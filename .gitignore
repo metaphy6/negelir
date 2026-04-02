@@ -1,0 +1,48 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# ── Go ──
+server/server
+server/tmp/
+*.exe
+
+# ── Data (mounted volumes) ──
+data/
+!data/.gitkeep
+
+# ── Environment ──
+.env
+
+# ── IDE ──
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Docker ──
+docker-compose.override.yml
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Models (too large for git) ──
+*.onnx
+*.tflite
+*.xgb
+*.lgb
+*.pkl
+
+# ── Logs ──
+*.log
+logs/

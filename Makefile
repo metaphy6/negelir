@@ -1,0 +1,210 @@
+# ══════════════════════════════════════════════════════════════
+#  Negelir — Project Makefile
+#  Turkish Football Match Analysis & Prediction System
+# ══════════════════════════════════════════════════════════════
+
+COMPOSE := docker compose
+ENV_FILE := .env
+
+# Detect OS for cross-platform compatibility
+ifeq ($(OS),Windows_NT)
+	SHELL := cmd.exe
+	COPY_CMD := copy
+	RM_CMD := del /q
+else
+	SHELL := /bin/bash
+	COPY_CMD := cp
+	RM_CMD := rm -f
+endif
+
+.DEFAULT_GOAL := help
+
+# ── Environment ─────────────────────────────────────────────
+
+.PHONY: env
+env: ## Create .env from .env.example if it doesn't exist
+	@test -f $(ENV_FILE) || ($(COPY_CMD) .env.example $(ENV_FILE) && echo "✅ Created .env from .env.example")
+	@test -f $(ENV_FILE) && echo "📄 .env exists"
+
+# ── Build & Run ─────────────────────────────────────────────
+
+.PHONY: build
+build: env ## Build all Docker images
+	$(COMPOSE) build
+
+.PHONY: up
+up: env ## Start all services (build + run)
+	$(COMPOSE) up --build
+
+.PHONY: up-detached
+up-detached: env ## Start all services in background
+	$(COMPOSE) up --build -d
+
+.PHONY: down
+down: ## Stop and remove all containers
+	$(COMPOSE) down
+
+.PHONY: restart
+restart: down up ## Restart all services
+
+# ── Individual Services ─────────────────────────────────────
+
+.PHONY: ai
+ai: env ## Run only the AI pipeline
+	$(COMPOSE) up --build ai
+
+.PHONY: p2p
+p2p: env ## Run only the P2P simulation
+	$(COMPOSE) up --build p2p
+
+.PHONY: server
+server: env ## Run only the Go server + dependencies
+	$(COMPOSE) up --build postgres redis server
+
+.PHONY: infra
+infra: env ## Start only infrastructure (PostgreSQL + Redis)
+	$(COMPOSE) up -d postgres redis
+
+# ── AI Commands ─────────────────────────────────────────────
+
+.PHONY: ai-pipeline
+ai-pipeline: env ## Run the full AI pipeline (scrape → process → analyze → respond)
+	$(COMPOSE) run --rm ai python -m pipeline.runner
+
+.PHONY: ai-train
+ai-train: env ## Train the GBDT model with synthetic data
+	$(COMPOSE) run --rm ai python -m model.trainer
+
+.PHONY: ai-demo
+ai-demo: env ## Run Turkish Q&A demo questions
+	$(COMPOSE) run --rm ai python -m pipeline.runner --demo
+
+.PHONY: ai-tqu-test
+ai-tqu-test: env ## Test TQU with sample Turkish questions
+	$(COMPOSE) run --rm ai python -m tqu.classifier
+
+.PHONY: ai-shell
+ai-shell: env ## Open a shell in the AI container
+	$(COMPOSE) run --rm ai bash
+
+# ── P2P Commands ────────────────────────────────────────────
+
+.PHONY: p2p-simulate
+p2p-simulate: env ## Run P2P network simulation
+	$(COMPOSE) run --rm p2p python -m simulation.runner
+
+.PHONY: p2p-shell
+p2p-shell: env ## Open a shell in the P2P container
+	$(COMPOSE) run --rm p2p bash
+
+# ── Server Commands ─────────────────────────────────────────
+
+.PHONY: server-scrape
+server-scrape: env ## Trigger data scraping via Go server
+	@curl -s -X POST http://localhost:8080/api/v1/scrape/trigger | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running. Use 'make server' first."
+
+.PHONY: server-health
+server-health: ## Check Go server health
+	@curl -s http://localhost:8080/api/v1/health | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running."
+
+.PHONY: server-matches
+server-matches: ## List cached matches
+	@curl -s http://localhost:8080/api/v1/matches | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running."
+
+# ── Database ────────────────────────────────────────────────
+
+.PHONY: db-shell
+db-shell: ## Open PostgreSQL shell
+	$(COMPOSE) exec postgres psql -U negelir -d negelir
+
+.PHONY: db-reset
+db-reset: ## Reset database (WARNING: destroys all data)
+	@echo "⚠️  This will destroy all data. Press Ctrl+C to cancel."
+	@sleep 3
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d postgres
+	@echo "✅ Database reset complete"
+
+.PHONY: redis-shell
+redis-shell: ## Open Redis CLI
+	$(COMPOSE) exec redis redis-cli
+
+# ── Logs ────────────────────────────────────────────────────
+
+.PHONY: logs
+logs: ## Tail all service logs
+	$(COMPOSE) logs -f
+
+.PHONY: logs-ai
+logs-ai: ## Tail AI service logs
+	$(COMPOSE) logs -f ai
+
+.PHONY: logs-p2p
+logs-p2p: ## Tail P2P service logs
+	$(COMPOSE) logs -f p2p
+
+.PHONY: logs-server
+logs-server: ## Tail Go server logs
+	$(COMPOSE) logs -f server
+
+# ── Testing ─────────────────────────────────────────────────
+
+.PHONY: test
+test: env ## Run all tests
+	$(COMPOSE) run --rm ai python -m pytest tests/ -v
+	$(COMPOSE) run --rm p2p python -m pytest tests/ -v
+
+.PHONY: test-ai
+test-ai: env ## Run AI module tests
+	$(COMPOSE) run --rm ai python -m pytest tests/ -v
+
+.PHONY: test-p2p
+test-p2p: env ## Run P2P module tests
+	$(COMPOSE) run --rm p2p python -m pytest tests/ -v
+
+# ── Cleanup ─────────────────────────────────────────────────
+
+.PHONY: clean
+clean: ## Remove containers, networks, and build cache
+	$(COMPOSE) down --rmi local --remove-orphans
+
+.PHONY: clean-all
+clean-all: ## Remove everything including volumes (WARNING: destroys data)
+	@echo "⚠️  This removes ALL data including database volumes."
+	@sleep 3
+	$(COMPOSE) down -v --rmi local --remove-orphans
+
+.PHONY: clean-data
+clean-data: ## Remove local data directory contents
+	@echo "⚠️  Removing data/ contents..."
+	find data/ -not -name '.gitkeep' -not -name 'data' -delete 2>/dev/null || true
+
+# ── Status ──────────────────────────────────────────────────
+
+.PHONY: status
+status: ## Show running service status
+	$(COMPOSE) ps
+
+.PHONY: ports
+ports: ## Show exposed ports
+	@echo "📡 Service Ports:"
+	@echo "  PostgreSQL : localhost:5432"
+	@echo "  Redis      : localhost:6379"
+	@echo "  Go Server  : localhost:8080"
+	@echo ""
+	@echo "🔗 Useful URLs:"
+	@echo "  Health     : http://localhost:8080/api/v1/health"
+	@echo "  Matches    : http://localhost:8080/api/v1/matches"
+	@echo "  Teams      : http://localhost:8080/api/v1/teams"
+
+# ── Help ────────────────────────────────────────────────────
+
+.PHONY: help
+help: ## Show this help message
+	@echo ""
+	@echo "⚽ Negelir — Turkish Football Analysis System"
+	@echo "══════════════════════════════════════════════"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo ""

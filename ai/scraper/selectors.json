@@ -1,0 +1,46 @@
+{
+  "version": "1.0.0",
+  "sources": {
+    "source_a": {
+      "description": "Historical match data and statistics archive",
+      "selectors": {
+        "match_row": "div.match-row, tr.match-item, .mac-satiri",
+        "home_team": ".home-team .name, .ev-sahibi, td:nth-child(2)",
+        "away_team": ".away-team .name, .deplasman, td:nth-child(4)",
+        "score": ".score-cell, .skor, td:nth-child(3)",
+        "date": ".match-date, .tarih, td:nth-child(1)",
+        "stats_container": ".match-stats, .mac-istatistik",
+        "possession": ".possession, .topa-sahip-olma",
+        "shots_on": ".shots-on-target, .isabetli-sut",
+        "shots_off": ".shots-off-target, .isabetsiz-sut",
+        "corners": ".corners, .korner",
+        "fouls": ".fouls, .faul"
+      }
+    },
+    "source_b": {
+      "description": "Live scores and league tables (public statistics)",
+      "selectors": {
+        "match_row": ".match-card, .event-row",
+        "home_team": ".home .team-name",
+        "away_team": ".away .team-name",
+        "score": ".score, .result",
+        "date": ".date, .event-date",
+        "league_table_row": ".standings-row, tr.team-row",
+        "position": ".pos, td:nth-child(1)",
+        "team_name": ".team, td:nth-child(2)",
+        "points": ".pts, td:last-child"
+      }
+    },
+    "source_c": {
+      "description": "Official results and fixture data",
+      "selectors": {
+        "fixture_row": ".fixture, .musabaka",
+        "home_team": ".home, .ev",
+        "away_team": ".away, .dep",
+        "score": ".result, .sonuc",
+        "date": ".date, .tarih",
+        "referee": ".referee, .hakem"
+      }
+    }
+  }
+}
