@@ -577,7 +577,9 @@ class TestProofreader:
 
     def test_ranges_dict_has_expected_keys(self):
         expected = {"home_score", "away_score", "possession", "shots_on",
-                    "shots_off", "corners", "fouls", "yellow_cards", "red_cards"}
+                    "shots_off", "corners", "fouls", "yellow_cards", "red_cards",
+                    "home_yellows", "away_yellows", "home_reds", "away_reds",
+                    "home_fouls", "away_fouls", "ht_home_score", "ht_away_score"}
         assert expected == set(RANGES.keys())
 
 
@@ -764,5 +766,5 @@ class TestConstantsIntegrity:
             assert "tier" in league
             assert "teams" in league
 
-    def test_feature_count_is_91(self):
-        assert N_FEATURES == 91
+    def test_feature_count_is_120(self):
+        assert N_FEATURES == 120

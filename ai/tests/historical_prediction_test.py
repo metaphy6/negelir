@@ -36,18 +36,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.constants import N_FEATURES
 from model.features import FEATURE_COLUMNS
 
-DATA_PATH = os.path.join(
+_DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "tr_super_lig_2024_25.json",
+    "data",
 )
-DEFAULT_OUTPUT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "prediction_results.txt",
-)
+# Prefer real scraped data; fall back to synthetic
+_REAL_DATA = os.path.join(_DATA_DIR, "tr_super_lig_real.json")
+_SYNTH_DATA = os.path.join(_DATA_DIR, "tr_super_lig_2024_25.json")
+DATA_PATH = _REAL_DATA if os.path.exists(_REAL_DATA) else _SYNTH_DATA
+
+DEFAULT_OUTPUT = os.path.join(_DATA_DIR, "prediction_results.txt")
 INITIAL_ELO = 1500.0
 K_FACTOR = 32.0
 HOME_ADV_ELO = 65.0
-TOTAL_TEAMS = 19
+TOTAL_TEAMS = 19  # Dynamically updated per dataset
 
 
 @dataclass
@@ -60,6 +62,12 @@ class MatchRecord:
     away_goals: int
     ht_home: int
     ht_away: int
+    home_yellows: int = 0
+    away_yellows: int = 0
+    home_reds: int = 0
+    away_reds: int = 0
+    home_fouls: int = 0
+    away_fouls: int = 0
 
     @property
     def result(self) -> str:
@@ -140,6 +148,10 @@ class TeamStats:
 
     draws: list = field(default_factory=list)
     scorelines: list = field(default_factory=list)
+
+    yellows: list = field(default_factory=list)
+    reds: list = field(default_factory=list)
+    fouls: list = field(default_factory=list)
 
     matches_played: int = 0
     home_matches: int = 0
@@ -271,28 +283,69 @@ class TeamStats:
 
 
 def load_matches(path):
+    """Load matches from JSON.  Supports both single-season and multi-season datasets.
+
+    For multi-season data the per-season matchday numbers repeat (e.g. every season
+    starts at Matchday 1).  We assign **global** round numbers so that the
+    expanding-window logic works correctly across seasons.
+    """
+    global TOTAL_TEAMS
     with open(path) as f:
         data = json.load(f)
 
-    matches = []
+    is_real = data.get("source") == "real" or data.get("generated") is False
+    matches_raw = []
     for m in data["matches"]:
         if not m.get("score") or not m["score"].get("ft"):
             continue
         ft = m["score"]["ft"]
         ht = m["score"].get("ht", [0, 0])
+        if ht is None:
+            ht = [0, 0]
+        season = m.get("season", "")
         round_str = m.get("round", "Matchday 0")
-        round_num = int("".join(c for c in round_str if c.isdigit()) or "0")
+        local_round = int("".join(c for c in round_str if c.isdigit()) or "0")
+        stats = m.get("stats", {})
+        matches_raw.append((
+            m["date"], season, local_round, m["team1"], m["team2"],
+            ft, ht, stats,
+        ))
+
+    matches_raw.sort(key=lambda t: (t[0], t[2]))
+
+    # Assign global round numbers: group by (season, local_round)
+    global_round = 0
+    prev_key = None
+    round_map = {}  # (season, local_round) -> global_round
+    for date, season, local_round, *_ in matches_raw:
+        key = (season, local_round)
+        if key not in round_map:
+            global_round += 1
+            round_map[key] = global_round
+
+    matches = []
+    all_teams = set()
+    for date, season, local_round, home, away, ft, ht, stats in matches_raw:
+        gr = round_map[(season, local_round)]
+        all_teams.update([home, away])
         matches.append(MatchRecord(
-            date=m["date"],
-            round_num=round_num,
-            home=m["team1"],
-            away=m["team2"],
+            date=date,
+            round_num=gr,
+            home=home,
+            away=away,
             home_goals=ft[0],
             away_goals=ft[1],
             ht_home=ht[0] if ht else 0,
             ht_away=ht[1] if ht else 0,
+            home_yellows=stats.get("home_yellows", 0),
+            away_yellows=stats.get("away_yellows", 0),
+            home_reds=stats.get("home_reds", 0),
+            away_reds=stats.get("away_reds", 0),
+            home_fouls=stats.get("home_fouls", 0),
+            away_fouls=stats.get("away_fouls", 0),
         ))
-    matches.sort(key=lambda m: (m.date, m.round_num))
+
+    TOTAL_TEAMS = len(all_teams)
     return matches
 
 
@@ -628,6 +681,54 @@ def build_feature_vector(
     s("wind_category", 1)
     s("venue_type", 0)
 
+    # ── Card & discipline (v0.2) ──
+    s("home_avg_yellows_5", hs.rolling(hs.yellows, 5))
+    s("away_avg_yellows_5", aws.rolling(aws.yellows, 5))
+    s("home_avg_yellows_10", hs.rolling(hs.yellows, 10))
+    s("away_avg_yellows_10", aws.rolling(aws.yellows, 10))
+    s("home_avg_fouls_5", hs.rolling(hs.fouls, 5))
+    s("away_avg_fouls_5", aws.rolling(aws.fouls, 5))
+    if h2h_records:
+        h2h_yellows = np.mean([m.home_yellows + m.away_yellows for m in h2h_records])
+        s("h2h_avg_cards", h2h_yellows)
+    else:
+        s("h2h_avg_cards", 4.0)
+    is_derby = frozenset({home, away}) in derbies
+    s("derby_card_factor", 1.3 if is_derby else 1.0)
+
+    # ── Half-time / second-half splits (v0.2) ──
+    s("home_avg_ht_scored_5", hs.rolling(hs.ht_scored, 5))
+    s("away_avg_ht_scored_5", aws.rolling(aws.ht_scored, 5))
+    s("home_avg_sh_scored_5", hs.rolling(hs.sh_scored, 5))
+    s("away_avg_sh_scored_5", aws.rolling(aws.sh_scored, 5))
+    s("home_avg_ht_conceded_5", hs.rolling(hs.ht_conceded, 5))
+    s("away_avg_ht_conceded_5", aws.rolling(aws.ht_conceded, 5))
+
+    # ── Venue-specific performance (v0.2) ──
+    s("home_venue_win_pct", hs.home_venue_win_pct(10))
+    s("away_venue_win_pct", aws.away_venue_win_pct(10))
+    s("home_venue_ppg_10", hs.rolling(hs.home_ppg, 10))
+    s("away_venue_ppg_10", aws.rolling(aws.away_ppg, 10))
+
+    # ── Draw & low-scoring tendencies (v0.2) ──
+    s("home_draws_bayesian", hs.bayesian_draw_prob())
+    s("away_draws_bayesian", aws.bayesian_draw_prob())
+    s("low_scoring_likelihood", (hs.low_scoring_rate(10) + aws.low_scoring_rate(10)) / 2)
+
+    # ── Strength of schedule (v0.2) ──
+    s("home_sos", hs.strength_of_schedule(10))
+    s("away_sos", aws.strength_of_schedule(10))
+
+    # ── Second-half detail (v0.2) ──
+    s("home_sh_scoring_rate", hs.second_half_scoring_rate(10))
+    s("away_sh_scoring_rate", aws.second_half_scoring_rate(10))
+    s("home_sh_conceding_rate", hs.second_half_conceding_rate(10))
+    s("away_sh_conceding_rate", aws.second_half_conceding_rate(10))
+
+    # ── Scoring patterns (v0.2) ──
+    s("home_goals_per_match_rate", hs.rolling(hs.scored, 10) if hs.scored else 1.0)
+    s("away_goals_per_match_rate", aws.rolling(aws.scored, 10) if aws.scored else 1.0)
+
     return vec.reshape(1, -1)
 
 
@@ -721,6 +822,14 @@ def update_team_stats(team_stats, match):
     else:
         hs.draw_beta += 1
         aws.draw_beta += 1
+
+    # Card & discipline tracking
+    hs.yellows.append(match.home_yellows)
+    aws.yellows.append(match.away_yellows)
+    hs.reds.append(match.home_reds)
+    aws.reds.append(match.away_reds)
+    hs.fouls.append(match.home_fouls)
+    aws.fouls.append(match.away_fouls)
 
     hs.matches_played += 1
     aws.matches_played += 1
@@ -852,7 +961,7 @@ class PredictionResult:
     betting_markets: dict = field(default_factory=dict)  # All market probabilities
 
 
-XGB_WEIGHT = 0.55  # XGBoost weight in ensemble (rest goes to Poisson)
+XGB_WEIGHT = 0.35  # XGBoost weight in ensemble (rest goes to Poisson)
 DRAW_BOOST = 0.0  # No draw boost (empirically hurts accuracy)
 
 
@@ -905,6 +1014,13 @@ def predict_matches(model, test_matches, all_prior_matches, team_stats):
 
         probs = {"H": home_win_prob, "D": draw_prob, "A": away_win_prob}
         predicted = max(probs, key=probs.get)
+
+        # Draw detection rule: when H and A are close, draw is more likely
+        ha_gap = abs(home_win_prob - away_win_prob)
+        bayesian_draw_avg = (hs.bayesian_draw_prob() + aws.bayesian_draw_prob()) / 2
+        if ha_gap < 0.15 and draw_prob > 0.26 and bayesian_draw_avg > 0.20:
+            predicted = "D"
+
         confidence = max(probs.values())
 
         # Score prediction from Poisson xG
@@ -943,7 +1059,7 @@ def generate_report(results, val_acc, val_loss, train_rounds, elapsed, model_par
 
     lines.append("=" * w)
     lines.append("NEGELIR AI — HISTORICAL PREDICTION TEST REPORT".center(w))
-    lines.append("Turkish Super Lig 2024-25 Season".center(w))
+    lines.append("Turkish Super Lig (Real Data — Multi-Season)".center(w))
     lines.append(("Generated: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")).center(w))
     lines.append("=" * w)
 
@@ -1172,9 +1288,9 @@ def generate_report(results, val_acc, val_loss, train_rounds, elapsed, model_par
 
 def run_test(
     train_rounds=25, output_path=None,
-    n_estimators=250, max_depth=4, learning_rate=0.06,
-    min_child_weight=4, expanding=False, retrain_every=1,
-    predict_from=18,
+    n_estimators=200, max_depth=3, learning_rate=0.06,
+    min_child_weight=5, expanding=False, retrain_every=3,
+    predict_from=15, train_pct=0.75,
 ):
     output_path = output_path or DEFAULT_OUTPUT
     start = time.time()
@@ -1185,7 +1301,14 @@ def run_test(
 
     print("\nLoading match data from {}...".format(DATA_PATH))
     matches = load_matches(DATA_PATH)
-    print("  Loaded {} matches".format(len(matches)))
+    print("  Loaded {} matches across {} teams".format(len(matches), TOTAL_TEAMS))
+
+    # For multi-season data, derive train_rounds from train_pct
+    max_round = max(m.round_num for m in matches) if matches else 38
+    if max_round > 45:  # multi-season data
+        train_rounds = int(max_round * train_pct)
+        predict_from = int(max_round * 0.12)  # start predicting after 12% of data
+    print("  Max round: {}, train split at round: {}".format(max_round, train_rounds))
 
     if expanding:
         # Expanding window: retrain every N rounds, predict from round predict_from
@@ -1269,6 +1392,7 @@ def run_test(
                     if len(fl) >= 20:
                         X = np.array(fl)
                         y = np.array(ll)
+                        print("    Training round {} ({} samples)...".format(rnd, len(fl)), end="", flush=True)
                         model = xgb.XGBClassifier(
                             n_estimators=n_estimators, max_depth=max_depth,
                             learning_rate=learning_rate,
@@ -1283,6 +1407,7 @@ def run_test(
                         val_acc_last = accuracy_score(y, model.predict(X))
                         val_loss_last = log_loss(y, model.predict_proba(X))
                         last_train_rnd = rnd
+                        print(" done (train_acc={:.1%})".format(val_acc_last), flush=True)
 
                 if model is not None:
                     # Predict using cached features and Poisson for consistency
@@ -1314,6 +1439,15 @@ def run_test(
 
                         probs = {"H": home_win_prob, "D": draw_prob, "A": away_win_prob}
                         predicted = max(probs, key=probs.get)
+
+                        # Draw detection rule: when H and A are close, draw is more likely
+                        hs_exp = team_stats_build.get(match.home, TeamStats())
+                        aws_exp = team_stats_build.get(match.away, TeamStats())
+                        ha_gap = abs(home_win_prob - away_win_prob)
+                        bayesian_draw_avg = (hs_exp.bayesian_draw_prob() + aws_exp.bayesian_draw_prob()) / 2
+                        if ha_gap < 0.15 and draw_prob > 0.26 and bayesian_draw_avg > 0.20:
+                            predicted = "D"
+
                         confidence = max(probs.values())
 
                         # Score prediction from Poisson xG
@@ -1403,25 +1537,25 @@ def run_test(
     return accuracy, report
 
 
-def iterate_to_improve(target_accuracy=0.60, max_iterations=12):
+def iterate_to_improve(target_accuracy=0.70, max_iterations=12):
     print("\n" + "=" * 60)
     print("NEGELIR AI — Iterative Improvement (v2)")
     print("=" * 60)
     print("Target accuracy: {:.0%}".format(target_accuracy))
 
     configs = [
-        (25, 300, 4, 0.08, 3),
-        (25, 400, 3, 0.06, 5),
-        (25, 500, 4, 0.05, 3),
-        (25, 300, 3, 0.10, 4),
-        (25, 600, 3, 0.04, 5),
-        (25, 400, 5, 0.06, 3),
-        (25, 300, 4, 0.07, 2),
-        (25, 500, 3, 0.06, 4),
-        (22, 400, 4, 0.06, 3),
-        (25, 350, 4, 0.09, 3),
-        (25, 250, 3, 0.12, 5),
-        (25, 400, 4, 0.08, 4),
+        (25, 200, 3, 0.06, 5),
+        (25, 150, 3, 0.08, 5),
+        (25, 250, 3, 0.05, 6),
+        (25, 200, 4, 0.06, 4),
+        (25, 300, 3, 0.04, 6),
+        (25, 150, 4, 0.08, 5),
+        (25, 200, 3, 0.07, 3),
+        (25, 250, 3, 0.06, 5),
+        (22, 200, 3, 0.06, 5),
+        (25, 175, 3, 0.09, 5),
+        (25, 200, 3, 0.10, 6),
+        (25, 150, 3, 0.06, 4),
     ]
 
     best_accuracy = 0.0
@@ -1504,11 +1638,11 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--iterate", action="store_true", help="Run iterative tuning")
     parser.add_argument("--expanding", action="store_true", help="Use expanding window")
-    parser.add_argument("--target", type=float, default=0.60)
+    parser.add_argument("--target", type=float, default=0.70)
     args = parser.parse_args()
 
     if args.iterate:
         iterate_to_improve(target_accuracy=args.target)
     else:
         run_test(train_rounds=args.rounds_train, output_path=args.output,
-                 expanding=True, retrain_every=1)
+                 expanding=args.expanding, retrain_every=1)

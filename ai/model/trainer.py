@@ -33,24 +33,29 @@ def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
     X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
     X = inject_noise(X, noise_pct=0.005, seed=42)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+    # Sample weights: upweight draws (class 1) for balance
+    sample_weights = y.map({0: 1.0, 1: 2.0, 2: 1.0}).values
+
+    X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
+        X, y, sample_weights, test_size=0.2, random_state=42, stratify=y
     )
     log.info(f"📚 Training set: {len(X_train)}, Test set: {len(X_test)}")
 
-    # Train XGBoost
+    # Train XGBoost (3-class)
     model = xgb.XGBClassifier(**params)
     log.info("🔄 Model training starting...")
 
     model.fit(
         X_train, y_train,
+        sample_weight=w_train,
         eval_set=[(X_test, y_test)],
+        sample_weight_eval_set=[w_test],
         verbose=False,
     )
 
     # Evaluate
     y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
+    y_prob = model.predict_proba(X_test)
     acc = accuracy_score(y_test, y_pred)
     loss = log_loss(y_test, y_prob)
 

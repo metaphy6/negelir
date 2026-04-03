@@ -62,6 +62,29 @@ FEATURE_COLUMNS = [
     # Weather / venue
     "temperature_bucket", "precipitation_flag", "wind_category",
     "venue_type",
+    # ── Card & discipline (v0.2) ──
+    "home_avg_yellows_5", "away_avg_yellows_5",
+    "home_avg_yellows_10", "away_avg_yellows_10",
+    "home_avg_fouls_5", "away_avg_fouls_5",
+    "h2h_avg_cards",
+    "derby_card_factor",
+    # ── Half-time / second-half splits (v0.2) ──
+    "home_avg_ht_scored_5", "away_avg_ht_scored_5",
+    "home_avg_sh_scored_5", "away_avg_sh_scored_5",
+    "home_avg_ht_conceded_5", "away_avg_ht_conceded_5",
+    # ── Venue-specific performance (v0.2) ──
+    "home_venue_win_pct", "away_venue_win_pct",
+    "home_venue_ppg_10", "away_venue_ppg_10",
+    # ── Draw & low-scoring tendencies (v0.2) ──
+    "home_draws_bayesian", "away_draws_bayesian",
+    "low_scoring_likelihood",
+    # ── Strength of schedule (v0.2) ──
+    "home_sos", "away_sos",
+    # ── Second-half detail (v0.2) ──
+    "home_sh_scoring_rate", "away_sh_scoring_rate",
+    "home_sh_conceding_rate", "away_sh_conceding_rate",
+    # ── Scoring patterns (v0.2) ──
+    "home_goals_per_match_rate", "away_goals_per_match_rate",
 ]
 
 assert len(FEATURE_COLUMNS) == N_FEATURES, f"Expected {N_FEATURES} features, got {len(FEATURE_COLUMNS)}"
@@ -70,7 +93,7 @@ assert len(FEATURE_COLUMNS) == N_FEATURES, f"Expected {N_FEATURES} features, got
 def generate_synthetic_dataset(n_matches: int = 500, seed: int = 42) -> tuple[pd.DataFrame, pd.Series]:
     """
     Generate synthetic match features + labels for PoC training.
-    Labels: 0 = away/draw, 1 = home win (simplified binary).
+    Labels: 0 = home win, 1 = draw, 2 = away win (3-class).
     """
     log.info(f"🏭 Generating synthetic data: {n_matches} matches...")
     rng = np.random.RandomState(seed)
@@ -95,13 +118,32 @@ def generate_synthetic_dataset(n_matches: int = 500, seed: int = 42) -> tuple[pd
             data[col] = rng.randint(0, 5, size=n_matches).astype(float)
         elif "bucket" in col or "category" in col or "type" in col or "phase" in col:
             data[col] = rng.randint(0, 4, size=n_matches).astype(float)
+        elif "yellows" in col or "cards" in col:
+            data[col] = rng.uniform(1, 5, size=n_matches)
+        elif "fouls" in col:
+            data[col] = rng.uniform(8, 18, size=n_matches)
+        elif "ht_scored" in col or "ht_conceded" in col:
+            data[col] = rng.uniform(0, 1.5, size=n_matches)
+        elif "sh_scor" in col or "sh_conced" in col:
+            data[col] = rng.uniform(0.3, 1.2, size=n_matches)
+        elif "venue_win" in col or "venue_ppg" in col:
+            data[col] = rng.uniform(0.2, 0.8, size=n_matches)
+        elif "bayesian" in col:
+            data[col] = rng.uniform(0.15, 0.40, size=n_matches)
+        elif "likelihood" in col:
+            data[col] = rng.uniform(0.1, 0.5, size=n_matches)
+        elif "sos" in col:
+            data[col] = rng.normal(1500, 100, size=n_matches)
+        elif "card_factor" in col:
+            data[col] = rng.uniform(0, 2, size=n_matches)
         else:
             data[col] = rng.uniform(0, 3, size=n_matches)
 
     X = pd.DataFrame(data)
 
-    # Synthetic labels: weighted by elo_diff + form_diff + home advantage
-    logit = (
+    # 3-class labels: Home(0) / Draw(1) / Away(2)
+    # Weighted by elo_diff + form_diff + home advantage + draw tendency
+    logit_home = (
         0.3 * (X["home_elo"] - X["away_elo"]) / 400
         + 0.2 * X["form_diff"]
         + 0.15 * X["home_win_ratio_5"]
@@ -109,11 +151,31 @@ def generate_synthetic_dataset(n_matches: int = 500, seed: int = 42) -> tuple[pd
         + 0.1  # home advantage
         + rng.normal(0, 0.3, size=n_matches)
     )
-    prob = 1 / (1 + np.exp(-logit))
-    y = (prob > 0.5).astype(int)
-    y = pd.Series(y, name="home_win")
+    prob_home = 1 / (1 + np.exp(-logit_home))
 
-    log.info(f"📊 Dataset: {n_matches} matches, {N_FEATURES} features, home win rate: {y.mean():.2f}")
+    # Draw probability from Bayesian draw features + team balance
+    elo_balance = 1.0 - np.abs(X["home_elo"] - X["away_elo"]) / 600
+    form_balance = 1.0 - np.abs(X["form_diff"])
+    draw_base = 0.5 * (X["home_draws_bayesian"] + X["away_draws_bayesian"])
+    prob_draw = np.clip(0.15 + 0.15 * elo_balance + 0.10 * form_balance + 0.10 * draw_base
+                        + rng.normal(0, 0.08, size=n_matches), 0.08, 0.45)
+
+    # Normalize to proper 3-class probabilities
+    prob_away = np.clip(1.0 - prob_home - prob_draw, 0.05, 0.60)
+    total = prob_home + prob_draw + prob_away
+    prob_home /= total
+    prob_draw /= total
+    prob_away /= total
+
+    # Sample labels from probabilities
+    y_vals = []
+    for i in range(n_matches):
+        y_vals.append(rng.choice([0, 1, 2], p=[prob_home[i], prob_draw[i], prob_away[i]]))
+    y = pd.Series(y_vals, name="result_class")
+
+    dist = y.value_counts(normalize=True).sort_index()
+    log.info(f"📊 Dataset: {n_matches} matches, {N_FEATURES} features, "
+             f"H={dist.get(0, 0):.2f} D={dist.get(1, 0):.2f} A={dist.get(2, 0):.2f}")
     return X, y
 
 

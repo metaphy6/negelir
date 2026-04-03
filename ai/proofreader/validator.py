@@ -34,6 +34,16 @@ RANGES = {
     "fouls":        (0, 40),
     "yellow_cards": (0, 10),
     "red_cards":    (0, 5),
+    # Per-team card & foul ranges (v0.2)
+    "home_yellows": (0, 10),
+    "away_yellows": (0, 10),
+    "home_reds":    (0, 5),
+    "away_reds":    (0, 5),
+    "home_fouls":   (0, 40),
+    "away_fouls":   (0, 40),
+    # Half-time scores
+    "ht_home_score": (0, 10),
+    "ht_away_score": (0, 10),
 }
 
 
@@ -125,6 +135,23 @@ class DataProofreader:
             if int(ht_home) > int(ft_home):
                 result.errors.append(
                     f"HT score cannot exceed FT: HT={ht_home} > FT={ft_home}"
+                )
+
+        ht_away = match.get("ht_away_score")
+        ft_away = match.get("away_score")
+        if ht_away is not None and ft_away is not None:
+            if int(ht_away) > int(ft_away):
+                result.errors.append(
+                    f"HT score cannot exceed FT: HT={ht_away} > FT={ft_away}"
+                )
+
+        # Card vs foul plausibility: yellows should not exceed fouls
+        home_yellows = stats.get("home_yellows")
+        home_fouls = stats.get("home_fouls")
+        if home_yellows is not None and home_fouls is not None:
+            if int(home_yellows) > int(home_fouls):
+                result.warnings.append(
+                    f"More yellow cards ({home_yellows}) than fouls ({home_fouls}) for home team"
                 )
 
     def _plausibility_checks(self, match: dict, result: ValidationResult):

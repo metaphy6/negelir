@@ -1,5 +1,6 @@
 """
-Negelir — GBDT model inference.
+Negelir — GBDT model inference (v0.2).
+3-class (Home/Draw/Away) + Poisson ensemble + score/card prediction.
 Per roadmap §5.4: produces analysis JSON from feature vectors.
 Includes input validation per roadmap §5.6.2 Feature Vector Firewall.
 """
@@ -10,6 +11,7 @@ import time
 
 import numpy as np
 import xgboost as xgb
+from scipy.stats import poisson
 
 from common.config import cfg
 from common.constants import MODEL_VERSION, N_FEATURES
@@ -32,8 +34,16 @@ FEATURE_RANGES = {
     "age": (15, 45),
     "scored": (0, 10),
     "conceded": (0, 10),
+    "yellows": (0, 10),
+    "fouls": (0, 40),
+    "cards": (0, 15),
+    "bayesian": (0, 1),
+    "sos": (800, 2200),
     "default": (-100, 100),
 }
+
+# Ensemble weight: XGBoost vs Poisson
+XGB_WEIGHT = 0.55
 
 
 class GBDTInference:
@@ -77,15 +87,118 @@ class GBDTInference:
 
         return True, ""
 
+    def _poisson_home_win_prob(self, home_xg: float, away_xg: float) -> float:
+        p = 0.0
+        for h in range(8):
+            for a in range(h):
+                p += poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+        return p
+
+    def _poisson_draw_prob(self, home_xg: float, away_xg: float) -> float:
+        p = 0.0
+        for k in range(6):
+            p += poisson.pmf(k, home_xg) * poisson.pmf(k, away_xg)
+        return p
+
+    def _predict_scorelines(self, home_xg: float, away_xg: float, top_n: int = 5) -> list[dict]:
+        scorelines = []
+        for h in range(8):
+            for a in range(8):
+                p = float(poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg))
+                scorelines.append({"home": h, "away": a, "probability": round(p, 4)})
+        scorelines.sort(key=lambda x: -x["probability"])
+        return scorelines[:top_n]
+
+    def _compute_betting_markets(self, home_xg: float, away_xg: float) -> dict:
+        max_g = 7
+        sm = {}
+        for h in range(max_g):
+            for a in range(max_g):
+                sm[(h, a)] = poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+
+        def p_over(line):
+            return 1.0 - sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a <= line)
+
+        p_home = sum(sm[(h, a)] for h in range(max_g) for a in range(h))
+        p_draw = sum(sm[(k, k)] for k in range(max_g))
+        p_away = max(0.01, 1.0 - p_home - p_draw)
+
+        p_h_zero = sum(sm[(0, a)] for a in range(max_g))
+        p_a_zero = sum(sm[(h, 0)] for h in range(max_g))
+        p_btts = 1.0 - p_h_zero - p_a_zero + sm[(0, 0)]
+
+        # Half-time (47% of goals in first half — Turkish league empirical)
+        ht_hxg = home_xg * 0.47
+        ht_axg = away_xg * 0.47
+        ht_sm = {}
+        for h in range(5):
+            for a in range(5):
+                ht_sm[(h, a)] = poisson.pmf(h, ht_hxg) * poisson.pmf(a, ht_axg)
+        ht_home = sum(ht_sm[(h, a)] for h in range(5) for a in range(h))
+        ht_draw = sum(ht_sm[(k, k)] for k in range(5))
+        ht_away = max(0.01, 1.0 - ht_home - ht_draw)
+
+        ah_h_m15 = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h - a >= 2)
+        denom_ha = max(0.01, p_home + p_away)
+
+        return {
+            "over_1_5": round(float(p_over(1)), 3),
+            "over_2_5": round(float(p_over(2)), 3),
+            "over_3_5": round(float(p_over(3)), 3),
+            "btts": round(float(p_btts), 3),
+            "dc_1x": round(float(p_home + p_draw), 3),
+            "dc_x2": round(float(p_draw + p_away), 3),
+            "dc_12": round(float(p_home + p_away), 3),
+            "dnb_home": round(float(p_home / denom_ha), 3),
+            "dnb_away": round(float(p_away / denom_ha), 3),
+            "ah_home_m1_5": round(float(ah_h_m15), 3),
+            "ht_home": round(float(ht_home), 3),
+            "ht_draw": round(float(ht_draw), 3),
+            "ht_away": round(float(ht_away), 3),
+            "ht_over_0_5": round(float(1.0 - ht_sm[(0, 0)]), 3),
+        }
+
+    def _estimate_cards(self, features: np.ndarray, derby: bool) -> dict:
+        """Estimate card counts from foul/discipline features."""
+        col_idx = {col: i for i, col in enumerate(FEATURE_COLUMNS)}
+
+        home_fouls = float(features[0, col_idx.get("home_avg_fouls_5", 0)])
+        away_fouls = float(features[0, col_idx.get("away_avg_fouls_5", 0)])
+        home_yellows_hist = float(features[0, col_idx.get("home_avg_yellows_5", 0)])
+        away_yellows_hist = float(features[0, col_idx.get("away_avg_yellows_5", 0)])
+
+        # Base expectation from historical card rates
+        base_yellows = home_yellows_hist + away_yellows_hist
+        if base_yellows < 1.0:
+            # Fallback to foul-based estimation
+            base_yellows = (home_fouls + away_fouls) / 3.5
+
+        # Derby multiplier
+        multiplier = 1.3 if derby else 1.0
+        expected_yellows = base_yellows * multiplier
+
+        # Red card probability
+        red_prob = 0.15 if derby else 0.08
+
+        return {
+            "expected_yellows": round(float(expected_yellows), 1),
+            "expected_yellows_home": round(float(expected_yellows * home_fouls / max(0.1, home_fouls + away_fouls)), 1),
+            "expected_yellows_away": round(float(expected_yellows * away_fouls / max(0.1, home_fouls + away_fouls)), 1),
+            "red_card_probability": round(float(red_prob), 3),
+            "over_3_5_cards": round(float(min(0.95, max(0.05, 1.0 / (1.0 + np.exp(-(expected_yellows - 3.5)))))), 3),
+            "over_4_5_cards": round(float(min(0.95, max(0.05, 1.0 / (1.0 + np.exp(-(expected_yellows - 4.5)))))), 3),
+        }
+
     def predict(self, features: np.ndarray) -> dict:
         """
-        Run inference and return analysis JSON (per roadmap §5.4).
+        Run inference and return full analysis JSON.
+        3-class XGBoost + Poisson ensemble with score/card predictions.
 
         Args:
-            features: 1×91 numpy array
+            features: 1×120 numpy array
 
         Returns:
-            Analysis dict with probabilities, confidence, feature importance
+            Analysis dict with probabilities, scores, cards, markets
         """
         # Validate
         is_valid, error = self.validate_features(features)
@@ -95,16 +208,50 @@ class GBDTInference:
 
         # Inference with timing (roadmap: <300ms)
         t0 = time.perf_counter()
-        proba = self.model.predict_proba(features)[0]
-        home_win_prob = float(proba[1]) if len(proba) > 1 else float(proba[0])
-        away_win_prob = 1.0 - home_win_prob
-        draw_prob = min(0.3, 1.0 - abs(home_win_prob - away_win_prob))  # heuristic
 
-        # Normalize distribution
-        total = home_win_prob + away_win_prob + draw_prob
+        # --- XGBoost 3-class probabilities ---
+        proba = self.model.predict_proba(features)[0]
+        # Handle both binary (legacy pkl) and 3-class models
+        if len(proba) == 3:
+            xgb_home = float(proba[0])
+            xgb_draw = float(proba[1])
+            xgb_away = float(proba[2])
+        else:
+            # Legacy binary model: approximate 3-class
+            xgb_home = float(proba[1]) if len(proba) > 1 else float(proba[0])
+            xgb_away = 1.0 - xgb_home
+            xgb_draw = min(0.30, 1.0 - abs(xgb_home - xgb_away))
+            total_xgb = xgb_home + xgb_draw + xgb_away
+            xgb_home /= total_xgb
+            xgb_draw /= total_xgb
+            xgb_away /= total_xgb
+
+        # --- Poisson model probabilities ---
+        col_idx = {col: i for i, col in enumerate(FEATURE_COLUMNS)}
+        home_avg_goals = max(0.3, float(features[0, col_idx["home_avg_scored_5"]]))
+        away_avg_goals = max(0.3, float(features[0, col_idx["away_avg_scored_5"]]))
+        home_xg_feat = float(features[0, col_idx["home_xg"]])
+        away_xg_feat = float(features[0, col_idx["away_xg"]])
+
+        # Use xG if available, else fall back to average goals
+        home_xg = home_xg_feat if home_xg_feat > 0.1 else home_avg_goals
+        away_xg = away_xg_feat if away_xg_feat > 0.1 else away_avg_goals
+
+        p_home_poisson = self._poisson_home_win_prob(home_xg, away_xg)
+        p_draw_poisson = self._poisson_draw_prob(home_xg, away_xg)
+        p_away_poisson = max(0.01, 1.0 - p_home_poisson - p_draw_poisson)
+
+        # --- Ensemble blend ---
+        pw = 1.0 - XGB_WEIGHT
+        home_win_prob = XGB_WEIGHT * xgb_home + pw * p_home_poisson
+        draw_prob = XGB_WEIGHT * xgb_draw + pw * p_draw_poisson
+        away_win_prob = XGB_WEIGHT * xgb_away + pw * p_away_poisson
+
+        # Normalize
+        total = home_win_prob + draw_prob + away_win_prob
         home_win_prob /= total
-        away_win_prob /= total
         draw_prob /= total
+        away_win_prob /= total
 
         inference_ms = (time.perf_counter() - t0) * 1000
         if inference_ms > 300:
@@ -127,16 +274,24 @@ class GBDTInference:
             for i in top_indices
         }
 
-        # Goal metrics (derived from features)
-        home_avg_goals = float(features[0, FEATURE_COLUMNS.index("home_avg_scored_5")])
-        away_avg_goals = float(features[0, FEATURE_COLUMNS.index("away_avg_scored_5")])
-        total_goals_est = home_avg_goals + away_avg_goals
+        # --- Goal metrics ---
+        total_goals_est = home_xg + away_xg
         over25_prob = float(min(0.95, max(0.05, 1.0 / (1.0 + np.exp(-(total_goals_est - 2.5))))))
-        bts_prob = float(min(0.95, max(0.05, home_avg_goals * away_avg_goals / 4.0)))
+        bts_prob = float(min(0.95, max(0.05, home_xg * away_xg / 4.0)))
+
+        # --- Score prediction (Poisson) ---
+        top_scorelines = self._predict_scorelines(home_xg, away_xg, top_n=5)
+
+        # --- Card prediction ---
+        derby = bool(features[0, col_idx["derby_flag"]] > 0.5)
+        card_prediction = self._estimate_cards(features, derby)
+
+        # --- Betting markets ---
+        betting_markets = self._compute_betting_markets(home_xg, away_xg)
 
         analysis = {
             "model_version": MODEL_VERSION,
-            "confidence": round(confidence, 3),
+            "confidence": round(float(confidence), 3),
             "distribution": {
                 "home_win": round(home_win_prob, 3),
                 "draw": round(draw_prob, 3),
@@ -146,7 +301,12 @@ class GBDTInference:
                 "expected_total_goals": round(total_goals_est, 2),
                 "over_2_5_prob": round(over25_prob, 3),
                 "bts_prob": round(bts_prob, 3),
+                "home_xg": round(home_xg, 2),
+                "away_xg": round(away_xg, 2),
             },
+            "score_prediction": top_scorelines,
+            "card_prediction": card_prediction,
+            "betting_markets": betting_markets,
             "feature_importance": feature_importance,
             "features_used": N_FEATURES,
         }
@@ -155,7 +315,9 @@ class GBDTInference:
             f"🧠 Prediction: H={analysis['distribution']['home_win']:.2f} "
             f"D={analysis['distribution']['draw']:.2f} "
             f"A={analysis['distribution']['away_win']:.2f} "
-            f"(confidence: {analysis['confidence']:.2f})"
+            f"(confidence: {analysis['confidence']:.2f}) "
+            f"Score: {top_scorelines[0]['home']}-{top_scorelines[0]['away']} "
+            f"Cards: ~{card_prediction['expected_yellows']} yellows"
         )
         return analysis
 
@@ -164,7 +326,13 @@ class GBDTInference:
             "model_version": MODEL_VERSION,
             "confidence": 0.1,
             "distribution": {"home_win": 0.33, "draw": 0.34, "away_win": 0.33},
-            "goal_metrics": {"expected_total_goals": 2.5, "over_2_5_prob": 0.5, "bts_prob": 0.5},
+            "goal_metrics": {"expected_total_goals": 2.5, "over_2_5_prob": 0.5, "bts_prob": 0.5,
+                             "home_xg": 1.3, "away_xg": 1.2},
+            "score_prediction": [{"home": 1, "away": 1, "probability": 0.12}],
+            "card_prediction": {"expected_yellows": 4.0, "expected_yellows_home": 2.0,
+                                "expected_yellows_away": 2.0, "red_card_probability": 0.08,
+                                "over_3_5_cards": 0.5, "over_4_5_cards": 0.4},
+            "betting_markets": {},
             "feature_importance": {},
             "features_used": 0,
             "error": reason,

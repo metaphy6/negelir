@@ -1,0 +1,915 @@
+==========================================================================================
+                      NEGELIR AI — HISTORICAL PREDICTION TEST REPORT                      
+                             Turkish Super Lig 2024-25 Season                             
+                              Generated: 2026-04-03 20:32:21                              
+==========================================================================================
+
+MODEL CONFIGURATION
+------------------------------------------------------------------------------------------
+  Algorithm                : XGBoost (GBDT, 3-class) + Poisson ensemble
+  Objective                : multi:softprob
+  n_estimators             : 250
+  max_depth                : 4
+  learning_rate            : 0.06
+  min_child_weight         : 4
+  reg_alpha                : 0.5
+  reg_lambda               : 1.5
+  subsample                : 0.8
+  colsample_bytree         : 0.8
+  Draw weighting           : uniform (no extra weighting)
+  Ensemble blend           : 55% XGBoost + 45% Poisson
+  Features                 : 91
+  Mode                     : expanding window (retrain every 1 rounds)
+  Training rounds          : 1-17
+  Test rounds              : 18-38
+  Validation accuracy      : 1.0000
+  Validation log-loss      : 0.1707
+  Execution time           : 2112.3s
+
+OVERALL RESULTS
+------------------------------------------------------------------------------------------
+  Total predictions   : 189
+  Correct predictions : 90
+  Overall accuracy    : 47.6%
+
+  Result Type        Total    Correct   Accuracy
+  Home Win              77         47      61.0%
+  Draw                  39          1       2.6%
+  Away Win              73         42      57.5%
+
+  High-confidence (>=50%): 128, correct: 66, accuracy: 51.6%
+
+SCORE PREDICTION ACCURACY
+------------------------------------------------------------------------------------------
+  Exact score match         : 20/189 (10.6%)
+  Within 1 goal (each team) : 109/189 (57.7%)
+  Top-3 scoreline hit       : 43/189 (22.8%)
+  Goal diff correct         : 37/189 (19.6%)
+
+BETTING MARKET ACCURACY (picking >50% side)
+------------------------------------------------------------------------------------------
+  Market                        Total  Correct   Accuracy
+  Over/Under 1.5 Goals            189      157      83.1%
+  Over/Under 2.5 Goals            189       97      51.3%
+  Over/Under 3.5 Goals            189      118      62.4%
+  BTTS (Yes/No)                   189       91      48.1%
+  Double Chance 1X                189      126      66.7%
+  Double Chance X2                189      113      59.8%
+  Draw No Bet                     150       87      58.0%
+  Asian Handicap H -1.5           189      143      75.7%
+  Half-Time Result                189       75      39.7%
+  HT Over/Under 0.5               189      144      76.2%
+
+FEATURE ENGINEERING HIGHLIGHTS
+------------------------------------------------------------------------------------------
+  Roadmap categories covered:
+    A. Match-Level Core Data     : FT/HT scores, goals per half, league standings, H2H
+    B. Player-Level (approx.)    : Goal concentration, scoring consistency, squad rotation Gini
+    C. Tactical & Formation      : Style matchup index, defensive organization
+    D. Media Sentiment (proxy)   : Form-derived sentiment, fan optimism, consensus strength
+    E. Contextual & Environmental: Fixture congestion, derby, pressure index, season phase
+    F. Derived & Computed        : Poisson xG, custom Elo, Bayesian strength, SoS, momentum
+
+MATCH-BY-MATCH PREDICTIONS
+------------------------------------------------------------------------------------------
+
+  --- Matchday 18 ---
+            Ankaragücü vs Fatih Karagümrük      Score:   1-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=33%  D=21%  A=46%  (conf: 46%)
+                                                Pred Score:   1-1 ~~  xG: 1.27-1.36  Alt: 1-1 (12%), 0-1 (10%), 1-0 (9%)
+                                                O/U2.5:U51%  BTTS:Y53%  HT:D41%  DC1X:61%  AH-1.5:15%
+            Alanyaspor vs Başakşehir            Score:   2-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=14%  D=32%  A=55%  (conf: 55%)
+                                                Pred Score:   0-1   xG: 0.75-1.60  Alt: 0-1 (15%), 0-2 (12%), 1-1 (11%)
+                                                O/U2.5:U58%  BTTS:N58%  HT:D43%  DC1X:42%  AH-1.5:5%
+           Galatasaray vs Beşiktaş              Score:   2-2  Pred: Away Win   Actual: Draw       XX
+                                                H=33%  D=19%  A=48%  (conf: 48%)
+                                                Pred Score:   2-1 ~~  xG: 2.01-1.54  Alt: 2-1 (9%), 1-1 (9%), 2-2 (7%)
+                                                O/U2.5:O69%  BTTS:Y68%  HT:H39%  DC1X:70%  AH-1.5:27%
+             Hatayspor vs Çaykur Rizespor       Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=23%  D=16%  A=61%  (conf: 61%)
+                                                Pred Score:   1-1 ~~  xG: 1.53-1.64  Alt: 1-1 (11%), 1-2 (9%), 2-1 (8%)
+                                                O/U2.5:O61%  BTTS:Y63%  HT:D37%  DC1X:59%  AH-1.5:17%
+          Gaziantep FK vs Samsunspor            Score:   2-2  Pred: Home Win   Actual: Draw       XX
+                                                H=46%  D=13%  A=41%  (conf: 46%)
+                                                Pred Score:   1-1 ~~  xG: 1.79-1.37  Alt: 1-1 (10%), 2-1 (9%), 1-0 (8%)
+                                                O/U2.5:O61%  BTTS:Y62%  HT:H37%  DC1X:70%  AH-1.5:25%
+             Konyaspor vs Trabzonspor           Score:   0-0  Pred: Home Win   Actual: Draw       XX
+                                                H=49%  D=26%  A=25%  (conf: 49%)
+                                                Pred Score:   1-0 ~~  xG: 1.02-0.86  Alt: 1-0 (16%), 0-0 (15%), 1-1 (13%)
+                                                O/U2.5:U71%  BTTS:N63%  HT:D50%  DC1X:70%  AH-1.5:15%
+             Kasımpaşa vs Pendikspor            Score:   3-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=61%  D=13%  A=26%  (conf: 61%)
+                                                Pred Score:   2-1 ~~  xG: 2.45-1.21  Alt: 2-1 (9%), 2-0 (8%), 3-1 (8%)
+                                                O/U2.5:O71%  BTTS:Y65%  HT:H49%  DC1X:81%  AH-1.5:42%
+           Kayserispor vs Adana Demirspor       Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=19%  D=24%  A=57%  (conf: 57%)
+                                                Pred Score:   1-1 ~~  xG: 1.52-1.57  Alt: 1-1 (11%), 1-2 (9%), 2-1 (8%)
+                                                O/U2.5:O60%  BTTS:Y62%  HT:D38%  DC1X:61%  AH-1.5:18%
+           Antalyaspor vs Sivasspor             Score:   1-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=37%  D=33%  A=31%  (conf: 37%)
+                                                Pred Score:   1-1 ~~  xG: 1.88-1.48  Alt: 1-1 (10%), 2-1 (9%), 1-2 (7%)
+                                                O/U2.5:O65%  BTTS:Y65%  HT:H37%  DC1X:69%  AH-1.5:26%
+
+  --- Matchday 19 ---
+            Alanyaspor vs Hatayspor             Score:   3-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=28%  D=36%  A=37%  (conf: 37%)
+                                                Pred Score:   1-1   xG: 1.26-1.33  Alt: 1-1 (13%), 0-1 (10%), 1-0 (9%)
+                                                O/U2.5:U52%  BTTS:Y53%  HT:D42%  DC1X:61%  AH-1.5:15%
+           Antalyaspor vs Beşiktaş              Score:   2-5  Pred: Away Win   Actual: Away Win   OK
+                                                H=13%  D=20%  A=67%  (conf: 67%)
+                                                Pred Score:   1-2   xG: 1.33-2.24  Alt: 1-2 (9%), 1-1 (8%), 0-2 (7%)
+                                                O/U2.5:O69%  BTTS:Y66%  HT:A45%  DC1X:42%  AH-1.5:9%
+            Başakşehir vs Samsunspor            Score:   2-2  Pred: Home Win   Actual: Draw       XX
+                                                H=65%  D=12%  A=23%  (conf: 65%)
+                                                Pred Score:   2-1 ~~  xG: 2.20-1.34  Alt: 2-1 (9%), 1-1 (9%), 2-0 (7%)
+                                                O/U2.5:O69%  BTTS:Y66%  HT:H44%  DC1X:77%  AH-1.5:35%
+       Adana Demirspor vs Gaziantep FK          Score:   3-1  Pred: Away Win   Actual: Home Win   XX
+                                                H=28%  D=19%  A=53%  (conf: 53%)
+                                                Pred Score:   1-1   xG: 1.11-1.86  Alt: 1-1 (11%), 1-2 (10%), 0-1 (10%)
+                                                O/U2.5:O57%  BTTS:Y57%  HT:A42%  DC1X:45%  AH-1.5:8%
+      Fatih Karagümrük vs Kayserispor           Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=35%  D=26%  A=39%  (conf: 39%)
+                                                Pred Score:   1-1 ~~  xG: 1.50-1.21  Alt: 1-1 (12%), 1-0 (10%), 2-1 (9%)
+                                                O/U2.5:O51%  BTTS:Y55%  HT:D40%  DC1X:69%  AH-1.5:22%
+            Pendikspor vs Ankaragücü            Score:   3-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=21%  D=21%  A=59%  (conf: 59%)
+                                                Pred Score:   1-1   xG: 1.09-1.49  Alt: 1-1 (12%), 0-1 (11%), 1-2 (9%)
+                                                O/U2.5:U52%  BTTS:Y52%  HT:D41%  DC1X:54%  AH-1.5:11%
+           Galatasaray vs Kasımpaşa             Score:   4-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=34%  D=34%  A=32%  (conf: 34%)
+                                                Pred Score:   2-1   xG: 2.31-1.78  Alt: 2-1 (8%), 2-2 (7%), 1-1 (7%)
+                                                O/U2.5:O77%  BTTS:Y75%  HT:H41%  DC1X:69%  AH-1.5:30%
+            Fenerbahçe vs Konyaspor             Score:   2-2  Pred: Home Win   Actual: Draw       XX
+                                                H=70%  D=12%  A=18%  (conf: 70%)
+                                                Pred Score:   2-1 ~~  xG: 2.06-1.08  Alt: 2-1 (10%), 1-1 (10%), 2-0 (9%)
+                                                O/U2.5:O61%  BTTS:Y58%  HT:H45%  DC1X:80%  AH-1.5:36%
+           Trabzonspor vs Sivasspor             Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=34%  D=28%  A=37%  (conf: 37%)
+                                                Pred Score:   1-1 ~~  xG: 1.37-1.21  Alt: 1-1 (13%), 1-0 (10%), 0-1 (9%)
+                                                O/U2.5:U52%  BTTS:Y52%  HT:D42%  DC1X:67%  AH-1.5:19%
+
+  --- Matchday 20 ---
+            Alanyaspor vs Fenerbahçe            Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=11%  D=12%  A=77%  (conf: 77%)
+                                                Pred Score:   1-2 ~~  xG: 1.24-2.66  Alt: 1-2 (9%), 1-3 (8%), 0-2 (7%)
+                                                O/U2.5:O75%  BTTS:Y67%  HT:A53%  DC1X:32%  AH-1.5:6%
+           Galatasaray vs Başakşehir            Score:   4-2  Pred: Home Win   Actual: Home Win   OK
+                                                H=50%  D=14%  A=36%  (conf: 50%)
+                                                Pred Score:   2-1   xG: 2.08-1.53  Alt: 2-1 (9%), 1-1 (9%), 2-2 (7%)
+                                                O/U2.5:O70%  BTTS:Y69%  HT:H40%  DC1X:71%  AH-1.5:29%
+             Sivasspor vs Gaziantep FK          Score:   5-3  Pred: Home Win   Actual: Home Win   OK
+                                                H=37%  D=27%  A=36%  (conf: 37%)
+                                                Pred Score:   1-1   xG: 1.28-1.70  Alt: 1-1 (11%), 1-2 (9%), 0-1 (9%)
+                                                O/U2.5:O57%  BTTS:Y59%  HT:D38%  DC1X:53%  AH-1.5:12%
+            Pendikspor vs Fatih Karagümrük      Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=38%  D=35%  A=27%  (conf: 38%)
+                                                Pred Score:   0-1 ==  xG: 0.99-1.47  Alt: 0-1 (13%), 1-1 (12%), 0-2 (9%)
+                                                O/U2.5:U55%  BTTS:N51%  HT:D42%  DC1X:52%  AH-1.5:9%
+           Antalyaspor vs Samsunspor            Score:   0-1  Pred: Away Win   Actual: Away Win   OK
+                                                H=38%  D=18%  A=43%  (conf: 43%)
+                                                Pred Score:   1-2 ~~  xG: 1.74-2.12  Alt: 1-2 (8%), 1-1 (8%), 2-2 (7%)
+                                                O/U2.5:O74%  BTTS:Y73%  HT:A39%  DC1X:53%  AH-1.5:16%
+              Beşiktaş vs Hatayspor             Score:   3-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=85%  D=8%  A=8%  (conf: 85%)
+                                                Pred Score:   2-1 ~~  xG: 2.94-1.08  Alt: 2-1 (8%), 3-1 (8%), 2-0 (8%)
+                                                O/U2.5:O77%  BTTS:Y64%  HT:H57%  DC1X:86%  AH-1.5:53%
+            Ankaragücü vs Kasımpaşa             Score:   1-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=31%  D=27%  A=43%  (conf: 43%)
+                                                Pred Score:   1-2   xG: 1.07-2.11  Alt: 1-2 (10%), 1-1 (9%), 0-2 (9%)
+                                                O/U2.5:O61%  BTTS:Y58%  HT:A47%  DC1X:39%  AH-1.5:7%
+           Trabzonspor vs Adana Demirspor       Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=22%  D=19%  A=59%  (conf: 59%)
+                                                Pred Score:   1-1 ~~  xG: 1.23-1.33  Alt: 1-1 (13%), 0-1 (10%), 1-0 (10%)
+                                                O/U2.5:U53%  BTTS:Y52%  HT:D42%  DC1X:61%  AH-1.5:15%
+             Konyaspor vs Kayserispor           Score:   1-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=44%  D=17%  A=40%  (conf: 44%)
+                                                Pred Score:   1-0 ==  xG: 1.42-0.83  Alt: 1-0 (15%), 1-1 (12%), 2-0 (11%)
+                                                O/U2.5:U61%  BTTS:N57%  HT:D44%  DC1X:78%  AH-1.5:25%
+
+  --- Matchday 21 ---
+            Başakşehir vs Kasımpaşa             Score:   2-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=68%  D=16%  A=16%  (conf: 68%)
+                                                Pred Score:   1-1   xG: 1.93-1.52  Alt: 1-1 (9%), 2-1 (9%), 1-2 (7%)
+                                                O/U2.5:O67%  BTTS:Y67%  HT:H38%  DC1X:69%  AH-1.5:26%
+           Antalyaspor vs Alanyaspor            Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=50%  D=12%  A=38%  (conf: 50%)
+                                                Pred Score:   1-1 ~~  xG: 1.60-1.13  Alt: 1-1 (12%), 1-0 (10%), 2-1 (9%)
+                                                O/U2.5:O51%  BTTS:Y54%  HT:D40%  DC1X:73%  AH-1.5:25%
+          Gaziantep FK vs Çaykur Rizespor       Score:   1-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=54%  D=20%  A=26%  (conf: 54%)
+                                                Pred Score:   1-1   xG: 1.93-1.35  Alt: 1-1 (10%), 2-1 (9%), 1-0 (7%)
+                                                O/U2.5:O64%  BTTS:Y63%  HT:H40%  DC1X:73%  AH-1.5:29%
+             Sivasspor vs Samsunspor            Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=29%  D=21%  A=50%  (conf: 50%)
+                                                Pred Score:   1-2   xG: 1.88-2.42  Alt: 1-2 (7%), 2-2 (7%), 1-1 (6%)
+                                                O/U2.5:O80%  BTTS:Y77%  HT:A42%  DC1X:49%  AH-1.5:15%
+           Galatasaray vs Pendikspor            Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=85%  D=8%  A=7%  (conf: 85%)
+                                                Pred Score:   3-0 ~~  xG: 3.15-0.98  Alt: 3-0 (8%), 3-1 (8%), 2-0 (8%)
+                                                O/U2.5:O78%  BTTS:Y61%  HT:H61%  DC1X:88%  AH-1.5:57%
+      Fatih Karagümrük vs Hatayspor             Score:   2-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=66%  D=16%  A=18%  (conf: 66%)
+                                                Pred Score:   1-0   xG: 1.43-0.88  Alt: 1-0 (14%), 1-1 (12%), 2-0 (10%)
+                                                O/U2.5:U59%  BTTS:N56%  HT:D44%  DC1X:77%  AH-1.5:25%
+              Beşiktaş vs Kayserispor           Score:   4-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=75%  D=10%  A=15%  (conf: 75%)
+                                                Pred Score:   2-0   xG: 2.89-0.98  Alt: 2-0 (9%), 2-1 (9%), 3-0 (8%)
+                                                O/U2.5:O74%  BTTS:Y60%  HT:H58%  DC1X:87%  AH-1.5:54%
+            Fenerbahçe vs Adana Demirspor       Score:   3-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=64%  D=12%  A=24%  (conf: 64%)
+                                                Pred Score:   3-1 ~~  xG: 3.05-1.28  Alt: 3-1 (8%), 2-1 (8%), 3-0 (6%)
+                                                O/U2.5:O81%  BTTS:Y70%  HT:H56%  DC1X:84%  AH-1.5:50%
+             Konyaspor vs Ankaragücü            Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=62%  D=23%  A=14%  (conf: 62%)
+                                                Pred Score:   1-0 ~~  xG: 1.25-0.65  Alt: 1-0 (19%), 0-0 (15%), 1-1 (12%)
+                                                O/U2.5:U70%  BTTS:N66%  HT:D49%  DC1X:81%  AH-1.5:24%
+
+  --- Matchday 22 ---
+           Antalyaspor vs Başakşehir            Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=25%  D=16%  A=59%  (conf: 59%)
+                                                Pred Score:   1-1 ==  xG: 1.40-1.93  Alt: 1-1 (10%), 1-2 (9%), 0-1 (7%)
+                                                O/U2.5:O65%  BTTS:Y64%  HT:A40%  DC1X:50%  AH-1.5:12%
+              Beşiktaş vs Gaziantep FK          Score:   2-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=66%  D=25%  A=9%  (conf: 66%)
+                                                Pred Score:   3-1 ~~  xG: 3.35-1.34  Alt: 3-1 (8%), 2-1 (7%), 4-1 (6%)
+                                                O/U2.5:O85%  BTTS:Y73%  HT:H58%  DC1X:83%  AH-1.5:53%
+      Fatih Karagümrük vs Alanyaspor            Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=40%  D=21%  A=39%  (conf: 40%)
+                                                Pred Score:   1-0 ~~  xG: 1.20-0.97  Alt: 1-0 (14%), 1-1 (13%), 0-0 (11%)
+                                                O/U2.5:U63%  BTTS:N57%  HT:D46%  DC1X:70%  AH-1.5:18%
+            Fenerbahçe vs Samsunspor            Score:   3-2  Pred: Home Win   Actual: Home Win   OK
+                                                H=72%  D=9%  A=19%  (conf: 72%)
+                                                Pred Score:   3-1 ~~  xG: 3.07-1.50  Alt: 3-1 (7%), 2-1 (7%), 4-1 (6%)
+                                                O/U2.5:O83%  BTTS:Y75%  HT:H53%  DC1X:80%  AH-1.5:46%
+            Ankaragücü vs Galatasaray           Score:   0-5  Pred: Away Win   Actual: Away Win   OK
+                                                H=13%  D=18%  A=69%  (conf: 69%)
+                                                Pred Score:   0-2   xG: 0.88-2.84  Alt: 0-2 (10%), 0-3 (9%), 1-2 (9%)
+                                                O/U2.5:O72%  BTTS:Y56%  HT:A60%  DC1X:22%  AH-1.5:3%
+            Pendikspor vs Kayserispor           Score:   2-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=48%  D=16%  A=36%  (conf: 48%)
+                                                Pred Score:   1-1 ~~  xG: 1.39-1.43  Alt: 1-1 (12%), 0-1 (9%), 1-2 (8%)
+                                                O/U2.5:O54%  BTTS:Y57%  HT:D40%  DC1X:62%  AH-1.5:17%
+             Kasımpaşa vs Adana Demirspor       Score:   4-2  Pred: Home Win   Actual: Home Win   OK
+                                                H=58%  D=12%  A=30%  (conf: 58%)
+                                                Pred Score:   1-1   xG: 1.73-1.40  Alt: 1-1 (11%), 2-1 (9%), 1-0 (8%)
+                                                O/U2.5:O61%  BTTS:Y62%  HT:D37%  DC1X:69%  AH-1.5:24%
+             Sivasspor vs Konyaspor             Score:   1-1  Pred: Draw       Actual: Draw       OK
+                                                H=29%  D=53%  A=18%  (conf: 53%)
+                                                Pred Score:   1-1 ==  xG: 1.06-1.06  Alt: 1-1 (13%), 0-1 (13%), 1-0 (13%)
+                                                O/U2.5:U64%  BTTS:N57%  HT:D47%  DC1X:65%  AH-1.5:14%
+             Hatayspor vs Trabzonspor           Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=23%  D=13%  A=64%  (conf: 64%)
+                                                Pred Score:   0-1   xG: 0.94-1.77  Alt: 0-1 (12%), 1-1 (11%), 0-2 (10%)
+                                                O/U2.5:O51%  BTTS:Y51%  HT:A42%  DC1X:43%  AH-1.5:7%
+
+  --- Matchday 23 ---
+           Kayserispor vs Başakşehir            Score:   0-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=47%  D=12%  A=41%  (conf: 47%)
+                                                Pred Score:   1-2 ~~  xG: 1.14-2.44  Alt: 1-2 (9%), 0-2 (8%), 1-1 (8%)
+                                                O/U2.5:O69%  BTTS:Y62%  HT:A51%  DC1X:34%  AH-1.5:6%
+             Sivasspor vs Beşiktaş              Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=9%  D=17%  A=74%  (conf: 74%)
+                                                Pred Score:   1-3 ~~  xG: 1.59-3.02  Alt: 1-3 (7%), 1-2 (7%), 2-3 (6%)
+                                                O/U2.5:O84%  BTTS:Y76%  HT:A53%  DC1X:33%  AH-1.5:8%
+      Fatih Karagümrük vs Antalyaspor           Score:   3-1  Pred: Away Win   Actual: Home Win   XX
+                                                H=23%  D=38%  A=39%  (conf: 39%)
+                                                Pred Score:   0-1   xG: 0.98-1.19  Alt: 0-1 (14%), 1-1 (13%), 0-0 (11%)
+                                                O/U2.5:U63%  BTTS:N57%  HT:D46%  DC1X:59%  AH-1.5:11%
+            Alanyaspor vs Ankaragücü            Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=34%  D=32%  A=34%  (conf: 34%)
+                                                Pred Score:   1-1 ~~  xG: 1.17-1.06  Alt: 1-1 (13%), 1-0 (13%), 0-1 (11%)
+                                                O/U2.5:U62%  BTTS:N55%  HT:D45%  DC1X:67%  AH-1.5:16%
+             Hatayspor vs Fenerbahçe            Score:   1-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=17%  D=7%  A=77%  (conf: 77%)
+                                                Pred Score:   0-3 ~~  xG: 0.86-3.92  Alt: 0-3 (8%), 0-4 (8%), 1-3 (7%)
+                                                O/U2.5:O86%  BTTS:Y61%  HT:A73%  DC1X:11%  AH-1.5:1%
+             Kasımpaşa vs Samsunspor            Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=63%  D=10%  A=27%  (conf: 63%)
+                                                Pred Score:   2-1   xG: 2.26-1.59  Alt: 2-1 (9%), 1-1 (8%), 2-2 (7%)
+                                                O/U2.5:O74%  BTTS:Y71%  HT:H42%  DC1X:72%  AH-1.5:31%
+            Pendikspor vs Trabzonspor           Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=35%  D=18%  A=47%  (conf: 47%)
+                                                Pred Score:   0-1 ~~  xG: 0.93-1.51  Alt: 0-1 (13%), 1-1 (12%), 0-2 (10%)
+                                                O/U2.5:U56%  BTTS:N53%  HT:D42%  DC1X:49%  AH-1.5:8%
+           Galatasaray vs Çaykur Rizespor       Score:   3-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=82%  D=7%  A=11%  (conf: 82%)
+                                                Pred Score:   3-0 ==  xG: 3.23-0.88  Alt: 3-0 (9%), 2-0 (9%), 3-1 (8%)
+                                                O/U2.5:O78%  BTTS:Y58%  HT:H63%  DC1X:89%  AH-1.5:60%
+             Konyaspor vs Gaziantep FK          Score:   3-2  Pred: Away Win   Actual: Home Win   XX
+                                                H=36%  D=20%  A=45%  (conf: 45%)
+                                                Pred Score:   1-0   xG: 1.21-0.71  Alt: 1-0 (18%), 0-0 (15%), 1-1 (13%)
+                                                O/U2.5:U70%  BTTS:N64%  HT:D49%  DC1X:78%  AH-1.5:21%
+
+  --- Matchday 24 ---
+            Başakşehir vs Konyaspor             Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=60%  D=19%  A=22%  (conf: 60%)
+                                                Pred Score:   1-0 ~~  xG: 1.16-0.89  Alt: 1-0 (15%), 1-1 (13%), 0-0 (13%)
+                                                O/U2.5:U66%  BTTS:N60%  HT:D47%  DC1X:72%  AH-1.5:18%
+      Fatih Karagümrük vs Fenerbahçe            Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=14%  D=19%  A=67%  (conf: 67%)
+                                                Pred Score:   0-2 ~~  xG: 0.98-2.28  Alt: 0-2 (10%), 1-2 (10%), 0-1 (9%)
+                                                O/U2.5:O63%  BTTS:Y56%  HT:A51%  DC1X:33%  AH-1.5:5%
+              Beşiktaş vs Alanyaspor            Score:   0-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=77%  D=12%  A=11%  (conf: 77%)
+                                                Pred Score:   2-0   xG: 2.44-0.91  Alt: 2-0 (10%), 2-1 (9%), 1-0 (9%)
+                                                O/U2.5:O65%  BTTS:Y55%  HT:H54%  DC1X:87%  AH-1.5:48%
+            Ankaragücü vs Gaziantep FK          Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=50%  D=19%  A=31%  (conf: 50%)
+                                                Pred Score:   1-1 ~~  xG: 1.52-1.26  Alt: 1-1 (12%), 1-0 (9%), 2-1 (9%)
+                                                O/U2.5:O53%  BTTS:Y56%  HT:D40%  DC1X:68%  AH-1.5:21%
+             Hatayspor vs Kasımpaşa             Score:   2-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=15%  D=12%  A=73%  (conf: 73%)
+                                                Pred Score:   0-2   xG: 0.90-2.14  Alt: 0-2 (11%), 0-1 (10%), 1-2 (10%)
+                                                O/U2.5:O59%  BTTS:Y53%  HT:A49%  DC1X:34%  AH-1.5:5%
+           Kayserispor vs Antalyaspor           Score:   0-5  Pred: Home Win   Actual: Away Win   XX
+                                                H=47%  D=11%  A=41%  (conf: 47%)
+                                                Pred Score:   0-2   xG: 0.89-2.08  Alt: 0-2 (11%), 0-1 (11%), 1-2 (10%)
+                                                O/U2.5:O57%  BTTS:Y52%  HT:A49%  DC1X:35%  AH-1.5:5%
+       Adana Demirspor vs Galatasaray           Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=9%  D=5%  A=86%  (conf: 86%)
+                                                Pred Score:   0-3   xG: 0.89-3.82  Alt: 0-3 (8%), 0-4 (8%), 1-3 (7%)
+                                                O/U2.5:O85%  BTTS:Y61%  HT:A71%  DC1X:12%  AH-1.5:1%
+            Samsunspor vs Çaykur Rizespor       Score:   0-0  Pred: Home Win   Actual: Draw       XX
+                                                H=59%  D=13%  A=28%  (conf: 59%)
+                                                Pred Score:   1-1 ~~  xG: 1.87-1.30  Alt: 1-1 (10%), 2-1 (10%), 1-0 (8%)
+                                                O/U2.5:O61%  BTTS:Y62%  HT:H39%  DC1X:73%  AH-1.5:28%
+           Trabzonspor vs Pendikspor            Score:   2-1  Pred: Away Win   Actual: Home Win   XX
+                                                H=31%  D=14%  A=55%  (conf: 55%)
+                                                Pred Score:   1-0 ~~  xG: 1.57-0.93  Alt: 1-0 (13%), 1-1 (12%), 2-0 (10%)
+                                                O/U2.5:U54%  BTTS:N52%  HT:D42%  DC1X:78%  AH-1.5:27%
+
+  --- Matchday 25 ---
+           Antalyaspor vs Fatih Karagümrük      Score:   2-0  Pred: Draw       Actual: Home Win   XX
+                                                H=26%  D=56%  A=18%  (conf: 56%)
+                                                Pred Score:   1-1 ~~  xG: 1.45-1.14  Alt: 1-1 (12%), 1-0 (11%), 2-1 (9%)
+                                                O/U2.5:U52%  BTTS:Y52%  HT:D41%  DC1X:70%  AH-1.5:21%
+           Trabzonspor vs Alanyaspor            Score:   3-1  Pred: Away Win   Actual: Home Win   XX
+                                                H=29%  D=20%  A=51%  (conf: 51%)
+                                                Pred Score:   1-0   xG: 1.27-0.68  Alt: 1-0 (18%), 0-0 (14%), 1-1 (12%)
+                                                O/U2.5:U69%  BTTS:N64%  HT:D48%  DC1X:80%  AH-1.5:23%
+              Beşiktaş vs Konyaspor             Score:   4-2  Pred: Home Win   Actual: Home Win   OK
+                                                H=61%  D=21%  A=17%  (conf: 61%)
+                                                Pred Score:   1-1   xG: 1.70-1.01  Alt: 1-1 (11%), 1-0 (11%), 2-1 (10%)
+                                                O/U2.5:O51%  BTTS:Y52%  HT:H40%  DC1X:77%  AH-1.5:29%
+            Fenerbahçe vs Çaykur Rizespor       Score:   5-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=78%  D=5%  A=17%  (conf: 78%)
+                                                Pred Score:   3-0   xG: 3.43-0.88  Alt: 3-0 (9%), 3-1 (8%), 2-0 (8%)
+                                                O/U2.5:O80%  BTTS:Y59%  HT:H65%  DC1X:88%  AH-1.5:62%
+            Pendikspor vs Gaziantep FK          Score:   2-2  Pred: Away Win   Actual: Draw       XX
+                                                H=40%  D=13%  A=47%  (conf: 47%)
+                                                Pred Score:   1-1 ~~  xG: 1.50-1.32  Alt: 1-1 (12%), 1-0 (9%), 2-1 (9%)
+                                                O/U2.5:O54%  BTTS:Y57%  HT:D39%  DC1X:66%  AH-1.5:20%
+             Sivasspor vs Başakşehir            Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=14%  D=13%  A=73%  (conf: 73%)
+                                                Pred Score:   1-2 ==  xG: 1.52-2.03  Alt: 1-2 (9%), 1-1 (9%), 2-2 (7%)
+                                                O/U2.5:O69%  BTTS:Y68%  HT:A40%  DC1X:50%  AH-1.5:13%
+            Samsunspor vs Kasımpaşa             Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=19%  D=13%  A=68%  (conf: 68%)
+                                                Pred Score:   1-1 ==  xG: 1.65-1.80  Alt: 1-1 (9%), 1-2 (8%), 2-1 (8%)
+                                                O/U2.5:O67%  BTTS:Y67%  HT:D35%  DC1X:58%  AH-1.5:18%
+       Adana Demirspor vs Kayserispor           Score:   0-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=57%  D=14%  A=28%  (conf: 57%)
+                                                Pred Score:   2-1   xG: 2.21-1.16  Alt: 2-1 (10%), 1-1 (9%), 2-0 (8%)
+                                                O/U2.5:O65%  BTTS:Y61%  HT:H47%  DC1X:80%  AH-1.5:38%
+            Ankaragücü vs Hatayspor             Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=30%  D=19%  A=51%  (conf: 51%)
+                                                Pred Score:   1-0   xG: 1.66-0.93  Alt: 1-0 (13%), 1-1 (12%), 2-0 (10%)
+                                                O/U2.5:U52%  BTTS:N51%  HT:D41%  DC1X:79%  AH-1.5:30%
+
+  --- Matchday 26 ---
+            Alanyaspor vs Trabzonspor           Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=11%  D=33%  A=56%  (conf: 56%)
+                                                Pred Score:   0-1 ~~  xG: 0.52-1.39  Alt: 0-1 (21%), 0-0 (15%), 0-2 (14%)
+                                                O/U2.5:U70%  BTTS:N69%  HT:D48%  DC1X:42%  AH-1.5:3%
+              Beşiktaş vs Ankaragücü            Score:   4-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=71%  D=13%  A=16%  (conf: 71%)
+                                                Pred Score:   2-1   xG: 2.57-1.12  Alt: 2-1 (9%), 2-0 (8%), 3-1 (8%)
+                                                O/U2.5:O71%  BTTS:Y63%  HT:H52%  DC1X:84%  AH-1.5:46%
+            Fenerbahçe vs Hatayspor             Score:   1-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=85%  D=3%  A=13%  (conf: 85%)
+                                                Pred Score:   4-0   xG: 4.60-0.56  Alt: 4-0 (11%), 5-0 (10%), 3-0 (9%)
+                                                O/U2.5:O89%  BTTS:Y53%  HT:H75%  DC1X:81%  AH-1.5:69%
+             Kasımpaşa vs Başakşehir            Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=16%  D=16%  A=68%  (conf: 68%)
+                                                Pred Score:   1-2 ~~  xG: 1.64-2.39  Alt: 1-2 (8%), 1-1 (7%), 2-2 (7%)
+                                                O/U2.5:O77%  BTTS:Y73%  HT:A44%  DC1X:45%  AH-1.5:12%
+           Galatasaray vs Gaziantep FK          Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=78%  D=8%  A=14%  (conf: 78%)
+                                                Pred Score:   3-0   xG: 3.57-0.80  Alt: 3-0 (10%), 4-0 (9%), 2-0 (8%)
+                                                O/U2.5:O81%  BTTS:Y57%  HT:H67%  DC1X:88%  AH-1.5:65%
+       Adana Demirspor vs Sivasspor             Score:   1-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=40%  D=13%  A=46%  (conf: 46%)
+                                                Pred Score:   1-1 ~~  xG: 1.34-1.85  Alt: 1-1 (10%), 1-2 (9%), 0-1 (8%)
+                                                O/U2.5:O62%  BTTS:Y62%  HT:A39%  DC1X:50%  AH-1.5:12%
+            Samsunspor vs Kayserispor           Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=56%  D=15%  A=29%  (conf: 56%)
+                                                Pred Score:   2-0   xG: 2.22-0.97  Alt: 2-0 (10%), 2-1 (10%), 1-0 (9%)
+                                                O/U2.5:O62%  BTTS:Y56%  HT:H49%  DC1X:84%  AH-1.5:42%
+       Çaykur Rizespor vs Antalyaspor           Score:   0-1  Pred: Away Win   Actual: Away Win   OK
+                                                H=22%  D=10%  A=68%  (conf: 68%)
+                                                Pred Score:   0-2 ~~  xG: 0.74-2.10  Alt: 0-2 (13%), 0-1 (12%), 1-2 (10%)
+                                                O/U2.5:O54%  BTTS:N54%  HT:A51%  DC1X:31%  AH-1.5:3%
+             Konyaspor vs Pendikspor            Score:   3-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=31%  D=18%  A=51%  (conf: 51%)
+                                                Pred Score:   1-0   xG: 1.12-0.88  Alt: 1-0 (15%), 0-0 (13%), 1-1 (13%)
+                                                O/U2.5:U68%  BTTS:N60%  HT:D48%  DC1X:72%  AH-1.5:17%
+
+  --- Matchday 27 ---
+       Adana Demirspor vs Alanyaspor            Score:   0-0  Pred: Home Win   Actual: Draw       XX
+                                                H=55%  D=16%  A=29%  (conf: 55%)
+                                                Pred Score:   1-1 ~~  xG: 1.27-1.20  Alt: 1-1 (13%), 1-0 (11%), 0-1 (10%)
+                                                O/U2.5:U55%  BTTS:Y50%  HT:D43%  DC1X:65%  AH-1.5:17%
+             Sivasspor vs Hatayspor             Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=47%  D=15%  A=38%  (conf: 47%)
+                                                Pred Score:   1-1 ~~  xG: 1.83-1.01  Alt: 1-1 (11%), 1-0 (11%), 2-1 (10%)
+                                                O/U2.5:O54%  BTTS:Y53%  HT:H42%  DC1X:79%  AH-1.5:32%
+       Çaykur Rizespor vs Ankaragücü            Score:   5-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=51%  D=14%  A=35%  (conf: 51%)
+                                                Pred Score:   1-1   xG: 1.24-1.28  Alt: 1-1 (13%), 0-1 (10%), 1-0 (10%)
+                                                O/U2.5:U54%  BTTS:Y51%  HT:D42%  DC1X:62%  AH-1.5:15%
+          Gaziantep FK vs Fenerbahçe            Score:   0-4  Pred: Away Win   Actual: Away Win   OK
+                                                H=6%  D=13%  A=81%  (conf: 81%)
+                                                Pred Score:   0-3 ~~  xG: 0.75-3.41  Alt: 0-3 (10%), 0-2 (9%), 0-4 (9%)
+                                                O/U2.5:O78%  BTTS:Y54%  HT:A69%  DC1X:14%  AH-1.5:1%
+           Kayserispor vs Beşiktaş              Score:   2-4  Pred: Away Win   Actual: Away Win   OK
+                                                H=7%  D=21%  A=72%  (conf: 72%)
+                                                Pred Score:   0-4   xG: 0.97-4.12  Alt: 0-4 (7%), 0-3 (7%), 1-4 (7%)
+                                                O/U2.5:O88%  BTTS:Y66%  HT:A73%  DC1X:11%  AH-1.5:1%
+             Kasımpaşa vs Galatasaray           Score:   3-3  Pred: Away Win   Actual: Draw       XX
+                                                H=17%  D=21%  A=62%  (conf: 62%)
+                                                Pred Score:   0-3   xG: 0.97-3.43  Alt: 0-3 (8%), 1-3 (8%), 0-2 (7%)
+                                                O/U2.5:O81%  BTTS:Y62%  HT:A66%  DC1X:17%  AH-1.5:2%
+      Fatih Karagümrük vs Trabzonspor           Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=40%  D=28%  A=32%  (conf: 40%)
+                                                Pred Score:   0-1 ~~  xG: 0.73-1.27  Alt: 0-1 (17%), 0-0 (14%), 1-1 (13%)
+                                                O/U2.5:U68%  BTTS:N63%  HT:D47%  DC1X:51%  AH-1.5:6%
+           Antalyaspor vs Pendikspor            Score:   2-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=67%  D=14%  A=19%  (conf: 67%)
+                                                Pred Score:   1-0 ~~  xG: 1.73-0.74  Alt: 1-0 (15%), 2-0 (13%), 1-1 (11%)
+                                                O/U2.5:U55%  BTTS:N57%  HT:H44%  DC1X:84%  AH-1.5:35%
+             Konyaspor vs Başakşehir            Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=30%  D=19%  A=51%  (conf: 51%)
+                                                Pred Score:   1-1 ~~  xG: 1.27-1.57  Alt: 1-1 (12%), 0-1 (9%), 1-2 (9%)
+                                                O/U2.5:O54%  BTTS:Y57%  HT:D39%  DC1X:56%  AH-1.5:13%
+
+  --- Matchday 28 ---
+            Alanyaspor vs Samsunspor            Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=37%  D=27%  A=36%  (conf: 37%)
+                                                Pred Score:   0-1 ==  xG: 0.86-1.27  Alt: 0-1 (15%), 1-1 (13%), 0-0 (12%)
+                                                O/U2.5:U64%  BTTS:N58%  HT:D46%  DC1X:54%  AH-1.5:8%
+            Başakşehir vs Sivasspor             Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=68%  D=17%  A=15%  (conf: 68%)
+                                                Pred Score:   1-1 ~~  xG: 1.93-1.14  Alt: 1-1 (10%), 2-1 (10%), 1-0 (9%)
+                                                O/U2.5:O59%  BTTS:Y58%  HT:H42%  DC1X:78%  AH-1.5:32%
+          Gaziantep FK vs Hatayspor             Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=22%  D=11%  A=67%  (conf: 67%)
+                                                Pred Score:   1-1 ==  xG: 1.69-1.55  Alt: 1-1 (10%), 2-1 (9%), 1-2 (8%)
+                                                O/U2.5:O63%  BTTS:Y64%  HT:D36%  DC1X:64%  AH-1.5:21%
+           Trabzonspor vs Fenerbahçe            Score:   2-2  Pred: Away Win   Actual: Draw       XX
+                                                H=9%  D=17%  A=74%  (conf: 74%)
+                                                Pred Score:   0-1   xG: 0.72-1.84  Alt: 0-1 (14%), 0-2 (13%), 1-1 (10%)
+                                                O/U2.5:U53%  BTTS:N57%  HT:A47%  DC1X:36%  AH-1.5:4%
+            Pendikspor vs Galatasaray           Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=28%  D=11%  A=61%  (conf: 61%)
+                                                Pred Score:   0-2 ~~  xG: 0.83-2.89  Alt: 0-2 (10%), 0-3 (10%), 1-2 (8%)
+                                                O/U2.5:O72%  BTTS:Y54%  HT:A62%  DC1X:21%  AH-1.5:2%
+       Adana Demirspor vs Fatih Karagümrük      Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=47%  D=29%  A=24%  (conf: 47%)
+                                                Pred Score:   1-1 ==  xG: 1.08-1.44  Alt: 1-1 (12%), 0-1 (12%), 1-2 (9%)
+                                                O/U2.5:U54%  BTTS:Y51%  HT:D42%  DC1X:55%  AH-1.5:11%
+            Ankaragücü vs Beşiktaş              Score:   3-3  Pred: Away Win   Actual: Draw       XX
+                                                H=5%  D=7%  A=88%  (conf: 88%)
+                                                Pred Score:   1-3   xG: 1.03-3.73  Alt: 1-3 (8%), 0-3 (7%), 1-4 (7%)
+                                                O/U2.5:O85%  BTTS:Y66%  HT:A68%  DC1X:15%  AH-1.5:2%
+             Kasımpaşa vs Kayserispor           Score:   4-2  Pred: Home Win   Actual: Home Win   OK
+                                                H=45%  D=10%  A=45%  (conf: 45%)
+                                                Pred Score:   2-1   xG: 2.72-1.39  Alt: 2-1 (8%), 3-1 (8%), 1-1 (6%)
+                                                O/U2.5:O78%  BTTS:Y71%  HT:H51%  DC1X:80%  AH-1.5:43%
+           Antalyaspor vs Çaykur Rizespor       Score:   2-2  Pred: Home Win   Actual: Draw       XX
+                                                H=62%  D=17%  A=21%  (conf: 62%)
+                                                Pred Score:   1-0   xG: 1.89-0.92  Alt: 1-0 (11%), 2-0 (11%), 1-1 (10%)
+                                                O/U2.5:O53%  BTTS:Y51%  HT:H45%  DC1X:82%  AH-1.5:35%
+
+  --- Matchday 29 ---
+            Alanyaspor vs Adana Demirspor       Score:   2-1  Pred: Away Win   Actual: Home Win   XX
+                                                H=29%  D=20%  A=51%  (conf: 51%)
+                                                Pred Score:   0-0   xG: 0.91-0.99  Alt: 0-0 (15%), 0-1 (15%), 1-0 (14%)
+                                                O/U2.5:U70%  BTTS:N62%  HT:D49%  DC1X:64%  AH-1.5:11%
+              Beşiktaş vs Sivasspor             Score:   3-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=82%  D=10%  A=8%  (conf: 82%)
+                                                Pred Score:   2-1 ~~  xG: 2.88-1.12  Alt: 2-1 (8%), 3-1 (8%), 2-0 (8%)
+                                                O/U2.5:O76%  BTTS:Y65%  HT:H56%  DC1X:85%  AH-1.5:51%
+             Hatayspor vs Pendikspor            Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=50%  D=19%  A=31%  (conf: 50%)
+                                                Pred Score:   1-1 ~~  xG: 1.17-1.31  Alt: 1-1 (13%), 0-1 (11%), 1-0 (10%)
+                                                O/U2.5:U55%  BTTS:Y50%  HT:D43%  DC1X:60%  AH-1.5:14%
+           Trabzonspor vs Kayserispor           Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=68%  D=11%  A=21%  (conf: 68%)
+                                                Pred Score:   2-0 ~~  xG: 2.42-0.65  Alt: 2-0 (14%), 1-0 (11%), 3-0 (11%)
+                                                O/U2.5:O59%  BTTS:N56%  HT:H57%  DC1X:91%  AH-1.5:52%
+       Çaykur Rizespor vs Gaziantep FK          Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=61%  D=17%  A=22%  (conf: 61%)
+                                                Pred Score:   1-1 ==  xG: 1.84-1.42  Alt: 1-1 (10%), 2-1 (9%), 1-2 (7%)
+                                                O/U2.5:O63%  BTTS:Y64%  HT:H38%  DC1X:70%  AH-1.5:26%
+            Fenerbahçe vs Fatih Karagümrük      Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=80%  D=13%  A=6%  (conf: 80%)
+                                                Pred Score:   2-0   xG: 2.62-0.64  Alt: 2-0 (13%), 3-0 (12%), 1-0 (10%)
+                                                O/U2.5:O63%  BTTS:N55%  HT:H60%  DC1X:91%  AH-1.5:57%
+            Ankaragücü vs Başakşehir            Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=8%  D=23%  A=68%  (conf: 68%)
+                                                Pred Score:   0-3   xG: 0.83-3.26  Alt: 0-3 (10%), 0-2 (9%), 1-3 (8%)
+                                                O/U2.5:O77%  BTTS:Y56%  HT:A66%  DC1X:16%  AH-1.5:2%
+            Samsunspor vs Galatasaray           Score:   0-5  Pred: Away Win   Actual: Away Win   OK
+                                                H=6%  D=21%  A=73%  (conf: 73%)
+                                                Pred Score:   0-2   xG: 0.96-2.92  Alt: 0-2 (9%), 0-3 (9%), 1-2 (8%)
+                                                O/U2.5:O74%  BTTS:Y59%  HT:A60%  DC1X:23%  AH-1.5:3%
+           Antalyaspor vs Kasımpaşa             Score:   4-1  Pred: Draw       Actual: Home Win   XX
+                                                H=29%  D=58%  A=14%  (conf: 58%)
+                                                Pred Score:   2-1   xG: 2.17-1.33  Alt: 2-1 (9%), 1-1 (9%), 2-0 (7%)
+                                                O/U2.5:O68%  BTTS:Y65%  HT:H44%  DC1X:76%  AH-1.5:34%
+
+  --- Matchday 30 ---
+            Alanyaspor vs Galatasaray           Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=4%  D=15%  A=81%  (conf: 81%)
+                                                Pred Score:   0-2 ~~  xG: 0.61-2.67  Alt: 0-2 (13%), 0-3 (12%), 0-1 (10%)
+                                                O/U2.5:O64%  BTTS:N56%  HT:A62%  DC1X:19%  AH-1.5:1%
+             Hatayspor vs Gaziantep FK          Score:   4-2  Pred: Away Win   Actual: Home Win   XX
+                                                H=29%  D=20%  A=51%  (conf: 51%)
+                                                Pred Score:   1-1   xG: 1.53-1.77  Alt: 1-1 (10%), 1-2 (9%), 2-1 (8%)
+                                                O/U2.5:O64%  BTTS:Y65%  HT:D36%  DC1X:56%  AH-1.5:16%
+              Beşiktaş vs Pendikspor            Score:   4-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=78%  D=8%  A=14%  (conf: 78%)
+                                                Pred Score:   3-1 ~~  xG: 3.20-1.16  Alt: 3-1 (8%), 2-1 (8%), 3-0 (7%)
+                                                O/U2.5:O81%  BTTS:Y67%  HT:H59%  DC1X:85%  AH-1.5:54%
+             Kasımpaşa vs Fenerbahçe            Score:   0-4  Pred: Away Win   Actual: Away Win   OK
+                                                H=8%  D=35%  A=57%  (conf: 57%)
+                                                Pred Score:   0-3 ~~  xG: 0.87-3.67  Alt: 0-3 (9%), 0-4 (8%), 1-3 (8%)
+                                                O/U2.5:O83%  BTTS:Y60%  HT:A70%  DC1X:13%  AH-1.5:1%
+            Ankaragücü vs Çaykur Rizespor       Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=26%  D=21%  A=52%  (conf: 52%)
+                                                Pred Score:   1-1 ~~  xG: 1.09-1.88  Alt: 1-1 (10%), 1-2 (10%), 0-1 (10%)
+                                                O/U2.5:O57%  BTTS:Y57%  HT:A42%  DC1X:44%  AH-1.5:8%
+            Başakşehir vs Antalyaspor           Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=51%  D=30%  A=19%  (conf: 51%)
+                                                Pred Score:   1-1 ~~  xG: 1.68-1.38  Alt: 1-1 (11%), 2-1 (9%), 1-0 (8%)
+                                                O/U2.5:O59%  BTTS:Y61%  HT:D37%  DC1X:68%  AH-1.5:23%
+      Fatih Karagümrük vs Samsunspor            Score:   3-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=46%  D=34%  A=20%  (conf: 46%)
+                                                Pred Score:   1-1   xG: 1.36-1.05  Alt: 1-1 (13%), 1-0 (12%), 0-1 (9%)
+                                                O/U2.5:U57%  BTTS:N52%  HT:D43%  DC1X:71%  AH-1.5:21%
+             Konyaspor vs Sivasspor             Score:   2-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=52%  D=27%  A=22%  (conf: 52%)
+                                                Pred Score:   1-0 ~~  xG: 1.33-0.84  Alt: 1-0 (15%), 1-1 (13%), 0-0 (11%)
+                                                O/U2.5:U63%  BTTS:N58%  HT:D46%  DC1X:76%  AH-1.5:23%
+       Adana Demirspor vs Trabzonspor           Score:   0-4  Pred: Away Win   Actual: Away Win   OK
+                                                H=20%  D=27%  A=53%  (conf: 53%)
+                                                Pred Score:   0-1   xG: 0.69-1.67  Alt: 0-1 (16%), 0-2 (13%), 1-1 (11%)
+                                                O/U2.5:U58%  BTTS:N59%  HT:A44%  DC1X:39%  AH-1.5:4%
+
+  --- Matchday 31 ---
+             Hatayspor vs Alanyaspor            Score:   2-2  Pred: Home Win   Actual: Draw       XX
+                                                H=53%  D=25%  A=21%  (conf: 53%)
+                                                Pred Score:   1-1 ~~  xG: 1.15-1.29  Alt: 1-1 (13%), 0-1 (11%), 1-0 (10%)
+                                                O/U2.5:U56%  BTTS:N50%  HT:D43%  DC1X:60%  AH-1.5:13%
+            Fenerbahçe vs Galatasaray           Score:   0-1  Pred: Home Win   Actual: Away Win   XX
+                                                H=46%  D=18%  A=37%  (conf: 46%)
+                                                Pred Score:   1-1 ~~  xG: 1.89-1.18  Alt: 1-1 (10%), 2-1 (10%), 1-0 (9%)
+                                                O/U2.5:O59%  BTTS:Y59%  HT:H41%  DC1X:76%  AH-1.5:31%
+          Gaziantep FK vs Konyaspor             Score:   1-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=14%  D=35%  A=51%  (conf: 51%)
+                                                Pred Score:   0-1 ~~  xG: 0.98-1.99  Alt: 0-1 (10%), 0-2 (10%), 1-1 (10%)
+                                                O/U2.5:O57%  BTTS:Y54%  HT:A46%  DC1X:39%  AH-1.5:6%
+       Çaykur Rizespor vs Pendikspor            Score:   0-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=45%  D=17%  A=38%  (conf: 45%)
+                                                Pred Score:   1-0   xG: 1.75-0.92  Alt: 1-0 (12%), 1-1 (11%), 2-0 (11%)
+                                                O/U2.5:U50%  BTTS:N50%  HT:H42%  DC1X:80%  AH-1.5:32%
+              Beşiktaş vs Antalyaspor           Score:   0-0  Pred: Home Win   Actual: Draw       XX
+                                                H=46%  D=17%  A=38%  (conf: 46%)
+                                                Pred Score:   2-1   xG: 2.39-1.65  Alt: 2-1 (8%), 1-1 (7%), 2-2 (7%)
+                                                O/U2.5:O77%  BTTS:Y74%  HT:H43%  DC1X:73%  AH-1.5:33%
+            Başakşehir vs Fatih Karagümrük      Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=67%  D=15%  A=18%  (conf: 67%)
+                                                Pred Score:   1-1 ==  xG: 1.69-1.03  Alt: 1-1 (11%), 1-0 (11%), 2-1 (10%)
+                                                O/U2.5:O51%  BTTS:Y52%  HT:H40%  DC1X:77%  AH-1.5:29%
+           Trabzonspor vs Samsunspor            Score:   0-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=70%  D=15%  A=15%  (conf: 70%)
+                                                Pred Score:   1-0   xG: 1.77-0.64  Alt: 1-0 (16%), 2-0 (14%), 1-1 (10%)
+                                                O/U2.5:U57%  BTTS:N61%  HT:H46%  DC1X:87%  AH-1.5:38%
+             Sivasspor vs Kasımpaşa             Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=38%  D=20%  A=43%  (conf: 43%)
+                                                Pred Score:   1-1 ~~  xG: 1.32-1.71  Alt: 1-1 (11%), 1-2 (9%), 0-1 (8%)
+                                                O/U2.5:O58%  BTTS:Y60%  HT:D38%  DC1X:53%  AH-1.5:13%
+           Kayserispor vs Ankaragücü            Score:   1-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=41%  D=14%  A=45%  (conf: 45%)
+                                                Pred Score:   1-1   xG: 1.50-1.22  Alt: 1-1 (12%), 1-0 (10%), 2-1 (9%)
+                                                O/U2.5:O51%  BTTS:Y55%  HT:D40%  DC1X:69%  AH-1.5:22%
+
+  --- Matchday 32 ---
+       Çaykur Rizespor vs Galatasaray           Score:   0-0  Pred: Away Win   Actual: Draw       XX
+                                                H=6%  D=13%  A=82%  (conf: 82%)
+                                                Pred Score:   0-2   xG: 0.96-2.69  Alt: 0-2 (9%), 1-2 (9%), 0-3 (8%)
+                                                O/U2.5:O70%  BTTS:Y58%  HT:A57%  DC1X:26%  AH-1.5:3%
+          Gaziantep FK vs Kasımpaşa             Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=43%  D=19%  A=38%  (conf: 43%)
+                                                Pred Score:   1-2 ~~  xG: 1.72-2.21  Alt: 1-2 (8%), 1-1 (7%), 2-2 (7%)
+                                                O/U2.5:O75%  BTTS:Y73%  HT:A40%  DC1X:50%  AH-1.5:15%
+            Fenerbahçe vs Pendikspor            Score:   3-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=92%  D=5%  A=4%  (conf: 92%)
+                                                Pred Score:   3-0 ==  xG: 3.10-0.51  Alt: 3-0 (13%), 2-0 (13%), 4-0 (10%)
+                                                O/U2.5:O70%  BTTS:N59%  HT:H67%  DC1X:93%  AH-1.5:67%
+      Fatih Karagümrük vs Adana Demirspor       Score:   5-3  Pred: Home Win   Actual: Home Win   OK
+                                                H=45%  D=25%  A=30%  (conf: 45%)
+                                                Pred Score:   1-0   xG: 1.49-0.74  Alt: 1-0 (16%), 2-0 (12%), 1-1 (12%)
+                                                O/U2.5:U61%  BTTS:N59%  HT:D44%  DC1X:81%  AH-1.5:28%
+            Alanyaspor vs Konyaspor             Score:   4-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=45%  D=28%  A=28%  (conf: 45%)
+                                                Pred Score:   0-1   xG: 0.95-1.00  Alt: 0-1 (14%), 0-0 (14%), 1-1 (14%)
+                                                O/U2.5:U69%  BTTS:N61%  HT:D49%  DC1X:64%  AH-1.5:12%
+           Antalyaspor vs Hatayspor             Score:   2-2  Pred: Home Win   Actual: Draw       XX
+                                                H=54%  D=23%  A=23%  (conf: 54%)
+                                                Pred Score:   1-1 ~~  xG: 1.82-1.15  Alt: 1-1 (11%), 2-1 (10%), 1-0 (9%)
+                                                O/U2.5:O57%  BTTS:Y57%  HT:H41%  DC1X:76%  AH-1.5:30%
+           Trabzonspor vs Başakşehir            Score:   2-2  Pred: Away Win   Actual: Draw       XX
+                                                H=18%  D=25%  A=57%  (conf: 57%)
+                                                Pred Score:   1-1 ~~  xG: 1.04-1.32  Alt: 1-1 (13%), 0-1 (13%), 1-0 (10%)
+                                                O/U2.5:U58%  BTTS:N53%  HT:D44%  DC1X:57%  AH-1.5:11%
+           Kayserispor vs Sivasspor             Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=23%  D=12%  A=65%  (conf: 65%)
+                                                Pred Score:   1-1 ~~  xG: 1.04-1.70  Alt: 1-1 (11%), 0-1 (11%), 1-2 (10%)
+                                                O/U2.5:O52%  BTTS:Y53%  HT:A40%  DC1X:47%  AH-1.5:8%
+            Samsunspor vs Ankaragücü            Score:   1-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=53%  D=19%  A=29%  (conf: 53%)
+                                                Pred Score:   1-0 ==  xG: 1.69-0.99  Alt: 1-0 (12%), 1-1 (11%), 2-0 (10%)
+                                                O/U2.5:O50%  BTTS:Y51%  HT:H40%  DC1X:78%  AH-1.5:29%
+
+  --- Matchday 33 ---
+       Çaykur Rizespor vs Samsunspor            Score:   0-1  Pred: Draw       Actual: Away Win   XX
+                                                H=35%  D=35%  A=30%  (conf: 35%)
+                                                Pred Score:   1-1 ~~  xG: 1.41-1.00  Alt: 1-1 (13%), 1-0 (13%), 0-1 (9%)
+                                                O/U2.5:U57%  BTTS:N52%  HT:D43%  DC1X:73%  AH-1.5:22%
+           Galatasaray vs Trabzonspor           Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=37%  D=35%  A=27%  (conf: 37%)
+                                                Pred Score:   1-0   xG: 1.58-0.97  Alt: 1-0 (12%), 1-1 (12%), 2-0 (10%)
+                                                O/U2.5:U53%  BTTS:N51%  HT:D41%  DC1X:77%  AH-1.5:27%
+             Sivasspor vs Alanyaspor            Score:   1-0  Pred: Draw       Actual: Home Win   XX
+                                                H=25%  D=49%  A=26%  (conf: 49%)
+                                                Pred Score:   0-1 ~~  xG: 1.00-1.22  Alt: 0-1 (13%), 1-1 (13%), 0-0 (11%)
+                                                O/U2.5:U62%  BTTS:N56%  HT:D45%  DC1X:59%  AH-1.5:11%
+           Antalyaspor vs Kayserispor           Score:   3-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=56%  D=13%  A=31%  (conf: 56%)
+                                                Pred Score:   2-0 ~~  xG: 2.27-0.88  Alt: 2-0 (11%), 2-1 (10%), 1-0 (10%)
+                                                O/U2.5:O61%  BTTS:Y53%  HT:H51%  DC1X:86%  AH-1.5:45%
+             Konyaspor vs Fenerbahçe            Score:   4-3  Pred: Away Win   Actual: Home Win   XX
+                                                H=3%  D=34%  A=62%  (conf: 62%)
+                                                Pred Score:   0-2   xG: 0.57-2.55  Alt: 0-2 (14%), 0-3 (12%), 0-1 (11%)
+                                                O/U2.5:O61%  BTTS:N59%  HT:A61%  DC1X:20%  AH-1.5:1%
+            Pendikspor vs Beşiktaş              Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=5%  D=14%  A=81%  (conf: 81%)
+                                                Pred Score:   0-3 ==  xG: 0.83-3.35  Alt: 0-3 (10%), 0-2 (9%), 0-4 (8%)
+                                                O/U2.5:O79%  BTTS:Y57%  HT:A67%  DC1X:16%  AH-1.5:2%
+      Fatih Karagümrük vs Ankaragücü            Score:   2-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=71%  D=18%  A=11%  (conf: 71%)
+                                                Pred Score:   1-0   xG: 1.78-0.68  Alt: 1-0 (15%), 2-0 (13%), 1-1 (10%)
+                                                O/U2.5:U55%  BTTS:N59%  HT:H46%  DC1X:86%  AH-1.5:37%
+             Hatayspor vs Başakşehir            Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=12%  D=43%  A=46%  (conf: 46%)
+                                                Pred Score:   1-2 ==  xG: 1.14-2.37  Alt: 1-2 (10%), 0-2 (8%), 1-1 (8%)
+                                                O/U2.5:O68%  BTTS:Y62%  HT:A50%  DC1X:35%  AH-1.5:6%
+             Kasımpaşa vs Gaziantep FK          Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=33%  D=16%  A=50%  (conf: 50%)
+                                                Pred Score:   2-1   xG: 2.15-1.81  Alt: 2-1 (8%), 1-1 (7%), 2-2 (7%)
+                                                O/U2.5:O76%  BTTS:Y74%  HT:H38%  DC1X:66%  AH-1.5:26%
+
+  --- Matchday 34 ---
+              Beşiktaş vs Çaykur Rizespor       Score:   0-0  Pred: Home Win   Actual: Draw       XX
+                                                H=60%  D=20%  A=21%  (conf: 60%)
+                                                Pred Score:   2-0   xG: 2.27-0.89  Alt: 2-0 (11%), 2-1 (10%), 1-0 (10%)
+                                                O/U2.5:O61%  BTTS:Y53%  HT:H51%  DC1X:86%  AH-1.5:44%
+           Kayserispor vs Galatasaray           Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=13%  D=10%  A=77%  (conf: 77%)
+                                                Pred Score:   0-3 ~~  xG: 0.60-3.46  Alt: 0-3 (12%), 0-2 (10%), 0-4 (10%)
+                                                O/U2.5:O77%  BTTS:N53%  HT:A72%  DC1X:11%  AH-1.5:1%
+       Adana Demirspor vs Samsunspor            Score:   1-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=35%  D=19%  A=45%  (conf: 45%)
+                                                Pred Score:   1-1 ~~  xG: 1.10-1.38  Alt: 1-1 (13%), 0-1 (11%), 1-0 (9%)
+                                                O/U2.5:U55%  BTTS:Y50%  HT:D42%  DC1X:57%  AH-1.5:12%
+            Alanyaspor vs Antalyaspor           Score:   3-2  Pred: Draw       Actual: Home Win   XX
+                                                H=26%  D=48%  A=26%  (conf: 48%)
+                                                Pred Score:   0-1   xG: 1.00-1.16  Alt: 0-1 (13%), 1-1 (13%), 0-0 (12%)
+                                                O/U2.5:U63%  BTTS:N57%  HT:D46%  DC1X:60%  AH-1.5:12%
+            Fenerbahçe vs Trabzonspor           Score:   2-3  Pred: Home Win   Actual: Away Win   XX
+                                                H=73%  D=14%  A=13%  (conf: 73%)
+                                                Pred Score:   1-0   xG: 1.82-0.99  Alt: 1-0 (11%), 1-1 (11%), 2-0 (10%)
+                                                O/U2.5:O53%  BTTS:Y53%  HT:H43%  DC1X:80%  AH-1.5:32%
+             Konyaspor vs Fatih Karagümrük      Score:   3-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=50%  D=25%  A=25%  (conf: 50%)
+                                                Pred Score:   1-1   xG: 1.29-1.54  Alt: 1-1 (12%), 0-1 (9%), 1-2 (9%)
+                                                O/U2.5:O54%  BTTS:Y57%  HT:D39%  DC1X:57%  AH-1.5:14%
+            Ankaragücü vs Sivasspor             Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=16%  D=13%  A=71%  (conf: 71%)
+                                                Pred Score:   0-1   xG: 0.88-1.81  Alt: 0-1 (12%), 0-2 (11%), 1-1 (11%)
+                                                O/U2.5:O50%  BTTS:N51%  HT:A44%  DC1X:41%  AH-1.5:6%
+            Pendikspor vs Kasımpaşa             Score:   3-2  Pred: Home Win   Actual: Home Win   OK
+                                                H=46%  D=14%  A=40%  (conf: 46%)
+                                                Pred Score:   1-1   xG: 1.45-1.64  Alt: 1-1 (11%), 1-2 (9%), 2-1 (8%)
+                                                O/U2.5:O60%  BTTS:Y62%  HT:D37%  DC1X:58%  AH-1.5:16%
+
+  --- Matchday 35 ---
+       Çaykur Rizespor vs Fatih Karagümrük      Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=37%  D=28%  A=35%  (conf: 37%)
+                                                Pred Score:   0-1 ~~  xG: 0.86-1.22  Alt: 0-1 (15%), 1-1 (13%), 0-0 (12%)
+                                                O/U2.5:U65%  BTTS:N59%  HT:D47%  DC1X:55%  AH-1.5:9%
+            Başakşehir vs Galatasaray           Score:   2-2  Pred: Away Win   Actual: Draw       XX
+                                                H=13%  D=23%  A=65%  (conf: 65%)
+                                                Pred Score:   0-1   xG: 0.98-1.64  Alt: 0-1 (12%), 1-1 (12%), 0-2 (10%)
+                                                O/U2.5:U51%  BTTS:Y50%  HT:D41%  DC1X:47%  AH-1.5:8%
+            Samsunspor vs Antalyaspor           Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=51%  D=23%  A=26%  (conf: 51%)
+                                                Pred Score:   0-1 ~~  xG: 0.95-1.39  Alt: 0-1 (13%), 1-1 (13%), 0-0 (10%)
+                                                O/U2.5:U59%  BTTS:N54%  HT:D44%  DC1X:53%  AH-1.5:9%
+          Gaziantep FK vs Beşiktaş              Score:   1-1  Pred: Away Win   Actual: Draw       XX
+                                                H=5%  D=39%  A=56%  (conf: 56%)
+                                                Pred Score:   0-3   xG: 0.94-3.60  Alt: 0-3 (8%), 1-3 (8%), 0-4 (7%)
+                                                O/U2.5:O83%  BTTS:Y62%  HT:A68%  DC1X:15%  AH-1.5:2%
+           Kayserispor vs Fenerbahçe            Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=9%  D=8%  A=83%  (conf: 83%)
+                                                Pred Score:   0-4 ~~  xG: 0.53-4.22  Alt: 0-4 (11%), 0-3 (11%), 0-5 (10%)
+                                                O/U2.5:O85%  BTTS:N51%  HT:A79%  DC1X:6%  AH-1.5:0%
+             Konyaspor vs Adana Demirspor       Score:   1-1  Pred: Home Win   Actual: Draw       XX
+                                                H=45%  D=12%  A=43%  (conf: 45%)
+                                                Pred Score:   1-1 ==  xG: 1.91-1.32  Alt: 1-1 (10%), 2-1 (10%), 1-0 (8%)
+                                                O/U2.5:O63%  BTTS:Y63%  HT:H40%  DC1X:73%  AH-1.5:29%
+           Trabzonspor vs Ankaragücü            Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=48%  D=17%  A=35%  (conf: 48%)
+                                                Pred Score:   2-0 ==  xG: 2.35-0.89  Alt: 2-0 (11%), 2-1 (10%), 1-0 (9%)
+                                                O/U2.5:O63%  BTTS:Y54%  HT:H52%  DC1X:86%  AH-1.5:46%
+            Alanyaspor vs Sivasspor             Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=54%  D=19%  A=27%  (conf: 54%)
+                                                Pred Score:   1-1 ~~  xG: 1.09-1.04  Alt: 1-1 (13%), 1-0 (13%), 0-1 (12%)
+                                                O/U2.5:U64%  BTTS:N57%  HT:D46%  DC1X:66%  AH-1.5:15%
+
+  --- Matchday 36 ---
+            Başakşehir vs Çaykur Rizespor       Score:   4-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=53%  D=19%  A=28%  (conf: 53%)
+                                                Pred Score:   1-0   xG: 1.54-0.65  Alt: 1-0 (17%), 2-0 (13%), 0-0 (11%)
+                                                O/U2.5:U63%  BTTS:N63%  HT:D44%  DC1X:84%  AH-1.5:31%
+      Fatih Karagümrük vs Galatasaray           Score:   1-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=12%  D=12%  A=76%  (conf: 76%)
+                                                Pred Score:   0-2 ~~  xG: 0.89-2.29  Alt: 0-2 (11%), 1-2 (10%), 0-1 (10%)
+                                                O/U2.5:O62%  BTTS:Y53%  HT:A52%  DC1X:31%  AH-1.5:4%
+           Antalyaspor vs Fenerbahçe            Score:   1-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=16%  D=38%  A=46%  (conf: 46%)
+                                                Pred Score:   1-1 ~~  xG: 1.05-1.92  Alt: 1-1 (10%), 1-2 (10%), 0-1 (10%)
+                                                O/U2.5:O57%  BTTS:Y56%  HT:A44%  DC1X:42%  AH-1.5:7%
+           Kayserispor vs Pendikspor            Score:   2-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=48%  D=14%  A=38%  (conf: 48%)
+                                                Pred Score:   1-1 ~~  xG: 1.21-1.65  Alt: 1-1 (11%), 1-2 (9%), 0-1 (9%)
+                                                O/U2.5:O55%  BTTS:Y57%  HT:D39%  DC1X:52%  AH-1.5:12%
+             Hatayspor vs Adana Demirspor       Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=32%  D=19%  A=50%  (conf: 50%)
+                                                Pred Score:   1-1 ~~  xG: 1.91-1.65  Alt: 1-1 (9%), 2-1 (9%), 1-2 (7%)
+                                                O/U2.5:O69%  BTTS:Y69%  HT:H36%  DC1X:66%  AH-1.5:24%
+              Beşiktaş vs Trabzonspor           Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=30%  D=22%  A=48%  (conf: 48%)
+                                                Pred Score:   1-1 ~~  xG: 1.92-1.26  Alt: 1-1 (10%), 2-1 (10%), 1-0 (8%)
+                                                O/U2.5:O62%  BTTS:Y61%  HT:H41%  DC1X:75%  AH-1.5:30%
+             Konyaspor vs Alanyaspor            Score:   0-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=54%  D=24%  A=21%  (conf: 54%)
+                                                Pred Score:   1-1 ~~  xG: 1.14-1.25  Alt: 1-1 (13%), 0-1 (11%), 1-0 (10%)
+                                                O/U2.5:U57%  BTTS:N51%  HT:D44%  DC1X:61%  AH-1.5:14%
+
+  --- Matchday 37 ---
+           Galatasaray vs Sivasspor             Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=76%  D=14%  A=9%  (conf: 76%)
+                                                Pred Score:   2-0 ==  xG: 2.06-0.68  Alt: 2-0 (14%), 1-0 (13%), 3-0 (9%)
+                                                O/U2.5:O52%  BTTS:N57%  HT:H51%  DC1X:88%  AH-1.5:44%
+       Adana Demirspor vs Çaykur Rizespor       Score:   4-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=44%  D=26%  A=30%  (conf: 44%)
+                                                Pred Score:   0-1   xG: 0.98-1.18  Alt: 0-1 (14%), 1-1 (13%), 0-0 (11%)
+                                                O/U2.5:U63%  BTTS:N57%  HT:D46%  DC1X:59%  AH-1.5:11%
+            Fenerbahçe vs Gaziantep FK          Score:   5-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=81%  D=8%  A=11%  (conf: 81%)
+                                                Pred Score:   2-0   xG: 2.95-0.88  Alt: 2-0 (9%), 3-0 (9%), 2-1 (8%)
+                                                O/U2.5:O73%  BTTS:Y57%  HT:H60%  DC1X:89%  AH-1.5:57%
+           Kayserispor vs Hatayspor             Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=45%  D=11%  A=44%  (conf: 45%)
+                                                Pred Score:   1-2 ==  xG: 1.36-2.45  Alt: 1-2 (9%), 1-1 (7%), 1-3 (7%)
+                                                O/U2.5:O73%  BTTS:Y68%  HT:A48%  DC1X:39%  AH-1.5:8%
+            Başakşehir vs Trabzonspor           Score:   0-2  Pred: Away Win   Actual: Away Win   OK
+                                                H=32%  D=33%  A=35%  (conf: 35%)
+                                                Pred Score:   1-1 ~~  xG: 1.41-1.05  Alt: 1-1 (13%), 1-0 (12%), 0-1 (9%)
+                                                O/U2.5:U55%  BTTS:N51%  HT:D43%  DC1X:72%  AH-1.5:22%
+      Fatih Karagümrük vs Konyaspor             Score:   0-0  Pred: Home Win   Actual: Draw       XX
+                                                H=45%  D=15%  A=40%  (conf: 45%)
+                                                Pred Score:   1-1 ~~  xG: 1.61-1.66  Alt: 1-1 (10%), 1-2 (8%), 2-1 (8%)
+                                                O/U2.5:O63%  BTTS:Y65%  HT:D36%  DC1X:60%  AH-1.5:18%
+           Antalyaspor vs Ankaragücü            Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=75%  D=15%  A=10%  (conf: 75%)
+                                                Pred Score:   2-0   xG: 2.36-0.75  Alt: 2-0 (12%), 1-0 (11%), 3-0 (10%)
+                                                O/U2.5:O60%  BTTS:N52%  HT:H55%  DC1X:89%  AH-1.5:49%
+
+  --- Matchday 38 ---
+             Konyaspor vs Çaykur Rizespor       Score:   2-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=28%  D=19%  A=54%  (conf: 54%)
+                                                Pred Score:   1-1   xG: 1.29-1.02  Alt: 1-1 (13%), 1-0 (13%), 0-1 (10%)
+                                                O/U2.5:U59%  BTTS:N54%  HT:D44%  DC1X:70%  AH-1.5:19%
+           Antalyaspor vs Galatasaray           Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=22%  D=36%  A=42%  (conf: 42%)
+                                                Pred Score:   1-1   xG: 1.03-1.50  Alt: 1-1 (12%), 0-1 (12%), 1-2 (9%)
+                                                O/U2.5:U54%  BTTS:N50%  HT:D42%  DC1X:52%  AH-1.5:10%
+       Adana Demirspor vs Pendikspor            Score:   2-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=61%  D=17%  A=22%  (conf: 61%)
+                                                Pred Score:   1-1 ~~  xG: 1.45-1.36  Alt: 1-1 (12%), 1-0 (9%), 2-1 (9%)
+                                                O/U2.5:O53%  BTTS:Y57%  HT:D40%  DC1X:65%  AH-1.5:19%
+            Samsunspor vs Hatayspor             Score:   1-0  Pred: Home Win   Actual: Home Win   OK
+                                                H=52%  D=26%  A=22%  (conf: 52%)
+                                                Pred Score:   1-1 ~~  xG: 1.26-1.26  Alt: 1-1 (13%), 0-1 (10%), 1-0 (10%)
+                                                O/U2.5:U54%  BTTS:Y51%  HT:D42%  DC1X:63%  AH-1.5:16%
+             Sivasspor vs Fenerbahçe            Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=6%  D=19%  A=75%  (conf: 75%)
+                                                Pred Score:   0-2   xG: 0.49-2.33  Alt: 0-2 (16%), 0-1 (14%), 0-3 (13%)
+                                                O/U2.5:O54%  BTTS:N64%  HT:A58%  DC1X:21%  AH-1.5:1%
+           Kayserispor vs Gaziantep FK          Score:   0-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=45%  D=15%  A=40%  (conf: 45%)
+                                                Pred Score:   1-1 ~~  xG: 1.30-1.78  Alt: 1-1 (11%), 1-2 (9%), 0-1 (8%)
+                                                O/U2.5:O60%  BTTS:Y61%  HT:A38%  DC1X:51%  AH-1.5:12%
+
+  --- Matchday 39 ---
+       Çaykur Rizespor vs Kasımpaşa             Score:   1-2  Pred: Home Win   Actual: Away Win   XX
+                                                H=41%  D=33%  A=26%  (conf: 41%)
+                                                Pred Score:   1-1 ~~  xG: 1.40-1.47  Alt: 1-1 (12%), 1-2 (9%), 0-1 (8%)
+                                                O/U2.5:O55%  BTTS:Y58%  HT:D39%  DC1X:61%  AH-1.5:16%
+           Antalyaspor vs Trabzonspor           Score:   2-1  Pred: Away Win   Actual: Home Win   XX
+                                                H=36%  D=27%  A=37%  (conf: 37%)
+                                                Pred Score:   1-1 ~~  xG: 1.21-1.43  Alt: 1-1 (12%), 0-1 (10%), 1-2 (9%)
+                                                O/U2.5:U51%  BTTS:Y53%  HT:D41%  DC1X:58%  AH-1.5:13%
+            Ankaragücü vs Fenerbahçe            Score:   0-1  Pred: Away Win   Actual: Away Win   OK
+                                                H=15%  D=26%  A=59%  (conf: 59%)
+                                                Pred Score:   0-3   xG: 0.64-3.43  Alt: 0-3 (11%), 0-2 (10%), 0-4 (10%)
+                                                O/U2.5:O77%  BTTS:N51%  HT:A71%  DC1X:12%  AH-1.5:1%
+       Adana Demirspor vs Hatayspor             Score:   4-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=58%  D=14%  A=28%  (conf: 58%)
+                                                Pred Score:   1-1   xG: 1.49-1.88  Alt: 1-1 (10%), 1-2 (9%), 2-1 (7%)
+                                                O/U2.5:O65%  BTTS:Y66%  HT:A38%  DC1X:53%  AH-1.5:14%
+
+  --- Matchday 40 ---
+             Kasımpaşa vs Çaykur Rizespor       Score:   2-1  Pred: Home Win   Actual: Home Win   OK
+                                                H=51%  D=13%  A=35%  (conf: 51%)
+                                                Pred Score:   1-1 ~~  xG: 1.47-1.40  Alt: 1-1 (12%), 2-1 (9%), 1-0 (8%)
+                                                O/U2.5:O55%  BTTS:Y58%  HT:D39%  DC1X:64%  AH-1.5:19%
+            Samsunspor vs Trabzonspor           Score:   3-4  Pred: Draw       Actual: Away Win   XX
+                                                H=19%  D=52%  A=29%  (conf: 52%)
+                                                Pred Score:   0-1   xG: 0.74-1.52  Alt: 0-1 (16%), 0-2 (12%), 1-1 (12%)
+                                                O/U2.5:U61%  BTTS:N59%  HT:D44%  DC1X:44%  AH-1.5:5%
+             Hatayspor vs Antalyaspor           Score:   1-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=30%  D=12%  A=57%  (conf: 57%)
+                                                Pred Score:   1-2   xG: 1.19-2.05  Alt: 1-2 (10%), 1-1 (10%), 0-2 (8%)
+                                                O/U2.5:O63%  BTTS:Y61%  HT:A44%  DC1X:43%  AH-1.5:8%
+
+  --- Matchday 41 ---
+           Kayserispor vs Çaykur Rizespor       Score:   2-0  Pred: Away Win   Actual: Home Win   XX
+                                                H=22%  D=12%  A=66%  (conf: 66%)
+                                                Pred Score:   0-1   xG: 0.97-1.79  Alt: 0-1 (11%), 1-1 (11%), 0-2 (10%)
+                                                O/U2.5:O52%  BTTS:Y52%  HT:A42%  DC1X:43%  AH-1.5:7%
+
+  --- Matchday 42 ---
+       Çaykur Rizespor vs Beşiktaş              Score:   0-3  Pred: Away Win   Actual: Away Win   OK
+                                                H=13%  D=10%  A=77%  (conf: 77%)
+                                                Pred Score:   0-2 ~~  xG: 0.85-2.19  Alt: 0-2 (12%), 0-1 (11%), 1-2 (10%)
+                                                O/U2.5:O58%  BTTS:Y51%  HT:A51%  DC1X:32%  AH-1.5:4%
+
+ROUND-BY-ROUND ACCURACY
+------------------------------------------------------------------------------------------
+     Round    Total    Correct   Accuracy  Bar
+        18        9          4      44.4%  ########............
+        19        9          3      33.3%  ######..............
+        20        9          6      66.7%  #############.......
+        21        9          3      33.3%  ######..............
+        22        9          7      77.8%  ###############.....
+        23        9          5      55.6%  ###########.........
+        24        9          3      33.3%  ######..............
+        25        9          4      44.4%  ########............
+        26        9          4      44.4%  ########............
+        27        9          5      55.6%  ###########.........
+        28        9          3      33.3%  ######..............
+        29        9          2      22.2%  ####................
+        30        9          7      77.8%  ###############.....
+        31        9          1      11.1%  ##..................
+        32        9          5      55.6%  ###########.........
+        33        9          4      44.4%  ########............
+        34        8          4      50.0%  ##########..........
+        35        8          3      37.5%  #######.............
+        36        7          5      71.4%  ##############......
+        37        7          4      57.1%  ###########.........
+        38        6          4      66.7%  #############.......
+        39        4          2      50.0%  ##########..........
+        40        3          1      33.3%  ######..............
+        41        1          0       0.0%  ....................
+        42        1          1     100.0%  ####################
+
+==========================================================================================
+                         SUMMARY: 90/189 correct (47.6% accuracy)                         
+                          Baseline (always predict home): 40.7%                           
+                             Model lift over baseline: +6.9%                              
+==========================================================================================

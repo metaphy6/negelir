@@ -66,6 +66,19 @@ CREATE TABLE IF NOT EXISTS team_features (
     -- Sentiment (bare floats, no text ever stored per roadmap §2D)
     media_sentiment_score  REAL,
     fan_optimism_index     REAL,
+    -- Card & discipline (v0.2)
+    avg_yellows_5          REAL,
+    avg_yellows_10         REAL,
+    avg_fouls_5            REAL,
+    avg_ht_scored_5        REAL,
+    avg_sh_scored_5        REAL,
+    avg_ht_conceded_5      REAL,
+    venue_win_pct          REAL,
+    venue_ppg_10           REAL,
+    draws_bayesian         REAL,
+    sos_rating             REAL,
+    sh_scoring_rate        REAL,
+    sh_conceding_rate      REAL,
     -- Meta
     noise_seed             INTEGER,
     PRIMARY KEY (team_uuid, season, match_week)

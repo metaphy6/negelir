@@ -47,16 +47,18 @@ def detect_device() -> str:
 def get_xgb_params(device: str) -> dict:
     """Return XGBoost parameters appropriate for the detected device."""
     base_params = {
-        "objective": "binary:logistic",
-        "eval_metric": "logloss",
-        "max_depth": 6,
-        "learning_rate": 0.1,
-        "n_estimators": 200,
+        "objective": "multi:softprob",
+        "num_class": 3,
+        "eval_metric": "mlogloss",
+        "max_depth": 4,
+        "learning_rate": 0.06,
+        "n_estimators": 350,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "reg_alpha": 0.1,
-        "reg_lambda": 1.0,
-        "min_child_weight": 3,
+        "reg_alpha": 0.5,
+        "reg_lambda": 1.5,
+        "min_child_weight": 4,
+        "gamma": 0.1,
         "seed": 42,
     }
 

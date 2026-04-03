@@ -1,8 +1,8 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "sources": {
     "source_a": {
-      "description": "Historical match data and statistics archive",
+      "description": "Historical match data, statistics, and card records",
       "selectors": {
         "match_row": "div.match-row, tr.match-item, .mac-satiri",
         "home_team": ".home-team .name, .ev-sahibi, td:nth-child(2)",
@@ -14,17 +14,25 @@
         "shots_on": ".shots-on-target, .isabetli-sut",
         "shots_off": ".shots-off-target, .isabetsiz-sut",
         "corners": ".corners, .korner",
-        "fouls": ".fouls, .faul"
+        "fouls": ".fouls, .faul",
+        "yellow_cards": ".yellow-cards, .sari-kart",
+        "red_cards": ".red-cards, .kirmizi-kart",
+        "home_yellows": ".home-yellows, .ev-sari",
+        "away_yellows": ".away-yellows, .dep-sari",
+        "home_reds": ".home-reds, .ev-kirmizi",
+        "away_reds": ".away-reds, .dep-kirmizi"
       }
     },
     "source_b": {
-      "description": "Live scores and league tables (public statistics)",
+      "description": "Live scores, league tables, and card statistics",
       "selectors": {
         "match_row": ".match-card, .event-row",
         "home_team": ".home .team-name",
         "away_team": ".away .team-name",
         "score": ".score, .result",
         "date": ".date, .event-date",
+        "yellow_cards": ".cards .yellow, .sari-kart",
+        "red_cards": ".cards .red, .kirmizi-kart",
         "league_table_row": ".standings-row, tr.team-row",
         "position": ".pos, td:nth-child(1)",
         "team_name": ".team, td:nth-child(2)",
@@ -32,14 +40,18 @@
       }
     },
     "source_c": {
-      "description": "Official results and fixture data",
+      "description": "Official results, fixture data, and discipline records",
       "selectors": {
         "fixture_row": ".fixture, .musabaka",
         "home_team": ".home, .ev",
         "away_team": ".away, .dep",
         "score": ".result, .sonuc",
         "date": ".date, .tarih",
-        "referee": ".referee, .hakem"
+        "referee": ".referee, .hakem",
+        "home_yellows": ".home-discipline .yellow, .ev-sari",
+        "away_yellows": ".away-discipline .yellow, .dep-sari",
+        "home_reds": ".home-discipline .red, .ev-kirmizi",
+        "away_reds": ".away-discipline .red, .dep-kirmizi"
       }
     }
   }

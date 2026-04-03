@@ -21,6 +21,11 @@ class ParsedMatch:
     ht_away_score: int | None = None
     match_date: str = ""
     stats: dict = field(default_factory=dict)
+    # Card & discipline data (v0.2)
+    home_yellows: int | None = None
+    away_yellows: int | None = None
+    home_reds: int | None = None
+    away_reds: int | None = None
 
 
 def parse_match_page(html: str, selectors: dict) -> list[ParsedMatch]:
@@ -89,8 +94,10 @@ def _extract_match_from_row(row, selectors: dict) -> ParsedMatch | None:
                 match.match_date = el.get_text(strip=True)
                 break
 
-        # Stats (possession, shots, etc.)
-        for stat_name in ["possession", "shots_on", "shots_off", "corners", "fouls"]:
+        # Stats (possession, shots, cards, etc.)
+        for stat_name in ["possession", "shots_on", "shots_off", "corners", "fouls",
+                          "yellow_cards", "red_cards",
+                          "home_yellows", "away_yellows", "home_reds", "away_reds"]:
             for sel in selectors.get(stat_name, "").split(","):
                 sel = sel.strip()
                 if not sel:
@@ -106,5 +113,15 @@ def _extract_match_from_row(row, selectors: dict) -> ParsedMatch | None:
     except Exception as e:
         log.debug(f"Row parse error: {e}")
         return None
+
+    # Map card stats to dedicated fields
+    if "home_yellows" in match.stats:
+        match.home_yellows = match.stats.pop("home_yellows")
+    if "away_yellows" in match.stats:
+        match.away_yellows = match.stats.pop("away_yellows")
+    if "home_reds" in match.stats:
+        match.home_reds = match.stats.pop("home_reds")
+    if "away_reds" in match.stats:
+        match.away_reds = match.stats.pop("away_reds")
 
     return match

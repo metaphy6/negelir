@@ -1,565 +1,1212 @@
-# 🕷️ Negelir — Web Scraping & Data Pipeline Documentation
+# Negelir — Data Sources, Fetch Mechanisms & Database Reference
+
+> Detailed reference: what is scraped, how it flows, where it is stored, what queries run, and how the AI consumes it.
+
+---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Data Sources](#data-sources)
-4. [Raw Data Format](#raw-data-format)
-5. [Scraping Engine](#scraping-engine)
-6. [CSS Selectors Configuration](#css-selectors-configuration)
-7. [Data Parsing](#data-parsing)
-8. [Data Proofreading & Validation](#data-proofreading--validation)
-9. [Feature Engineering — From Raw Data to AI Input](#feature-engineering--from-raw-data-to-ai-input)
-10. [Feature Vector Schema (91 Dimensions)](#feature-vector-schema-91-dimensions)
-11. [How Data Feeds the AI Model](#how-data-feeds-the-ai-model)
-12. [Database Schema](#database-schema)
-13. [Go Middleware Server](#go-middleware-server)
-14. [Security & Compliance](#security--compliance)
-15. [Data Flow Diagram](#data-flow-diagram)
+1. [Architecture Overview](#1-architecture-overview)
+2. [Data Sources](#2-data-sources)
+3. [Scraping Process Mechanism](#3-scraping-process-mechanism)
+4. [HTML Extraction — CSS Selectors](#4-html-extraction--css-selectors)
+5. [Go Middleware Server — REST API & SQL Queries](#5-go-middleware-server--rest-api--sql-queries)
+6. [PostgreSQL Database Schema](#6-postgresql-database-schema)
+7. [Redis Cache Layer](#7-redis-cache-layer)
+8. [JSON Structures — Full Examples](#8-json-structures--full-examples)
+9. [Feature Extraction from Raw Data](#9-feature-extraction-from-raw-data)
+10. [Data Provenance Obfuscation](#10-data-provenance-obfuscation)
+11. [Environment Configuration](#11-environment-configuration)
+12. [Scrape Task Lifecycle](#12-scrape-task-lifecycle)
 
 ---
 
-## Overview
-
-Negelir's data pipeline collects Turkish football match data, validates it, transforms it into a 91-dimensional feature vector, and feeds it to an XGBoost GBDT model for match prediction. The system follows a strict **RAM-only processing** paradigm — raw HTML is never persisted to disk.
-
-### Key Principles (from Roadmap §4.2)
-
-- **Rate-limited**: Max 1 request per 5 seconds per domain
-- **robots.txt-respecting**: Compliance with site crawling policies
-- **RAM-only**: HTML is processed in memory and discarded immediately
-- **No PII**: No personal data is collected or stored
-- **Source anonymization**: Internal UUIDs replace source-identifying data (Roadmap §6.2)
-
----
-
-## Architecture
+## 1. Architecture Overview
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                        DATA SOURCES                           │
-│   Source-A (Statistics)  Source-B (Live Scores)  Source-C      │
-│        Archive              League Tables        (Official)   │
-└────────────┬──────────────────┬──────────────────┬────────────┘
-             │                  │                  │
-             ▼                  ▼                  ▼
-┌───────────────────────────────────────────────────────────────┐
-│                    GO MIDDLEWARE SERVER                        │
-│   • Triggers scraping       • Caches to PostgreSQL            │
-│   • Rate limiting           • Redis caching                   │
-│   • Health monitoring       • REST API for AI module          │
-│   Endpoint: POST /api/v1/scrape/trigger                       │
-└────────────────────────────┬──────────────────────────────────┘
-                             │ JSON
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│                    AI SCRAPING ENGINE                          │
-│   ai/scraper/engine.py                                        │
-│   • Prefers Go server (cached data)                           │
-│   • Fallback: direct scraping with rate limiting              │
-│   • Uses CSS selectors from selectors.json                    │
-└────────────────────────────┬──────────────────────────────────┘
-                             │ ParsedMatch objects
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│                    HTML PARSER                                 │
-│   ai/scraper/parsers.py                                       │
-│   • BeautifulSoup + lxml                                      │
-│   • Extracts: teams, scores, dates, stats                     │
-│   • HTML discarded from RAM after parsing                     │
-└────────────────────────────┬──────────────────────────────────┘
-                             │ Raw match dicts
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│                    DATA PROOFREADER                            │
-│   ai/proofreader/validator.py                                 │
-│   • Range checks (goals 0-15, possession 0-100)              │
-│   • Consistency checks (possession sums to ~100)              │
-│   • Plausibility checks (>3σ deviation = suspect)             │
-│   • Invalid data → quarantine, not discard                    │
-└────────────────────────────┬──────────────────────────────────┘
-                             │ Validated match data
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│                    FEATURE ENGINEERING                         │
-│   ai/model/features.py                                        │
-│   • 91 features per match (FEATURE_COLUMNS)                   │
-│   • Rolling window stats, Elo, Poisson xG, H2H               │
-│   • ±0.5% noise injection (Roadmap §6.2 Stage 5)             │
-└────────────────────────────┬──────────────────────────────────┘
-                             │ 1×91 numpy float32 array
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│                    GBDT MODEL (XGBoost)                        │
-│   ai/model/inference.py                                       │
-│   • Feature Vector Firewall (range validation)                │
-│   • Inference < 300ms SLA                                     │
-│   • Output: match probabilities, goal metrics, confidence     │
-└───────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│              EXTERNAL DATA SOURCES  (HTTPS)                        │
+│   Source A: arsiv.mackolik.com   — historical match archive        │
+│   Source B: www.mackolik.com     — live scores & league tables     │
+│   Source C: www.tff.org          — official TFF results            │
+│   Source Extra: (user-defined via .env, comma-separated)           │
+└──────────────────┬─────────────────────────────────────────────────┘
+                   │ Rate-limited HTTPS (1 req / 5s per domain)
+                   │ robots.txt respected
+                   ▼
+┌────────────────────────────────────────────────────────────────────┐
+│           GO MIDDLEWARE SERVER  (Gin, port 8080)                   │
+│                                                                    │
+│  • Accepts scrape triggers via POST /api/v1/scrape/trigger         │
+│  • Fetches external pages, parses HTML, stores structured data     │
+│  • Caches hot queries in Redis (TTL varies per route)              │
+│  • Exposes 7 REST endpoints to the AI module                       │
+└──────┬─────────────────────────┬──────────────────────────────────┘
+       │ pgxpool (max 10 conns)  │ go-redis
+       ▼                         ▼
+┌─────────────────┐     ┌────────────────────┐
+│  PostgreSQL 16  │     │   Redis 7 (cache)  │
+│  7 core tables  │     │  TTL: 60s – 300s   │
+│  + 4 indexes    │     └────────────────────┘
+└─────────────────┘
+       │
+       │ REST (HTTP) → GET /api/v1/matches, /teams, /features
+       ▼
+┌────────────────────────────────────────────────────────────────────┐
+│           PYTHON AI MODULE  (Docker service, no exposed port)      │
+│                                                                    │
+│  ScrapingEngine → DataProofreader → FeatureEngineering             │
+│  → GBDTInference → P2PConsensus → TQU → TRC → Turkish response    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Stack:**
+- Go 1.23, Gin v1.9, pgxpool v5.5, go-redis v9.4
+- Python 3.11, requests, BeautifulSoup4, lxml, XGBoost, numpy
+
+---
+
+## 2. Data Sources
+
+Sources are configured entirely via `.env` and passed to the AI container through Docker Compose. No source URL is ever hard-coded in application logic.
+
+### Source A — Historical Match Archive
+
+| | |
+|---|---|
+| Env var | `SCRAPE_SOURCE_A` |
+| Default | `https://arsiv.mackolik.com` |
+| Internal label | `source_a` |
+| Purpose | Historical match results, half-time scores, detailed per-match statistics |
+| Coverage | Last 5 seasons (per roadmap §2 scope) |
+| CSS selector set | `source_a` in `selectors.json` |
+
+**Fields extracted:**
+- Full-time score (`home_score`, `away_score`)
+- Half-time score (`ht_home_score`, `ht_away_score`)
+- Match date, home team name, away team name
+- Stats: possession %, shots on target, shots off target, corners, fouls
+
+### Source B — Live Scores & League Tables
+
+| | |
+|---|---|
+| Env var | `SCRAPE_SOURCE_B` |
+| Default | `https://www.mackolik.com` |
+| Internal label | `source_b` |
+| Purpose | Live and recent match results, current league standings |
+| CSS selector set | `source_b` in `selectors.json` |
+
+**Fields extracted:**
+- Recent match results (current season)
+- League table: position, team, played, won, drawn, lost, GF, GA, GD, points
+
+### Source C — Official TFF Results
+
+| | |
+|---|---|
+| Env var | `SCRAPE_SOURCE_C` |
+| Default | `https://www.tff.org` |
+| Internal label | `source_c` |
+| Purpose | Authoritative fixture list, confirmed final scores |
+| CSS selector set | `source_c` in `selectors.json` |
+
+**Fields extracted:**
+- Fixture date, round, home team, away team
+- Official confirmed score
+- Referee identity (stored only as SHA-256 hash, never as name)
+
+### Source Extra — User-Configured
+
+| | |
+|---|---|
+| Env var | `SCRAPE_SOURCE_EXTRA` |
+| Default | *(empty)* |
+| Format | Comma-separated URLs: `https://site1.com,https://site2.com` |
+| Internal label | `source_extra` |
+
+Additional sources can be added without touching code — only the `.env` file.
+
+**Example `.env`:**
+```dotenv
+SCRAPE_SOURCE_A=https://arsiv.mackolik.com
+SCRAPE_SOURCE_B=https://www.mackolik.com
+SCRAPE_SOURCE_C=https://www.tff.org
+SCRAPE_SOURCE_EXTRA=https://example1.com,https://example2.com
 ```
 
 ---
 
-## Data Sources
+## 3. Scraping Process Mechanism
 
-Configured in `ai/scraper/selectors.json` with 3 source profiles:
+### 3.1 Preferred Path: Go Middleware Delegation
 
-| Source | Description | Data Type |
-|--------|-------------|-----------|
-| **Source-A** | Historical match data and statistics archive | Match results, scores, detailed stats (possession, shots, corners, fouls) |
-| **Source-B** | Live scores and league tables | Match cards, results, standings |
-| **Source-C** | Official results and fixture data | Fixtures, results, referee information |
+The Python AI module **does not scrape directly in normal operation**. It delegates to the Go server:
 
-Each source has its own CSS selector map for parsing different HTML structures.
-
----
-
-## Raw Data Format
-
-### From Go Server API (`GET /api/v1/matches`)
-
-```json
-{
-    "count": 180,
-    "matches": [
-        {
-            "id": "uuid-v4",
-            "source_id": "source_001_match_42",
-            "league_id": "super_lig",
-            "season": "2025-2026",
-            "match_week": 30,
-            "home_team": "team_001",
-            "away_team": "team_002",
-            "home_score": 2,
-            "away_score": 1,
-            "ht_home_score": 1,
-            "ht_away_score": 0,
-            "match_date": "2026-04-05T19:00:00Z",
-            "stats_json": {
-                "possession_home": 56,
-                "possession_away": 44,
-                "shots_on_home": 6,
-                "shots_on_away": 4,
-                "shots_off_home": 8,
-                "shots_off_away": 5,
-                "corners_home": 7,
-                "corners_away": 5,
-                "fouls_home": 14,
-                "fouls_away": 16
-            },
-            "scraped_at": "2026-04-03T07:00:00Z"
-        }
-    ]
-}
+```
+AI module (ScrapingEngine)
+  │
+  ├─ Step 1: check_server_health()
+  │     GET /api/v1/health
+  │     → HTTP 200 {"status": "healthy", "database": true, "redis": true}
+  │
+  ├─ Step 2: trigger_server_scrape()
+  │     POST /api/v1/scrape/trigger
+  │     → HTTP 202 {"task_id": "manual_...", "status": "pending"}
+  │     Go server: inserts row into scrape_tasks table
+  │
+  └─ Step 3: fetch_matches_from_server()
+        GET /api/v1/matches?league_id=super_lig&season=2025-2026
+        → JSON array of matches from PostgreSQL (Redis-cached 60s)
 ```
 
-### From HTML Parsing (`ParsedMatch` dataclass)
+### 3.2 Fallback Path: Direct Scraping
+
+If the Go server is unreachable, `ScrapingEngine` scrapes directly:
+
+```
+For each source in cfg.scrape_sources:
+  For each page 1..N:
+    _respect_rate_limit(domain)          # sleep if < 5s since last request
+    response = requests.get(url,
+        headers={"User-Agent": cfg.scrape_user_agent},
+        timeout=10)
+    html = response.text
+    matches = parse_match_page(html, SELECTOR_CONFIG[source])
+    # html goes out of scope → garbage collected immediately
+    all_matches.extend(matches)
+```
+
+### 3.3 Rate Limiting
+
+```python
+# ai/scraper/engine.py — _respect_rate_limit()
+def _respect_rate_limit(self, domain: str):
+    last = self._last_request_time.get(domain, 0)
+    elapsed = time.time() - last
+    if elapsed < self.rate_limit:          # default: 5 seconds
+        wait = self.rate_limit - elapsed
+        log.debug(f"⏱️  Rate limit: {wait:.1f}s waiting ({domain})")
+        time.sleep(wait)
+    self._last_request_time[domain] = time.time()
+```
+
+| Setting | Default | Env var |
+|---|---|---|
+| Rate limit | 5 seconds per domain | `SCRAPE_RATE_LIMIT_SECONDS` |
+| User-Agent | `Negelir/0.1 (Football Analysis Research)` | `SCRAPE_USER_AGENT` |
+| Respect robots.txt | `true` | `SCRAPE_RESPECT_ROBOTS_TXT` |
+
+### 3.4 HTML Processing (RAM-only)
+
+HTML is never written to disk or database. Processing is entirely in-memory:
+
+```
+1. requests.get(url)  →  response.text (str in RAM)
+                ↓
+2. BeautifulSoup(html, "lxml")  →  soup object in RAM
+                ↓
+3. soup.select(match_row_selector)  →  per-row extraction
+                ↓
+4. ParsedMatch dataclass built per row
+                ↓
+5. Function returns list[ParsedMatch]
+   → soup and html go out of scope → garbage collected
+```
+
+Log output confirming RAM-only:
+```
+📄 47 matches parsed (HTML discarded from memory ✓)
+```
+
+### 3.5 ParsedMatch — Raw Extracted Record
 
 ```python
 @dataclass
 class ParsedMatch:
-    home_team: str       # "Galatasaray"
-    away_team: str       # "Fenerbahçe"
-    home_score: int      # 2
-    away_score: int      # 1
-    ht_home_score: int   # 1 (half-time)
-    ht_away_score: int   # 0
-    match_date: str      # "2026-04-05"
-    stats: dict          # {"possession": 56, "shots_on": 6, ...}
+    home_team:     str        # "Galatasaray" — display name from HTML
+    away_team:     str        # "Fenerbahçe"
+    home_score:    int | None # Full-time home goals (None if not played)
+    away_score:    int | None # Full-time away goals
+    ht_home_score: int | None # Half-time home goals
+    ht_away_score: int | None # Half-time away goals
+    match_date:    str        # "2025-11-02" ISO date string
+    stats:         dict       # {"possession": 58, "shots_on": 7, ...}
 ```
 
-### Historical Data File (`data/tr_super_lig_2024_25.json`)
+**`stats` dict keys:**
+
+| Key | Type | Range | Description |
+|---|---|---|---|
+| `possession` | int | 0–100 | Home team ball possession % |
+| `shots_on` | int | 0–40 | Shots on target |
+| `shots_off` | int | 0–40 | Shots off target |
+| `corners` | int | 0–25 | Corner kicks |
+| `fouls` | int | 0–40 | Fouls committed |
+
+---
+
+## 4. HTML Extraction — CSS Selectors
+
+File: `ai/scraper/selectors.json`
+
+Multiple comma-separated selectors per field — tried in order, first match wins.
+
+### Source A — Historical Archive
 
 ```json
 {
-    "matches": [
-        {
-            "date": "2024-08-09",
-            "round": "Matchday 1",
-            "team1": "Galatasaray",
-            "team2": "Hatayspor",
-            "score": {
-                "ft": [1, 0],
-                "ht": [0, 0]
-            }
-        }
-    ]
+  "match_row":       "div.match-row, tr.match-item, .mac-satiri",
+  "home_team":       ".home-team .name, .ev-sahibi, td:nth-child(2)",
+  "away_team":       ".away-team .name, .deplasman, td:nth-child(4)",
+  "score":           ".score-cell, .skor, td:nth-child(3)",
+  "date":            ".match-date, .tarih, td:nth-child(1)",
+  "stats_container": ".match-stats, .mac-istatistik",
+  "possession":      ".possession, .topa-sahip-olma",
+  "shots_on":        ".shots-on-target, .isabetli-sut",
+  "shots_off":       ".shots-off-target, .isabetsiz-sut",
+  "corners":         ".corners, .korner",
+  "fouls":           ".fouls, .faul"
 }
 ```
 
----
-
-## Scraping Engine
-
-**File**: `ai/scraper/engine.py`
-
-The `ScrapingEngine` class coordinates data fetching with two strategies:
-
-### Strategy 1: Go Middleware (Preferred)
-```
-ScrapingEngine → GET server:8080/api/v1/matches → JSON response
-```
-- Data is already cached in PostgreSQL by the Go server
-- No rate limiting needed (internal API)
-- Returns structured JSON with team UUIDs
-
-### Strategy 2: Direct HTML Scraping (Fallback)
-```
-ScrapingEngine → HTTP GET (rate-limited, 5s/domain) → HTML → BeautifulSoup → ParsedMatch
-```
-- Used when Go server is unavailable
-- Respects `_respect_rate_limit()` — max 1 request per 5 seconds per domain
-- User-Agent: `Negelir/0.1 (Football Analysis Research)`
-
-### Key Methods
-
-| Method | Purpose |
-|--------|---------|
-| `fetch_matches_from_server()` | Get cached matches from Go server |
-| `fetch_teams_from_server()` | Get team data from Go server |
-| `trigger_server_scrape()` | Tell Go server to refresh its scraped data |
-| `check_server_health()` | Verify Go server is reachable |
-| `_respect_rate_limit(domain)` | Enforce 5s cooldown per domain |
-
----
-
-## CSS Selectors Configuration
-
-**File**: `ai/scraper/selectors.json`
-
-Each source defines selectors for extracting structured data from HTML:
-
-```json
-{
-    "match_row": "div.match-row, tr.match-item, .mac-satiri",
-    "home_team": ".home-team .name, .ev-sahibi, td:nth-child(2)",
-    "away_team": ".away-team .name, .deplasman, td:nth-child(4)",
-    "score": ".score-cell, .skor, td:nth-child(3)",
-    "date": ".match-date, .tarih, td:nth-child(1)",
-    "possession": ".possession, .topa-sahip-olma",
-    "shots_on": ".shots-on-target, .isabetli-sut",
-    "corners": ".corners, .korner",
-    "fouls": ".fouls, .faul"
-}
-```
-
-Selectors use comma-separated fallbacks to handle different site structures. Turkish CSS class names (e.g., `.ev-sahibi`, `.isabetli-sut`) are included for Turkish football sites.
-
----
-
-## Data Parsing
-
-**File**: `ai/scraper/parsers.py`
-
-### Parse Flow
-
-1. HTML string → `BeautifulSoup(html, "lxml")`
-2. Select all match rows using `match_row` selector
-3. For each row, extract:
-   - Home/away team names
-   - Score (regex: `(\d+)\s*[-:]\s*(\d+)`)
-   - Match date
-   - Per-stat values (possession, shots, corners, fouls)
-4. Return list of `ParsedMatch` objects
-5. **BeautifulSoup and raw HTML go out of scope → garbage collected**
-
-### Stats Extracted Per Match
-
-| Stat | Description | Range |
-|------|-------------|-------|
-| `possession` | Ball possession % | 0-100 |
-| `shots_on` | Shots on target | 0-40 |
-| `shots_off` | Shots off target | 0-40 |
-| `corners` | Corner kicks | 0-25 |
-| `fouls` | Fouls committed | 0-40 |
-
----
-
-## Data Proofreading & Validation
-
-**File**: `ai/proofreader/validator.py`
-
-Every match record passes through 3 validation layers before reaching the AI model:
-
-### 1. Range Checks
-| Field | Valid Range |
-|-------|------------|
-| `home_score`, `away_score` | 0 - 15 |
-| `possession` | 0 - 100 |
-| `shots_on`, `shots_off` | 0 - 40 |
-| `corners` | 0 - 25 |
-| `fouls` | 0 - 40 |
-| `yellow_cards` | 0 - 10 |
-| `red_cards` | 0 - 5 |
-
-### 2. Consistency Checks
-- Home + Away possession ≈ 100 (±5 tolerance)
-- Half-time score ≤ Full-time score (per team)
-
-### 3. Plausibility Checks
-- Total goals ≥ 10 → warning (statistically rare)
-- Single team scoring 8+ → error (implausible)
-- >3σ deviation from historical averages → quarantine
-
-### Quarantine Logic
-- Failed records are quarantined, not discarded
-- Batch validation fails if >30% of records are quarantined
-- Quarantined records stored in `data_quarantine` DB table with reason
-
----
-
-## Feature Engineering — From Raw Data to AI Input
-
-**File**: `ai/model/features.py`
-
-### Transformation Pipeline
-
-```
-Raw Match Data → Rolling Window Calculations → Elo Rating Updates
-    → Poisson xG Computation → H2H Statistics → League Position
-    → Contextual Features → Sentiment Analysis → 91-Feature Vector
-    → ±0.5% Noise Injection → Model Input
-```
-
-### Feature Categories (from Roadmap §5.2)
-
-| Category | Count | Source |
-|----------|-------|--------|
-| **A. Team Form (Rolling Windows)** | 24 | Last 3, 5, 10 match averages for scored/conceded/PPG/win ratio |
-| **B. Elo & Derived** | 9 | Custom Elo ratings, Poisson xG, form indices |
-| **C. Head-to-Head** | 6 | H2H win %, draw %, avg goals, over 2.5 %, BTS % |
-| **D. League Position** | 8 | Normalized positions, goal diff, gap to leader/relegation |
-| **E. Squad & Tactical** | 8 | Formation stability, rotation Gini, goal concentration, avg age |
-| **F. Contextual** | 7 | Fixture congestion, manager tenure/change, derby flag, season phase |
-| **G. Temporal** | 7 | Day/month sine/cosine encoding, rest days, rest diff |
-| **H. Sentiment** | 5 | Media sentiment, fan optimism, consensus strength |
-| **I. Derived** | 8 | Style matchup, fatigue diff, momentum, scoring consistency, surprise index |
-| **J. Weather/Venue** | 4 | Temperature bucket, precipitation flag, wind, venue type |
-| **Total** | **91** | |
-
----
-
-## Feature Vector Schema (91 Dimensions)
-
-```
-Index  Feature Name                    Type     Range        Description
-─────  ──────────────────────────────  ───────  ───────────  ─────────────────────────────────
-0-2    home_avg_scored_3/5/10          float    [0, 10]      Rolling avg goals scored (home)
-3-5    home_avg_conceded_3/5/10        float    [0, 10]      Rolling avg goals conceded (home)
-6      home_ppg_5                      float    [0, 3]       Points per game (last 5)
-7      home_ppg_10                     float    [0, 3]       Points per game (last 10)
-8      home_clean_sheet_10             float    [0, 1]       Clean sheet rate (last 10)
-9-11   home_win/draw/loss_ratio_5      float    [0, 1]       Result ratios (last 5)
-12-23  away_avg_scored/conceded/ppg... float    (same)       Mirror of home features for away team
-24-26  home_elo, away_elo, elo_diff    float    [-500, 3500] Custom Elo ratings
-27-29  home_xg, away_xg, xg_diff      float    [0, 5]       Poisson expected goals
-30-32  home/away_form_index, form_diff float    [0, 1]       Normalized form index
-33-38  h2h_home_win_pct → h2h_count   float    [0, 1/10]    Head-to-head statistics
-39-41  home/away_league_pos_norm, diff float    [0, 1]       Normalized league position
-42-43  home/away_goal_diff             float    [-50, 50]    Season goal difference
-44-47  home/away_pts_gap_leader/releg  float    [0, 100]     Gap to leader/relegation zone
-48-55  formation_stability → avg_age   float    varies       Squad & tactical metrics
-56-57  home/away_fixture_congestion_7  int      [0, 5]       Matches in last 7 days
-58-59  home/away_fixture_congestion_14 int      [0, 8]       Matches in last 14 days
-60-61  home/away_manager_tenure        int      [1, 10]      Manager matches
-62-63  home/away_manager_change        binary   {0, 1}       Recent manager change
-64     derby_flag                      binary   {0, 1}       Istanbul derby matches
-65     season_phase                    int      {0,1,2,3}    Start/Mid/End/Playoff
-66     match_week_norm                 float    [0, 1]       Normalized week (round/38)
-67-70  day_sin/cos, month_sin/cos      float    [-1, 1]      Cyclical time encoding
-71-73  home/away_rest_days, rest_diff  int      [1, 21]      Days since last match
-74-78  media_sentiment → consensus_str float    [-1, 1]      NLP sentiment features
-79-80  style_matchup_index, fatigue    float    [0, 1]       Tactical derived features
-81-82  home/away_momentum              float    [-1, 1]      Form acceleration (2nd derivative)
-83-84  home/away_scoring_consistency   float    [0, 1]       1 - std(goals)
-85-86  surprise_index_home/away        float    [0, 2]       PPG volatility
-87     temperature_bucket              int      {0,1,2}      Winter/Mild/Hot
-88     precipitation_flag              binary   {0, 1}       Rain/snow
-89     wind_category                   int      {0,1,2}      Calm/Moderate/Strong
-90     venue_type                      int      {0,1}        Home=0, Away=1
-```
-
-### Noise Injection (Roadmap §6.2, Stage 5)
+Score parsing regex:
 ```python
-# ±0.5% uniform noise applied to all features to prevent back-calculation
-noise = rng.uniform(1 - 0.005, 1 + 0.005, size=features.shape)
-noised_features = features * noise
+_SCORE_RE = re.compile(r"(\d+)\s*[-:]\s*(\d+)")
+# matches: "2-1",  "2 : 1",  "3 - 0",  "2:1"
+```
+
+### Source B — Live Scores & Standings
+
+```json
+{
+  "match_row":        ".match-card, .event-row",
+  "home_team":        ".home .team-name",
+  "away_team":        ".away .team-name",
+  "score":            ".score, .result",
+  "date":             ".date, .event-date",
+  "league_table_row": ".standings-row, tr.team-row",
+  "position":         ".pos, td:nth-child(1)",
+  "team_name":        ".team, td:nth-child(2)",
+  "points":           ".pts, td:last-child"
+}
+```
+
+### Source C — Official TFF
+
+```json
+{
+  "fixture_row": ".fixture, .musabaka",
+  "home_team":   ".home, .ev",
+  "away_team":   ".away, .dep",
+  "score":       ".result, .sonuc",
+  "date":        ".date, .tarih",
+  "referee":     ".referee, .hakem"
+}
+```
+
+### Parsing Logic
+
+```python
+def parse_match_page(html: str, selectors: dict) -> list[ParsedMatch]:
+    soup = BeautifulSoup(html, "lxml")
+    for sel in selectors["match_row"].split(","):
+        rows = soup.select(sel.strip())
+        for row in rows:
+            match = _extract_match_from_row(row, selectors)
+            if match and match.home_team and match.away_team:
+                matches.append(match)
+    # soup + html go out of scope here
+    return matches
 ```
 
 ---
 
-## How Data Feeds the AI Model
+## 5. Go Middleware Server — REST API & SQL Queries
 
-### Step-by-Step Flow
+**Tech stack:** Go 1.23 · Gin v1.9 · pgxpool v5.5 (max 10 conns, 5s timeout) · go-redis v9.4
 
-1. **Scraping**: Go server fetches HTML → parses → stores in PostgreSQL
-2. **Fetch**: AI module calls `GET /api/v1/matches` → receives JSON array
-3. **Validate**: `DataProofreader.validate_batch()` checks ranges, consistency, plausibility
-4. **Feature Extract**: `extract_features_for_match()` maps match dict → 1×91 numpy array
-5. **Firewall**: `GBDTInference.validate_features()` checks ranges per feature type
-6. **Inference**: `model.predict_proba(features)` → [P(home_win), P(not_home_win)]
-7. **Post-process**: Normalize to 3-class distribution [home, draw, away]
-8. **Goal Metrics**: Compute over/under, BTS from Poisson xG model
-9. **Response**: TRC templates compose Turkish natural-language answer
+### Endpoints Summary
 
-### Model Architecture
-
-- **Algorithm**: XGBoost GBDT (Gradient Boosted Decision Trees)
-- **Objective**: Binary classification (PoC) / 3-class softprob (historical test)
-- **Features**: 91 per match
-- **Training Data**: Synthetic (PoC) / Turkish Super Lig 2024-25 (historical)
-- **Ensemble**: 55% XGBoost + 45% Poisson model (historical test mode)
-- **Inference SLA**: < 300ms per prediction
-- **Confidence**: Entropy-based (1 - normalized entropy of output distribution)
-
-### Feature Vector Firewall (Roadmap §5.6.2)
-
-Before inference, every feature is validated against type-specific ranges:
-
-| Feature Type | Valid Range |
-|-------------|------------|
-| `elo` | -500 to 3500 |
-| `ratio`, `norm` | 0 to 1 |
-| `pct` | 0 to 100 |
-| `sentiment`, `optimism` | -1 to 1 |
-| `sin`, `cos` | -1 to 1 |
-| `flag` | 0 to 1 |
-| `age` | 15 to 45 |
-| `scored`, `conceded` | 0 to 10 |
-
-Out-of-range values are **clamped** (not rejected) to maintain robustness.
+| Method | Path | Redis cache key | Redis TTL | Description |
+|---|---|---|---|---|
+| `GET` | `/api/v1/health` | — | — | DB + Redis liveness |
+| `GET` | `/api/v1/matches` | `matches:list` | 60s | Last 50 matches |
+| `GET` | `/api/v1/matches/:id` | — | — | Single match detail |
+| `GET` | `/api/v1/teams` | `teams:list` | 300s | All teams |
+| `GET` | `/api/v1/teams/:id` | — | — | Single team |
+| `POST` | `/api/v1/scrape/trigger` | — | — | Queue scrape task |
+| `GET` | `/api/v1/features/:match_id` | — | — | Pre-computed features |
 
 ---
 
-## Database Schema
+### GET /api/v1/health
 
-**File**: `migrations/001_initial.sql`
+No SQL. Uses `pool.Ping(ctx)` (TCP-level) and `rdb.Ping(ctx)`.
 
-### Core Tables
-
-| Table | Purpose | Key Columns |
-|-------|---------|------------|
-| `teams` | Team registry | `id` (UUID), `display_name`, `league_id`, `internal_code` |
-| `raw_matches` | Scraped match data | `source_id`, `home_team`, `away_team`, `home_score`, `away_score`, `ht_home_score`, `ht_away_score`, `stats_json`, `scraped_at` |
-| `team_features` | Computed feature vectors | `team_id`, `season`, `match_week`, `features_json` |
-| `analyses` | AI predictions | `match_id`, `distribution_json`, `confidence`, `model_version` |
-| `outcome_validations` | Post-match validation | `analysis_id`, `actual_result`, `was_correct` |
-| `peer_reputation` | P2P node scores | `node_id`, `accuracy`, `predictions`, `trust_level` |
-| `scrape_tasks` | Scraping job tracker | `task_id`, `status`, `source`, `started_at` |
-| `data_quarantine` | Failed validation | `match_id`, `reason`, `raw_data_json` |
+```json
+{
+  "status":   "healthy",
+  "database": true,
+  "redis":    true,
+  "version":  "0.1.0"
+}
+```
 
 ---
 
-## Go Middleware Server
+### GET /api/v1/matches
 
-**File**: `server/cmd/main.go`
+**Query parameters:** `league_id` · `season`
 
-### API Endpoints
+**Redis lookup:** `GET matches:list` → cache hit returns immediately
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/api/v1/health` | Health check (DB + Redis) |
-| `GET` | `/api/v1/matches` | List cached matches |
-| `GET` | `/api/v1/teams` | List teams |
-| `POST` | `/api/v1/scrape/trigger` | Trigger scraping pipeline |
+**SQL (cache miss):**
+```sql
+SELECT id, home_team, away_team, match_date, league_id, season,
+       home_score, away_score, match_week
+FROM raw_matches
+ORDER BY match_date DESC
+LIMIT 50;
+```
 
-### Server Stack
-- **Framework**: Gin (Go)
-- **Database**: PostgreSQL 16 via pgxpool
-- **Cache**: Redis 7 via go-redis
-- **Port**: 8080
-
----
-
-## Security & Compliance
-
-### Data Privacy (Roadmap §6.2)
-- Team names → internal UUIDs (no source-identifying data in transit)
-- Raw HTML never persisted to disk
-- ±0.5% noise injection prevents back-calculation of exact stats
-- No PII collected or stored
-
-### Input Sanitization (Roadmap §5.6.2)
-- Injection pattern detection (LLM prompt markers, HTML, JS)
-- URL stripping
-- Turkish character normalization
-- 200-character input limit
-- Disallowed character removal
-
-### Compliance (Roadmap §3.1)
-- Banned words filter: `bahis`, `iddaa`, `kupon`, `odds`, `oran`, `bet`, `tip`, `gambling`, etc.
-- No gambling-related terminology in any user-facing output
-- Output length capped at 500 characters
+**Response:**
+```json
+{
+  "matches": [
+    {
+      "id":         1,
+      "home_team":  "Galatasaray",
+      "away_team":  "Fenerbahçe",
+      "match_date": "2025-11-02",
+      "league":     "super_lig",
+      "season":     "2025-2026",
+      "home_score": 3,
+      "away_score": 1,
+      "match_week": 12
+    }
+  ],
+  "count": 1
+}
+```
 
 ---
 
-## Data Flow Diagram
+### GET /api/v1/matches/:id
+
+**SQL:**
+```sql
+SELECT home_team, away_team, match_date, league_id, season,
+       home_score, away_score, match_week, stats_json::text
+FROM raw_matches
+WHERE id = $1;
+```
+
+**Response:**
+```json
+{
+  "id":         "1",
+  "home_team":  "Galatasaray",
+  "away_team":  "Fenerbahçe",
+  "match_date": "2025-11-02",
+  "league":     "super_lig",
+  "season":     "2025-2026",
+  "home_score": 3,
+  "away_score": 1,
+  "match_week": 12
+}
+```
+
+---
+
+### GET /api/v1/teams
+
+**Redis lookup:** `GET teams:list` → cache hit returns immediately
+
+**SQL (cache miss):**
+```sql
+SELECT uuid, display_name, league_id, internal_code
+FROM teams
+ORDER BY display_name;
+```
+
+**Response (abridged):**
+```json
+{
+  "teams": [
+    { "id": "team_008", "name": "Alanyaspor",  "internal_code": "ALN", "league": "super_lig" },
+    { "id": "team_019", "name": "Ankaragücü",  "internal_code": "MKE", "league": "super_lig" },
+    { "id": "team_005", "name": "Başakşehir",  "internal_code": "IBB", "league": "super_lig" },
+    { "id": "team_003", "name": "Beşiktaş",    "internal_code": "BJK", "league": "super_lig" },
+    { "id": "team_052", "name": "Bodrum FK",   "internal_code": "BOD", "league": "lig_1"     },
+    { "id": "team_002", "name": "Fenerbahçe",  "internal_code": "FB",  "league": "super_lig" },
+    { "id": "team_001", "name": "Galatasaray", "internal_code": "GS",  "league": "super_lig" }
+  ],
+  "count": 24
+}
+```
+
+---
+
+### GET /api/v1/teams/:id
+
+**SQL:**
+```sql
+SELECT display_name, league_id, internal_code
+FROM teams
+WHERE uuid = $1;
+```
+
+---
+
+### POST /api/v1/scrape/trigger
+
+**SQL:**
+```sql
+INSERT INTO scrape_tasks (task_id, source_id, data_type, match_date, status)
+VALUES ($1, 'manual_trigger', 'full_scrape', CURRENT_DATE, 'pending');
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "task_id": "manual_1743684000000000000",
+  "status":  "pending",
+  "message": "Scrape task queued"
+}
+```
+
+---
+
+### GET /api/v1/features/:match_id
+
+**SQL:**
+```sql
+SELECT team_uuid, season, match_week, elo_rating, form_index, xg_approximation,
+       avg_goals_scored_5, avg_goals_conceded_5, points_per_game_5
+FROM team_features
+WHERE match_week = $1
+ORDER BY team_uuid;
+```
+
+**Response:**
+```json
+{
+  "match_week": "12",
+  "features": [
+    {
+      "team_uuid":  "team_001",
+      "season":     "2025-2026",
+      "match_week": 12,
+      "elo":        1722.5,
+      "form":       0.81,
+      "xg":         1.94,
+      "scored_5":   2.2,
+      "conceded_5": 0.8,
+      "ppg_5":      2.4
+    }
+  ]
+}
+```
+
+---
+
+## 6. PostgreSQL Database Schema
+
+File: `migrations/001_initial.sql`
+
+### Table: `teams`
+
+```sql
+CREATE TABLE teams (
+    uuid          TEXT PRIMARY KEY,   -- 'team_001' (internal, never a real DB ID)
+    display_name  TEXT NOT NULL,      -- 'Galatasaray'
+    league_id     TEXT NOT NULL,      -- 'super_lig' | 'lig_1'
+    internal_code TEXT NOT NULL,      -- 'GS' | 'FB' | 'BJK' ...
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Seed data (24 teams):**
+
+```sql
+INSERT INTO teams (uuid, display_name, league_id, internal_code) VALUES
+  -- Süper Lig (19 teams)
+  ('team_001', 'Galatasaray',      'super_lig', 'GS' ),
+  ('team_002', 'Fenerbahçe',       'super_lig', 'FB' ),
+  ('team_003', 'Beşiktaş',         'super_lig', 'BJK'),
+  ('team_004', 'Trabzonspor',      'super_lig', 'TS' ),
+  ('team_005', 'Başakşehir',       'super_lig', 'IBB'),
+  ('team_006', 'Adana Demirspor',  'super_lig', 'ADS'),
+  ('team_007', 'Antalyaspor',      'super_lig', 'ANT'),
+  ('team_008', 'Alanyaspor',       'super_lig', 'ALN'),
+  ('team_009', 'Kasımpaşa',        'super_lig', 'KSM'),
+  ('team_010', 'Konyaspor',        'super_lig', 'KNY'),
+  ('team_011', 'Sivasspor',        'super_lig', 'SVS'),
+  ('team_012', 'Kayserispor',      'super_lig', 'KYS'),
+  ('team_013', 'Gaziantep FK',     'super_lig', 'GFK'),
+  ('team_014', 'Hatayspor',        'super_lig', 'HTY'),
+  ('team_015', 'Samsunspor',       'super_lig', 'SAM'),
+  ('team_016', 'Çaykur Rizespor',  'super_lig', 'RZE'),
+  ('team_017', 'Pendikspor',       'super_lig', 'PND'),
+  ('team_018', 'Fatih Karagümrük', 'super_lig', 'FKG'),
+  ('team_019', 'Ankaragücü',       'super_lig', 'MKE'),
+  -- 1. Lig (5 sample teams)
+  ('team_050', 'Eyüpspor',         'lig_1', 'EYP'),
+  ('team_051', 'Göztepe',          'lig_1', 'GOZ'),
+  ('team_052', 'Bodrum FK',        'lig_1', 'BOD'),
+  ('team_053', 'Sakaryaspor',      'lig_1', 'SKR'),
+  ('team_054', 'Keçiörengücü',     'lig_1', 'KCG')
+ON CONFLICT (uuid) DO NOTHING;
+```
+
+---
+
+### Table: `raw_matches`
+
+Primary scrape output buffer — one row per match.
+
+```sql
+CREATE TABLE raw_matches (
+    id             SERIAL PRIMARY KEY,
+    source_id      TEXT NOT NULL,       -- 'source_a' | 'source_b' | 'source_c' (never real URLs)
+    league_id      TEXT NOT NULL,       -- 'super_lig'
+    season         TEXT NOT NULL,       -- '2025-2026'
+    match_week     INTEGER NOT NULL,
+    home_team      TEXT NOT NULL,       -- display name (not UUID — resolved at feature stage)
+    away_team      TEXT NOT NULL,
+    home_score     INTEGER,             -- NULL for future fixtures
+    away_score     INTEGER,
+    ht_home_score  INTEGER,
+    ht_away_score  INTEGER,
+    match_date     DATE,
+    stats_json     JSONB,               -- see stats_json structure below
+    scraped_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(league_id, season, match_week, home_team, away_team)
+);
+
+CREATE INDEX idx_raw_matches_league_week ON raw_matches(league_id, season, match_week);
+```
+
+**`stats_json` JSONB structure:**
+```json
+{
+  "possession":    58,
+  "shots_on":       7,
+  "shots_off":      5,
+  "corners":        8,
+  "fouls":         14,
+  "yellow_cards":   3,
+  "red_cards":      0
+}
+```
+
+---
+
+### Table: `team_features`
+
+AI-computed feature cache — one row per team per week.
+
+```sql
+CREATE TABLE team_features (
+    team_uuid              TEXT NOT NULL REFERENCES teams(uuid),
+    season                 TEXT NOT NULL,
+    match_week             INTEGER NOT NULL,
+    computed_at            TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Rolling form windows (3 / 5 / 10 matches)
+    avg_goals_scored_3     REAL,
+    avg_goals_scored_5     REAL,
+    avg_goals_scored_10    REAL,
+    avg_goals_conceded_3   REAL,
+    avg_goals_conceded_5   REAL,
+    avg_goals_conceded_10  REAL,
+    points_per_game_5      REAL,
+    points_per_game_10     REAL,
+    clean_sheet_ratio_10   REAL,
+    home_win_ratio_10      REAL,
+    away_win_ratio_10      REAL,
+
+    -- Derived ratings
+    elo_rating             REAL DEFAULT 1500.0,
+    form_index             REAL,          -- composite: [0, 1]
+    xg_approximation       REAL,          -- Poisson expected goals proxy
+
+    -- Squad & tactical
+    formation_stability    REAL,          -- [0,1] — 1.0 = never changes XI
+    squad_rotation_gini    REAL,          -- Gini coeff of minutes distribution
+    goal_concentration_hhi REAL,          -- HHI of goal-scorers by position slot
+
+    -- Scheduling
+    fixture_congestion_7d  REAL,          -- matches in last 7 days
+    fixture_congestion_14d REAL,
+
+    -- Management
+    manager_tenure_weeks   INTEGER,
+    manager_change_flag    BOOLEAN DEFAULT FALSE,
+    derby_flag             BOOLEAN DEFAULT FALSE,
+
+    -- Sentiment (numeric scores only — no text ever stored, per roadmap §2D)
+    media_sentiment_score  REAL,          -- [-1.0, +1.0]
+    fan_optimism_index     REAL,          -- [-1.0, +1.0]
+    noise_seed             INTEGER,       -- for reproducible ±0.5% noise injection
+
+    PRIMARY KEY (team_uuid, season, match_week)
+);
+
+CREATE INDEX idx_team_features_week ON team_features(season, match_week);
+```
+
+---
+
+### Table: `analyses`
+
+XGBoost inference results (local and P2P ensemble).
+
+```sql
+CREATE TABLE analyses (
+    analysis_id      TEXT PRIMARY KEY,    -- SHA-256(match_id + model_version + timestamp)
+    match_identifier TEXT NOT NULL,
+    league_id        TEXT NOT NULL,
+    season           TEXT NOT NULL,
+    match_week       INTEGER NOT NULL,
+    model_version    TEXT NOT NULL,       -- '0.1.0'
+    adaptation_gen   INTEGER DEFAULT 0,   -- self-improvement generation counter
+    result_json      JSONB NOT NULL,      -- see §8 for full structure
+    confidence       REAL,
+    is_ensemble      BOOLEAN DEFAULT FALSE,
+    peers_consulted  INTEGER DEFAULT 0,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_analyses_match ON analyses(match_identifier);
+```
+
+**`result_json` JSONB structure:**
+```json
+{
+  "model_version": "0.1.0",
+  "confidence": 0.82,
+  "distribution": {
+    "home_win": 0.610,
+    "draw":     0.245,
+    "away_win": 0.145
+  },
+  "goal_metrics": {
+    "expected_total_goals": 2.94,
+    "over_2_5_prob":        0.681,
+    "bts_prob":             0.452
+  },
+  "feature_importance": {
+    "away_elo":       0.0353,
+    "form_diff":      0.0301,
+    "home_elo":       0.0250,
+    "away_ppg_10":    0.0242,
+    "home_goal_diff": 0.0228
+  },
+  "features_used": 91
+}
+```
+
+---
+
+### Table: `outcome_validations`
+
+Post-match ground truth — drives model accuracy tracking and P2P reputation updates.
+
+```sql
+CREATE TABLE outcome_validations (
+    match_identifier  TEXT PRIMARY KEY,
+    actual_result     TEXT NOT NULL,       -- 'H' | 'D' | 'A'
+    actual_home_goals INTEGER NOT NULL,
+    actual_away_goals INTEGER NOT NULL,
+    analysis_id       TEXT REFERENCES analyses(analysis_id),
+    prediction_error  REAL,               -- |predicted_prob - actual|
+    was_correct       BOOLEAN,
+    validated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+### Table: `peer_reputation`
+
+Distributed reputation graph — one row per P2P node.
+
+```sql
+CREATE TABLE peer_reputation (
+    peer_node_id        TEXT PRIMARY KEY,
+    accuracy_rolling_50 REAL DEFAULT 0.0,  -- accuracy over last 50 validated matches
+    calibration_score   REAL DEFAULT 0.0,  -- Brier score derived
+    total_validated     INTEGER DEFAULT 0,
+    trust_level         TEXT DEFAULT 'new', -- new | low | medium | high | leader
+    last_validated_at   TIMESTAMPTZ,
+    first_seen_at       TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Trust level thresholds and ensemble weights:**
+
+| `trust_level` | Condition | Weight in ensemble |
+|---|---|---|
+| `new` | `total_validated < 10` | 0.1 |
+| `low` | `accuracy < 0.40` | 0.2 |
+| `medium` | `accuracy 0.40–0.59` | 0.5 |
+| `high` | `accuracy 0.60–0.74` | 1.0 |
+| `leader` | `accuracy ≥ 0.75` | 1.5 |
+
+---
+
+### Table: `scrape_tasks`
+
+Distributed scraping coordination queue.
+
+```sql
+CREATE TABLE scrape_tasks (
+    task_id       TEXT PRIMARY KEY,
+    source_id     TEXT NOT NULL,       -- 'source_a' | 'source_b' | 'source_c'
+    data_type     TEXT NOT NULL,       -- 'full_scrape' | 'incremental' | 'fixtures_only'
+    match_date    DATE NOT NULL,
+    status        TEXT DEFAULT 'pending',  -- pending | assigned | completed | failed
+    assigned_node TEXT,                -- peer_node_id that claimed the task
+    content_hash  TEXT,                -- SHA-256(html_body) for duplicate detection
+    completed_at  TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_scrape_tasks_status ON scrape_tasks(status);
+```
+
+---
+
+### Table: `data_quarantine`
+
+Records rejected by DataProofreader — kept for manual review without polluting live data.
+
+```sql
+CREATE TABLE data_quarantine (
+    id             SERIAL PRIMARY KEY,
+    source_id      TEXT NOT NULL,
+    match_week     INTEGER NOT NULL,
+    reason         TEXT NOT NULL,      -- human-readable: "Out of range: home_score=20 (expected: 0-15)"
+    raw_json       JSONB NOT NULL,     -- the problematic record
+    quarantined_at TIMESTAMPTZ DEFAULT NOW(),
+    resolved       BOOLEAN DEFAULT FALSE
+);
+```
+
+---
+
+## 7. Redis Cache Layer
+
+Redis 7 provides short-lived caching in front of PostgreSQL for read-heavy paths.
+
+| Cache key | Backed by | SQL reading | TTL |
+|---|---|---|---|
+| `matches:list` | `/api/v1/matches` | `raw_matches ORDER BY match_date DESC LIMIT 50` | 60s |
+| `teams:list` | `/api/v1/teams` | `teams ORDER BY display_name` | 300s |
+
+Cache lookup pattern (Go):
+```go
+cached, err := rdb.Get(ctx, "matches:list").Result()
+if err == nil && cached != "" {
+    // Cache hit — return without touching PostgreSQL
+    c.Data(http.StatusOK, "application/json", []byte(cached))
+    return
+}
+// Cache miss → query PostgreSQL → write result to cache (future: rdb.Set)
+```
+
+---
+
+## 8. JSON Structures — Full Examples
+
+### Raw Match → `raw_matches` table
+
+```json
+{
+  "source_id":      "source_a",
+  "league_id":      "super_lig",
+  "season":         "2025-2026",
+  "match_week":     12,
+  "home_team":      "Galatasaray",
+  "away_team":      "Fenerbahçe",
+  "home_score":     3,
+  "away_score":     1,
+  "ht_home_score":  1,
+  "ht_away_score":  0,
+  "match_date":     "2025-11-02",
+  "stats_json": {
+    "possession":    58,
+    "shots_on":       7,
+    "shots_off":      5,
+    "corners":        8,
+    "fouls":         14,
+    "yellow_cards":   3,
+    "red_cards":      0
+  }
+}
+```
+
+### Feature Vector (91 named dimensions)
 
 ```
-                    ┌──────────────┐
-                    │  Turkish     │
-                    │  Football    │
-                    │  Websites    │
-                    └──────┬───────┘
-                           │ HTML (rate-limited, 5s/domain)
-                           ▼
-              ┌────────────────────────┐
-              │  Go Middleware Server   │
-              │  • Parse HTML          │
-              │  • Store in PostgreSQL  │
-              │  • Cache in Redis      │
-              └────────────┬───────────┘
-                           │ REST API (JSON)
-                           ▼
-              ┌────────────────────────┐
-              │  AI Scraping Engine    │
-              │  • fetch_matches()     │
-              │  • fetch_teams()       │
-              └────────────┬───────────┘
-                           │ list[dict]
-                           ▼
-              ┌────────────────────────┐
-              │  Data Proofreader      │
-              │  • Range checks        │──── Quarantined data
-              │  • Consistency checks  │     (data_quarantine table)
-              │  • Plausibility checks │
-              └────────────┬───────────┘
-                           │ Validated data
-                           ▼
-              ┌────────────────────────┐
-              │  Feature Engineering   │
-              │  • 91 features         │
-              │  • Rolling windows     │
-              │  • Elo + Poisson xG    │
-              │  • ±0.5% noise         │
-              └────────────┬───────────┘
-                           │ 1×91 numpy array
-                           ▼
-              ┌────────────────────────┐
-              │  Feature Firewall      │
-              │  • Type-specific       │
-              │    range validation    │
-              │  • NaN/Inf detection   │
-              │  • Auto-clamp          │
-              └────────────┬───────────┘
-                           │ Validated features
-                           ▼
-              ┌────────────────────────┐
-              │  GBDT Model (XGBoost)  │
-              │  • predict_proba()     │
-              │  • < 300ms SLA         │
-              └────────────┬───────────┘
-                           │ Analysis JSON
-                           ▼
-              ┌────────────────────────┐
-              │  TRC Response Composer │
-              │  • Verdict selection   │
-              │  • Template filling    │
-              │  • Compliance check    │
-              │  • 500-char limit      │
-              └────────────────────────┘
-                           │
-                           ▼
-                   Turkish Response
+Group               Count   Feature names
+──────────────────  ─────   ────────────────────────────────────────
+Team Form (home)      12    home_avg_scored_{3,5,10}
+                            home_avg_conceded_{3,5,10}
+                            home_ppg_{5,10}  home_clean_sheet_10
+                            home_{win,draw,loss}_ratio_5
+
+Team Form (away)      12    (mirror of home, prefix: away_)
+
+Elo & Derived          9    home_elo  away_elo  elo_diff
+                            home_xg  away_xg  xg_diff
+                            home_form_index  away_form_index  form_diff
+
+Head-to-Head           6    h2h_home_win_pct  h2h_draw_pct  h2h_avg_goals
+                            h2h_over25_pct  h2h_bts_pct  h2h_count
+
+League Position        9    home/away_league_pos_norm  pos_diff
+                            home/away_goal_diff
+                            home/away_pts_gap_leader
+                            home/away_pts_gap_relegation
+
+Squad & Tactical       8    home/away_formation_stability
+                            home/away_squad_rotation_gini
+                            home/away_goal_concentration
+                            home/away_avg_age
+
+Contextual            11    home/away_fixture_congestion_{7d,14d}
+                            home/away_manager_tenure
+                            home/away_manager_change
+                            derby_flag  season_phase  match_week_norm
+
+Temporal               7    day_sin  day_cos  month_sin  month_cos
+                            home_rest_days  away_rest_days  rest_diff
+
+Sentiment / NLP        5    home/away_media_sentiment
+                            home/away_fan_optimism
+                            media_consensus_strength
+
+Derived / Composite    8    style_matchup_index  fatigue_diff
+                            home/away_momentum
+                            home/away_scoring_consistency
+                            surprise_index_{home,away}
+
+Weather / Venue        4    temperature_bucket  precipitation_flag
+                            wind_category  venue_type
+──────────────────  ─────
+TOTAL                 91
 ```
+
+**Compact vector (match #0, synthetic seed 42):**
+```
+[1.12, 0.56, 0.79, 2.02, 1.72, 1.18, 1.94, 0.12, 2.16, 0.91,    ← home form
+ 0.37, 0.53, 1.96, 2.92, 0.22, 1.50, 0.01, 2.44, 1.94, 1.16,    ← away form
+ 2.19, 0.77, 0.76, 0.52,                                          ← more away form
+ 1431.9, 1456.5, 1579.4, 2.50, 0.14, 2.00, 0.45, 0.10, 2.38,    ← elo / xg
+ 0.20, 0.91, 2.24, 0.00, 0.50, 2.54,                             ← h2h
+ 0.86, 0.57, 0.18, 1.45, 0.97, 1.51, 2.44, 2.00, 2.22,          ← league + squad
+ 1.01, 1.79, 0.59, 0.94, 0.67, 0.81, 25.92, 29.78, 3.00,        ← contextual
+ 1.00, 2.00, 0.00, 27.77, 31.36, 0.00, 0.00, 1.00, 0.00,
+ 0.22, 0.63, -0.00, -0.12, -0.63, 12.00, 28.00, 6.00,            ← temporal
+ 0.16, 0.43, 0.37, -0.82, 0.20, 0.80,                            ← sentiment
+ 1.74, 0.33, 1.76, 0.74, 1.76, 0.62, 0.92,                       ← derived
+ 3.00, 0.00, 3.00, 1.00]                                          ← weather/venue
+```
+
+### GBDT Model Output (`analyses.result_json`)
+
+```json
+{
+  "model_version": "0.1.0",
+  "features_used": 91,
+  "confidence": 0.82,
+  "distribution": {
+    "home_win": 0.610,
+    "draw":     0.245,
+    "away_win": 0.145
+  },
+  "goal_metrics": {
+    "expected_total_goals": 2.94,
+    "over_2_5_prob":        0.681,
+    "bts_prob":             0.452
+  },
+  "feature_importance": {
+    "away_elo":       0.0353,
+    "form_diff":      0.0301,
+    "home_elo":       0.0250,
+    "away_ppg_10":    0.0242,
+    "home_goal_diff": 0.0228
+  }
+}
+```
+
+### P2P Message Payload (over SimulatedTransport / asyncio queues)
+
+```json
+{
+  "message_type":   "analysis",
+  "sender_id":      "node_alpha",
+  "schema_version": "1.0",
+  "timestamp":      1743684000.0,
+  "ttl_hours":      168,
+  "content_hash":   "a3f2b1c9d4e0f5...",
+  "payload": {
+    "match_id":       "super_lig_2025-2026_wk12_GS_FB",
+    "home_win_prob":  0.66,
+    "draw_prob":      0.20,
+    "away_win_prob":  0.14,
+    "confidence":     0.82,
+    "model_version":  "0.1.0"
+  }
+}
+```
+
+### TQU Classification Result
+
+```json
+{
+  "success":    true,
+  "intent_id":  "match_winner",
+  "confidence": 0.92,
+  "entities": {
+    "team_refs":  ["team_001", "team_002"],
+    "team_names": ["Galatasaray", "Fenerbahçe"],
+    "min_goals":  null,
+    "max_goals":  null,
+    "threshold":  2.5,
+    "half":       null,
+    "match_ref":  null
+  }
+}
+```
+
+### TRC Turkish Response
+
+```json
+{
+  "verdict":     "Büyük ihtimalle evet.",
+  "explanation": "Galatasaray son 5 maçının 3'ünü kazanmış ve form endeksi yükselişte. Rakip takımın deplasman performansı zayıf — son 5 deplasmanında sadece 1 galibiyet var. Kafa kafaya istatistiklerde de Galatasaray lehine. Güven: %82.",
+  "intent":      "match_winner",
+  "model_version": "0.1.0"
+}
+```
+
+---
+
+## 9. Feature Extraction from Raw Data
+
+### Pipeline
+
+```python
+# Step 1: Parse HTML → ParsedMatch
+matches = parse_match_page(html, SELECTOR_CONFIG["source_a"])
+
+# Step 2: Validate
+result = proofreader.validate_batch(matches)   # returns ValidationResult
+
+# Step 3: Convert to feature vector
+vec = extract_features_for_match(match.__dict__)
+# Returns np.ndarray shape (1, 91), dtype float32
+
+# Step 4: Inject noise  (per roadmap §6.2 Stage 5)
+noised = inject_noise(vec, noise_pct=0.005, seed=42)
+
+# Step 5: Feature firewall
+is_valid, error = model.validate_features(noised)
+
+# Step 6: Inference
+analysis = model.predict(noised)
+```
+
+### `extract_features_for_match(match_data: dict) → np.ndarray`
+
+```python
+def extract_features_for_match(match_data: dict) -> np.ndarray:
+    vec = np.zeros(91, dtype=np.float32)
+    col_to_idx = {col: i for i, col in enumerate(FEATURE_COLUMNS)}
+    for key, idx in col_to_idx.items():
+        if key in match_data:
+            val = match_data[key]
+            if val is not None:
+                vec[idx] = float(val)
+    return vec.reshape(1, -1)   # shape: (1, 91)
+```
+
+Fields in the match dict that share a name with any of the 91 `FEATURE_COLUMNS` are mapped directly by name. Missing fields default to `0.0` (safe for gradient boosted trees).
+
+### Feature Firewall — Range Clipping
+
+```python
+FEATURE_RANGES = {
+    "elo":       (-500, 3500),
+    "ratio":     (0, 1),
+    "pct":       (0, 100),
+    "norm":      (0, 1),
+    "sentiment": (-1, 1),
+    "optimism":  (-1, 1),
+    "sin":       (-1, 1),
+    "cos":       (-1, 1),
+    "flag":      (0, 1),
+    "age":       (15, 45),
+    "scored":    (0, 10),
+    "conceded":  (0, 10),
+    "default":   (-100, 100),
+}
+
+# Out-of-range values are CLIPPED, not rejected:
+features[0, i] = np.clip(val, lo, hi)
+```
+
+### Proofreader — Validation Checks
+
+**Range checks:**
+```python
+RANGES = {
+    "home_score":   (0, 15),
+    "away_score":   (0, 15),
+    "possession":   (0, 100),
+    "shots_on":     (0, 40),
+    "shots_off":    (0, 40),
+    "corners":      (0, 25),
+    "fouls":        (0, 40),
+    "yellow_cards": (0, 10),
+    "red_cards":    (0, 5),
+}
+```
+
+**Consistency checks:**
+- `home_poss + away_poss ≈ 100` (±5 tolerance)
+- `ht_home_score ≤ ft_home_score` (HT score cannot exceed FT)
+
+**Plausibility checks:**
+- Total goals ≥ 10 → `warning` (statistically rare)
+- Single team ≥ 8 goals → `error` (implausible)
+
+**Batch threshold:**
+```python
+batch_valid = (quarantined_count / total_count) < 0.30
+# > 30% quarantined → reject entire batch
+```
+
+---
+
+## 10. Data Provenance Obfuscation
+
+Per roadmap §6.2, source identity is systematically removed at every stage:
+
+| Stage | What is removed / obfuscated |
+|---|---|
+| HTML fetch | Raw HTML processed in RAM, never written to disk or DB |
+| `source_id` | Stored as `source_a`, never as real URL |
+| Team names | Replaced with internal UUIDs (`team_001`) in all DB tables |
+| Player names | Never collected — represented as position slots (`ST_01`) |
+| Referee names | Stored as SHA-256 hash, never as plaintext |
+| Sentiment text | News/social text analyzed in RAM; only the float score kept |
+| Feature noise | ±0.5% uniform noise makes exact feature reconstruction infeasible |
+| Raw HTML | Zero bytes retained after `BeautifulSoup` parse scope exits |
+
+---
+
+## 11. Environment Configuration
+
+Full `.env` reference:
+
+```dotenv
+# ── PostgreSQL ───────────────────────────────────────────────────
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=negelir
+POSTGRES_USER=negelir
+POSTGRES_PASSWORD=negelir_dev_2026
+
+# ── Redis ────────────────────────────────────────────────────────
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+# ── Go Middleware ────────────────────────────────────────────────
+SERVER_URL=http://server:8080
+SERVER_PORT=8080
+
+# ── Scraping Behaviour ───────────────────────────────────────────
+SCRAPE_RATE_LIMIT_SECONDS=5
+SCRAPE_USER_AGENT=Negelir/0.1 (Football Analysis Research)
+SCRAPE_RESPECT_ROBOTS_TXT=true
+
+# ── Data Sources ─────────────────────────────────────────────────
+SCRAPE_SOURCE_A=https://arsiv.mackolik.com
+SCRAPE_SOURCE_B=https://www.mackolik.com
+SCRAPE_SOURCE_C=https://www.tff.org
+SCRAPE_SOURCE_EXTRA=        # comma-separated, empty disables extra sources
+```
+
+Python `Config` class resolves these at import time:
+
+```python
+@property
+def scrape_sources(self) -> list[dict[str, str]]:
+    sources = []
+    if self.scrape_source_a:
+        sources.append({"name": "source_a", "label": "Statistics Archive",
+                         "url": self.scrape_source_a})
+    if self.scrape_source_b:
+        sources.append({"name": "source_b", "label": "Live Scores",
+                         "url": self.scrape_source_b})
+    if self.scrape_source_c:
+        sources.append({"name": "source_c", "label": "Official Results",
+                         "url": self.scrape_source_c})
+    for extra in self.scrape_source_extra.split(","):
+        extra = extra.strip()
+        if extra:
+            sources.append({"name": "source_extra", "label": "Extra Source",
+                             "url": extra})
+    return sources
+```
+
+---
+
+## 12. Scrape Task Lifecycle
+
+```
+POST /api/v1/scrape/trigger
+        │
+        ▼ SQL INSERT
+scrape_tasks — status='pending', source_id='manual_trigger', data_type='full_scrape'
+        │
+        ▼ Go worker picks up task (or future P2P node)
+status = 'assigned', assigned_node = 'node_alpha'
+        │
+        ▼ HTTP GET external source
+        │   → _respect_rate_limit(domain)  [5s cooldown]
+        │   → requests.get(url, headers={"User-Agent": ...})
+        │   → content_hash = SHA-256(response.text)  [dedup guard]
+        │
+        ▼ HTML parse
+        │   BeautifulSoup + CSS selectors → list[ParsedMatch]
+        │   HTML goes out of scope → garbage collected
+        │
+        ▼ Proofreader gate
+        │   range_checks + consistency_checks + plausibility_checks
+        │
+        ├─── passes ──▶ INSERT INTO raw_matches … ON CONFLICT DO NOTHING
+        │               status = 'completed', completed_at = NOW()
+        │
+        └─── fails  ──▶ INSERT INTO data_quarantine (reason, raw_json)
+                        status = 'failed'
+
+AI module consumption:
+  GET /api/v1/matches → reads raw_matches (Redis-cached 60s)
+  GET /api/v1/features/{week} → reads team_features (computed by AI, stored back)
+  POST /api/v1/scrape/trigger → queues next refresh
+```
+
+### Deduplication
+
+The `UNIQUE` constraint on `raw_matches` prevents duplicate inserts:
+```sql
+UNIQUE(league_id, season, match_week, home_team, away_team)
+```
+
+The `content_hash` column in `scrape_tasks` (SHA-256 of the raw HTML body) provides an additional dedup layer across nodes in the P2P network — if two nodes scrape the same page, the second insert is a no-op.

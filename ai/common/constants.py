@@ -3,10 +3,10 @@ Negelir — Constants, team mappings, and domain knowledge.
 Per roadmap §6.2: team names → UUIDs; no source-identifying data.
 """
 
-MODEL_VERSION = "0.1.0"
+MODEL_VERSION = "0.2.0"
 CURRENT_SEASON = "2025-2026"
 MAX_INPUT_LENGTH = 200
-N_FEATURES = 91
+N_FEATURES = 120
 
 # ── Team UUID registry ──────────────────────────────────
 # Maps display names to internal UUIDs (per roadmap §6.2)
