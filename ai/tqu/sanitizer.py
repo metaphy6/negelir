@@ -68,8 +68,9 @@ def sanitize(text: str) -> tuple[str, bool]:
     # Remove disallowed characters
     cleaned = _ALLOWED_CHARS_RE.sub("", cleaned)
 
-    # Normalize Turkish characters (lowercase)
-    cleaned = cleaned.lower().translate(_TR_UPPER_TO_LOWER)
+    # Normalize Turkish characters (translate uppercase first, then lowercase)
+    # Must translate before lower() so İ→i not İ→i̇ (combining dot form)
+    cleaned = cleaned.translate(_TR_UPPER_TO_LOWER).lower()
 
     # Collapse whitespace
     cleaned = re.sub(r"\s+", " ", cleaned).strip()

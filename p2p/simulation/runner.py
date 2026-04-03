@@ -69,14 +69,32 @@ SIMULATED_SCRAPED_DATA = {
 }
 
 # ── Turkish questions sent through P2P pipeline ──────────
+# Extended set mapped to simulated match data (3 matches × ~7 questions each)
 P2P_DEMO_QUESTIONS = [
+    # Galatasaray-Fenerbahçe
     ("Galatasaray-Fenerbahçe", "Galatasaray bu maçı kazanır mı?"),
     ("Galatasaray-Fenerbahçe", "Bu maçta 2.5 üstü gol olur mu?"),
     ("Galatasaray-Fenerbahçe", "İki takım da gol atar mı?"),
+    ("Galatasaray-Fenerbahçe", "Fenerbahçe galip gelir mi?"),
+    ("Galatasaray-Fenerbahçe", "Bu maç berabere biter mi?"),
+    ("Galatasaray-Fenerbahçe", "İlk yarıda gol olur mu?"),
+    ("Galatasaray-Fenerbahçe", "Galatasaray kalesini gol yemeden korur mu?"),
+    # Beşiktaş-Trabzonspor
     ("Beşiktaş-Trabzonspor", "Beşiktaş kazanır mı?"),
     ("Beşiktaş-Trabzonspor", "Bu maç berabere biter mi?"),
+    ("Beşiktaş-Trabzonspor", "Bu maçta 3.5 üstü gol olur mu?"),
+    ("Beşiktaş-Trabzonspor", "Trabzonspor galip gelebilir mi?"),
+    ("Beşiktaş-Trabzonspor", "İki takım da gol atar mı?"),
+    ("Beşiktaş-Trabzonspor", "İlk yarı nasıl biter?"),
+    ("Beşiktaş-Trabzonspor", "Bu maçta kaç gol atılır?"),
+    # Başakşehir-Antalyaspor
     ("Başakşehir-Antalyaspor", "Başakşehir kalesini gol yemeden korur mu?"),
     ("Başakşehir-Antalyaspor", "Maçta kaç gol atılır?"),
+    ("Başakşehir-Antalyaspor", "Başakşehir bu maçı kazanır mı?"),
+    ("Başakşehir-Antalyaspor", "Alt mı olur üst mü?"),
+    ("Başakşehir-Antalyaspor", "Beraberlik olur mu sizce?"),
+    ("Başakşehir-Antalyaspor", "Antalyaspor rakibini yenebilir mi?"),
+    ("Başakşehir-Antalyaspor", "Her iki takım da gol bulur mu?"),
 ]
 
 # ── Turkish intent classification (inline TQU for P2P) ───

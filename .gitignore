@@ -16,11 +16,11 @@ server/tmp/
 *.exe
 
 # ── Data (mounted volumes) ──
-data/
-!data/.gitkeep
+# data/
+# !data/.gitkeep
 
 # ── Environment ──
-.env
+# .env
 
 # ── IDE ──
 .vscode/settings.json
@@ -41,7 +41,7 @@ Thumbs.db
 *.tflite
 *.xgb
 *.lgb
-*.pkl
+#*.pkl
 
 # ── Logs ──
 *.log

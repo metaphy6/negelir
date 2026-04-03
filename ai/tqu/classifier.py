@@ -5,7 +5,7 @@ Per roadmap §5.1: regex + keyword scoring, zero neural network.
 
 from dataclasses import dataclass
 
-from common.constants import FOOTBALL_KEYWORDS
+from common.constants import FOOTBALL_KEYWORDS, TEAM_MAP
 from common.logger import get_logger, section_banner
 from tqu.sanitizer import sanitize
 from tqu.patterns import INTENT_PATTERNS, IntentPattern
@@ -29,19 +29,23 @@ class ClassificationResult:
 
 
 def _has_football_context(text: str) -> bool:
-    """Check if text contains at least one football keyword."""
+    """Check if text contains at least one football keyword or a known team name."""
     text_lower = text.lower()
-    return any(kw in text_lower for kw in FOOTBALL_KEYWORDS)
+    if any(kw in text_lower for kw in FOOTBALL_KEYWORDS):
+        return True
+    if any(team in text_lower for team in TEAM_MAP):
+        return True
+    return False
 
 
 def _score_intent(text: str, pattern: IntentPattern) -> float:
     """Score how well the text matches an intent pattern."""
     score = 0.0
 
-    # Regex pattern matches (high signal)
+    # Regex pattern matches (high signal — sufficient alone)
     for regex in pattern.patterns:
         if regex.search(text):
-            score += 0.5
+            score += 0.6
             break  # one regex match is enough
 
     # Keyword matches (additive)
@@ -49,7 +53,7 @@ def _score_intent(text: str, pattern: IntentPattern) -> float:
     matched_keywords = sum(1 for kw in pattern.keywords if kw in text_lower)
     if pattern.keywords:
         keyword_ratio = matched_keywords / len(pattern.keywords)
-        score += keyword_ratio * 0.5
+        score += keyword_ratio * 0.4
 
     return min(score * pattern.weight, 1.0)
 

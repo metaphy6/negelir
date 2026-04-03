@@ -165,8 +165,8 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		rows, err := pool.Query(ctx, `
-			SELECT id, home_team_id, away_team_id, match_date, league, season,
-				   home_score, away_score, status
+			SELECT id, home_team, away_team, match_date, league_id, season,
+				   home_score, away_score, match_week
 			FROM raw_matches
 			ORDER BY match_date DESC
 			LIMIT 50
@@ -179,24 +179,26 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 
 		var matches []gin.H
 		for rows.Next() {
-			var id, homeTeamID, awayTeamID, league, season, status string
+			var id int
+			var homeTeam, awayTeam, leagueID, season string
 			var matchDate time.Time
 			var homeScore, awayScore *int
+			var matchWeek int
 
-			if err := rows.Scan(&id, &homeTeamID, &awayTeamID, &matchDate,
-				&league, &season, &homeScore, &awayScore, &status); err != nil {
+			if err := rows.Scan(&id, &homeTeam, &awayTeam, &matchDate,
+				&leagueID, &season, &homeScore, &awayScore, &matchWeek); err != nil {
 				continue
 			}
 			matches = append(matches, gin.H{
-				"id":            id,
-				"home_team_id":  homeTeamID,
-				"away_team_id":  awayTeamID,
-				"match_date":    matchDate.Format("2006-01-02"),
-				"league":        league,
-				"season":        season,
-				"home_score":    homeScore,
-				"away_score":    awayScore,
-				"status":        status,
+				"id":           id,
+				"home_team":    homeTeam,
+				"away_team":    awayTeam,
+				"match_date":   matchDate.Format("2006-01-02"),
+				"league":       leagueID,
+				"season":       season,
+				"home_score":   homeScore,
+				"away_score":   awayScore,
+				"match_week":   matchWeek,
 			})
 		}
 
@@ -216,17 +218,18 @@ func matchDetailHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 		id := c.Param("id")
 		ctx := c.Request.Context()
 
-		var homeTeamID, awayTeamID, league, season, status string
+		var homeTeam, awayTeam, leagueID, season string
 		var matchDate time.Time
 		var homeScore, awayScore *int
-		var rawJSON *string
+		var matchWeek int
+		var statsJSON *string
 
 		err := pool.QueryRow(ctx, `
-			SELECT home_team_id, away_team_id, match_date, league, season,
-				   home_score, away_score, status, raw_json::text
+			SELECT home_team, away_team, match_date, league_id, season,
+				   home_score, away_score, match_week, stats_json::text
 			FROM raw_matches WHERE id = $1
-		`, id).Scan(&homeTeamID, &awayTeamID, &matchDate, &league, &season,
-			&homeScore, &awayScore, &status, &rawJSON)
+		`, id).Scan(&homeTeam, &awayTeam, &matchDate, &leagueID, &season,
+			&homeScore, &awayScore, &matchWeek, &statsJSON)
 
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "match not found"})
@@ -234,15 +237,15 @@ func matchDetailHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"id":            id,
-			"home_team_id":  homeTeamID,
-			"away_team_id":  awayTeamID,
-			"match_date":    matchDate.Format("2006-01-02"),
-			"league":        league,
-			"season":        season,
-			"home_score":    homeScore,
-			"away_score":    awayScore,
-			"status":        status,
+			"id":           id,
+			"home_team":    homeTeam,
+			"away_team":    awayTeam,
+			"match_date":   matchDate.Format("2006-01-02"),
+			"league":       leagueID,
+			"season":       season,
+			"home_score":   homeScore,
+			"away_score":   awayScore,
+			"match_week":   matchWeek,
 		})
 	}
 }
@@ -258,9 +261,9 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		rows, err := pool.Query(ctx, `
-			SELECT id, name, short_name, league
+			SELECT uuid, display_name, league_id, internal_code
 			FROM teams
-			ORDER BY name
+			ORDER BY display_name
 		`)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch data"})
@@ -270,15 +273,15 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 
 		var teams []gin.H
 		for rows.Next() {
-			var id, name, shortName, league string
-			if err := rows.Scan(&id, &name, &shortName, &league); err != nil {
+			var uuid, displayName, leagueID, internalCode string
+			if err := rows.Scan(&uuid, &displayName, &leagueID, &internalCode); err != nil {
 				continue
 			}
 			teams = append(teams, gin.H{
-				"id":         id,
-				"name":       name,
-				"short_name": shortName,
-				"league":     league,
+				"id":            uuid,
+				"name":          displayName,
+				"internal_code": internalCode,
+				"league":        leagueID,
 			})
 		}
 
@@ -298,20 +301,20 @@ func teamDetailHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 		id := c.Param("id")
 		ctx := c.Request.Context()
 
-		var name, shortName, league string
+		var displayName, leagueID, internalCode string
 		err := pool.QueryRow(ctx, `
-			SELECT name, short_name, league FROM teams WHERE id = $1
-		`, id).Scan(&name, &shortName, &league)
+			SELECT display_name, league_id, internal_code FROM teams WHERE uuid = $1
+		`, id).Scan(&displayName, &leagueID, &internalCode)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "team not found"})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"id":         id,
-			"name":       name,
-			"short_name": shortName,
-			"league":     league,
+			"id":            id,
+			"name":          displayName,
+			"internal_code": internalCode,
+			"league":        leagueID,
 		})
 	}
 }
@@ -321,12 +324,11 @@ func scrapeTriggerHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 		ctx := c.Request.Context()
 
 		// Insert a scrape task
-		var taskID string
-		err := pool.QueryRow(ctx, `
-			INSERT INTO scrape_tasks (source_name, source_url, status)
-			VALUES ('manual_trigger', 'N/A', 'pending')
-			RETURNING id
-		`).Scan(&taskID)
+		taskID := fmt.Sprintf("manual_%d", time.Now().UnixNano())
+		_, err := pool.Exec(ctx, `
+			INSERT INTO scrape_tasks (task_id, source_id, data_type, match_date, status)
+			VALUES ($1, 'manual_trigger', 'full_scrape', CURRENT_DATE, 'pending')
+		`, taskID)
 
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create scrape task"})
@@ -347,19 +349,44 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 		matchID := c.Param("match_id")
 		ctx := c.Request.Context()
 
-		var featuresJSON *string
-		err := pool.QueryRow(ctx, `
-			SELECT feature_vector::text FROM team_features
-			WHERE match_id = $1
-			LIMIT 1
-		`, matchID).Scan(&featuresJSON)
-
-		if err != nil || featuresJSON == nil {
+		rows, err := pool.Query(ctx, `
+			SELECT team_uuid, season, match_week, elo_rating, form_index, xg_approximation,
+				   avg_goals_scored_5, avg_goals_conceded_5, points_per_game_5
+			FROM team_features
+			WHERE match_week = $1
+			ORDER BY team_uuid
+		`, matchID)
+		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "feature data not found"})
 			return
 		}
+		defer rows.Close()
 
-		c.Data(http.StatusOK, "application/json", []byte(*featuresJSON))
+		var features []gin.H
+		for rows.Next() {
+			var teamUUID, season string
+			var matchWeek int
+			var elo, form, xg, scored5, conceded5, ppg5 *float64
+			if err := rows.Scan(&teamUUID, &season, &matchWeek, &elo, &form, &xg,
+				&scored5, &conceded5, &ppg5); err != nil {
+				continue
+			}
+			features = append(features, gin.H{
+				"team_uuid":  teamUUID,
+				"season":     season,
+				"match_week": matchWeek,
+				"elo":        elo,
+				"form":       form,
+				"xg":         xg,
+				"scored_5":   scored5,
+				"conceded_5": conceded5,
+				"ppg_5":      ppg5,
+			})
+		}
+		if features == nil {
+			features = []gin.H{}
+		}
+		c.JSON(http.StatusOK, gin.H{"features": features, "match_week": matchID})
 	}
 }
 

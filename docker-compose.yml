@@ -75,6 +75,7 @@ services:
       AI_LOG_LEVEL: ${AI_LOG_LEVEL:-DEBUG}
       AI_DEVICE: ${AI_DEVICE:-auto}
       PYTHONUNBUFFERED: "1"
+      SIMULATION_INTERVAL: ${SIMULATION_INTERVAL:-30}
     depends_on:
       server:
         condition: service_started
@@ -103,6 +104,7 @@ services:
       AI_LOG_LEVEL: ${AI_LOG_LEVEL:-DEBUG}
       AI_DEVICE: ${AI_DEVICE:-auto}
       PYTHONUNBUFFERED: "1"
+      SIMULATION_INTERVAL: ${SIMULATION_INTERVAL:-30}
     depends_on:
       server:
         condition: service_started

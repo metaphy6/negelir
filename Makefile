@@ -87,11 +87,23 @@ ai-tqu-test: env ## Test TQU with sample Turkish questions
 ai-shell: env ## Open a shell in the AI container
 	$(COMPOSE) run --rm ai bash
 
+.PHONY: ai-continuous
+ai-continuous: env ## Run AI pipeline in continuous loop (Ctrl+C to stop)
+	$(COMPOSE) run --rm ai python main.py --continuous
+
+.PHONY: ai-continuous-demo
+ai-continuous-demo: env ## Run AI demo in continuous loop (Ctrl+C to stop)
+	$(COMPOSE) run --rm ai python main.py --demo --continuous
+
 # ── P2P Commands ────────────────────────────────────────────
 
 .PHONY: p2p-simulate
 p2p-simulate: env ## Run P2P network simulation
 	$(COMPOSE) run --rm p2p python -m simulation.runner
+
+.PHONY: p2p-continuous
+p2p-continuous: env ## Run P2P simulation in continuous loop (Ctrl+C to stop)
+	$(COMPOSE) run --rm p2p python main.py --continuous
 
 .PHONY: p2p-shell
 p2p-shell: env ## Open a shell in the P2P container
@@ -205,6 +217,6 @@ help: ## Show this help message
 	@echo "⚽ Negelir — Turkish Football Analysis System"
 	@echo "══════════════════════════════════════════════"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""

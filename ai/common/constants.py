@@ -75,6 +75,7 @@ UUID_TO_NAME: dict[str, str] = {
 # ── Football domain keywords (Turkish) ──────────────────
 # Used by TQU football domain gate (roadmap §5.1 TQU Step 2)
 FOOTBALL_KEYWORDS: list[str] = [
+    # Match / result
     "maç", "maçta", "maçı", "gol", "golü", "kazanır", "kazanir",
     "yener", "biter", "bitermi", "kaybeder", "berabere", "skor",
     "takım", "takim", "üst", "ust", "alt", "forma", "lig",
@@ -85,6 +86,27 @@ FOOTBALL_KEYWORDS: list[str] = [
     "trabzonspor", "başakşehir", "basaksehir", "performans",
     "nasıl", "olur mu", "atar mı", "yemez mi", "kapanır mı",
     "kg", "karşılaşma", "derbi", "şampiyon",
+    # Extended (1000+ question coverage)
+    "galip", "galibiyet", "mağlup", "mağlubiyet", "alır", "alabilir",
+    "favori", "kazanabilir", "yenilmezlik", "gol atar", "gol atılır",
+    "kale", "kaleci", "savunma", "defans", "hücum", "forvet",
+    "sakatlık", "sakat", "kadroda", "oynar", "oynuyor",
+    "asist", "gol krallığı", "şampiyonluk", "küme düşer", "küme düşme",
+    "sıralama", "sırada", "avrupa", "kupa", "play-off",
+    "ofsayt", "var", "frikik", "hat-trick", "hat trick",
+    "kırmızı kart", "sarı kart", "faul", "müdahale",
+    "karşılıklı", "karşılıklı gol", "kale kapanır", "clean sheet",
+    "erken gol", "son dakika", "uzatma", "90+",
+    "iç saha", "dış saha", "evinde", "deplasmanında",
+    "düşüşte", "yükselişte", "formda", "form", "son formu",
+    "gol ortalaması", "yediği gol", "attığı gol",
+    "puanla", "3 puan", "kazanma", "yenme",
+    "sezon", "bu sezon", "bu hafta", "hafta", "lig sıralaması",
+    "kafa kafaya", "h2h", "son 5 maç", "son 10 maç",
+    "skoru", "kaça kaç", "kaç kaç", "final skoru",
+    "gollü", "golsüz", "az gollü", "çok gollü",
+    "ikinci yarıda", "devre", "devre arası",
+    "oyuncu", "yıldız", "penaltıları", "vuruyor",
 ]
 
 # ── Leagues ──────────────────────────────────────────────
