@@ -74,6 +74,13 @@ services:
       SERVER_URL: http://server:8080
       AI_LOG_LEVEL: ${AI_LOG_LEVEL:-DEBUG}
       AI_DEVICE: ${AI_DEVICE:-auto}
+      SCRAPE_RATE_LIMIT_SECONDS: ${SCRAPE_RATE_LIMIT_SECONDS:-5}
+      SCRAPE_USER_AGENT: ${SCRAPE_USER_AGENT:-Negelir/0.1 (Football Analysis Research)}
+      SCRAPE_RESPECT_ROBOTS_TXT: ${SCRAPE_RESPECT_ROBOTS_TXT:-true}
+      SCRAPE_SOURCE_A: ${SCRAPE_SOURCE_A:-https://arsiv.mackolik.com}
+      SCRAPE_SOURCE_B: ${SCRAPE_SOURCE_B:-https://www.mackolik.com}
+      SCRAPE_SOURCE_C: ${SCRAPE_SOURCE_C:-https://www.tff.org}
+      SCRAPE_SOURCE_EXTRA: ${SCRAPE_SOURCE_EXTRA:-}
       PYTHONUNBUFFERED: "1"
       SIMULATION_INTERVAL: ${SIMULATION_INTERVAL:-30}
     depends_on:

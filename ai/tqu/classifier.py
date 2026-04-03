@@ -10,10 +10,17 @@ from common.logger import get_logger, section_banner
 from tqu.sanitizer import sanitize
 from tqu.patterns import INTENT_PATTERNS, IntentPattern
 from tqu.entities import extract_entities, ExtractedEntities
+from tqu.normalizer import (
+    normalize, asciify, stem_text, asciify_keywords,
+)
 
 log = get_logger("tqu.classifier")
 
 CONFIDENCE_THRESHOLD = 0.6
+
+# Pre-compute ASCII-folded keyword list once at import time
+_FOOTBALL_KEYWORDS_EXPANDED = asciify_keywords(FOOTBALL_KEYWORDS)
+_TEAM_NAMES = list(TEAM_MAP.keys())
 REJECTION_NO_FOOTBALL = "Sadece futbol maçları hakkında sorulara cevap verebilirim. Maç sonucu, gol sayısı, alt/üst, veya takım formu gibi konularda sorabilirsiniz."
 REJECTION_NO_INTENT = "Sorunuzu anlayamadım. Maç sonucu, gol sayısı, alt/üst, karşılıklı gol veya takım formu hakkında sorabilirsiniz."
 
@@ -29,28 +36,41 @@ class ClassificationResult:
 
 
 def _has_football_context(text: str) -> bool:
-    """Check if text contains at least one football keyword or a known team name."""
+    """Check if text contains at least one football keyword or a known team name.
+    Matches against both original and ASCII-folded forms for typo resilience."""
     text_lower = text.lower()
-    if any(kw in text_lower for kw in FOOTBALL_KEYWORDS):
+    text_ascii = asciify(text_lower)
+    text_stemmed = stem_text(text_ascii)
+    if any(kw in text_lower or asciify(kw) in text_ascii for kw in _FOOTBALL_KEYWORDS_EXPANDED):
         return True
-    if any(team in text_lower for team in TEAM_MAP):
+    if any(team in text_lower or asciify(team) in text_ascii for team in TEAM_MAP):
+        return True
+    # Stemmed fallback — catches suffixed keywords like "gollerini", "maçlarında"
+    stemmed_kws = [asciify(kw) for kw in FOOTBALL_KEYWORDS if len(kw) >= 3]
+    if any(skw in text_stemmed for skw in stemmed_kws):
         return True
     return False
 
 
 def _score_intent(text: str, pattern: IntentPattern) -> float:
-    """Score how well the text matches an intent pattern."""
+    """Score how well the text matches an intent pattern.
+    Tests regex against both original and ASCII-folded forms."""
     score = 0.0
+    text_ascii = asciify(text)
 
     # Regex pattern matches (high signal — sufficient alone)
     for regex in pattern.patterns:
-        if regex.search(text):
+        if regex.search(text) or regex.search(text_ascii):
             score += 0.6
             break  # one regex match is enough
 
-    # Keyword matches (additive)
+    # Keyword matches (additive) — check both forms
     text_lower = text.lower()
-    matched_keywords = sum(1 for kw in pattern.keywords if kw in text_lower)
+    text_ascii_lower = text_ascii.lower()
+    matched_keywords = sum(
+        1 for kw in pattern.keywords
+        if kw in text_lower or asciify(kw) in text_ascii_lower
+    )
     if pattern.keywords:
         keyword_ratio = matched_keywords / len(pattern.keywords)
         score += keyword_ratio * 0.4
@@ -76,6 +96,9 @@ def classify(raw_input: str) -> ClassificationResult:
             rejection_message=REJECTION_NO_FOOTBALL,
             sanitized_input=cleaned,
         )
+
+    # Step 1b: Normalize (dedup chars, resolve team typos)
+    cleaned = normalize(cleaned, team_names=_TEAM_NAMES)
 
     # Step 2: Football domain gate
     if not _has_football_context(cleaned):

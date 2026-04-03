@@ -26,13 +26,20 @@ class ScrapingEngine:
     """
     Coordinates data fetching — either from the Go middleware server (preferred)
     or directly from sources (fallback, rate-limited).
+    Sources are configured via environment variables (SCRAPE_SOURCE_A/B/C/EXTRA).
     """
 
     def __init__(self):
         self.server_url = cfg.server_url
         self.rate_limit = cfg.scrape_rate_limit
         self.user_agent = cfg.scrape_user_agent
+        self.sources = cfg.scrape_sources
         self._last_request_time: dict[str, float] = {}
+
+        # Log active sources on init
+        log.info(f"📡 Configured {len(self.sources)} data source(s):")
+        for src in self.sources:
+            log.info(f"   🔗 {src['label']}: {src['url']}")
 
     def fetch_matches_from_server(self, league_id: str = "super_lig", season: str = "2025-2026") -> list[dict]:
         """

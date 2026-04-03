@@ -370,3 +370,399 @@ class TestExtendedClassification:
                     "both_teams_score", "clean_sheet", "half_time",
                     "form_query", "head_to_head"}
         assert intents_seen == expected, f"Missing intents: {expected - intents_seen}"
+
+
+# ── Normalizer ───────────────────────────────────────────────────────────────
+
+from tqu.normalizer import (
+    asciify, dedup_chars, strip_suffixes, stem_text,
+    fuzzy_match_team, resolve_team_typos, normalize,
+)
+
+
+class TestNormalizerAsciify:
+    """Turkish special chars → ASCII folding."""
+
+    def test_folds_turkish_chars(self):
+        assert asciify("çğıöşü") == "cgiosu"
+
+    def test_preserves_ascii(self):
+        assert asciify("hello world") == "hello world"
+
+    def test_mixed_content(self):
+        assert asciify("maçın şampiyonu") == "macin sampiyonu"
+
+
+class TestNormalizerDedup:
+    """Collapse repeated characters (excited Turkish typing)."""
+
+    def test_gooool(self):
+        assert dedup_chars("gooool") == "gol"
+
+    def test_yeneeeer(self):
+        assert dedup_chars("yeneeeer") == "yener"
+
+    def test_normal_text_unchanged(self):
+        assert dedup_chars("gol atar") == "gol atar"
+
+    def test_double_chars_kept(self):
+        # Only 3+ repeats are collapsed, doubles are fine
+        assert dedup_chars("topp") == "topp"
+
+    def test_maçççç(self):
+        assert dedup_chars("maçççç") == "maç"
+
+
+class TestNormalizerStemming:
+    """Basic Turkish suffix stripping."""
+
+    def test_strip_iyor(self):
+        assert strip_suffixes("kazanıyor") == "kazan"
+
+    def test_strip_abilir(self):
+        assert strip_suffixes("kazanabilir") == "kazan"
+
+    def test_short_word_not_overstemmed(self):
+        # "gol" is only 3 chars — should not strip anything
+        assert strip_suffixes("gol") == "gol"
+
+    def test_strip_ları(self):
+        assert strip_suffixes("maçları") == "maç"
+
+    def test_stem_text_full(self):
+        stemmed = stem_text("takımların performansları")
+        # Both words should be stemmed
+        assert "takım" not in stemmed or len(stemmed) < len("takımların performansları")
+
+
+class TestNormalizerFuzzyTeam:
+    """Fuzzy team name matching via edit distance."""
+
+    TEAMS = ["galatasaray", "fenerbahçe", "beşiktaş", "trabzonspor"]
+
+    def test_exact_match(self):
+        assert fuzzy_match_team("galatasaray", self.TEAMS) == "galatasaray"
+
+    def test_one_char_typo(self):
+        assert fuzzy_match_team("galatasary", self.TEAMS) == "galatasaray"
+
+    def test_ascii_variant(self):
+        assert fuzzy_match_team("fenerbahce", self.TEAMS) == "fenerbahçe"
+
+    def test_two_char_typo(self):
+        assert fuzzy_match_team("besiktas", self.TEAMS) == "beşiktaş"
+
+    def test_too_far_returns_none(self):
+        # "xyz" is nothing like any team
+        assert fuzzy_match_team("xyz", self.TEAMS) is None
+
+    def test_short_token_ignored(self):
+        # Tokens shorter than 4 chars are skipped
+        assert fuzzy_match_team("gs", self.TEAMS) is None
+
+
+class TestNormalizerClassifierIntegration:
+    """Verify the classifier handles messy input after normalizer integration."""
+
+    def test_ascii_turkce_kazanir(self):
+        """'kazanir mi' (no ı) should still classify as match_winner."""
+        result = classify("galatasaray kazanir mi")
+        assert result.success
+        assert result.intent_id == "match_winner"
+
+    def test_ascii_turkce_berabere(self):
+        """'mac berabere bitermi' (no ç, no space) should classify."""
+        result = classify("mac berabere biter mi")
+        assert result.success
+        assert result.intent_id == "draw"
+
+    def test_repeated_chars(self):
+        """'goooool olur mu' should classify after char dedup."""
+        result = classify("galatasaray macinda goooool olur mu")
+        assert result.success
+
+    def test_team_typo_galatasary(self):
+        """Misspelled team 'galatasary' should resolve and classify."""
+        result = classify("galatasary kazanir mi")
+        assert result.success
+
+    def test_team_typo_fenerbace(self):
+        """Misspelled team 'fenerbace' should resolve and classify."""
+        result = classify("fenerbace bu maci alir mi")
+        assert result.success
+
+    def test_all_ascii_ust(self):
+        """'ust olur mu' (no ü) should classify as over_under."""
+        result = classify("galatasaray macinda ust olur mu")
+        assert result.success
+        assert result.intent_id == "over_under"
+
+    def test_mixed_case_sloppy(self):
+        """ALL CAPS input should work fine."""
+        result = classify("GALATASARAY KAZANIR MI")
+        assert result.success
+
+    def test_suffixed_keywords(self):
+        """Heavily suffixed input should still pass domain gate."""
+        result = classify("fenerbahçe maçlarında kaç gol atılır")
+        assert result.success
+
+
+# ── Proofreader / Data Validation ────────────────────────────────────────────
+
+from proofreader.validator import DataProofreader, RANGES
+
+
+class TestProofreader:
+    """Validate the data proofreading layer."""
+
+    def setup_method(self):
+        self.proofreader = DataProofreader()
+
+    def _make_valid_match(self, **overrides):
+        base = {
+            "home_score": 2, "away_score": 1,
+            "stats": {
+                "possession": 55, "shots_on": 6, "shots_off": 8,
+                "corners": 7, "fouls": 14, "yellow_cards": 3, "red_cards": 0,
+            },
+        }
+        base.update(overrides)
+        return base
+
+    def test_valid_match_passes(self):
+        result = self.proofreader.validate_match(self._make_valid_match())
+        assert result.is_valid
+
+    def test_negative_score_fails(self):
+        match = self._make_valid_match(home_score=-1)
+        result = self.proofreader.validate_match(match)
+        assert len(result.errors) > 0 or len(result.warnings) > 0
+
+    def test_excessive_goals_flagged(self):
+        match = self._make_valid_match(home_score=20)
+        result = self.proofreader.validate_match(match)
+        assert len(result.errors) > 0 or len(result.warnings) > 0
+
+    def test_possession_out_of_range(self):
+        match = self._make_valid_match()
+        match["stats"]["possession"] = 110
+        result = self.proofreader.validate_match(match)
+        assert len(result.errors) > 0 or len(result.warnings) > 0
+
+    def test_cards_over_limit(self):
+        match = self._make_valid_match()
+        match["stats"]["red_cards"] = 8
+        result = self.proofreader.validate_match(match)
+        assert len(result.errors) > 0 or len(result.warnings) > 0
+
+    def test_batch_all_valid(self):
+        matches = [self._make_valid_match() for _ in range(5)]
+        result = self.proofreader.validate_batch(matches)
+        assert result.is_valid
+        assert len(result.quarantined) == 0
+
+    def test_batch_with_bad_match_quarantines(self):
+        good = [self._make_valid_match() for _ in range(4)]
+        bad = self._make_valid_match(home_score=99)
+        result = self.proofreader.validate_batch(good + [bad])
+        # At least the bad match should be flagged somehow
+        assert len(result.errors) > 0 or len(result.quarantined) > 0
+
+    def test_empty_stats_still_validates(self):
+        match = {"home_score": 1, "away_score": 0, "stats": {}}
+        result = self.proofreader.validate_match(match)
+        # Should pass (no stats to check, no violations)
+        assert result.is_valid
+
+    def test_ranges_dict_has_expected_keys(self):
+        expected = {"home_score", "away_score", "possession", "shots_on",
+                    "shots_off", "corners", "fouls", "yellow_cards", "red_cards"}
+        assert expected == set(RANGES.keys())
+
+
+# ── Historical Match Scenarios ───────────────────────────────────────────────
+
+class TestHistoricalScenarios:
+    """
+    Test AI predictions against known types of Super Lig match profiles.
+    Verifies the math holds for realistic Turkish football data ranges.
+    """
+
+    def test_derby_high_xg(self):
+        """GS-FB style derby: both teams attack, expect high over 2.5."""
+        bm = compute_betting_markets(1.9, 1.6)
+        assert bm["over_2.5"] > 0.55
+        assert bm["btts"] > 0.55
+
+    def test_defensive_grind(self):
+        """Low-table defensive match: expect low goals."""
+        bm = compute_betting_markets(0.6, 0.5)
+        assert bm["over_2.5"] < 0.25
+        assert bm["btts"] < 0.25
+
+    def test_dominant_home_team(self):
+        """Strong home side vs weak visitor."""
+        hp = poisson_home_win_prob(2.2, 0.7)
+        assert hp > 0.55
+        bm = compute_betting_markets(2.2, 0.7)
+        assert bm["ah_home_-1.5"] > 0.25
+
+    def test_balanced_midtable(self):
+        """Two equal mid-table teams: draw probability should be elevated."""
+        dp = poisson_draw_prob(1.1, 1.1)
+        assert dp > 0.20
+
+    def test_relegation_battle(self):
+        """Low-scoring, tight, tense match."""
+        bm = compute_betting_markets(0.8, 0.7)
+        assert bm["over_1.5"] < 0.65
+        scores = predict_scoreline(0.8, 0.7, top_n=3)
+        # Most likely scores should be low
+        for h, a, _ in scores:
+            assert h + a <= 3
+
+    def test_title_race_fixture(self):
+        """Top 2 clash: both high xG, expect goals."""
+        bm = compute_betting_markets(2.0, 1.8)
+        assert bm["over_2.5"] > 0.60
+
+    def test_cup_match_surprise_factor(self):
+        """When underdog has decent xG, away win should be plausible."""
+        ap = 1 - poisson_home_win_prob(1.0, 1.3) - poisson_draw_prob(1.0, 1.3)
+        assert ap > 0.25
+
+    def test_all_scorelines_cover_reasonable_range(self):
+        """Top 20 scores for a typical match should span 0-0 to ~4-3."""
+        scores = predict_scoreline(1.5, 1.3, top_n=20)
+        max_goals = max(h + a for h, a, _ in scores)
+        assert max_goals >= 4  # at least some high-scoring predictions
+        min_goals = min(h + a for h, a, _ in scores)
+        assert min_goals == 0  # 0-0 should appear
+
+
+# ── Stress / Bulk Classification Runs ────────────────────────────────────────
+
+class TestBulkClassification:
+    """
+    Run the classifier against the full 1600+ question dataset multiple times
+    to ensure consistency and catch stochastic regressions.
+    """
+
+    def test_full_dataset_acceptance_rate_consistent(self):
+        """Run classification twice; rates should be identical (deterministic)."""
+        rate1 = sum(1 for q in FOOTBALL_QUESTIONS if classify(q["text"]).success) / len(FOOTBALL_QUESTIONS)
+        rate2 = sum(1 for q in FOOTBALL_QUESTIONS if classify(q["text"]).success) / len(FOOTBALL_QUESTIONS)
+        assert rate1 == rate2, "Classifier should be deterministic"
+
+    def test_all_rejection_questions_stable(self):
+        """Run rejection checks twice, all must be rejected both times."""
+        for q in REJECTION_QUESTIONS_LIST:
+            r1 = classify(q["text"])
+            r2 = classify(q["text"])
+            assert not r1.success and not r2.success, f"Unstable rejection: '{q['text']}'"
+
+    def test_intent_distribution_reasonable(self):
+        """No single intent should dominate >40% of accepted questions."""
+        from collections import Counter
+        intents = Counter()
+        for q in FOOTBALL_QUESTIONS:
+            r = classify(q["text"])
+            if r.success:
+                intents[r.intent_id] += 1
+        total = sum(intents.values())
+        for intent, count in intents.items():
+            ratio = count / total
+            assert ratio < 0.40, f"Intent '{intent}' dominates at {ratio:.1%}"
+
+    def test_high_confidence_questions_exist(self):
+        """At least some questions should have confidence > 0.8."""
+        high_conf = sum(1 for q in FOOTBALL_QUESTIONS
+                        if classify(q["text"]).success and classify(q["text"]).confidence > 0.8)
+        assert high_conf > 10, f"Only {high_conf} high-confidence questions"
+
+    def test_no_crash_on_unicode_edge_cases(self):
+        """Classifier should handle various Unicode without crashing."""
+        edge_cases = [
+            "Galatasaray\u200bkazanır\u200bmı",  # zero-width space
+            "fenerbahçe\tgol\natar\rmı",           # control chars
+            "   beşiktaş   kazanır   mı   ",       # excessive spaces
+            "TRABZONSPOR GALIP GELIR MI",           # all caps
+            "gAlAtAsArAy MaÇı nAsIl BiTeR",        # alternating case
+        ]
+        for text in edge_cases:
+            result = classify(text)  # should not raise
+            assert isinstance(result.success, bool)
+
+
+# ── Entity Extraction Depth ──────────────────────────────────────────────────
+
+from tqu.entities import extract_entities
+
+
+class TestEntityExtraction:
+    """Test entity extraction for various Turkish football contexts."""
+
+    def test_two_teams_extracted(self):
+        entities = extract_entities("galatasaray fenerbahçe maçında")
+        assert len(entities.team_refs) == 2
+
+    def test_goal_range_extracted(self):
+        entities = extract_entities("bu maçta 2-4 gol olur")
+        assert entities.min_goals == 2
+        assert entities.max_goals == 4
+
+    def test_threshold_fazla(self):
+        entities = extract_entities("3'ten fazla gol olur mu")
+        assert entities.threshold == 2.5
+
+    def test_threshold_az(self):
+        entities = extract_entities("3'ten az gol olur")
+        assert entities.threshold == 3.5
+
+    def test_first_half_detected(self):
+        entities = extract_entities("ilk yarıda gol olur mu")
+        assert entities.half == 1
+
+    def test_second_half_detected(self):
+        entities = extract_entities("ikinci yarıda gol atılır mı")
+        assert entities.half == 2
+
+    def test_over_under_threshold_from_number(self):
+        entities = extract_entities("2 üst olur mu")
+        assert entities.threshold == 2.5
+
+    def test_no_teams_in_generic_text(self):
+        entities = extract_entities("maçta gol olur mu")
+        assert len(entities.team_refs) == 0
+
+
+# ── Config / Constants Integrity ─────────────────────────────────────────────
+
+from common.constants import TEAM_MAP, UUID_TO_NAME, BANNED_WORDS, LEAGUES
+
+
+class TestConstantsIntegrity:
+    """Verify internal data consistency."""
+
+    def test_team_map_uuids_match_reverse_map(self):
+        for name, uuid in TEAM_MAP.items():
+            assert uuid in UUID_TO_NAME, f"UUID {uuid} ({name}) missing from reverse map"
+
+    def test_reverse_map_uuids_exist_in_team_map(self):
+        forward_uuids = set(TEAM_MAP.values())
+        for uuid in UUID_TO_NAME:
+            assert uuid in forward_uuids, f"Reverse UUID {uuid} not in TEAM_MAP"
+
+    def test_banned_words_all_lowercase(self):
+        for word in BANNED_WORDS:
+            assert word == word.lower(), f"Banned word '{word}' not lowercase"
+
+    def test_leagues_have_required_fields(self):
+        for key, league in LEAGUES.items():
+            assert "name" in league
+            assert "tier" in league
+            assert "teams" in league
+
+    def test_feature_count_is_91(self):
+        assert N_FEATURES == 91

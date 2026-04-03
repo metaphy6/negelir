@@ -32,6 +32,39 @@ class Config:
     scrape_user_agent: str = field(default_factory=lambda: os.getenv(
         "SCRAPE_USER_AGENT", "Negelir/0.1 (Football Analysis Research)"
     ))
+    scrape_respect_robots: bool = field(default_factory=lambda: os.getenv(
+        "SCRAPE_RESPECT_ROBOTS_TXT", "true"
+    ).lower() in ("true", "1", "yes"))
+
+    # Scraping data sources
+    scrape_source_a: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_A", "https://arsiv.mackolik.com"
+    ))
+    scrape_source_b: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_B", "https://www.mackolik.com"
+    ))
+    scrape_source_c: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_C", "https://www.tff.org"
+    ))
+    scrape_source_extra: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_EXTRA", ""
+    ))
+
+    @property
+    def scrape_sources(self) -> list[dict[str, str]]:
+        """All active scraping sources as a list of {name, url} dicts."""
+        sources = []
+        if self.scrape_source_a:
+            sources.append({"name": "source_a", "label": "Statistics Archive", "url": self.scrape_source_a})
+        if self.scrape_source_b:
+            sources.append({"name": "source_b", "label": "Live Scores", "url": self.scrape_source_b})
+        if self.scrape_source_c:
+            sources.append({"name": "source_c", "label": "Official Results", "url": self.scrape_source_c})
+        for extra in self.scrape_source_extra.split(","):
+            extra = extra.strip()
+            if extra:
+                sources.append({"name": "source_extra", "label": "Extra Source", "url": extra})
+        return sources
 
     # Paths
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "/data"))
