@@ -4,17 +4,19 @@ Per roadmap §7: nodes produce analyses, share them, build reputations,
 and the network collectively improves.
 
 Includes:
-  - Simulated web scraping with performance metrics
+  - Real match data loading from scraped JSON
   - AI pipeline (TQU → GBDT → TRC) running across all nodes
   - Turkish question-answer demonstration through P2P network
   - Reputation-weighted ensemble results
 """
 
 import hashlib
+import json
 import os
 import random
 import sys
 import time
+from pathlib import Path
 
 from node.peer import PeerNode, PeerAnalysis, ScrapedRecord, DataStore, get_p2p_logger
 from protocol.messages import P2PMessage, MessageType
@@ -24,78 +26,158 @@ from reputation.tracker import compute_network_summary, print_reputation_matrix
 log = get_p2p_logger("simulation")
 
 
-# ── Simulated scraping data (per roadmap §4.2) ──────────
-# Represents data that would be scraped from Turkish football sites
-SIMULATED_SCRAPED_DATA = {
-    "Galatasaray-Fenerbahçe": {
-        "home_team": "Galatasaray", "away_team": "Fenerbahçe",
-        "match_date": "2026-04-05", "league": "Süper Lig", "week": 30,
-        "home_form": [3, 3, 1, 3, 0],  # W=3, D=1, L=0
-        "away_form": [3, 1, 0, 3, 3],
-        "h2h_last5": {"home_wins": 3, "away_wins": 1, "draws": 1, "avg_goals": 2.8},
-        "home_elo": 1720, "away_elo": 1680,
-        "home_avg_scored": 1.9, "away_avg_scored": 1.6,
-        "home_avg_conceded": 0.7, "away_avg_conceded": 0.9,
-        "sentiment_home": 0.72, "sentiment_away": 0.55,
-        "stats": {"possession_h": 56, "possession_a": 44, "shots_on_h": 6, "shots_on_a": 4,
-                  "corners_h": 7, "corners_a": 5, "fouls_h": 14, "fouls_a": 16},
-    },
-    "Beşiktaş-Trabzonspor": {
-        "home_team": "Beşiktaş", "away_team": "Trabzonspor",
-        "match_date": "2026-04-05", "league": "Süper Lig", "week": 30,
-        "home_form": [3, 0, 3, 1, 3],
-        "away_form": [1, 3, 0, 3, 1],
-        "h2h_last5": {"home_wins": 2, "away_wins": 2, "draws": 1, "avg_goals": 3.0},
-        "home_elo": 1650, "away_elo": 1590,
-        "home_avg_scored": 1.6, "away_avg_scored": 1.3,
-        "home_avg_conceded": 1.0, "away_avg_conceded": 1.2,
-        "sentiment_home": 0.60, "sentiment_away": 0.45,
-        "stats": {"possession_h": 52, "possession_a": 48, "shots_on_h": 5, "shots_on_a": 5,
-                  "corners_h": 6, "corners_a": 6, "fouls_h": 12, "fouls_a": 13},
-    },
-    "Başakşehir-Antalyaspor": {
-        "home_team": "Başakşehir", "away_team": "Antalyaspor",
-        "match_date": "2026-04-06", "league": "Süper Lig", "week": 30,
-        "home_form": [3, 1, 3, 3, 1],
-        "away_form": [0, 1, 0, 3, 0],
-        "h2h_last5": {"home_wins": 3, "away_wins": 0, "draws": 2, "avg_goals": 2.2},
-        "home_elo": 1600, "away_elo": 1440,
-        "home_avg_scored": 1.5, "away_avg_scored": 0.9,
-        "home_avg_conceded": 0.8, "away_avg_conceded": 1.6,
-        "sentiment_home": 0.58, "sentiment_away": 0.25,
-        "stats": {"possession_h": 58, "possession_a": 42, "shots_on_h": 7, "shots_on_a": 3,
-                  "corners_h": 8, "corners_a": 3, "fouls_h": 11, "fouls_a": 18},
-    },
-}
+# ── Real data loading ────────────────────────────────────────
 
-# ── Turkish questions sent through P2P pipeline ──────────
-# Extended set mapped to simulated match data (3 matches × ~7 questions each)
-P2P_DEMO_QUESTIONS = [
-    # Galatasaray-Fenerbahçe
-    ("Galatasaray-Fenerbahçe", "Galatasaray bu maçı kazanır mı?"),
-    ("Galatasaray-Fenerbahçe", "Bu maçta 2.5 üstü gol olur mu?"),
-    ("Galatasaray-Fenerbahçe", "İki takım da gol atar mı?"),
-    ("Galatasaray-Fenerbahçe", "Fenerbahçe galip gelir mi?"),
-    ("Galatasaray-Fenerbahçe", "Bu maç berabere biter mi?"),
-    ("Galatasaray-Fenerbahçe", "İlk yarıda gol olur mu?"),
-    ("Galatasaray-Fenerbahçe", "Galatasaray kalesini gol yemeden korur mu?"),
-    # Beşiktaş-Trabzonspor
-    ("Beşiktaş-Trabzonspor", "Beşiktaş kazanır mı?"),
-    ("Beşiktaş-Trabzonspor", "Bu maç berabere biter mi?"),
-    ("Beşiktaş-Trabzonspor", "Bu maçta 3.5 üstü gol olur mu?"),
-    ("Beşiktaş-Trabzonspor", "Trabzonspor galip gelebilir mi?"),
-    ("Beşiktaş-Trabzonspor", "İki takım da gol atar mı?"),
-    ("Beşiktaş-Trabzonspor", "İlk yarı nasıl biter?"),
-    ("Beşiktaş-Trabzonspor", "Bu maçta kaç gol atılır?"),
-    # Başakşehir-Antalyaspor
-    ("Başakşehir-Antalyaspor", "Başakşehir kalesini gol yemeden korur mu?"),
-    ("Başakşehir-Antalyaspor", "Maçta kaç gol atılır?"),
-    ("Başakşehir-Antalyaspor", "Başakşehir bu maçı kazanır mı?"),
-    ("Başakşehir-Antalyaspor", "Alt mı olur üst mü?"),
-    ("Başakşehir-Antalyaspor", "Beraberlik olur mu sizce?"),
-    ("Başakşehir-Antalyaspor", "Antalyaspor rakibini yenebilir mi?"),
-    ("Başakşehir-Antalyaspor", "Her iki takım da gol bulur mu?"),
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+_REAL_DATA_PATH = _DATA_DIR / "tr_super_lig_real.json"
+
+
+def _load_real_matches(limit: int = 30) -> list[dict]:
+    """
+    Load real matches from the scraped JSON file and convert to
+    the simulation format (team stats + Elo approximation).
+    Returns the most recent `limit` matches that have scores.
+    """
+    if not _REAL_DATA_PATH.exists():
+        log.warning(f"⚠️  Real data not found at {_REAL_DATA_PATH}, using fallback")
+        return []
+
+    with open(_REAL_DATA_PATH) as f:
+        raw = json.load(f)
+
+    matches = [m for m in raw.get("matches", []) if m.get("score", {}).get("ft")]
+
+    # Build rolling team stats from the full history
+    team_stats: dict[str, dict] = {}  # team → {goals_for, goals_against, matches, form}
+    for m in matches:
+        for side, opp_side in [("team1", "team2"), ("team2", "team1")]:
+            team = m[side]
+            if team not in team_stats:
+                team_stats[team] = {"gf": [], "ga": [], "form": [], "elo": 1500.0}
+            ft = m["score"]["ft"]
+            gf = ft[0] if side == "team1" else ft[1]
+            ga = ft[1] if side == "team1" else ft[0]
+            team_stats[team]["gf"].append(gf)
+            team_stats[team]["ga"].append(ga)
+            # Form: W=3, D=1, L=0
+            if gf > ga:
+                team_stats[team]["form"].append(3)
+            elif gf == ga:
+                team_stats[team]["form"].append(1)
+            else:
+                team_stats[team]["form"].append(0)
+            # Simple Elo update
+            expected = 1.0 / (1.0 + 10 ** ((team_stats.get(m[opp_side], {}).get("elo", 1500) - team_stats[team]["elo"]) / 400))
+            actual = 1.0 if gf > ga else (0.5 if gf == ga else 0.0)
+            team_stats[team]["elo"] += 20 * (actual - expected)
+
+    # Take the last `limit` matches and build simulation-format dicts
+    recent = matches[-limit:]
+    result = []
+    for m in recent:
+        t1, t2 = m["team1"], m["team2"]
+        s1 = team_stats.get(t1, {})
+        s2 = team_stats.get(t2, {})
+        ft = m["score"]["ft"]
+        ht = m["score"].get("ht", [0, 0])
+
+        def _avg(lst, n=5):
+            window = lst[-n:] if lst else [0]
+            return sum(window) / max(1, len(window))
+
+        result.append({
+            "home_team": t1,
+            "away_team": t2,
+            "match_date": m.get("date", ""),
+            "league": "Süper Lig",
+            "week": int(m.get("round", "Matchday 1").split()[-1]) if "Matchday" in m.get("round", "") else 1,
+            "home_form": s1.get("form", [1])[-5:],
+            "away_form": s2.get("form", [1])[-5:],
+            "h2h_last5": {"home_wins": 2, "away_wins": 1, "draws": 2, "avg_goals": 2.5},
+            "home_elo": round(s1.get("elo", 1500)),
+            "away_elo": round(s2.get("elo", 1500)),
+            "home_avg_scored": round(_avg(s1.get("gf", [1])), 2),
+            "away_avg_scored": round(_avg(s2.get("gf", [1])), 2),
+            "home_avg_conceded": round(_avg(s1.get("ga", [1])), 2),
+            "away_avg_conceded": round(_avg(s2.get("ga", [1])), 2),
+            "sentiment_home": round(random.uniform(0.3, 0.8), 2),
+            "sentiment_away": round(random.uniform(0.2, 0.7), 2),
+            "stats": {
+                "possession_h": random.randint(40, 60),
+                "possession_a": 0,  # filled below
+                "shots_on_h": random.randint(2, 8),
+                "shots_on_a": random.randint(2, 8),
+                "corners_h": random.randint(2, 10),
+                "corners_a": random.randint(2, 10),
+                "fouls_h": random.randint(8, 20),
+                "fouls_a": random.randint(8, 20),
+            },
+            # Store actual result for validation
+            "_actual_ft": ft,
+            "_actual_ht": ht,
+        })
+        result[-1]["stats"]["possession_a"] = 100 - result[-1]["stats"]["possession_h"]
+
+    log.info(f"📂 Loaded {len(result)} real matches from {_REAL_DATA_PATH.name}")
+    return result
+
+
+# ── Simulated scraping data — now loaded from real data or fallback ──
+_real_matches = _load_real_matches(limit=30)
+
+SIMULATED_SCRAPED_DATA: dict[str, dict] = {}
+if _real_matches:
+    for m in _real_matches[:10]:  # Use 10 matches for the main simulation dict
+        key = f"{m['home_team']}-{m['away_team']}"
+        SIMULATED_SCRAPED_DATA[key] = m
+else:
+    # Fallback: hardcoded data if real data is unavailable
+    SIMULATED_SCRAPED_DATA = {
+        "Galatasaray-Fenerbahçe": {
+            "home_team": "Galatasaray", "away_team": "Fenerbahçe",
+            "match_date": "2026-04-05", "league": "Süper Lig", "week": 30,
+            "home_form": [3, 3, 1, 3, 0], "away_form": [3, 1, 0, 3, 3],
+            "h2h_last5": {"home_wins": 3, "away_wins": 1, "draws": 1, "avg_goals": 2.8},
+            "home_elo": 1720, "away_elo": 1680,
+            "home_avg_scored": 1.9, "away_avg_scored": 1.6,
+            "home_avg_conceded": 0.7, "away_avg_conceded": 0.9,
+            "sentiment_home": 0.72, "sentiment_away": 0.55,
+            "stats": {"possession_h": 56, "possession_a": 44, "shots_on_h": 6, "shots_on_a": 4,
+                      "corners_h": 7, "corners_a": 5, "fouls_h": 14, "fouls_a": 16},
+        },
+        "Beşiktaş-Trabzonspor": {
+            "home_team": "Beşiktaş", "away_team": "Trabzonspor",
+            "match_date": "2026-04-05", "league": "Süper Lig", "week": 30,
+            "home_form": [3, 0, 3, 1, 3], "away_form": [1, 3, 0, 3, 1],
+            "h2h_last5": {"home_wins": 2, "away_wins": 2, "draws": 1, "avg_goals": 3.0},
+            "home_elo": 1650, "away_elo": 1590,
+            "home_avg_scored": 1.6, "away_avg_scored": 1.3,
+            "home_avg_conceded": 1.0, "away_avg_conceded": 1.2,
+            "sentiment_home": 0.60, "sentiment_away": 0.45,
+            "stats": {"possession_h": 52, "possession_a": 48, "shots_on_h": 5, "shots_on_a": 5,
+                      "corners_h": 6, "corners_a": 6, "fouls_h": 12, "fouls_a": 13},
+        },
+    }
+
+
+# Build demo questions from whichever data we loaded
+P2P_DEMO_QUESTIONS: list[tuple[str, str]] = []
+_question_templates = [
+    "{home} bu maçı kazanır mı?",
+    "Bu maçta 2.5 üstü gol olur mu?",
+    "İki takım da gol atar mı?",
+    "Bu maç berabere biter mi?",
+    "İlk yarıda gol olur mu?",
+    "{home} kalesini gol yemeden korur mu?",
+    "{away} galip gelebilir mi?",
 ]
+for match_key, data in list(SIMULATED_SCRAPED_DATA.items())[:7]:
+    home = data["home_team"]
+    away = data["away_team"]
+    for tmpl in _question_templates:
+        P2P_DEMO_QUESTIONS.append(
+            (match_key, tmpl.format(home=home, away=away))
+        )
 
 # ── Turkish intent classification (inline TQU for P2P) ───
 import re
@@ -270,6 +352,16 @@ class P2PSimulation:
                        f"🆕 New: {summary.new_count}")
 
         elapsed = time.time() - start
+        # Transport realism stats
+        ts = self.transport.stats
+        console.print(f"\n📡 [bold]Transport Realism Stats:[/bold]")
+        console.print(f"   📨 Messages sent: {ts.messages_sent:,}")
+        console.print(f"   📬 Delivered: {ts.messages_delivered:,}")
+        console.print(f"   💀 Dropped: {ts.messages_dropped:,} ({ts.drop_rate:.1%})")
+        console.print(f"   📦 Bytes serialized: {ts.bytes_serialized:,}")
+        console.print(f"   ⚠️  Serde errors: {ts.serde_errors}")
+        console.print(f"   ⏱️  Avg latency: {ts.avg_latency_ms:.1f}ms")
+        console.print(f"   🔗 Topology: k={self.transport.k_neighbors} neighbors, fanout={self.transport.gossip_fanout}")
         console.print(f"\n✅ [bold green]Simulation complete! ({elapsed:.1f}s)[/bold green]\n")
 
     # ── Phase A: Node Creation ──────────────────────────
@@ -616,7 +708,7 @@ class P2PSimulation:
                 data.get("sentiment_home", 0.5) * 0.1 - 0.05
             ))
 
-            self._run_single_match_round(match_idx, home, away, match_id, true_home_prob, rng, results)
+            self._run_single_match_round(match_idx, home, away, match_id, true_home_prob, rng, results, match_data=data)
 
         # Additional matches for reputation building
         for extra_idx, (home, away) in enumerate(extra_teams):
@@ -628,7 +720,7 @@ class P2PSimulation:
 
         return results
 
-    def _run_single_match_round(self, match_idx, home, away, match_id, true_home_prob, rng, results):
+    def _run_single_match_round(self, match_idx, home, away, match_id, true_home_prob, rng, results, match_data=None):
         """Execute one P2P round: local analysis → broadcast → receive → ensemble → validate."""
         log.info(f"\n{'─' * 60}")
         log.info(f"⚽ Match {match_idx + 1}: {home} vs {away} (ID: {match_id[:8]})")
@@ -667,7 +759,7 @@ class P2PSimulation:
             node.compute_ensemble(match_id)
 
         # Simulate result & validate
-        actual_result = self._simulate_result(true_home_prob, rng)
+        actual_result = self._simulate_result(true_home_prob, rng, match_data)
         result_text = {"H": f"{home} won", "D": "Draw", "A": f"{away} won"}
         log.info(f"🏆 Result: {result_text.get(actual_result, actual_result)}")
 
@@ -735,8 +827,21 @@ class P2PSimulation:
 
     # ── Helpers ──────────────────────────────────────────
 
-    def _simulate_result(self, home_prob: float, rng: random.Random) -> str:
-        """Simulate a match result based on true probabilities."""
+    def _simulate_result(self, home_prob: float, rng: random.Random, match_data: dict | None = None) -> str:
+        """
+        Determine match result.
+        Uses actual result from real data if available, otherwise simulates.
+        """
+        actual_ft = match_data.get("_actual_ft") if match_data else None
+        if actual_ft and len(actual_ft) == 2:
+            h, a = actual_ft
+            if h > a:
+                return "H"
+            elif h == a:
+                return "D"
+            else:
+                return "A"
+        # Fallback: simulate
         r = rng.random()
         draw_prob = 0.25
         if r < home_prob:
