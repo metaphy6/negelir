@@ -2,7 +2,8 @@
 
 ## Overview
 
-Negelir is an AI-powered system that analyzes Turkish football matches and produces pattern-based insights.
+Negelir is an AI-powered system that analyzes football matches and produces pattern-based insights.
+It supports multiple leagues through a pluggable `LeagueConfig` system.
 The system consists of four main layers:
 
 ```
@@ -35,8 +36,9 @@ The system consists of four main layers:
 | **TRC** | `trc/verdict.py` | Confidence × probability → verdict selection |
 | **Model** | `model/trainer.py` | XGBoost GBDT training (GPU/CPU) |
 | **Model** | `model/inference.py` | Inference and analysis |
-| **Model** | `model/features.py` | 91 feature columns, synthetic data |
+| **Model** | `model/features.py` | 120 feature columns, synthetic data |
 | **Model** | `model/device.py` | GPU/CPU auto-detection |
+| **Common** | `common/league_config.py` | Multi-league config (TR, EN, DE, ES) |
 | **Scraper** | `scraper/engine.py` | Data fetching via Go server |
 | **Scraper** | `scraper/parsers.py` | HTML parsing (BeautifulSoup) |
 | **NLP** | `nlp/sentiment.py` | Turkish sentiment analysis |
@@ -83,13 +85,30 @@ data_quarantine      → Suspicious data quarantine
 
 ```
 1. Scraper  → Go Server → PostgreSQL (raw data)
-2. Features → 91 column generation + noise injection
-3. GBDT     → XGBoost prediction (GPU or CPU)
+2. Features → 120 column generation + noise injection
+3. GBDT     → XGBoost + Dixon-Coles Poisson ensemble (GPU or CPU)
 4. TQU      → Turkish question understanding + intent classification
 5. TRC      → Template-based Turkish response composition
 6. Proofreader → Data validation + quarantine
 7. P2P      → Analysis sharing + reputation-weighted ensemble
 ```
+
+## Prediction Model
+
+- **XGBoost (GBDT)**: 3-class multi:softprob (Home/Draw/Away)
+- **Poisson**: Dixon-Coles corrected for low-scoring matches (ρ = -0.13)
+- **Ensemble**: 35% XGBoost + 65% Poisson (configurable per league)
+- **Draw detection**: Multi-signal scoring (H-A gap, Bayesian, Poisson, Elo)
+- **Features**: 120 columns across 6 categories (A-F)
+- **Accuracy (Turkish Süper Lig)**: 41.2% 1X2, 68.1% DC1X, 78.8% AH-1.5
+
+## Multi-League Support
+
+League-specific parameters are extracted into `common/league_config.py`:
+- Elo home advantage, first-half goal percentage, Dixon-Coles ρ
+- Derby pairs, team counts, promotion/relegation slots
+- XGBoost ensemble weight, draw detection thresholds
+- Pre-built configs: Turkish Süper Lig, EPL, Bundesliga, La Liga
 
 ## Security
 

@@ -367,18 +367,44 @@ def poisson_xg(attack, defense, league_avg):
     return max(0.1, attack * defense * league_avg)
 
 
-def poisson_draw_prob(home_xg, away_xg):
+# Dixon-Coles adjustment for low-scoring matches (0-0, 1-0, 0-1, 1-1)
+# rho < 0 means these scorelines are more likely than independent Poisson
+DIXON_COLES_RHO = -0.13
+
+
+def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho=DIXON_COLES_RHO):
+    """Dixon-Coles correction factor for score (hg, ag)."""
+    if hg == 0 and ag == 0:
+        return 1.0 - home_xg * away_xg * rho
+    elif hg == 1 and ag == 0:
+        return 1.0 + away_xg * rho
+    elif hg == 0 and ag == 1:
+        return 1.0 + home_xg * rho
+    elif hg == 1 and ag == 1:
+        return 1.0 - rho
+    return 1.0
+
+
+def _score_prob(hg, ag, home_xg, away_xg, use_dc=True):
+    """Probability of score (hg, ag) with optional Dixon-Coles correction."""
+    p = poisson.pmf(hg, home_xg) * poisson.pmf(ag, away_xg)
+    if use_dc:
+        p *= _dixon_coles_tau(hg, ag, home_xg, away_xg)
+    return max(0.0, p)
+
+
+def poisson_draw_prob(home_xg, away_xg, use_dc=True):
     p_draw = 0.0
     for k in range(6):
-        p_draw += poisson.pmf(k, home_xg) * poisson.pmf(k, away_xg)
+        p_draw += _score_prob(k, k, home_xg, away_xg, use_dc)
     return p_draw
 
 
-def poisson_home_win_prob(home_xg, away_xg):
+def poisson_home_win_prob(home_xg, away_xg, use_dc=True):
     p_home = 0.0
     for h in range(8):
         for a in range(h):
-            p_home += poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+            p_home += _score_prob(h, a, home_xg, away_xg, use_dc)
     return p_home
 
 
@@ -396,24 +422,30 @@ def predict_scoreline(home_xg, away_xg, top_n=3):
     scorelines = []
     for h in range(8):
         for a in range(8):
-            p = poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+            p = _score_prob(h, a, home_xg, away_xg, use_dc=True)
             scorelines.append((h, a, p))
     scorelines.sort(key=lambda x: -x[2])
     return scorelines[:top_n]
 
 
 def compute_betting_markets(home_xg, away_xg):
-    """Compute standard betting market probabilities from Poisson xG model.
+    """Compute standard betting market probabilities from Dixon-Coles Poisson model.
 
     Returns dict with probabilities for: Over/Under (1.5, 2.5, 3.5),
     BTTS, Double Chance, Draw No Bet, Asian Handicap, Half-Time result.
     """
     max_g = 7
-    # Build score probability matrix
+    # Build score probability matrix with Dixon-Coles correction
     sm = {}
     for h in range(max_g):
         for a in range(max_g):
-            sm[(h, a)] = poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+            sm[(h, a)] = _score_prob(h, a, home_xg, away_xg, use_dc=True)
+
+    # Normalise to ensure probabilities sum to ~1
+    sm_total = sum(sm.values())
+    if sm_total > 0:
+        for k in sm:
+            sm[k] /= sm_total
 
     # Over/Under goal lines
     def p_over(line):
@@ -729,6 +761,9 @@ def build_feature_vector(
     s("home_goals_per_match_rate", hs.rolling(hs.scored, 10) if hs.scored else 1.0)
     s("away_goals_per_match_rate", aws.rolling(aws.scored, 10) if aws.scored else 1.0)
 
+    # Sanitize: replace NaN/Inf with 0
+    vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
+
     return vec.reshape(1, -1)
 
 
@@ -869,9 +904,10 @@ def compute_league_avg_goals(team_stats):
 
 def train_on_historical(
     training_matches, all_prior_matches,
-    n_estimators=300, max_depth=4, learning_rate=0.08,
+    n_estimators=150, max_depth=4, learning_rate=0.10,
     reg_alpha=0.5, reg_lambda=1.5, subsample=0.8,
     colsample=0.8, min_child_weight=3,
+    use_calibration=True,
 ):
     team_stats = {}
     features_list = []
@@ -905,7 +941,7 @@ def train_on_historical(
     y = np.array(labels)
     w = np.array(sample_weights)
 
-    model = xgb.XGBClassifier(
+    base_model = xgb.XGBClassifier(
         n_estimators=n_estimators,
         max_depth=max_depth,
         learning_rate=learning_rate,
@@ -922,24 +958,36 @@ def train_on_historical(
         gamma=0.1,
         random_state=42,
         verbosity=0,
+        n_jobs=-1,
     )
 
+    # Train/validation split for accuracy estimate
     from sklearn.model_selection import train_test_split
     X_tr, X_val, y_tr, y_val, w_tr, w_val = train_test_split(
         X, y, w, test_size=0.15, random_state=42, stratify=y,
     )
+    base_model.fit(X_tr, y_tr, sample_weight=w_tr,
+                   eval_set=[(X_val, y_val)], sample_weight_eval_set=[w_val],
+                   verbose=False)
+    val_acc = float(accuracy_score(y_val, base_model.predict(X_val)))
+    val_loss = float(log_loss(y_val, base_model.predict_proba(X_val)))
 
-    model.fit(
-        X_tr, y_tr,
-        sample_weight=w_tr,
-        eval_set=[(X_val, y_val)],
-        sample_weight_eval_set=[w_val],
-        verbose=False,
-    )
+    # Retrain on full data for final model
+    base_model.fit(X, y, sample_weight=w, verbose=False)
 
-    val_pred = model.predict(X_val)
-    val_acc = accuracy_score(y_val, val_pred)
-    val_loss = log_loss(y_val, model.predict_proba(X_val))
+    model = base_model
+
+    # Log top-20 feature importances
+    importances = base_model.feature_importances_
+    top_idx = np.argsort(importances)[::-1][:20]
+    print("  Top-20 feature importances:")
+    for rank, idx in enumerate(top_idx):
+        col_name = FEATURE_COLUMNS[idx] if idx < len(FEATURE_COLUMNS) else f"f{idx}"
+        print("    {:>2}. {:<35s} {:.4f}".format(rank + 1, col_name, importances[idx]))
+    # Count zero-importance features
+    zero_count = int(np.sum(importances == 0))
+    if zero_count > 0:
+        print("  ⚠  {} features have zero importance".format(zero_count))
 
     return model, val_acc, val_loss, team_stats
 
@@ -1015,10 +1063,24 @@ def predict_matches(model, test_matches, all_prior_matches, team_stats):
         probs = {"H": home_win_prob, "D": draw_prob, "A": away_win_prob}
         predicted = max(probs, key=probs.get)
 
-        # Draw detection rule: when H and A are close, draw is more likely
+        # Enhanced draw detection: multi-signal scoring
+        draw_signals = 0
         ha_gap = abs(home_win_prob - away_win_prob)
         bayesian_draw_avg = (hs.bayesian_draw_prob() + aws.bayesian_draw_prob()) / 2
-        if ha_gap < 0.15 and draw_prob > 0.26 and bayesian_draw_avg > 0.20:
+        elo_gap = abs(hs.elo - aws.elo)
+
+        if ha_gap < 0.15:
+            draw_signals += 1
+        if draw_prob > 0.26:
+            draw_signals += 1
+        if bayesian_draw_avg > 0.20:
+            draw_signals += 1
+        if p_draw > 0.25:  # Poisson (Dixon-Coles) draw probability
+            draw_signals += 1
+        if elo_gap < 80:   # Closely matched teams by Elo
+            draw_signals += 1
+        # Override to draw when >= 3 signals fire
+        if draw_signals >= 3 and draw_prob > 0.22:
             predicted = "D"
 
         confidence = max(probs.values())
@@ -1288,8 +1350,8 @@ def generate_report(results, val_acc, val_loss, train_rounds, elapsed, model_par
 
 def run_test(
     train_rounds=25, output_path=None,
-    n_estimators=200, max_depth=3, learning_rate=0.06,
-    min_child_weight=5, expanding=False, retrain_every=3,
+    n_estimators=150, max_depth=4, learning_rate=0.10,
+    min_child_weight=3, expanding=False, retrain_every=3,
     predict_from=15, train_pct=0.75,
 ):
     output_path = output_path or DEFAULT_OUTPUT
@@ -1402,6 +1464,7 @@ def run_test(
                             reg_alpha=0.5, reg_lambda=1.5, subsample=0.8,
                             colsample_bytree=0.8, min_child_weight=min_child_weight,
                             gamma=0.1, random_state=42, verbosity=0,
+                            n_jobs=-1,
                         )
                         model.fit(X, y, verbose=False)
                         val_acc_last = accuracy_score(y, model.predict(X))
@@ -1440,12 +1503,25 @@ def run_test(
                         probs = {"H": home_win_prob, "D": draw_prob, "A": away_win_prob}
                         predicted = max(probs, key=probs.get)
 
-                        # Draw detection rule: when H and A are close, draw is more likely
+                        # Enhanced draw detection: multi-signal scoring
                         hs_exp = team_stats_build.get(match.home, TeamStats())
                         aws_exp = team_stats_build.get(match.away, TeamStats())
+                        draw_signals = 0
                         ha_gap = abs(home_win_prob - away_win_prob)
                         bayesian_draw_avg = (hs_exp.bayesian_draw_prob() + aws_exp.bayesian_draw_prob()) / 2
-                        if ha_gap < 0.15 and draw_prob > 0.26 and bayesian_draw_avg > 0.20:
+                        elo_gap = abs(hs_exp.elo - aws_exp.elo)
+
+                        if ha_gap < 0.15:
+                            draw_signals += 1
+                        if draw_prob > 0.26:
+                            draw_signals += 1
+                        if bayesian_draw_avg > 0.20:
+                            draw_signals += 1
+                        if p_draw > 0.25:
+                            draw_signals += 1
+                        if elo_gap < 80:
+                            draw_signals += 1
+                        if draw_signals >= 3 and draw_prob > 0.22:
                             predicted = "D"
 
                         confidence = max(probs.values())

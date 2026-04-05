@@ -4,7 +4,7 @@ Negelir P2P — Simulation entry point.
 import os
 import sys
 import time
-from simulation.runner import P2PSimulation
+from simulation.runner import P2PSimulation, run_scaling_test, run_churn_test
 from node.peer import get_p2p_logger
 
 log = get_p2p_logger("main")
@@ -12,6 +12,18 @@ log = get_p2p_logger("main")
 
 def main():
     log.info("🌐 Negelir P2P Simulation starting...")
+
+    if "--scale-test" in sys.argv:
+        count = 25
+        for arg in sys.argv:
+            if arg.startswith("--nodes="):
+                count = int(arg.split("=")[1])
+        run_scaling_test(target_nodes=count)
+        return
+
+    if "--churn-test" in sys.argv:
+        run_churn_test()
+        return
 
     if "--continuous" in sys.argv:
         interval = int(os.getenv("SIMULATION_INTERVAL", "30"))

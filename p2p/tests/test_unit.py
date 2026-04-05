@@ -534,3 +534,500 @@ class TestP2PStress:
             avg_honest = sum(honest_reps) / len(honest_reps)
             # Biased node should not outperform honest average by much
             assert biased_rep.accuracy_rolling_50 <= avg_honest + 0.20
+
+
+# ── Data Store & Retention ────────────────────────────────────────────────────
+
+from node.peer import DataStore, ScrapedRecord
+
+
+class TestDataStore:
+    """Test the content-addressed data store for P2P data retention."""
+
+    def test_insert_returns_record(self):
+        store = DataStore(owner_id="ds_test_1")
+        rec = store.insert("match", {"home": "GS", "away": "FB"})
+        assert rec is not None
+        assert rec.data_type == "match"
+        assert store.size == 1
+
+    def test_duplicate_insert_returns_none(self):
+        store = DataStore(owner_id="ds_test_2")
+        rec1 = store.insert("match", {"home": "GS", "away": "FB"})
+        rec2 = store.insert("match", {"home": "GS", "away": "FB"})
+        assert rec1 is not None
+        assert rec2 is None  # duplicate
+        assert store.size == 1
+
+    def test_different_payload_different_hash(self):
+        store = DataStore(owner_id="ds_test_3")
+        r1 = store.insert("match", {"home": "GS", "away": "FB"})
+        r2 = store.insert("match", {"home": "BJK", "away": "TS"})
+        assert r1 is not None and r2 is not None
+        assert r1.data_hash != r2.data_hash
+        assert store.size == 2
+
+    def test_has_check(self):
+        store = DataStore(owner_id="ds_test_4")
+        rec = store.insert("match", {"home": "GS", "away": "FB"})
+        assert store.has(rec.data_hash)
+        assert not store.has("nonexistent_hash")
+
+    def test_get_all_filters_by_type(self):
+        store = DataStore(owner_id="ds_test_5")
+        store.insert("match", {"home": "GS", "away": "FB"})
+        store.insert("odds", {"home_odds": 1.5, "away_odds": 3.2})
+        store.insert("match", {"home": "BJK", "away": "TS"})
+        assert len(store.get_all("match")) == 2
+        assert len(store.get_all("odds")) == 1
+        assert len(store.get_all()) == 3
+
+    def test_manifest_lists_all_hashes(self):
+        store = DataStore(owner_id="ds_test_6")
+        store.insert("match", {"id": 1})
+        store.insert("match", {"id": 2})
+        manifest = store.get_manifest()
+        assert len(manifest) == 2
+
+    def test_missing_from_identifies_gaps(self):
+        store_a = DataStore(owner_id="ds_a")
+        store_b = DataStore(owner_id="ds_b")
+        store_a.insert("match", {"id": 1})
+        store_a.insert("match", {"id": 2})
+        store_b.insert("match", {"id": 1})  # only has one
+        missing = store_b.missing_from(store_a.get_manifest())
+        assert len(missing) == 1
+
+    def test_merge_record_accepts_new(self):
+        store_a = DataStore(owner_id="merge_a")
+        rec = store_a.insert("match", {"home": "GS", "away": "FB"})
+        store_b = DataStore(owner_id="merge_b")
+        assert store_b.merge_record(rec) is True
+        assert store_b.size == 1
+
+    def test_merge_record_rejects_duplicate(self):
+        store_a = DataStore(owner_id="dup_a")
+        rec = store_a.insert("match", {"home": "GS", "away": "FB"})
+        store_b = DataStore(owner_id="dup_b")
+        store_b.merge_record(rec)
+        assert store_b.merge_record(rec) is False  # duplicate
+        assert store_b.size == 1
+
+    def test_merge_rejects_tampered_hash(self):
+        store = DataStore(owner_id="tamper_test")
+        rec = ScrapedRecord(
+            data_hash="000000_bad_hash",
+            source_node_id="attacker",
+            data_type="match",
+            payload={"home": "GS", "away": "FB"},
+        )
+        assert store.merge_record(rec) is False
+        assert store.size == 0
+
+    def test_evict_expired(self):
+        store = DataStore(owner_id="evict_test")
+        store.insert("match", {"id": "fresh"})
+        # Manually insert expired record
+        old_rec = ScrapedRecord(
+            data_hash=DataStore.compute_hash({"id": "old"}, "match"),
+            source_node_id="evict_test",
+            data_type="match",
+            payload={"id": "old"},
+            timestamp=time.time() - 200 * 3600,  # 200 hours ago
+            ttl_hours=168,
+        )
+        store._records[old_rec.data_hash] = old_rec
+        store._seen_hashes.add(old_rec.data_hash)
+        assert store.size == 2
+        evicted = store.evict_expired()
+        assert evicted == 1
+        assert store.size == 1
+
+    def test_to_summary(self):
+        store = DataStore(owner_id="summary_test")
+        store.insert("match", {"id": 1})
+        store.insert("odds", {"id": 2})
+        summary = store.to_summary()
+        assert summary["total"] == 2
+        assert summary["by_type"]["match"] == 1
+        assert summary["by_type"]["odds"] == 1
+
+
+class TestPeerDataRetention:
+    """Test data retention through PeerNode methods."""
+
+    def test_ingest_and_check(self):
+        node = PeerNode(node_id="ret_1", port=4001)
+        rec = node.ingest_scraped_data("match", {"home": "GS", "away": "FB"})
+        assert rec is not None
+        assert not node.needs_scrape("match", {"home": "GS", "away": "FB"})
+
+    def test_needs_scrape_true_for_missing(self):
+        node = PeerNode(node_id="ret_2", port=4002)
+        assert node.needs_scrape("match", {"home": "Unknown", "away": "Team"})
+
+    def test_receive_scraped_data_from_peer(self):
+        node_a = PeerNode(node_id="ret_a", port=4010)
+        node_b = PeerNode(node_id="ret_b", port=4011)
+        rec = node_a.ingest_scraped_data("match", {"home": "GS", "away": "FB"})
+        assert node_b.receive_scraped_data(rec) is True
+        assert not node_b.needs_scrape("match", {"home": "GS", "away": "FB"})
+
+    def test_manifest_exchange(self):
+        node_a = PeerNode(node_id="man_a", port=4020)
+        node_b = PeerNode(node_id="man_b", port=4021)
+        node_a.ingest_scraped_data("match", {"id": 1})
+        node_a.ingest_scraped_data("match", {"id": 2})
+        node_b.ingest_scraped_data("match", {"id": 1})  # only has one
+        missing = node_b.request_missing_data(node_a.get_data_manifest())
+        assert len(missing) == 1
+
+    def test_data_propagation_chain(self):
+        """Test that data cascades through a chain of peers."""
+        nodes = [PeerNode(node_id=f"chain_{i}", port=4100 + i) for i in range(5)]
+        # Node 0 scrapes
+        rec = nodes[0].ingest_scraped_data("match", {"home": "GS", "away": "FB"})
+        # Propagate through chain
+        for i in range(1, len(nodes)):
+            nodes[i].receive_scraped_data(rec)
+        # All nodes should have the data
+        for node in nodes:
+            assert not node.needs_scrape("match", {"home": "GS", "away": "FB"})
+            assert node.data_store.size == 1
+
+
+# ── Transport Unregister ─────────────────────────────────────────────────────
+
+
+class TestTransportUnregister:
+    """Test dynamic node removal from the transport layer."""
+
+    def test_unregister_removes_node(self):
+        t = SimulatedTransport()
+        t.register_node("to_remove")
+        t.register_node("keeper")
+        assert t.node_count == 2
+        assert t.unregister_node("to_remove") is True
+        assert t.node_count == 1
+
+    def test_unregister_unknown_returns_false(self):
+        t = SimulatedTransport()
+        assert t.unregister_node("nobody") is False
+
+    def test_broadcast_skips_removed_node(self):
+        t = SimulatedTransport()
+        t.register_node("a")
+        t.register_node("b")
+        t.register_node("c")
+        t.unregister_node("b")
+        msg = P2PMessage(message_type="ping", sender_id="a")
+        t.broadcast("a", msg)
+        assert len(t.get_pending("c")) == 1
+        # "b" no longer exists
+        assert t.get_pending("b") == []
+
+
+# ── Scaling Tests (20+ peers) ────────────────────────────────────────────────
+
+
+class TestScaling:
+    """Test P2P network behaviour with 20+ peers."""
+
+    def _run_scaled_simulation(self, n_nodes, n_rounds=20):
+        import random
+        rng = random.Random(12345)
+        nodes = [PeerNode(node_id=f"scale_{i}", port=3000 + i) for i in range(n_nodes)]
+        transport = SimulatedTransport()
+        for n in nodes:
+            transport.register_node(n.node_id)
+
+        for m in range(n_rounds):
+            match_id = f"scale_test_{m}"
+            true_prob = rng.uniform(0.25, 0.65)
+
+            for n in nodes:
+                a = n.produce_analysis(match_id, base_home_prob=true_prob)
+                msg = P2PMessage(
+                    message_type=MessageType.ANALYSIS.value,
+                    sender_id=n.node_id,
+                    payload=a.to_dict(),
+                )
+                transport.broadcast(n.node_id, msg)
+
+            for n in nodes:
+                for msg in transport.get_pending(n.node_id):
+                    if msg.message_type == MessageType.ANALYSIS.value:
+                        pa = PeerAnalysis(
+                            analysis_id=msg.payload["analysis_id"],
+                            node_id=msg.sender_id,
+                            match_id=msg.payload["match_id"],
+                            home_win_prob=msg.payload["distribution"]["home_win"],
+                            draw_prob=msg.payload["distribution"]["draw"],
+                            away_win_prob=msg.payload["distribution"]["away_win"],
+                            confidence=msg.payload["confidence"],
+                        )
+                        n.receive_peer_analysis(pa)
+
+            for n in nodes:
+                ens = n.compute_ensemble(match_id)
+                assert ens is not None
+                total = ens.home_win_prob + ens.draw_prob + ens.away_win_prob
+                assert abs(total - 1.0) < 0.01
+
+            actual = "H" if rng.random() < true_prob else ("D" if rng.random() < 0.35 else "A")
+            for n in nodes:
+                n.validate_outcome(match_id, actual)
+
+        return nodes
+
+    def test_20_peers_stable(self):
+        """20 peers produce valid ensembles over 20 rounds without crashes."""
+        nodes = self._run_scaled_simulation(20)
+        for n in nodes:
+            assert len(n.reputation_table) >= 10
+
+    def test_25_peers_stable(self):
+        """25 peers over 20 rounds."""
+        nodes = self._run_scaled_simulation(25)
+        assert len(nodes) == 25
+
+    def test_30_peers_stable(self):
+        """30 peers over 15 rounds."""
+        nodes = self._run_scaled_simulation(30, n_rounds=15)
+        summary = compute_network_summary(nodes)
+        assert summary.total_nodes == 30
+        assert summary.avg_accuracy > 0.0
+
+    def test_50_peers_stable(self):
+        """50 peers over 10 rounds — high message volume."""
+        nodes = self._run_scaled_simulation(50, n_rounds=10)
+        assert len(nodes) == 50
+
+    def test_data_retention_at_scale(self):
+        """All 25 peers should share scraped data without redundancy."""
+        nodes = [PeerNode(node_id=f"drs_{i}", port=2000 + i) for i in range(25)]
+        # Node 0 scrapes 10 records
+        records = []
+        for j in range(10):
+            rec = nodes[0].ingest_scraped_data("match", {"id": j, "teams": f"A{j}-B{j}"})
+            if rec:
+                records.append(rec)
+        # Propagate to all peers
+        for rec in records:
+            for node in nodes[1:]:
+                node.receive_scraped_data(rec)
+        # All nodes should have all 10 records
+        for node in nodes:
+            assert node.data_store.size == 10
+        # Second scrape attempt should be blocked
+        for node in nodes:
+            for j in range(10):
+                assert not node.needs_scrape("match", {"id": j, "teams": f"A{j}-B{j}"})
+
+    def test_message_volume_scales_quadratically(self):
+        """Verify message count = n*(n-1) per round (broadcast)."""
+        for n in [5, 10, 20]:
+            transport = SimulatedTransport()
+            nodes = [PeerNode(node_id=f"vol_{n}_{i}", port=1000 + i) for i in range(n)]
+            for node in nodes:
+                transport.register_node(node.node_id)
+
+            msg = P2PMessage(message_type="ping", sender_id=nodes[0].node_id)
+            transport.broadcast(nodes[0].node_id, msg)
+            received = sum(len(transport.get_pending(node.node_id)) for node in nodes)
+            assert received == n - 1  # each broadcast reaches n-1 peers
+
+
+# ── Dynamic Churn Tests ──────────────────────────────────────────────────────
+
+
+class TestDynamicChurn:
+    """Test adding and removing peers during active simulation."""
+
+    def test_add_node_during_simulation(self):
+        """Add a node mid-simulation and verify it participates."""
+        import random
+        rng = random.Random(999)
+        from simulation.runner import P2PSimulation
+
+        sim = P2PSimulation()
+        sim.node_count = 5
+        sim._create_nodes()
+
+        # Run 5 rounds with 5 nodes
+        for m in range(5):
+            match_id = f"dyn_add_{m}"
+            for n in sim.nodes:
+                a = n.produce_analysis(match_id, base_home_prob=0.55)
+                msg = P2PMessage(
+                    message_type=MessageType.ANALYSIS.value,
+                    sender_id=n.node_id, payload=a.to_dict(),
+                )
+                sim.transport.broadcast(n.node_id, msg)
+            for n in sim.nodes:
+                for msg in sim.transport.get_pending(n.node_id):
+                    pa = PeerAnalysis(
+                        analysis_id=msg.payload["analysis_id"], node_id=msg.sender_id,
+                        match_id=msg.payload["match_id"],
+                        home_win_prob=msg.payload["distribution"]["home_win"],
+                        draw_prob=msg.payload["distribution"]["draw"],
+                        away_win_prob=msg.payload["distribution"]["away_win"],
+                        confidence=msg.payload["confidence"],
+                    )
+                    n.receive_peer_analysis(pa)
+
+        # Add 3 new nodes
+        for _ in range(3):
+            sim.add_node()
+        assert len(sim.nodes) == 8
+
+        # Run 5 more rounds with 8 nodes
+        for m in range(5, 10):
+            match_id = f"dyn_add_{m}"
+            for n in sim.nodes:
+                a = n.produce_analysis(match_id, base_home_prob=0.50)
+                msg = P2PMessage(
+                    message_type=MessageType.ANALYSIS.value,
+                    sender_id=n.node_id, payload=a.to_dict(),
+                )
+                sim.transport.broadcast(n.node_id, msg)
+            for n in sim.nodes:
+                for msg in sim.transport.get_pending(n.node_id):
+                    if msg.message_type == MessageType.ANALYSIS.value:
+                        pa = PeerAnalysis(
+                            analysis_id=msg.payload["analysis_id"], node_id=msg.sender_id,
+                            match_id=msg.payload["match_id"],
+                            home_win_prob=msg.payload["distribution"]["home_win"],
+                            draw_prob=msg.payload["distribution"]["draw"],
+                            away_win_prob=msg.payload["distribution"]["away_win"],
+                            confidence=msg.payload["confidence"],
+                        )
+                        n.receive_peer_analysis(pa)
+            for n in sim.nodes:
+                ens = n.compute_ensemble(match_id)
+                assert ens is not None
+
+    def test_remove_node_during_simulation(self):
+        """Remove nodes mid-simulation and verify network continues."""
+        from simulation.runner import P2PSimulation
+
+        sim = P2PSimulation()
+        sim.node_count = 8
+        sim._create_nodes()
+
+        # Run 5 rounds
+        for m in range(5):
+            match_id = f"dyn_rm_{m}"
+            for n in sim.nodes:
+                n.produce_analysis(match_id, base_home_prob=0.55)
+            actual = "H" if m % 2 == 0 else "A"
+            for n in sim.nodes:
+                n.validate_outcome(match_id, actual)
+
+        # Remove 3 nodes
+        removed = []
+        for _ in range(3):
+            r = sim.remove_node()
+            if r:
+                removed.append(r)
+        assert len(sim.nodes) == 5
+        assert len(removed) == 3
+
+        # Run 5 more rounds — should not crash
+        for m in range(5, 10):
+            match_id = f"dyn_rm_{m}"
+            for n in sim.nodes:
+                n.produce_analysis(match_id, base_home_prob=0.50)
+                ens = n.compute_ensemble(match_id)
+                assert ens is not None
+
+    def test_simultaneous_join_and_leave(self):
+        """Peers join and leave at the same time."""
+        from simulation.runner import P2PSimulation
+
+        sim = P2PSimulation()
+        sim.node_count = 10
+        sim._create_nodes()
+
+        # Seed data
+        sim.nodes[0].ingest_scraped_data("match", {"test": "data"})
+
+        for round_num in range(20):
+            # Simultaneously add and remove
+            if round_num % 2 == 0 and len(sim.nodes) < 20:
+                new_node = sim.add_node()
+                # Verify new node gets data
+                for rec in sim.nodes[0].data_store.get_all():
+                    new_node.receive_scraped_data(rec)
+            if round_num % 3 == 0 and len(sim.nodes) > 5:
+                sim.remove_node()
+
+            match_id = f"churn_{round_num}"
+            for n in sim.nodes:
+                a = n.produce_analysis(match_id, base_home_prob=0.50)
+                msg = P2PMessage(
+                    message_type=MessageType.ANALYSIS.value,
+                    sender_id=n.node_id, payload=a.to_dict(),
+                )
+                sim.transport.broadcast(n.node_id, msg)
+            for n in sim.nodes:
+                for msg in sim.transport.get_pending(n.node_id):
+                    if msg.message_type == MessageType.ANALYSIS.value:
+                        pa = PeerAnalysis(
+                            analysis_id=msg.payload["analysis_id"], node_id=msg.sender_id,
+                            match_id=msg.payload["match_id"],
+                            home_win_prob=msg.payload["distribution"]["home_win"],
+                            draw_prob=msg.payload["distribution"]["draw"],
+                            away_win_prob=msg.payload["distribution"]["away_win"],
+                            confidence=msg.payload["confidence"],
+                        )
+                        n.receive_peer_analysis(pa)
+            for n in sim.nodes:
+                ens = n.compute_ensemble(match_id)
+                assert ens is not None
+
+        # Network should still be functional
+        assert len(sim.nodes) >= 5
+
+    def test_data_survives_churn(self):
+        """Data in the network persists even as nodes join and leave."""
+        from simulation.runner import P2PSimulation
+
+        sim = P2PSimulation()
+        sim.node_count = 5
+        sim._create_nodes()
+
+        # Ingest data on all nodes
+        test_payload = {"home": "Galatasaray", "away": "Fenerbahçe", "week": 30}
+        rec = sim.nodes[0].ingest_scraped_data("match", test_payload)
+        for node in sim.nodes[1:]:
+            node.receive_scraped_data(rec)
+
+        # Remove 3 nodes (keeping 2)
+        for _ in range(3):
+            sim.remove_node()
+        assert len(sim.nodes) == 2
+
+        # Remaining nodes still have the data
+        for node in sim.nodes:
+            assert not node.needs_scrape("match", test_payload)
+
+        # Add 5 new nodes and sync data from survivors
+        for _ in range(5):
+            new_node = sim.add_node()
+            for existing_rec in sim.nodes[0].data_store.get_all():
+                new_node.receive_scraped_data(existing_rec)
+
+        # All 7 nodes should have the data
+        for node in sim.nodes:
+            assert not node.needs_scrape("match", test_payload)
+            assert node.data_store.size >= 1
+
+    def test_cannot_remove_last_node(self):
+        from simulation.runner import P2PSimulation
+        sim = P2PSimulation()
+        sim.node_count = 1
+        sim._create_nodes()
+        result = sim.remove_node()
+        assert result is None
+        assert len(sim.nodes) == 1

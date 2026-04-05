@@ -105,6 +105,15 @@ p2p-simulate: env ## Run P2P network simulation
 p2p-continuous: env ## Run P2P simulation in continuous loop (Ctrl+C to stop)
 	$(COMPOSE) run --rm p2p python main.py --continuous
 
+.PHONY: p2p-scale-test
+p2p-scale-test: env ## Stress test P2P with 25 peers (override: make p2p-scale-test P2P_SCALE_NODES=50)
+	$(COMPOSE) run --rm -e P2P_NODE_COUNT=$(or $(P2P_SCALE_NODES),25) p2p \
+		python -m simulation.runner --scale-test --nodes=$(or $(P2P_SCALE_NODES),25)
+
+.PHONY: p2p-churn-test
+p2p-churn-test: env ## Test dynamic peer join/leave (10→25→10 peers over 40 rounds)
+	$(COMPOSE) run --rm p2p python -m simulation.runner --churn-test
+
 .PHONY: p2p-shell
 p2p-shell: env ## Open a shell in the P2P container
 	$(COMPOSE) run --rm p2p bash

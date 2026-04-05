@@ -16,7 +16,7 @@ import random
 import sys
 import time
 
-from node.peer import PeerNode, PeerAnalysis, get_p2p_logger
+from node.peer import PeerNode, PeerAnalysis, ScrapedRecord, DataStore, get_p2p_logger
 from protocol.messages import P2PMessage, MessageType
 from protocol.transport import SimulatedTransport
 from reputation.tracker import compute_network_summary, print_reputation_matrix
@@ -217,6 +217,9 @@ class P2PSimulation:
     Simulates a P2P network of Negelir AI nodes.
     Demonstrates: web scraping → data processing → AI analysis → P2P sharing →
                   reputation building → Turkish Q&A answers.
+
+    Supports dynamic peer scaling: add_node() / remove_node() at any point.
+    Implements P2P data retention via SCRAPE_DATA message broadcasts.
     """
 
     def __init__(self):
@@ -224,6 +227,9 @@ class P2PSimulation:
         self.match_count = int(os.getenv("P2P_SIMULATION_MATCHES", "10"))
         self.nodes: list[PeerNode] = []
         self.transport = SimulatedTransport()
+        self._next_port = int(os.getenv("P2P_BASE_PORT", "9000"))
+        self._node_counter = 0
+        self._removed_nodes: list[PeerNode] = []  # track departed peers
 
     def run(self):
         """Run the full P2P simulation with AI pipeline integration."""
@@ -273,16 +279,65 @@ class P2PSimulation:
         log.info(f"📡 Creating {self.node_count} nodes...")
 
         for i in range(self.node_count):
-            node_id = hashlib.sha256(f"node_{i}_negelir".encode()).hexdigest()[:16]
-            node = PeerNode(node_id=node_id, port=9000 + i)
-            self.nodes.append(node)
-            self.transport.register_node(node_id)
-            log.info(f"   🖥️  Node {i + 1}: {node_id[:8]} (port: {9000 + i})")
+            self.add_node(announce=False)
 
         # Inject one Sybil-like bad node for reputation testing
         if len(self.nodes) >= 2:
             self.nodes[-1].model_bias = 0.3
             log.info(f"   ⚠️  Node {self.nodes[-1].node_id[:8]}: deliberate bias (Sybil test)")
+
+    # ── Dynamic Scaling ─────────────────────────────────
+
+    def add_node(self, announce: bool = True) -> PeerNode:
+        """Add a new peer node to the live network."""
+        idx = self._node_counter
+        self._node_counter += 1
+        node_id = hashlib.sha256(f"node_{idx}_negelir".encode()).hexdigest()[:16]
+        port = self._next_port
+        self._next_port += 1
+        node = PeerNode(node_id=node_id, port=port)
+        self.nodes.append(node)
+        self.transport.register_node(node_id)
+
+        if announce:
+            log.info(f"🟢 Node JOINED: {node_id[:8]} (port: {port}, total: {len(self.nodes)})")
+            # Propagate data from existing peers to the new node
+            self._sync_data_to_node(node)
+        else:
+            log.info(f"   🖥️  Node {idx + 1}: {node_id[:8]} (port: {port})")
+
+        return node
+
+    def remove_node(self, node: PeerNode | None = None) -> PeerNode | None:
+        """Remove a peer from the live network. Defaults to a random non-first node."""
+        if len(self.nodes) <= 1:
+            log.warning("⚠️  Cannot remove last node")
+            return None
+        if node is None:
+            node = random.choice(self.nodes[1:])  # never remove first node (lead)
+        if node not in self.nodes:
+            return None
+        self.nodes.remove(node)
+        self.transport.unregister_node(node.node_id)
+        self._removed_nodes.append(node)
+        log.info(f"🔴 Node LEFT: {node.node_id[:8]} (total: {len(self.nodes)}, data retained: {node.data_store.size} records)")
+        return node
+
+    def _sync_data_to_node(self, new_node: PeerNode):
+        """Synchronise existing scraped data to a newly joined node."""
+        if not self.nodes:
+            return
+        # Pick one peer at random to share its data store
+        donors = [n for n in self.nodes if n.node_id != new_node.node_id and n.data_store.size > 0]
+        if not donors:
+            return
+        donor = random.choice(donors)
+        synced = 0
+        for record in donor.data_store.get_all():
+            if new_node.data_store.merge_record(record):
+                synced += 1
+        if synced:
+            log.info(f"   📦 Synced {synced} records from {donor.node_id[:8]} → {new_node.node_id[:8]}")
 
     # ── Phase B: Simulated Web Scraping ─────────────────
 
@@ -386,6 +441,70 @@ class P2PSimulation:
             f"🏁 Total: {total_pages} pages, {total_bytes/1024:.0f} KB, "
             f"{total_time_ms:.0f}ms — all HTML cleared from RAM ✓"
         )
+
+        # ── Data Retention: ingest into scraper node and broadcast ──
+        scraper_node = self.nodes[0]  # First node is the scraper
+        new_records = 0
+        duplicate_records = 0
+        for match_key, data in SIMULATED_SCRAPED_DATA.items():
+            rec = scraper_node.ingest_scraped_data("match", data)
+            if rec:
+                new_records += 1
+                # Broadcast SCRAPE_DATA to all peers
+                msg = P2PMessage(
+                    message_type=MessageType.SCRAPE_DATA.value,
+                    sender_id=scraper_node.node_id,
+                    payload={
+                        "data_hash": rec.data_hash,
+                        "data_type": rec.data_type,
+                        "payload": rec.payload,
+                        "source_node_id": rec.source_node_id,
+                    },
+                )
+                self.transport.broadcast(scraper_node.node_id, msg)
+            else:
+                duplicate_records += 1
+
+        # Peers receive and store scraped data (dedup happens automatically)
+        peer_new_total = 0
+        peer_dup_total = 0
+        for node in self.nodes:
+            if node.node_id == scraper_node.node_id:
+                continue
+            messages = self.transport.get_pending(node.node_id)
+            for msg in messages:
+                if msg.message_type == MessageType.SCRAPE_DATA.value:
+                    record = ScrapedRecord(
+                        data_hash=msg.payload["data_hash"],
+                        source_node_id=msg.payload["source_node_id"],
+                        data_type=msg.payload["data_type"],
+                        payload=msg.payload["payload"],
+                    )
+                    if node.receive_scraped_data(record):
+                        peer_new_total += 1
+                    else:
+                        peer_dup_total += 1
+
+        log.info(
+            f"📦 Data retention: {new_records} new records ingested, "
+            f"{duplicate_records} duplicates skipped at source"
+        )
+        log.info(
+            f"📡 P2P propagation: {peer_new_total} new records across peers, "
+            f"{peer_dup_total} duplicates rejected"
+        )
+
+        # Data store summary
+        from rich.table import Table as RichTable
+        ds_table = RichTable(title="📦 P2P Data Store Summary", show_lines=True)
+        ds_table.add_column("Node", style="cyan")
+        ds_table.add_column("Records", justify="right")
+        ds_table.add_column("Types", justify="left")
+        for node in self.nodes:
+            summary = node.data_store.to_summary()
+            types_str = ", ".join(f"{k}:{v}" for k, v in summary["by_type"].items()) or "—"
+            ds_table.add_row(node.node_id[:8], str(summary["total"]), types_str)
+        console.print(ds_table)
 
         return SIMULATED_SCRAPED_DATA
 
@@ -628,6 +747,350 @@ class P2PSimulation:
             return "A"
 
 
-if __name__ == "__main__":
+# ── Scaling Test (20+ peers) ─────────────────────────────────────
+
+
+def run_scaling_test(target_nodes: int = 25):
+    """
+    Stress test: create a network with target_nodes peers.
+    Run 30 match rounds and measure consensus quality, message volume,
+    reputation convergence, and data retention across all peers.
+    """
+    from rich.console import Console
+    from rich.table import Table
+    console = Console(force_terminal=True)
+
+    console.rule(f"[bold cyan]📐 SCALING TEST — {target_nodes} PEERS[/bold cyan]", style="cyan")
+    start = time.time()
+
     sim = P2PSimulation()
-    sim.run()
+    sim.node_count = target_nodes
+    sim._create_nodes()
+
+    # Inject 10% biased nodes (Sybil test at scale)
+    sybil_count = max(1, target_nodes // 10)
+    for node in sim.nodes[-sybil_count:]:
+        node.model_bias = random.uniform(0.15, 0.35)
+    log.info(f"⚠️  {sybil_count} Sybil nodes injected")
+
+    # Phase 1: Scrape data and propagate via P2P retention
+    log.info("\n📦 Phase 1: Data ingestion & P2P propagation")
+    scraper = sim.nodes[0]
+    for match_key, data in SIMULATED_SCRAPED_DATA.items():
+        rec = scraper.ingest_scraped_data("match", data)
+        if rec:
+            msg = P2PMessage(
+                message_type=MessageType.SCRAPE_DATA.value,
+                sender_id=scraper.node_id,
+                payload={
+                    "data_hash": rec.data_hash, "data_type": rec.data_type,
+                    "payload": rec.payload, "source_node_id": rec.source_node_id,
+                },
+            )
+            sim.transport.broadcast(scraper.node_id, msg)
+
+    # All peers receive data
+    for node in sim.nodes:
+        if node.node_id == scraper.node_id:
+            continue
+        for msg in sim.transport.get_pending(node.node_id):
+            if msg.message_type == MessageType.SCRAPE_DATA.value:
+                record = ScrapedRecord(
+                    data_hash=msg.payload["data_hash"],
+                    source_node_id=msg.payload["source_node_id"],
+                    data_type=msg.payload["data_type"],
+                    payload=msg.payload["payload"],
+                )
+                node.receive_scraped_data(record)
+
+    # Verify data retention: all nodes should have the data
+    data_coverage = sum(1 for n in sim.nodes if n.data_store.size == scraper.data_store.size)
+    log.info(f"📊 Data coverage: {data_coverage}/{target_nodes} nodes have full data ({scraper.data_store.size} records)")
+
+    # Phase 2: Run 30 match analysis rounds
+    rng = random.Random(42)
+    n_rounds = 30
+    total_messages = 0
+    ensemble_diffs = []  # track how much ensembles differ from local
+
+    log.info(f"\n⚽ Phase 2: {n_rounds} match rounds across {target_nodes} peers")
+    for m in range(n_rounds):
+        match_id = f"scale_match_{m}"
+        true_prob = rng.uniform(0.20, 0.70)
+
+        # Produce & broadcast
+        for node in sim.nodes:
+            a = node.produce_analysis(match_id, base_home_prob=true_prob)
+            msg = P2PMessage(
+                message_type=MessageType.ANALYSIS.value,
+                sender_id=node.node_id,
+                payload=a.to_dict(),
+            )
+            sim.transport.broadcast(node.node_id, msg)
+            total_messages += len(sim.nodes) - 1
+
+        # Receive
+        for node in sim.nodes:
+            for msg in sim.transport.get_pending(node.node_id):
+                if msg.message_type == MessageType.ANALYSIS.value:
+                    pa = PeerAnalysis(
+                        analysis_id=msg.payload["analysis_id"],
+                        node_id=msg.sender_id,
+                        match_id=msg.payload["match_id"],
+                        home_win_prob=msg.payload["distribution"]["home_win"],
+                        draw_prob=msg.payload["distribution"]["draw"],
+                        away_win_prob=msg.payload["distribution"]["away_win"],
+                        confidence=msg.payload["confidence"],
+                    )
+                    node.receive_peer_analysis(pa)
+
+        # Ensemble
+        for node in sim.nodes:
+            ens = node.compute_ensemble(match_id)
+            local = node.analyses[match_id]
+            if ens:
+                diff = abs(ens.home_win_prob - local.home_win_prob)
+                ensemble_diffs.append(diff)
+
+        # Validate
+        r = rng.random()
+        actual = "H" if r < true_prob else ("D" if r < true_prob + 0.25 else "A")
+        for node in sim.nodes:
+            node.validate_outcome(match_id, actual)
+
+    # Phase 3: Results
+    console.rule("[bold cyan]📊 Scaling Test Results[/bold cyan]", style="cyan")
+
+    summary = compute_network_summary(sim.nodes)
+    avg_diff = sum(ensemble_diffs) / max(1, len(ensemble_diffs))
+
+    table = Table(title=f"📐 Scaling Test: {target_nodes} Peers × {n_rounds} Rounds", show_lines=True)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", justify="right")
+    table.add_row("Total peers", str(target_nodes))
+    table.add_row("Sybil peers", str(sybil_count))
+    table.add_row("Match rounds", str(n_rounds))
+    table.add_row("Total messages", f"{total_messages:,}")
+    table.add_row("Msgs/round", f"{total_messages / n_rounds:.0f}")
+    table.add_row("Avg accuracy", f"{summary.avg_accuracy:.1%}")
+    table.add_row("Avg ensemble shift", f"{avg_diff:.3f}")
+    table.add_row("Data coverage", f"{data_coverage}/{target_nodes}")
+    table.add_row("Leaders", str(summary.leader_count))
+    table.add_row("High trust", str(summary.high_count))
+    table.add_row("Medium trust", str(summary.medium_count))
+    table.add_row("Low trust", str(summary.low_count))
+    table.add_row("New", str(summary.new_count))
+    console.print(table)
+
+    # Reputation matrix (top 10 nodes to keep readable)
+    display_nodes = sim.nodes[:min(10, len(sim.nodes))]
+    print_reputation_matrix(display_nodes)
+
+    elapsed = time.time() - start
+    console.print(f"\n✅ [bold green]Scaling test complete! ({elapsed:.1f}s)[/bold green]\n")
+    return sim
+
+
+# ── Churn Test (dynamic join/leave) ─────────────────────────────
+
+
+def run_churn_test(initial_nodes: int = 10, peak_nodes: int = 25, n_rounds: int = 40):
+    """
+    Test dynamic peer churn: peers join and leave simultaneously during
+    active match analysis rounds.
+
+    Schedule:
+      Rounds  1-10:  Start with initial_nodes, ramp up to peak_nodes (join phase)
+      Rounds 11-20:  Stay at peak, some random churn (small join + leave)
+      Rounds 21-30:  Ramp down to initial_nodes (leave phase)
+      Rounds 31-40:  Stable at initial_nodes, measure recovery
+    """
+    from rich.console import Console
+    from rich.table import Table
+    console = Console(force_terminal=True)
+
+    console.rule(
+        f"[bold cyan]🔄 CHURN TEST — {initial_nodes}→{peak_nodes}→{initial_nodes} PEERS[/bold cyan]",
+        style="cyan",
+    )
+    start = time.time()
+
+    sim = P2PSimulation()
+    sim.node_count = initial_nodes
+    sim._create_nodes()
+
+    # Seed data into the network
+    scraper = sim.nodes[0]
+    for match_key, data in SIMULATED_SCRAPED_DATA.items():
+        rec = scraper.ingest_scraped_data("match", data)
+        if rec:
+            msg = P2PMessage(
+                message_type=MessageType.SCRAPE_DATA.value,
+                sender_id=scraper.node_id,
+                payload={
+                    "data_hash": rec.data_hash, "data_type": rec.data_type,
+                    "payload": rec.payload, "source_node_id": rec.source_node_id,
+                },
+            )
+            sim.transport.broadcast(scraper.node_id, msg)
+    for node in sim.nodes:
+        if node.node_id == scraper.node_id:
+            continue
+        for msg in sim.transport.get_pending(node.node_id):
+            if msg.message_type == MessageType.SCRAPE_DATA.value:
+                record = ScrapedRecord(
+                    data_hash=msg.payload["data_hash"],
+                    source_node_id=msg.payload["source_node_id"],
+                    data_type=msg.payload["data_type"],
+                    payload=msg.payload["payload"],
+                )
+                node.receive_scraped_data(record)
+
+    rng = random.Random(777)
+    round_log = []  # (round, node_count, accuracy, event)
+    nodes_to_add_per_round = max(1, (peak_nodes - initial_nodes) // 10)
+    nodes_to_remove_per_round = max(1, (peak_nodes - initial_nodes) // 10)
+
+    for r in range(1, n_rounds + 1):
+        event = ""
+
+        # ── Churn schedule ──
+        if r <= 10:
+            # Ramp up
+            for _ in range(nodes_to_add_per_round):
+                if len(sim.nodes) < peak_nodes:
+                    sim.add_node()
+                    event = "JOIN"
+        elif r <= 20:
+            # Random churn at peak
+            if rng.random() < 0.3 and len(sim.nodes) > initial_nodes:
+                sim.remove_node()
+                event = "LEAVE"
+            if rng.random() < 0.3 and len(sim.nodes) < peak_nodes + 3:
+                sim.add_node()
+                event = event + "+JOIN" if event else "JOIN"
+        elif r <= 30:
+            # Ramp down
+            for _ in range(nodes_to_remove_per_round):
+                if len(sim.nodes) > initial_nodes:
+                    sim.remove_node()
+                    event = "LEAVE"
+        else:
+            # Stable recovery
+            event = "STABLE"
+
+        # ── Run one match round ──
+        match_id = f"churn_match_{r}"
+        true_prob = rng.uniform(0.25, 0.65)
+
+        for node in sim.nodes:
+            a = node.produce_analysis(match_id, base_home_prob=true_prob)
+            msg = P2PMessage(
+                message_type=MessageType.ANALYSIS.value,
+                sender_id=node.node_id,
+                payload=a.to_dict(),
+            )
+            sim.transport.broadcast(node.node_id, msg)
+
+        for node in sim.nodes:
+            for msg in sim.transport.get_pending(node.node_id):
+                if msg.message_type == MessageType.ANALYSIS.value:
+                    pa = PeerAnalysis(
+                        analysis_id=msg.payload["analysis_id"],
+                        node_id=msg.sender_id,
+                        match_id=msg.payload["match_id"],
+                        home_win_prob=msg.payload["distribution"]["home_win"],
+                        draw_prob=msg.payload["distribution"]["draw"],
+                        away_win_prob=msg.payload["distribution"]["away_win"],
+                        confidence=msg.payload["confidence"],
+                    )
+                    node.receive_peer_analysis(pa)
+
+        for node in sim.nodes:
+            node.compute_ensemble(match_id)
+
+        actual = "H" if rng.random() < true_prob else ("D" if rng.random() < 0.35 else "A")
+        for node in sim.nodes:
+            node.validate_outcome(match_id, actual)
+
+        # Track
+        summary = compute_network_summary(sim.nodes)
+        data_coverage = sum(1 for n in sim.nodes if n.data_store.size > 0)
+        round_log.append({
+            "round": r, "nodes": len(sim.nodes),
+            "accuracy": summary.avg_accuracy,
+            "data_coverage": data_coverage,
+            "event": event or "—",
+        })
+
+        if r % 5 == 0 or event:
+            log.info(
+                f"Round {r:2d}: {len(sim.nodes):2d} nodes | "
+                f"acc={summary.avg_accuracy:.1%} | "
+                f"data={data_coverage}/{len(sim.nodes)} | {event or '—'}"
+            )
+
+    # ── Churn Results ──
+    console.rule("[bold cyan]📊 Churn Test Results[/bold cyan]", style="cyan")
+
+    table = Table(title="🔄 Churn Test Timeline", show_lines=True)
+    table.add_column("Rnd", justify="right", style="dim")
+    table.add_column("Nodes", justify="right")
+    table.add_column("Accuracy", justify="right")
+    table.add_column("Data Cov", justify="right")
+    table.add_column("Event", style="yellow")
+
+    for entry in round_log:
+        style = ""
+        if "JOIN" in entry["event"]:
+            style = "green"
+        elif "LEAVE" in entry["event"]:
+            style = "red"
+        table.add_row(
+            str(entry["round"]),
+            str(entry["nodes"]),
+            f"{entry['accuracy']:.1%}",
+            f"{entry['data_coverage']}/{entry['nodes']}",
+            entry["event"],
+            style=style,
+        )
+    console.print(table)
+
+    # Summary stats
+    final_summary = compute_network_summary(sim.nodes)
+    peak_count = max(e["nodes"] for e in round_log)
+    min_count = min(e["nodes"] for e in round_log)
+    stable_acc = [e["accuracy"] for e in round_log if e["round"] > 30]
+    avg_stable_acc = sum(stable_acc) / max(1, len(stable_acc))
+
+    summary_table = Table(title="📊 Churn Test Summary", show_lines=True)
+    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Value", justify="right")
+    summary_table.add_row("Initial nodes", str(initial_nodes))
+    summary_table.add_row("Peak nodes", str(peak_count))
+    summary_table.add_row("Min nodes", str(min_count))
+    summary_table.add_row("Final nodes", str(len(sim.nodes)))
+    summary_table.add_row("Total rounds", str(n_rounds))
+    summary_table.add_row("Nodes removed (total)", str(len(sim._removed_nodes)))
+    summary_table.add_row("Final avg accuracy", f"{final_summary.avg_accuracy:.1%}")
+    summary_table.add_row("Stable-phase accuracy", f"{avg_stable_acc:.1%}")
+    summary_table.add_row("Data retention", f"{sum(1 for n in sim.nodes if n.data_store.size > 0)}/{len(sim.nodes)}")
+    console.print(summary_table)
+
+    elapsed = time.time() - start
+    console.print(f"\n✅ [bold green]Churn test complete! ({elapsed:.1f}s)[/bold green]\n")
+    return sim
+
+
+if __name__ == "__main__":
+    if "--scale-test" in sys.argv:
+        count = 25
+        for arg in sys.argv:
+            if arg.startswith("--nodes="):
+                count = int(arg.split("=")[1])
+        run_scaling_test(target_nodes=count)
+    elif "--churn-test" in sys.argv:
+        run_churn_test()
+    else:
+        sim = P2PSimulation()
+        sim.run()

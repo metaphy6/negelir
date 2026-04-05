@@ -25,6 +25,14 @@ class SimulatedTransport:
         self.node_inboxes[node_id] = asyncio.Queue()
         log.debug(f"📡 Node registered: {node_id[:8]}")
 
+    def unregister_node(self, node_id: str) -> bool:
+        """Remove a node from the transport. Returns True if found."""
+        if node_id in self.node_inboxes:
+            del self.node_inboxes[node_id]
+            log.debug(f"📴 Node unregistered: {node_id[:8]}")
+            return True
+        return False
+
     def send(self, sender_id: str, target_id: str, message: P2PMessage):
         """Send a message to a specific node."""
         if target_id in self.node_inboxes:

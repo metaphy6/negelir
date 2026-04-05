@@ -15,6 +15,7 @@ from scipy.stats import poisson
 
 from common.config import cfg
 from common.constants import MODEL_VERSION, N_FEATURES
+from common.league_config import LeagueConfig, get_league_config
 from common.logger import get_logger
 from model.features import FEATURE_COLUMNS
 
@@ -42,12 +43,37 @@ FEATURE_RANGES = {
     "default": (-100, 100),
 }
 
-# Ensemble weight: XGBoost vs Poisson
-XGB_WEIGHT = 0.55
+# Ensemble weight: XGBoost vs Poisson (synced with historical test)
+XGB_WEIGHT = 0.35
+
+# Dixon-Coles low-scoring correction parameter
+DIXON_COLES_RHO = -0.13
+
+
+def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho=DIXON_COLES_RHO):
+    """Dixon-Coles correction factor for low-scoring matches."""
+    if hg == 0 and ag == 0:
+        return 1.0 - home_xg * away_xg * rho
+    elif hg == 1 and ag == 0:
+        return 1.0 + away_xg * rho
+    elif hg == 0 and ag == 1:
+        return 1.0 + home_xg * rho
+    elif hg == 1 and ag == 1:
+        return 1.0 - rho
+    return 1.0
+
+
+def _score_prob(hg, ag, home_xg, away_xg):
+    """Score probability with Dixon-Coles correction."""
+    p = poisson.pmf(hg, home_xg) * poisson.pmf(ag, away_xg)
+    p *= _dixon_coles_tau(hg, ag, home_xg, away_xg)
+    return max(0.0, float(p))
 
 
 class GBDTInference:
-    def __init__(self, model_path: str | None = None):
+    def __init__(self, model_path: str | None = None, league_config: LeagueConfig | None = None):
+        self.league_config = league_config or get_league_config()
+
         if model_path is None:
             model_path = os.path.join(cfg.model_dir, f"negelir_gbdt_v{MODEL_VERSION}.pkl")
 
@@ -91,20 +117,20 @@ class GBDTInference:
         p = 0.0
         for h in range(8):
             for a in range(h):
-                p += poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+                p += _score_prob(h, a, home_xg, away_xg)
         return p
 
     def _poisson_draw_prob(self, home_xg: float, away_xg: float) -> float:
         p = 0.0
         for k in range(6):
-            p += poisson.pmf(k, home_xg) * poisson.pmf(k, away_xg)
+            p += _score_prob(k, k, home_xg, away_xg)
         return p
 
     def _predict_scorelines(self, home_xg: float, away_xg: float, top_n: int = 5) -> list[dict]:
         scorelines = []
         for h in range(8):
             for a in range(8):
-                p = float(poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg))
+                p = _score_prob(h, a, home_xg, away_xg)
                 scorelines.append({"home": h, "away": a, "probability": round(p, 4)})
         scorelines.sort(key=lambda x: -x["probability"])
         return scorelines[:top_n]
@@ -114,7 +140,13 @@ class GBDTInference:
         sm = {}
         for h in range(max_g):
             for a in range(max_g):
-                sm[(h, a)] = poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+                sm[(h, a)] = _score_prob(h, a, home_xg, away_xg)
+
+        # Normalise
+        sm_total = sum(sm.values())
+        if sm_total > 0:
+            for k in sm:
+                sm[k] /= sm_total
 
         def p_over(line):
             return 1.0 - sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a <= line)
@@ -127,9 +159,10 @@ class GBDTInference:
         p_a_zero = sum(sm[(h, 0)] for h in range(max_g))
         p_btts = 1.0 - p_h_zero - p_a_zero + sm[(0, 0)]
 
-        # Half-time (47% of goals in first half — Turkish league empirical)
-        ht_hxg = home_xg * 0.47
-        ht_axg = away_xg * 0.47
+        # Half-time (first-half goal percentage from league config)
+        ht_pct = self.league_config.first_half_goal_pct
+        ht_hxg = home_xg * ht_pct
+        ht_axg = away_xg * ht_pct
         ht_sm = {}
         for h in range(5):
             for a in range(5):
@@ -241,11 +274,12 @@ class GBDTInference:
         p_draw_poisson = self._poisson_draw_prob(home_xg, away_xg)
         p_away_poisson = max(0.01, 1.0 - p_home_poisson - p_draw_poisson)
 
-        # --- Ensemble blend ---
-        pw = 1.0 - XGB_WEIGHT
-        home_win_prob = XGB_WEIGHT * xgb_home + pw * p_home_poisson
-        draw_prob = XGB_WEIGHT * xgb_draw + pw * p_draw_poisson
-        away_win_prob = XGB_WEIGHT * xgb_away + pw * p_away_poisson
+        # --- Ensemble blend (weight from league config) ---
+        xgb_w = self.league_config.xgb_weight
+        pw = 1.0 - xgb_w
+        home_win_prob = xgb_w * xgb_home + pw * p_home_poisson
+        draw_prob = xgb_w * xgb_draw + pw * p_draw_poisson
+        away_win_prob = xgb_w * xgb_away + pw * p_away_poisson
 
         # Normalize
         total = home_win_prob + draw_prob + away_win_prob

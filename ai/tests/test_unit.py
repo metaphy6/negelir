@@ -768,3 +768,125 @@ class TestConstantsIntegrity:
 
     def test_feature_count_is_120(self):
         assert N_FEATURES == 120
+
+
+# ── LeagueConfig ─────────────────────────────────────────────────────────────
+
+from common.league_config import (
+    LeagueConfig, get_league_config, turkish_super_lig,
+    english_premier_league, german_bundesliga, spanish_la_liga,
+    LEAGUE_REGISTRY,
+)
+
+
+class TestLeagueConfig:
+    def test_default_is_turkish(self):
+        lc = LeagueConfig()
+        assert lc.league_id == "tr_super_lig"
+        assert lc.language == "tr"
+
+    def test_turkish_super_lig_factory(self):
+        lc = turkish_super_lig()
+        assert lc.teams_count == 19
+        assert lc.rounds_per_season == 38
+        assert lc.elo_home_advantage == 65.0
+
+    def test_epl_factory(self):
+        lc = english_premier_league()
+        assert lc.league_id == "en_premier_league"
+        assert lc.teams_count == 20
+        assert lc.language == "en"
+
+    def test_bundesliga_factory(self):
+        lc = german_bundesliga()
+        assert lc.rounds_per_season == 34
+        assert lc.teams_count == 18
+
+    def test_la_liga_factory(self):
+        lc = spanish_la_liga()
+        assert lc.league_id == "es_la_liga"
+        assert lc.country == "Spain"
+
+    def test_get_league_config_default(self):
+        lc = get_league_config()
+        assert lc.league_id == "tr_super_lig"
+
+    def test_get_league_config_by_id(self):
+        lc = get_league_config("en_premier_league")
+        assert lc.language == "en"
+
+    def test_get_league_config_unknown_fallback(self):
+        lc = get_league_config("nonexistent_league")
+        assert lc.league_id == "tr_super_lig"
+
+    def test_is_derby_true(self):
+        lc = turkish_super_lig()
+        assert lc.is_derby("Galatasaray", "Fenerbahçe")
+        assert lc.is_derby("Fenerbahçe", "Galatasaray")
+
+    def test_is_derby_false(self):
+        lc = turkish_super_lig()
+        assert not lc.is_derby("Galatasaray", "Alanyaspor")
+
+    def test_all_leagues_in_registry(self):
+        assert len(LEAGUE_REGISTRY) >= 4
+        for league_id in LEAGUE_REGISTRY:
+            lc = get_league_config(league_id)
+            assert lc.league_id == league_id
+
+    def test_league_config_xgb_weight_range(self):
+        for league_id in LEAGUE_REGISTRY:
+            lc = get_league_config(league_id)
+            assert 0.0 < lc.xgb_weight < 1.0
+
+    def test_league_config_first_half_goal_pct(self):
+        for league_id in LEAGUE_REGISTRY:
+            lc = get_league_config(league_id)
+            assert 0.3 < lc.first_half_goal_pct < 0.7
+
+    def test_league_config_dixon_coles_rho(self):
+        for league_id in LEAGUE_REGISTRY:
+            lc = get_league_config(league_id)
+            assert -0.5 < lc.dixon_coles_rho < 0.0
+
+
+# ── Dixon-Coles Poisson ──────────────────────────────────────────────────────
+
+from tests.historical_prediction_test import (
+    _dixon_coles_tau, _score_prob,
+)
+
+
+class TestDixonColes:
+    def test_tau_00_increases_probability(self):
+        # rho < 0 means 0-0 is more likely
+        tau = _dixon_coles_tau(0, 0, 1.3, 1.1, rho=-0.13)
+        assert tau > 1.0
+
+    def test_tau_11_increases_probability(self):
+        tau = _dixon_coles_tau(1, 1, 1.3, 1.1, rho=-0.13)
+        assert tau > 1.0
+
+    def test_tau_nonadjusted_scores(self):
+        # Scores > 1 should not be adjusted
+        assert _dixon_coles_tau(2, 1, 1.3, 1.1) == 1.0
+        assert _dixon_coles_tau(0, 3, 1.3, 1.1) == 1.0
+        assert _dixon_coles_tau(3, 2, 1.3, 1.1) == 1.0
+
+    def test_score_prob_positive(self):
+        for hg in range(4):
+            for ag in range(4):
+                p = _score_prob(hg, ag, 1.5, 1.2)
+                assert p >= 0.0
+
+    def test_score_prob_without_dc(self):
+        from scipy.stats import poisson as sp
+        p_raw = sp.pmf(2, 1.5) * sp.pmf(1, 1.2)
+        p_dc = _score_prob(2, 1, 1.5, 1.2, use_dc=False)
+        assert abs(p_raw - p_dc) < 1e-10
+
+    def test_draw_prob_with_dc_higher(self):
+        # Dixon-Coles with negative rho should increase draw probability
+        p_dc = poisson_draw_prob(1.3, 1.1, use_dc=True)
+        p_no = poisson_draw_prob(1.3, 1.1, use_dc=False)
+        assert p_dc > p_no
