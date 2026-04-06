@@ -42,6 +42,20 @@ TEAM_MAP: dict[str, str] = {
     "bodrum fk":        "team_052",
     "sakaryaspor":      "team_053",
     "keçiörengücü":     "team_054",
+    # Abbreviations & nicknames
+    "gs":               "team_001",
+    "cim bom":          "team_001",
+    "cimbom":           "team_001",
+    "aslan":            "team_001",
+    "fb":               "team_002",
+    "fener":            "team_002",
+    "kanarya":          "team_002",
+    "bjk":              "team_003",
+    "kartal":           "team_003",
+    "kara kartal":      "team_003",
+    "ts":               "team_004",
+    "bordo mavi":       "team_004",
+    "fırtına":          "team_004",
 }
 
 # Reverse map: uuid → display name
@@ -107,6 +121,21 @@ FOOTBALL_KEYWORDS: list[str] = [
     "gollü", "golsüz", "az gollü", "çok gollü",
     "ikinci yarıda", "devre", "devre arası",
     "oyuncu", "yıldız", "penaltıları", "vuruyor",
+    # Team abbreviations & nicknames
+    "gs", "fb", "bjk", "ts", "cim bom", "cimbom", "aslan",
+    "fener", "kanarya", "kartal", "kara kartal", "bordo mavi", "fırtına",
+    # Conversational / colloquial
+    "ne dersin", "ne düşünüyorsun", "sence", "sizce", "tahmin et",
+    "bence", "analiz", "yorumun", "fikrini", "görüşün",
+    "yapar", "halleder", "söker", "döver", "geçer", "ezer",
+    "yenişemez", "paylaşır", "götürür",
+    # Betting shorthand (pattern only, not output)
+    "ms1", "ms2", "msx", "1x2", "kg", "btts",
+    "handikap", "çifte şans", "ilk gol", "maç sonu",
+    "bol gol", "gol çıkar", "gol var mı",
+    # Time references
+    "bugün", "bu akşam", "yarın", "bu hafta sonu", "bu pazar",
+    "bu cumartesi",
 ]
 
 # ── Leagues ──────────────────────────────────────────────

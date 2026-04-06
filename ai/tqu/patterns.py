@@ -35,6 +35,15 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(3\s*puan|üç\s*puan)\s*(la|ile|yla)?\s*(çıkar|alır)", re.I),
             re.compile(r"(galibiyet|yenilmezlik)\s*(seri|devam|alır|sürd)", re.I),
             re.compile(r"(şansı|avantajlı)\s*(var|mı|mi|mu|mü)", re.I),
+            # Colloquial / slang
+            re.compile(r"(alır\s*bence|kazanır\s*bence|yener\s*bence)", re.I),
+            re.compile(r"(ne\s*dersin|ne\s*düşünüyorsun).*(kazanır|yener|alır|galip)", re.I),
+            re.compile(r"(sence|sizce).*(kazanır|yener|galip|alır)", re.I),
+            re.compile(r"(yapar\s*mı|götürür\s*mü|halleder\s*mi)\b", re.I),
+            re.compile(r"(açar\s*mı|söker\s*mi|ezer\s*mi|döver\s*mi|geçer\s*mi)", re.I),
+            re.compile(r"(rahat\s*(alır|kazanır|yener))", re.I),
+            re.compile(r"(ms|maç\s*sonucu)\s*(ne|kaç|1|2|x)", re.I),
+            re.compile(r"\b(1x2|ms1|ms2|msx)\b", re.I),
         ],
         keywords=["kazanır", "yener", "galip", "kim alır"],
     ),
@@ -51,6 +60,11 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(skor\s*eşitliği|eşitlikle\s*ayrılır)", re.I),
             re.compile(r"berabere\s*(bitme|kaldı|kal)", re.I),
             re.compile(r"maç.*beraberlikle\s*(sonuçlanır|biter)", re.I),
+            # Colloquial / slang
+            re.compile(r"(bence\s*berabere|berabere\s*bence)", re.I),
+            re.compile(r"(paylaş|puanları\s*paylaş)\w*\s*(mı|mi|mu|mü)", re.I),
+            re.compile(r"(yenişemez|yenisemez)\s*(ler|mi|mı)?", re.I),
+            re.compile(r"(x\s*çıkar|x\s*olur|sonuç\s*x)", re.I),
         ],
         keywords=["berabere", "beraberlik", "eşitlik"],
     ),
@@ -68,6 +82,12 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(gol\s*festivali|gol\s*yağmuru)\s*(olur)?\s*(mu|mı|mi|mü)?", re.I),
             re.compile(r"(alt\s*mı|üst\s*mü|alt\s*mı\s*üst\s*mü)", re.I),
             re.compile(r"(o/u|over|under)\s*\d", re.I),
+            # Colloquial / betting shorthand
+            re.compile(r"(gol\s*çık|gol\s*var\s*mı|gol\s*gel)\w*\s*(mı|mi|mu|mü)?", re.I),
+            re.compile(r"(skor\s*yüksek|skor\s*düşük)\s*(olur)?\s*(mu|mı)?", re.I),
+            re.compile(r"(golsüz\s*kalmaz|illa\s*gol\s*olur)", re.I),
+            re.compile(r"(bol\s*gol|bol\s*gollü)", re.I),
+            re.compile(r"(\d+)\s*(gole|golün)\s*(üstü|altı|üzeri)", re.I),
         ],
         keywords=["üst", "ust", "alt", "2.5", "üzeri", "altı", "gollü"],
     ),
@@ -93,6 +113,11 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(penaltı|frikik|ofsayt|var|hat.?trick)\s*(olur|çıkar|atılır)", re.I),
             re.compile(r"(erken|son\s*dakika|90\+?)\s*(gol)", re.I),
             re.compile(r"(kırmızı|sarı)\s*kart.*(olur|çıkar|mı|mi)", re.I),
+            # Conversational / slang
+            re.compile(r"(kaç\s*tane\s*gol|ne\s*kadar\s*gol)", re.I),
+            re.compile(r"gol.*(yağar|patlat|bombard)", re.I),
+            re.compile(r"(skor\s*ne\s*olur|nasıl\s*bir\s*skor)", re.I),
+            re.compile(r"(tahminin\s*ne|ne\s*tahmin\s*edersin)", re.I),
         ],
         keywords=["gol", "kaç gol", "toplam gol", "fazla gol", "skor"],
     ),
@@ -109,6 +134,11 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(karşılıklı)\s*(gol)\s*(atar|olur|çıkar|bekleniyor)", re.I),
             re.compile(r"(bir\s*taraf|bir\s*takım)\s*(gol\s*atamaz)", re.I),
             re.compile(r"(rakibine)\s*(gol\s*atacak|gol\s*atar)", re.I),
+            # Colloquial / shorthand
+            re.compile(r"\b(btts|bts)\b", re.I),
+            re.compile(r"(iki\s*taraftan\s*da\s*gol)", re.I),
+            re.compile(r"(herkes\s*gol\s*atar|ikisi\s*de\s*gol)", re.I),
+            re.compile(r"(gol\s*atışır|birbirine\s*gol)", re.I),
         ],
         keywords=["kg", "karşılıklı gol", "iki takım", "her iki taraf"],
     ),
@@ -165,6 +195,13 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(ligde|sırada|kaçıncı)\s*(mı|mi|mu|mü|nasıl|nerede)", re.I),
             re.compile(r"(averaj|gol\s*ortalaması|yediği\s*gol|attığı\s*gol)", re.I),
             re.compile(r"(maçın\s*yıldızı|penaltıları|kaç\s*(gol|asist))", re.I),
+            # Colloquial / situational
+            re.compile(r"(takım|takim|lig|puan|form|kadrо).*?(durumu|durumları)\s*(ne|nasıl|nedir)", re.I),
+            re.compile(r"(ne\s*halde|ne\s*alemde)", re.I),
+            re.compile(r"(son\s*\d+\s*maç|son\s*hafta).*(nasıl|ne)", re.I),
+            re.compile(r"(çöktü\s*mü|dağıldı\s*mı|toparlıyor\s*mu)", re.I),
+            re.compile(r"(morali|motivasyonu)\s*(nasıl|iyi|kötü|bozuk|yüksek)", re.I),
+            re.compile(r"(kadro|11|on\s*bir).*(kim|nasıl|belli)", re.I),
         ],
         keywords=["form", "performans", "nasıl oynuyor", "gidiyor", "sezon"],
     ),
@@ -179,8 +216,29 @@ INTENT_PATTERNS: list[IntentPattern] = [
             re.compile(r"(h2h|rekabet|geçmiş)", re.I),
             re.compile(r"(son\s*\d+\s*(maç|karşılaşma))", re.I),
             re.compile(r"(kaç\s*kez\s*(kazandı|yendi|galip))", re.I),
+            # Colloquial
+            re.compile(r"(önceki\s*maç|geçen\s*maç).*(ne|nasıl|kaç)", re.I),
+            re.compile(r"(birbirini|birbiriyle).*(yen|gol|maç|oynad)", re.I),
+            re.compile(r"(geçen\s*sezon|önceki\s*sezon).*(nasıl|ne)", re.I),
         ],
         keywords=["kafa kafaya", "karşılaşma", "son maçlar", "aralarında", "h2h"],
+    ),
+
+    # score_predict — "Bu maç kaça kaç biter?", "Skor tahmini ne?"
+    IntentPattern(
+        intent_id="score_predict",
+        patterns=[
+            re.compile(r"(kaça?\s*kaç)\s*(biter|olur|tahmin)", re.I),
+            re.compile(r"(skor\s*tahmin|tahmin\s*skor)\w*\s*(ne|nedir|eder)?", re.I),
+            re.compile(r"(final\s*skor|maç\s*skor)\w*\s*(ne|kaç|nasıl)", re.I),
+            re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*(biter|olur|mi|mı|mu|mü)", re.I),
+            re.compile(r"(maç|mac)\s*(\d+)\s*[-–]\s*(\d+)", re.I),
+            re.compile(r"(tahmin\s*et|tamin\s*et|ne\s*dersin)\s*.*(skor|maç|mac)", re.I),
+            re.compile(r"(ne\s*biter|nasıl\s*biter)\s*bu\s*maç", re.I),
+            re.compile(r"(sonuç|sonuc)\s*(ne\s*olur|tahmin)", re.I),
+        ],
+        keywords=["skor", "kaça kaç", "tahmin", "biter", "sonuç"],
+        weight=1.1,  # slight boost — specific request
     ),
 ]
 

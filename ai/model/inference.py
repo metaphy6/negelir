@@ -113,6 +113,47 @@ class GBDTInference:
 
         return True, ""
 
+    def _adjust_xg_with_elo(self, home_xg: float, away_xg: float,
+                             home_elo: float, away_elo: float) -> tuple[float, float]:
+        """
+        Adjust xG using Elo differential and league home advantage.
+        Elo difference maps to a multiplicative factor via logistic curve.
+        """
+        elo_diff = home_elo - away_elo + self.league_config.elo_home_advantage
+        # Logistic mapping: elo_diff → multiplier in ~[0.7, 1.3]
+        # 400 Elo diff ≈ 10:1 expected, but we dampen for xG adjustment
+        factor = 1.0 / (1.0 + 10.0 ** (-elo_diff / 600.0))
+        # factor is in [0,1]; map to multiplier centered at 1.0
+        home_mult = 0.7 + factor * 0.6   # [0.7, 1.3]
+        away_mult = 1.3 - factor * 0.6   # [1.3, 0.7]
+
+        adj_home = max(0.3, home_xg * home_mult)
+        adj_away = max(0.3, away_xg * away_mult)
+        return adj_home, adj_away
+
+    def _venue_adjusted_xg(self, features: np.ndarray, col_idx: dict,
+                            home_xg: float, away_xg: float) -> tuple[float, float]:
+        """
+        Weight xG by home/away form — teams that score more at home/away
+        get a venue-specific boost.
+        """
+        home_scored_home = float(features[0, col_idx.get("home_avg_scored_home_5", 0)])
+        away_scored_away = float(features[0, col_idx.get("away_avg_scored_away_5", 0)])
+        home_scored_all = float(features[0, col_idx.get("home_avg_scored_5", 0)])
+        away_scored_all = float(features[0, col_idx.get("away_avg_scored_5", 0)])
+
+        # Venue ratio: how much better/worse a team scores at home/away
+        if home_scored_all > 0.1 and home_scored_home > 0.01:
+            home_venue_ratio = min(1.4, max(0.7, home_scored_home / home_scored_all))
+        else:
+            home_venue_ratio = 1.0
+        if away_scored_all > 0.1 and away_scored_away > 0.01:
+            away_venue_ratio = min(1.4, max(0.7, away_scored_away / away_scored_all))
+        else:
+            away_venue_ratio = 1.0
+
+        return home_xg * home_venue_ratio, away_xg * away_venue_ratio
+
     def _poisson_home_win_prob(self, home_xg: float, away_xg: float) -> float:
         p = 0.0
         for h in range(8):
@@ -134,6 +175,43 @@ class GBDTInference:
                 scorelines.append({"home": h, "away": a, "probability": round(p, 4)})
         scorelines.sort(key=lambda x: -x["probability"])
         return scorelines[:top_n]
+
+    def _compute_score_brackets(self, home_xg: float, away_xg: float) -> dict:
+        """Compute probability brackets for score ranges."""
+        max_g = 8
+        sm = {}
+        for h in range(max_g):
+            for a in range(max_g):
+                sm[(h, a)] = _score_prob(h, a, home_xg, away_xg)
+
+        sm_total = sum(sm.values())
+        if sm_total > 0:
+            for k in sm:
+                sm[k] /= sm_total
+
+        # Score brackets
+        p_0_goals = sm[(0, 0)]
+        p_1_goal = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a == 1)
+        p_2_goals = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a == 2)
+        p_3_goals = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a == 3)
+        p_4plus = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a >= 4)
+
+        # Most likely total goals
+        total_probs = {}
+        for h in range(max_g):
+            for a in range(max_g):
+                t = h + a
+                total_probs[t] = total_probs.get(t, 0.0) + sm[(h, a)]
+        most_likely_total = max(total_probs, key=total_probs.get)
+
+        return {
+            "goals_0": round(float(p_0_goals), 3),
+            "goals_1": round(float(p_1_goal), 3),
+            "goals_2": round(float(p_2_goals), 3),
+            "goals_3": round(float(p_3_goals), 3),
+            "goals_4_plus": round(float(p_4plus), 3),
+            "most_likely_total_goals": most_likely_total,
+        }
 
     def _compute_betting_markets(self, home_xg: float, away_xg: float) -> dict:
         max_g = 7
@@ -270,6 +348,15 @@ class GBDTInference:
         home_xg = home_xg_feat if home_xg_feat > 0.1 else home_avg_goals
         away_xg = away_xg_feat if away_xg_feat > 0.1 else away_avg_goals
 
+        # Elo-adjusted xG — modulate lambdas by Elo differential
+        home_elo = float(features[0, col_idx.get("home_elo", 0)])
+        away_elo = float(features[0, col_idx.get("away_elo", 0)])
+        if home_elo > 100 and away_elo > 100:
+            home_xg, away_xg = self._adjust_xg_with_elo(home_xg, away_xg, home_elo, away_elo)
+
+        # Venue-adjusted xG — weight by home/away specific scoring rates
+        home_xg, away_xg = self._venue_adjusted_xg(features, col_idx, home_xg, away_xg)
+
         p_home_poisson = self._poisson_home_win_prob(home_xg, away_xg)
         p_draw_poisson = self._poisson_draw_prob(home_xg, away_xg)
         p_away_poisson = max(0.01, 1.0 - p_home_poisson - p_draw_poisson)
@@ -313,8 +400,9 @@ class GBDTInference:
         over25_prob = float(min(0.95, max(0.05, 1.0 / (1.0 + np.exp(-(total_goals_est - 2.5))))))
         bts_prob = float(min(0.95, max(0.05, home_xg * away_xg / 4.0)))
 
-        # --- Score prediction (Poisson) ---
+        # --- Score prediction (Poisson) with bracket analysis ---
         top_scorelines = self._predict_scorelines(home_xg, away_xg, top_n=5)
+        score_brackets = self._compute_score_brackets(home_xg, away_xg)
 
         # --- Card prediction ---
         derby = bool(features[0, col_idx["derby_flag"]] > 0.5)
@@ -339,6 +427,7 @@ class GBDTInference:
                 "away_xg": round(away_xg, 2),
             },
             "score_prediction": top_scorelines,
+            "score_brackets": score_brackets,
             "card_prediction": card_prediction,
             "betting_markets": betting_markets,
             "feature_importance": feature_importance,

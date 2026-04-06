@@ -1,6 +1,7 @@
 """
 Negelir TQU — Entity extraction from sanitized Turkish text.
-Extracts team references, goal numbers, match references.
+Extracts team references, goal numbers, match references, score predictions,
+and temporal references.
 Per roadmap §5.1 TQU Step 4.
 """
 
@@ -15,6 +16,12 @@ log = get_logger("tqu.entities")
 _GOAL_RANGE_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
 _GOAL_THRESHOLD_RE = re.compile(r"(\d+)\s*'?\s*(ten|dan|den|tan)?\s*(fazla|çok|üstü|üzeri|az|altı|altında)")
 _NUMBER_RE = re.compile(r"\b(\d+)\b")
+_SCORE_RE = re.compile(r"\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b")
+_TIME_PATTERNS = {
+    "today": re.compile(r"\b(bugün|bu\s*akşam|bu\s*gece)\b", re.I),
+    "tomorrow": re.compile(r"\b(yarın|yarın\s*akşam)\b", re.I),
+    "this_week": re.compile(r"\b(bu\s*hafta|bu\s*hafta\s*sonu|bu\s*pazar|bu\s*cumartesi)\b", re.I),
+}
 
 
 @dataclass
@@ -26,6 +33,8 @@ class ExtractedEntities:
     threshold: float = 2.5                                    # default over/under
     half: int | None = None                                   # 1 or 2
     match_ref: str | None = None
+    predicted_score: tuple[int, int] | None = None            # (home, away) if user mentions specific score
+    time_ref: str | None = None                               # today, tomorrow, this_week
 
 
 def extract_entities(text: str) -> ExtractedEntities:
@@ -72,5 +81,20 @@ def extract_entities(text: str) -> ExtractedEntities:
         nums = _NUMBER_RE.findall(text)
         if nums:
             entities.threshold = float(nums[0]) + 0.5 if float(nums[0]) == int(float(nums[0])) else float(nums[0])
+
+    # ── Score prediction reference (e.g. "2-1 biter mi") ──
+    score_match = _SCORE_RE.search(text)
+    if score_match:
+        h, a = int(score_match.group(1)), int(score_match.group(2))
+        if h <= 10 and a <= 10:  # sanity bound
+            entities.predicted_score = (h, a)
+            log.debug(f"Score reference: {h}-{a}")
+
+    # ── Temporal reference ──
+    for time_key, pattern in _TIME_PATTERNS.items():
+        if pattern.search(text):
+            entities.time_ref = time_key
+            log.debug(f"Time reference: {time_key}")
+            break
 
     return entities

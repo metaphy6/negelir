@@ -368,7 +368,7 @@ class TestExtendedClassification:
                 intents_seen.add(result.intent_id)
         expected = {"match_winner", "draw", "over_under", "goal_range",
                     "both_teams_score", "clean_sheet", "half_time",
-                    "form_query", "head_to_head"}
+                    "form_query", "head_to_head", "score_predict"}
         assert intents_seen == expected, f"Missing intents: {expected - intents_seen}"
 
 
@@ -890,3 +890,206 @@ class TestDixonColes:
         p_dc = poisson_draw_prob(1.3, 1.1, use_dc=True)
         p_no = poisson_draw_prob(1.3, 1.1, use_dc=False)
         assert p_dc > p_no
+
+
+# ── Colloquial / Slang Pattern Matching ──────────────────────────────────────
+
+
+class TestColloquialPatterns:
+    """Slang, abbreviations, and informal Turkish queries should classify correctly."""
+
+    @pytest.mark.parametrize("text, expected_intent", [
+        ("gs söker mi bu maçı", "match_winner"),
+        ("sence gs kazanır mı", "match_winner"),
+        ("fb yapar mı bu işi", "match_winner"),
+        ("ms1 var mı bu maçta", "match_winner"),
+        ("bjk yenişemez gs ile", "draw"),
+        ("bu maçta x çıkar", "draw"),
+        ("bu maçta puanları paylaşır mı", "draw"),
+        ("bol gol olur mu bu maçta üst mü", "over_under"),
+        ("gol çıkar mı bu maçta", "over_under"),
+        ("maç kaç tane gol gösterir", "goal_range"),
+        ("bjk ne halde bu aralar", "form_query"),
+        ("kadro belli mi ts için", "form_query"),
+        ("ts çöktü mü yoksa", "form_query"),
+        ("gs fb geçen sezon nasıl oldu", "head_to_head"),
+        ("bu iki takım kafa kafaya nasıl oynadı", "head_to_head"),
+    ])
+    def test_colloquial_intent_classification(self, text, expected_intent):
+        result = classify(text)
+        assert result.success, f"Should accept: '{text}'"
+        assert result.intent_id == expected_intent, (
+            f"'{text}' → expected {expected_intent}, got {result.intent_id}"
+        )
+
+    @pytest.mark.parametrize("text", [
+        "kg olur mu bjk gs maçında",
+        "karşılıklı gol var mı derbi de",
+        "birbirine gol atar mı",
+    ])
+    def test_btts_slang(self, text):
+        result = classify(text)
+        assert result.success
+        assert result.intent_id == "both_teams_score"
+
+
+# ── Team Abbreviation / Nickname Resolution ──────────────────────────────────
+
+from tqu.entities import extract_entities
+
+
+class TestAbbreviationResolution:
+    """Team abbreviations and nicknames should resolve to correct UUIDs."""
+
+    @pytest.mark.parametrize("alias, expected_uuid", [
+        ("gs", "team_001"),
+        ("cimbom", "team_001"),
+        ("aslan", "team_001"),
+        ("fb", "team_002"),
+        ("fener", "team_002"),
+        ("kanarya", "team_002"),
+        ("bjk", "team_003"),
+        ("kartal", "team_003"),
+        ("kara kartal", "team_003"),
+        ("ts", "team_004"),
+        ("bordo mavi", "team_004"),
+    ])
+    def test_alias_resolves(self, alias, expected_uuid):
+        entities = extract_entities(f"{alias} kazanır mı bu maçta")
+        assert expected_uuid in entities.team_refs, (
+            f"'{alias}' should resolve to {expected_uuid}, got {entities.team_refs}"
+        )
+
+
+# ── Score Predict Intent ─────────────────────────────────────────────────────
+
+
+class TestScorePredictIntent:
+    """The new score_predict intent should match typical Turkish queries."""
+
+    @pytest.mark.parametrize("text", [
+        "bu maç kaça kaç biter",
+        "skor tahmini ne",
+        "gs fb maçı 2-1 biter mi",
+        "final skoru ne olur",
+        "ne dersin skor olarak",
+        "sonuç ne olur tahmin et",
+        "nasıl biter bu maç",
+    ])
+    def test_score_predict_accepted(self, text):
+        result = classify(text)
+        assert result.success, f"Should accept: '{text}'"
+        assert result.intent_id == "score_predict", (
+            f"'{text}' → expected score_predict, got {result.intent_id}"
+        )
+
+
+# ── Entity Extraction Extensions ─────────────────────────────────────────────
+
+
+class TestEntityExtensions:
+    """Score reference and temporal reference extraction."""
+
+    def test_score_reference_parsed(self):
+        e = extract_entities("bu maç 2-1 biter mi")
+        assert e.predicted_score == (2, 1)
+
+    def test_score_reference_dash_variant(self):
+        e = extract_entities("3–0 kazanır gs")
+        assert e.predicted_score == (3, 0)
+
+    def test_score_reference_bounded(self):
+        e = extract_entities("99-99 olur mu")
+        # scores > 10 should not be stored
+        assert e.predicted_score is None
+
+    def test_time_ref_today(self):
+        e = extract_entities("bugün maç var mı gs")
+        assert e.time_ref == "today"
+
+    def test_time_ref_tomorrow(self):
+        e = extract_entities("yarın fb maçı ne zaman")
+        assert e.time_ref == "tomorrow"
+
+    def test_time_ref_this_week(self):
+        e = extract_entities("bu hafta sonu bjk maçı var")
+        assert e.time_ref == "this_week"
+
+    def test_no_time_ref(self):
+        e = extract_entities("galatasaray kazanır mı")
+        assert e.time_ref is None
+
+    def test_no_score_ref(self):
+        e = extract_entities("galatasaray kazanır mı")
+        assert e.predicted_score is None
+
+
+# ── Elo-Adjusted xG and Score Brackets ──────────────────────────────────────
+
+from model.inference import GBDTInference
+
+_MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "..", "data", "models", "negelir_gbdt_v0.1.0.pkl")
+
+
+class TestEloVenueXg:
+    """Elo-adjusted xG and venue correction produce reasonable outputs."""
+
+    @pytest.fixture(autouse=True)
+    def _make_inference(self):
+        self.inf = GBDTInference(model_path=_MODEL_PATH)
+
+    def test_elo_advantage_boosts_home(self):
+        """Higher home Elo should increase home xG."""
+        adj_h, adj_a = self.inf._adjust_xg_with_elo(1.5, 1.3, 1800, 1500)
+        # Home team much higher Elo → home xG should increase
+        assert adj_h > 1.5
+        assert adj_a < 1.3
+
+    def test_elo_disadvantage_dampens_home(self):
+        """Lower home Elo should decrease home xG."""
+        adj_h, adj_a = self.inf._adjust_xg_with_elo(1.5, 1.3, 1200, 1700)
+        assert adj_h < 1.5
+        assert adj_a > 1.3
+
+    def test_equal_elo_home_advantage(self):
+        """Equal Elo should still give slight home boost (league home advantage)."""
+        adj_h, adj_a = self.inf._adjust_xg_with_elo(1.5, 1.5, 1500, 1500)
+        # league_config.elo_home_advantage is positive, so home gets a small boost
+        assert adj_h >= 1.5
+        assert adj_a <= 1.5
+
+    def test_adjusted_xg_bounded_above_minimum(self):
+        """xG should never drop below 0.3."""
+        adj_h, adj_a = self.inf._adjust_xg_with_elo(0.4, 0.4, 800, 2000)
+        assert adj_h >= 0.3
+        assert adj_a >= 0.3
+
+
+class TestScoreBrackets:
+    """Score bracket computation should produce valid probability distribution."""
+
+    @pytest.fixture(autouse=True)
+    def _make_inference(self):
+        self.inf = GBDTInference(model_path=_MODEL_PATH)
+
+    def test_brackets_sum_to_one(self):
+        brackets = self.inf._compute_score_brackets(1.5, 1.2)
+        total = (brackets["goals_0"] + brackets["goals_1"] +
+                 brackets["goals_2"] + brackets["goals_3"] +
+                 brackets["goals_4_plus"])
+        assert abs(total - 1.0) < 0.05  # allow small rounding error
+
+    def test_most_likely_total_reasonable(self):
+        brackets = self.inf._compute_score_brackets(1.5, 1.2)
+        assert 0 <= brackets["most_likely_total_goals"] <= 10
+
+    def test_high_xg_shifts_distribution(self):
+        """With high xG, 4+ goals bracket should be dominant."""
+        brackets = self.inf._compute_score_brackets(3.0, 2.5)
+        assert brackets["goals_4_plus"] > brackets["goals_0"]
+
+    def test_low_xg_favours_low_scoring(self):
+        """With low xG, 0-1 goal brackets should be larger."""
+        brackets = self.inf._compute_score_brackets(0.5, 0.4)
+        assert brackets["goals_0"] + brackets["goals_1"] > brackets["goals_4_plus"]
