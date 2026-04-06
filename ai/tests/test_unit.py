@@ -766,8 +766,8 @@ class TestConstantsIntegrity:
             assert "tier" in league
             assert "teams" in league
 
-    def test_feature_count_is_120(self):
-        assert N_FEATURES == 120
+    def test_feature_count_is_130(self):
+        assert N_FEATURES == 130
 
 
 # ── LeagueConfig ─────────────────────────────────────────────────────────────
@@ -1093,3 +1093,160 @@ class TestScoreBrackets:
         """With low xG, 0-1 goal brackets should be larger."""
         brackets = self.inf._compute_score_brackets(0.5, 0.4)
         assert brackets["goals_0"] + brackets["goals_1"] > brackets["goals_4_plus"]
+
+
+# ── QID Collector ─────────────────────────────────────────────────────────────
+
+from qid.collector import (
+    QueryIntentCollector, INTENT_BUCKETS, N_INTENT_BUCKETS, MIN_VOLUME,
+    MatchQueryProfile, QueryRecord,
+)
+
+
+class TestQIDCollector:
+    def test_record_and_retrieve(self):
+        c = QueryIntentCollector()
+        c.record("m1", "over_under", 0.8)
+        c.record("m1", "match_winner", 0.9)
+        assert c.get_volume("m1") == 2
+
+    def test_unknown_intent_ignored(self):
+        c = QueryIntentCollector()
+        c.record("m1", "nonexistent_intent", 0.5)
+        assert c.get_volume("m1") == 0
+
+    def test_features_uniform_below_min_volume(self):
+        c = QueryIntentCollector()
+        c.record("m1", "draw", 0.7)
+        feats = c.get_features("m1")
+        assert len(feats) == N_INTENT_BUCKETS
+        assert all(abs(f - 1.0 / N_INTENT_BUCKETS) < 1e-9 for f in feats)
+
+    def test_features_reflect_distribution(self):
+        c = QueryIntentCollector()
+        for _ in range(8):
+            c.record("m1", "over_under", 0.9)
+        for _ in range(2):
+            c.record("m1", "draw", 0.9)
+        feats = c.get_features("m1")
+        assert len(feats) == N_INTENT_BUCKETS
+        ou_idx = INTENT_BUCKETS.index("over_under")
+        draw_idx = INTENT_BUCKETS.index("draw")
+        assert feats[ou_idx] > feats[draw_idx]
+
+    def test_feature_vector_length_matches_buckets(self):
+        c = QueryIntentCollector()
+        feats = c.get_features("nonexistent")
+        assert len(feats) == 10
+        assert N_INTENT_BUCKETS == 10
+
+    def test_broadcast_and_merge(self):
+        c1 = QueryIntentCollector()
+        c2 = QueryIntentCollector()
+        for _ in range(5):
+            c1.record("m1", "match_winner", 0.8)
+        payload = c1.to_broadcast_payload("m1")
+        assert payload is not None
+        assert payload["volume"] == 5
+        added = c2.merge_peer_payload(payload)
+        assert added == 5
+        assert c2.get_volume("m1") == 5
+
+    def test_broadcast_empty_match(self):
+        c = QueryIntentCollector()
+        assert c.to_broadcast_payload("missing") is None
+
+    def test_merge_empty_payload(self):
+        c = QueryIntentCollector()
+        assert c.merge_peer_payload({}) == 0
+
+    def test_evict_match(self):
+        c = QueryIntentCollector()
+        c.record("m1", "draw", 0.5)
+        assert c.get_volume("m1") == 1
+        c.evict_match("m1")
+        assert c.get_volume("m1") == 0
+
+    def test_summary(self):
+        c = QueryIntentCollector()
+        c.record("m1", "draw", 0.5)
+        c.record("m2", "form_query", 0.7)
+        s = c.summary()
+        assert s["matches_tracked"] == 2
+        assert s["total_records"] == 2
+
+    def test_max_records_cap(self):
+        c = QueryIntentCollector(max_records_per_match=3)
+        for _ in range(10):
+            c.record("m1", "draw", 0.5)
+        assert c.get_volume("m1") == 3
+
+    def test_record_batch(self):
+        c = QueryIntentCollector()
+        records = [
+            {"intent_id": "draw", "confidence": 0.8, "source": "node_a"},
+            {"intent_id": "over_under", "confidence": 0.6, "source": "node_b"},
+            {"intent_id": "bad_intent", "confidence": 0.9, "source": "node_c"},
+        ]
+        added = c.record_batch("m1", records)
+        assert added == 2  # bad_intent filtered
+        assert c.get_volume("m1") == 2
+
+    def test_all_match_ids(self):
+        c = QueryIntentCollector()
+        c.record("m1", "draw", 0.5)
+        c.record("m2", "draw", 0.5)
+        c.record("m3", "form_query", 0.7)
+        ids = c.get_all_match_ids()
+        assert set(ids) == {"m1", "m2", "m3"}
+
+
+class TestMatchQueryProfile:
+    def test_empty_profile_distribution(self):
+        p = MatchQueryProfile(match_id="m1")
+        dist = p.intent_distribution()
+        assert all(v == 0.0 for v in dist.values())
+        assert len(dist) == N_INTENT_BUCKETS
+
+    def test_weighted_distribution(self):
+        p = MatchQueryProfile(match_id="m1", records=[
+            QueryRecord(intent_id="draw", confidence=1.0),
+            QueryRecord(intent_id="draw", confidence=1.0),
+            QueryRecord(intent_id="match_winner", confidence=0.5),
+        ])
+        wd = p.confidence_weighted_distribution()
+        assert wd["draw"] > wd["match_winner"]
+
+    def test_volume_property(self):
+        p = MatchQueryProfile(match_id="m1", records=[
+            QueryRecord(intent_id="draw", confidence=0.5),
+        ])
+        assert p.volume == 1
+
+
+class TestQIDFeatureColumnsExpansion:
+    def test_feature_columns_count_130(self):
+        from model.features import FEATURE_COLUMNS, N_FEATURES
+        assert len(FEATURE_COLUMNS) == 130
+        assert N_FEATURES == 130
+
+    def test_qid_columns_present(self):
+        from model.features import FEATURE_COLUMNS
+        qid_cols = [c for c in FEATURE_COLUMNS if c.startswith("qid_")]
+        assert len(qid_cols) == 10
+        assert "qid_match_winner" in qid_cols
+        assert "qid_score_predict" in qid_cols
+
+    def test_synthetic_dataset_shape(self):
+        from model.features import generate_synthetic_dataset
+        X, y = generate_synthetic_dataset(n_matches=20, seed=99)
+        assert X.shape == (20, 130)
+        assert len(y) == 20
+
+    def test_qid_synthetic_values_in_range(self):
+        from model.features import generate_synthetic_dataset
+        X, _ = generate_synthetic_dataset(n_matches=50, seed=99)
+        for col in X.columns:
+            if col.startswith("qid_"):
+                assert X[col].min() >= 0.0
+                assert X[col].max() <= 0.5

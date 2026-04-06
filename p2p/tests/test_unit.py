@@ -1185,3 +1185,110 @@ class TestTransportRealism:
             for m in matches:
                 assert "_actual_ft" in m
                 assert len(m["_actual_ft"]) == 2
+
+
+# ── PeerNode Query Intent Distribution ───────────────────────────────────────
+
+from node.peer import PeerNode
+
+
+class TestPeerNodeQID:
+    def test_record_query_intent(self):
+        node = PeerNode("node_qid_01")
+        node.record_query_intent("m1", "over_under", 0.8)
+        node.record_query_intent("m1", "draw", 0.6)
+        assert len(node.query_intents["m1"]) == 2
+
+    def test_get_query_intent_payload(self):
+        node = PeerNode("node_qid_02")
+        node.record_query_intent("m1", "match_winner", 0.9)
+        payload = node.get_query_intent_payload("m1")
+        assert payload is not None
+        assert payload["volume"] == 1
+        assert payload["match_id"] == "m1"
+        assert payload["records"][0]["intent_id"] == "match_winner"
+
+    def test_get_payload_returns_none_for_empty(self):
+        node = PeerNode("node_qid_03")
+        assert node.get_query_intent_payload("missing") is None
+
+    def test_receive_query_intents_from_peer(self):
+        sender = PeerNode("sender_01")
+        receiver = PeerNode("receiver_01")
+        sender.record_query_intent("m1", "over_under", 0.8)
+        sender.record_query_intent("m1", "draw", 0.7)
+        payload = sender.get_query_intent_payload("m1")
+        added = receiver.receive_query_intents(payload)
+        assert added == 2
+        assert len(receiver.query_intents["m1"]) == 2
+
+    def test_receive_own_intents_ignored(self):
+        node = PeerNode("self_node")
+        node.record_query_intent("m1", "draw", 0.5)
+        payload = node.get_query_intent_payload("m1")
+        added = node.receive_query_intents(payload)
+        assert added == 0
+
+    def test_query_intent_distribution(self):
+        node = PeerNode("node_dist_01")
+        for _ in range(5):
+            node.record_query_intent("m1", "over_under", 0.9)
+        for _ in range(5):
+            node.record_query_intent("m1", "match_winner", 0.1)
+        dist = node.get_query_intent_distribution("m1")
+        # over_under has much higher confidence weight
+        assert dist["over_under"] > dist["match_winner"]
+        assert abs(sum(dist.values()) - 1.0) < 0.01
+
+    def test_empty_distribution(self):
+        node = PeerNode("node_dist_02")
+        dist = node.get_query_intent_distribution("nonexistent")
+        assert all(v == 0.0 for v in dist.values())
+
+    def test_multi_node_aggregation(self):
+        """Simulate 3 nodes sharing query intents for the same match."""
+        nodes = [PeerNode(f"agg_node_{i:02d}") for i in range(3)]
+        # Each node records different intents
+        nodes[0].record_query_intent("m1", "over_under", 0.9)
+        nodes[1].record_query_intent("m1", "draw", 0.7)
+        nodes[2].record_query_intent("m1", "match_winner", 0.8)
+
+        # Share payloads: node 0 receives from 1 and 2
+        for sender in nodes[1:]:
+            payload = sender.get_query_intent_payload("m1")
+            nodes[0].receive_query_intents(payload)
+
+        # Node 0 should now have 3 records
+        assert len(nodes[0].query_intents["m1"]) == 3
+        dist = nodes[0].get_query_intent_distribution("m1")
+        assert dist["over_under"] > 0
+        assert dist["draw"] > 0
+        assert dist["match_winner"] > 0
+
+
+class TestQueryIntentMessageType:
+    def test_query_intent_enum_exists(self):
+        assert MessageType.QUERY_INTENT.value == "query_intent"
+
+    def test_query_intent_message_serialises(self):
+        msg = P2PMessage(
+            message_type=MessageType.QUERY_INTENT.value,
+            sender_id="node_001",
+            payload={"match_id": "m1", "records": [{"intent_id": "draw", "confidence": 0.8}]},
+        )
+        data = msg.to_bytes()
+        restored = P2PMessage.from_bytes(data)
+        assert restored.message_type == "query_intent"
+        assert restored.payload["match_id"] == "m1"
+
+
+class TestScorePredictIntentRule:
+    def test_score_predict_classified(self):
+        from simulation.runner import _classify_question
+        intent, conf = _classify_question("Skor tahmini ne?")
+        assert intent == "score_predict"
+
+    def test_kac_kac_classified(self):
+        from simulation.runner import _classify_question
+        intent, conf = _classify_question("Maç kaç kaç biter?")
+        assert intent == "score_predict"

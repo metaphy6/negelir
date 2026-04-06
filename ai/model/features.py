@@ -85,6 +85,10 @@ FEATURE_COLUMNS = [
     "home_sh_conceding_rate", "away_sh_conceding_rate",
     # ── Scoring patterns (v0.2) ──
     "home_goals_per_match_rate", "away_goals_per_match_rate",
+    # ── Query Intent Distribution (v0.3) ──
+    "qid_match_winner", "qid_draw", "qid_over_under", "qid_goal_range",
+    "qid_both_teams_score", "qid_clean_sheet", "qid_half_time",
+    "qid_form_query", "qid_head_to_head", "qid_score_predict",
 ]
 
 assert len(FEATURE_COLUMNS) == N_FEATURES, f"Expected {N_FEATURES} features, got {len(FEATURE_COLUMNS)}"
@@ -136,6 +140,9 @@ def generate_synthetic_dataset(n_matches: int = 500, seed: int = 42) -> tuple[pd
             data[col] = rng.normal(1500, 100, size=n_matches)
         elif "card_factor" in col:
             data[col] = rng.uniform(0, 2, size=n_matches)
+        elif col.startswith("qid_"):
+            # Query intent distribution features: Dirichlet-like fractions ∈ [0, 1]
+            data[col] = rng.uniform(0, 0.5, size=n_matches)
         else:
             data[col] = rng.uniform(0, 3, size=n_matches)
 

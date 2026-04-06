@@ -236,6 +236,7 @@ class PeerNode:
         self.analyses: dict[str, PeerAnalysis] = {}  # match_id → own analysis
         self.peer_analyses: dict[str, list[PeerAnalysis]] = {}  # match_id → list of peer analyses
         self.data_store = DataStore(owner_id=node_id)
+        self.query_intents: dict[str, list[dict]] = {}  # match_id → list of intent records
         self.log = get_p2p_logger(f"node.{node_id[:8]}")
 
         # Simulated model bias (each node is slightly different)
@@ -413,3 +414,64 @@ class PeerNode:
     def request_missing_data(self, peer_manifest: list[str]) -> list[str]:
         """Given a peer's manifest, return the hashes we're missing."""
         return self.data_store.missing_from(peer_manifest)
+
+    # ── Query Intent Distribution ────────────────────────
+
+    def record_query_intent(self, match_id: str, intent_id: str, confidence: float) -> None:
+        """Record a classified query intent for a match."""
+        if match_id not in self.query_intents:
+            self.query_intents[match_id] = []
+        self.query_intents[match_id].append({
+            "intent_id": intent_id,
+            "confidence": round(confidence, 3),
+            "source": self.node_id,
+        })
+        self.log.debug(f"📝 QID recorded: {match_id[:8]} intent={intent_id} conf={confidence:.2f}")
+
+    def get_query_intent_payload(self, match_id: str) -> dict | None:
+        """Build broadcast payload of query intent records for a match."""
+        records = self.query_intents.get(match_id, [])
+        if not records:
+            return None
+        return {
+            "match_id": match_id,
+            "node_id": self.node_id,
+            "volume": len(records),
+            "records": records,
+        }
+
+    def receive_query_intents(self, payload: dict) -> int:
+        """Merge query intent records from a peer. Returns count added."""
+        match_id = payload.get("match_id", "")
+        records = payload.get("records", [])
+        sender = payload.get("node_id", "unknown")
+        if not match_id or not records or sender == self.node_id:
+            return 0
+        if match_id not in self.query_intents:
+            self.query_intents[match_id] = []
+        added = 0
+        for r in records:
+            self.query_intents[match_id].append({
+                "intent_id": r["intent_id"],
+                "confidence": r["confidence"],
+                "source": sender,
+            })
+            added += 1
+        self.log.debug(f"📥 QID merged {added} records from {sender[:8]} for {match_id[:8]}")
+        return added
+
+    def get_query_intent_distribution(self, match_id: str) -> dict[str, float]:
+        """Compute normalised intent distribution for a match from all records."""
+        _BUCKETS = [
+            "match_winner", "draw", "over_under", "goal_range",
+            "both_teams_score", "clean_sheet", "half_time",
+            "form_query", "head_to_head", "score_predict",
+        ]
+        records = self.query_intents.get(match_id, [])
+        counts: dict[str, float] = {b: 0.0 for b in _BUCKETS}
+        for r in records:
+            bid = r.get("intent_id", "")
+            if bid in counts:
+                counts[bid] += r.get("confidence", 1.0)
+        total = max(0.01, sum(counts.values()))
+        return {k: v / total for k, v in counts.items()}

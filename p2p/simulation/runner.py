@@ -192,6 +192,7 @@ _INTENT_RULES = [
     ("half_time",        [re.compile(r"(ilk|ikinci)\s*yarı", re.I)]),
     ("form_query",       [re.compile(r"(form|performans|son\s*maç)", re.I)]),
     ("head_to_head",     [re.compile(r"(kafa\s*kafa|h2h|karşılaşma)", re.I)]),
+    ("score_predict",    [re.compile(r"(skor|kaç.kaç|tahmin)", re.I)]),
 ]
 
 
@@ -801,17 +802,21 @@ class P2PSimulation:
                 log.warning(f"   ⚠️  Match data not found: {match_key}")
                 continue
 
-            # Step 3: Get P2P ensemble from lead node
+            # Step 3: Record query intent on all nodes (QID)
             match_id = hashlib.sha256(
                 f"{match_data['home_team']}:{match_data['away_team']}:0".encode()
             ).hexdigest()[:16]
 
+            for node in self.nodes:
+                node.record_query_intent(match_id, intent, confidence)
+
+            # Step 4: Get P2P ensemble from lead node
             ensemble = lead_node.compute_ensemble(match_id)
+            # Step 5: Produce fresh analysis if no ensemble exists
             if not ensemble:
-                # Produce fresh analysis if no ensemble exists
                 ensemble = lead_node.produce_analysis(match_id, base_home_prob=0.55)
 
-            # Step 4: TRC — Compose Turkish response
+            # Step 6: TRC — Compose Turkish response
             answer = _compose_turkish_answer(intent, match_data, ensemble)
             log.info(f"   🤖 TRC response composed ({len(answer)} chars)")
 
@@ -824,6 +829,38 @@ class P2PSimulation:
                 padding=(0, 2),
             ))
             console.print()
+
+        # ── QID: Broadcast query intent distributions across P2P ──
+        log.info("\n📊 Broadcasting query intent distributions across P2P network...")
+        qid_messages_sent = 0
+        for node in self.nodes:
+            for mid in list(node.query_intents.keys()):
+                payload = node.get_query_intent_payload(mid)
+                if payload:
+                    msg = P2PMessage(
+                        message_type=MessageType.QUERY_INTENT.value,
+                        sender_id=node.node_id,
+                        payload=payload,
+                    )
+                    self.transport.broadcast(node.node_id, msg)
+                    qid_messages_sent += 1
+
+        # Peers receive and merge
+        qid_records_merged = 0
+        for node in self.nodes:
+            messages = self.transport.get_pending(node.node_id)
+            for msg in messages:
+                if msg.message_type == MessageType.QUERY_INTENT.value:
+                    qid_records_merged += node.receive_query_intents(msg.payload)
+
+        log.info(f"📡 QID: {qid_messages_sent} broadcasts, {qid_records_merged} records merged across peers")
+
+        # Show aggregated distribution for lead node
+        for mid in lead_node.query_intents:
+            dist = lead_node.get_query_intent_distribution(mid)
+            top_3 = sorted(dist.items(), key=lambda x: x[1], reverse=True)[:3]
+            top_str = ", ".join(f"{k}={v:.2f}" for k, v in top_3)
+            log.info(f"   📈 {mid[:8]}: volume={len(lead_node.query_intents[mid])}, top=[{top_str}]")
 
     # ── Helpers ──────────────────────────────────────────
 

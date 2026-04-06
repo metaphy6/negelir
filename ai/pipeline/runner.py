@@ -21,6 +21,7 @@ from proofreader.validator import DataProofreader
 from orchestrator.state_machine import TaskOrchestrator, TaskResult, OrchestratorContext
 from nlp.sentiment import analyze_sentiment
 from tqu.questions import DEMO_QUESTIONS as EXTENDED_DEMO, QUESTION_COUNT
+from qid.collector import QueryIntentCollector
 
 log = get_logger("pipeline")
 
@@ -38,6 +39,7 @@ class PipelineRunner:
         self.proofreader = DataProofreader()
         self.orchestrator = TaskOrchestrator()
         self.model: GBDTInference | None = None
+        self.qid_collector = QueryIntentCollector()
 
     def run_full_pipeline(self):
         """Execute the complete pipeline: data → model → questions → answers."""
@@ -239,6 +241,10 @@ class PipelineRunner:
         intent = classification.intent_id
         entities = classification.entities
 
+        # QID: record query intent distribution
+        match_id = entities.match_ref or f"demo_match_{idx}"
+        self.qid_collector.record(match_id, intent, classification.confidence)
+
         # Generate feature vector for this "match"
         feature_vec = np.zeros((1, N_FEATURES), dtype=np.float32)
         for i, col in enumerate(FEATURE_COLUMNS):
@@ -254,6 +260,14 @@ class PipelineRunner:
                 feature_vec[0, i] = rng.randint(0, 2)
             else:
                 feature_vec[0, i] = rng.uniform(0, 3)
+
+        # Inject QID features from collected query intent distribution
+        qid_features = self.qid_collector.get_features(match_id)
+        for i, col in enumerate(FEATURE_COLUMNS):
+            if col.startswith("qid_"):
+                feature_vec[0, FEATURE_COLUMNS.index(col)] = qid_features.pop(0)
+                if not qid_features:
+                    break
 
         # GBDT: inference
         analysis = self.model.predict(feature_vec)

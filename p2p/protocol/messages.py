@@ -15,6 +15,7 @@ class MessageType(Enum):
     OUTCOME_VALIDATION = "outcome_validation"
     SCRAPE_DATA = "scrape_data"
     PEER_DISCOVERY = "peer_discovery"
+    QUERY_INTENT = "query_intent"
     PING = "ping"
     PONG = "pong"
 
