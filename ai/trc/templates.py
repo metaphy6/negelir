@@ -14,6 +14,10 @@ VERDICTS = {
     "uncertain":     "Zor bir tahmin.",
     "balanced":      "İki taraf için de argüman var.",
     "low_data":      "Bu maç için yeterli veri yok, dikkatli olmak gerek.",
+    # Phase 2: data-quality verdicts
+    "fixture_unknown":     "Belirtilen maç fikstürde bulunamadı.",
+    "data_stale":          "Veriler güncel değil, tahmin güvenilirliği düşük.",
+    "insufficient_data":   "Bu takım için yeterli geçmiş veri bulunmuyor.",
 }
 
 # ── Rejection messages (fixed, per roadmap §5.6.2) ──────

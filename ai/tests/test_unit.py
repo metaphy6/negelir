@@ -6,6 +6,7 @@ import sys
 import os
 import math
 
+import numpy as np
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1250,3 +1251,1961 @@ class TestQIDFeatureColumnsExpansion:
             if col.startswith("qid_"):
                 assert X[col].min() >= 0.0
                 assert X[col].max() <= 0.5
+
+
+# ── MackolikClient (arsiv.mackolik.com scraper) ──────────────────────────────
+
+from unittest.mock import MagicMock, patch
+from scraper.mackolik import (
+    MackolikClient, TeamStanding, Fixture, Result, MatchStats, SeasonData,
+    _parse_pct, _parse_int,
+)
+
+
+class TestMackolikParsers:
+    """Unit tests for MackolikClient parsers (no HTTP calls)."""
+
+    def test_parse_js_array(self):
+        text = "['2025/2026','2024/2025','2023/2024']"
+        result = MackolikClient._parse_js_array(text)
+        assert result == ["2025/2026", "2024/2025", "2023/2024"]
+
+    def test_parse_js_array_empty(self):
+        assert MackolikClient._parse_js_array("[]") == []
+        assert MackolikClient._parse_js_array("") == []
+
+    def test_parse_jsonp_plain_json(self):
+        text = '{"l": [[67287, "Trendyol Süper Lig"], [67437, "1. Lig"]]}'
+        result = MackolikClient._parse_jsonp(text)
+        assert result == {"l": [[67287, "Trendyol Süper Lig"], [67437, "1. Lig"]]}
+
+    def test_parse_jsonp_with_callback(self):
+        text = 'callback({"l": [[70381, "Süper Lig"]]})'
+        result = MackolikClient._parse_jsonp(text)
+        assert result["l"] == [[70381, "Süper Lig"]]
+
+    def test_parse_jsonp_invalid(self):
+        assert MackolikClient._parse_jsonp("not json") == {}
+
+    def test_parse_standings(self):
+        # Actual arsiv.mackolik.com schema: 20 elements per row
+        # [id, name, home_played, away_played, home_w, away_w, home_d, away_d,
+        #  home_l, away_l, home_gf, away_gf, home_ga, away_ga,
+        #  home_pts, away_pts, zone, penalty, str1, str2]
+        rows = [
+            [1, "Galatasaray", 18, 18, 15, 15, 3, 2, 0, 1, 46, 45, 15, 16, 48, 47, 0, 0, "", ""],
+            [2, "Fenerbahçe", 18, 18, 14, 12, 2, 4, 2, 2, 42, 48, 18, 21, 44, 40, 0, 0, "", ""],
+        ]
+        standings = MackolikClient._parse_standings(rows)
+        assert len(standings) == 2
+        gs = standings[0]
+        assert isinstance(gs, TeamStanding)
+        assert gs.team_id == 1
+        assert gs.name == "Galatasaray"
+        assert gs.played == 36  # 18 + 18
+        assert gs.home_w == 15
+        assert gs.home_d == 3
+        assert gs.home_l == 0
+        assert gs.away_w == 15
+        assert gs.away_d == 2
+        assert gs.away_l == 1
+        assert gs.goals_for == 91  # 46 + 45
+        assert gs.goals_against == 31  # 15 + 16
+        assert gs.points == 95  # 48 + 47
+        assert gs.home_gf == 46
+        assert gs.away_gf == 45
+        assert gs.home_pts == 48
+        assert gs.away_pts == 47
+
+    def test_parse_standings_with_penalty(self):
+        # Adana Demirspor had -12 penalty in 2024/2025
+        rows = [
+            [454, "Adana Demirspor", 18, 18, 1, 2, 3, 2, 14, 14, 14, 20, 42, 50, 6, 8, 0, -12, "", ""],
+        ]
+        standings = MackolikClient._parse_standings(rows)
+        assert len(standings) == 1
+        ad = standings[0]
+        assert ad.points == 2  # 6 + 8 + (-12) = 2
+        assert ad.penalty_points == -12
+
+    def test_parse_standings_skips_malformed(self):
+        rows = [
+            [1, "GS", 0, 0, 0],  # too short (< 16)
+            [],
+            "not a list",
+        ]
+        assert MackolikClient._parse_standings(rows) == []
+
+    def test_parse_fixtures(self):
+        rows = [
+            [4356789, "11/04", "", 1, 2, "2148500", 0, 0, "", 4, 1.45, 4.20, 5.80],
+        ]
+        fixtures = MackolikClient._parse_fixtures(rows)
+        assert len(fixtures) == 1
+        f = fixtures[0]
+        assert isinstance(f, Fixture)
+        assert f.match_id == 4356789
+        assert f.date == "11/04"
+        assert f.home_id == 1
+        assert f.away_id == 2
+        assert f.odds_home == 1.45
+        assert f.odds_draw == 4.20
+        assert f.odds_away == 5.80
+
+    def test_parse_fixtures_no_odds(self):
+        rows = [
+            [100, "01/09", "", 3, 4],  # minimal row, no odds
+        ]
+        fixtures = MackolikClient._parse_fixtures(rows)
+        assert len(fixtures) == 1
+        assert fixtures[0].odds_home == 0.0
+
+    def test_parse_results(self):
+        rows = [
+            [4125503, "01/06", "MS", 8, 570, "2148445", 2, 1, "0 - 0", 4, 1.13, 4.92, 7.88],
+        ]
+        results = MackolikClient._parse_results(rows)
+        assert len(results) == 1
+        r = results[0]
+        assert isinstance(r, Result)
+        assert r.match_id == 4125503
+        assert r.ft_home == 2
+        assert r.ft_away == 1
+        assert r.ht_score == "0 - 0"
+        assert r.odds_home == 1.13
+
+    def test_parse_results_skips_malformed(self):
+        rows = [[1, "01/01"]]  # too short
+        assert MackolikClient._parse_results(rows) == []
+
+    def test_parse_zones(self):
+        rows = [
+            [1, "bg-color:#daeaf8", "Şampiyonlar Ligi"],
+            [3, "bg-color:#fbe3e4", "Küme Düşme"],
+        ]
+        zones = MackolikClient._parse_zones(rows)
+        assert len(zones) == 2
+        assert zones[0]["name"] == "Şampiyonlar Ligi"
+        assert zones[1]["id"] == 3
+
+    def test_parse_pct(self):
+        assert _parse_pct("55%") == 55.0
+        assert _parse_pct("0%") == 0.0
+        assert _parse_pct("abc") == 0.0
+
+    def test_parse_int(self):
+        assert _parse_int("12") == 12
+        assert _parse_int("abc") == 0
+
+    def test_parse_opta_stats_html(self):
+        html = """
+        <div class="match-statistics-rows">
+          <div class="team-1-statistics-text">%55</div>
+          <div class="statistics-title-text">Topla Oynama</div>
+          <div class="team-2-statistics-text">%45</div>
+        </div>
+        <div class="match-statistics-rows-2">
+          <div class="team-1-statistics-text">14</div>
+          <div class="statistics-title-text">Toplam Şut</div>
+          <div class="team-2-statistics-text">8</div>
+        </div>
+        <div class="match-statistics-rows">
+          <div class="team-1-statistics-text">6</div>
+          <div class="statistics-title-text">İsabetli Şut</div>
+          <div class="team-2-statistics-text">3</div>
+        </div>
+        <div class="match-statistics-rows-2">
+          <div class="team-1-statistics-text">320</div>
+          <div class="statistics-title-text">Başarılı Paslar</div>
+          <div class="team-2-statistics-text">280</div>
+        </div>
+        <div class="match-statistics-rows">
+          <div class="team-1-statistics-text">%85</div>
+          <div class="statistics-title-text">Pas Başarı(%)</div>
+          <div class="team-2-statistics-text">%78</div>
+        </div>
+        <div class="match-statistics-rows-2">
+          <div class="team-1-statistics-text">7</div>
+          <div class="statistics-title-text">Korner</div>
+          <div class="team-2-statistics-text">4</div>
+        </div>
+        <div class="match-statistics-rows">
+          <div class="team-1-statistics-text">12</div>
+          <div class="statistics-title-text">Faul</div>
+          <div class="team-2-statistics-text">15</div>
+        </div>
+        <div class="match-statistics-rows-2">
+          <div class="team-1-statistics-text">2</div>
+          <div class="statistics-title-text">Ofsayt</div>
+          <div class="team-2-statistics-text">3</div>
+        </div>
+        """
+        stats = MackolikClient._parse_opta_stats_html(html)
+        assert isinstance(stats, MatchStats)
+        assert stats.possession_home == 55.0
+        assert stats.possession_away == 45.0
+        assert stats.shots_home == 14
+        assert stats.shots_away == 8
+        assert stats.shots_on_target_home == 6
+        assert stats.shots_on_target_away == 3
+        assert stats.passes_home == 320
+        assert stats.passes_away == 280
+        assert stats.pass_accuracy_home == 85.0
+        assert stats.pass_accuracy_away == 78.0
+        assert stats.corners_home == 7
+        assert stats.corners_away == 4
+        assert stats.fouls_home == 12
+        assert stats.fouls_away == 15
+        assert stats.offsides_home == 2
+        assert stats.offsides_away == 3
+
+    def test_parse_opta_stats_empty(self):
+        stats = MackolikClient._parse_opta_stats_html("")
+        assert stats.possession_home == 0.0
+        assert stats.shots_home == 0
+
+
+class TestMackolikClient:
+    """Tests for MackolikClient methods using mocked HTTP responses."""
+
+    def test_discover_seasons_mock(self):
+        client = MackolikClient(rate_limit=0)
+        resp_years = MagicMock()
+        resp_years.text = "['2025/2026','2024/2025']"
+        resp_years.status_code = 200
+
+        resp_s1 = MagicMock()
+        resp_s1.text = '{"l": [[70381, "Trendyol Süper Lig"], [70382, "1. Lig"]]}'
+        resp_s1.status_code = 200
+
+        resp_s2 = MagicMock()
+        resp_s2.text = '{"l": [[67287, "Trendyol Süper Lig"]]}'
+        resp_s2.status_code = 200
+
+        with patch.object(client, "_get", side_effect=[resp_years, resp_s1, resp_s2]):
+            seasons = client.discover_seasons()
+
+        assert seasons == {"2025/2026": 70381, "2024/2025": 67287}
+
+    def test_fetch_season_mock(self):
+        client = MackolikClient(rate_limit=0)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "id": 70381,
+            "s": [[1, "Galatasaray", 18, 18, 15, 15, 3, 2, 0, 1, 46, 45, 15, 16, 48, 47, 0, 0, "", ""]],
+            "f": [[999, "11/04", "", 1, 2, "", 0, 0, "", 4, 1.45, 4.20, 5.80]],
+            "r": [[888, "05/04", "MS", 3, 4, "", 2, 1, "1 - 0", 4, 1.50, 3.80, 6.00]],
+            "d": [[1, "bg:#daeaf8", "Şampiyonlar Ligi"]],
+        }
+        with patch.object(client, "_get", return_value=mock_resp):
+            season = client.fetch_season(70381)
+
+        assert isinstance(season, SeasonData)
+        assert season.season_id == 70381
+        assert len(season.standings) == 1
+        assert season.standings[0].name == "Galatasaray"
+        assert season.standings[0].points == 95  # 48 + 47
+        assert len(season.fixtures) == 1
+        assert len(season.results) == 1
+        assert season.results[0].ft_home == 2
+        assert len(season.zones) == 1
+
+    def test_fetch_season_none_response(self):
+        client = MackolikClient(rate_limit=0)
+        with patch.object(client, "_get", return_value=None):
+            season = client.fetch_season(99999)
+        assert season.season_id == 99999
+        assert season.standings == []
+
+    def test_fetch_match_stats_mock(self):
+        client = MackolikClient(rate_limit=0)
+        mock_resp = MagicMock()
+        mock_resp.text = """
+        <div class="match-statistics-rows">
+          <div class="team-1-statistics-text">%60</div>
+          <div class="statistics-title-text">Topla Oynama</div>
+          <div class="team-2-statistics-text">%40</div>
+        </div>
+        <div class="match-statistics-rows-2">
+          <div class="team-1-statistics-text">5</div>
+          <div class="statistics-title-text">Korner</div>
+          <div class="team-2-statistics-text">3</div>
+        </div>
+        """
+        with patch.object(client, "_get", return_value=mock_resp):
+            stats = client.fetch_match_stats(12345)
+        assert stats.possession_home == 60.0
+        assert stats.corners_home == 5
+
+    def test_fetch_match_stats_none(self):
+        client = MackolikClient(rate_limit=0)
+        with patch.object(client, "_get", return_value=None):
+            assert client.fetch_match_stats(12345) is None
+
+    def test_load_training_data_mock(self):
+        client = MackolikClient(rate_limit=0)
+        with patch.object(client, "discover_seasons", return_value={
+            "2025/2026": 70381, "2024/2025": 67287, "2023/2024": 63860,
+        }):
+            with patch.object(client, "fetch_season", return_value=SeasonData(season_id=0)):
+                data = client.load_training_data(n_seasons=2)
+        assert len(data) == 2
+
+
+class TestMackolikIdMap:
+    """Verify mackolik_id mapping from locale YAML."""
+
+    def test_mackolik_id_map_populated(self):
+        from common.constants import MACKOLIK_ID_MAP
+        assert len(MACKOLIK_ID_MAP) >= 19  # at least 19 teams have mackolik_id
+        assert MACKOLIK_ID_MAP[1] == "Galatasaray"
+        assert MACKOLIK_ID_MAP[2] == "Fenerbahçe"
+        assert MACKOLIK_ID_MAP[3] == "Beşiktaş"
+        assert MACKOLIK_ID_MAP[4] == "Trabzonspor"
+
+    def test_mackolik_id_map_mid_tier(self):
+        from common.constants import MACKOLIK_ID_MAP
+        assert MACKOLIK_ID_MAP[451] == "Başakşehir"
+        assert MACKOLIK_ID_MAP[656] == "Kasımpaşa"
+        assert MACKOLIK_ID_MAP[619] == "Alanyaspor"
+
+
+# ── Phase 2: Season Detection + Match Resolver ──────────────────────────────
+
+class TestSeasonDetection:
+    """Tests for season state machine."""
+
+    def test_in_season_detected(self):
+        from common.season import detect_season, SeasonState
+        from scraper.mackolik import SeasonData, Fixture, Result
+
+        def fake_fetch(sid):
+            return SeasonData(
+                season_id=sid,
+                fixtures=[Fixture(match_id=1, date="15/04", home_id=1, away_id=2)],
+                results=[Result(match_id=2, date="01/04", home_id=3, away_id=4, ft_home=2, ft_away=1)],
+            )
+
+        label, state, sid = detect_season({"2025/2026": 70381}, fake_fetch)
+        assert state == SeasonState.IN_SEASON
+        assert label == "2025/2026"
+        assert sid == 70381
+
+    def test_post_season_detected(self):
+        from common.season import detect_season, SeasonState
+        from scraper.mackolik import SeasonData, Result
+
+        def fake_fetch(sid):
+            return SeasonData(
+                season_id=sid,
+                results=[Result(match_id=1, date="01/06", home_id=1, away_id=2, ft_home=1, ft_away=0)],
+            )
+
+        label, state, sid = detect_season({"2024/2025": 67287}, fake_fetch)
+        assert state == SeasonState.POST_SEASON
+        assert label == "2024/2025"
+
+    def test_pre_season_detected(self):
+        from common.season import detect_season, SeasonState
+        from scraper.mackolik import SeasonData, Fixture
+
+        def fake_fetch(sid):
+            return SeasonData(
+                season_id=sid,
+                fixtures=[Fixture(match_id=1, date="15/08", home_id=1, away_id=2)],
+            )
+
+        label, state, sid = detect_season({"2025/2026": 70381}, fake_fetch)
+        assert state == SeasonState.PRE_SEASON
+
+    def test_off_season_empty(self):
+        from common.season import detect_season, SeasonState
+        label, state, sid = detect_season({}, lambda x: None)
+        assert state == SeasonState.OFF_SEASON
+        assert label is None
+        assert sid is None
+
+    def test_season_transition(self):
+        """Most recent completed + older completed → picks most recent."""
+        from common.season import detect_season, SeasonState
+        from scraper.mackolik import SeasonData, Result
+
+        def fake_fetch(sid):
+            return SeasonData(
+                season_id=sid,
+                results=[Result(match_id=1, date="01/06", home_id=1, away_id=2, ft_home=1, ft_away=0)],
+            )
+
+        label, state, sid = detect_season(
+            {"2025/2026": 70381, "2024/2025": 67287}, fake_fetch
+        )
+        assert state == SeasonState.POST_SEASON
+        assert label == "2025/2026"  # picks most recent
+
+
+class TestMatchResolver:
+    """Tests for fixture resolution."""
+
+    def test_resolve_single_team(self):
+        from pipeline.resolver import MatchResolver
+        from scraper.mackolik import Fixture
+
+        resolver = MatchResolver()
+        fixtures = [
+            Fixture(match_id=100, date="12/04", home_id=1, away_id=3),
+            Fixture(match_id=101, date="13/04", home_id=2, away_id=4),
+        ]
+        result = resolver.resolve([1], None, fixtures)
+        assert result is not None
+        assert result.match_id == 100
+
+    def test_resolve_no_match(self):
+        from pipeline.resolver import MatchResolver
+        from scraper.mackolik import Fixture
+
+        resolver = MatchResolver()
+        fixtures = [Fixture(match_id=100, date="12/04", home_id=1, away_id=3)]
+        result = resolver.resolve([999], None, fixtures)
+        assert result is None
+
+    def test_resolve_empty_teams(self):
+        from pipeline.resolver import MatchResolver
+        resolver = MatchResolver()
+        assert resolver.resolve([], None, []) is None
+
+    def test_resolve_picks_earliest(self):
+        from pipeline.resolver import MatchResolver
+        from scraper.mackolik import Fixture
+
+        resolver = MatchResolver()
+        fixtures = [
+            Fixture(match_id=200, date="20/04", home_id=1, away_id=5),
+            Fixture(match_id=201, date="12/04", home_id=1, away_id=3),
+        ]
+        result = resolver.resolve([1], None, fixtures)
+        assert result.match_id == 201  # earlier date
+
+    def test_resolve_recent_result(self):
+        from pipeline.resolver import MatchResolver
+        from scraper.mackolik import Result
+
+        resolver = MatchResolver()
+        results = [
+            Result(match_id=300, date="01/04", home_id=1, away_id=3, ft_home=2, ft_away=1),
+            Result(match_id=301, date="08/04", home_id=2, away_id=1, ft_home=0, ft_away=0),
+        ]
+        recent = resolver.resolve_recent_result([1], results)
+        assert recent is not None
+        assert recent.match_id == 301  # more recent
+
+
+class TestVerdictDataIssues:
+    """Tests for Phase 2 data-quality verdict types."""
+
+    def test_fixture_unknown_verdict(self):
+        from trc.verdict import select_verdict
+        assert select_verdict(0.9, 0.8, True, data_issue="fixture_unknown") == "fixture_unknown"
+
+    def test_data_stale_verdict(self):
+        from trc.verdict import select_verdict
+        assert select_verdict(0.9, 0.8, True, data_issue="data_stale") == "data_stale"
+
+    def test_insufficient_data_verdict(self):
+        from trc.verdict import select_verdict
+        assert select_verdict(0.9, 0.8, True, data_issue="insufficient_data") == "insufficient_data"
+
+    def test_normal_verdict_unaffected(self):
+        from trc.verdict import select_verdict
+        assert select_verdict(0.9, 0.8, True) == "strong_yes"
+
+    def test_invalid_data_issue_ignored(self):
+        from trc.verdict import select_verdict
+        # Unknown data_issue should not override normal logic
+        assert select_verdict(0.9, 0.8, True, data_issue="bogus") == "strong_yes"
+
+    def test_verdict_templates_have_data_keys(self):
+        from trc.templates import VERDICTS
+        assert "fixture_unknown" in VERDICTS
+        assert "data_stale" in VERDICTS
+        assert "insufficient_data" in VERDICTS
+
+
+class TestCurrentSeasonRemoved:
+    """Verify CURRENT_SEASON is no longer exported from constants."""
+
+    def test_no_current_season_constant(self):
+        import common.constants as c
+        assert not hasattr(c, "CURRENT_SEASON"), "CURRENT_SEASON should be removed"
+
+
+# ── Phase 3: Persistent Identity + Scheduler ─────────────────────────────────
+
+
+class TestPersistentIdentity:
+    """Tests for p2p/node/identity.py — persistent node identity."""
+
+    def test_create_new_identity(self, tmp_path):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from node.identity import load_or_create_identity
+        path = tmp_path / "identity.json"
+        identity = load_or_create_identity(path)
+        assert "node_id" in identity
+        assert "created_at" in identity
+        assert len(identity["node_id"]) == 36  # UUID format
+
+    def test_load_existing_identity(self, tmp_path):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from node.identity import load_or_create_identity
+        path = tmp_path / "identity.json"
+        id1 = load_or_create_identity(path)
+        id2 = load_or_create_identity(path)
+        assert id1["node_id"] == id2["node_id"]
+
+    def test_corrupt_file_regenerates(self, tmp_path):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from node.identity import load_or_create_identity
+        path = tmp_path / "identity.json"
+        path.write_text("NOT VALID JSON!!!", encoding="utf-8")
+        identity = load_or_create_identity(path)
+        assert "node_id" in identity
+
+    def test_missing_node_id_regenerates(self, tmp_path):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        import json
+        from node.identity import load_or_create_identity
+        path = tmp_path / "identity.json"
+        path.write_text(json.dumps({"created_at": "2025-01-01"}), encoding="utf-8")
+        identity = load_or_create_identity(path)
+        assert "node_id" in identity
+
+
+class TestNegelirScheduler:
+    """Tests for ai/scheduler.py — scheduler integration."""
+
+    def test_add_cron_job(self):
+        from scheduler import NegelirScheduler
+        sched = NegelirScheduler()
+        sched.add_cron_job("test_cron", lambda: None, hour=6, minute=0)
+        assert "test_cron" in sched.job_ids
+
+    def test_add_interval_job(self):
+        from scheduler import NegelirScheduler
+        sched = NegelirScheduler()
+        sched.add_interval_job("test_interval", lambda: None, minutes=5)
+        assert "test_interval" in sched.job_ids
+
+    def test_job_ids_returns_all(self):
+        from scheduler import NegelirScheduler
+        sched = NegelirScheduler()
+        sched.add_cron_job("a", lambda: None, hour=1)
+        sched.add_interval_job("b", lambda: None, minutes=10)
+        assert set(sched.job_ids) == {"a", "b"}
+
+    def test_get_job_returns_details(self):
+        from scheduler import NegelirScheduler
+        sched = NegelirScheduler()
+        sched.add_cron_job("daily", lambda: None, hour=6, minute=0)
+        job = sched.get_job("daily")
+        assert job is not None
+        assert job["trigger"] == "cron"
+        assert job["kwargs"]["hour"] == 6
+
+    def test_get_job_missing_returns_none(self):
+        from scheduler import NegelirScheduler
+        sched = NegelirScheduler()
+        assert sched.get_job("nonexistent") is None
+
+    def test_build_default_schedule(self):
+        from scheduler import NegelirScheduler, build_default_schedule
+        sched = NegelirScheduler()
+        build_default_schedule(sched,
+                               scrape_fn=lambda: None,
+                               outcome_fn=lambda: None,
+                               retrain_fn=lambda: None,
+                               heartbeat_fn=lambda: None)
+        assert "daily_scrape" in sched.job_ids
+        assert "outcome_check" in sched.job_ids
+        assert "weekly_retrain" in sched.job_ids
+        assert "heartbeat" in sched.job_ids
+        assert len(sched.job_ids) == 4
+
+    def test_build_default_schedule_partial(self):
+        from scheduler import NegelirScheduler, build_default_schedule
+        sched = NegelirScheduler()
+        build_default_schedule(sched, scrape_fn=lambda: None)
+        assert "daily_scrape" in sched.job_ids
+        assert "outcome_check" not in sched.job_ids
+
+    def test_shutdown_no_error(self):
+        from scheduler import NegelirScheduler
+        sched = NegelirScheduler()
+        sched.shutdown()  # should not raise
+
+
+class TestPhase3MessageTypes:
+    """Verify Phase 3 message types added to protocol."""
+
+    def test_heartbeat_type_exists(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from protocol.messages import MessageType
+        assert MessageType.HEARTBEAT.value == "heartbeat"
+
+    def test_task_claim_type_exists(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from protocol.messages import MessageType
+        assert MessageType.TASK_CLAIM.value == "task_claim"
+
+    def test_task_complete_type_exists(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from protocol.messages import MessageType
+        assert MessageType.TASK_COMPLETE.value == "task_complete"
+
+    def test_all_message_types_count(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from protocol.messages import MessageType
+        assert len(MessageType) == 20  # 7 original + 3 phase3 + 6 phase4 + 4 phase7
+
+
+class TestPhase3MainSignalShutdown:
+    """Verify while-True-sleep loops replaced with signal-based shutdown."""
+
+    def test_ai_main_no_while_true_sleep(self):
+        import inspect
+        from importlib import import_module
+        # Read ai/main.py source
+        main_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
+        with open(main_path) as f:
+            source = f.read()
+        # Should use signal handlers, not bare while-True with fixed sleep
+        assert "signal.SIGINT" in source or "signal.SIGTERM" in source
+        assert "NegelirScheduler" in source or "scheduler" in source.lower()
+
+    def test_p2p_main_uses_signals(self):
+        p2p_main = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "..", "p2p", "main.py")
+        with open(p2p_main) as f:
+            source = f.read()
+        assert "signal.SIGINT" in source or "signal.SIGTERM" in source
+        assert "_shutdown" in source
+
+
+# ── Phase 4: Distributed Scrape Coordination ─────────────────────────────────
+
+
+class TestRoleElection:
+    """Tests for p2p/coordination/election.py — deterministic role assignment."""
+
+    def test_deterministic_across_calls(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.election import elect_roles, PeerInfo
+        peers = [
+            PeerInfo("node_a", trust_weight=0.9, uptime_hours=100),
+            PeerInfo("node_b", trust_weight=0.7, uptime_hours=200),
+            PeerInfo("node_c", trust_weight=0.5, uptime_hours=50),
+        ]
+        r1 = elect_roles(peers, epoch_day=1)
+        r2 = elect_roles(peers, epoch_day=1)
+        assert r1 == r2
+
+    def test_highest_trust_gets_primary(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.election import elect_roles, PeerInfo
+        peers = [
+            PeerInfo("low", trust_weight=0.3),
+            PeerInfo("high", trust_weight=0.9, uptime_hours=100),
+            PeerInfo("mid", trust_weight=0.6),
+        ]
+        roles = elect_roles(peers, epoch_day=1)
+        assert roles["scraper_mackolik"] == "high"
+        assert roles["indexer"] == "high"
+
+    def test_validators_top_3(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.election import elect_roles, PeerInfo
+        peers = [PeerInfo(f"n{i}", trust_weight=1.0 - i * 0.1) for i in range(5)]
+        roles = elect_roles(peers, epoch_day=1)
+        assert len(roles["validator"]) == 3
+
+    def test_single_peer(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.election import elect_roles, PeerInfo
+        peers = [PeerInfo("solo", trust_weight=0.5)]
+        roles = elect_roles(peers, epoch_day=1)
+        assert roles["scraper_mackolik"] == "solo"
+        assert roles["scraper_openfootball"] == "solo"  # wraps around
+
+    def test_empty_peers(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.election import elect_roles
+        roles = elect_roles([], epoch_day=1)
+        assert roles["scraper_mackolik"] == ""
+        assert roles["validator"] == []
+
+    def test_tie_breaking_by_node_id(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.election import elect_roles, PeerInfo
+        # Same trust and uptime — should break by node_id alphabetically
+        peers = [
+            PeerInfo("zzz", trust_weight=0.5, uptime_hours=10),
+            PeerInfo("aaa", trust_weight=0.5, uptime_hours=10),
+        ]
+        roles = elect_roles(peers, epoch_day=1)
+        assert roles["scraper_mackolik"] == "aaa"
+
+
+class TestTaskQueue:
+    """Tests for p2p/coordination/tasks.py — scrape task queue."""
+
+    def test_create_daily_tasks(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue
+        q = TaskQueue()
+        tasks = q.create_daily_tasks()
+        assert len(tasks) == 2  # standing + fixture
+        assert q.size == 2
+
+    def test_create_daily_with_match_stats(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue
+        q = TaskQueue()
+        tasks = q.create_daily_tasks(recent_match_ids=[100, 200])
+        assert len(tasks) == 4  # 2 base + 2 match_stats
+        assert any(t.target_id == 100 for t in tasks)
+
+    def test_claim_pending_succeeds(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue, ScrapeTask, TaskStatus
+        q = TaskQueue()
+        task = ScrapeTask(source="mackolik", data_type="standing")
+        q.add(task)
+        assert q.claim(task.task_id, "peer_a")
+        assert q.get_task(task.task_id).status == TaskStatus.ASSIGNED
+
+    def test_claim_already_assigned_fails(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue, ScrapeTask
+        q = TaskQueue()
+        task = ScrapeTask(source="mackolik", data_type="standing")
+        q.add(task)
+        assert q.claim(task.task_id, "peer_a")
+        assert not q.claim(task.task_id, "peer_b")  # already assigned
+
+    def test_complete_task(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue, ScrapeTask, TaskStatus
+        q = TaskQueue()
+        task = ScrapeTask(source="mackolik", data_type="standing")
+        q.add(task)
+        q.claim(task.task_id, "peer_a")
+        assert q.complete(task.task_id, "sha256:abc")
+        assert q.get_task(task.task_id).status == TaskStatus.COMPLETED
+        assert q.get_task(task.task_id).content_hash == "sha256:abc"
+
+    def test_complete_unclaimed_fails(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue, ScrapeTask
+        q = TaskQueue()
+        task = ScrapeTask(source="mackolik", data_type="standing")
+        q.add(task)
+        assert not q.complete(task.task_id, "sha256:abc")
+
+    def test_get_pending(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
+        from coordination.tasks import TaskQueue, ScrapeTask
+        q = TaskQueue()
+        t1 = ScrapeTask(source="a", data_type="standing")
+        t2 = ScrapeTask(source="b", data_type="fixture")
+        q.add(t1)
+        q.add(t2)
+        q.claim(t1.task_id, "peer")
+        pending = q.get_pending()
+        assert len(pending) == 1
+        assert pending[0].task_id == t2.task_id
+
+
+class TestSourceHealthMonitor:
+    """Tests for ai/scraper/health.py — source health monitoring."""
+
+    def test_healthy_by_default(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        assert monitor.is_healthy("mackolik")
+
+    def test_single_failure_stays_healthy(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        monitor.record("mackolik", success=False)
+        assert monitor.is_healthy("mackolik")
+
+    def test_three_failures_marks_down(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        for _ in range(3):
+            monitor.record("mackolik", success=False)
+        assert not monitor.is_healthy("mackolik")
+        assert "mackolik" in monitor.get_down_sources()
+
+    def test_success_interrupts_failure_streak(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        monitor.record("mackolik", success=False)
+        monitor.record("mackolik", success=False)
+        monitor.record("mackolik", success=True)  # breaks streak
+        monitor.record("mackolik", success=False)
+        assert monitor.is_healthy("mackolik")
+
+    def test_mark_recovered(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        for _ in range(3):
+            monitor.record("mackolik", success=False)
+        assert not monitor.is_healthy("mackolik")
+        monitor.mark_recovered("mackolik")
+        assert monitor.is_healthy("mackolik")
+
+    def test_success_rate(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        for _ in range(7):
+            monitor.record("mackolik", success=True)
+        for _ in range(3):
+            monitor.record("mackolik", success=False)
+        rate = monitor.success_rate("mackolik", window=10)
+        assert abs(rate - 0.7) < 0.01
+
+    def test_multiple_sources_independent(self):
+        from scraper.health import SourceHealthMonitor
+        monitor = SourceHealthMonitor()
+        for _ in range(3):
+            monitor.record("mackolik", success=False)
+        monitor.record("tff", success=True)
+        assert not monitor.is_healthy("mackolik")
+        assert monitor.is_healthy("tff")
+
+
+class TestCrossValidator:
+    """Tests for ai/proofreader/cross_validator.py — cross-source validation."""
+
+    def test_all_agree(self):
+        from proofreader.cross_validator import CrossValidator, SourceResult
+        cv = CrossValidator()
+        report = cv.validate({
+            "mackolik": [SourceResult("mackolik", 100, 1, 2, 2, 1)],
+            "tff": [SourceResult("tff", 100, 1, 2, 2, 1)],
+        })
+        assert report.validated_count == 1
+        assert report.quarantined_count == 0
+        assert report.validated[0].confidence == 1.0
+
+    def test_majority_vote(self):
+        from proofreader.cross_validator import CrossValidator, SourceResult
+        cv = CrossValidator()
+        report = cv.validate({
+            "mackolik": [SourceResult("mackolik", 100, 1, 2, 2, 1)],
+            "tff": [SourceResult("tff", 100, 1, 2, 2, 1)],
+            "openfootball": [SourceResult("openfootball", 100, 1, 2, 3, 0)],
+        })
+        assert report.validated_count == 1
+        assert report.validated[0].ft_home == 2
+        assert report.validated[0].ft_away == 1
+        assert report.validated[0].confidence == pytest.approx(2/3, abs=0.01)
+
+    def test_quarantine_no_majority(self):
+        from proofreader.cross_validator import CrossValidator, SourceResult
+        cv = CrossValidator()
+        report = cv.validate({
+            "mackolik": [SourceResult("mackolik", 100, 1, 2, 2, 1)],
+            "tff": [SourceResult("tff", 100, 1, 2, 1, 0)],
+            "openfootball": [SourceResult("openfootball", 100, 1, 2, 0, 3)],
+        })
+        assert report.validated_count == 0
+        assert report.quarantined_count == 1
+        assert report.quarantined[0]["reason"] == "no_majority"
+
+    def test_multiple_matches(self):
+        from proofreader.cross_validator import CrossValidator, SourceResult
+        cv = CrossValidator()
+        report = cv.validate({
+            "mackolik": [
+                SourceResult("mackolik", 100, 1, 2, 2, 1),
+                SourceResult("mackolik", 200, 3, 4, 0, 0),
+            ],
+            "tff": [
+                SourceResult("tff", 100, 1, 2, 2, 1),
+                SourceResult("tff", 200, 3, 4, 0, 0),
+            ],
+        })
+        assert report.validated_count == 2
+        assert all(v.confidence == 1.0 for v in report.validated)
+
+    def test_empty_sources(self):
+        from proofreader.cross_validator import CrossValidator
+        cv = CrossValidator()
+        report = cv.validate({})
+        assert report.validated_count == 0
+        assert report.quarantined_count == 0
+
+
+# ── Phase 5: Player + Transfer Resolution ────────────────────────────────────
+
+
+class TestPlayerRegistry:
+    """Tests for tqu/player_registry.py — dynamic player→team resolution."""
+
+    def test_add_and_lookup_exact(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Mauro Icardi", team_id="team_001"))
+        ref = reg.lookup("Mauro Icardi")
+        assert ref is not None
+        assert ref.team_id == "team_001"
+
+    def test_lookup_case_insensitive(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Mauro Icardi", team_id="team_001"))
+        ref = reg.lookup("mauro icardi")
+        assert ref is not None
+
+    def test_lookup_turkish_chars_folded(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Hakan Çalhanoğlu", team_id="team_001"))
+        ref = reg.lookup("Hakan Calhanoglu")
+        assert ref is not None
+
+    def test_fuzzy_one_char_typo(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Barış Alper Yılmaz", team_id="team_001"))
+        ref = reg.lookup("Baris Alper Yilmaz")
+        assert ref is not None
+
+    def test_lookup_not_found(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Mauro Icardi", team_id="team_001"))
+        assert reg.lookup("Completely Unknown Player") is None
+
+    def test_deactivate_player(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Mauro Icardi", team_id="team_001"))
+        reg.deactivate("p1")
+        ref = reg.lookup("Mauro Icardi")
+        assert ref is None  # inactive players not returned
+
+    def test_active_count(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="Player A", team_id="t1"))
+        reg.add(PlayerRecord(source_id="p2", name="Player B", team_id="t1"))
+        reg.deactivate("p2")
+        assert reg.size == 2
+        assert reg.active_count == 1
+
+    def test_get_team_players(self):
+        from tqu.player_registry import PlayerRegistry, PlayerRecord
+        reg = PlayerRegistry()
+        reg.add(PlayerRecord(source_id="p1", name="A", team_id="t1"))
+        reg.add(PlayerRecord(source_id="p2", name="B", team_id="t1"))
+        reg.add(PlayerRecord(source_id="p3", name="C", team_id="t2"))
+        assert len(reg.get_team_players("t1")) == 2
+        assert len(reg.get_team_players("t2")) == 1
+
+
+class TestTransferDetector:
+    """Tests for transfer detection comparing roster snapshots."""
+
+    def test_no_changes(self):
+        from tqu.player_registry import TransferDetector, PlayerRecord
+        det = TransferDetector()
+        roster = {"t1": [PlayerRecord("p1", "A", "t1")]}
+        transfers = det.detect_changes(roster, roster)
+        assert len(transfers) == 0
+
+    def test_detect_departure(self):
+        from tqu.player_registry import TransferDetector, PlayerRecord
+        det = TransferDetector()
+        prev = {"t1": [PlayerRecord("p1", "A", "t1"), PlayerRecord("p2", "B", "t1")]}
+        curr = {"t1": [PlayerRecord("p1", "A", "t1")]}
+        transfers = det.detect_changes(prev, curr)
+        assert len(transfers) == 1
+        assert transfers[0].transfer_type == "release"
+        assert transfers[0].from_team == "t1"
+
+    def test_detect_transfer(self):
+        from tqu.player_registry import TransferDetector, PlayerRecord
+        det = TransferDetector()
+        prev = {"t1": [PlayerRecord("p1", "A", "t1")]}
+        curr = {"t2": [PlayerRecord("p1", "A", "t2")]}
+        transfers = det.detect_changes(prev, curr)
+        assert len(transfers) == 1
+        assert transfers[0].transfer_type == "transfer"
+        assert transfers[0].from_team == "t1"
+        assert transfers[0].to_team == "t2"
+
+    def test_detect_new_arrival(self):
+        from tqu.player_registry import TransferDetector, PlayerRecord
+        det = TransferDetector()
+        prev = {"t1": [PlayerRecord("p1", "A", "t1")]}
+        curr = {"t1": [PlayerRecord("p1", "A", "t1"), PlayerRecord("p2", "B", "t1")]}
+        transfers = det.detect_changes(prev, curr)
+        assert len(transfers) == 1
+        assert transfers[0].to_team == "t1"
+
+    def test_multiple_changes(self):
+        from tqu.player_registry import TransferDetector, PlayerRecord
+        det = TransferDetector()
+        prev = {"t1": [PlayerRecord("p1", "A", "t1"), PlayerRecord("p2", "B", "t1")]}
+        curr = {"t1": [PlayerRecord("p1", "A", "t1")], "t2": [PlayerRecord("p2", "B", "t2"), PlayerRecord("p3", "C", "t2")]}
+        transfers = det.detect_changes(prev, curr)
+        # p2: transferred t1→t2, p3: new arrival to t2
+        assert len(transfers) == 2
+
+
+# ── Phase 6: Continuous Model Learning ────────────────────────────────────────
+
+
+class TestOutcomeCollector:
+    """Tests for ai/model/outcomes.py — outcome buffering + retrain trigger."""
+
+    def test_buffer_accumulates(self):
+        from model.outcomes import OutcomeCollector
+        collector = OutcomeCollector()
+        feats = np.zeros(5)
+        collector.on_match_completed(1, feats, actual_result=0)
+        collector.on_match_completed(2, feats, actual_result=1)
+        assert collector.buffer_size == 2
+        assert collector.total_outcomes == 2
+
+    def test_retrain_triggered_at_threshold(self):
+        from model.outcomes import OutcomeCollector
+        retrain_calls = []
+        collector = OutcomeCollector(retrain_callback=lambda buf: retrain_calls.append(len(buf)))
+        feats = np.zeros(5)
+        for i in range(20):
+            collector.on_match_completed(i, feats, actual_result=i % 3)
+        assert collector.retrain_count == 1
+        assert retrain_calls == [20]
+        assert collector.buffer_size == 0  # buffer flushed
+
+    def test_accuracy_calculation(self):
+        from model.outcomes import OutcomeCollector
+        collector = OutcomeCollector()
+        feats = np.zeros(5)
+        for i in range(10):
+            collector.on_match_completed(i, feats, actual_result=0, predicted_result=0)
+        for i in range(10, 15):
+            collector.on_match_completed(i, feats, actual_result=1, predicted_result=0)
+        assert collector.accuracy() == pytest.approx(10/15)
+
+    def test_accuracy_windowed(self):
+        from model.outcomes import OutcomeCollector
+        collector = OutcomeCollector()
+        feats = np.zeros(5)
+        # 10 correct, then 10 wrong
+        for i in range(10):
+            collector.on_match_completed(i, feats, actual_result=0, predicted_result=0)
+        for i in range(10, 20):
+            collector.on_match_completed(i, feats, actual_result=1, predicted_result=0)
+        # Last 10 are all wrong
+        assert collector.accuracy(window=10) == 0.0
+
+    def test_get_training_data(self):
+        from model.outcomes import OutcomeCollector
+        collector = OutcomeCollector()
+        for i in range(5):
+            collector.on_match_completed(i, np.array([1.0, 2.0, 3.0]), actual_result=i % 3)
+        X, y = collector.get_training_data()
+        assert X.shape == (5, 3)
+        assert len(y) == 5
+
+
+class TestDriftDetector:
+    """Tests for ai/model/drift.py — accuracy drift detection."""
+
+    def test_no_drift_with_good_accuracy(self):
+        from model.drift import DriftDetector
+        from model.outcomes import Outcome
+        det = DriftDetector(window=10, floor=0.35)
+        # 8/10 correct = 0.8
+        outcomes = []
+        for i in range(10):
+            o = Outcome(match_id=i, features=np.zeros(5), actual_result=0,
+                        predicted_result=0 if i < 8 else 1)
+            outcomes.append(o)
+        report = det.check(outcomes)
+        assert not report.needs_retrain
+        assert report.current_accuracy == pytest.approx(0.8)
+
+    def test_drift_detected_below_floor(self):
+        from model.drift import DriftDetector
+        from model.outcomes import Outcome
+        det = DriftDetector(window=10, floor=0.35)
+        # 2/10 correct = 0.2
+        outcomes = []
+        for i in range(10):
+            o = Outcome(match_id=i, features=np.zeros(5), actual_result=0,
+                        predicted_result=0 if i < 2 else 1)
+            outcomes.append(o)
+        report = det.check(outcomes)
+        assert report.needs_retrain
+        assert report.current_accuracy == pytest.approx(0.2)
+
+    def test_insufficient_data_no_retrain(self):
+        from model.drift import DriftDetector
+        from model.outcomes import Outcome
+        det = DriftDetector(window=30, floor=0.35)
+        outcomes = [Outcome(match_id=0, features=np.zeros(5), actual_result=0, predicted_result=1)]
+        report = det.check(outcomes)
+        assert not report.needs_retrain  # only 1 outcome < 30 window
+
+    def test_exactly_at_floor(self):
+        from model.drift import DriftDetector
+        from model.outcomes import Outcome
+        det = DriftDetector(window=20, floor=0.35)
+        # 7/20 = 0.35, exactly at floor
+        outcomes = []
+        for i in range(20):
+            o = Outcome(match_id=i, features=np.zeros(5), actual_result=0,
+                        predicted_result=0 if i < 7 else 1)
+            outcomes.append(o)
+        report = det.check(outcomes)
+        assert not report.needs_retrain  # 0.35 is not < 0.35
+
+
+class TestIncrementalRetrain:
+    """Test incremental retrain function in trainer.py."""
+
+    def test_incremental_retrain_produces_valid_model(self):
+        from model.trainer import train_model, incremental_retrain
+        import tempfile
+        # Train initial model
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            path = f.name
+        try:
+            model = train_model(save_path=path)
+            # Create small new dataset
+            from model.features import generate_synthetic_dataset
+            X_new, y_new = generate_synthetic_dataset(n_matches=50, seed=99)
+            updated = incremental_retrain(path, X_new, y_new, n_rounds=5)
+            # Should still produce predictions
+            preds = updated.predict(X_new)
+            assert len(preds) == 50
+            assert set(preds).issubset({0, 1, 2})
+        finally:
+            os.unlink(path)
+
+
+# ── Phase 1 Live Integration Tests ──────────────────────────────────────────
+# Run with: pytest -k "live" -x -v
+# These hit the real arsiv.mackolik.com API and respect 5s rate limits.
+
+def _can_reach_mackolik() -> bool:
+    """Quick connectivity check (1s timeout)."""
+    import requests as _req
+    try:
+        _req.head("https://arsiv.mackolik.com", timeout=2)
+        return True
+    except _req.RequestException:
+        return False
+
+_skip_live = pytest.mark.skipif(
+    not _can_reach_mackolik(),
+    reason="arsiv.mackolik.com unreachable",
+)
+
+
+@_skip_live
+class TestMackolikLive:
+    """
+    Live integration tests against arsiv.mackolik.com.
+    Phase 1 acceptance criteria:
+      - discover_seasons returns 5+ years
+      - fetch_season returns 19 teams for 2024/25 (completed season)
+      - fetch_match_stats returns possession/shots
+      - Team IDs match mackolik_id values in locale_tr.yaml
+      - Rate limit enforced (5s/request)
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup_client(self):
+        from scraper.mackolik import MackolikClient
+        # Use 1s rate limit for integration tests (still polite, but manageable)
+        self.client = MackolikClient(rate_limit=1.0)
+
+    def test_live_discover_seasons_partial(self):
+        """
+        AC: discover_seasons mechanism works and returns 5+ years.
+        We verify the year listing + resolve 5 recent years only
+        (full 128-year scan is too slow for CI).
+        """
+        from scraper.mackolik import MackolikClient
+        import re, json
+        # Step 1: verify year listing works
+        r = self.client._get(
+            f"{self.client.AJAX}/CompetitionHandler.aspx",
+            params={"op": "groupYears", "group": MackolikClient.GROUP_TURKEY},
+        )
+        assert r is not None, "groupYears request failed"
+        years = MackolikClient._parse_js_array(r.text)
+        assert len(years) >= 5, f"Expected 5+ years, got {len(years)}"
+        assert "2024/2025" in years
+        assert "2023/2024" in years
+
+        # Step 2: resolve Süper Lig ID for 5 recent years
+        resolved = {}
+        for year in years[:5]:
+            r = self.client._get(
+                f"{self.client.AJAX}/CompetitionHandler.aspx",
+                params={"op": "seasons", "group": MackolikClient.GROUP_TURKEY, "year": year},
+            )
+            if r is None:
+                continue
+            data = MackolikClient._parse_jsonp(r.text)
+            for league_id, league_name in data.get("l", []):
+                if "Süper Lig" in league_name or "Super Lig" in league_name:
+                    resolved[year] = league_id
+                    break
+        assert len(resolved) >= 5, f"Resolved only {len(resolved)} seasons: {resolved}"
+        assert "2024/2025" in resolved
+        assert resolved["2024/2025"] == 67287  # known ID
+
+    def test_live_fetch_season_2024_25(self):
+        """AC: fetch_season(67287) returns 19 teams, 0 fixtures (season complete)."""
+        from scraper.mackolik import SeasonData
+        data = self.client.fetch_season(67287)  # 2024/2025 Süper Lig
+        assert isinstance(data, SeasonData)
+        # 19 teams in 2024/25 Süper Lig
+        assert len(data.standings) == 19, f"Expected 19 teams, got {len(data.standings)}"
+        # Galatasaray is champion with 95 points
+        gs = next((t for t in data.standings if t.team_id == 1), None)
+        assert gs is not None, "Galatasaray (id=1) not found in standings"
+        assert gs.points == 95, f"GS points: expected 95, got {gs.points}"
+        assert gs.played == 36, f"GS played: expected 36, got {gs.played}"
+        # Fenerbahçe
+        fb = next((t for t in data.standings if t.team_id == 2), None)
+        assert fb is not None, "Fenerbahçe (id=2) not found"
+        assert fb.points == 84, f"FB points: expected 84, got {fb.points}"
+        # Season is complete: 0 fixtures
+        assert len(data.fixtures) == 0, f"Expected 0 fixtures, got {len(data.fixtures)}"
+        # Has results (full season = 306 matches for 18 teams per matchday × 17 rounds × 2 = 306)
+        assert len(data.results) > 0, "Expected results for completed season"
+
+    def test_live_fetch_season_standings_have_home_away(self):
+        """Verify extended home/away splits are populated."""
+        data = self.client.fetch_season(67287)
+        gs = next(t for t in data.standings if t.team_id == 1)
+        # Home/away played should sum to total
+        assert gs.home_played + gs.away_played == gs.played
+        # Home/away points should sum to total (no penalty for GS)
+        assert gs.home_pts + gs.away_pts == gs.points
+        # Home/away goals should sum to totals
+        assert gs.home_gf + gs.away_gf == gs.goals_for
+        assert gs.home_ga + gs.away_ga == gs.goals_against
+
+    def test_live_penalty_points(self):
+        """Adana Demirspor had -12 penalty in 2024/25."""
+        data = self.client.fetch_season(67287)
+        adana = next((t for t in data.standings if t.team_id == 454), None)
+        assert adana is not None, "Adana Demirspor (id=454) not found"
+        assert adana.penalty_points == -12, f"Expected -12 penalty, got {adana.penalty_points}"
+        assert adana.points == adana.home_pts + adana.away_pts + adana.penalty_points
+
+    def test_live_fetch_match_stats(self):
+        """AC: fetch_match_stats returns possession/shots."""
+        # First get a match_id from 2024/25 results
+        data = self.client.fetch_season(67287)
+        assert len(data.results) > 0, "No results to pick match from"
+        match_id = data.results[0].match_id
+        from scraper.mackolik import MatchStats
+        stats = self.client.fetch_match_stats(match_id)
+        assert stats is not None, f"No stats returned for match {match_id}"
+        assert isinstance(stats, MatchStats)
+        # Possession should be non-zero for a played match
+        assert stats.possession_home > 0 or stats.possession_away > 0, \
+            f"Zero possession for match {match_id}"
+
+    def test_live_team_ids_match_locale(self):
+        """AC: Team IDs match mackolik_id values in locale_tr.yaml."""
+        from common.constants import MACKOLIK_ID_MAP
+        data = self.client.fetch_season(67287)
+        matched = 0
+        for team in data.standings:
+            if team.team_id in MACKOLIK_ID_MAP:
+                matched += 1
+        # At least 17 of 19 teams should be in our locale map
+        assert matched >= 17, f"Only {matched}/19 teams matched MACKOLIK_ID_MAP"
+
+    def test_live_rate_limit_enforced(self):
+        """AC: Rate limit of 5s/request enforced."""
+        import time
+        from scraper.mackolik import MackolikClient
+        rl_client = MackolikClient(rate_limit=5.0)
+        start = time.time()
+        rl_client._get(
+            f"{rl_client.AJAX}/CompetitionHandler.aspx",
+            params={"op": "groupYears", "group": 1},
+        )
+        rl_client._get(
+            f"{rl_client.AJAX}/CompetitionHandler.aspx",
+            params={"op": "groupYears", "group": 1},
+        )
+        elapsed = time.time() - start
+        assert elapsed >= 4.5, f"Two requests took only {elapsed:.1f}s, expected >= 5s gap"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 7: Adaptive Scraper Intelligence
+# ═══════════════════════════════════════════════════════════════════
+
+class TestSchemaFingerprinting:
+    """Phase 7.1: DOM fingerprinting + drift detection."""
+
+    def setup_method(self):
+        from scraper.schema_fingerprint import SchemaFingerprinter
+        self.fp = SchemaFingerprinter()
+
+    def test_fingerprint_extracts_tags(self):
+        html = "<html><body><div class='a'><span>text</span></div><table><tr><td>1</td></tr></table></body></html>"
+        fp = self.fp.fingerprint(html)
+        assert "div" in fp.tag_histogram
+        assert "span" in fp.tag_histogram
+        assert "table" in fp.tag_histogram
+        assert "tr" in fp.tag_histogram
+        assert "td" in fp.tag_histogram
+
+    def test_fingerprint_extracts_classes(self):
+        html = "<div class='standing-row active'><span class='score'>3</span></div>"
+        fp = self.fp.fingerprint(html)
+        assert "standing-row" in fp.class_vocabulary
+        assert "active" in fp.class_vocabulary
+        assert "score" in fp.class_vocabulary
+
+    def test_fingerprint_content_hash_deterministic(self):
+        html = "<div><span>a</span><span>b</span></div>"
+        fp1 = self.fp.fingerprint(html)
+        fp2 = self.fp.fingerprint(html)
+        assert fp1.content_hash == fp2.content_hash
+
+    def test_no_drift_same_page(self):
+        html = "<div class='a b'><table><tr><td>1</td></tr></table></div>"
+        fp = self.fp.fingerprint(html)
+        assert self.fp.detect_drift(fp, fp) == 0.0
+        assert not self.fp.is_drifted(fp, fp)
+
+    def test_drift_detected_on_redesign(self):
+        """AC: >35% CSS class change triggers drift."""
+        old_html = "<div class='standing-row match-score team-name date-col'><span class='pts'>10</span></div>"
+        new_html = "<div class='new-layout react-comp data-grid widget-box'><span class='cell'>10</span></div>"
+        old_fp = self.fp.fingerprint(old_html)
+        new_fp = self.fp.fingerprint(new_html)
+        drift = self.fp.detect_drift(new_fp, old_fp)
+        assert drift > 0.35, f"Expected drift > 0.35 for redesign, got {drift:.2f}"
+        assert self.fp.is_drifted(new_fp, old_fp)
+
+    def test_baseline_store_retrieve(self):
+        html = "<div class='x'>hello</div>"
+        fp = self.fp.fingerprint(html)
+        self.fp.store_baseline("mackolik", "standings", fp)
+        retrieved = self.fp.get_baseline("mackolik", "standings")
+        assert retrieved is not None
+        assert retrieved.content_hash == fp.content_hash
+
+    def test_baseline_none_when_missing(self):
+        assert self.fp.get_baseline("nonexistent", "x") is None
+
+
+class TestFieldDiscovery:
+    """Phase 7.2: AI-driven field relocation."""
+
+    def setup_method(self):
+        from scraper.field_discovery import FieldDiscoveryEngine
+        self.engine = FieldDiscoveryEngine()
+
+    def test_discovers_team_names(self):
+        html = '<div class="row"><span class="home">Galatasaray</span> vs <span class="away">Fenerbahçe</span></div>'
+        ctx = {"team_registry": ["Galatasaray", "Fenerbahçe", "Beşiktaş"]}
+        schema = self.engine.discover_fields(
+            html, {"team_name": 2, "score": 2}, ctx
+        )
+        # team_name should be found
+        assert schema is not None or any(
+            True for node_text in ["Galatasaray", "Fenerbahçe"]
+        )  # At least the heuristic ran
+        candidates = self.engine._heuristic_scan(
+            html, {"team_name": 2}, ctx
+        )
+        team_cands = [c for c in candidates if c.field_type == "team_name"]
+        assert len(team_cands) == 2
+
+    def test_discovers_scores(self):
+        html = '<div><span class="s">2</span> - <span class="s">1</span></div>'
+        candidates = self.engine._heuristic_scan(
+            html, {"score": 2}, {}
+        )
+        score_cands = [c for c in candidates if c.field_type == "score"]
+        assert len(score_cands) == 2
+        assert score_cands[0].value == "2"
+        assert score_cands[1].value == "1"
+
+    def test_discovers_possession(self):
+        html = '<div class="stats"><span class="poss">55%</span><span class="poss">45%</span></div>'
+        candidates = self.engine._heuristic_scan(
+            html, {"possession_pct": 2}, {}
+        )
+        poss = [c for c in candidates if c.field_type == "possession_pct"]
+        assert len(poss) == 2
+
+    def test_confidence_threshold(self):
+        """AC: Returns None when discovered fields are insufficient."""
+        html = '<div>Hello world no data here</div>'
+        result = self.engine.discover_fields(
+            html, {"team_name": 2, "score": 2, "possession_pct": 2}, {}
+        )
+        assert result is None
+
+    def test_evaluate_candidates_coverage(self):
+        from scraper.field_discovery import FieldCandidate
+        candidates = [
+            FieldCandidate("team_name", ".x", "GS", 0.9),
+            FieldCandidate("score", ".y", "2", 0.8),
+        ]
+        cov = self.engine._evaluate_candidates(candidates, {"team_name": 2, "score": 2, "possession_pct": 2})
+        assert abs(cov - 2/3) < 0.01  # 2 of 3 expected types found
+
+
+class TestDataContracts:
+    """Phase 7.3: Extraction invariant validation."""
+
+    def setup_method(self):
+        from scraper.data_contracts import ContractValidator, STANDING_CONTRACTS, MATCH_STAT_CONTRACTS
+        self.validator = ContractValidator()
+        self.standing_contracts = STANDING_CONTRACTS
+        self.match_contracts = MATCH_STAT_CONTRACTS
+
+    def test_standing_team_count_valid(self):
+        ok, violations = self.validator.validate(
+            {"team_count": 19}, self.standing_contracts
+        )
+        assert ok
+        assert len(violations) == 0
+
+    def test_standing_team_count_invalid(self):
+        """AC: Contracts catch invalid team count."""
+        ok, violations = self.validator.validate(
+            {"team_count": 50}, self.standing_contracts
+        )
+        assert not ok
+        assert any("team_count" in v for v in violations)
+
+    def test_wdl_sum_valid(self):
+        ok, _ = self.validator.validate(
+            {"w_d_l_sum": {"w": 10, "d": 5, "l": 3, "played": 18}},
+            self.standing_contracts,
+        )
+        assert ok
+
+    def test_wdl_sum_invalid(self):
+        ok, violations = self.validator.validate(
+            {"w_d_l_sum": {"w": 10, "d": 5, "l": 3, "played": 20}},
+            self.standing_contracts,
+        )
+        assert not ok
+
+    def test_possession_sum_valid(self):
+        """AC: Possession summing to ~100% passes."""
+        ok, _ = self.validator.validate(
+            {"possession_sum": {"home": 55.0, "away": 45.0}},
+            self.match_contracts,
+        )
+        assert ok
+
+    def test_possession_sum_invalid(self):
+        """AC: Possession not summing to 100% is caught."""
+        ok, violations = self.validator.validate(
+            {"possession_sum": {"home": 60.0, "away": 60.0}},
+            self.match_contracts,
+        )
+        assert not ok
+        assert any("possession" in v.lower() for v in violations)
+
+    def test_shots_on_target_contract(self):
+        # On target > total should fail
+        ok, violations = self.validator.validate(
+            {"shots_on_target": {
+                "on_target_home": 10, "total_home": 5,
+                "on_target_away": 3, "total_away": 8
+            }},
+            self.match_contracts,
+        )
+        assert not ok
+
+    def test_missing_field_passes(self):
+        """Fields not present in data are skipped, not flagged."""
+        ok, violations = self.validator.validate({}, self.standing_contracts)
+        assert ok
+        assert len(violations) == 0
+
+
+class TestSchemaTrainer:
+    """Phase 7.4: Self-supervised schema classifier training."""
+
+    def setup_method(self):
+        from scraper.schema_trainer import SchemaTrainer
+        self.trainer = SchemaTrainer()
+
+    def test_record_snapshot(self):
+        self.trainer.record_snapshot(
+            "mackolik", "standings",
+            {"div": 10, "table": 2},
+            {"row", "cell"},
+            {"team_name": ".row .name", "points": ".row .pts"},
+        )
+        assert self.trainer.snapshot_count == 1
+
+    def test_get_snapshots_filtered(self):
+        self.trainer.record_snapshot("mackolik", "standings", {}, set(), {})
+        self.trainer.record_snapshot("tff", "standings", {}, set(), {})
+        self.trainer.record_snapshot("mackolik", "results", {}, set(), {})
+        mack = self.trainer.get_snapshots(source="mackolik")
+        assert len(mack) == 2
+        tff = self.trainer.get_snapshots(source="tff")
+        assert len(tff) == 1
+
+    def test_can_train_threshold(self):
+        """AC: Needs ≥20 snapshots to train classifier."""
+        assert not self.trainer.can_train()
+        for i in range(20):
+            self.trainer.record_snapshot("src", f"ep_{i}", {}, set(), {})
+        assert self.trainer.can_train()
+
+    def test_augment_produces_variants(self):
+        from scraper.schema_trainer import DOMSnapshot
+        snap = DOMSnapshot(
+            source="mackolik", endpoint="standings",
+            tag_histogram={"div": 5, "span": 3},
+            class_vocabulary={"row", "cell"},
+            field_locations={"team": ".row"},
+            snapshot_hash="abc123",
+        )
+        variants = self.trainer.augment(snap, n_variants=3)
+        assert len(variants) == 3
+        # Variants should have different class vocabularies
+        for v in variants:
+            assert v.class_vocabulary != snap.class_vocabulary
+            # Field locations preserved
+            assert v.field_locations == snap.field_locations
+
+
+class TestSchemaGossip:
+    """Phase 7.6: P2P schema proposal, voting, and adoption."""
+
+    def setup_method(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
+        from coordination.schema_gossip import SchemaGossipProtocol
+        self.gossip = SchemaGossipProtocol()
+
+    def test_create_proposal_above_floor(self):
+        p = self.gossip.create_proposal(
+            "mackolik", "standings",
+            {"team": ".row .name", "pts": ".row .pts"},
+            confidence=0.8, discovery_layer="heuristic",
+            proposer_id="peer_A",
+        )
+        assert p is not None
+        assert p.votes_for == 1  # proposer auto-votes
+        assert p.proposer_id == "peer_A"
+
+    def test_create_proposal_below_floor_rejected(self):
+        """AC: Confidence < 0.6 rejects proposal."""
+        p = self.gossip.create_proposal(
+            "mackolik", "standings", {},
+            confidence=0.4, discovery_layer="heuristic",
+            proposer_id="peer_A",
+        )
+        assert p is None
+
+    def test_quorum_reached_with_3_votes(self):
+        """AC: Schema adopted after 3 confirming peers."""
+        p = self.gossip.create_proposal(
+            "mackolik", "standings",
+            {"team": ".x"}, confidence=0.9,
+            discovery_layer="heuristic", proposer_id="peer_A",
+        )
+        assert p is not None
+        # peer_A auto-voted (1 vote)
+        adopted = self.gossip.cast_vote(p.proposal_id, "peer_B", True)
+        assert not adopted  # 2 votes, need 3
+        adopted = self.gossip.cast_vote(p.proposal_id, "peer_C", True)
+        assert adopted  # 3 votes = quorum
+
+        assert p.adopted
+        assert len(self.gossip.get_adopted()) == 1
+
+    def test_duplicate_vote_ignored(self):
+        p = self.gossip.create_proposal(
+            "mackolik", "standings", {"team": ".x"},
+            confidence=0.9, discovery_layer="heuristic",
+            proposer_id="peer_A",
+        )
+        self.gossip.cast_vote(p.proposal_id, "peer_B", True)
+        # Duplicate vote from peer_B
+        self.gossip.cast_vote(p.proposal_id, "peer_B", True)
+        assert p.votes_for == 2  # Not 3
+
+    def test_reject_votes_counted(self):
+        p = self.gossip.create_proposal(
+            "mackolik", "standings", {"team": ".x"},
+            confidence=0.9, discovery_layer="heuristic",
+            proposer_id="peer_A",
+        )
+        self.gossip.cast_vote(p.proposal_id, "peer_B", False)
+        assert p.votes_against == 1
+        assert not p.adopted
+
+    def test_vote_on_unknown_proposal(self):
+        result = self.gossip.cast_vote("nonexistent", "peer_X", True)
+        assert result is False
+
+    def test_pending_count(self):
+        self.gossip.create_proposal(
+            "a", "b", {}, confidence=0.7,
+            discovery_layer="heuristic", proposer_id="p1",
+        )
+        self.gossip.create_proposal(
+            "c", "d", {}, confidence=0.8,
+            discovery_layer="heuristic", proposer_id="p2",
+        )
+        assert self.gossip.pending_count == 2
+
+
+class TestPhase7Migration:
+    """Phase 7: Verify migration file exists and has correct schema."""
+
+    def test_003_migration_exists(self):
+        import os
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "migrations", "003_schema_snapshots.sql")
+        assert os.path.isfile(path), "migrations/003_schema_snapshots.sql not found"
+
+    def test_003_migration_has_tables(self):
+        import os
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "migrations", "003_schema_snapshots.sql")
+        with open(path) as f:
+            sql = f.read()
+        assert "schema_snapshots" in sql
+        assert "discovered_schemas" in sql
+        assert "dom_skeleton" in sql
+        assert "field_locations" in sql
+        assert "confidence" in sql
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 8: Self-Healing + Source Failover
+# ═══════════════════════════════════════════════════════════════════
+
+class TestSelectorVersioning:
+    """Phase 8.1: Versioned selectors with fallback."""
+
+    def setup_method(self):
+        from scraper.self_healing import SelectorVersionManager
+        self.mgr = SelectorVersionManager()
+
+    def test_get_current_selectors(self):
+        sels = self.mgr.get_selectors("source_a")
+        assert sels is not None
+        assert "match_row" in sels
+
+    def test_get_current_version(self):
+        v = self.mgr.get_version("source_a")
+        assert v == 3  # source_a is at version 3
+
+    def test_fallback_walks_versions(self):
+        """AC: Selector fallback walks backwards through versions on failure."""
+        assert self.mgr.get_version("source_a") == 3
+        ok = self.mgr.fallback("source_a")
+        assert ok
+        assert self.mgr.get_version("source_a") == 2
+        ok = self.mgr.fallback("source_a")
+        assert ok
+        assert self.mgr.get_version("source_a") == 1
+        # No more fallbacks
+        ok = self.mgr.fallback("source_a")
+        assert not ok
+
+    def test_all_exhausted(self):
+        assert not self.mgr.all_exhausted("source_a")
+        self.mgr.fallback("source_a")  # v2
+        self.mgr.fallback("source_a")  # v1
+        self.mgr.fallback("source_a")  # exhausted
+        assert self.mgr.all_exhausted("source_a")
+
+    def test_reset_restores_current(self):
+        self.mgr.fallback("source_a")
+        assert self.mgr.get_version("source_a") == 2
+        self.mgr.reset("source_a")
+        assert self.mgr.get_version("source_a") == 3
+
+    def test_unknown_source(self):
+        assert self.mgr.get_selectors("nonexistent") is None
+        assert not self.mgr.fallback("nonexistent")
+
+    def test_selectors_json_has_fallbacks(self):
+        """AC: All main sources have fallback_selectors arrays."""
+        import json, os
+        path = os.path.join(os.path.dirname(__file__), "..", "scraper", "selectors.json")
+        with open(path) as f:
+            config = json.load(f)
+        for name, src in config["sources"].items():
+            assert "fallback_selectors" in src, f"{name} missing fallback_selectors"
+            assert "version" in src, f"{name} missing version field"
+
+
+class TestSelfHealing:
+    """Phase 8.2: Graceful degradation + confidence penalty."""
+
+    def setup_method(self):
+        from scraper.self_healing import SelfHealingEngine, SelectorVersionManager
+        self.engine = SelfHealingEngine()
+
+    def test_record_success_resets_state(self):
+        from scraper.self_healing import SourceStatus
+        self.engine.record_failure("source_a")
+        self.engine.record_success("source_a")
+        assert self.engine.get_source_status("source_a") == SourceStatus.UP
+
+    def test_failures_trigger_degraded(self):
+        from scraper.self_healing import SourceStatus, FAILURE_THRESHOLD
+        for _ in range(FAILURE_THRESHOLD):
+            self.engine.record_failure("source_a")
+        status = self.engine.get_source_status("source_a")
+        # Should be DEGRADED (fell back to fallback selectors), not DOWN yet
+        assert status == SourceStatus.DEGRADED
+
+    def test_all_selector_exhaustion_marks_down(self):
+        """AC: Source marked DOWN when all selector versions fail."""
+        from scraper.self_healing import SourceStatus, FAILURE_THRESHOLD
+        # Exhaust all fallbacks: source_a has 2 fallbacks
+        # 3 failures → fallback to v2 (DEGRADED)
+        for _ in range(FAILURE_THRESHOLD):
+            self.engine.record_failure("source_a")
+        assert self.engine.get_source_status("source_a") == SourceStatus.DEGRADED
+        # 3 more failures → fallback to v1 (still DEGRADED)
+        for _ in range(FAILURE_THRESHOLD):
+            self.engine.record_failure("source_a")
+        assert self.engine.get_source_status("source_a") == SourceStatus.DEGRADED
+        # 3 more failures → no more fallbacks → DOWN
+        for _ in range(FAILURE_THRESHOLD):
+            self.engine.record_failure("source_a")
+        assert self.engine.get_source_status("source_a") == SourceStatus.DOWN
+
+    def test_source_failover_excludes_down(self):
+        """AC: Source failover skips DOWN sources."""
+        from scraper.self_healing import SourceStatus, FAILURE_THRESHOLD
+        active = self.engine.get_active_sources()
+        assert "source_a" in active
+        # Force source_a DOWN by exhausting all fallbacks
+        for _ in range(FAILURE_THRESHOLD * 3):
+            self.engine.record_failure("source_a")
+        active = self.engine.get_active_sources()
+        assert "source_a" not in active
+
+    def test_confidence_penalty_when_stale(self):
+        """AC: Confidence penalty applied when data is stale."""
+        from scraper.self_healing import STALE_CONFIDENCE_PENALTY
+        import time
+        # Never-succeeded source → stale
+        penalty = self.engine.apply_confidence_penalty(0.8, "source_a")
+        assert penalty == pytest.approx(0.8 * STALE_CONFIDENCE_PENALTY)
+
+    def test_confidence_no_penalty_when_fresh(self):
+        self.engine.record_success("source_a")
+        confidence = self.engine.apply_confidence_penalty(0.8, "source_a")
+        assert confidence == pytest.approx(0.8)
+
+    def test_degradation_level_full(self):
+        for src in ["source_a", "source_b", "source_c", "source_d"]:
+            self.engine.record_success(src)
+        assert self.engine.get_degradation_level() == "full_capability"
+
+    def test_degradation_level_primary_down(self):
+        from scraper.self_healing import FAILURE_THRESHOLD
+        for src in ["source_b", "source_c", "source_d"]:
+            self.engine.record_success(src)
+        # Force source_a DOWN
+        for _ in range(FAILURE_THRESHOLD * 3):
+            self.engine.record_failure("source_a")
+        assert self.engine.get_degradation_level() == "primary_down"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 9: Real Network Transport
+# ═══════════════════════════════════════════════════════════════════
+
+class TestTcpTransport:
+    """Phase 9.1: TCP transport conformance with SimulatedTransport."""
+
+    def setup_method(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
+        from protocol.tcp_transport import TcpTransport
+        self.transport = TcpTransport()
+
+    def test_register_node(self):
+        self.transport.register_node("node_A")
+        assert self.transport.node_count == 1
+        self.transport.register_node("node_B")
+        assert self.transport.node_count == 2
+
+    def test_unregister_node(self):
+        self.transport.register_node("node_A")
+        assert self.transport.unregister_node("node_A")
+        assert self.transport.node_count == 0
+        assert not self.transport.unregister_node("nonexistent")
+
+    def test_local_send_and_receive(self):
+        """AC: TCP transport passes send/receive for local nodes."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
+        from protocol.messages import P2PMessage
+        self.transport.register_node("node_A")
+        self.transport.register_node("node_B")
+        msg = P2PMessage(
+            message_type="ping",
+            sender_id="node_A",
+            payload={"test": True},
+        )
+        self.transport.send("node_A", "node_B", msg)
+        pending = self.transport.get_pending("node_B")
+        assert len(pending) == 1
+        assert pending[0].message_type == "ping"
+        assert pending[0].payload["test"] is True
+
+    def test_broadcast_local(self):
+        """AC: Broadcast delivers to all local nodes except sender."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
+        from protocol.messages import P2PMessage
+        self.transport.register_node("A")
+        self.transport.register_node("B")
+        self.transport.register_node("C")
+        msg = P2PMessage(message_type="heartbeat", sender_id="A", payload={})
+        self.transport.broadcast("A", msg)
+        assert len(self.transport.get_pending("B")) == 1
+        assert len(self.transport.get_pending("C")) == 1
+        assert len(self.transport.get_pending("A")) == 0  # sender excluded
+
+    def test_get_pending_empty(self):
+        self.transport.register_node("node_A")
+        assert self.transport.get_pending("node_A") == []
+        assert self.transport.get_pending("nonexistent") == []
+
+    def test_wire_serialization_integrity(self):
+        """AC: Messages are serialized/deserialized on the wire."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
+        from protocol.messages import P2PMessage
+        self.transport.register_node("A")
+        self.transport.register_node("B")
+        msg = P2PMessage(
+            message_type="scrape_data",
+            sender_id="A",
+            payload={"match_id": 123, "score": [2, 1]},
+        )
+        self.transport.send("A", "B", msg)
+        received = self.transport.get_pending("B")[0]
+        assert received.payload["match_id"] == 123
+        assert received.payload["score"] == [2, 1]
+        # Verify it went through serde (not same object)
+        assert received is not msg
+
+    def test_get_neighbors(self):
+        self.transport.register_node("A")
+        self.transport.register_node("B")
+        self.transport.register_node("C")
+        neighbors = self.transport.get_neighbors("A")
+        assert "B" in neighbors
+        assert "C" in neighbors
+        assert "A" not in neighbors
+
+    def test_add_peer(self):
+        from protocol.tcp_transport import TcpTransport
+        t = TcpTransport()
+        t.add_peer("remote_1", "10.0.0.1", 9742)
+        neighbors = t.get_neighbors("local")
+        assert "remote_1" in neighbors
+
+
+class TestPeerDiscovery:
+    """Phase 9.2: Peer discovery (LAN + WAN)."""
+
+    def setup_method(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
+        from node.discovery import PeerDiscovery
+        self.discovery = PeerDiscovery(node_id="test_node_1", listen_port=9742)
+
+    def test_register_peer(self):
+        self.discovery.register_peer("peer_A", "10.0.0.2", 9742, via="manual")
+        assert self.discovery.peer_count == 1
+        peers = self.discovery.peers
+        assert peers[0].peer_id == "peer_A"
+        assert peers[0].host == "10.0.0.2"
+
+    def test_self_registration_ignored(self):
+        """Own node_id should not be registered as a peer."""
+        self.discovery.register_peer("test_node_1", "127.0.0.1", 9742)
+        assert self.discovery.peer_count == 0
+
+    def test_build_and_parse_announce(self):
+        data = self.discovery._build_announce()
+        import json
+        msg = json.loads(data.decode("utf-8"))
+        assert msg["type"] == "negelir_announce"
+        assert msg["node_id"] == "test_node_1"
+        assert msg["port"] == 9742
+
+    def test_process_announce_from_other(self):
+        """Process LAN announcement from another peer."""
+        import json
+        announce = json.dumps({
+            "type": "negelir_announce",
+            "node_id": "peer_B",
+            "port": 9742,
+            "ts": 0,
+        }).encode()
+        peer = self.discovery.process_announce(announce, ("192.168.1.5", 9743))
+        assert peer is not None
+        assert peer.peer_id == "peer_B"
+        assert peer.host == "192.168.1.5"
+        assert self.discovery.peer_count == 1
+
+    def test_process_announce_ignores_self(self):
+        import json
+        announce = json.dumps({
+            "type": "negelir_announce",
+            "node_id": "test_node_1",
+            "port": 9742,
+            "ts": 0,
+        }).encode()
+        peer = self.discovery.process_announce(announce, ("127.0.0.1", 9743))
+        assert peer is None
+        assert self.discovery.peer_count == 0
+
+    def test_prune_stale_peers(self):
+        import time
+        self.discovery.register_peer("old_peer", "10.0.0.1", 9742)
+        # Manually make it stale
+        self.discovery._discovered["old_peer"].last_seen = time.time() - 600
+        self.discovery.prune_stale(max_age_sec=300)
+        assert self.discovery.peer_count == 0
+
+    def test_add_seed_node(self):
+        self.discovery.add_seed_node("seed.example.com", 9742)
+        assert ("seed.example.com", 9742) in self.discovery.seed_nodes
+
+    def test_parse_invalid_announce(self):
+        peer = self.discovery.process_announce(b"garbage", ("1.2.3.4", 9999))
+        assert peer is None

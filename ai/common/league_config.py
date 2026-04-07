@@ -39,14 +39,7 @@ class LeagueConfig:
     dixon_coles_rho: float = -0.13
 
     # Derby pairs (frozenset of team name tuples)
-    derbies: set = field(default_factory=lambda: {
-        frozenset(("Galatasaray", "Fenerbahçe")),
-        frozenset(("Galatasaray", "Beşiktaş")),
-        frozenset(("Fenerbahçe", "Beşiktaş")),
-        frozenset(("Galatasaray", "Trabzonspor")),
-        frozenset(("Fenerbahçe", "Trabzonspor")),
-        frozenset(("Beşiktaş", "Trabzonspor")),
-    })
+    derbies: set = field(default_factory=set)
 
     # Ensemble weights
     xgb_weight: float = 0.35
@@ -86,7 +79,8 @@ class LeagueConfig:
 
 def turkish_super_lig() -> LeagueConfig:
     """Turkish Süper Lig with empirically tuned parameters."""
-    return LeagueConfig()  # defaults are Turkish Süper Lig
+    from .constants import DERBIES_SET
+    return LeagueConfig(derbies=DERBIES_SET)
 
 
 def english_premier_league() -> LeagueConfig:

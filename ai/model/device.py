@@ -59,6 +59,7 @@ def get_xgb_params(device: str) -> dict:
         "reg_lambda": 1.5,
         "min_child_weight": 4,
         "gamma": 0.1,
+        "n_jobs": -1,
         "seed": 42,
     }
 

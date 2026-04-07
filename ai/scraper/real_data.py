@@ -57,73 +57,39 @@ FOOTBALLDATA_UK_SEASONS = {
 }
 
 # ── Team name normalisation ─────────────────────────────
-# openfootball and football-data.co.uk use different names.
-# This map normalises to a single canonical form.
-TEAM_NAME_MAP = {
-    # openfootball names
+# Built from locale_tr.yaml source_aliases (single source of truth).
+# Historical team names not in current locale are appended as fallbacks.
+from common.constants import SOURCE_ALIAS_MAP
+
+TEAM_NAME_MAP = dict(SOURCE_ALIAS_MAP)
+
+# Historical teams from previous seasons (not in current locale YAML)
+_HISTORICAL_ALIASES = {
     "Kasımpaşa SK": "Kasımpaşa",
     "İstanbul Başakşehir": "Başakşehir",
     "Istanbul Basaksehir": "Başakşehir",
     "Medipol Başakşehir": "Başakşehir",
-
-    # football-data.co.uk names
-    "Galatasaray": "Galatasaray",
-    "Fenerbahce": "Fenerbahçe",
-    "Besiktas": "Beşiktaş",
-    "Trabzonspor": "Trabzonspor",
-    "Basaksehir": "Başakşehir",
-    "Adana Demirspor": "Adana Demirspor",
-    "Antalyaspor": "Antalyaspor",
-    "Alanyaspor": "Alanyaspor",
-    "Kasimpasa": "Kasımpaşa",
-    "Konyaspor": "Konyaspor",
-    "Sivasspor": "Sivasspor",
-    "Kayserispor": "Kayserispor",
-    "Gaziantep FK": "Gaziantep FK",
     "Gazisehir Gaziantep": "Gaziantep FK",
-    "Rizespor": "Çaykur Rizespor",
     "Caykur Rizespor": "Çaykur Rizespor",
-    "Samsunspor": "Samsunspor",
-    "Hatayspor": "Hatayspor",
-    "Ankaragucu": "Ankaragücü",
-    "Pendikspor": "Pendikspor",
-    "Karagumruk": "Fatih Karagümrük",
     "Fatih Karagumruk": "Fatih Karagümrük",
-    "Eyupspor": "Eyüpspor",
-    "Goztepe": "Göztepe",
+    "Buyuksehir Bld": "Başakşehir",
     "Giresunspor": "Giresunspor",
     "Yeni Malatyaspor": "Yeni Malatyaspor",
     "Malatyaspor": "Yeni Malatyaspor",
     "Denizlispor": "Denizlispor",
-    "Genclerbirligi": "Gençlerbirliği",
     "Erzurum BB": "BB Erzurumspor",
     "Akhisar Belediyespor": "Akhisarspor",
     "Akhisarspor": "Akhisarspor",
     "Bursaspor": "Bursaspor",
     "Osmanlispor": "Osmanlıspor",
-
-    # Turkish chars — openfootball uses proper Turkish
-    "Çaykur Rizespor": "Çaykur Rizespor",
-    "Ankaragücü": "Ankaragücü",
-    "Fatih Karagümrük": "Fatih Karagümrük",
-    "Başakşehir": "Başakşehir",
-    "Kasımpaşa": "Kasımpaşa",
-    "Göztepe": "Göztepe",
-    "Bodrum FK": "Bodrum FK",
-    "Eyüpspor": "Eyüpspor",
-    "Beşiktaş": "Beşiktaş",
-    "Fenerbahçe": "Fenerbahçe",
-
-    # Extra names from various seasons
-    "Buyuksehir Bld": "Başakşehir",
-    "Keciorengucu": "Keçiörengücü",
-    "Sakaryaspor": "Sakaryaspor",
-    "Boluspor": "Boluspor",
     "Umraniyespor": "Ümraniyespor",
     "Istanbulspor": "İstanbulspor",
     "Altay": "Altay",
     "BB Erzurumspor": "BB Erzurumspor",
+    "Boluspor": "Boluspor",
 }
+for alias, canonical in _HISTORICAL_ALIASES.items():
+    TEAM_NAME_MAP.setdefault(alias, canonical)
 
 
 def normalise_team(name: str) -> str:

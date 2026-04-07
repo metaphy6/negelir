@@ -417,20 +417,43 @@ class P2PSimulation:
         return node
 
     def _sync_data_to_node(self, new_node: PeerNode):
-        """Synchronise existing scraped data to a newly joined node."""
+        """Synchronise existing scraped data to a newly joined node.
+        Per Gemini §4 Phase 4: manifest-based delta sync — exchange hash
+        manifests first, then transfer only missing records."""
         if not self.nodes:
             return
-        # Pick one peer at random to share its data store
+        # Gather all donors that have data
         donors = [n for n in self.nodes if n.node_id != new_node.node_id and n.data_store.size > 0]
         if not donors:
             return
-        donor = random.choice(donors)
-        synced = 0
-        for record in donor.data_store.get_all():
-            if new_node.data_store.merge_record(record):
-                synced += 1
-        if synced:
-            log.info(f"   📦 Synced {synced} records from {donor.node_id[:8]} → {new_node.node_id[:8]}")
+
+        new_manifest = set(new_node.data_store.get_manifest())
+        synced_total = 0
+
+        for donor in donors:
+            donor_manifest = donor.data_store.get_manifest()
+            # Only transfer hashes the new node doesn't have
+            missing = [h for h in donor_manifest if h not in new_manifest]
+            if not missing:
+                continue
+            synced = 0
+            for h in missing:
+                record = donor.data_store.get(h)
+                if record and new_node.data_store.merge_record(record):
+                    new_manifest.add(h)
+                    synced += 1
+            if synced:
+                log.info(
+                    f"   📦 Delta-synced {synced}/{len(donor_manifest)} records "
+                    f"from {donor.node_id[:8]} → {new_node.node_id[:8]}"
+                )
+                synced_total += synced
+
+        if synced_total:
+            log.info(
+                f"   ✅ Manifest sync complete: {synced_total} new records "
+                f"(store: {new_node.data_store.size})"
+            )
 
     # ── Phase B: Simulated Web Scraping ─────────────────
 

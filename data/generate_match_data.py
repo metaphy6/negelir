@@ -6,61 +6,57 @@ Uses known team strength tiers + Poisson score generation + realistic
 card/discipline patterns. Output: data/tr_super_lig_2024_25.json
 
 This is a PoC data generator, NOT real scraped data.
+Teams and strength values are loaded from ai/common/locale_tr.yaml (single source of truth).
 """
 
 import json
 import math
 import os
 import random
+import sys
 from datetime import datetime, timedelta
 
 import numpy as np
 from scipy.stats import poisson
 
+# ── Load teams from locale YAML (single source of truth) ─
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+sys.path.insert(0, os.path.join(_PROJECT_ROOT, "ai"))
+
+import yaml
+
+def _load_teams_from_locale():
+    locale_path = os.path.join(_PROJECT_ROOT, "ai", "common", "locale_tr.yaml")
+    with open(locale_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    teams = []
+    strength = {}
+    derby_uuids = data.get("derbies", [])
+    uuid_to_name = {}
+    for uuid, info in data.get("teams", {}).items():
+        name = info.get("display_name")
+        if not name:
+            continue
+        uuid_to_name[uuid] = name
+        s = info.get("strength")
+        if s:
+            teams.append(name)
+            strength[name] = (s.get("attack", 1.0), s.get("defense", 1.0))
+    derbies = set()
+    for pair in derby_uuids:
+        if len(pair) == 2:
+            a = uuid_to_name.get(pair[0])
+            b = uuid_to_name.get(pair[1])
+            if a and b:
+                derbies.add(frozenset((a, b)))
+    return teams, strength, derbies
+
 SEED = 2024
 random.seed(SEED)
 np.random.seed(SEED)
 
-TEAMS = [
-    "Galatasaray", "Fenerbahçe", "Beşiktaş", "Trabzonspor",
-    "Başakşehir", "Adana Demirspor", "Antalyaspor", "Alanyaspor",
-    "Kasımpaşa", "Konyaspor", "Sivasspor", "Kayserispor",
-    "Gaziantep FK", "Hatayspor", "Samsunspor", "Çaykur Rizespor",
-    "Pendikspor", "Fatih Karagümrük", "Ankaragücü",
-]
-
-# Team strength tiers (attack, defense) — higher attack = scores more, lower defense = concedes less
-TEAM_STRENGTH = {
-    "Galatasaray":      (1.55, 0.80),
-    "Fenerbahçe":       (1.50, 0.82),
-    "Beşiktaş":         (1.30, 0.92),
-    "Trabzonspor":      (1.25, 0.95),
-    "Başakşehir":       (1.15, 0.90),
-    "Adana Demirspor":  (1.10, 1.05),
-    "Antalyaspor":      (1.05, 1.00),
-    "Alanyaspor":       (1.00, 1.00),
-    "Kasımpaşa":        (1.05, 1.10),
-    "Konyaspor":        (0.90, 1.00),
-    "Sivasspor":        (0.85, 1.05),
-    "Kayserispor":      (0.80, 1.15),
-    "Gaziantep FK":     (0.95, 1.05),
-    "Hatayspor":        (0.85, 1.10),
-    "Samsunspor":       (1.00, 1.00),
-    "Çaykur Rizespor":  (0.85, 1.15),
-    "Pendikspor":       (0.80, 1.20),
-    "Fatih Karagümrük": (0.90, 1.10),
-    "Ankaragücü":       (0.85, 1.15),
-}
-
-# Derbies: generate more fouls, cards
-DERBIES = {
-    frozenset({"Galatasaray", "Fenerbahçe"}),
-    frozenset({"Galatasaray", "Beşiktaş"}),
-    frozenset({"Fenerbahçe", "Beşiktaş"}),
-    frozenset({"Galatasaray", "Trabzonspor"}),
-    frozenset({"Fenerbahçe", "Trabzonspor"}),
-    frozenset({"Beşiktaş", "Trabzonspor"}),
-}
+TEAMS, TEAM_STRENGTH, DERBIES = _load_teams_from_locale()
 
 LEAGUE_AVG_GOALS = 1.35  # Per team per match (Turkish league average ~2.7 total)
 HOME_ADVANTAGE = 0.25    # Extra xG for home team

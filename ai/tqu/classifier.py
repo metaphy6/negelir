@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from common.constants import FOOTBALL_KEYWORDS, TEAM_MAP
 from common.logger import get_logger, section_banner
+from common.telemetry import get_sink
 from tqu.sanitizer import sanitize
 from tqu.patterns import INTENT_PATTERNS, IntentPattern
 from tqu.entities import extract_entities, ExtractedEntities
@@ -120,6 +121,12 @@ def classify(raw_input: str) -> ClassificationResult:
 
     if not scores or scores[0][1] < CONFIDENCE_THRESHOLD:
         log.info(f"⛔ Intent threshold not met (highest: {scores[0][1]:.2f})" if scores else "⛔ No intent matched")
+        get_sink().log_classification(
+            raw_input=raw_input,
+            intent_id=scores[0][0] if scores else None,
+            confidence=scores[0][1] if scores else 0.0,
+            success=False,
+        )
         return ClassificationResult(
             success=False,
             rejection_message=REJECTION_NO_INTENT,
@@ -131,6 +138,14 @@ def classify(raw_input: str) -> ClassificationResult:
 
     # Step 4: Entity extraction
     entities = extract_entities(cleaned)
+
+    # Step 5: Telemetry — log classification to Redis stream
+    get_sink().log_classification(
+        raw_input=raw_input,
+        intent_id=best_intent,
+        confidence=best_score,
+        success=True,
+    )
 
     return ClassificationResult(
         success=True,

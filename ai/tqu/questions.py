@@ -9,24 +9,12 @@ Used by:
   - p2p/simulation/runner.py (P2P Q&A demo)
 """
 
-# ── Teams ────────────────────────────────────────────────
-_TEAMS = [
-    "Galatasaray", "Fenerbahçe", "Beşiktaş", "Trabzonspor",
-    "Başakşehir", "Adana Demirspor", "Antalyaspor", "Alanyaspor",
-    "Kasımpaşa", "Konyaspor", "Sivasspor", "Kayserispor",
-    "Gaziantep FK", "Hatayspor", "Samsunspor", "Rizespor",
-    "Pendikspor", "Karagümrük", "Ankaragücü", "Eyüpspor",
-    "Göztepe", "Bodrum FK",
-]
+from common.constants import ALL_TEAM_NAMES, DERBY_PAIRS
 
-_DERBIES = [
-    ("Galatasaray", "Fenerbahçe"),
-    ("Galatasaray", "Beşiktaş"),
-    ("Fenerbahçe", "Beşiktaş"),
-    ("Galatasaray", "Trabzonspor"),
-    ("Fenerbahçe", "Trabzonspor"),
-    ("Beşiktaş", "Trabzonspor"),
-]
+# ── Teams (loaded from locale_tr.yaml) ───────────────────
+_TEAMS = ALL_TEAM_NAMES
+
+_DERBIES = DERBY_PAIRS
 
 # ── Intent-specific question templates ───────────────────
 # {t} = team, {t1}/{t2} = team pair, {n} = number
@@ -256,17 +244,14 @@ H2H_QUESTIONS = [
 ]
 
 # ── Player-specific questions (new category) ────────────
-_PLAYERS_GS = ["Icardi", "Mertens", "Zaha", "Muslera", "Torreira", "Barış Alper"]
-_PLAYERS_FB = ["Dzeko", "Tadic", "İrfan Can", "Szymanski", "Livakovic", "Osayi-Samuel"]
-_PLAYERS_BJK = ["Gedson", "Weghorst", "Ghezzal", "Güven Yalçın", "Ersin Destanoğlu"]
-_PLAYERS_TS = ["Bakasetas", "Trezeguet", "Uğurcan Çakır", "Nwakaeme", "Maxi Gomez"]
-
-_ALL_PLAYERS = (
-    [(p, "Galatasaray") for p in _PLAYERS_GS] +
-    [(p, "Fenerbahçe") for p in _PLAYERS_FB] +
-    [(p, "Beşiktaş") for p in _PLAYERS_BJK] +
-    [(p, "Trabzonspor") for p in _PLAYERS_TS]
-)
+# Player-team mapping is intentionally kept minimal here.
+# Phase 5 will replace this with dynamic resolution from scraped roster data.
+_SAMPLE_PLAYERS = [
+    "Icardi", "Mertens", "Zaha", "Muslera", "Torreira", "Barış Alper",
+    "Dzeko", "Tadic", "İrfan Can", "Szymanski", "Livakovic", "Osayi-Samuel",
+    "Gedson", "Weghorst", "Ghezzal", "Güven Yalçın", "Ersin Destanoğlu",
+    "Bakasetas", "Trezeguet", "Uğurcan Çakır", "Nwakaeme", "Maxi Gomez",
+]
 
 PLAYER_QUESTIONS = [
     "{p} bu maçta gol atar mı?",
@@ -512,10 +497,10 @@ def _generate_questions() -> list[dict]:
     # ── Player questions ────────────────────────────────
     for tpl in PLAYER_QUESTIONS:
         if "{p}" in tpl and "{t}" in tpl:
-            for p, t in _ALL_PLAYERS:
-                add(tpl.format(p=p, t=t), "form_query")
+            for p in _SAMPLE_PLAYERS[:8]:
+                add(tpl.format(p=p, t=_TEAMS[0] if _TEAMS else "Takım"), "form_query")
         elif "{p}" in tpl:
-            for p, t in _ALL_PLAYERS:
+            for p in _SAMPLE_PLAYERS:
                 add(tpl.format(p=p), "form_query")
 
     # ── Card questions ──────────────────────────────────

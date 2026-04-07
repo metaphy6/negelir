@@ -7,7 +7,7 @@ Generates synthetic features for PoC; real pipeline follows same schema.
 import random
 import numpy as np
 import pandas as pd
-from common.constants import N_FEATURES, CURRENT_SEASON
+from common.constants import N_FEATURES
 from common.logger import get_logger
 
 log = get_logger("model.features")

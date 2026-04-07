@@ -18,6 +18,22 @@ class MessageType(Enum):
     QUERY_INTENT = "query_intent"
     PING = "ping"
     PONG = "pong"
+    # Phase 3: Scheduler + heartbeat
+    HEARTBEAT = "heartbeat"
+    TASK_CLAIM = "task_claim"
+    TASK_COMPLETE = "task_complete"
+    # Phase 4: Coordination
+    FIXTURE_INDEX = "fixture_index"
+    ROLE_ELECTION = "role_election"
+    DATA_CONFLICT = "data_conflict"
+    ROSTER_UPDATE = "roster_update"
+    MODEL_CHECKPOINT = "model_checkpoint"
+    SEASON_BOUNDARY = "season_boundary"
+    # Phase 7: Adaptive scraper
+    SCHEMA_DRIFT = "schema_drift"
+    SCHEMA_PROPOSAL = "schema_proposal"
+    SCHEMA_VOTE = "schema_vote"
+    SCHEMA_ADOPTED = "schema_adopted"
 
 
 @dataclass

@@ -1,11 +1,13 @@
 """
 Negelir — GBDT model trainer.
 Per roadmap §5.1 & §5.5: XGBoost training with GPU/CPU auto-detect.
+Includes feature importance analysis and zero-importance pruning.
 """
 
 import os
 import pickle
 
+import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
@@ -14,7 +16,7 @@ from common.config import cfg
 from common.constants import MODEL_VERSION
 from common.logger import get_logger, section_banner, success_banner
 from model.device import detect_device, get_xgb_params
-from model.features import generate_synthetic_dataset, inject_noise
+from model.features import generate_synthetic_dataset, inject_noise, FEATURE_COLUMNS
 
 log = get_logger("model.trainer")
 
@@ -90,7 +92,56 @@ def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
     for feat, imp in top_features:
         log.info(f"   {feat}: {imp:.4f}")
 
+    # Feature importance analysis: identify zero/near-zero importance
+    zero_features = [col for col, imp in zip(FEATURE_COLUMNS, importance) if imp < 1e-6]
+    low_features = [col for col, imp in zip(FEATURE_COLUMNS, importance)
+                    if 1e-6 <= imp < 0.001]
+    if zero_features:
+        log.info(f"⚠️  Zero-importance features ({len(zero_features)}): "
+                 f"{', '.join(zero_features[:5])}{'...' if len(zero_features) > 5 else ''}")
+    if low_features:
+        log.info(f"📉 Low-importance features ({len(low_features)}): "
+                 f"{', '.join(low_features[:5])}{'...' if len(low_features) > 5 else ''}")
+    log.info(f"📊 Feature utilization: {len(FEATURE_COLUMNS) - len(zero_features)}/{len(FEATURE_COLUMNS)} "
+             f"({100*(1-len(zero_features)/len(FEATURE_COLUMNS)):.0f}%)")
+
     success_banner(f"Model training complete (v{MODEL_VERSION})")
+    return model
+
+
+def incremental_retrain(model_path: str, new_X: np.ndarray, new_y: np.ndarray,
+                        n_rounds: int = 10) -> xgb.XGBClassifier:
+    """
+    Phase 6: Continue training from saved model, appending new trees.
+    Faster than full retrain; maintains learned patterns.
+
+    Args:
+        model_path: path to existing .pkl model
+        new_X: new feature matrix
+        new_y: new labels (0/1/2)
+        n_rounds: number of additional boosting rounds
+
+    Returns:
+        Updated XGBClassifier
+    """
+    log.info(f"Incremental retrain: {len(new_y)} new samples, {n_rounds} rounds")
+
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+
+    # Fit additional rounds on new data
+    model.n_estimators = model.n_estimators + n_rounds
+    model.fit(
+        new_X, new_y,
+        xgb_model=model.get_booster(),
+        verbose=False,
+    )
+
+    # Save updated model
+    with open(model_path, "wb") as f:
+        pickle.dump(model, f)
+    log.info(f"Incremental retrain complete → {model_path}")
+
     return model
 
 

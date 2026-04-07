@@ -1,8 +1,9 @@
 {
-  "version": "2.0.0",
+  "version": "3.0.0",
   "sources": {
     "source_a": {
       "description": "Historical match data, statistics, and card records",
+      "version": 3,
       "selectors": {
         "match_row": "div.match-row, tr.match-item, .mac-satiri",
         "home_team": ".home-team .name, .ev-sahibi, td:nth-child(2)",
@@ -21,10 +22,33 @@
         "away_yellows": ".away-yellows, .dep-sari",
         "home_reds": ".home-reds, .ev-kirmizi",
         "away_reds": ".away-reds, .dep-kirmizi"
-      }
+      },
+      "fallback_selectors": [
+        {
+          "version": 2,
+          "selectors": {
+            "match_row": "tr.match-item, .mac-satiri",
+            "home_team": ".ev-sahibi, td:nth-child(2)",
+            "away_team": ".deplasman, td:nth-child(4)",
+            "score": ".skor, td:nth-child(3)",
+            "date": ".tarih, td:nth-child(1)"
+          }
+        },
+        {
+          "version": 1,
+          "selectors": {
+            "match_row": "tr.match-item",
+            "home_team": "td:nth-child(2)",
+            "away_team": "td:nth-child(4)",
+            "score": "td:nth-child(3)",
+            "date": "td:nth-child(1)"
+          }
+        }
+      ]
     },
     "source_b": {
       "description": "Live scores, league tables, and card statistics",
+      "version": 2,
       "selectors": {
         "match_row": ".match-card, .event-row",
         "home_team": ".home .team-name",
@@ -37,10 +61,23 @@
         "position": ".pos, td:nth-child(1)",
         "team_name": ".team, td:nth-child(2)",
         "points": ".pts, td:last-child"
-      }
+      },
+      "fallback_selectors": [
+        {
+          "version": 1,
+          "selectors": {
+            "match_row": ".event-row",
+            "home_team": ".home .team-name",
+            "away_team": ".away .team-name",
+            "score": ".result",
+            "date": ".event-date"
+          }
+        }
+      ]
     },
     "source_c": {
       "description": "Official results, fixture data, and discipline records",
+      "version": 2,
       "selectors": {
         "fixture_row": ".fixture, .musabaka",
         "home_team": ".home, .ev",
@@ -52,7 +89,41 @@
         "away_yellows": ".away-discipline .yellow, .dep-sari",
         "home_reds": ".home-discipline .red, .ev-kirmizi",
         "away_reds": ".away-discipline .red, .dep-kirmizi"
-      }
+      },
+      "fallback_selectors": [
+        {
+          "version": 1,
+          "selectors": {
+            "fixture_row": ".musabaka",
+            "home_team": ".ev",
+            "away_team": ".dep",
+            "score": ".sonuc",
+            "date": ".tarih"
+          }
+        }
+      ]
+    },
+    "source_d": {
+      "description": "Modern frontend: embedded JSON in data-settings attribute (www.mackolik.com)",
+      "version": 1,
+      "extraction": "json_embedded",
+      "selectors": {
+        "data_blob": "[data-settings]",
+        "standings_path": "competition.standings[0].table",
+        "gamesets_path": "competition.gamesets",
+        "team_stats_path": "competition.teamStats",
+        "player_stats_path": "competition.playerStats",
+        "season_list_path": "seasonList",
+        "season_path": "season"
+      },
+      "fallback_selectors": [],
+      "urls": {
+        "standings": "/puan-durumu/türkiye-trendyol-süper-lig/{competition_uuid}",
+        "fixtures": "/puan-durumu/türkiye-trendyol-süper-lig/fikstur/{competition_uuid}",
+        "stats": "/puan-durumu/türkiye-trendyol-süper-lig/istatistik/{competition_uuid}",
+        "season": "/puan-durumu/türkiye-trendyol-süper-lig/{season_slug}/{competition_uuid}"
+      },
+      "competition_uuid": "482ofyysbdbeoxauk19yg7tdt"
     }
   }
 }

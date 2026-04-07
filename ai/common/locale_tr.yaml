@@ -1,0 +1,598 @@
+# Negelir — Locale Configuration (Turkish / Süper Lig)
+# Per Gemini §4: extracted from hardcoded constants for i18n readiness.
+# To add a new locale: create a new YAML file (e.g. locale_en.yaml),
+# load it via load_locale() in locale_loader.py.
+
+locale_id: "tr"
+locale_name: "Türkçe"
+default_league: "super_lig"
+
+# ── Team UUID Registry ──────────────────────────────────
+# Maps display names, abbreviations, and nicknames to internal UUIDs.
+teams:
+  team_001:
+    display_name: "Galatasaray"
+    aliases:
+      - "galatasaray"
+      - "gs"
+      - "cim bom"
+      - "cimbom"
+      - "aslan"
+    mackolik_id: 1
+    mackolik_www_id: 2217
+    mackolik_www_uuid: "esa748l653sss1wurz5ps3228"
+    source_aliases:
+      openfootball: "Galatasaray"
+      footballdata_uk: "Galatasaray"
+      tff: "GALATASARAY A.Ş."
+    strength:
+      attack: 1.55
+      defense: 0.80
+  team_002:
+    display_name: "Fenerbahçe"
+    aliases:
+      - "fenerbahçe"
+      - "fenerbahce"
+      - "fb"
+      - "fener"
+      - "kanarya"
+    mackolik_id: 2
+    mackolik_www_id: 2212
+    mackolik_www_uuid: "8lroq0cbhdxj8124qtxwrhvmm"
+    source_aliases:
+      openfootball: "Fenerbahçe"
+      footballdata_uk: "Fenerbahce"
+      tff: "FENERBAHÇE A.Ş."
+    strength:
+      attack: 1.50
+      defense: 0.82
+  team_003:
+    display_name: "Beşiktaş"
+    aliases:
+      - "beşiktaş"
+      - "besiktas"
+      - "bjk"
+      - "kartal"
+      - "kara kartal"
+    mackolik_id: 3
+    mackolik_www_id: 2214
+    mackolik_www_uuid: "2ez9cvam9lp9jyhng3eh3znb4"
+    source_aliases:
+      openfootball: "Beşiktaş"
+      footballdata_uk: "Besiktas"
+      tff: "BEŞİKTAŞ A.Ş."
+    strength:
+      attack: 1.30
+      defense: 0.92
+  team_004:
+    display_name: "Trabzonspor"
+    aliases:
+      - "trabzonspor"
+      - "ts"
+      - "bordo mavi"
+      - "fırtına"
+    mackolik_id: 4
+    mackolik_www_id: 2213
+    mackolik_www_uuid: "2yab38jdfl0gk2tei1mq40o06"
+    source_aliases:
+      openfootball: "Trabzonspor"
+      footballdata_uk: "Trabzonspor"
+      tff: "TRABZONSPOR A.Ş."
+    strength:
+      attack: 1.25
+      defense: 0.95
+  team_005:
+    display_name: "Başakşehir"
+    aliases:
+      - "başakşehir"
+      - "basaksehir"
+    mackolik_id: 451
+    mackolik_www_id: 2884
+    mackolik_www_uuid: "47njg6cmlx5q3fvdsupd2n6qu"
+    source_aliases:
+      openfootball: "İstanbul Başakşehir"
+      footballdata_uk: "Basaksehir"
+      tff: "İSTANBUL BAŞAKŞEHİR A.Ş."
+    strength:
+      attack: 1.15
+      defense: 0.90
+  team_006:
+    display_name: "Adana Demirspor"
+    aliases:
+      - "adana demirspor"
+    mackolik_id: 454
+    source_aliases:
+      openfootball: "Adana Demirspor"
+      footballdata_uk: "Adana Demirspor"
+    strength:
+      attack: 1.10
+      defense: 1.05
+  team_007:
+    display_name: "Antalyaspor"
+    aliases:
+      - "antalyaspor"
+    mackolik_id: 455
+    mackolik_www_id: 2236
+    mackolik_www_uuid: "9irsyv431fpuqhqtfq9iwxf2u"
+    source_aliases:
+      openfootball: "Antalyaspor"
+      footballdata_uk: "Antalyaspor"
+    strength:
+      attack: 1.05
+      defense: 1.00
+  team_008:
+    display_name: "Alanyaspor"
+    aliases:
+      - "alanyaspor"
+    mackolik_id: 619
+    mackolik_www_id: 7285
+    mackolik_www_uuid: "84fpe0iynjdghwysyo5tizdkk"
+    source_aliases:
+      openfootball: "Alanyaspor"
+      footballdata_uk: "Alanyaspor"
+    strength:
+      attack: 1.00
+      defense: 1.00
+  team_009:
+    display_name: "Kasımpaşa"
+    aliases:
+      - "kasımpaşa"
+      - "kasimpasa"
+    mackolik_id: 656
+    mackolik_www_id: 6900
+    mackolik_www_uuid: "4idg23egrrvtrbgrg7p5x7bwf"
+    source_aliases:
+      openfootball: "Kasımpaşa SK"
+      footballdata_uk: "Kasimpasa"
+    strength:
+      attack: 1.05
+      defense: 1.10
+  team_010:
+    display_name: "Konyaspor"
+    aliases:
+      - "konyaspor"
+    mackolik_id: 447
+    mackolik_www_id: 2223
+    mackolik_www_uuid: "cw4lbdzlqqdvbkdkz00c9ye49"
+    source_aliases:
+      openfootball: "Konyaspor"
+      footballdata_uk: "Konyaspor"
+    strength:
+      attack: 0.90
+      defense: 1.00
+  team_011:
+    display_name: "Sivasspor"
+    aliases:
+      - "sivasspor"
+    mackolik_id: 446
+    source_aliases:
+      openfootball: "Sivasspor"
+      footballdata_uk: "Sivasspor"
+    strength:
+      attack: 0.85
+      defense: 1.05
+  team_012:
+    display_name: "Kayserispor"
+    aliases:
+      - "kayserispor"
+    mackolik_id: 570
+    mackolik_www_id: 2235
+    mackolik_www_uuid: "c8ns6z3u8kxldv1zh1evu10rv"
+    source_aliases:
+      openfootball: "Kayserispor"
+      footballdata_uk: "Kayserispor"
+    strength:
+      attack: 0.80
+      defense: 1.15
+  team_013:
+    display_name: "Gaziantep FK"
+    aliases:
+      - "gaziantep"
+      - "gaziantep fk"
+    mackolik_id: 572
+    mackolik_www_id: 3287
+    mackolik_www_uuid: "2agzb2h4ppg7lfz9hn7eg1rqo"
+    source_aliases:
+      openfootball: "Gaziantep FK"
+      footballdata_uk: "Gaziantep FK"
+    strength:
+      attack: 0.95
+      defense: 1.05
+  team_014:
+    display_name: "Hatayspor"
+    aliases:
+      - "hatayspor"
+    mackolik_id: 574
+    source_aliases:
+      openfootball: "Hatayspor"
+      footballdata_uk: "Hatayspor"
+    strength:
+      attack: 0.85
+      defense: 1.10
+  team_015:
+    display_name: "Samsunspor"
+    aliases:
+      - "samsunspor"
+    mackolik_id: 8
+    mackolik_www_id: 2220
+    mackolik_www_uuid: "dpsnqu7pd2b0shfzjyn5j1znf"
+    source_aliases:
+      openfootball: "Samsunspor"
+      footballdata_uk: "Samsunspor"
+    strength:
+      attack: 1.00
+      defense: 1.00
+  team_016:
+    display_name: "Çaykur Rizespor"
+    aliases:
+      - "rizespor"
+      - "çaykur rizespor"
+    mackolik_id: 448
+    mackolik_www_id: 2224
+    mackolik_www_uuid: "1lbrlj3uu8wi2h9j79snuoae4"
+    source_aliases:
+      openfootball: "Çaykur Rizespor"
+      footballdata_uk: "Rizespor"
+    strength:
+      attack: 0.85
+      defense: 1.15
+  team_017:
+    display_name: "Pendikspor"
+    aliases:
+      - "pendikspor"
+    source_aliases:
+      openfootball: "Pendikspor"
+      footballdata_uk: "Pendikspor"
+    strength:
+      attack: 0.80
+      defense: 1.20
+  team_018:
+    display_name: "Fatih Karagümrük"
+    aliases:
+      - "karagümrük"
+      - "fatih karagümrük"
+    mackolik_id: 537
+    mackolik_www_id: 3014
+    mackolik_www_uuid: "c3txoz57mu7w9y1jprvnv2flr"
+    source_aliases:
+      openfootball: "Fatih Karagümrük"
+      footballdata_uk: "Karagumruk"
+    strength:
+      attack: 0.90
+      defense: 1.10
+  team_019:
+    display_name: "Ankaragücü"
+    aliases:
+      - "ankaragücü"
+    source_aliases:
+      openfootball: "Ankaragücü"
+      footballdata_uk: "Ankaragucu"
+    strength:
+      attack: 0.85
+      defense: 1.15
+  team_050:
+    display_name: "Eyüpspor"
+    aliases:
+      - "eyüpspor"
+    mackolik_id: 557
+    mackolik_www_id: 9142
+    mackolik_www_uuid: "bmgtxgipsznlb1j20zwjti3xh"
+    source_aliases:
+      footballdata_uk: "Eyupspor"
+    strength:
+      attack: 0.90
+      defense: 1.05
+  team_051:
+    display_name: "Göztepe"
+    aliases:
+      - "göztepe"
+    mackolik_id: 15
+    mackolik_www_id: 2247
+    mackolik_www_uuid: "cjbaf8s09qoa1n11r33gc560x"
+    source_aliases:
+      footballdata_uk: "Goztepe"
+    strength:
+      attack: 0.95
+      defense: 1.00
+  team_052:
+    display_name: "Bodrum FK"
+    aliases:
+      - "bodrum fk"
+    mackolik_id: 12201
+    source_aliases:
+      footballdata_uk: "Bodrum FK"
+    strength:
+      attack: 0.85
+      defense: 1.10
+  team_053:
+    display_name: "Sakaryaspor"
+    aliases:
+      - "sakaryaspor"
+    source_aliases:
+      footballdata_uk: "Sakaryaspor"
+    strength:
+      attack: 0.80
+      defense: 1.15
+  team_054:
+    display_name: "Keçiörengücü"
+    aliases:
+      - "keçiörengücü"
+    source_aliases:
+      footballdata_uk: "Keciorengucu"
+    strength:
+      attack: 0.80
+      defense: 1.20
+  team_055:
+    display_name: "Gençlerbirliği"
+    aliases:
+      - "gençlerbirliği"
+      - "genclerbirligi"
+    mackolik_id: 7
+    mackolik_www_id: 2219
+    mackolik_www_uuid: "embqktr41hfzczc8uav1scmcn"
+    source_aliases:
+      footballdata_uk: "Genclerbirligi"
+    strength:
+      attack: 0.85
+      defense: 1.10
+  team_056:
+    display_name: "Kocaelispor"
+    aliases:
+      - "kocaelispor"
+    mackolik_id: 18
+    mackolik_www_id: 2234
+    mackolik_www_uuid: "b703zecenioz21dnj3p63v3f7"
+    source_aliases:
+      footballdata_uk: "Kocaelispor"
+    strength:
+      attack: 0.85
+      defense: 1.10
+
+# ── Leagues ─────────────────────────────────────────────
+leagues:
+  super_lig:
+    name: "Trendyol Süper Lig"
+    tier: 1
+    teams: 19
+  lig_1:
+    name: "Trendyol 1. Lig"
+    tier: 2
+    teams: 18
+
+# ── Football Domain Keywords ─────────────────────────────
+# Used by TQU football domain gate.
+football_keywords:
+  # Match / result
+  - "maç"
+  - "maçta"
+  - "maçı"
+  - "gol"
+  - "golü"
+  - "kazanır"
+  - "kazanir"
+  - "yener"
+  - "biter"
+  - "bitermi"
+  - "kaybeder"
+  - "berabere"
+  - "skor"
+  - "takım"
+  - "takim"
+  - "üst"
+  - "ust"
+  - "alt"
+  - "forma"
+  - "lig"
+  - "süper"
+  - "super"
+  - "deplasman"
+  - "ev sahibi"
+  - "puan"
+  - "averaj"
+  - "kart"
+  - "kırmızı"
+  - "sarı"
+  - "korner"
+  - "penaltı"
+  - "yarı"
+  - "yari"
+  - "ilk yarı"
+  - "ikinci yarı"
+  - "sonuç"
+  - "galatasaray"
+  - "fenerbahçe"
+  - "fenerbahce"
+  - "beşiktaş"
+  - "besiktas"
+  - "trabzonspor"
+  - "başakşehir"
+  - "basaksehir"
+  - "performans"
+  - "nasıl"
+  - "olur mu"
+  - "atar mı"
+  - "yemez mi"
+  - "kapanır mı"
+  - "kg"
+  - "karşılaşma"
+  - "derbi"
+  - "şampiyon"
+  # Extended
+  - "galip"
+  - "galibiyet"
+  - "mağlup"
+  - "mağlubiyet"
+  - "alır"
+  - "alabilir"
+  - "favori"
+  - "kazanabilir"
+  - "yenilmezlik"
+  - "gol atar"
+  - "gol atılır"
+  - "kale"
+  - "kaleci"
+  - "savunma"
+  - "defans"
+  - "hücum"
+  - "forvet"
+  - "sakatlık"
+  - "sakat"
+  - "kadroda"
+  - "oynar"
+  - "oynuyor"
+  - "asist"
+  - "gol krallığı"
+  - "şampiyonluk"
+  - "küme düşer"
+  - "küme düşme"
+  - "sıralama"
+  - "sırada"
+  - "avrupa"
+  - "kupa"
+  - "play-off"
+  - "ofsayt"
+  - "var"
+  - "frikik"
+  - "hat-trick"
+  - "hat trick"
+  - "kırmızı kart"
+  - "sarı kart"
+  - "faul"
+  - "müdahale"
+  - "karşılıklı"
+  - "karşılıklı gol"
+  - "kale kapanır"
+  - "clean sheet"
+  - "erken gol"
+  - "son dakika"
+  - "uzatma"
+  - "90+"
+  - "iç saha"
+  - "dış saha"
+  - "evinde"
+  - "deplasmanında"
+  - "düşüşte"
+  - "yükselişte"
+  - "formda"
+  - "form"
+  - "son formu"
+  - "gol ortalaması"
+  - "yediği gol"
+  - "attığı gol"
+  - "puanla"
+  - "3 puan"
+  - "kazanma"
+  - "yenme"
+  - "sezon"
+  - "bu sezon"
+  - "bu hafta"
+  - "hafta"
+  - "lig sıralaması"
+  - "kafa kafaya"
+  - "h2h"
+  - "son 5 maç"
+  - "son 10 maç"
+  - "skoru"
+  - "kaça kaç"
+  - "kaç kaç"
+  - "final skoru"
+  - "gollü"
+  - "golsüz"
+  - "az gollü"
+  - "çok gollü"
+  - "ikinci yarıda"
+  - "devre"
+  - "devre arası"
+  - "oyuncu"
+  - "yıldız"
+  - "penaltıları"
+  - "vuruyor"
+  # Team abbreviations
+  - "gs"
+  - "fb"
+  - "bjk"
+  - "ts"
+  - "cim bom"
+  - "cimbom"
+  - "aslan"
+  - "fener"
+  - "kanarya"
+  - "kartal"
+  - "kara kartal"
+  - "bordo mavi"
+  - "fırtına"
+  # Conversational
+  - "ne dersin"
+  - "ne düşünüyorsun"
+  - "sence"
+  - "sizce"
+  - "tahmin et"
+  - "bence"
+  - "analiz"
+  - "yorumun"
+  - "fikrini"
+  - "görüşün"
+  - "yapar"
+  - "halleder"
+  - "söker"
+  - "döver"
+  - "geçer"
+  - "ezer"
+  - "yenişemez"
+  - "paylaşır"
+  - "götürür"
+  # Betting shorthand
+  - "ms1"
+  - "ms2"
+  - "msx"
+  - "1x2"
+  - "btts"
+  - "handikap"
+  - "çifte şans"
+  - "ilk gol"
+  - "maç sonu"
+  - "bol gol"
+  - "gol çıkar"
+  - "gol var mı"
+  # Time references
+  - "bugün"
+  - "bu akşam"
+  - "yarın"
+  - "bu hafta sonu"
+  - "bu pazar"
+  - "bu cumartesi"
+
+# ── Banned Words ────────────────────────────────────────
+# Never appear in user-facing output (compliance).
+banned_words:
+  - "bahis"
+  - "iddaa"
+  - "kupon"
+  - "odds"
+  - "oran"
+  - "wager"
+  - "bet"
+  - "tip"
+  - "guaranteed"
+  - "sure"
+  - "profit"
+  - "earning"
+  - "kazanç"
+  - "para"
+  - "money"
+  - "casino"
+  - "gambling"
+  - "stake"
+  - "prediction"
+  - "winner"
+  - "tahmin"
+
+# ── Derby Pairs ─────────────────────────────────────────
+# Single source of truth for derby detection across the codebase.
+derbies:
+  - ["team_001", "team_002"]   # Galatasaray vs Fenerbahçe
+  - ["team_001", "team_003"]   # Galatasaray vs Beşiktaş
+  - ["team_002", "team_003"]   # Fenerbahçe vs Beşiktaş
+  - ["team_001", "team_004"]   # Galatasaray vs Trabzonspor
+  - ["team_002", "team_004"]   # Fenerbahçe vs Trabzonspor
+  - ["team_003", "team_004"]   # Beşiktaş vs Trabzonspor

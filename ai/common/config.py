@@ -46,6 +46,9 @@ class Config:
     scrape_source_c: str = field(default_factory=lambda: os.getenv(
         "SCRAPE_SOURCE_C", "https://www.tff.org"
     ))
+    scrape_source_d: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_D", "https://www.mackolik.com"
+    ))
     scrape_source_extra: str = field(default_factory=lambda: os.getenv(
         "SCRAPE_SOURCE_EXTRA", ""
     ))
@@ -60,6 +63,8 @@ class Config:
             sources.append({"name": "source_b", "label": "Live Scores", "url": self.scrape_source_b})
         if self.scrape_source_c:
             sources.append({"name": "source_c", "label": "Official Results", "url": self.scrape_source_c})
+        if self.scrape_source_d:
+            sources.append({"name": "source_d", "label": "Modern Frontend", "url": self.scrape_source_d})
         for extra in self.scrape_source_extra.split(","):
             extra = extra.strip()
             if extra:

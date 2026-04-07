@@ -10,7 +10,7 @@ import numpy as np
 
 from common.logger import get_logger, section_banner, success_banner, error_banner
 from common.config import cfg
-from common.constants import CURRENT_SEASON, UUID_TO_NAME
+from common.constants import UUID_TO_NAME
 from model.features import generate_synthetic_dataset, FEATURE_COLUMNS, N_FEATURES
 from model.inference import GBDTInference
 from model.trainer import train_model
@@ -374,7 +374,7 @@ class PipelineRunner:
                     "ht_away_score": rng.randint(0, away_score),
                     "match_week": week,
                     "league_id": "super_lig",
-                    "season": CURRENT_SEASON,
+                    "season": "auto",
                     "stats": {
                         "possession": rng.randint(35, 65),
                         "shots_on": rng.randint(2, 12),
