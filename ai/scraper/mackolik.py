@@ -112,7 +112,7 @@ class SeasonData:
 class MackolikClient:
     """Client for arsiv.mackolik.com JSON API."""
 
-    BASE = "https://arsiv.mackolik.com"
+    BASE = cfg.scrape_mackolik_archive
     AJAX = f"{BASE}/AjaxHandlers"
     GROUP_TURKEY = 1  # Süper Lig group ID
 

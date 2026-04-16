@@ -10,7 +10,7 @@ The system consists of four main layers:
 ┌──────────────────────────────────────────────────────┐
 │                    Flutter (future)                   │
 ├──────────────────────────────────────────────────────┤
-│              Go Middleware Server                      │
+│          Go Middleware Server  [dev-env only]         │
 │        REST API • PostgreSQL • Redis                  │
 ├──────────────────────────────────────────────────────┤
 │                   AI Engine (Python)                  │
@@ -20,6 +20,11 @@ The system consists of four main layers:
 │     Node │ Protocol │ Reputation │ Simulation         │
 └──────────────────────────────────────────────────────┘
 ```
+
+> **Note:** The Go server, PostgreSQL, and Redis are **local development tools only**.
+> They exist for inspecting scraped data, checking AI feature payloads, and ad-hoc
+> analysis during development. They are **not** part of the production architecture
+> and will not be shipped as required production components.
 
 ## Component Details
 
@@ -46,14 +51,19 @@ The system consists of four main layers:
 | **Proofreader** | `proofreader/validator.py` | Data validation and quarantine |
 | **Pipeline** | `pipeline/runner.py` | End-to-end pipeline, demo mode |
 
-### 2. Go Server (`server/`)
+### 2. Go Server (`server/`) — Local Development Only
+
+> ⚠️ **Development environment only.** Not required in production.
+> The AI engine scrapes data directly from its configured sources and operates
+> fully standalone. The Go server and its backing stores (PostgreSQL, Redis)
+> exist purely as a local inspection and caching layer.
 
 - **Gin** HTTP framework
-- PostgreSQL (`pgx/v5`) connection pool
-- Redis caching layer
-- API Endpoints:
+- PostgreSQL (`pgx/v5`) connection pool — stores raw scraped matches locally
+- Redis caching layer — caches feature payloads for quick re-queries
+- API Endpoints (development/inspection use only):
   - `GET /api/v1/health` — System health check
-  - `GET /api/v1/matches` — Match list
+  - `GET /api/v1/matches` — Match list (returns data only if DB has been populated)
   - `GET /api/v1/matches/:id` — Match details
   - `GET /api/v1/teams` — Team list
   - `GET /api/v1/teams/:id` — Team details
@@ -84,13 +94,18 @@ data_quarantine      → Suspicious data quarantine
 ## Data Flow
 
 ```
-1. Scraper  → Go Server → PostgreSQL (raw data)
-2. Features → 120 column generation + noise injection
+# Production flow (AI engine only)
+1. Scraper  → Live sources (mackolik.com → nesine → tff.org → openfootball → fallback)
+2. Features → 130+ column generation from real match data
 3. GBDT     → XGBoost + Dixon-Coles Poisson ensemble (GPU or CPU)
 4. TQU      → Turkish question understanding + intent classification
 5. TRC      → Template-based Turkish response composition
 6. Proofreader → Data validation + quarantine
 7. P2P      → Analysis sharing + reputation-weighted ensemble
+
+# Local development only (optional)
+8. Scraper  → Go Server → PostgreSQL (raw data inspection cache)
+9. Redis    → Feature payload caching
 ```
 
 ## Prediction Model

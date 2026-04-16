@@ -10,8 +10,12 @@ import numpy as np
 
 from common.logger import get_logger, section_banner, success_banner, error_banner
 from common.config import cfg
-from common.constants import UUID_TO_NAME
+from common.constants import UUID_TO_NAME, MACKOLIK_ID_MAP, TEAM_STRENGTH
 from model.features import generate_synthetic_dataset, FEATURE_COLUMNS, N_FEATURES
+from model.real_features import (
+    EloTracker, TeamStats, H2HTracker, StandingsTracker,
+    load_real_matches, _parse_date, _is_derby,
+)
 from model.inference import GBDTInference
 from model.trainer import train_model
 from tqu.classifier import classify
@@ -63,18 +67,17 @@ class PipelineRunner:
             success_banner(f"Pipeline completed successfully ({elapsed:.1f}s)")
 
     def run_demo(self):
-        """Run demo questions with synthetic data (requirement #2)."""
-        section_banner("NEGELIR AI — DEMO PIPELINE")
+        """Run demo questions with real scraped data."""
+        section_banner("NEGELIR AI — DEMO PIPELINE (REAL DATA)")
         start = time.time()
 
-        # Step 1: Train model with synthetic data
+        # Step 1: Train model with real data
         self._ensure_model()
 
-        # Step 2: Generate synthetic match features
-        section_banner("Synthetic Match Data Generation")
-        rng = np.random.RandomState(42)
-        demo_features = self._generate_demo_features(rng)
-        log.info("✅ Demo match data prepared")
+        # Step 2: Load real team context for feature generation
+        section_banner("Loading Real Match Context")
+        real_context = self._load_real_context()
+        log.info(f"✅ Real match context loaded ({len(real_context.get('teams', {}))} teams)")
 
         # Step 3: Sentiment analysis demo
         section_banner("NLP Sentiment Analysis (Demo)")
@@ -89,11 +92,11 @@ class PipelineRunner:
         log.info("✅ NLP sentiment analysis complete")
 
         # Step 4: Run Turkish Q&A demo
-        section_banner("Turkish Q&A Demo")
+        section_banner("Turkish Q&A Demo (Real Data)")
         log.info(f"📋 {len(DEMO_QUESTIONS)} questions to process...\n")
 
         for i, question in enumerate(DEMO_QUESTIONS, 1):
-            self._process_single_question(i, question, demo_features, rng)
+            self._process_single_question(i, question, real_context, None)
 
         elapsed = time.time() - start
         success_banner(f"Demo complete! ({elapsed:.1f}s, {len(DEMO_QUESTIONS)} questions)")
@@ -105,78 +108,37 @@ class PipelineRunner:
     # ── Pipeline steps ──────────────────────────────────
 
     def _step_scrape(self, ctx: OrchestratorContext) -> TaskResult:
-        """Step 1: Fetch data from Go server or generate synthetic."""
+        """Step 1: Fetch real data from live sources."""
         t0 = time.time()
-        section_banner("Step 1: Data Fetching (Web Scraping)")
+        section_banner("Step 1: Live Data Scraping")
 
-        # Try Go server first
+        # Try Go server first for cached data
         log.info("🌐 Checking Go server health...")
         server_ok = self.scraper.check_server_health()
         if server_ok:
-            log.info("🟢 Go server reachable — fetching data through server")
-            self.scraper.trigger_server_scrape()
+            log.info("🟢 Go server reachable")
             matches = self.scraper.fetch_matches_from_server()
             if matches:
-                log.info(f"📊 Fetched {len(matches)} matches from Go server")
+                log.info(f"📊 Fetched {len(matches)} cached matches from Go server")
                 ctx.raw_matches = matches
                 return TaskResult(success=True, duration_ms=(time.time() - t0) * 1000)
 
-        # Fallback: simulate detailed scraping process
-        log.info("⚠️  Go server not available — starting simulated scraping")
-        log.info("")
+        # Real scraping from live sources
+        log.info("🔄 Scraping real data from live sources...")
+        try:
+            from model.real_features import load_real_matches
+            real_matches = load_real_matches()
+            if real_matches:
+                ctx.raw_matches = real_matches
+                log.info(f"✅ Loaded {len(real_matches)} real matches from live sources")
+                return TaskResult(success=True, duration_ms=(time.time() - t0) * 1000)
+        except Exception as exc:
+            log.warning(f"⚠️  Real scraping failed: {exc}")
 
-        # Simulate scraping from 3 sources with performance metrics
-        sources = [
-            {"name": "Source-A (Statistics Site)", "pages": 8},
-            {"name": "Source-B (Live Score Site)", "pages": 5},
-            {"name": "Source-C (Archive Site)",       "pages": 10},
-        ]
-
-        total_pages = 0
-        total_bytes = 0
-        total_matches_found = 0
-
-        for src in sources:
-            src_start = time.time()
-            src_bytes = 0
-            src_matches = 0
-            log.info(f"🔗 {src['name']}:")
-            log.info(f"   ⏱️  Rate limit: 5s/request (roadmap §4.2)")
-
-            for page in range(1, src['pages'] + 1):
-                import time as _t
-                _t.sleep(0.015)  # simulate small delay
-                page_bytes = random.randint(25_000, 70_000)
-                matches_on_page = random.randint(2, 5)
-                src_bytes += page_bytes
-                src_matches += matches_on_page
-
-                if page <= 2 or page == src['pages']:
-                    log.info(
-                        f"   📄 Page {page}/{src['pages']}: "
-                        f"{page_bytes/1024:.1f} KB → {matches_on_page} matches parsed "
-                        f"(HTML discarded from RAM ✓)"
-                    )
-                elif page == 3:
-                    log.info(f"   ... ({src['pages'] - 4} more pages)")
-
-            src_elapsed = (time.time() - src_start) * 1000
-            total_pages += src['pages']
-            total_bytes += src_bytes
-            total_matches_found += src_matches
-            log.info(
-                f"   ✅ {src_matches} matches, {src_bytes/1024:.0f} KB, {src_elapsed:.0f}ms"
-            )
-
-        log.info(f"\n🏁 Scraping Summary:")
-        log.info(f"   📄 Total pages: {total_pages}")
-        log.info(f"   📦 Total data: {total_bytes/1024:.0f} KB")
-        log.info(f"   ⚽ Total matches: {total_matches_found} (parsed)")
-        log.info(f"   🗑️  All HTML discarded from memory (RAM-only)")
-
-        # Generate synthetic matches based on "scraped" data
-        ctx.raw_matches = self._generate_synthetic_matches()
-        log.info(f"\n📦 {len(ctx.raw_matches)} matches passed to pipeline")
+        # Last resort: use existing real JSON
+        log.info("⚠️  Falling back to local data cache")
+        ctx.raw_matches = self._load_cached_matches()
+        log.info(f"📦 {len(ctx.raw_matches)} matches passed to pipeline")
         return TaskResult(success=True, duration_ms=(time.time() - t0) * 1000)
 
     def _step_process(self, ctx: OrchestratorContext) -> TaskResult:
@@ -209,11 +171,10 @@ class PipelineRunner:
         t0 = time.time()
         section_banner("Step 4: Analysis & Turkish Response")
 
-        rng = np.random.RandomState(42)
-        demo_features = self._generate_demo_features(rng)
+        real_context = self._load_real_context(ctx.raw_matches if hasattr(ctx, "raw_matches") else None)
 
         for i, question in enumerate(DEMO_QUESTIONS, 1):
-            self._process_single_question(i, question, demo_features, rng)
+            self._process_single_question(i, question, real_context, None)
 
         return TaskResult(success=True, duration_ms=(time.time() - t0) * 1000)
 
@@ -226,7 +187,7 @@ class PipelineRunner:
             self.model = GBDTInference()
             log.info("✅ GBDT model ready")
 
-    def _process_single_question(self, idx: int, question: str, features: dict, rng):
+    def _process_single_question(self, idx: int, question: str, context: dict, rng):
         """Process one Turkish question through TQU → GBDT → TRC."""
         log.info(f"\n{'─' * 60}")
         log.info(f"❓ Q{idx}: \"{question}\"")
@@ -245,21 +206,8 @@ class PipelineRunner:
         match_id = entities.match_ref or f"demo_match_{idx}"
         self.qid_collector.record(match_id, intent, classification.confidence)
 
-        # Generate feature vector for this "match"
-        feature_vec = np.zeros((1, N_FEATURES), dtype=np.float32)
-        for i, col in enumerate(FEATURE_COLUMNS):
-            if "elo" in col:
-                feature_vec[0, i] = rng.normal(1500, 200)
-            elif "ratio" in col or "pct" in col or "norm" in col:
-                feature_vec[0, i] = rng.uniform(0, 1)
-            elif "sentiment" in col or "optimism" in col:
-                feature_vec[0, i] = rng.uniform(-1, 1)
-            elif "sin" in col or "cos" in col:
-                feature_vec[0, i] = rng.uniform(-1, 1)
-            elif "flag" in col or "change" in col:
-                feature_vec[0, i] = rng.randint(0, 2)
-            else:
-                feature_vec[0, i] = rng.uniform(0, 3)
+        # Build real feature vector from team context
+        feature_vec = self._build_real_features(entities, context)
 
         # Inject QID features from collected query intent distribution
         qid_features = self.qid_collector.get_features(match_id)
@@ -279,7 +227,7 @@ class PipelineRunner:
         trc_analysis = {
             "confidence": analysis["confidence"],
             "probability": prob,
-            "features": self._build_trc_features(analysis, features, rng),
+            "features": self._build_trc_features_from_context(analysis, entities, context),
         }
 
         entity_dict = {}
@@ -319,7 +267,8 @@ class PipelineRunner:
         return 0.5
 
     def _build_trc_features(self, analysis: dict, match_features: dict, rng) -> dict:
-        """Build the features dict expected by TRC templates."""
+        """Build the features dict expected by TRC templates (legacy fallback)."""
+        rng = rng or np.random.RandomState(42)
         return {
             "window": 5,
             "avg_total_goals": round(rng.uniform(1.8, 3.2), 1),
@@ -349,8 +298,316 @@ class PipelineRunner:
             "trend_text": rng.choice(["dengeli", "ev sahibi lehine", "deplasman lehine"]),
         }
 
+    def _build_trc_features_from_context(self, analysis: dict, entities, context: dict) -> dict:
+        """Build TRC features from real team context."""
+        team_stats = context.get("team_stats", {})
+        h2h_tracker = context.get("h2h")
+        elo_tracker = context.get("elo")
+
+        # Determine home/away teams from entities
+        home_name = None
+        away_name = None
+        if entities and len(entities.team_refs) >= 2:
+            home_name = UUID_TO_NAME.get(entities.team_refs[0], entities.team_names[0] if entities.team_names else None)
+            away_name = UUID_TO_NAME.get(entities.team_refs[1], entities.team_names[1] if len(entities.team_names) > 1 else None)
+        elif entities and len(entities.team_refs) == 1:
+            home_name = UUID_TO_NAME.get(entities.team_refs[0], entities.team_names[0] if entities.team_names else None)
+
+        h_stats = team_stats.get(home_name) if home_name else None
+        a_stats = team_stats.get(away_name) if away_name else None
+
+        if h_stats and a_stats:
+            h2h_data = h2h_tracker.stats(home_name, away_name) if h2h_tracker else {}
+            h_elo = elo_tracker.rating(home_name) if elo_tracker else 1500
+            a_elo = elo_tracker.rating(away_name) if elo_tracker else 1500
+
+            h_ppg3 = h_stats.ppg(3)
+            h_ppg5 = h_stats.ppg(5)
+            a_ppg3 = a_stats.ppg(3)
+            a_ppg5 = a_stats.ppg(5)
+            h_momentum = "rising" if h_ppg3 > h_ppg5 else ("falling" if h_ppg3 < h_ppg5 else "stable")
+            a_momentum = "rising" if a_ppg3 > a_ppg5 else ("falling" if a_ppg3 < a_ppg5 else "stable")
+
+            h_cs = h_stats.clean_sheet_pct(10)
+            a_cs = a_stats.clean_sheet_pct(10)
+            if h_cs > 0.4 and a_cs > 0.4:
+                defense_q = "strong"
+            elif h_cs < 0.2 and a_cs < 0.2:
+                defense_q = "weak"
+            else:
+                defense_q = "mixed"
+
+            h2h_advantage = "balanced"
+            if h2h_data.get("home_win_pct", 0.33) > 0.5:
+                h2h_advantage = "home_dominant"
+            elif h2h_data.get("home_win_pct", 0.33) < 0.25:
+                h2h_advantage = "away_dominant"
+
+            avg_total = h_stats.avg_scored(5) + a_stats.avg_scored(5)
+            trend = "dengeli"
+            if h_elo - a_elo > 100:
+                trend = "ev sahibi lehine"
+            elif a_elo - h_elo > 100:
+                trend = "deplasman lehine"
+
+            return {
+                "window": 5,
+                "avg_total_goals": round(h_stats.avg_scored(5) + a_stats.avg_scored(5), 1),
+                "avg_goals_scored": round(h_stats.avg_scored(5), 1),
+                "avg_goals_conceded": round(h_stats.avg_conceded(5), 1),
+                "h2h_over_pct": int(h2h_data.get("over25_pct", 0.5) * 100),
+                "draw_pct": int(h2h_data.get("draw_pct", 0.25) * 100),
+                "bts_pct": int(h2h_data.get("bts_pct", 0.5) * 100),
+                "elo_rating": int(h_elo),
+                "form_index": round(h_stats.ppg(5) / 3.0, 2),
+                "win_count": int(h_stats.win_ratio(5) * 5),
+                "opp_wins": int(a_stats.win_ratio(5) * 5),
+                "venue_type": "ev sahibi",
+                "venue_type_tr": "ev sahibi",
+                "advantage_text": trend,
+                "home_momentum": h_momentum,
+                "away_momentum": a_momentum,
+                "defense_quality": defense_q,
+                "h2h_advantage": h2h_advantage,
+                "clean_sheets": int(h_stats.clean_sheet_pct(10) * 10),
+                "half_stat": f"İY ort. {h_stats.avg_ht_scored(5):.1f}-{a_stats.avg_ht_scored(5):.1f}",
+                "wins": int(h_stats.win_ratio(5) * 5),
+                "draws": int(h_stats.draw_ratio(5) * 5),
+                "losses": int(h_stats.loss_ratio(5) * 5),
+                "t1_wins": int(h_stats.win_ratio(10) * 10),
+                "t2_wins": int(a_stats.win_ratio(10) * 10),
+                "trend_text": trend,
+            }
+
+        # Fallback for single/unknown teams
+        rng = np.random.RandomState(42)
+        return self._build_trc_features(analysis, {}, rng)
+
+    def _build_real_features(self, entities, context: dict) -> np.ndarray:
+        """Build a real feature vector from extracted entities and match context."""
+        import math
+        from datetime import datetime
+
+        feature_vec = np.zeros((1, N_FEATURES), dtype=np.float32)
+        team_stats = context.get("team_stats", {})
+        elo_tracker = context.get("elo")
+        h2h_tracker = context.get("h2h")
+        standings = context.get("standings")
+
+        if not entities or not entities.team_refs:
+            return feature_vec
+
+        # Resolve team names from UUIDs
+        home_name = UUID_TO_NAME.get(entities.team_refs[0])
+        away_name = UUID_TO_NAME.get(entities.team_refs[1]) if len(entities.team_refs) >= 2 else None
+
+        h_stats = team_stats.get(home_name) if home_name else None
+        a_stats = team_stats.get(away_name) if away_name else None
+
+        if not h_stats or not a_stats:
+            # Not enough data, return zero vector (model will give low confidence)
+            return feature_vec
+
+        helo = elo_tracker.rating(home_name) if elo_tracker else 1500.0
+        aelo = elo_tracker.rating(away_name) if elo_tracker else 1500.0
+        h2h_data = h2h_tracker.stats(home_name, away_name) if h2h_tracker else {
+            "home_win_pct": 0.33, "draw_pct": 0.33, "avg_goals": 2.5,
+            "over25_pct": 0.5, "bts_pct": 0.5, "count": 0, "avg_cards": 3.0,
+        }
+
+        h_strength = TEAM_STRENGTH.get(home_name, (1.0, 1.0))
+        a_strength = TEAM_STRENGTH.get(away_name, (1.0, 1.0))
+
+        home_xg = 1.35 * h_strength[0] / max(a_strength[1], 0.5) * (1 + (helo - 1500) / 2000)
+        away_xg = 1.35 * a_strength[0] / max(h_strength[1], 0.5) * (1 + (aelo - 1500) / 2000)
+
+        home_form = 0.5 * h_stats.ppg(5) / 3.0 + 0.3 * h_stats.win_ratio(5) + 0.2 * (1 - h_stats.loss_ratio(5))
+        away_form = 0.5 * a_stats.ppg(5) / 3.0 + 0.3 * a_stats.win_ratio(5) + 0.2 * (1 - a_stats.loss_ratio(5))
+
+        h_venue_win, h_venue_ppg = h_stats.venue_stats(is_home=True)
+        a_venue_win, a_venue_ppg = a_stats.venue_stats(is_home=False)
+
+        derby = 1.0 if _is_derby(home_name, away_name) else 0.0
+
+        now = datetime.now()
+        day_of_year = now.timetuple().tm_yday
+        day_sin = math.sin(2 * math.pi * day_of_year / 365)
+        day_cos = math.cos(2 * math.pi * day_of_year / 365)
+        month_sin = math.sin(2 * math.pi * now.month / 12)
+        month_cos = math.cos(2 * math.pi * now.month / 12)
+
+        h_last = h_stats.last_match_date()
+        a_last = a_stats.last_match_date()
+        h_rest = (_parse_date(str(now.date())) - _parse_date(h_last)).days if h_last else 7
+        a_rest = (_parse_date(str(now.date())) - _parse_date(a_last)).days if a_last else 7
+        h_rest = min(max(h_rest, 1), 30)
+        a_rest = min(max(a_rest, 1), 30)
+
+        h_momentum = h_stats.ppg(3) - h_stats.ppg(5)
+        a_momentum = a_stats.ppg(3) - a_stats.ppg(5)
+
+        avg_total = h_stats.avg_scored(10) + a_stats.avg_scored(10)
+        low_scoring = 1.0 / (1.0 + math.exp(avg_total - 2.0))
+
+        h_congestion_7 = 1 if h_rest <= 4 else 0
+        a_congestion_7 = 1 if a_rest <= 4 else 0
+        h_congestion_14 = 2 if h_rest <= 3 else (1 if h_rest <= 5 else 0)
+        a_congestion_14 = 2 if a_rest <= 3 else (1 if a_rest <= 5 else 0)
+
+        style_matchup = abs(h_strength[0] - a_strength[1]) + abs(a_strength[0] - h_strength[1])
+        h_expected = 1.0 / (1.0 + 10 ** ((1500 - helo) / 400))
+        a_expected = 1.0 / (1.0 + 10 ** ((1500 - aelo) / 400))
+        h_surprise = abs(h_stats.win_ratio(5) - h_expected)
+        a_surprise = abs(a_stats.win_ratio(5) - a_expected)
+        derby_card_factor = 1.3 if derby else 1.0
+
+        # Season progress estimate (0.75 = late season by default for inference)
+        season_progress = 0.75
+        match_week_norm = season_progress
+
+        vec = [
+            h_stats.avg_scored(3), h_stats.avg_scored(5), h_stats.avg_scored(10),
+            h_stats.avg_conceded(3), h_stats.avg_conceded(5), h_stats.avg_conceded(10),
+            h_stats.ppg(5), h_stats.ppg(10), h_stats.clean_sheet_pct(10),
+            h_stats.win_ratio(5), h_stats.draw_ratio(5), h_stats.loss_ratio(5),
+            a_stats.avg_scored(3), a_stats.avg_scored(5), a_stats.avg_scored(10),
+            a_stats.avg_conceded(3), a_stats.avg_conceded(5), a_stats.avg_conceded(10),
+            a_stats.ppg(5), a_stats.ppg(10), a_stats.clean_sheet_pct(10),
+            a_stats.win_ratio(5), a_stats.draw_ratio(5), a_stats.loss_ratio(5),
+            helo, aelo, helo - aelo,
+            home_xg, away_xg, home_xg - away_xg,
+            home_form, away_form, home_form - away_form,
+            h2h_data["home_win_pct"], h2h_data["draw_pct"], h2h_data["avg_goals"],
+            h2h_data["over25_pct"], h2h_data["bts_pct"], h2h_data["count"],
+            standings.position_norm(home_name) if standings else 0.5,
+            standings.position_norm(away_name) if standings else 0.5,
+            (standings.position_norm(home_name) - standings.position_norm(away_name)) if standings else 0.0,
+            standings.goal_diff(home_name) if standings else 0,
+            standings.goal_diff(away_name) if standings else 0,
+            standings.pts_gap_leader(home_name) if standings else 0,
+            standings.pts_gap_leader(away_name) if standings else 0,
+            standings.pts_gap_relegation(home_name) if standings else 0,
+            standings.pts_gap_relegation(away_name) if standings else 0,
+            0.7, 0.7, 0.5, 0.5, 0.3, 0.3, 26.0, 26.0,
+            h_congestion_7, a_congestion_7, h_congestion_14, a_congestion_14,
+            10.0, 10.0, 0.0, 0.0,
+            derby, 2,  # season_phase=late
+            match_week_norm,
+            day_sin, day_cos, month_sin, month_cos,
+            h_rest, a_rest, h_rest - a_rest,
+            0.0, 0.0, 0.0, 0.0, 0.0,
+            style_matchup, h_rest - a_rest,
+            h_momentum, a_momentum,
+            h_stats.scoring_consistency(), a_stats.scoring_consistency(),
+            h_surprise, a_surprise,
+            2.0, 0.0, 1.0, 0.0,
+            h_stats.avg_yellows(5), a_stats.avg_yellows(5),
+            h_stats.avg_yellows(10), a_stats.avg_yellows(10),
+            h_stats.avg_fouls(5), a_stats.avg_fouls(5),
+            h2h_data["avg_cards"], derby_card_factor,
+            h_stats.avg_ht_scored(5), a_stats.avg_ht_scored(5),
+            h_stats.sh_scoring_rate(5), a_stats.sh_scoring_rate(5),
+            h_stats.avg_ht_conceded(5), a_stats.avg_ht_conceded(5),
+            h_venue_win, a_venue_win, h_venue_ppg, a_venue_ppg,
+            h_stats.draws_bayesian(), a_stats.draws_bayesian(), low_scoring,
+            standings.sos(home_name, elo_tracker) if standings and elo_tracker else 1500.0,
+            standings.sos(away_name, elo_tracker) if standings and elo_tracker else 1500.0,
+            h_stats.sh_scoring_rate(5), a_stats.sh_scoring_rate(5),
+            h_stats.sh_conceding_rate(5), a_stats.sh_conceding_rate(5),
+            h_stats.goals_per_match_rate(), a_stats.goals_per_match_rate(),
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  # QID slots
+        ]
+
+        assert len(vec) == N_FEATURES, f"Feature vector length {len(vec)} != {N_FEATURES}"
+        feature_vec[0, :] = vec
+        return feature_vec
+
+    def _load_real_context(self, raw_matches: list[dict] | None = None) -> dict:
+        """Build real team context (trackers) from match data."""
+        from collections import defaultdict
+
+        matches = raw_matches
+        if not matches:
+            try:
+                matches = load_real_matches()
+            except Exception as exc:
+                log.warning(f"Real data loading failed: {exc}")
+                matches = self._load_cached_matches()
+
+        if not matches:
+            log.warning("No match data available, using empty context")
+            return {"teams": {}, "team_stats": {}, "elo": EloTracker(), "h2h": H2HTracker(), "standings": StandingsTracker()}
+
+        elo = EloTracker()
+        team_stats_map: dict[str, TeamStats] = defaultdict(TeamStats)
+        h2h = H2HTracker()
+        standings = StandingsTracker()
+
+        for m in matches:
+            home = m.get("home", m.get("team1", ""))
+            away = m.get("away", m.get("team2", ""))
+            ft_home = m.get("ft_home", m.get("home_score", 0))
+            ft_away = m.get("ft_away", m.get("away_score", 0))
+
+            if ft_home is None or ft_away is None:
+                continue
+
+            elo.update(home, away, ft_home, ft_away)
+            h2h.add(home, away, ft_home, ft_away)
+            standings.update(home, away, ft_home, ft_away)
+
+            if ft_home > ft_away:
+                h_pts, a_pts = 3, 0
+            elif ft_home == ft_away:
+                h_pts, a_pts = 1, 1
+            else:
+                h_pts, a_pts = 0, 3
+
+            team_stats_map[home].add({
+                "date": m.get("date", ""),
+                "gf": ft_home, "ga": ft_away,
+                "ht_gf": m.get("ht_home"), "ht_ga": m.get("ht_away"),
+                "pts": h_pts, "is_home": True,
+                "yellows": m.get("home_yellows"),
+                "fouls": m.get("home_fouls"),
+            })
+            team_stats_map[away].add({
+                "date": m.get("date", ""),
+                "gf": ft_away, "ga": ft_home,
+                "ht_gf": m.get("ht_away"), "ht_ga": m.get("ht_home"),
+                "pts": a_pts, "is_home": False,
+                "yellows": m.get("away_yellows"),
+                "fouls": m.get("away_fouls"),
+            })
+
+        log.info(f"📊 Context built: {len(team_stats_map)} teams, {len(matches)} matches")
+        return {
+            "teams": dict(team_stats_map),
+            "team_stats": dict(team_stats_map),
+            "elo": elo,
+            "h2h": h2h,
+            "standings": standings,
+        }
+
+    def _load_cached_matches(self) -> list[dict]:
+        """Load matches from local JSON cache."""
+        import json
+        import os
+
+        for path in ["/data/tr_super_lig_real.json", "data/tr_super_lig_real.json"]:
+            if os.path.isfile(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    matches = data.get("matches", [])
+                    log.info(f"📦 Loaded {len(matches)} cached matches from {path}")
+                    return matches
+                except Exception as exc:
+                    log.warning(f"Cache load failed ({path}): {exc}")
+        return []
+
     def _generate_demo_features(self, rng) -> dict:
-        """Generate feature context for demo matches."""
+        """Generate feature context for demo matches (legacy)."""
         return {"demo": True, "generated": True}
 
     def _generate_synthetic_matches(self) -> list[dict]:

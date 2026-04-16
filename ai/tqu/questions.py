@@ -560,15 +560,54 @@ QUESTION_COUNT = len(QUESTIONS)
 FOOTBALL_QUESTIONS = [q for q in QUESTIONS if q["should_succeed"]]
 REJECTION_QUESTIONS_LIST = [q for q in QUESTIONS if not q["should_succeed"]]
 
-# Demo subset (one per intent)
-DEMO_QUESTIONS = [
-    q["text"] for q in QUESTIONS
-    if q["expected_intent"] in (
+# Demo subset: prioritize two-team matchup questions for meaningful predictions
+def _select_demo_questions() -> list[str]:
+    """Select demo questions that showcase real predictions (two-team matchups preferred)."""
+    intents = (
         "match_winner", "draw", "over_under", "goal_range",
         "both_teams_score", "clean_sheet", "half_time",
         "form_query", "head_to_head",
     )
-][:20] + [q["text"] for q in REJECTION_QUESTIONS_LIST[:2]]
+    # Prefer questions with 2 teams (better predictions)
+    two_team = [q["text"] for q in QUESTIONS if q["expected_intent"] in intents and q["should_succeed"]
+                and any(t in q["text"] for t in _TEAMS[:6])
+                and sum(1 for t in _TEAMS if t in q["text"]) >= 2]
+    # Fill remaining with single-team questions
+    one_team = [q["text"] for q in QUESTIONS if q["expected_intent"] in intents and q["should_succeed"]
+                and q["text"] not in two_team]
+
+    # Take diverse set: up to 2 per intent from two-team, then fill from one-team
+    from collections import defaultdict
+    seen_intents = defaultdict(int)
+    selected = []
+    for q_text in two_team:
+        for q in QUESTIONS:
+            if q["text"] == q_text:
+                intent = q["expected_intent"]
+                if seen_intents[intent] < 2:
+                    selected.append(q_text)
+                    seen_intents[intent] += 1
+                break
+        if len(selected) >= 16:
+            break
+
+    # Add single-team to reach 20
+    for q_text in one_team:
+        if len(selected) >= 20:
+            break
+        for q in QUESTIONS:
+            if q["text"] == q_text:
+                intent = q["expected_intent"]
+                if seen_intents[intent] < 3:
+                    selected.append(q_text)
+                    seen_intents[intent] += 1
+                break
+
+    # Add 2 rejection questions
+    selected += [q["text"] for q in REJECTION_QUESTIONS_LIST[:2]]
+    return selected
+
+DEMO_QUESTIONS = _select_demo_questions()
 
 
 if __name__ == "__main__":

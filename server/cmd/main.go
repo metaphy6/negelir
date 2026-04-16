@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -115,6 +116,9 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("❌ Server shutdown error: %v", err)
 	}
+	if err := rdb.Close(); err != nil {
+		log.Printf("⚠️  Redis close error: %v", err)
+	}
 	fmt.Println("✅ Server shut down successfully")
 }
 
@@ -202,14 +206,26 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			})
 		}
 
+		if err := rows.Err(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "row iteration error"})
+			return
+		}
+
 		if matches == nil {
 			matches = []gin.H{}
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		result := gin.H{
 			"matches": matches,
 			"count":   len(matches),
-		})
+		}
+
+		// Write to cache (5 min TTL)
+		if data, err := json.Marshal(result); err == nil {
+			rdb.Set(ctx, "matches:list", data, 5*time.Minute)
+		}
+
+		c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -285,14 +301,26 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			})
 		}
 
+		if err := rows.Err(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "row iteration error"})
+			return
+		}
+
 		if teams == nil {
 			teams = []gin.H{}
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		result := gin.H{
 			"teams": teams,
 			"count": len(teams),
-		})
+		}
+
+		// Write to cache (10 min TTL)
+		if data, err := json.Marshal(result); err == nil {
+			rdb.Set(ctx, "teams:list", data, 10*time.Minute)
+		}
+
+		c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -353,7 +381,7 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			SELECT team_uuid, season, match_week, elo_rating, form_index, xg_approximation,
 				   avg_goals_scored_5, avg_goals_conceded_5, points_per_game_5
 			FROM team_features
-			WHERE match_week = $1
+			WHERE match_id = $1
 			ORDER BY team_uuid
 		`, matchID)
 		if err != nil {
@@ -383,10 +411,15 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 				"ppg_5":      ppg5,
 			})
 		}
+		if err := rows.Err(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "row iteration error"})
+			return
+		}
+
 		if features == nil {
 			features = []gin.H{}
 		}
-		c.JSON(http.StatusOK, gin.H{"features": features, "match_week": matchID})
+		c.JSON(http.StatusOK, gin.H{"features": features, "match_id": matchID})
 	}
 }
 

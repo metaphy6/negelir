@@ -21,18 +21,28 @@ from model.features import generate_synthetic_dataset, inject_noise, FEATURE_COL
 log = get_logger("model.trainer")
 
 
-def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
+def train_model(save_path: str | None = None, use_real_data: bool = True) -> xgb.XGBClassifier:
     """
     Train the GBDT base model.
-    Uses synthetic data for PoC; real training uses historical match features.
+    Uses real scraped data by default; falls back to synthetic if scraping fails.
     """
     section_banner("GBDT Model Training")
 
     device = detect_device()
     params = get_xgb_params(device)
 
-    # Generate training data
-    X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
+    # Load real data from live sources; fallback to synthetic
+    if use_real_data:
+        try:
+            from model.real_features import extract_real_dataset
+            X, y = extract_real_dataset(min_history=5)
+            log.info(f"🏟️  Training on REAL data: {len(X)} matches")
+        except Exception as exc:
+            log.warning(f"Real data extraction failed ({exc}), falling back to synthetic")
+            X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
+    else:
+        X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
+
     X = inject_noise(X, noise_pct=0.005, seed=42)
 
     # Sample weights: upweight draws (class 1) for balance

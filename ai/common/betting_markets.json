@@ -1,0 +1,980 @@
+{
+  "_meta": {
+    "source": "İddaa / Nesine / Misli - Turkish Süper Lig football betting markets",
+    "last_updated": "2026-04-16",
+    "description": "Comprehensive list of betting markets available on legal Turkish betting platforms for football matches"
+  },
+  "categories": [
+    {
+      "category_id": "match_result",
+      "category_tr": "Taraf Bahisleri",
+      "category_en": "Match Result Markets",
+      "markets": [
+        {
+          "id": "ms",
+          "name_tr": "Maç Sonucu",
+          "name_en": "Match Result (1X2)",
+          "short_code": "MS",
+          "outcomes": ["1", "X", "2"],
+          "outcome_labels_tr": {"1": "Ev Sahibi", "X": "Beraberlik", "2": "Deplasman"},
+          "available_all_matches": true,
+          "popularity": "very_high",
+          "difficulty": "low"
+        },
+        {
+          "id": "cs",
+          "name_tr": "Çifte Şans",
+          "name_en": "Double Chance",
+          "short_code": "CS",
+          "outcomes": ["1-X", "1-2", "X-2"],
+          "outcome_labels_tr": {"1-X": "Ev Sahibi veya Beraberlik", "1-2": "Ev Sahibi veya Deplasman", "X-2": "Beraberlik veya Deplasman"},
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "low"
+        },
+        {
+          "id": "hms",
+          "name_tr": "Handikaplı Maç Sonucu",
+          "name_en": "Handicap Match Result",
+          "short_code": "HND",
+          "handicap_values": [-3, -2, -1, 1, 2, 3],
+          "outcomes": ["1", "X", "2"],
+          "outcome_labels_tr": {"1": "Ev Sahibi", "X": "Beraberlik", "2": "Deplasman"},
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_sonucu",
+          "name_tr": "İlk Yarı Sonucu",
+          "name_en": "First Half Result",
+          "short_code": "IY",
+          "outcomes": ["1", "X", "2"],
+          "outcome_labels_tr": {"1": "Ev Sahibi", "X": "Beraberlik", "2": "Deplasman"},
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_cs",
+          "name_tr": "İlk Yarı Çifte Şans",
+          "name_en": "First Half Double Chance",
+          "short_code": "IYCS",
+          "outcomes": ["1-X", "1-2", "X-2"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "2y_sonucu",
+          "name_tr": "İkinci Yarı Sonucu",
+          "name_en": "Second Half Result",
+          "short_code": "2Y",
+          "outcomes": ["1", "X", "2"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_ms",
+          "name_tr": "İlk Yarı / Maç Sonucu",
+          "name_en": "Half Time / Full Time",
+          "short_code": "IY/MS",
+          "outcomes": ["1/1", "1/X", "1/2", "X/1", "X/X", "X/2", "2/1", "2/X", "2/2"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "high"
+        },
+        {
+          "id": "kazanma_marji",
+          "name_tr": "Hangi Takım Kaç Farkla Kazanır?",
+          "name_en": "Winning Margin",
+          "short_code": "KM",
+          "outcomes": ["Ev 3+", "Ev 2", "Ev 1", "0", "Dep 1", "Dep 2", "Dep 3+"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "high"
+        },
+        {
+          "id": "ev_iki_yari_kazanir",
+          "name_tr": "Ev Sahibi Her İki Yarıyı Kazanır Mı?",
+          "name_en": "Home Team Wins Both Halves",
+          "short_code": "EIKY",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "dep_iki_yari_kazanir",
+          "name_tr": "Deplasman Her İki Yarıyı Kazanır Mı?",
+          "name_en": "Away Team Wins Both Halves",
+          "short_code": "DIKY",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "high"
+        }
+      ]
+    },
+    {
+      "category_id": "over_under",
+      "category_tr": "Alt/Üst Bahisleri",
+      "category_en": "Over/Under Markets",
+      "markets": [
+        {
+          "id": "au_05",
+          "name_tr": "Alt/Üst 0.5",
+          "name_en": "Over/Under 0.5 Goals",
+          "short_code": "AU05",
+          "threshold": 0.5,
+          "outcomes": ["Alt", "Üst"],
+          "outcome_labels_en": {"Alt": "Under", "Üst": "Over"},
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "low"
+        },
+        {
+          "id": "au_15",
+          "name_tr": "Alt/Üst 1.5",
+          "name_en": "Over/Under 1.5 Goals",
+          "short_code": "AU15",
+          "threshold": 1.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "low"
+        },
+        {
+          "id": "au_25",
+          "name_tr": "Alt/Üst 2.5",
+          "name_en": "Over/Under 2.5 Goals",
+          "short_code": "AU25",
+          "threshold": 2.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "very_high",
+          "difficulty": "low"
+        },
+        {
+          "id": "au_35",
+          "name_tr": "Alt/Üst 3.5",
+          "name_en": "Over/Under 3.5 Goals",
+          "short_code": "AU35",
+          "threshold": 3.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "low"
+        },
+        {
+          "id": "au_45",
+          "name_tr": "Alt/Üst 4.5",
+          "name_en": "Over/Under 4.5 Goals",
+          "short_code": "AU45",
+          "threshold": 4.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "low"
+        },
+        {
+          "id": "iy_au_05",
+          "name_tr": "İlk Yarı Alt/Üst 0.5",
+          "name_en": "First Half Over/Under 0.5",
+          "short_code": "IYAU05",
+          "threshold": 0.5,
+          "scope": "first_half",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_au_15",
+          "name_tr": "İlk Yarı Alt/Üst 1.5",
+          "name_en": "First Half Over/Under 1.5",
+          "short_code": "IYAU15",
+          "threshold": 1.5,
+          "scope": "first_half",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_au_25",
+          "name_tr": "İlk Yarı Alt/Üst 2.5",
+          "name_en": "First Half Over/Under 2.5",
+          "short_code": "IYAU25",
+          "threshold": 2.5,
+          "scope": "first_half",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ev_au_05",
+          "name_tr": "Ev Sahibi Alt/Üst 0.5",
+          "name_en": "Home Team Over/Under 0.5",
+          "short_code": "EVAU05",
+          "threshold": 0.5,
+          "scope": "home",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ev_au_15",
+          "name_tr": "Ev Sahibi Alt/Üst 1.5",
+          "name_en": "Home Team Over/Under 1.5",
+          "short_code": "EVAU15",
+          "threshold": 1.5,
+          "scope": "home",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ev_au_25",
+          "name_tr": "Ev Sahibi Alt/Üst 2.5",
+          "name_en": "Home Team Over/Under 2.5",
+          "short_code": "EVAU25",
+          "threshold": 2.5,
+          "scope": "home",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_au_05",
+          "name_tr": "Deplasman Alt/Üst 0.5",
+          "name_en": "Away Team Over/Under 0.5",
+          "short_code": "DEPAU05",
+          "threshold": 0.5,
+          "scope": "away",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_au_15",
+          "name_tr": "Deplasman Alt/Üst 1.5",
+          "name_en": "Away Team Over/Under 1.5",
+          "short_code": "DEPAU15",
+          "threshold": 1.5,
+          "scope": "away",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_au_25",
+          "name_tr": "Deplasman Alt/Üst 2.5",
+          "name_en": "Away Team Over/Under 2.5",
+          "short_code": "DEPAU25",
+          "threshold": 2.5,
+          "scope": "away",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ev_iy_au_05",
+          "name_tr": "Ev Sahibi İlk Yarı Altı/Üstü 0.5",
+          "name_en": "Home Team First Half Over/Under 0.5",
+          "short_code": "EVIYAU05",
+          "threshold": 0.5,
+          "scope": "home_first_half",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_iy_au_05",
+          "name_tr": "Deplasman İlk Yarı Altı/Üstü 0.5",
+          "name_en": "Away Team First Half Over/Under 0.5",
+          "short_code": "DEPIYAU05",
+          "threshold": 0.5,
+          "scope": "away_first_half",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iki_yari_alt_15",
+          "name_tr": "İki Yarı da Alt 1.5",
+          "name_en": "Both Halves Under 1.5",
+          "short_code": "2YALT15",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iki_yari_ust_15",
+          "name_tr": "İki Yarı da Üst 1.5",
+          "name_en": "Both Halves Over 1.5",
+          "short_code": "2YUST15",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        }
+      ]
+    },
+    {
+      "category_id": "goals",
+      "category_tr": "Gol Bahisleri",
+      "category_en": "Goal Markets",
+      "markets": [
+        {
+          "id": "kg",
+          "name_tr": "Karşılıklı Gol",
+          "name_en": "Both Teams to Score (BTTS)",
+          "short_code": "KG",
+          "outcomes": ["Var", "Yok"],
+          "outcome_labels_en": {"Var": "Yes", "Yok": "No"},
+          "available_all_matches": true,
+          "popularity": "very_high",
+          "difficulty": "low"
+        },
+        {
+          "id": "iy_kg",
+          "name_tr": "İlk Yarı Karşılıklı Gol",
+          "name_en": "First Half Both Teams to Score",
+          "short_code": "IYKG",
+          "outcomes": ["Var", "Yok"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "2y_kg",
+          "name_tr": "İkinci Yarı Karşılıklı Gol",
+          "name_en": "Second Half Both Teams to Score",
+          "short_code": "2YKG",
+          "outcomes": ["Var", "Yok"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "toplam_gol",
+          "name_tr": "Toplam Gol",
+          "name_en": "Total Goals Range",
+          "short_code": "TG",
+          "outcomes": ["0-1", "2-3", "4-5", "6+"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "tek_cift",
+          "name_tr": "Tek/Çift",
+          "name_en": "Odd/Even Goals",
+          "short_code": "TC",
+          "outcomes": ["Tek", "Çift"],
+          "outcome_labels_en": {"Tek": "Odd", "Çift": "Even"},
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "low"
+        },
+        {
+          "id": "iy_tek_cift",
+          "name_tr": "İlk Yarı Tek/Çift",
+          "name_en": "First Half Odd/Even Goals",
+          "short_code": "IYTC",
+          "outcomes": ["Tek", "Çift"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "low"
+        },
+        {
+          "id": "ilk_gol",
+          "name_tr": "İlk Golü Hangi Takım Atar",
+          "name_en": "First Goal Scorer Team",
+          "short_code": "IG",
+          "outcomes": ["1", "Olmaz", "2"],
+          "outcome_labels_tr": {"1": "Ev Sahibi", "Olmaz": "Gol Olmaz", "2": "Deplasman"},
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "hangi_yari_fazla_gol",
+          "name_tr": "Hangi Yarıda Daha Fazla Gol Olur",
+          "name_en": "Which Half More Goals",
+          "short_code": "HYFG",
+          "outcomes": ["1. Y", "Eşit", "2. Y"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ev_hangi_yari_gol",
+          "name_tr": "Ev Sahibi Hangi Yarıda Daha Fazla Gol Atar",
+          "name_en": "Home Team Which Half More Goals",
+          "short_code": "EVHYG",
+          "outcomes": ["1. Y", "Eşit", "2. Y"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "dep_hangi_yari_gol",
+          "name_tr": "Deplasman Hangi Yarıda Daha Fazla Gol Atar",
+          "name_en": "Away Team Which Half More Goals",
+          "short_code": "DEPHYG",
+          "outcomes": ["1. Y", "Eşit", "2. Y"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "ev_iki_yari_gol",
+          "name_tr": "Ev Sahibi Her İki Yarıda da Gol Atar",
+          "name_en": "Home Team Scores in Both Halves",
+          "short_code": "EVIYG",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_iki_yari_gol",
+          "name_tr": "Deplasman Her İki Yarıda da Gol Atar",
+          "name_en": "Away Team Scores in Both Halves",
+          "short_code": "DEPIYG",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_2y_kg",
+          "name_tr": "İlk Yarıda/İkinci Yarıda Karşılıklı Gol Olur",
+          "name_en": "BTTS in First Half / Second Half",
+          "short_code": "IY2YKG",
+          "outcomes": ["Hayır / Hayır", "Evet / Hayır", "Evet / Evet", "Hayır / Evet"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "high"
+        }
+      ]
+    },
+    {
+      "category_id": "combined",
+      "category_tr": "İkili (Kombine) Bahisler",
+      "category_en": "Combined Markets",
+      "markets": [
+        {
+          "id": "ms_au_15",
+          "name_tr": "Maç Sonucu ve Alt/Üst 1.5",
+          "name_en": "Match Result & Over/Under 1.5",
+          "short_code": "MSAU15",
+          "outcomes": ["MS 1 + A", "MS X + A", "MS 2 + A", "MS 1 + Ü", "MS X + Ü", "MS 2 + Ü"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ms_au_25",
+          "name_tr": "Maç Sonucu ve Alt/Üst 2.5",
+          "name_en": "Match Result & Over/Under 2.5",
+          "short_code": "MSAU25",
+          "outcomes": ["MS 1 + A", "MS X + A", "MS 2 + A", "MS 1 + Ü", "MS X + Ü", "MS 2 + Ü"],
+          "available_all_matches": true,
+          "popularity": "very_high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ms_au_35",
+          "name_tr": "Maç Sonucu ve Alt/Üst 3.5",
+          "name_en": "Match Result & Over/Under 3.5",
+          "short_code": "MSAU35",
+          "outcomes": ["MS 1 + A", "MS X + A", "MS 2 + A", "MS 1 + Ü", "MS X + Ü", "MS 2 + Ü"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ms_au_45",
+          "name_tr": "Maç Sonucu ve Alt/Üst 4.5",
+          "name_en": "Match Result & Over/Under 4.5",
+          "short_code": "MSAU45",
+          "outcomes": ["MS 1 + A", "MS X + A", "MS 2 + A", "MS 1 + Ü", "MS X + Ü", "MS 2 + Ü"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ms_kg",
+          "name_tr": "Maç Sonucu ve Karşılıklı Gol",
+          "name_en": "Match Result & BTTS",
+          "short_code": "MSKG",
+          "outcomes": ["1 ve Var", "1 ve Yok", "X ve Var", "X ve Yok", "2 ve Var", "2 ve Yok"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "au25_kg",
+          "name_tr": "Altı/Üstü 2.5 ve Karşılıklı Gol",
+          "name_en": "Over/Under 2.5 & BTTS",
+          "short_code": "AU25KG",
+          "outcomes": ["Alt ve Var", "Üst ve Var", "Alt ve Yok", "Üst ve Yok"],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_sonucu_kg",
+          "name_tr": "İlk Yarı Sonucu ve İlk Yarı Karşılıklı Gol",
+          "name_en": "First Half Result & First Half BTTS",
+          "short_code": "IYKG",
+          "outcomes": ["1 ve Var", "1 ve Yok", "0 ve Var", "0 ve Yok", "2 ve Var", "2 ve Yok"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "high"
+        },
+        {
+          "id": "iy_sonucu_au_15",
+          "name_tr": "İlk Yarı Sonucu ve Altı/Üstü 1.5",
+          "name_en": "First Half Result & Over/Under 1.5",
+          "short_code": "IYAU15",
+          "outcomes": ["1 ve Alt", "0 ve Alt", "2 ve Alt", "1 ve Üst", "0 ve Üst", "2 ve Üst"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "high"
+        }
+      ]
+    },
+    {
+      "category_id": "correct_score",
+      "category_tr": "Skor Bahisleri",
+      "category_en": "Correct Score Markets",
+      "markets": [
+        {
+          "id": "mac_skoru",
+          "name_tr": "Maç Skoru",
+          "name_en": "Correct Score",
+          "short_code": "SK",
+          "outcomes": [
+            "1:0", "2:0", "2:1", "3:0", "3:1", "3:2", "4:0", "4:1", "4:2", "5:0", "5:1", "6:0",
+            "0:0", "1:1", "2:2", "3:3",
+            "0:1", "0:2", "1:2", "0:3", "1:3", "2:3", "0:4", "1:4", "2:4", "0:5", "1:5", "0:6",
+            "Diğer"
+          ],
+          "available_all_matches": true,
+          "popularity": "high",
+          "difficulty": "very_high"
+        },
+        {
+          "id": "iy_skoru",
+          "name_tr": "İlk Yarı Skoru",
+          "name_en": "First Half Correct Score",
+          "short_code": "IYSK",
+          "outcomes": [
+            "0:0", "1:0", "2:0", "2:1", "1:1", "2:2",
+            "0:1", "0:2", "1:2",
+            "Diğer"
+          ],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "very_high"
+        },
+        {
+          "id": "iy_ms_skoru",
+          "name_tr": "İlk Yarı / Maç Sonucu Skorları",
+          "name_en": "HT/FT Combined Correct Score",
+          "short_code": "IYMSSK",
+          "description_tr": "İlk yarı ve maç sonu skorunun birlikte tahmini",
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "very_high"
+        }
+      ]
+    },
+    {
+      "category_id": "corners",
+      "category_tr": "Korner Bahisleri",
+      "category_en": "Corner Markets",
+      "markets": [
+        {
+          "id": "korner_au_85",
+          "name_tr": "Toplam Korner Sayısı Alt/Üst 8.5",
+          "name_en": "Total Corners Over/Under 8.5",
+          "short_code": "KAU85",
+          "threshold": 8.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "korner_au_95",
+          "name_tr": "Toplam Korner Sayısı Alt/Üst 9.5",
+          "name_en": "Total Corners Over/Under 9.5",
+          "short_code": "KAU95",
+          "threshold": 9.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "korner_au_105",
+          "name_tr": "Toplam Korner Sayısı Alt/Üst 10.5",
+          "name_en": "Total Corners Over/Under 10.5",
+          "short_code": "KAU105",
+          "threshold": 10.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_korner_au_45",
+          "name_tr": "İlk Yarı Toplam Korner Sayısı Alt/Üst 4.5",
+          "name_en": "First Half Total Corners Over/Under 4.5",
+          "short_code": "IYKAU45",
+          "threshold": 4.5,
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "korner_aralik",
+          "name_tr": "Toplam Korner Aralığı",
+          "name_en": "Total Corners Range",
+          "short_code": "KRNRNG",
+          "outcomes": ["0-8", "9-11", "12+"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_korner_aralik",
+          "name_tr": "İlk Yarı Toplam Korner Aralığı",
+          "name_en": "First Half Total Corners Range",
+          "short_code": "IYKRNRNG",
+          "outcomes": ["0-4", "5-6", "7+"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ilk_korner",
+          "name_tr": "İlk Korneri Kim Kullanır",
+          "name_en": "First Corner",
+          "short_code": "IK",
+          "outcomes": ["1", "Olmaz", "2"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "kim_cok_korner",
+          "name_tr": "Kim Daha Çok Korner Kullanır",
+          "name_en": "Most Corners",
+          "short_code": "KCK",
+          "outcomes": ["Ev", "Eşit", "Dep."],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_kim_cok_korner",
+          "name_tr": "İlk Yarı Kim Daha Çok Korner Kullanır",
+          "name_en": "First Half Most Corners",
+          "short_code": "IYKCR",
+          "outcomes": ["1", "Eşit", "2"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "korner_handikap",
+          "name_tr": "Korner Handikap",
+          "name_en": "Corner Handicap",
+          "short_code": "KH",
+          "outcomes": ["1", "2"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "iy_korner_handikap",
+          "name_tr": "İlk Yarı Korner Handikap",
+          "name_en": "First Half Corner Handicap",
+          "short_code": "IYKH",
+          "outcomes": ["1", "2"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "korner_tek_cift",
+          "name_tr": "Korner Tek/Çift",
+          "name_en": "Corners Odd/Even",
+          "short_code": "KTC",
+          "outcomes": ["Tek", "Çift"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "low"
+        },
+        {
+          "id": "ev_korner_au",
+          "name_tr": "Ev Sahibi Toplam Korner Altı/Üstü",
+          "name_en": "Home Team Total Corners Over/Under",
+          "short_code": "EVKAU",
+          "typical_thresholds": [3.5, 4.5],
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_korner_au",
+          "name_tr": "Deplasman Toplam Korner Altı/Üstü",
+          "name_en": "Away Team Total Corners Over/Under",
+          "short_code": "DEPKAU",
+          "typical_thresholds": [3.5, 4.5],
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "medium"
+        }
+      ]
+    },
+    {
+      "category_id": "cards",
+      "category_tr": "Kart Bahisleri",
+      "category_en": "Card Markets",
+      "markets": [
+        {
+          "id": "kart_au",
+          "name_tr": "Toplam Kart Sayısı Alt/Üst",
+          "name_en": "Total Cards Over/Under",
+          "short_code": "KARTAU",
+          "typical_thresholds": [3.5, 4.5, 5.5],
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium",
+          "note": "Available mainly for Süper Lig and top league matches"
+        },
+        {
+          "id": "kim_cok_kart",
+          "name_tr": "Hangi Takım Daha Fazla Kart Görür",
+          "name_en": "Most Cards",
+          "short_code": "KCK",
+          "outcomes": ["1", "Eşit", "2"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "kart_puan_au",
+          "name_tr": "Kart Puanı Alt/Üst",
+          "name_en": "Card Points Over/Under",
+          "short_code": "KPAU",
+          "note_tr": "Sarı kart = 10 puan, Kırmızı kart = 25 puan",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        }
+      ]
+    },
+    {
+      "category_id": "clean_sheet",
+      "category_tr": "Gol Yemez Bahisleri",
+      "category_en": "Clean Sheet Markets",
+      "markets": [
+        {
+          "id": "ev_gol_yemez",
+          "name_tr": "Ev Sahibi Takım Maçı Gol Yemeden Bitirir Mi?",
+          "name_en": "Home Team Clean Sheet",
+          "short_code": "EVGY",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "dep_gol_yemez",
+          "name_tr": "Deplasman Takımı Maçı Gol Yemeden Bitirir Mi?",
+          "name_en": "Away Team Clean Sheet",
+          "short_code": "DEPGY",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "ev_gol_yemeden_kazanir",
+          "name_tr": "Ev Sahibi Takım Gol Yemeden Kazanır Mı?",
+          "name_en": "Home Team Wins to Nil",
+          "short_code": "EVGYK",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "dep_gol_yemeden_kazanir",
+          "name_tr": "Deplasman Takımı Gol Yemeden Kazanır Mı?",
+          "name_en": "Away Team Wins to Nil",
+          "short_code": "DEPGYK",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        }
+      ]
+    },
+    {
+      "category_id": "long_term",
+      "category_tr": "Uzun Vadeli Bahisler",
+      "category_en": "Long Term / Outright Markets",
+      "markets": [
+        {
+          "id": "sampiyon",
+          "name_tr": "Şampiyon",
+          "name_en": "League Winner",
+          "short_code": "SAMP",
+          "outcomes": "dynamic_team_list",
+          "available_all_matches": false,
+          "popularity": "high",
+          "difficulty": "very_high",
+          "note": "Season-long market"
+        },
+        {
+          "id": "kume_dusme",
+          "name_tr": "Küme Düşecek Takımlar",
+          "name_en": "Relegation",
+          "short_code": "KD",
+          "outcomes": "dynamic_team_list",
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "very_high",
+          "note": "Season-long market"
+        },
+        {
+          "id": "gol_krali",
+          "name_tr": "Gol Kralı",
+          "name_en": "Top Scorer",
+          "short_code": "GK",
+          "outcomes": "dynamic_player_list",
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "very_high",
+          "note": "Season-long market"
+        }
+      ]
+    },
+    {
+      "category_id": "player",
+      "category_tr": "Oyuncu Bahisleri",
+      "category_en": "Player Markets",
+      "markets": [
+        {
+          "id": "oyuncu_gol",
+          "name_tr": "Oyuncu Gol Atar",
+          "name_en": "Player to Score Anytime",
+          "short_code": "OG",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "high",
+          "note": "Available mainly for top league and high-profile matches"
+        },
+        {
+          "id": "oyuncu_sut",
+          "name_tr": "Oyuncu X+ Şut Çeker",
+          "name_en": "Player X+ Shots",
+          "short_code": "OS",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "oyuncu_sut_takim_kazanir",
+          "name_tr": "Oyuncu X+ Şut Çeker ve Takımı Kazanır",
+          "name_en": "Player X+ Shots & Team Wins",
+          "short_code": "OSTK",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high"
+        }
+      ]
+    },
+    {
+      "category_id": "minute_based",
+      "category_tr": "Dakika Bazlı Bahisler",
+      "category_en": "Minute-Based Markets",
+      "markets": [
+        {
+          "id": "dakika_au",
+          "name_tr": "X-Y dk. Altı/Üstü",
+          "name_en": "Minute Range Over/Under Goals",
+          "short_code": "DKAU",
+          "description_tr": "Belirli dakika aralığında atılacak gol sayısı (örn: 21-30 dk. 1.5 Gol Alt/Üst)",
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high",
+          "note": "Mainly available for live betting (Canlı İddaa)"
+        },
+        {
+          "id": "gol_aralik",
+          "name_tr": "X. Gol Hangi Aralıkta Olur",
+          "name_en": "Nth Goal Minute Range",
+          "short_code": "GA",
+          "description_tr": "Kaçıncı golün hangi dakika aralığında atılacağı (örn: 2. Gol Hangi Aralıkta Olur)",
+          "outcomes": "dynamic_minute_ranges",
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_market_types": 72,
+    "core_markets_always_available": [
+      "ms", "cs", "hms", "iy_sonucu", "iy_cs", "2y_sonucu", "iy_ms",
+      "au_05", "au_15", "au_25", "au_35", "au_45",
+      "iy_au_05", "iy_au_15", "iy_au_25",
+      "ev_au_05", "ev_au_15", "dep_au_05", "dep_au_15",
+      "kg", "iy_kg", "2y_kg", "toplam_gol", "tek_cift", "iy_tek_cift",
+      "ilk_gol", "hangi_yari_fazla_gol",
+      "ms_au_15", "ms_au_25", "ms_au_35", "ms_kg", "au25_kg",
+      "mac_skoru", "iy_skoru",
+      "kazanma_marji", "iy_ms"
+    ],
+    "best_for_prediction_ai": [
+      "ms", "au_25", "kg", "iy_sonucu", "toplam_gol", "tek_cift",
+      "cs", "hms", "ms_au_25", "ms_kg", "au25_kg",
+      "au_15", "au_35", "iy_au_05", "iy_au_15",
+      "ilk_gol", "hangi_yari_fazla_gol",
+      "mac_skoru", "iy_ms"
+    ],
+    "platform_columns_nesine": ["1", "X", "2", "Alt", "Üst", "HND", "1-X", "1-2", "X-2", "Var", "Yok"],
+    "platform_columns_misli": ["1", "X", "2", "Alt", "Üst", "HND", "1-X", "1-2", "X-2", "Var", "Yok"]
+  }
+}

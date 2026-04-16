@@ -26,7 +26,8 @@ class ScrapingEngine:
     """
     Coordinates data fetching — either from the Go middleware server (preferred)
     or directly from sources (fallback, rate-limited).
-    Sources are configured via environment variables (SCRAPE_SOURCE_A/B/C/EXTRA).
+    Sources are configured via environment variables (SCRAPE_SOURCE_1 through SCRAPE_SOURCE_5,
+    SCRAPE_SOURCE_FALLBACK, SCRAPE_SOURCE_EXTRA).
     """
 
     def __init__(self):

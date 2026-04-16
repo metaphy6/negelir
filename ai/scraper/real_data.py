@@ -22,39 +22,20 @@ from datetime import datetime
 
 import requests
 
+from common.config import cfg
 from common.logger import get_logger
 
 log = get_logger("scraper.real_data")
 
-# ── Configuration ────────────────────────────────────────
-OPENFOOTBALL_BASE = (
-    "https://raw.githubusercontent.com/openfootball/football.json/master"
-)
+# ── Configuration (values sourced from config / .env) ────
+OPENFOOTBALL_BASE = cfg.scrape_openfootball_base
+FOOTBALLDATA_UK_BASE = cfg.scrape_footballdata_base
 
-FOOTBALLDATA_UK_BASE = "https://www.football-data.co.uk/mmz4281"
+# Turkish Süper Lig seasons available on openfootball (from .env)
+OPENFOOTBALL_SEASONS = cfg.openfootball_seasons
 
-# Turkish Süper Lig seasons available on openfootball
-OPENFOOTBALL_SEASONS = [
-    ("2018-19", "2018-19"),
-    ("2019-20", "2019-20"),
-    ("2020-21", "2020-21"),
-    ("2024-25", "2024-25"),
-    ("2025-26", "2025-26"),
-]
-
-# football-data.co.uk season codes (directory codes) → our labels
-FOOTBALLDATA_UK_SEASONS = {
-    "2526": "2025-26",
-    "2425": "2024-25",
-    "2324": "2023-24",
-    "2223": "2022-23",
-    "2122": "2021-22",
-    "2021": "2020-21",
-    "1920": "2019-20",
-    "1819": "2018-19",
-    "1718": "2017-18",
-    "1617": "2016-17",
-}
+# football-data.co.uk season codes → labels (from .env)
+FOOTBALLDATA_UK_SEASONS = cfg.footballdata_uk_seasons
 
 # ── Team name normalisation ─────────────────────────────
 # Built from locale_tr.yaml source_aliases (single source of truth).

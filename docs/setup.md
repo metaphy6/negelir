@@ -17,6 +17,13 @@
 | Go | 1.22+ | Server development |
 | CUDA | 12.0+ | GPU acceleration (target: RTX 4080) |
 
+> **Infrastructure note:** PostgreSQL, Redis, and the Go middleware server are **local
+> development tools only**. They provide a convenient way to inspect raw scraped data
+> and cached feature payloads during development. They are **not** required to run the
+> AI engine, and they are **not** part of the production deployment. The AI service
+> (`ai/`) is fully self-contained and connects directly to its configured scraping
+> sources.
+
 ## Quick Start
 
 ```bash

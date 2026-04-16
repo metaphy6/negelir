@@ -79,6 +79,30 @@ ai-train: env ## Train the GBDT model with synthetic data
 ai-demo: env ## Run Turkish Q&A demo questions
 	$(COMPOSE) run --rm ai python -m pipeline.runner --demo
 
+.PHONY: ai-backtest
+ai-backtest: env ## Multi-market backtest (all betting types, last 3 weeks)
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 3
+
+.PHONY: ai-backtest-2w
+ai-backtest-2w: env ## Multi-market backtest (last 2 weeks, high-confidence only)
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 2 --min-confidence 0.55
+
+.PHONY: ai-backtest-1x2
+ai-backtest-1x2: env ## Backtest only 1X2 market
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 3 --markets ms
+
+.PHONY: ai-backtest-goals
+ai-backtest-goals: env ## Backtest goal-related markets (AU, KG, skor)
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 5 --markets au_1.5,au_2.5,au_3.5,kg,tc,skor,skor_top3
+
+.PHONY: ai-backtest-halftime
+ai-backtest-halftime: env ## Backtest half-time markets (IY, IY/MS)
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 5 --markets iy,2y,iy_ms,iy_au_05
+
+.PHONY: ai-backtest-full
+ai-backtest-full: env ## Full backtest across 10 weeks with all markets
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 10
+
 .PHONY: ai-tqu-test
 ai-tqu-test: env ## Test TQU with sample Turkish questions
 	$(COMPOSE) run --rm ai python -m tqu.classifier
@@ -129,10 +153,32 @@ server-health: ## Check Go server health
 	@curl -s http://localhost:8080/api/v1/health | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running."
 
 .PHONY: server-matches
-server-matches: ## List cached matches
-	@curl -s http://localhost:8080/api/v1/matches | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running."
+server-matches: ## List cached matches from Go server (requires 'make db-seed' first)
+	@curl -s http://localhost:8080/api/v1/matches | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running. Use 'make server' first."
+	@echo ""
+	@echo "💡  Empty? Run: make db-seed  (imports local JSON cache into PostgreSQL)"
+
+.PHONY: server-teams
+server-teams: ## List teams from Go server
+	@curl -s http://localhost:8080/api/v1/teams | python3 -m json.tool 2>/dev/null || echo "⚠️  Server not running."
 
 # ── Database ────────────────────────────────────────────────
+
+.PHONY: db-migrate
+db-migrate: env ## Run all pending database migrations
+	@echo "🗄️  Running migrations..."
+	@for f in migrations/*.sql; do \
+		echo "  → $$f"; \
+		$(COMPOSE) exec -T postgres psql -U negelir -d negelir < $$f 2>/dev/null \
+			|| $(COMPOSE) exec postgres psql -U negelir -d negelir -f /dev/stdin < $$f; \
+	done
+	@echo "✅  Migrations complete"
+
+.PHONY: db-seed
+db-seed: env ## Seed PostgreSQL with local JSON cache (dev only; run 'make infra' first)
+	@echo "🌱  Seeding database from local JSON cache..."
+	$(COMPOSE) run --rm -v $(PWD)/data:/data:ro ai python /data/seed_db.py
+	@echo "✅  Seed complete — now try: make server-matches"
 
 .PHONY: db-shell
 db-shell: ## Open PostgreSQL shell
@@ -201,6 +247,13 @@ clean-data: ## Remove local data directory contents
 	find data/ -not -name '.gitkeep' -not -name 'data' -delete 2>/dev/null || true
 
 # ── Status ──────────────────────────────────────────────────
+
+.PHONY: health
+health: ## Check health of all running services
+	@echo "🏥  Service health check..."
+	@curl -sf http://localhost:8080/api/v1/health > /dev/null && echo "✅  Go server  OK" || echo "❌  Go server  DOWN (run 'make server')"
+	@$(COMPOSE) exec -T postgres pg_isready -U negelir -d negelir -q 2>/dev/null && echo "✅  PostgreSQL OK" || echo "❌  PostgreSQL DOWN (run 'make infra')"
+	@$(COMPOSE) exec -T redis redis-cli ping 2>/dev/null | grep -q PONG && echo "✅  Redis      OK" || echo "❌  Redis      DOWN (run 'make infra')"
 
 .PHONY: status
 status: ## Show running service status
