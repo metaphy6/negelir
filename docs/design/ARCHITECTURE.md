@@ -8,16 +8,16 @@ The system consists of four main layers:
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                    Flutter (future)                   │
+│                    Flutter (future)                  │
 ├──────────────────────────────────────────────────────┤
-│          Go Middleware Server  [dev-env only]         │
-│        REST API • PostgreSQL • Redis                  │
+│          Go Middleware Server  [dev-env only]        │
+│        REST API • PostgreSQL • Redis                 │
 ├──────────────────────────────────────────────────────┤
-│                   AI Engine (Python)                  │
+│                   AI Engine (Python)                 │
 │  TQU │ TRC │ GBDT Model │ Scraper │ NLP │ Pipeline   │
 ├──────────────────────────────────────────────────────┤
-│               P2P Network (Python)                    │
-│     Node │ Protocol │ Reputation │ Simulation         │
+│               P2P Network (Python)                   │
+│     Node │ Protocol │ Reputation │ Simulation        │
 └──────────────────────────────────────────────────────┘
 ```
 

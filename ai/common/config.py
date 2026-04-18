@@ -391,6 +391,22 @@ class Config:
         _bounded("schedule_daily_scrape_minute", self.schedule_daily_scrape_minute, 0, 59)
         _bounded("schedule_outcome_check_minute", self.schedule_outcome_check_minute, 0, 59)
 
+        # Day-of-week for retrain schedule (APScheduler short-form names)
+        _ALLOWED_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+        if str(self.schedule_retrain_day).lower() not in _ALLOWED_DAYS:
+            issues.append(
+                f"schedule_retrain_day={self.schedule_retrain_day!r} "
+                f"must be one of {sorted(_ALLOWED_DAYS)}"
+            )
+
+        # Feature-range JSON override must parse to (lo, hi) tuples with lo < hi
+        try:
+            for fname, (lo, hi) in self.feature_ranges.items():
+                if lo >= hi:
+                    issues.append(f"feature_ranges[{fname!r}]: lo={lo} >= hi={hi}")
+        except (ValueError, TypeError, KeyError) as e:
+            issues.append(f"feature_ranges parse error: {e}")
+
         # Required strings
         if not self.default_league_id:
             issues.append("default_league_id is empty")

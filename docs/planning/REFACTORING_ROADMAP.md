@@ -493,7 +493,15 @@ Already covered in R1.4. This phase ensures it's complete and verified.
 
 **File:** `server/cmd/main.go`
 
-**Critical security issue:** Database password `negelir_dev_2026` appears as a fallback default in the Go source code.
+**Status (2026-04-18):** ✅ RESOLVED by Phase 1.6 of [ROADMAP.md](ROADMAP.md). The Go
+source no longer carries any hardcoded credential fallback; it reads the DB
+password from `POSTGRES_PASSWORD` and the connection string from `DATABASE_URL`,
+defaulting to empty strings. `.env.example` ships a placeholder.
+
+**Historical note (kept for archaeology):** an earlier revision of
+`server/cmd/main.go` shipped `negelir_dev_2026` as a fallback default for the
+database password. That literal has been removed from source; only deployment
+`.env` files (gitignored in production setups) carry an actual value.
 
 **Changes required:**
 
@@ -502,10 +510,10 @@ Already covered in R1.4. This phase ensures it's complete and verified.
 | ~485-491 | All `getEnvOrDefault("DB_...", "5")` calls | Keep pattern but verify `.env.example` documents every var |
 | ~482-483 | `CACHE_MATCHES_TTL_SEC=300`, `CACHE_TEAMS_TTL_SEC=600` | Already env-driven — document in `.env.example` |
 | ~195-213 | `LIMIT 50` in SQL query | Make configurable: `MATCHES_QUERY_LIMIT` env var |
-| DB password | Hardcoded `negelir_dev_2026` as fallback | **Remove fallback entirely.** If `DATABASE_URL` not set, server must fail with clear error |
+| DB password | ~~Hardcoded `negelir_dev_2026` as fallback~~ | ✅ Removed; reads `POSTGRES_PASSWORD` env var, defaults to empty |
 
 **Deliverables:**
-- [ ] Zero hardcoded credentials in Go source
+- [x] Zero hardcoded credentials in Go source
 - [ ] Server refuses to start if `DATABASE_URL` is not set (fail-closed)
 - [ ] `LIMIT 50` made configurable
 - [ ] All Go env vars documented in `.env.example`
@@ -999,7 +1007,7 @@ Complete list of every hardcoded value found during the audit, organized by file
 - Line 483: Server port (8080)
 - Line 485: `DB_MAX_CONNS=10`
 - Line 195-213: SQL `LIMIT 50`
-- DB password: `negelir_dev_2026` as fallback
+- ~~DB password: `negelir_dev_2026` as fallback~~ ✅ Resolved (Phase 1.6)
 
 ---
 

@@ -33,23 +33,31 @@ from scipy.stats import poisson
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from common.config import cfg
 from common.constants import N_FEATURES
+from common.league_config import get_league_config
 from model.features import FEATURE_COLUMNS
+
+_LEAGUE = get_league_config(cfg.default_league_id)
 
 _DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "data",
 )
-# Prefer real scraped data; fall back to synthetic
-_REAL_DATA = os.path.join(_DATA_DIR, "tr_super_lig_real.json")
-_SYNTH_DATA = os.path.join(_DATA_DIR, "tr_super_lig_2024_25.json")
-DATA_PATH = _REAL_DATA if os.path.exists(_REAL_DATA) else _SYNTH_DATA
+# Phase 2: real data only. The legacy synthetic season fixture has been
+# removed from production data/. If it is missing, this regression script
+# fails loudly so the operator runs `make bootstrap` first.
+# Use the canonical league_id from LeagueConfig (handles alias normalization,
+# e.g. "super_lig" -> "tr_super_lig").
+DATA_PATH = os.path.join(_DATA_DIR, f"{_LEAGUE.league_id}_real.json")
 
 DEFAULT_OUTPUT = os.path.join(_DATA_DIR, "prediction_results.txt")
-INITIAL_ELO = 1500.0
-K_FACTOR = 32.0
-HOME_ADV_ELO = 65.0
-TOTAL_TEAMS = 19  # Dynamically updated per dataset
+# Single source of truth: LeagueConfig (Phase 1.1/1.2). These names are kept
+# for readability inside this large script; their values come from config.
+INITIAL_ELO = _LEAGUE.elo_initial
+K_FACTOR = _LEAGUE.elo_k
+HOME_ADV_ELO = _LEAGUE.elo_home_advantage
+TOTAL_TEAMS = _LEAGUE.teams_count  # Dynamically updated per dataset
 
 
 @dataclass
@@ -368,8 +376,9 @@ def poisson_xg(attack, defense, league_avg):
 
 
 # Dixon-Coles adjustment for low-scoring matches (0-0, 1-0, 0-1, 1-1)
-# rho < 0 means these scorelines are more likely than independent Poisson
-DIXON_COLES_RHO = -0.13
+# rho < 0 means these scorelines are more likely than independent Poisson.
+# Sourced from LeagueConfig (Phase 1.1) — do not hardcode here.
+DIXON_COLES_RHO = _LEAGUE.dixon_coles_rho
 
 
 def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho=DIXON_COLES_RHO):
@@ -1009,7 +1018,8 @@ class PredictionResult:
     betting_markets: dict = field(default_factory=dict)  # All market probabilities
 
 
-XGB_WEIGHT = 0.35  # XGBoost weight in ensemble (rest goes to Poisson)
+# XGBoost ensemble weight sourced from LeagueConfig (Phase 1.1)
+XGB_WEIGHT = _LEAGUE.xgb_weight  # rest goes to Poisson
 DRAW_BOOST = 0.0  # No draw boost (empirically hurts accuracy)
 
 
