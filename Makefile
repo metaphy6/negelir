@@ -5,6 +5,8 @@
 
 COMPOSE := docker compose
 ENV_FILE := .env
+WORKSPACE_DIR := /workspace
+TEST_PYTHONPATH := $(WORKSPACE_DIR)/ai:$(WORKSPACE_DIR)/p2p
 
 # Detect OS for cross-platform compatibility
 ifeq ($(OS),Windows_NT)
@@ -181,7 +183,8 @@ db-seed: env ## Seed PostgreSQL with local JSON cache (dev only; run 'make infra
 	@echo "✅  Seed complete — now try: make server-matches"
 
 .PHONY: db-shell
-db-shell: ## Open PostgreSQL shell
+db-shell: env ## Open PostgreSQL shell
+	$(COMPOSE) up -d postgres
 	$(COMPOSE) exec postgres psql -U negelir -d negelir
 
 .PHONY: db-reset
@@ -193,7 +196,8 @@ db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "✅ Database reset complete"
 
 .PHONY: redis-shell
-redis-shell: ## Open Redis CLI
+redis-shell: env ## Open Redis CLI
+	$(COMPOSE) up -d redis
 	$(COMPOSE) exec redis redis-cli
 
 # ── Logs ────────────────────────────────────────────────────
@@ -218,16 +222,27 @@ logs-server: ## Tail Go server logs
 
 .PHONY: test
 test: env ## Run all tests
-	$(COMPOSE) run --rm ai python -m pytest tests/ -v
-	$(COMPOSE) run --rm p2p python -m pytest tests/ -v
+	$(COMPOSE) run --rm \
+		-v $(PWD):$(WORKSPACE_DIR) \
+		-w $(WORKSPACE_DIR) \
+		-e PYTHONPATH=$(TEST_PYTHONPATH) \
+		ai python -m pytest ai/tests p2p/tests -v
 
 .PHONY: test-ai
 test-ai: env ## Run AI module tests
-	$(COMPOSE) run --rm ai python -m pytest tests/ -v
+	$(COMPOSE) run --rm \
+		-v $(PWD):$(WORKSPACE_DIR) \
+		-w $(WORKSPACE_DIR) \
+		-e PYTHONPATH=$(TEST_PYTHONPATH) \
+		ai python -m pytest ai/tests -v
 
 .PHONY: test-p2p
 test-p2p: env ## Run P2P module tests
-	$(COMPOSE) run --rm p2p python -m pytest tests/ -v
+	$(COMPOSE) run --rm \
+		-v $(PWD):$(WORKSPACE_DIR) \
+		-w $(WORKSPACE_DIR) \
+		-e PYTHONPATH=$(TEST_PYTHONPATH) \
+		p2p python -m pytest p2p/tests -v
 
 # ── Cleanup ─────────────────────────────────────────────────
 

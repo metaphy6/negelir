@@ -239,6 +239,7 @@ class TestTransport:
 
     def test_send_delivers_to_target(self):
         t = SimulatedTransport()
+        t.drop_rate = 0.0
         t.register_node("sender")
         t.register_node("target")
         msg = P2PMessage(message_type="ping", sender_id="sender", payload={"x": 1})
@@ -258,6 +259,7 @@ class TestTransport:
 
     def test_broadcast_reaches_all_except_sender(self):
         t = SimulatedTransport()
+        t.drop_rate = 0.0
         for nid in ["a", "b", "c"]:
             t.register_node(nid)
         msg = P2PMessage(message_type="ping", sender_id="a")
@@ -268,6 +270,7 @@ class TestTransport:
 
     def test_get_pending_drains_inbox(self):
         t = SimulatedTransport()
+        t.drop_rate = 0.0
         t.register_node("n")
         for i in range(3):
             t.send("other", "n", P2PMessage(message_type="ping", sender_id="other", payload={"i": i}))
