@@ -43,6 +43,11 @@ class PipelineRunner:
         self.orchestrator = TaskOrchestrator()
         self.model: GBDTInference | None = None
         self.qid_collector = QueryIntentCollector()
+        # Localized demo strings come from the active league's config so swapping
+        # leagues (e.g. en_premier_league) automatically retitles banners and
+        # sentiment samples without code edits.
+        from common.league_config import get_league_config
+        self.league_config = get_league_config()
 
     def run_full_pipeline(self):
         """Execute the complete pipeline: data → model → questions → answers."""
@@ -80,18 +85,14 @@ class PipelineRunner:
 
         # Step 3: Sentiment analysis demo
         section_banner("NLP Sentiment Analysis (Demo)")
-        demo_texts = [
-            "Galatasaray son maçta muhteşem bir galibiyet aldı, takım morali çok yüksek",
-            "Fenerbahçe'de sakatlık krizi devam ediyor, taraftar moral bozuk",
-            "Beşiktaş istikrarlı oynuyor, savunma sağlam gidiyor",
-        ]
+        demo_texts = self.league_config.demo_sentiment_samples
         for text in demo_texts:
             score = analyze_sentiment(text)
             log.info(f"📝 Duygu: {score:+.3f} ← '{text[:60]}...'")
         log.info("✅ NLP sentiment analysis complete")
 
         # Step 4: Run Turkish Q&A demo
-        section_banner("Turkish Q&A Demo (Real Data)")
+        section_banner(f"{self.league_config.demo_label} (Real Data)")
         log.info(f"📋 {len(DEMO_QUESTIONS)} questions to process...\n")
 
         for i, question in enumerate(DEMO_QUESTIONS, 1):

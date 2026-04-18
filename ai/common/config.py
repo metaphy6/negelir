@@ -3,6 +3,7 @@ Negelir — Configuration loaded from environment variables.
 All settings respect Docker Compose injection.
 """
 
+import json
 import os
 from dataclasses import dataclass, field
 
@@ -237,6 +238,53 @@ class Config:
     # Telemetry
     telemetry_max_stream_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TELEMETRY_MAX_STREAM", "50000")))
     redis_socket_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REDIS_SOCKET_TIMEOUT", "2")))
+
+    # Bootstrap / data validation
+    bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
+        "BOOTSTRAP_MIN_MATCHES", "100"
+    )))
+
+    # Feature-vector range validation (roadmap §5.6.2 firewall).
+    # Override via NEGELIR_FEATURE_RANGES_JSON='{"elo":[-500,3500], ...}'.
+    _feature_ranges_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_FEATURE_RANGES_JSON", ""
+    ))
+
+    @property
+    def feature_ranges(self) -> dict[str, tuple[float, float]]:
+        """
+        Mapping of feature-name substring → (lo, hi) clamp range.
+        Defaults match roadmap §5.6.2 firewall spec; override via
+        NEGELIR_FEATURE_RANGES_JSON for league-specific tuning.
+        """
+        defaults: dict[str, tuple[float, float]] = {
+            "elo":       (-500.0, 3500.0),
+            "ratio":     (0.0, 1.0),
+            "pct":       (0.0, 100.0),
+            "norm":      (0.0, 1.0),
+            "sentiment": (-1.0, 1.0),
+            "optimism":  (-1.0, 1.0),
+            "sin":       (-1.0, 1.0),
+            "cos":       (-1.0, 1.0),
+            "flag":      (0.0, 1.0),
+            "age":       (15.0, 45.0),
+            "scored":    (0.0, 10.0),
+            "conceded":  (0.0, 10.0),
+            "yellows":   (0.0, 10.0),
+            "fouls":     (0.0, 40.0),
+            "cards":     (0.0, 15.0),
+            "bayesian":  (0.0, 1.0),
+            "sos":       (800.0, 2200.0),
+            "default":   (-100.0, 100.0),
+        }
+        raw = self._feature_ranges_raw.strip()
+        if not raw:
+            return defaults
+        try:
+            parsed = json.loads(raw)
+            return {k: (float(v[0]), float(v[1])) for k, v in parsed.items()}
+        except (ValueError, TypeError, KeyError, IndexError):
+            return defaults
 
     # Paths
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "/data"))

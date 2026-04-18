@@ -1,0 +1,234 @@
+# =============================================================================
+# Negelir — Canonical default configuration reference.
+# -----------------------------------------------------------------------------
+# This file is the single human-readable source of truth for every tunable
+# default in the AI + P2P stacks.
+#
+#   * Authoritative runtime values live in `ai/common/config.py` (Config),
+#     `ai/common/league_config.py` (LeagueConfig) and `p2p/config.py`
+#     (P2PConfig); each `field(default_factory=...)` reads the matching
+#     environment variable shown below, falling back to the value listed here.
+#   * `.env.example` mirrors these env-var names — keep all three files in
+#     sync when adding new tunables.
+#   * Nothing imports this file at runtime (it is documentation), so editing a
+#     value here has no effect; set the env var or override the dataclass.
+# =============================================================================
+
+# ── PostgreSQL ───────────────────────────────────────────────────────────────
+postgres:
+  host: localhost            # POSTGRES_HOST
+  port: 5432                 # POSTGRES_PORT
+  db: negelir                # POSTGRES_DB
+  user: negelir              # POSTGRES_USER
+  password: ""               # POSTGRES_PASSWORD  (REQUIRED in .env, never default)
+
+# ── Redis ────────────────────────────────────────────────────────────────────
+redis:
+  host: localhost            # REDIS_HOST
+  port: 6379                 # REDIS_PORT
+  socket_timeout_sec: 2      # NEGELIR_REDIS_SOCKET_TIMEOUT
+
+# ── Go server ────────────────────────────────────────────────────────────────
+server:
+  url: http://localhost:8080 # SERVER_URL
+  fetch_timeout_sec: 10      # NEGELIR_SERVER_FETCH_TIMEOUT
+
+# ── AI runtime ───────────────────────────────────────────────────────────────
+ai:
+  device: auto               # AI_DEVICE          (auto|cpu|cuda)
+  log_level: DEBUG           # AI_LOG_LEVEL
+
+# ── Runtime defaults (league + season identity) ──────────────────────────────
+runtime:
+  default_league_id: super_lig            # NEGELIR_DEFAULT_LEAGUE_ID
+  default_season: "2025-2026"             # NEGELIR_DEFAULT_SEASON
+  mackolik_group_id: 1                    # NEGELIR_MACKOLIK_GROUP_ID
+  mackolik_league_name_filter: "Süper Lig" # NEGELIR_MACKOLIK_LEAGUE_FILTER
+
+# ── HTTP / scrape timeouts (seconds) ─────────────────────────────────────────
+timeouts:
+  scrape_trigger: 30         # NEGELIR_SCRAPE_TRIGGER_TIMEOUT
+  health_check: 5            # NEGELIR_HEALTH_CHECK_TIMEOUT
+  mackolik_http: 15          # NEGELIR_MACKOLIK_HTTP_TIMEOUT
+  scrape_http: 15            # NEGELIR_SCRAPE_HTTP_TIMEOUT
+  footballdata_http: 10      # NEGELIR_FOOTBALLDATA_HTTP_TIMEOUT
+
+# ── Scheduler (APScheduler cron) ─────────────────────────────────────────────
+scheduler:
+  daily_scrape_hour: 6       # NEGELIR_SCHEDULE_DAILY_SCRAPE_HOUR
+  daily_scrape_minute: 0     # NEGELIR_SCHEDULE_DAILY_SCRAPE_MINUTE
+  outcome_check_hour: 22     # NEGELIR_SCHEDULE_OUTCOME_CHECK_HOUR
+  outcome_check_minute: 0    # NEGELIR_SCHEDULE_OUTCOME_CHECK_MINUTE
+  retrain_day: sun           # NEGELIR_SCHEDULE_RETRAIN_DAY  (mon..sun)
+  retrain_hour: 3            # NEGELIR_SCHEDULE_RETRAIN_HOUR
+  heartbeat_minutes: 5       # NEGELIR_SCHEDULE_HEARTBEAT_MINUTES
+
+# ── Self-healing / failover ──────────────────────────────────────────────────
+self_healing:
+  source_priority: [source_a, source_b, source_c, source_d]  # NEGELIR_SOURCE_PRIORITY (csv)
+  stale_threshold_seconds: 604800  # NEGELIR_STALE_THRESHOLD_SECONDS  (7 days)
+  stale_confidence_penalty: 0.5    # NEGELIR_STALE_CONFIDENCE_PENALTY
+  source_failure_threshold: 3      # NEGELIR_SOURCE_FAILURE_THRESHOLD
+
+# ── Scraping ─────────────────────────────────────────────────────────────────
+scraping:
+  rate_limit_seconds: 5      # SCRAPE_RATE_LIMIT_SECONDS
+  real_data_rate_limit: 1.0  # NEGELIR_REAL_DATA_RATE_LIMIT
+  user_agent: "Negelir/0.1 (Football Analysis Research)"  # SCRAPE_USER_AGENT
+  respect_robots_txt: true   # SCRAPE_RESPECT_ROBOTS_TXT
+  sources:                   # SCRAPE_SOURCE_1..5 + SCRAPE_SOURCE_FALLBACK
+    - https://www.mackolik.com
+    - https://www.nesine.com
+    - https://www.tff.org
+    - https://raw.githubusercontent.com/openfootball/football.json/master
+    - https://www.football-data.co.uk/mmz4281
+    - https://arsiv.mackolik.com  # fallback
+  mackolik_seasons:          # MACKOLIK_SEASON_<LABEL>
+    "2025/2026": 70381
+    "2024/2025": 67287
+    "2023/2024": 62682
+    "2022/2023": 59539
+    "2021/2022": 55775
+
+# ── Model / training ─────────────────────────────────────────────────────────
+training:
+  noise_pct: 0.005           # NEGELIR_TRAINING_NOISE_PCT
+  test_split: 0.2            # NEGELIR_TRAINING_TEST_SPLIT
+  random_seed: 42            # NEGELIR_TRAINING_SEED
+  model_max_size_mb: 8.0     # NEGELIR_MODEL_MAX_SIZE_MB
+  min_matches: 100           # NEGELIR_TRAINING_MIN_MATCHES
+  sample_weights: [1.0, 2.0, 1.0]  # NEGELIR_TRAINING_SAMPLE_WEIGHTS  (Home,Draw,Away)
+
+drift:
+  accuracy_window: 30        # NEGELIR_DRIFT_WINDOW
+  accuracy_floor: 0.35       # NEGELIR_DRIFT_FLOOR
+
+# ── Bootstrap gate ───────────────────────────────────────────────────────────
+bootstrap:
+  min_matches: 100           # BOOTSTRAP_MIN_MATCHES (Makefile + proofreader)
+
+# ── Feature-vector firewall (roadmap §5.6.2) ─────────────────────────────────
+# Substring → (lo, hi). Override via NEGELIR_FEATURE_RANGES_JSON.
+feature_ranges:
+  elo:       [-500.0, 3500.0]
+  ratio:     [0.0, 1.0]
+  pct:       [0.0, 100.0]
+  norm:      [0.0, 1.0]
+  sentiment: [-1.0, 1.0]
+  optimism:  [-1.0, 1.0]
+  sin:       [-1.0, 1.0]
+  cos:       [-1.0, 1.0]
+  flag:      [0.0, 1.0]
+  age:       [15.0, 45.0]
+  scored:    [0.0, 10.0]
+  conceded:  [0.0, 10.0]
+  yellows:   [0.0, 10.0]
+  fouls:     [0.0, 40.0]
+  cards:     [0.0, 15.0]
+  bayesian:  [0.0, 1.0]
+  sos:       [800.0, 2200.0]
+  default:   [-100.0, 100.0]
+
+# ── Telemetry ────────────────────────────────────────────────────────────────
+telemetry:
+  max_stream_len: 50000      # NEGELIR_TELEMETRY_MAX_STREAM
+
+# ── Storage paths ────────────────────────────────────────────────────────────
+paths:
+  data_dir: /data            # DATA_DIR
+  model_dir: /data/models    # MODEL_DIR
+
+# ── LeagueConfig (per-league overrides; see ai/common/league_config.py) ──────
+# Numbers below are the Turkish Süper Lig defaults. Each preset in
+# `LEAGUE_REGISTRY` (en_premier_league, de_bundesliga, es_la_liga, …) overrides
+# the subset of fields that differ for that league.
+league:
+  identity:
+    league_id: tr_super_lig
+    league_name: "Turkish Süper Lig"
+    country: Turkey
+    language: tr
+  structure:
+    teams_count: 19
+    rounds_per_season: 38
+    promotion_slots: 3
+    relegation_slots: 4
+  elo:
+    initial: 1500.0
+    k: 32.0
+    home_advantage: 65.0
+  goals:
+    first_half_goal_pct: 0.47
+    league_avg_goals: 2.65
+  poisson:
+    max_goals: 7
+    ht_max_goals: 5
+    home_goal_cap: 7
+    away_goal_cap: 7
+    draw_goal_cap: 5
+    market_goal_cap: 6
+    min_xg_floor: 0.3
+  dixon_coles_rho: -0.13
+  elo_xg_curve:
+    divisor: 600.0
+    factor_min: 0.7
+    factor_range: 0.6
+  venue_ratio:
+    floor: 0.7
+    ceiling: 1.4
+  ensemble:
+    xgb_weight: 0.35
+  draw_thresholds:
+    ha_gap: 0.15
+    prob: 0.26
+    bayesian: 0.20
+  xgboost:
+    n_estimators: 300
+    max_depth: 4
+    learning_rate: 0.08
+    min_child_weight: 3
+    reg_alpha: 0.5
+    reg_lambda: 1.5
+    subsample: 0.8
+    colsample_bytree: 0.8
+    gamma: 0.1
+  training:
+    draw_sample_weight: 2.0
+    val_split: 0.15
+    train_pct: 0.75
+    calibrate_probabilities: true
+  demo:
+    label: "Turkish Q&A Demo"
+    sentiment_samples:
+      - "Galatasaray son maçta muhteşem bir galibiyet aldı, takım morali çok yüksek"
+      - "Fenerbahçe'de sakatlık krizi devam ediyor, taraftar moral bozuk"
+      - "Beşiktaş istikrarlı oynuyor, savunma sağlam gidiyor"
+
+# ── P2P network (see p2p/config.py) ──────────────────────────────────────────
+p2p:
+  data_dir: /data            # DATA_DIR  (shared with AI)
+  default_league_id: super_lig             # NEGELIR_DEFAULT_LEAGUE_ID
+  simulation_min_real_matches: 10          # P2P_SIM_MIN_REAL_MATCHES
+  message_ttl_hours: 168                   # P2P_MESSAGE_TTL_HOURS  (7 days)
+  data_ttl_hours: 168                      # P2P_DATA_TTL_HOURS
+  discovery:
+    multicast_group: 239.42.42.1           # P2P_MULTICAST_GROUP
+    multicast_port: 9743                   # P2P_MULTICAST_PORT
+    interval_sec: 30                       # P2P_DISCOVERY_INTERVAL_SEC
+    multicast_ttl: 2                       # P2P_MULTICAST_TTL
+  tcp:
+    host: 0.0.0.0                          # P2P_TCP_HOST
+    port: 9742                             # P2P_TCP_PORT
+    connect_timeout_sec: 5.0               # P2P_TCP_CONNECT_TIMEOUT_SEC
+    read_timeout_sec: 10.0                 # P2P_TCP_READ_TIMEOUT_SEC
+    max_message_size: 1048576              # P2P_TCP_MAX_MESSAGE_SIZE  (1 MiB)
+  simulation:
+    latency_min_ms: 20.0                   # P2P_SIM_LATENCY_MIN_MS
+    latency_max_ms: 150.0                  # P2P_SIM_LATENCY_MAX_MS
+    drop_rate: 0.02                        # P2P_SIM_DROP_RATE
+    k_neighbors: 8                         # P2P_SIM_K_NEIGHBORS
+    gossip_fanout: 3                       # P2P_SIM_GOSSIP_FANOUT
+  schema_gossip:
+    quorum: 3                              # P2P_SCHEMA_QUORUM
+    vote_timeout_sec: 600                  # P2P_SCHEMA_VOTE_TIMEOUT_SEC
+    confidence_floor: 0.6                  # P2P_SCHEMA_CONFIDENCE_FLOOR

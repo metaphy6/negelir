@@ -21,27 +21,10 @@ from model.features import FEATURE_COLUMNS
 
 log = get_logger("model.inference")
 
-# Feature range validation (roadmap §5.6.2)
-FEATURE_RANGES = {
-    "elo": (-500, 3500),
-    "ratio": (0, 1),
-    "pct": (0, 100),
-    "norm": (0, 1),
-    "sentiment": (-1, 1),
-    "optimism": (-1, 1),
-    "sin": (-1, 1),
-    "cos": (-1, 1),
-    "flag": (0, 1),
-    "age": (15, 45),
-    "scored": (0, 10),
-    "conceded": (0, 10),
-    "yellows": (0, 10),
-    "fouls": (0, 40),
-    "cards": (0, 15),
-    "bayesian": (0, 1),
-    "sos": (800, 2200),
-    "default": (-100, 100),
-}
+# Feature range validation (roadmap §5.6.2). Defaults live in `cfg.feature_ranges`
+# and are overridable via NEGELIR_FEATURE_RANGES_JSON. The module-level alias
+# is kept for back-compat with callers that imported `FEATURE_RANGES` directly.
+FEATURE_RANGES = cfg.feature_ranges
 
 def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho: float):
     """Dixon-Coles correction factor for low-scoring matches."""
@@ -123,9 +106,10 @@ class GBDTInference:
             return False, "NaN or Inf value detected"
 
         # Range validation per feature type
+        feature_ranges = cfg.feature_ranges
         for i, col in enumerate(FEATURE_COLUMNS):
             val = features[0, i]
-            for key, (lo, hi) in FEATURE_RANGES.items():
+            for key, (lo, hi) in feature_ranges.items():
                 if key in col:
                     if val < lo or val > hi:
                         features[0, i] = np.clip(val, lo, hi)

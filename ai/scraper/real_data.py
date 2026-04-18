@@ -1,55 +1,7 @@
 """
 Negelir — Real Data Scraper
+============================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-- [analysis/GEMINI_3_1.md](analysis/GEMINI_3_1.md)## Research and External Analysis- [SETUP.md](SETUP.md)## Setup and Operations- [QID_TEST_REPORT.md](QID_TEST_REPORT.md)- [GENERIC_INPUT_HANDLING.md](GENERIC_INPUT_HANDLING.md)## NLP, Input, and Query Intent- [MULTI_MARKET_BACKTEST_REPORT.md](MULTI_MARKET_BACKTEST_REPORT.md)- [BACKTEST_TEST_REPORT.md](BACKTEST_TEST_REPORT.md)## Backtesting and Evaluation- [P2P_REALISM_REPORT.md](P2P_REALISM_REPORT.md)- [P2P_DATA_RETENTION.md](P2P_DATA_RETENTION.md)- [P2P_NETWORK.md](P2P_NETWORK.md)## P2P and Network- [SCRAPING.md](SCRAPING.md)- [DATA_SOURCES.md](DATA_SOURCES.md)## Data Sources and Scraping- [PHASE2_SYNTHETIC_DATA_PURGE_REPORT.md](PHASE2_SYNTHETIC_DATA_PURGE_REPORT.md)## Refactor and Compliance Reports- [REFACTORING_ROADMAP.md](REFACTORING_ROADMAP.md)- [MULTI_LEAGUE_ROADMAP.md](MULTI_LEAGUE_ROADMAP.md)- [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md)- [ROADMAP.md](ROADMAP.md)## Roadmaps and Planning- [GLOBAL_EXPANSION_ASSESSMENT.md](GLOBAL_EXPANSION_ASSESSMENT.md)- [FEASIBILITY.md](FEASIBILITY.md)- [AUTONOMOUS_PIPELINE.md](AUTONOMOUS_PIPELINE.md)- [ARCHITECTURE.md](ARCHITECTURE.md)## Architecture and System DesignThis file organizes all project documents by topic so the docs folder is easier to navigate.============================
 Scrapes real league match data from multiple public sources.
 
 Sources:

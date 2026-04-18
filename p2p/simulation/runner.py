@@ -90,7 +90,7 @@ def _load_real_matches(limit: int = 30) -> list[dict]:
             "home_team": t1,
             "away_team": t2,
             "match_date": m.get("date", ""),
-            "league": "Süper Lig",
+            "league": p2p_cfg.default_league_name,
             "week": int(m.get("round", "Matchday 1").split()[-1]) if "Matchday" in m.get("round", "") else 1,
             "home_form": s1.get("form", [1])[-5:],
             "away_form": s2.get("form", [1])[-5:],

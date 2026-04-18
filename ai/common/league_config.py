@@ -91,6 +91,16 @@ class LeagueConfig:
     # Team name map (display name → canonical)
     team_name_map: dict = field(default_factory=dict)
 
+    # Demo / showcase strings (localized; surfaced by pipeline runner banners
+    # and the NLP sentiment showcase). Override per-league for non-Turkish
+    # demos or custom narratives.
+    demo_label: str = "Turkish Q&A Demo"
+    demo_sentiment_samples: list = field(default_factory=lambda: [
+        "Galatasaray son maçta muhteşem bir galibiyet aldı, takım morali çok yüksek",
+        "Fenerbahçe'de sakatlık krizi devam ediyor, taraftar moral bozuk",
+        "Beşiktaş istikrarlı oynuyor, savunma sağlam gidiyor",
+    ])
+
     def is_derby(self, home: str, away: str) -> bool:
         """True if (home, away) — by display name OR canonical UUID — is a derby pair."""
         if frozenset((home, away)) in self.derbies:

@@ -11,6 +11,7 @@ class P2PConfig:
     # Shared data / league context
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "/data"))
     default_league_id: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_LEAGUE_ID", "super_lig"))
+    default_league_name: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_LEAGUE_NAME", "Süper Lig"))
     simulation_min_real_matches: int = field(default_factory=lambda: int(os.getenv("P2P_SIM_MIN_REAL_MATCHES", "10")))
 
     # Message + retention
