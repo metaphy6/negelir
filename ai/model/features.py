@@ -7,91 +7,12 @@ Generates synthetic features for PoC; real pipeline follows same schema.
 import random
 import numpy as np
 import pandas as pd
-from common.constants import N_FEATURES
+# FEATURE_COLUMNS lives in constants.py as the single source of truth;
+# N_FEATURES is derived from len(FEATURE_COLUMNS).
+from common.constants import N_FEATURES, FEATURE_COLUMNS
 from common.logger import get_logger
 
 log = get_logger("model.features")
-
-# Feature column names (91 features per roadmap §5.4)
-FEATURE_COLUMNS = [
-    # Team form (rolling windows)
-    "home_avg_scored_3", "home_avg_scored_5", "home_avg_scored_10",
-    "home_avg_conceded_3", "home_avg_conceded_5", "home_avg_conceded_10",
-    "home_ppg_5", "home_ppg_10", "home_clean_sheet_10",
-    "home_win_ratio_5", "home_draw_ratio_5", "home_loss_ratio_5",
-    "away_avg_scored_3", "away_avg_scored_5", "away_avg_scored_10",
-    "away_avg_conceded_3", "away_avg_conceded_5", "away_avg_conceded_10",
-    "away_ppg_5", "away_ppg_10", "away_clean_sheet_10",
-    "away_win_ratio_5", "away_draw_ratio_5", "away_loss_ratio_5",
-    # Elo & derived
-    "home_elo", "away_elo", "elo_diff",
-    "home_xg", "away_xg", "xg_diff",
-    "home_form_index", "away_form_index", "form_diff",
-    # H2H
-    "h2h_home_win_pct", "h2h_draw_pct", "h2h_avg_goals",
-    "h2h_over25_pct", "h2h_bts_pct", "h2h_count",
-    # League position
-    "home_league_pos_norm", "away_league_pos_norm", "pos_diff",
-    "home_goal_diff", "away_goal_diff",
-    "home_pts_gap_leader", "away_pts_gap_leader",
-    "home_pts_gap_relegation", "away_pts_gap_relegation",
-    # Squad & tactical
-    "home_formation_stability", "away_formation_stability",
-    "home_squad_rotation_gini", "away_squad_rotation_gini",
-    "home_goal_concentration", "away_goal_concentration",
-    "home_avg_age", "away_avg_age",
-    # Contextual
-    "home_fixture_congestion_7d", "away_fixture_congestion_7d",
-    "home_fixture_congestion_14d", "away_fixture_congestion_14d",
-    "home_manager_tenure", "away_manager_tenure",
-    "home_manager_change", "away_manager_change",
-    "derby_flag", "season_phase",
-    "match_week_norm",
-    # Temporal
-    "day_sin", "day_cos", "month_sin", "month_cos",
-    "home_rest_days", "away_rest_days", "rest_diff",
-    # Sentiment
-    "home_media_sentiment", "away_media_sentiment",
-    "home_fan_optimism", "away_fan_optimism",
-    "media_consensus_strength",
-    # Derived
-    "style_matchup_index", "fatigue_diff",
-    "home_momentum", "away_momentum",
-    "home_scoring_consistency", "away_scoring_consistency",
-    "surprise_index_home", "surprise_index_away",
-    # Weather / venue
-    "temperature_bucket", "precipitation_flag", "wind_category",
-    "venue_type",
-    # ── Card & discipline (v0.2) ──
-    "home_avg_yellows_5", "away_avg_yellows_5",
-    "home_avg_yellows_10", "away_avg_yellows_10",
-    "home_avg_fouls_5", "away_avg_fouls_5",
-    "h2h_avg_cards",
-    "derby_card_factor",
-    # ── Half-time / second-half splits (v0.2) ──
-    "home_avg_ht_scored_5", "away_avg_ht_scored_5",
-    "home_avg_sh_scored_5", "away_avg_sh_scored_5",
-    "home_avg_ht_conceded_5", "away_avg_ht_conceded_5",
-    # ── Venue-specific performance (v0.2) ──
-    "home_venue_win_pct", "away_venue_win_pct",
-    "home_venue_ppg_10", "away_venue_ppg_10",
-    # ── Draw & low-scoring tendencies (v0.2) ──
-    "home_draws_bayesian", "away_draws_bayesian",
-    "low_scoring_likelihood",
-    # ── Strength of schedule (v0.2) ──
-    "home_sos", "away_sos",
-    # ── Second-half detail (v0.2) ──
-    "home_sh_scoring_rate", "away_sh_scoring_rate",
-    "home_sh_conceding_rate", "away_sh_conceding_rate",
-    # ── Scoring patterns (v0.2) ──
-    "home_goals_per_match_rate", "away_goals_per_match_rate",
-    # ── Query Intent Distribution (v0.3) ──
-    "qid_match_winner", "qid_draw", "qid_over_under", "qid_goal_range",
-    "qid_both_teams_score", "qid_clean_sheet", "qid_half_time",
-    "qid_form_query", "qid_head_to_head", "qid_score_predict",
-]
-
-assert len(FEATURE_COLUMNS) == N_FEATURES, f"Expected {N_FEATURES} features, got {len(FEATURE_COLUMNS)}"
 
 
 def generate_synthetic_dataset(n_matches: int = 500, seed: int = 42) -> tuple[pd.DataFrame, pd.Series]:

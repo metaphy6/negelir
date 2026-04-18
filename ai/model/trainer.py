@@ -17,15 +17,15 @@ from common.constants import MODEL_VERSION
 from common.league_config import get_league_config
 from common.logger import get_logger, section_banner, success_banner
 from model.device import detect_device, get_xgb_params
-from model.features import generate_synthetic_dataset, inject_noise, FEATURE_COLUMNS
+from model.features import inject_noise, FEATURE_COLUMNS
 
 log = get_logger("model.trainer")
 
 
-def train_model(save_path: str | None = None, use_real_data: bool = True) -> xgb.XGBClassifier:
+def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
     """
-    Train the GBDT base model.
-    Uses real scraped data by default; falls back to synthetic if scraping fails.
+    Train the GBDT base model on real scraped data.
+    Fails loudly if real data is unavailable — no synthetic fallback in production.
     """
     section_banner("GBDT Model Training")
 
@@ -37,17 +37,9 @@ def train_model(save_path: str | None = None, use_real_data: bool = True) -> xgb
         random_seed=cfg.training_random_seed,
     )
 
-    # Load real data from live sources; fallback to synthetic
-    if use_real_data:
-        try:
-            from model.real_features import extract_real_dataset
-            X, y = extract_real_dataset(min_history=5)
-            log.info(f"🏟️  Training on REAL data: {len(X)} matches")
-        except Exception as exc:
-            log.warning(f"Real data extraction failed ({exc}), falling back to synthetic")
-            X, y = generate_synthetic_dataset(n_matches=1000, seed=cfg.training_random_seed)
-    else:
-        X, y = generate_synthetic_dataset(n_matches=1000, seed=cfg.training_random_seed)
+    from model.real_features import extract_real_dataset
+    X, y = extract_real_dataset(min_history=5)
+    log.info(f"🏟️  Training on REAL data: {len(X)} matches")
 
     X = inject_noise(X, noise_pct=cfg.training_noise_pct, seed=cfg.training_random_seed)
 

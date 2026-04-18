@@ -11,7 +11,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-negelir}
       POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-negelir_dev_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
     ports:
       - "5432:5432"
     volumes:
@@ -50,7 +50,7 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-negelir}
       POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-negelir_dev_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       DATABASE_URL: ${DATABASE_URL:-}
@@ -85,7 +85,7 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-negelir}
       POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-negelir_dev_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       SERVER_URL: http://server:8080
@@ -130,7 +130,7 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-negelir}
       POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-negelir_dev_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
       SERVER_URL: http://server:8080
       P2P_NODE_COUNT: ${P2P_NODE_COUNT:-5}
       P2P_BASE_PORT: ${P2P_BASE_PORT:-9000}

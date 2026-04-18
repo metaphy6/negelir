@@ -73,21 +73,6 @@ class ScrapingEngine:
             log.error(f"Go server error: {e}")
             return []
 
-    def fetch_teams_from_server(self) -> list[dict]:
-        """Fetch team data from Go server."""
-        url = f"{self.server_url}/api/v1/teams"
-        try:
-            log.info(f"🌐 Fetching team data: {url}")
-            resp = requests.get(url, timeout=cfg.server_fetch_timeout)
-            resp.raise_for_status()
-            data = resp.json()
-            teams = data.get("teams", [])
-            log.info(f"✅ {len(teams)} teams fetched")
-            return teams
-        except Exception as e:
-            log.warning(f"Failed to fetch team data: {e}")
-            return []
-
     def trigger_server_scrape(self) -> bool:
         """Tell the Go server to run its scraping pipeline."""
         url = f"{self.server_url}/api/v1/scrape/trigger"

@@ -2442,11 +2442,13 @@ class TestMackolikLive:
         (full 128-year scan is too slow for CI).
         """
         from scraper.mackolik import MackolikClient
+        from common.config import cfg
         import re, json
+        group_id = cfg.mackolik_group_id
         # Step 1: verify year listing works
         r = self.client._get(
             f"{self.client.AJAX}/CompetitionHandler.aspx",
-            params={"op": "groupYears", "group": MackolikClient.GROUP_TURKEY},
+            params={"op": "groupYears", "group": group_id},
         )
         assert r is not None, "groupYears request failed"
         years = MackolikClient._parse_js_array(r.text)
@@ -2459,7 +2461,7 @@ class TestMackolikLive:
         for year in years[:5]:
             r = self.client._get(
                 f"{self.client.AJAX}/CompetitionHandler.aspx",
-                params={"op": "seasons", "group": MackolikClient.GROUP_TURKEY, "year": year},
+                params={"op": "seasons", "group": group_id, "year": year},
             )
             if r is None:
                 continue

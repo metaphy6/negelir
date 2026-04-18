@@ -43,6 +43,17 @@ class LeagueConfig:
     # Dixon-Coles low-scoring adjustment (rho parameter)
     dixon_coles_rho: float = -0.13
 
+    # Elo → xG adjustment curve
+    # factor = 1 / (1 + 10 ** (-elo_diff / elo_xg_divisor))
+    # adjusted_xg_multiplier = xg_elo_factor_min + factor * xg_elo_factor_range
+    elo_xg_divisor: float = 600.0
+    xg_elo_factor_min: float = 0.7
+    xg_elo_factor_range: float = 0.6
+
+    # Venue-specific xG ratio bounds (home/away scoring vs all-venues)
+    venue_ratio_floor: float = 0.7
+    venue_ratio_ceiling: float = 1.4
+
     # Derby pairs (frozenset of team name tuples)
     derbies: set = field(default_factory=set)
 
@@ -77,7 +88,19 @@ class LeagueConfig:
     team_name_map: dict = field(default_factory=dict)
 
     def is_derby(self, home: str, away: str) -> bool:
-        return frozenset((home, away)) in self.derbies
+        """True if (home, away) — by display name OR canonical UUID — is a derby pair."""
+        if frozenset((home, away)) in self.derbies:
+            return True
+        # Also try canonical UUIDs (display names may differ between sources)
+        try:
+            from .constants import TEAM_MAP
+        except Exception:
+            return False
+        h_uuid = TEAM_MAP.get(home.lower())
+        a_uuid = TEAM_MAP.get(away.lower())
+        if h_uuid and a_uuid:
+            return frozenset((h_uuid, a_uuid)) in self.derbies
+        return False
 
 
 # ── Pre-built league configs ────────────────────────────

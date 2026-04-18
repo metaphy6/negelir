@@ -9,19 +9,19 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    🌐 Go Middleware Server                    │
-│          REST API · Scrape Orchestration · Caching           │
+│                    🌐 Go Middleware Server                  │
+│          REST API · Scrape Orchestration · Caching          │
 ├─────────────────────────────────────────────────────────────┤
 │           ┌──────────────┐    ┌──────────────┐              │
-│           │ 🐘 PostgreSQL │    │  🔴 Redis     │              │
-│           │   Storage     │    │   Cache       │              │
+│           │ 🐘 PostgreSQL│    │  🔴 Redis    │              │
+│           │   Storage    │    │   Cache      │              │
 │           └──────────────┘    └──────────────┘              │
-├──────────────────────┬──────────────────────────────────────┤
-│  🤖 AI Engine         │  📡 P2P Network                      │
+├───────────────────────┬─────────────────────────────────────┤
+│  🤖 AI Engine         │  📡 P2P Network                     │
 │  Scraper → Proofreader│  5+ Nodes · Reputation Tracking     │
-│  → Features → GBDT   │  Ensemble Predictions               │
-│  → TQU → TRC         │  Turkish Q&A                        │
-└──────────────────────┴──────────────────────────────────────┘
+│  → Features → GBDT    │  Ensemble Predictions               │
+│  → TQU → TRC          │  Turkish Q&A                        │
+└───────────────────────┴─────────────────────────────────────┘
 ```
 
 ---
@@ -332,7 +332,7 @@ negelir/
 |----------|---------|-------------|
 | `POSTGRES_DB` | `negelir` | Database name |
 | `POSTGRES_USER` | `negelir` | Database user |
-| `POSTGRES_PASSWORD` | `negelir_dev_2026` | Database password |
+| `POSTGRES_PASSWORD` | _(required, no default)_ | Database password — must be set in `.env` |
 | `SERVER_PORT` | `8080` | Go server port |
 | `P2P_NODE_COUNT` | `5` | Number of P2P nodes |
 | `P2P_SIMULATION_MATCHES` | `10` | Matches per simulation |

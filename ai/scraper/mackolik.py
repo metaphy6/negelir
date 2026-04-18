@@ -114,8 +114,6 @@ class MackolikClient:
 
     BASE = cfg.scrape_mackolik_archive
     AJAX = f"{BASE}/AjaxHandlers"
-    # Backward compatibility for legacy tests/callers.
-    GROUP_TURKEY = cfg.mackolik_group_id
 
     def __init__(
         self,

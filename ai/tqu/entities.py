@@ -22,6 +22,8 @@ _TIME_PATTERNS = {
     "tomorrow": re.compile(r"\b(yarın|yarın\s*akşam)\b", re.I),
     "this_week": re.compile(r"\b(bu\s*hafta|bu\s*hafta\s*sonu|bu\s*pazar|bu\s*cumartesi)\b", re.I),
 }
+_FIRST_HALF_RE = re.compile(r"(ilk|birinci|1\.?)\s*(yarı|yari)", re.I)
+_SECOND_HALF_RE = re.compile(r"(ikinci|2\.?)\s*(yarı|yari)", re.I)
 
 
 @dataclass
@@ -71,9 +73,9 @@ def extract_entities(text: str) -> ExtractedEntities:
         log.debug(f"Goal threshold: {entities.threshold}")
 
     # ── Half reference ──
-    if re.search(r"(ilk|birinci|1\.?)\s*(yarı|yari)", text, re.I):
+    if _FIRST_HALF_RE.search(text):
         entities.half = 1
-    elif re.search(r"(ikinci|2\.?)\s*(yarı|yari)", text, re.I):
+    elif _SECOND_HALF_RE.search(text):
         entities.half = 2
 
     # ── Over/under threshold from explicit numbers ──

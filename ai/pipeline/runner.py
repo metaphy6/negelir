@@ -5,13 +5,12 @@ Shows hardcoded logs of entire data lifecycle as requested.
 """
 
 import time
-import random
 import numpy as np
 
 from common.logger import get_logger, section_banner, success_banner, error_banner
 from common.config import cfg
 from common.constants import UUID_TO_NAME, MACKOLIK_ID_MAP, TEAM_STRENGTH
-from model.features import generate_synthetic_dataset, FEATURE_COLUMNS, N_FEATURES
+from model.features import FEATURE_COLUMNS, N_FEATURES
 from model.real_features import (
     EloTracker, TeamStats, H2HTracker, StandingsTracker,
     load_real_matches, _parse_date, _is_derby,
@@ -594,7 +593,12 @@ class PipelineRunner:
         import json
         import os
 
-        for path in ["/data/tr_super_lig_real.json", "data/tr_super_lig_real.json"]:
+        league_id = cfg.default_league_id
+        candidates = [
+            os.path.join(cfg.data_dir, f"{league_id}_real.json"),
+            os.path.join("data", f"{league_id}_real.json"),
+        ]
+        for path in candidates:
             if os.path.isfile(path):
                 try:
                     with open(path, "r", encoding="utf-8") as f:
@@ -605,43 +609,6 @@ class PipelineRunner:
                 except Exception as exc:
                     log.warning(f"Cache load failed ({path}): {exc}")
         return []
-
-    def _generate_demo_features(self, rng) -> dict:
-        """Generate feature context for demo matches (legacy)."""
-        return {"demo": True, "generated": True}
-
-    def _generate_synthetic_matches(self) -> list[dict]:
-        """Generate synthetic match records for testing."""
-        teams = list(UUID_TO_NAME.keys())[:10]
-        matches = []
-
-        rng = random.Random(42)
-        for week in range(1, 6):
-            shuffled = teams[:]
-            rng.shuffle(shuffled)
-            for i in range(0, len(shuffled) - 1, 2):
-                home_score = rng.randint(0, 4)
-                away_score = rng.randint(0, 3)
-                matches.append({
-                    "home_team": shuffled[i],
-                    "away_team": shuffled[i + 1],
-                    "home_score": home_score,
-                    "away_score": away_score,
-                    "ht_home_score": rng.randint(0, home_score),
-                    "ht_away_score": rng.randint(0, away_score),
-                    "match_week": week,
-                    "league_id": "super_lig",
-                    "season": "auto",
-                    "stats": {
-                        "possession": rng.randint(35, 65),
-                        "shots_on": rng.randint(2, 12),
-                        "shots_off": rng.randint(3, 15),
-                        "corners": rng.randint(2, 12),
-                        "fouls": rng.randint(8, 22),
-                    },
-                })
-
-        return matches
 
 
 if __name__ == "__main__":

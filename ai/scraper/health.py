@@ -8,6 +8,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from common.config import cfg
 from common.logger import get_logger
 
 log = get_logger("scraper.health")
@@ -24,12 +25,14 @@ class HealthRecord:
 class SourceHealthMonitor:
     """
     Monitors scrape source health.
-    Declares a source DOWN after FAILURE_THRESHOLD consecutive failures.
+    Declares a source DOWN after `cfg.source_failure_threshold` consecutive failures.
     """
 
-    FAILURE_THRESHOLD = 3
-
-    def __init__(self):
+    def __init__(self, failure_threshold: int | None = None):
+        self.failure_threshold = (
+            failure_threshold if failure_threshold is not None
+            else cfg.source_failure_threshold
+        )
         self._history: dict[str, list[HealthRecord]] = defaultdict(list)
         self._down_sources: set[str] = set()
 
@@ -38,15 +41,15 @@ class SourceHealthMonitor:
         self._history[source].append(HealthRecord(
             success=success, matches_found=matches_found
         ))
-        recent = self._history[source][-self.FAILURE_THRESHOLD:]
-        if len(recent) >= self.FAILURE_THRESHOLD and all(not r.success for r in recent):
+        recent = self._history[source][-self.failure_threshold:]
+        if len(recent) >= self.failure_threshold and all(not r.success for r in recent):
             if source not in self._down_sources:
                 self._declare_failure(source)
 
     def _declare_failure(self, source: str):
         """Mark source as DOWN."""
         self._down_sources.add(source)
-        log.warning(f"Source declared DOWN: {source} ({self.FAILURE_THRESHOLD} consecutive failures)")
+        log.warning(f"Source declared DOWN: {source} ({self.failure_threshold} consecutive failures)")
 
     def is_healthy(self, source: str) -> bool:
         """Check if source is considered healthy."""

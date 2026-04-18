@@ -250,6 +250,84 @@ class Config:
     def pg_url(self) -> str:
         return f"postgresql://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_db}"
 
+    def validate(self, *, strict: bool = False) -> list[str]:
+        """
+        Sanity-check configuration values. Returns list of issue strings.
+        When strict=True, raises ValueError on any issue.
+
+        Numeric ranges, port bounds, and probability fractions are validated.
+        Empty/missing secrets are reported but never echoed back.
+        """
+        issues: list[str] = []
+
+        def _bounded(name: str, value, lo, hi, *, allow_eq_hi: bool = True):
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                issues.append(f"{name}: not numeric ({value!r})")
+                return
+            ok = (lo <= v <= hi) if allow_eq_hi else (lo <= v < hi)
+            if not ok:
+                issues.append(f"{name}={v} outside [{lo}, {hi}]")
+
+        # Ports
+        _bounded("pg_port", self.pg_port, 1, 65535)
+        _bounded("redis_port", self.redis_port, 1, 65535)
+
+        # Probability / fraction fields
+        _bounded("drift_accuracy_floor", self.drift_accuracy_floor, 0.0, 1.0)
+        _bounded("training_noise_pct", self.training_noise_pct, 0.0, 1.0)
+        _bounded("training_test_split", self.training_test_split, 0.0, 1.0, allow_eq_hi=False)
+        _bounded("stale_confidence_penalty", self.stale_confidence_penalty, 0.0, 1.0)
+
+        # Positive integers
+        for name, value in (
+            ("drift_accuracy_window", self.drift_accuracy_window),
+            ("training_min_matches", self.training_min_matches),
+            ("source_failure_threshold", self.source_failure_threshold),
+            ("stale_threshold_seconds", self.stale_threshold_seconds),
+            ("telemetry_max_stream_len", self.telemetry_max_stream_len),
+            ("server_fetch_timeout", self.server_fetch_timeout),
+            ("scrape_trigger_timeout", self.scrape_trigger_timeout),
+            ("health_check_timeout", self.health_check_timeout),
+            ("mackolik_http_timeout", self.mackolik_http_timeout),
+            ("scrape_http_timeout", self.scrape_http_timeout),
+            ("footballdata_http_timeout", self.footballdata_http_timeout),
+            ("redis_socket_timeout", self.redis_socket_timeout),
+        ):
+            if not isinstance(value, int) or value <= 0:
+                issues.append(f"{name}={value} must be a positive integer")
+
+        # Hour/minute ranges
+        _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)
+        _bounded("schedule_outcome_check_hour", self.schedule_outcome_check_hour, 0, 23)
+        _bounded("schedule_retrain_hour", self.schedule_retrain_hour, 0, 23)
+        _bounded("schedule_daily_scrape_minute", self.schedule_daily_scrape_minute, 0, 59)
+        _bounded("schedule_outcome_check_minute", self.schedule_outcome_check_minute, 0, 59)
+
+        # Required strings
+        if not self.default_league_id:
+            issues.append("default_league_id is empty")
+        if not self.data_dir:
+            issues.append("data_dir is empty")
+        if not self.model_dir:
+            issues.append("model_dir is empty")
+
+        # Sample weights must parse and have at least 3 entries (Home/Draw/Away)
+        try:
+            weights = self.training_sample_weights
+            if len(weights) < 3:
+                issues.append(f"training_sample_weights needs >=3 entries (got {len(weights)})")
+            for k, v in weights.items():
+                if v < 0:
+                    issues.append(f"training_sample_weights[{k}]={v} cannot be negative")
+        except (ValueError, TypeError) as e:
+            issues.append(f"training_sample_weights parse error: {e}")
+
+        if strict and issues:
+            raise ValueError("Config validation failed:\n  - " + "\n  - ".join(issues))
+        return issues
+
 
 # Singleton
 cfg = Config()

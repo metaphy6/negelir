@@ -8,6 +8,16 @@ ENV_FILE := .env
 WORKSPACE_DIR := /workspace
 TEST_PYTHONPATH := $(WORKSPACE_DIR)/ai:$(WORKSPACE_DIR)/p2p
 
+# Tunable defaults for backtest targets (override on the CLI: `make ai-backtest WEEKS=5`)
+WEEKS ?= 3
+WEEKS_SHORT ?= 2
+WEEKS_LONG ?= 10
+WEEKS_MARKET ?= 5
+MIN_CONFIDENCE ?= 0.55
+MARKETS_1X2 ?= ms
+MARKETS_GOALS ?= au_1.5,au_2.5,au_3.5,kg,tc,skor,skor_top3
+MARKETS_HALFTIME ?= iy,2y,iy_ms,iy_au_05
+
 # Detect OS for cross-platform compatibility
 ifeq ($(OS),Windows_NT)
 	SHELL := cmd.exe
@@ -83,27 +93,27 @@ ai-demo: env ## Run Turkish Q&A demo questions
 
 .PHONY: ai-backtest
 ai-backtest: env ## Multi-market backtest (all betting types, last 3 weeks)
-	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 3
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks $(WEEKS)
 
 .PHONY: ai-backtest-2w
 ai-backtest-2w: env ## Multi-market backtest (last 2 weeks, high-confidence only)
-	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 2 --min-confidence 0.55
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks $(WEEKS_SHORT) --min-confidence $(MIN_CONFIDENCE)
 
 .PHONY: ai-backtest-1x2
 ai-backtest-1x2: env ## Backtest only 1X2 market
-	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 3 --markets ms
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks $(WEEKS) --markets $(MARKETS_1X2)
 
 .PHONY: ai-backtest-goals
 ai-backtest-goals: env ## Backtest goal-related markets (AU, KG, skor)
-	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 5 --markets au_1.5,au_2.5,au_3.5,kg,tc,skor,skor_top3
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks $(WEEKS_MARKET) --markets $(MARKETS_GOALS)
 
 .PHONY: ai-backtest-halftime
 ai-backtest-halftime: env ## Backtest half-time markets (IY, IY/MS)
-	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 5 --markets iy,2y,iy_ms,iy_au_05
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks $(WEEKS_MARKET) --markets $(MARKETS_HALFTIME)
 
 .PHONY: ai-backtest-full
 ai-backtest-full: env ## Full backtest across 10 weeks with all markets
-	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks 10
+	$(COMPOSE) run --rm ai python -m backtest.evaluator --weeks $(WEEKS_LONG)
 
 .PHONY: ai-tqu-test
 ai-tqu-test: env ## Test TQU with sample Turkish questions

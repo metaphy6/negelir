@@ -27,7 +27,6 @@ import pandas as pd
 from common.config import cfg
 
 from common.constants import (
-    DERBIES_SET,
     MACKOLIK_ID_MAP,
     TEAM_STRENGTH,
     UUID_TO_NAME,
@@ -457,17 +456,9 @@ def _parse_date(date_str: str) -> datetime:
 
 
 def _is_derby(home: str, away: str) -> bool:
-    """Check if this matchup is a derby."""
-    pair = frozenset([home, away])
-    if pair in DERBIES_SET:
-        return True
-    # Also check by UUID
-    from common.constants import TEAM_MAP
-    home_uuid = TEAM_MAP.get(home.lower())
-    away_uuid = TEAM_MAP.get(away.lower())
-    if home_uuid and away_uuid:
-        return frozenset([home_uuid, away_uuid]) in DERBIES_SET
-    return False
+    """Check if this matchup is a derby (delegates to LeagueConfig)."""
+    from common.league_config import turkish_super_lig
+    return turkish_super_lig().is_derby(home, away)
 
 
 def extract_real_dataset(min_history: int = 5) -> tuple[pd.DataFrame, pd.Series]:
@@ -483,9 +474,10 @@ def extract_real_dataset(min_history: int = 5) -> tuple[pd.DataFrame, pd.Series]
     """
     matches = load_real_matches()
     if not matches:
-        log.error("No real matches loaded! Falling back to synthetic.")
-        from model.features import generate_synthetic_dataset
-        return generate_synthetic_dataset()
+        raise RuntimeError(
+            "No real matches available. Run `make scrape` (or scrape sources "
+            "directly) before training."
+        )
 
     log.info(f"🔧 Extracting features from {len(matches)} real matches...")
 
@@ -554,10 +546,10 @@ def extract_real_dataset(min_history: int = 5) -> tuple[pd.DataFrame, pd.Series]
         })
 
     if not rows:
-        log.error(f"No matches with sufficient history (min={min_history})! "
-                  f"Falling back to synthetic.")
-        from model.features import generate_synthetic_dataset
-        return generate_synthetic_dataset()
+        raise RuntimeError(
+            f"No matches with sufficient history (min={min_history}). "
+            "Increase historical data or lower NEGELIR_MIN_HISTORY."
+        )
 
     X = pd.DataFrame(rows, columns=FEATURE_COLUMNS)
     y = pd.Series(labels, name="result_class")
