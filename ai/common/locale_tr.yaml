@@ -596,3 +596,29 @@ derbies:
   - ["team_001", "team_004"]   # Galatasaray vs Trabzonspor
   - ["team_002", "team_004"]   # Fenerbahçe vs Trabzonspor
   - ["team_003", "team_004"]   # Beşiktaş vs Trabzonspor
+
+# ── Historical Source Aliases ──────────────────────────
+# Legacy names from historical datasets moved here so scraper modules stay hardcode-free.
+historical_source_aliases:
+  "Kasımpaşa SK": "Kasımpaşa"
+  "İstanbul Başakşehir": "Başakşehir"
+  "Istanbul Basaksehir": "Başakşehir"
+  "Medipol Başakşehir": "Başakşehir"
+  "Gazisehir Gaziantep": "Gaziantep FK"
+  "Caykur Rizespor": "Çaykur Rizespor"
+  "Fatih Karagumruk": "Fatih Karagümrük"
+  "Buyuksehir Bld": "Başakşehir"
+  "Giresunspor": "Giresunspor"
+  "Yeni Malatyaspor": "Yeni Malatyaspor"
+  "Malatyaspor": "Yeni Malatyaspor"
+  "Denizlispor": "Denizlispor"
+  "Erzurum BB": "BB Erzurumspor"
+  "Akhisar Belediyespor": "Akhisarspor"
+  "Akhisarspor": "Akhisarspor"
+  "Bursaspor": "Bursaspor"
+  "Osmanlispor": "Osmanlıspor"
+  "Umraniyespor": "Ümraniyespor"
+  "Istanbulspor": "İstanbulspor"
+  "Altay": "Altay"
+  "BB Erzurumspor": "BB Erzurumspor"
+  "Boluspor": "Boluspor"

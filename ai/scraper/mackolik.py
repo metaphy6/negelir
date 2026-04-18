@@ -114,10 +114,23 @@ class MackolikClient:
 
     BASE = cfg.scrape_mackolik_archive
     AJAX = f"{BASE}/AjaxHandlers"
-    GROUP_TURKEY = 1  # Süper Lig group ID
+    # Backward compatibility for legacy tests/callers.
+    GROUP_TURKEY = cfg.mackolik_group_id
 
-    def __init__(self, rate_limit: float | None = None):
+    def __init__(
+        self,
+        rate_limit: float | None = None,
+        group_id: int | None = None,
+        league_name_filter: str | None = None,
+        http_timeout: int | None = None,
+    ):
         self._rate_limit = rate_limit if rate_limit is not None else cfg.scrape_rate_limit
+        self.group_id = group_id if group_id is not None else cfg.mackolik_group_id
+        self.league_name_filter = (
+            league_name_filter if league_name_filter is not None else cfg.mackolik_league_name_filter
+        )
+        self._league_name_filter_norm = self._fold_turkish(self.league_name_filter)
+        self._http_timeout = http_timeout if http_timeout is not None else cfg.mackolik_http_timeout
         self._last_request = 0.0
         self._session = requests.Session()
         self._session.headers["User-Agent"] = cfg.scrape_user_agent
@@ -132,7 +145,7 @@ class MackolikClient:
         # Step 1: Get year labels
         r = self._get(
             f"{self.AJAX}/CompetitionHandler.aspx",
-            params={"op": "groupYears", "group": self.GROUP_TURKEY},
+            params={"op": "groupYears", "group": self.group_id},
         )
         if r is None:
             return {}
@@ -144,13 +157,13 @@ class MackolikClient:
         for year in years:
             r = self._get(
                 f"{self.AJAX}/CompetitionHandler.aspx",
-                params={"op": "seasons", "group": self.GROUP_TURKEY, "year": year},
+                params={"op": "seasons", "group": self.group_id, "year": year},
             )
             if r is None:
                 continue
             data = self._parse_jsonp(r.text)
             for league_id, league_name in data.get("l", []):
-                if "Süper Lig" in league_name or "Super Lig" in league_name:
+                if self._league_name_filter_norm in self._fold_turkish(str(league_name)):
                     seasons[year] = league_id
                     break
 
@@ -225,12 +238,18 @@ class MackolikClient:
         self._last_request = time.time()
 
         try:
-            resp = self._session.get(url, params=params, timeout=15)
+            resp = self._session.get(url, params=params, timeout=self._http_timeout)
             resp.raise_for_status()
             return resp
         except requests.RequestException as exc:
             log.warning(f"Request failed: {url} — {exc}")
             return None
+
+    @staticmethod
+    def _fold_turkish(value: str) -> str:
+        """Normalize Turkish characters for robust case-insensitive matching."""
+        table = str.maketrans("çğıöşü", "cgiosu")
+        return value.lower().translate(table)
 
     # ── Parsers ──────────────────────────────────────────
 

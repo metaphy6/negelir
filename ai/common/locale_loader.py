@@ -99,8 +99,18 @@ def build_source_alias_map(data: dict) -> dict[str, str]:
         # The display name itself is always canonical
         result[name] = name
         # Add all external source aliases
-        for _source, alias in info.get("source_aliases", {}).items():
-            result[alias] = name
+        for _source, alias_value in info.get("source_aliases", {}).items():
+            if isinstance(alias_value, list):
+                for alias in alias_value:
+                    if alias:
+                        result[str(alias)] = name
+            elif alias_value:
+                result[str(alias_value)] = name
+
+    # Historical aliases can be defined at the locale root to avoid scraper hardcodes.
+    for alias, canonical in data.get("historical_source_aliases", {}).items():
+        if alias and canonical:
+            result[str(alias)] = str(canonical)
     return result
 
 

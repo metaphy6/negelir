@@ -399,7 +399,7 @@ def load_real_matches() -> list[dict]:
     # Source 3: openfootball (live)
     try:
         from scraper.real_data import RealDataScraper
-        scraper = RealDataScraper(rate_limit=1.0)
+        scraper = RealDataScraper(rate_limit=cfg.real_data_rate_limit)
         of_matches = scraper.scrape_openfootball()
         for m in of_matches:
             matches.append({

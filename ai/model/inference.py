@@ -43,14 +43,7 @@ FEATURE_RANGES = {
     "default": (-100, 100),
 }
 
-# Ensemble weight: XGBoost vs Poisson (synced with historical test)
-XGB_WEIGHT = 0.35
-
-# Dixon-Coles low-scoring correction parameter
-DIXON_COLES_RHO = -0.13
-
-
-def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho=DIXON_COLES_RHO):
+def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho: float):
     """Dixon-Coles correction factor for low-scoring matches."""
     if hg == 0 and ag == 0:
         return 1.0 - home_xg * away_xg * rho
@@ -63,10 +56,10 @@ def _dixon_coles_tau(hg, ag, home_xg, away_xg, rho=DIXON_COLES_RHO):
     return 1.0
 
 
-def _score_prob(hg, ag, home_xg, away_xg):
+def _score_prob(hg, ag, home_xg, away_xg, rho: float):
     """Score probability with Dixon-Coles correction."""
     p = poisson.pmf(hg, home_xg) * poisson.pmf(ag, away_xg)
-    p *= _dixon_coles_tau(hg, ag, home_xg, away_xg)
+    p *= _dixon_coles_tau(hg, ag, home_xg, away_xg, rho=rho)
     return max(0.0, float(p))
 
 
@@ -88,9 +81,11 @@ class GBDTInference:
             log.info(f"📦 Model loaded: {self.model_path}")
         else:
             log.warning(f"⚠️  Model not found: {self.model_path}")
-            log.info("🔄 Training new model...")
+            auto_train_real_data = os.getenv("NEGELIR_AUTO_TRAIN_REAL_DATA", "0") == "1"
+            mode = "real-data" if auto_train_real_data else "synthetic"
+            log.info(f"🔄 Training new model ({mode} auto-train)...")
             from model.trainer import train_model
-            self.model = train_model(self.model_path)
+            self.model = train_model(self.model_path, use_real_data=auto_train_real_data)
 
     def validate_features(self, features: np.ndarray) -> tuple[bool, str]:
         """
@@ -127,8 +122,8 @@ class GBDTInference:
         home_mult = 0.7 + factor * 0.6   # [0.7, 1.3]
         away_mult = 1.3 - factor * 0.6   # [1.3, 0.7]
 
-        adj_home = max(0.3, home_xg * home_mult)
-        adj_away = max(0.3, away_xg * away_mult)
+        adj_home = max(self.league_config.min_xg_floor, home_xg * home_mult)
+        adj_away = max(self.league_config.min_xg_floor, away_xg * away_mult)
         return adj_home, adj_away
 
     def _venue_adjusted_xg(self, features: np.ndarray, col_idx: dict,
@@ -156,33 +151,40 @@ class GBDTInference:
 
     def _poisson_home_win_prob(self, home_xg: float, away_xg: float) -> float:
         p = 0.0
-        for h in range(8):
-            for a in range(h):
-                p += _score_prob(h, a, home_xg, away_xg)
+        rho = self.league_config.dixon_coles_rho
+        home_cap = self.league_config.poisson_home_goal_cap
+        away_cap = self.league_config.poisson_away_goal_cap
+        for h in range(home_cap + 1):
+            for a in range(min(h, away_cap + 1)):
+                p += _score_prob(h, a, home_xg, away_xg, rho=rho)
         return p
 
     def _poisson_draw_prob(self, home_xg: float, away_xg: float) -> float:
         p = 0.0
-        for k in range(6):
-            p += _score_prob(k, k, home_xg, away_xg)
+        rho = self.league_config.dixon_coles_rho
+        for k in range(self.league_config.poisson_draw_goal_cap + 1):
+            p += _score_prob(k, k, home_xg, away_xg, rho=rho)
         return p
 
     def _predict_scorelines(self, home_xg: float, away_xg: float, top_n: int = 5) -> list[dict]:
         scorelines = []
-        for h in range(8):
-            for a in range(8):
-                p = _score_prob(h, a, home_xg, away_xg)
+        rho = self.league_config.dixon_coles_rho
+        for h in range(self.league_config.poisson_home_goal_cap + 1):
+            for a in range(self.league_config.poisson_away_goal_cap + 1):
+                p = _score_prob(h, a, home_xg, away_xg, rho=rho)
                 scorelines.append({"home": h, "away": a, "probability": round(p, 4)})
         scorelines.sort(key=lambda x: -x["probability"])
         return scorelines[:top_n]
 
     def _compute_score_brackets(self, home_xg: float, away_xg: float) -> dict:
         """Compute probability brackets for score ranges."""
-        max_g = 8
+        rho = self.league_config.dixon_coles_rho
+        home_range = range(self.league_config.poisson_home_goal_cap + 1)
+        away_range = range(self.league_config.poisson_away_goal_cap + 1)
         sm = {}
-        for h in range(max_g):
-            for a in range(max_g):
-                sm[(h, a)] = _score_prob(h, a, home_xg, away_xg)
+        for h in home_range:
+            for a in away_range:
+                sm[(h, a)] = _score_prob(h, a, home_xg, away_xg, rho=rho)
 
         sm_total = sum(sm.values())
         if sm_total > 0:
@@ -191,15 +193,15 @@ class GBDTInference:
 
         # Score brackets
         p_0_goals = sm[(0, 0)]
-        p_1_goal = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a == 1)
-        p_2_goals = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a == 2)
-        p_3_goals = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a == 3)
-        p_4plus = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a >= 4)
+        p_1_goal = sum(sm[(h, a)] for h in home_range for a in away_range if h + a == 1)
+        p_2_goals = sum(sm[(h, a)] for h in home_range for a in away_range if h + a == 2)
+        p_3_goals = sum(sm[(h, a)] for h in home_range for a in away_range if h + a == 3)
+        p_4plus = sum(sm[(h, a)] for h in home_range for a in away_range if h + a >= 4)
 
         # Most likely total goals
         total_probs = {}
-        for h in range(max_g):
-            for a in range(max_g):
+        for h in home_range:
+            for a in away_range:
                 t = h + a
                 total_probs[t] = total_probs.get(t, 0.0) + sm[(h, a)]
         most_likely_total = max(total_probs, key=total_probs.get)
@@ -214,11 +216,13 @@ class GBDTInference:
         }
 
     def _compute_betting_markets(self, home_xg: float, away_xg: float) -> dict:
-        max_g = 7
+        rho = self.league_config.dixon_coles_rho
+        max_g = self.league_config.poisson_market_goal_cap
+        goal_range = range(max_g + 1)
         sm = {}
-        for h in range(max_g):
-            for a in range(max_g):
-                sm[(h, a)] = _score_prob(h, a, home_xg, away_xg)
+        for h in goal_range:
+            for a in goal_range:
+                sm[(h, a)] = _score_prob(h, a, home_xg, away_xg, rho=rho)
 
         # Normalise
         sm_total = sum(sm.values())
@@ -227,29 +231,30 @@ class GBDTInference:
                 sm[k] /= sm_total
 
         def p_over(line):
-            return 1.0 - sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h + a <= line)
+            return 1.0 - sum(sm[(h, a)] for h in goal_range for a in goal_range if h + a <= line)
 
-        p_home = sum(sm[(h, a)] for h in range(max_g) for a in range(h))
-        p_draw = sum(sm[(k, k)] for k in range(max_g))
+        p_home = sum(sm[(h, a)] for h in goal_range for a in goal_range if h > a)
+        p_draw = sum(sm[(k, k)] for k in goal_range)
         p_away = max(0.01, 1.0 - p_home - p_draw)
 
-        p_h_zero = sum(sm[(0, a)] for a in range(max_g))
-        p_a_zero = sum(sm[(h, 0)] for h in range(max_g))
+        p_h_zero = sum(sm[(0, a)] for a in goal_range)
+        p_a_zero = sum(sm[(h, 0)] for h in goal_range)
         p_btts = 1.0 - p_h_zero - p_a_zero + sm[(0, 0)]
 
         # Half-time (first-half goal percentage from league config)
         ht_pct = self.league_config.first_half_goal_pct
         ht_hxg = home_xg * ht_pct
         ht_axg = away_xg * ht_pct
+        ht_goal_range = range(self.league_config.poisson_ht_max_goals + 1)
         ht_sm = {}
-        for h in range(5):
-            for a in range(5):
+        for h in ht_goal_range:
+            for a in ht_goal_range:
                 ht_sm[(h, a)] = poisson.pmf(h, ht_hxg) * poisson.pmf(a, ht_axg)
-        ht_home = sum(ht_sm[(h, a)] for h in range(5) for a in range(h))
-        ht_draw = sum(ht_sm[(k, k)] for k in range(5))
+        ht_home = sum(ht_sm[(h, a)] for h in ht_goal_range for a in ht_goal_range if h > a)
+        ht_draw = sum(ht_sm[(k, k)] for k in ht_goal_range)
         ht_away = max(0.01, 1.0 - ht_home - ht_draw)
 
-        ah_h_m15 = sum(sm[(h, a)] for h in range(max_g) for a in range(max_g) if h - a >= 2)
+        ah_h_m15 = sum(sm[(h, a)] for h in goal_range for a in goal_range if h - a >= 2)
         denom_ha = max(0.01, p_home + p_away)
 
         return {
@@ -306,7 +311,7 @@ class GBDTInference:
         3-class XGBoost + Poisson ensemble with score/card predictions.
 
         Args:
-            features: 1×120 numpy array
+            features: 1×N_FEATURES numpy array
 
         Returns:
             Analysis dict with probabilities, scores, cards, markets
@@ -339,8 +344,9 @@ class GBDTInference:
 
         # --- Poisson model probabilities ---
         col_idx = {col: i for i, col in enumerate(FEATURE_COLUMNS)}
-        home_avg_goals = max(0.3, float(features[0, col_idx["home_avg_scored_5"]]))
-        away_avg_goals = max(0.3, float(features[0, col_idx["away_avg_scored_5"]]))
+        xg_floor = self.league_config.min_xg_floor
+        home_avg_goals = max(xg_floor, float(features[0, col_idx["home_avg_scored_5"]]))
+        away_avg_goals = max(xg_floor, float(features[0, col_idx["away_avg_scored_5"]]))
         home_xg_feat = float(features[0, col_idx["home_xg"]])
         away_xg_feat = float(features[0, col_idx["away_xg"]])
 

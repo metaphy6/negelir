@@ -107,18 +107,17 @@ Set `AI_DEVICE=cpu` or leave empty.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POSTGRES_DB` | negelir | Database name |
-| `POSTGRES_USER` | negelir | Database user |
-| `POSTGRES_PASSWORD` | negelir_dev | Database password |
-| `REDIS_URL` | redis:6379 | Redis address |
-| `SERVER_PORT` | 8080 | Go server port |
-| `AI_DEVICE` | auto | GPU/CPU target |
-| `AI_LOG_LEVEL` | DEBUG | Log level |
-| `AI_MODEL_VERSION` | 0.1.0 | Model version |
-| `P2P_NODE_COUNT` | 5 | P2P simulation node count |
-| `P2P_SIMULATION_MATCHES` | 10 | Simulation match count |
+Use `.env.example` as the canonical source of every configurable key.
+
+| Group | Canonical Prefix/Keys | Description |
+|------|------------------------|-------------|
+| AI runtime | `NEGELIR_*` | Scheduler, scraper, model, telemetry defaults for `ai/common/config.py` |
+| P2P network | `P2P_*` | Discovery, transport, gossip consensus, retention, simulation |
+| Server runtime | `DB_*`, `HTTP_*`, `CACHE_*`, `SERVER_PORT` | Go server DB pool, HTTP timeouts, cache TTLs, listen port |
+| Infra connectivity | `POSTGRES_*`, `REDIS_*`, `DATABASE_URL`, `REDIS_URL` | Database/Redis connection settings |
+| Device and logs | `AI_DEVICE`, `AI_LOG_LEVEL` | Inference hardware target and logging verbosity |
+
+Legacy fallback aliases were removed. Set canonical keys directly to avoid ambiguity.
 
 ## Troubleshooting
 

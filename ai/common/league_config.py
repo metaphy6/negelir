@@ -34,6 +34,11 @@ class LeagueConfig:
     # Poisson limits
     poisson_max_goals: int = 7
     poisson_ht_max_goals: int = 5
+    poisson_home_goal_cap: int = 7
+    poisson_away_goal_cap: int = 7
+    poisson_draw_goal_cap: int = 5
+    poisson_market_goal_cap: int = 6
+    min_xg_floor: float = 0.3
 
     # Dixon-Coles low-scoring adjustment (rho parameter)
     dixon_coles_rho: float = -0.13

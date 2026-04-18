@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,20 +22,36 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type serverConfig struct {
+	DatabaseURL         string
+	RedisURL            string
+	Port                string
+	DBMaxConns          int32
+	DBConnectTimeout    time.Duration
+	DBPingTimeout       time.Duration
+	DBRetryDelay        time.Duration
+	RedisRetryDelay     time.Duration
+	HTTPReadTimeout     time.Duration
+	HTTPWriteTimeout    time.Duration
+	HTTPShutdownTimeout time.Duration
+	MatchesCacheTTL     time.Duration
+	TeamsCacheTTL       time.Duration
+}
+
 func main() {
 	fmt.Println("🚀 Negelir Middleware Server starting...")
+	cfg := loadServerConfig()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Database
-	dbURL := getEnv("DATABASE_URL", "postgres://negelir:negelir_dev_2026@postgres:5432/negelir?sslmode=disable")
-	dbConfig, err := pgxpool.ParseConfig(dbURL)
+	dbConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("❌ PostgreSQL URL error: %v", err)
 	}
-	dbConfig.MaxConns = 10
-	dbConfig.ConnConfig.ConnectTimeout = 5 * time.Second
+	dbConfig.MaxConns = cfg.DBMaxConns
+	dbConfig.ConnConfig.ConnectTimeout = cfg.DBConnectTimeout
 
 	pool, err := pgxpool.NewWithConfig(ctx, dbConfig)
 	if err != nil {
@@ -42,12 +59,12 @@ func main() {
 	}
 	defer pool.Close()
 
-	pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+	pingCtx, pingCancel := context.WithTimeout(ctx, cfg.DBPingTimeout)
 	if err := pool.Ping(pingCtx); err != nil {
 		pingCancel()
 		log.Printf("⚠️  PostgreSQL not ready yet, retrying...")
-		time.Sleep(3 * time.Second)
-		pingCtx2, pingCancel2 := context.WithTimeout(ctx, 5*time.Second)
+		time.Sleep(cfg.DBRetryDelay)
+		pingCtx2, pingCancel2 := context.WithTimeout(ctx, cfg.DBPingTimeout)
 		if err := pool.Ping(pingCtx2); err != nil {
 			pingCancel2()
 			log.Fatalf("❌ Could not connect to PostgreSQL: %v", err)
@@ -59,11 +76,10 @@ func main() {
 	fmt.Println("✅ PostgreSQL connection successful")
 
 	// Redis
-	redisAddr := getEnv("REDIS_URL", "redis:6379")
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisURL})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Printf("⚠️  Redis not ready yet, retrying...")
-		time.Sleep(2 * time.Second)
+		time.Sleep(cfg.RedisRetryDelay)
 		if err := rdb.Ping(ctx).Err(); err != nil {
 			log.Fatalf("❌ Could not connect to Redis: %v", err)
 		}
@@ -82,25 +98,24 @@ func main() {
 	api := r.Group("/api/v1")
 	{
 		api.GET("/health", healthHandler(pool, rdb))
-		api.GET("/matches", matchesHandler(pool, rdb))
+		api.GET("/matches", matchesHandler(pool, rdb, cfg.MatchesCacheTTL))
 		api.GET("/matches/:id", matchDetailHandler(pool, rdb))
-		api.GET("/teams", teamsHandler(pool, rdb))
+		api.GET("/teams", teamsHandler(pool, rdb, cfg.TeamsCacheTTL))
 		api.GET("/teams/:id", teamDetailHandler(pool))
 		api.POST("/scrape/trigger", scrapeTriggerHandler(pool))
 		api.GET("/features/:match_id", featuresHandler(pool, rdb))
 	}
 
-	port := getEnv("SERVER_PORT", "8080")
 	srv := &http.Server{
-		Addr:         ":" + port,
+		Addr:         ":" + cfg.Port,
 		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ReadTimeout:  cfg.HTTPReadTimeout,
+		WriteTimeout: cfg.HTTPWriteTimeout,
 	}
 
 	// Graceful shutdown
 	go func() {
-		fmt.Printf("📡 Server listening on :%s\n", port)
+		fmt.Printf("📡 Server listening on :%s\n", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Server error: %v", err)
 		}
@@ -111,7 +126,7 @@ func main() {
 	<-quit
 
 	fmt.Println("\n🛑 Server shutting down...")
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("❌ Server shutdown error: %v", err)
@@ -157,7 +172,7 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 	}
 }
 
-func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
+func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
@@ -194,15 +209,15 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 				continue
 			}
 			matches = append(matches, gin.H{
-				"id":           id,
-				"home_team":    homeTeam,
-				"away_team":    awayTeam,
-				"match_date":   matchDate.Format("2006-01-02"),
-				"league":       leagueID,
-				"season":       season,
-				"home_score":   homeScore,
-				"away_score":   awayScore,
-				"match_week":   matchWeek,
+				"id":         id,
+				"home_team":  homeTeam,
+				"away_team":  awayTeam,
+				"match_date": matchDate.Format("2006-01-02"),
+				"league":     leagueID,
+				"season":     season,
+				"home_score": homeScore,
+				"away_score": awayScore,
+				"match_week": matchWeek,
 			})
 		}
 
@@ -220,9 +235,9 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			"count":   len(matches),
 		}
 
-		// Write to cache (5 min TTL)
+		// Write to cache using configured TTL
 		if data, err := json.Marshal(result); err == nil {
-			rdb.Set(ctx, "matches:list", data, 5*time.Minute)
+			rdb.Set(ctx, "matches:list", data, cacheTTL)
 		}
 
 		c.JSON(http.StatusOK, result)
@@ -253,20 +268,20 @@ func matchDetailHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"id":           id,
-			"home_team":    homeTeam,
-			"away_team":    awayTeam,
-			"match_date":   matchDate.Format("2006-01-02"),
-			"league":       leagueID,
-			"season":       season,
-			"home_score":   homeScore,
-			"away_score":   awayScore,
-			"match_week":   matchWeek,
+			"id":         id,
+			"home_team":  homeTeam,
+			"away_team":  awayTeam,
+			"match_date": matchDate.Format("2006-01-02"),
+			"league":     leagueID,
+			"season":     season,
+			"home_score": homeScore,
+			"away_score": awayScore,
+			"match_week": matchWeek,
 		})
 	}
 }
 
-func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
+func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
@@ -315,9 +330,9 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			"count": len(teams),
 		}
 
-		// Write to cache (10 min TTL)
+		// Write to cache using configured TTL
 		if data, err := json.Marshal(result); err == nil {
-			rdb.Set(ctx, "teams:list", data, 10*time.Minute)
+			rdb.Set(ctx, "teams:list", data, cacheTTL)
 		}
 
 		c.JSON(http.StatusOK, result)
@@ -430,4 +445,51 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	v := getEnv(key, strconv.Itoa(fallback))
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func getEnvDurationSeconds(key string, fallbackSeconds int) time.Duration {
+	seconds := getEnvInt(key, fallbackSeconds)
+	return time.Duration(seconds) * time.Second
+}
+
+func defaultDatabaseURL() string {
+	host := getEnv("POSTGRES_HOST", "postgres")
+	port := getEnv("POSTGRES_PORT", "5432")
+	db := getEnv("POSTGRES_DB", "negelir")
+	user := getEnv("POSTGRES_USER", "negelir")
+	password := getEnv("POSTGRES_PASSWORD", "")
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port, db)
+}
+
+func defaultRedisURL() string {
+	host := getEnv("REDIS_HOST", "redis")
+	port := getEnv("REDIS_PORT", "6379")
+	return fmt.Sprintf("%s:%s", host, port)
+}
+
+func loadServerConfig() serverConfig {
+	return serverConfig{
+		DatabaseURL:         getEnv("DATABASE_URL", defaultDatabaseURL()),
+		RedisURL:            getEnv("REDIS_URL", defaultRedisURL()),
+		Port:                getEnv("SERVER_PORT", "8080"),
+		DBMaxConns:          int32(getEnvInt("DB_MAX_CONNS", 10)),
+		DBConnectTimeout:    getEnvDurationSeconds("DB_CONNECT_TIMEOUT_SEC", 5),
+		DBPingTimeout:       getEnvDurationSeconds("DB_PING_TIMEOUT_SEC", 5),
+		DBRetryDelay:        getEnvDurationSeconds("DB_RETRY_DELAY_SEC", 3),
+		RedisRetryDelay:     getEnvDurationSeconds("REDIS_RETRY_DELAY_SEC", 2),
+		HTTPReadTimeout:     getEnvDurationSeconds("HTTP_READ_TIMEOUT_SEC", 10),
+		HTTPWriteTimeout:    getEnvDurationSeconds("HTTP_WRITE_TIMEOUT_SEC", 30),
+		HTTPShutdownTimeout: getEnvDurationSeconds("HTTP_SHUTDOWN_TIMEOUT_SEC", 5),
+		MatchesCacheTTL:     getEnvDurationSeconds("CACHE_MATCHES_TTL_SEC", 300),
+		TeamsCacheTTL:       getEnvDurationSeconds("CACHE_TEAMS_TTL_SEC", 600),
+	}
 }

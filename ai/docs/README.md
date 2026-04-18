@@ -8,7 +8,7 @@ AI engine that analyzes Turkish football matches and produces Turkish-language r
 
 ### TQU (Turkish Question Understanding)
 Module that understands and classifies Turkish football questions.
-- 9 intent types: `match_winner`, `draw`, `over_under`, `goal_range`, `both_teams_score`, `clean_sheet`, `half_time`, `form_query`, `head_to_head`
+- 10 intent types: `match_winner`, `draw`, `over_under`, `goal_range`, `both_teams_score`, `clean_sheet`, `half_time`, `form_query`, `head_to_head`, `score_predict`
 - Input sanitization: injection prevention, Turkish character normalization
 - Confidence threshold: 0.60
 
@@ -21,10 +21,10 @@ Module that transforms model outputs into Turkish responses.
 
 ### Model (GBDT)
 XGBoost gradient boosted decision tree model.
-- 91 feature columns (form, Elo, H2H, league position, squad, context, temporal, sentiment, derived, weather)
+- 130 feature columns (form, Elo, H2H, league position, squad, context, temporal, sentiment, derived, weather, QID)
 - GPU support (target RTX 4080, CUDA `gpu_hist`)
 - CPU fallback (`hist`)
-- Synthetic data generation and noise injection (§6.2)
+- Trained on real scraped data only — no synthetic data in production
 
 ### Scraper
 Module for fetching data via the Go middleware server.

@@ -1,5 +1,7 @@
 # Negelir — Feasibility Analysis
 
+> **Note (2026-04-18):** Originally scoped for Turkish Süper Lig only. The project is now expanding to multi-league support (6 leagues). See [ROADMAP.md](ROADMAP.md) for current scope. Flutter remains a future phase — the current implementation is Python-only.
+
 > Comprehensive feasibility assessment for the Turkish Football Match Analysis Flutter App with Autonomous Self-Improving P2P AI Network
 
 ---

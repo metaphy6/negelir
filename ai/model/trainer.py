@@ -14,6 +14,7 @@ from sklearn.metrics import accuracy_score, log_loss
 
 from common.config import cfg
 from common.constants import MODEL_VERSION
+from common.league_config import get_league_config
 from common.logger import get_logger, section_banner, success_banner
 from model.device import detect_device, get_xgb_params
 from model.features import generate_synthetic_dataset, inject_noise, FEATURE_COLUMNS
@@ -29,7 +30,12 @@ def train_model(save_path: str | None = None, use_real_data: bool = True) -> xgb
     section_banner("GBDT Model Training")
 
     device = detect_device()
-    params = get_xgb_params(device)
+    league_config = get_league_config(cfg.default_league_id)
+    params = get_xgb_params(
+        device,
+        league_config=league_config,
+        random_seed=cfg.training_random_seed,
+    )
 
     # Load real data from live sources; fallback to synthetic
     if use_real_data:
@@ -39,17 +45,24 @@ def train_model(save_path: str | None = None, use_real_data: bool = True) -> xgb
             log.info(f"🏟️  Training on REAL data: {len(X)} matches")
         except Exception as exc:
             log.warning(f"Real data extraction failed ({exc}), falling back to synthetic")
-            X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
+            X, y = generate_synthetic_dataset(n_matches=1000, seed=cfg.training_random_seed)
     else:
-        X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
+        X, y = generate_synthetic_dataset(n_matches=1000, seed=cfg.training_random_seed)
 
-    X = inject_noise(X, noise_pct=0.005, seed=42)
+    X = inject_noise(X, noise_pct=cfg.training_noise_pct, seed=cfg.training_random_seed)
 
     # Sample weights: upweight draws (class 1) for balance
-    sample_weights = y.map({0: 1.0, 1: 2.0, 2: 1.0}).values
+    sample_weights = y.map(
+        lambda cls: cfg.training_sample_weights.get(int(cls), 1.0)
+    ).values
 
     X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
-        X, y, sample_weights, test_size=0.2, random_state=42, stratify=y
+        X,
+        y,
+        sample_weights,
+        test_size=cfg.training_test_split,
+        random_state=cfg.training_random_seed,
+        stratify=y,
     )
     log.info(f"📚 Training set: {len(X_train)}, Test set: {len(X_test)}")
 
@@ -88,8 +101,10 @@ def train_model(save_path: str | None = None, use_real_data: bool = True) -> xgb
     # Model size (roadmap: must be < 8 MB)
     size_mb = os.path.getsize(save_path) / (1024 * 1024)
     log.info(f"📦 Model size: {size_mb:.2f} MB")
-    if size_mb > 8.0:
-        raise ValueError(f"Model size {size_mb:.2f} MB exceeds 8 MB limit")
+    if size_mb > cfg.model_max_size_mb:
+        raise ValueError(
+            f"Model size {size_mb:.2f} MB exceeds {cfg.model_max_size_mb:.2f} MB limit"
+        )
 
     # Feature importance (top 10)
     importance = model.feature_importances_

@@ -9,6 +9,8 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 
+from config import p2p_cfg
+
 
 class MessageType(Enum):
     ANALYSIS = "analysis"
@@ -44,7 +46,7 @@ class P2PMessage:
     sender_id: str = ""
     payload: dict = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
-    ttl_hours: int = 168  # 7 days
+    ttl_hours: int = field(default_factory=lambda: p2p_cfg.message_ttl_hours)
 
     @property
     def content_hash(self) -> str:
@@ -76,7 +78,7 @@ class P2PMessage:
             sender_id=d.get("sender_id", ""),
             payload=d.get("payload", {}),
             timestamp=d.get("timestamp", 0),
-            ttl_hours=d.get("ttl_hours", 168),
+            ttl_hours=d.get("ttl_hours", p2p_cfg.message_ttl_hours),
         )
         # Verify content hash
         expected_hash = d.get("content_hash", "")

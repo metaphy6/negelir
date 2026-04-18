@@ -32,7 +32,7 @@ The system consists of four main layers:
 
 | Module | File | Description |
 |--------|------|-------------|
-| **TQU** | `tqu/classifier.py` | Classifies Turkish questions (9 intent types) |
+| **TQU** | `tqu/classifier.py` | Classifies Turkish questions (10 intent types) |
 | **TQU** | `tqu/sanitizer.py` | Input sanitization, injection prevention |
 | **TQU** | `tqu/patterns.py` | Regex intent patterns |
 | **TQU** | `tqu/entities.py` | Team name and entity extraction |
@@ -41,7 +41,7 @@ The system consists of four main layers:
 | **TRC** | `trc/verdict.py` | Confidence × probability → verdict selection |
 | **Model** | `model/trainer.py` | XGBoost GBDT training (GPU/CPU) |
 | **Model** | `model/inference.py` | Inference and analysis |
-| **Model** | `model/features.py` | 120 feature columns, synthetic data |
+| **Model** | `model/features.py` | 130 feature columns, real data pipeline |
 | **Model** | `model/device.py` | GPU/CPU auto-detection |
 | **Common** | `common/league_config.py` | Multi-league config (TR, EN, DE, ES) |
 | **Scraper** | `scraper/engine.py` | Data fetching via Go server |
@@ -81,9 +81,9 @@ The system consists of four main layers:
 ### 4. Database Schema
 
 ```
-teams                → Team records (24 Super Lig + 1. Lig)
+teams                → Team records (per league, league_id tagged)
 raw_matches          → Raw match data
-team_features        → 91-dimensional feature vectors
+team_features        → 130-dimensional feature vectors
 analyses             → GBDT prediction results
 outcome_validations  → Prediction validation records
 peer_reputation      → P2P reputation table
@@ -114,7 +114,7 @@ data_quarantine      → Suspicious data quarantine
 - **Poisson**: Dixon-Coles corrected for low-scoring matches (ρ = -0.13)
 - **Ensemble**: 35% XGBoost + 65% Poisson (configurable per league)
 - **Draw detection**: Multi-signal scoring (H-A gap, Bayesian, Poisson, Elo)
-- **Features**: 120 columns across 6 categories (A-F)
+- **Features**: 130 columns across 6 categories (A-F)
 - **Accuracy (Turkish Süper Lig)**: 41.2% 1X2, 68.1% DC1X, 78.8% AH-1.5
 
 ## Multi-League Support

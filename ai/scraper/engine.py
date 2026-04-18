@@ -42,18 +42,20 @@ class ScrapingEngine:
         for src in self.sources:
             log.info(f"   🔗 {src['label']}: {src['url']}")
 
-    def fetch_matches_from_server(self, league_id: str = "super_lig", season: str = "2025-2026") -> list[dict]:
+    def fetch_matches_from_server(self, league_id: str | None = None, season: str | None = None) -> list[dict]:
         """
         Fetch match data from the Go middleware server.
         This is the preferred path — Go server caches data in PostgreSQL.
         """
         section_banner("Data Fetching: Go Server")
+        resolved_league_id = league_id or cfg.default_league_id
+        resolved_season = season or cfg.default_season
         url = f"{self.server_url}/api/v1/matches"
-        params = {"league_id": league_id, "season": season}
+        params = {"league_id": resolved_league_id, "season": resolved_season}
 
         try:
             log.info(f"🌐 Connecting to Go server: {url}")
-            resp = requests.get(url, params=params, timeout=10)
+            resp = requests.get(url, params=params, timeout=cfg.server_fetch_timeout)
             resp.raise_for_status()
             data = resp.json()
 
@@ -76,7 +78,7 @@ class ScrapingEngine:
         url = f"{self.server_url}/api/v1/teams"
         try:
             log.info(f"🌐 Fetching team data: {url}")
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(url, timeout=cfg.server_fetch_timeout)
             resp.raise_for_status()
             data = resp.json()
             teams = data.get("teams", [])
@@ -91,7 +93,7 @@ class ScrapingEngine:
         url = f"{self.server_url}/api/v1/scrape/trigger"
         try:
             log.info("🔄 Triggering scrape on Go server...")
-            resp = requests.post(url, timeout=30)
+            resp = requests.post(url, timeout=cfg.scrape_trigger_timeout)
             if resp.status_code == 200:
                 result = resp.json()
                 log.info(f"✅ Scraping complete: {result.get('message', 'OK')}")
@@ -107,7 +109,7 @@ class ScrapingEngine:
         """Check if the Go middleware server is healthy."""
         url = f"{self.server_url}/api/v1/health"
         try:
-            resp = requests.get(url, timeout=5)
+            resp = requests.get(url, timeout=cfg.health_check_timeout)
             return resp.status_code == 200
         except Exception:
             return False

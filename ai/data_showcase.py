@@ -9,6 +9,7 @@ import time
 import random
 import numpy as np
 
+from common.config import cfg
 from common.constants import (
     TEAM_MAP, UUID_TO_NAME, LEAGUES, N_FEATURES,
     FOOTBALL_KEYWORDS, BANNED_WORDS, MODEL_VERSION,
@@ -29,6 +30,9 @@ from nlp.sentiment import analyze_sentiment
 
 SEP = "═" * 78
 THIN = "─" * 78
+SHOWCASE_SAMPLE_MATCHES = cfg.training_min_matches
+SHOWCASE_RANDOM_SEED = cfg.training_random_seed
+SHOWCASE_NOISE_PCT = cfg.training_noise_pct
 
 
 def header(title: str):
@@ -66,7 +70,7 @@ def show_teams():
 #  2. FEATURE SCHEMA (91 dimensions)
 # ─────────────────────────────────────────────────────────
 def show_features():
-    header("2. FEATURE SCHEMA — 91 dimensions per match")
+    header(f"2. FEATURE SCHEMA — {N_FEATURES} dimensions per match")
     categories = {
         "Team Form (rolling windows)": [],
         "Elo & Derived":               [],
@@ -118,22 +122,40 @@ def show_features():
 #  3. SYNTHETIC TRAINING DATA SAMPLE
 # ─────────────────────────────────────────────────────────
 def show_training_data():
-    header("3. SYNTHETIC TRAINING DATA — 1000 matches, 91 features each")
-    X, y = generate_synthetic_dataset(n_matches=1000, seed=42)
-    X_noised = inject_noise(X, noise_pct=0.005, seed=42)
+    header(
+        f"3. SYNTHETIC TRAINING DATA — {SHOWCASE_SAMPLE_MATCHES} matches, "
+        f"{N_FEATURES} features each"
+    )
+    X, y = generate_synthetic_dataset(
+        n_matches=SHOWCASE_SAMPLE_MATCHES,
+        seed=SHOWCASE_RANDOM_SEED,
+    )
+    X_noised = inject_noise(
+        X,
+        noise_pct=SHOWCASE_NOISE_PCT,
+        seed=SHOWCASE_RANDOM_SEED,
+    )
 
+    home_count = int((y == 0).sum())
+    draw_count = int((y == 1).sum())
+    away_count = int((y == 2).sum())
     print(f"\n  Shape: {X.shape[0]} matches × {X.shape[1]} features")
-    print(f"  Label distribution: home_win={y.sum()}/{len(y)} ({y.mean():.1%})")
-    print(f"  Noise injection: ±0.5% uniform (privacy preservation)")
+    print(
+        f"  Label distribution: "
+        f"home={home_count}/{len(y)} ({home_count / len(y):.1%}) "
+        f"draw={draw_count}/{len(y)} ({draw_count / len(y):.1%}) "
+        f"away={away_count}/{len(y)} ({away_count / len(y):.1%})"
+    )
+    print(f"  Noise injection: ±{SHOWCASE_NOISE_PCT * 100:.2f}% uniform (privacy preservation)")
 
-    sub("SAMPLE MATCH #0 — Raw features (first 20 of 91)")
+    sub(f"SAMPLE MATCH #0 — Raw features (first 20 of {N_FEATURES})")
     row = X.iloc[0]
     for col in FEATURE_COLUMNS[:20]:
         raw = row[col]
         noised = X_noised.iloc[0][col]
         print(f"    {col:<35s}  raw={raw:>8.3f}  noised={noised:>8.3f}")
 
-    sub("SAMPLE MATCH #0 — All 91 features as compact vector")
+    sub(f"SAMPLE MATCH #0 — All {N_FEATURES} features as compact vector")
     vec = X.iloc[0].values
     line = "  ["
     for i, v in enumerate(vec):
@@ -255,7 +277,7 @@ def show_model_output():
     header("6. MODEL OUTPUT — XGBoost GBDT inference result")
     model = GBDTInference()
 
-    rng = np.random.RandomState(42)
+    rng = np.random.RandomState(SHOWCASE_RANDOM_SEED)
     vec = np.zeros((1, N_FEATURES), dtype=np.float32)
     for i, col in enumerate(FEATURE_COLUMNS):
         if "elo" in col:
@@ -291,13 +313,13 @@ def show_model_output():
 #  7. TQU — INTENT CLASSIFICATION EXAMPLES
 # ─────────────────────────────────────────────────────────
 def show_tqu():
-    header("7. TQU — Turkish Question Understanding (9 intents)")
-
     intents = [
         "match_winner", "total_goals", "over_under",
         "bts", "score_range", "half_result",
         "form_query", "head_to_head", "card_count",
     ]
+    header(f"7. TQU — Turkish Question Understanding ({len(intents)} intents)")
+
     print(f"\n  Supported intents: {len(intents)}")
     for i in intents:
         print(f"    • {i}")
@@ -366,7 +388,7 @@ def show_trc():
 
     sub("FULL PIPELINE EXAMPLES: question → classification → model → Turkish answer")
     model = GBDTInference()
-    rng = np.random.RandomState(123)
+    rng = np.random.RandomState(SHOWCASE_RANDOM_SEED)
 
     demo_qs = [
         "Galatasaray Fenerbahçe maçını kim kazanır?",

@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 
+from common.config import cfg
 from common.logger import get_logger
 
 log = get_logger("scraper.self_healing")
@@ -115,16 +116,16 @@ class SourceState:
 # ── Graceful degradation ──
 
 # Priority order for source failover
-SOURCE_PRIORITY = ["source_a", "source_b", "source_c", "source_d"]
+SOURCE_PRIORITY = cfg.source_priority
 
 # Data staleness threshold (7 days in seconds)
-STALE_THRESHOLD_SEC = 7 * 24 * 3600
+STALE_THRESHOLD_SEC = cfg.stale_threshold_seconds
 
 # Confidence penalty multiplier when data is stale
-STALE_CONFIDENCE_PENALTY = 0.5
+STALE_CONFIDENCE_PENALTY = cfg.stale_confidence_penalty
 
 # Consecutive failures before marking source DOWN
-FAILURE_THRESHOLD = 3
+FAILURE_THRESHOLD = cfg.source_failure_threshold
 
 
 class SelfHealingEngine:

@@ -15,6 +15,8 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass, field
+
+from config import p2p_cfg
 from node.peer import get_p2p_logger
 from protocol.messages import P2PMessage
 
@@ -55,10 +57,13 @@ class SimulatedTransport:
     node_inboxes: dict[str, asyncio.Queue] = field(default_factory=dict)
 
     # ── Realism knobs ───────────────────────────────────
-    latency_ms_range: tuple[float, float] = (20.0, 150.0)  # min/max one-way latency
-    drop_rate: float = 0.02                                  # 2 % packet loss
-    k_neighbors: int = 8                                     # partial mesh degree
-    gossip_fanout: int = 3                                   # rebroadcast to this many peers
+    latency_ms_range: tuple[float, float] = field(default_factory=lambda: (
+        p2p_cfg.sim_latency_min_ms,
+        p2p_cfg.sim_latency_max_ms,
+    ))
+    drop_rate: float = field(default_factory=lambda: p2p_cfg.sim_drop_rate)
+    k_neighbors: int = field(default_factory=lambda: p2p_cfg.sim_k_neighbors)
+    gossip_fanout: int = field(default_factory=lambda: p2p_cfg.sim_gossip_fanout)
 
     # ── Topology ────────────────────────────────────────
     _neighbor_table: dict[str, list[str]] = field(default_factory=dict)

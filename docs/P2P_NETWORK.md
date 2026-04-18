@@ -527,13 +527,27 @@ TRC (Turkish Response Composer)
 
 ## 11. Configuration
 
-All parameters are configurable via `.env`:
+P2P runtime defaults are centralized in `p2p/config.py` (`P2PConfig`) and can be overridden via `.env`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `P2P_NODE_COUNT` | 5 | Number of peer nodes in simulation |
 | `P2P_BASE_PORT` | 9000 | Starting port for simulated nodes |
 | `P2P_SIMULATION_MATCHES` | 10 | Extra synthetic matches for reputation building |
+| `P2P_MESSAGE_TTL_HOURS` | 168 | Message retention TTL |
+| `P2P_DATA_TTL_HOURS` | 168 | Shared scraped-record retention TTL |
+| `P2P_MULTICAST_GROUP` | `239.42.42.1` | LAN multicast discovery group |
+| `P2P_MULTICAST_PORT` | 9743 | LAN multicast discovery port |
+| `P2P_TCP_PORT` | 9742 | TCP transport listen port |
+| `P2P_TCP_MAX_MESSAGE_SIZE` | 1048576 | Max framed message size (bytes) |
+| `P2P_SIM_LATENCY_MIN_MS` | 20.0 | Simulated one-way min latency |
+| `P2P_SIM_LATENCY_MAX_MS` | 150.0 | Simulated one-way max latency |
+| `P2P_SIM_DROP_RATE` | 0.02 | Simulated packet loss probability |
+| `P2P_SIM_K_NEIGHBORS` | 8 | Partial-mesh neighbor count |
+| `P2P_SIM_GOSSIP_FANOUT` | 3 | Second-hop gossip fanout |
+| `P2P_SCHEMA_QUORUM` | 3 | Votes required for schema adoption |
+| `P2P_SCHEMA_VOTE_TIMEOUT_SEC` | 600 | Schema proposal vote timeout |
+| `P2P_SCHEMA_CONFIDENCE_FLOOR` | 0.6 | Minimum confidence for schema proposals |
 | `SIMULATION_INTERVAL` | 30 | Seconds between continuous simulation cycles |
 | `AI_LOG_LEVEL` | DEBUG | Log verbosity (DEBUG, INFO, WARNING) |
 

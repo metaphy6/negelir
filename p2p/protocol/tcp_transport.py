@@ -10,27 +10,28 @@ import ssl
 import struct
 from dataclasses import dataclass, field
 
-from protocol.messages import P2PMessage
+from config import p2p_cfg
 from node.peer import get_p2p_logger
+from protocol.messages import P2PMessage
 
 log = get_p2p_logger("tcp_transport")
 
 # Message frame: 4-byte length prefix + payload
 HEADER_SIZE = 4
-MAX_MESSAGE_SIZE = 1024 * 1024  # 1 MB
+MAX_MESSAGE_SIZE = p2p_cfg.tcp_max_message_size
 
 
 @dataclass
 class TcpTransportConfig:
     """Configuration for TCP transport."""
-    host: str = "0.0.0.0"
-    port: int = 9742
+    host: str = field(default_factory=lambda: p2p_cfg.tcp_host)
+    port: int = field(default_factory=lambda: p2p_cfg.tcp_port)
     use_tls: bool = False
     cert_path: str = ""
     key_path: str = ""
     ca_path: str = ""
-    connect_timeout: float = 5.0
-    read_timeout: float = 10.0
+    connect_timeout: float = field(default_factory=lambda: p2p_cfg.tcp_connect_timeout_sec)
+    read_timeout: float = field(default_factory=lambda: p2p_cfg.tcp_read_timeout_sec)
 
 
 @dataclass

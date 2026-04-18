@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from common.logger import get_logger
+from config import p2p_cfg
 
 log = get_logger("coordination.schema_gossip")
 
@@ -44,11 +45,19 @@ class SchemaGossipProtocol:
     7. Once votes >= QUORUM, the schema is ADOPTED network-wide
     """
 
-    QUORUM = 3               # Minimum confirming peers before adoption
-    VOTE_TIMEOUT_SEC = 600   # 10 minutes to collect votes
-    CONFIDENCE_FLOOR = 0.6   # Minimum discovery confidence to propose
-
-    def __init__(self):
+    def __init__(
+        self,
+        quorum: int | None = None,
+        vote_timeout_sec: int | None = None,
+        confidence_floor: float | None = None,
+    ):
+        self.quorum = quorum if quorum is not None else p2p_cfg.schema_quorum
+        self.vote_timeout_sec = (
+            vote_timeout_sec if vote_timeout_sec is not None else p2p_cfg.schema_vote_timeout_sec
+        )
+        self.confidence_floor = (
+            confidence_floor if confidence_floor is not None else p2p_cfg.schema_confidence_floor
+        )
         self._proposals: dict[str, SchemaProposal] = {}
         self._adopted: list[SchemaProposal] = []
 
@@ -59,8 +68,8 @@ class SchemaGossipProtocol:
         Create a new schema proposal if confidence meets floor.
         Returns the proposal or None if confidence too low.
         """
-        if confidence < self.CONFIDENCE_FLOOR:
-            log.info(f"Proposal rejected: confidence {confidence:.2f} < floor {self.CONFIDENCE_FLOOR}")
+        if confidence < self.confidence_floor:
+            log.info(f"Proposal rejected: confidence {confidence:.2f} < floor {self.confidence_floor}")
             return None
 
         proposal = SchemaProposal(
@@ -94,7 +103,7 @@ class SchemaGossipProtocol:
 
         if voter_id in proposal.voters:
             log.info(f"Duplicate vote from {voter_id} on {proposal_id}")
-            return proposal.votes_for >= self.QUORUM
+            return proposal.votes_for >= self.quorum
 
         proposal.voters.add(voter_id)
         if confirm:
@@ -102,7 +111,7 @@ class SchemaGossipProtocol:
         else:
             proposal.votes_against += 1
 
-        if proposal.votes_for >= self.QUORUM:
+        if proposal.votes_for >= self.quorum:
             self._adopt(proposal)
             return True
 
@@ -131,7 +140,7 @@ class SchemaGossipProtocol:
             return True
         if proposal.adopted:
             return False
-        return (time.time() - proposal.created_at) > self.VOTE_TIMEOUT_SEC
+        return (time.time() - proposal.created_at) > self.vote_timeout_sec
 
     @property
     def pending_count(self) -> int:

@@ -5,6 +5,7 @@ Phase 6: Rolling accuracy check triggers retrain when performance degrades.
 
 from dataclasses import dataclass
 
+from common.config import cfg
 from common.logger import get_logger
 
 log = get_logger("model.drift")
@@ -25,8 +26,8 @@ class DriftDetector:
     when accuracy drops below ACCURACY_FLOOR over WINDOW outcomes.
     """
 
-    WINDOW = 30
-    ACCURACY_FLOOR = 0.35
+    WINDOW = cfg.drift_accuracy_window
+    ACCURACY_FLOOR = cfg.drift_accuracy_floor
 
     def __init__(self, window: int | None = None, floor: float | None = None):
         self._window = window or self.WINDOW

@@ -28,18 +28,19 @@ class TelemetrySink:
 
     _CLASSIFICATION_STREAM = "negelir:tqu:classifications"
     _QID_STREAM = "negelir:qid:snapshots"
-    _MAX_STREAM_LEN = 50_000  # auto-trim oldest entries
+    _DEFAULT_MAX_STREAM_LEN = 50_000  # auto-trim oldest entries
 
     def __init__(self, config: Config | None = None):
         self._redis = None
         cfg = config or Config()
+        self._max_stream_len = getattr(cfg, "telemetry_max_stream_len", self._DEFAULT_MAX_STREAM_LEN)
         try:
             import redis
             self._redis = redis.Redis(
                 host=cfg.redis_host,
                 port=cfg.redis_port,
                 decode_responses=True,
-                socket_connect_timeout=2,
+                socket_connect_timeout=getattr(cfg, "redis_socket_timeout", 2),
             )
             self._redis.ping()
             log.info("Telemetry sink connected to Redis %s:%s", cfg.redis_host, cfg.redis_port)
@@ -74,7 +75,7 @@ class TelemetrySink:
             self._redis.xadd(
                 self._CLASSIFICATION_STREAM,
                 entry,
-                maxlen=self._MAX_STREAM_LEN,
+                maxlen=self._max_stream_len,
             )
         except Exception:  # noqa: BLE001
             pass  # non-blocking
@@ -95,7 +96,7 @@ class TelemetrySink:
             self._redis.xadd(
                 self._QID_STREAM,
                 entry,
-                maxlen=self._MAX_STREAM_LEN,
+                maxlen=self._max_stream_len,
             )
         except Exception:  # noqa: BLE001
             pass

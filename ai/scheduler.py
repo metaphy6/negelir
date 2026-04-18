@@ -6,6 +6,7 @@ Schedules: daily scrape, outcome check, weekly retrain, heartbeat.
 
 from datetime import datetime, timezone
 
+from common.config import cfg
 from common.logger import get_logger
 
 log = get_logger("scheduler")
@@ -92,10 +93,29 @@ def build_default_schedule(scheduler: NegelirScheduler,
       - heartbeat: every 5 minutes
     """
     if scrape_fn:
-        scheduler.add_cron_job("daily_scrape", scrape_fn, hour=6, minute=0)
+        scheduler.add_cron_job(
+            "daily_scrape",
+            scrape_fn,
+            hour=cfg.schedule_daily_scrape_hour,
+            minute=cfg.schedule_daily_scrape_minute,
+        )
     if outcome_fn:
-        scheduler.add_cron_job("outcome_check", outcome_fn, hour=22, minute=0)
+        scheduler.add_cron_job(
+            "outcome_check",
+            outcome_fn,
+            hour=cfg.schedule_outcome_check_hour,
+            minute=cfg.schedule_outcome_check_minute,
+        )
     if retrain_fn:
-        scheduler.add_cron_job("weekly_retrain", retrain_fn, day_of_week="sun", hour=3)
+        scheduler.add_cron_job(
+            "weekly_retrain",
+            retrain_fn,
+            day_of_week=cfg.schedule_retrain_day,
+            hour=cfg.schedule_retrain_hour,
+        )
     if heartbeat_fn:
-        scheduler.add_interval_job("heartbeat", heartbeat_fn, minutes=5)
+        scheduler.add_interval_job(
+            "heartbeat",
+            heartbeat_fn,
+            minutes=cfg.schedule_heartbeat_minutes,
+        )

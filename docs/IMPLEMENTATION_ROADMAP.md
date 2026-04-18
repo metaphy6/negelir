@@ -1,7 +1,9 @@
 # Technical Implementation Roadmap
 
+> **Note (2026-04-18):** Several items in this roadmap have been implemented: `scheduler.py`, `self_healing.py`, `schema_fingerprint.py`, `mackolik.py` scraper, `real_data.py` scraper, AI model/scraper config hardcode elimination, P2P `P2PConfig` centralization, and Go server env-driven runtime tuning. Legacy AI env fallback aliases were also removed in favor of canonical keys. For the master execution plan, see [ROADMAP.md](ROADMAP.md).
+
 **Date:** 2026-04-07
-**Scope:** Consolidated roadmap to transform Negelir from a demo-data prototype into a fully autonomous, self-sustaining Turkish football prediction system — combining findings from [autonomous-pipeline.md](autonomous-pipeline.md), [data-sources.md](data-sources.md), and [generic-input-handling.md](generic-input-handling.md).
+**Scope:** Consolidated roadmap to transform Negelir from a demo-data prototype into a fully autonomous, self-sustaining Turkish football prediction system — combining findings from [AUTONOMOUS_PIPELINE.md](AUTONOMOUS_PIPELINE.md), [DATA_SOURCES.md](DATA_SOURCES.md), and [GENERIC_INPUT_HANDLING.md](GENERIC_INPUT_HANDLING.md).
 
 **Core Constraint:** After `docker compose up`, the system runs with zero human intervention. The only manually provided infrastructure is a signal server for peer matching.
 
@@ -34,7 +36,7 @@
 
 ## 1. Source Priority Chain
 
-The previous data-sources.md report established OpenFootball as primary. After probing the Turkish sources configured in `.env`, the priority is reversed — Turkish sources are primary because they provide richer, more timely data with native team names.
+The previous DATA_SOURCES.md report established OpenFootball as primary. After probing the Turkish sources configured in `.env`, the priority is reversed — Turkish sources are primary because they provide richer, more timely data with native team names.
 
 | Priority | Source | Data Provided | Auth | Rate Limit |
 |---|---|---|---|---|
@@ -491,7 +493,7 @@ TFF.org is **not suitable as the primary source** due to complex ASP.NET postbac
 
 ## 4. OpenFootball + football-data.co.uk — Tertiary Sources
 
-Per [data-sources.md](data-sources.md):
+Per [DATA_SOURCES.md](DATA_SOURCES.md):
 
 | Source | Strengths | Weaknesses |
 |---|---|---|
@@ -561,7 +563,7 @@ Phase 9 ── Real Network Transport ──────────────
 
 ## 7. Phase 0: Single Source of Truth
 
-**Problem (from generic-input-handling.md §3.2):** 5 independent copies of team lists across 5 files. A team rename, promotion, or relegation requires editing all 5.
+**Problem (from GENERIC_INPUT_HANDLING.md §3.2):** 5 independent copies of team lists across 5 files. A team rename, promotion, or relegation requires editing all 5.
 
 ### Files to Modify
 
@@ -780,7 +782,7 @@ Existing `ScrapingEngine` in `engine.py` already enforces 5s/domain rate limits.
 
 ## 9. Phase 2: Fixture Index + Season Detection
 
-**Problem (from generic-input-handling.md §3.3 + §3.4):** No fixture database, `CURRENT_SEASON` hardcoded, user questions like "bu hafta sonu" can't resolve to actual matches.
+**Problem (from GENERIC_INPUT_HANDLING.md §3.3 + §3.4):** No fixture database, `CURRENT_SEASON` hardcoded, user questions like "bu hafta sonu" can't resolve to actual matches.
 
 ### 2.1 Season State Machine
 
@@ -856,7 +858,7 @@ else:
 
 ### 2.4 Confidence Gating
 
-**Problem (from generic-input-handling.md §4.3):** System answers confidently even when match context was never resolved.
+**Problem (from GENERIC_INPUT_HANDLING.md §4.3):** System answers confidently even when match context was never resolved.
 
 The pipeline must never return a confident prediction when the underlying data is synthetic/fabricated:
 
@@ -1123,7 +1125,7 @@ class CrossValidator:
 
 ## 12. Phase 5: Player + Transfer Resolution
 
-**Problem (from generic-input-handling.md §3.1):** Player rosters hardcoded in `questions.py`, stale since 2024 transfers.
+**Problem (from GENERIC_INPUT_HANDLING.md §3.1):** Player rosters hardcoded in `questions.py`, stale since 2024 transfers.
 
 ### 5.1 Player Data Scraping
 

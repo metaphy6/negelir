@@ -41,9 +41,23 @@ GET /api/v1/health
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgres://negelir:negelir_dev@postgres:5432/negelir` | PostgreSQL connection string |
-| `REDIS_URL` | `redis:6379` | Redis address |
+| `DATABASE_URL` | empty | Full PostgreSQL DSN (optional if `POSTGRES_*` is set) |
+| `POSTGRES_HOST` | `postgres` | PostgreSQL host fallback |
+| `POSTGRES_PORT` | `5432` | PostgreSQL port fallback |
+| `POSTGRES_DB` | `negelir` | PostgreSQL database fallback |
+| `POSTGRES_USER` | `negelir` | PostgreSQL user fallback |
+| `POSTGRES_PASSWORD` | empty | PostgreSQL password fallback |
+| `REDIS_URL` | empty | Full Redis address (optional if `REDIS_*` is set) |
+| `REDIS_HOST` | `redis` | Redis host fallback |
+| `REDIS_PORT` | `6379` | Redis port fallback |
 | `SERVER_PORT` | `8080` | Listen port |
+| `DB_MAX_CONNS` | `10` | PostgreSQL max pooled connections |
+| `DB_CONNECT_TIMEOUT_SEC` | `5` | PostgreSQL connect timeout |
+| `DB_PING_TIMEOUT_SEC` | `5` | PostgreSQL ping timeout |
+| `HTTP_READ_TIMEOUT_SEC` | `10` | HTTP read timeout |
+| `HTTP_WRITE_TIMEOUT_SEC` | `30` | HTTP write timeout |
+| `CACHE_MATCHES_TTL_SEC` | `300` | `/matches` cache TTL |
+| `CACHE_TEAMS_TTL_SEC` | `600` | `/teams` cache TTL |
 | `GIN_MODE` | `release` | Gin mode |
 
 ## Building

@@ -14,7 +14,7 @@ class Config:
     pg_port: int = field(default_factory=lambda: int(os.getenv("POSTGRES_PORT", "5432")))
     pg_db: str = field(default_factory=lambda: os.getenv("POSTGRES_DB", "negelir"))
     pg_user: str = field(default_factory=lambda: os.getenv("POSTGRES_USER", "negelir"))
-    pg_password: str = field(default_factory=lambda: os.getenv("POSTGRES_PASSWORD", "negelir_dev_2026"))
+    pg_password: str = field(default_factory=lambda: os.getenv("POSTGRES_PASSWORD", ""))
 
     # Redis
     redis_host: str = field(default_factory=lambda: os.getenv("REDIS_HOST", "localhost"))
@@ -27,8 +27,48 @@ class Config:
     device: str = field(default_factory=lambda: os.getenv("AI_DEVICE", "auto"))
     log_level: str = field(default_factory=lambda: os.getenv("AI_LOG_LEVEL", "DEBUG"))
 
+    # Runtime defaults
+    default_league_id: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_LEAGUE_ID", "super_lig"))
+    default_season: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_SEASON", "2025-2026"))
+    mackolik_group_id: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MACKOLIK_GROUP_ID", "1")))
+    mackolik_league_name_filter: str = field(default_factory=lambda: os.getenv("NEGELIR_MACKOLIK_LEAGUE_FILTER", "Süper Lig"))
+
+    # Scraper and server timeouts
+    server_fetch_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_FETCH_TIMEOUT", "10")))
+    scrape_trigger_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCRAPE_TRIGGER_TIMEOUT", "30")))
+    health_check_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_HEALTH_CHECK_TIMEOUT", "5")))
+    mackolik_http_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MACKOLIK_HTTP_TIMEOUT", "15")))
+    scrape_http_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCRAPE_HTTP_TIMEOUT", "15")))
+    footballdata_http_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_FOOTBALLDATA_HTTP_TIMEOUT", "10")))
+
+    # Scheduler defaults
+    schedule_daily_scrape_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCHEDULE_DAILY_SCRAPE_HOUR", "6")))
+    schedule_daily_scrape_minute: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCHEDULE_DAILY_SCRAPE_MINUTE", "0")))
+    schedule_outcome_check_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCHEDULE_OUTCOME_CHECK_HOUR", "22")))
+    schedule_outcome_check_minute: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCHEDULE_OUTCOME_CHECK_MINUTE", "0")))
+    schedule_retrain_day: str = field(default_factory=lambda: os.getenv("NEGELIR_SCHEDULE_RETRAIN_DAY", "sun"))
+    schedule_retrain_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCHEDULE_RETRAIN_HOUR", "3")))
+    schedule_heartbeat_minutes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SCHEDULE_HEARTBEAT_MINUTES", "5")))
+
+    # Self-healing defaults
+    _source_priority_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SOURCE_PRIORITY", "source_a,source_b,source_c,source_d"
+    ))
+    stale_threshold_seconds: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_STALE_THRESHOLD_SECONDS", "604800"
+    )))
+    stale_confidence_penalty: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_STALE_CONFIDENCE_PENALTY", "0.5"
+    )))
+    source_failure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SOURCE_FAILURE_THRESHOLD", "3"
+    )))
+
     # Scraping
     scrape_rate_limit: int = field(default_factory=lambda: int(os.getenv("SCRAPE_RATE_LIMIT_SECONDS", "5")))
+    real_data_rate_limit: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_REAL_DATA_RATE_LIMIT", "1.0"
+    )))
     scrape_user_agent: str = field(default_factory=lambda: os.getenv(
         "SCRAPE_USER_AGENT", "Negelir/0.1 (Football Analysis Research)"
     ))
@@ -166,6 +206,37 @@ class Config:
             if extra:
                 sources.append({"name": "source_extra", "label": "Extra Source", "url": extra})
         return sources
+
+    @property
+    def source_priority(self) -> list[str]:
+        """Ordered source preference for self-healing failover logic."""
+        values = [item.strip() for item in self._source_priority_raw.split(",") if item.strip()]
+        if values:
+            return values
+        return ["source_a", "source_b", "source_c", "source_d"]
+
+    # Model / Training
+    drift_accuracy_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DRIFT_WINDOW", "30")))
+    drift_accuracy_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_FLOOR", "0.35")))
+    training_noise_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_TRAINING_NOISE_PCT", "0.005")))
+    training_test_split: float = field(default_factory=lambda: float(os.getenv("NEGELIR_TRAINING_TEST_SPLIT", "0.2")))
+    training_random_seed: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TRAINING_SEED", "42")))
+    model_max_size_mb: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MODEL_MAX_SIZE_MB", "8.0")))
+    training_min_matches: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TRAINING_MIN_MATCHES", "100")))
+
+    # Sample weights per class (0=Home, 1=Draw, 2=Away) — comma-separated
+    _training_sample_weights_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_TRAINING_SAMPLE_WEIGHTS", "1.0,2.0,1.0"
+    ))
+
+    @property
+    def training_sample_weights(self) -> dict[int, float]:
+        parts = self._training_sample_weights_raw.split(",")
+        return {i: float(v.strip()) for i, v in enumerate(parts)}
+
+    # Telemetry
+    telemetry_max_stream_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TELEMETRY_MAX_STREAM", "50000")))
+    redis_socket_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REDIS_SOCKET_TIMEOUT", "2")))
 
     # Paths
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "/data"))

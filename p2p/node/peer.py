@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from rich.console import Console
 from rich.logging import RichHandler
 
+from config import p2p_cfg
+
 _console = Console(force_terminal=True)
 
 
@@ -44,7 +46,7 @@ class ScrapedRecord:
     data_type: str  # "match", "team_stats", "odds", "referee"
     payload: dict
     timestamp: float = field(default_factory=time.time)
-    ttl_hours: int = 168  # 7 days default
+    ttl_hours: int = field(default_factory=lambda: p2p_cfg.data_ttl_hours)
 
     def is_expired(self) -> bool:
         return (time.time() - self.timestamp) / 3600 > self.ttl_hours
@@ -304,9 +306,8 @@ class PeerNode:
         if not peers:
             return local
 
-        # Softmax over reputation scores
-        import math
-        w_local = 0.5
+        # Local model keeps a strong prior; peer influence is reputation-weighted.
+        local_trust_weight = 1.0
         weights = []
         for pa in peers:
             rep = self.reputation_table.get(pa.node_id)
@@ -317,12 +318,13 @@ class PeerNode:
                 w = 0.1  # unknown peer
             weights.append(w)
 
-        # Normalize peer weights
         total_peer_w = sum(weights)
-        if total_peer_w > 0:
-            weights = [w / total_peer_w * (1 - w_local) for w in weights]
-        else:
-            weights = [0.0] * len(peers)
+        total_weight = local_trust_weight + total_peer_w
+        if total_weight <= 0:
+            return local
+
+        w_local = local_trust_weight / total_weight
+        weights = [w / total_weight for w in weights]
 
         # Weighted ensemble
         home = w_local * local.home_win_prob + sum(w * pa.home_win_prob for w, pa in zip(weights, peers))

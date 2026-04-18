@@ -38,39 +38,11 @@ OPENFOOTBALL_SEASONS = cfg.openfootball_seasons
 FOOTBALLDATA_UK_SEASONS = cfg.footballdata_uk_seasons
 
 # ── Team name normalisation ─────────────────────────────
-# Built from locale_tr.yaml source_aliases (single source of truth).
-# Historical team names not in current locale are appended as fallbacks.
+# Built from locale_tr.yaml source_aliases + historical_source_aliases
+# (single source of truth in locale config).
 from common.constants import SOURCE_ALIAS_MAP
 
 TEAM_NAME_MAP = dict(SOURCE_ALIAS_MAP)
-
-# Historical teams from previous seasons (not in current locale YAML)
-_HISTORICAL_ALIASES = {
-    "Kasımpaşa SK": "Kasımpaşa",
-    "İstanbul Başakşehir": "Başakşehir",
-    "Istanbul Basaksehir": "Başakşehir",
-    "Medipol Başakşehir": "Başakşehir",
-    "Gazisehir Gaziantep": "Gaziantep FK",
-    "Caykur Rizespor": "Çaykur Rizespor",
-    "Fatih Karagumruk": "Fatih Karagümrük",
-    "Buyuksehir Bld": "Başakşehir",
-    "Giresunspor": "Giresunspor",
-    "Yeni Malatyaspor": "Yeni Malatyaspor",
-    "Malatyaspor": "Yeni Malatyaspor",
-    "Denizlispor": "Denizlispor",
-    "Erzurum BB": "BB Erzurumspor",
-    "Akhisar Belediyespor": "Akhisarspor",
-    "Akhisarspor": "Akhisarspor",
-    "Bursaspor": "Bursaspor",
-    "Osmanlispor": "Osmanlıspor",
-    "Umraniyespor": "Ümraniyespor",
-    "Istanbulspor": "İstanbulspor",
-    "Altay": "Altay",
-    "BB Erzurumspor": "BB Erzurumspor",
-    "Boluspor": "Boluspor",
-}
-for alias, canonical in _HISTORICAL_ALIASES.items():
-    TEAM_NAME_MAP.setdefault(alias, canonical)
 
 
 def normalise_team(name: str) -> str:
@@ -120,22 +92,34 @@ class RealMatch:
 class RealDataScraper:
     """Scrapes and merges real Turkish Süper Lig data from multiple sources."""
 
-    def __init__(self, rate_limit: float = 1.0):
-        self.rate_limit = rate_limit
+    def __init__(
+        self,
+        rate_limit: float | None = None,
+        scrape_http_timeout: int | None = None,
+        footballdata_http_timeout: int | None = None,
+    ):
+        self.rate_limit = rate_limit if rate_limit is not None else cfg.real_data_rate_limit
+        self.scrape_http_timeout = (
+            scrape_http_timeout if scrape_http_timeout is not None else cfg.scrape_http_timeout
+        )
+        self.footballdata_http_timeout = (
+            footballdata_http_timeout
+            if footballdata_http_timeout is not None
+            else cfg.footballdata_http_timeout
+        )
         self._last_request = 0.0
         self.session = requests.Session()
-        self.session.headers["User-Agent"] = (
-            "Negelir/0.2 (Football Analysis Research)"
-        )
+        self.session.headers["User-Agent"] = cfg.scrape_user_agent
 
-    def _throttled_get(self, url: str, timeout: int = 15) -> requests.Response | None:
+    def _throttled_get(self, url: str, timeout: int | None = None) -> requests.Response | None:
         """Rate-limited HTTP GET."""
         elapsed = time.time() - self._last_request
         if elapsed < self.rate_limit:
             time.sleep(self.rate_limit - elapsed)
         self._last_request = time.time()
+        effective_timeout = timeout if timeout is not None else self.scrape_http_timeout
         try:
-            resp = self.session.get(url, timeout=timeout)
+            resp = self.session.get(url, timeout=effective_timeout)
             return resp
         except requests.RequestException as e:
             log.warning(f"Request failed: {url} — {e}")
@@ -206,7 +190,7 @@ class RealDataScraper:
             url = f"{FOOTBALLDATA_UK_BASE}/{code}/T1.csv"
             log.info(f"📥 Fetching {season_label} from football-data.co.uk...")
 
-            resp = self._throttled_get(url, timeout=10)
+            resp = self._throttled_get(url, timeout=self.footballdata_http_timeout)
             if resp is None or resp.status_code != 200 or len(resp.text) < 100:
                 log.warning(f"   ⚠️  {season_label}: unavailable")
                 continue
@@ -495,8 +479,8 @@ def main():
     parser.add_argument(
         "--rate-limit",
         type=float,
-        default=1.0,
-        help="Seconds between requests (default: 1.0)",
+        default=cfg.real_data_rate_limit,
+        help=f"Seconds between requests (default: {cfg.real_data_rate_limit})",
     )
     args = parser.parse_args()
 

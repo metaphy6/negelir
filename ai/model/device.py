@@ -4,6 +4,8 @@ Per requirement #11: target RTX 4080, fallback to CPU dynamically.
 """
 
 import os
+
+from common.league_config import LeagueConfig, get_league_config
 from common.logger import get_logger
 
 log = get_logger("model.device")
@@ -44,23 +46,30 @@ def detect_device() -> str:
     return "cpu"
 
 
-def get_xgb_params(device: str) -> dict:
+def get_xgb_params(
+    device: str,
+    league_config: LeagueConfig | None = None,
+    random_seed: int | None = None,
+) -> dict:
     """Return XGBoost parameters appropriate for the detected device."""
+    cfg = league_config or get_league_config()
+    seed = random_seed if random_seed is not None else 42
+
     base_params = {
         "objective": "multi:softprob",
         "num_class": 3,
         "eval_metric": "mlogloss",
-        "max_depth": 4,
-        "learning_rate": 0.06,
-        "n_estimators": 350,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "reg_alpha": 0.5,
-        "reg_lambda": 1.5,
-        "min_child_weight": 4,
-        "gamma": 0.1,
+        "max_depth": cfg.xgb_max_depth,
+        "learning_rate": cfg.xgb_learning_rate,
+        "n_estimators": cfg.xgb_n_estimators,
+        "subsample": cfg.xgb_subsample,
+        "colsample_bytree": cfg.xgb_colsample_bytree,
+        "reg_alpha": cfg.xgb_reg_alpha,
+        "reg_lambda": cfg.xgb_reg_lambda,
+        "min_child_weight": cfg.xgb_min_child_weight,
+        "gamma": cfg.xgb_gamma,
         "n_jobs": -1,
-        "seed": 42,
+        "seed": seed,
     }
 
     if device == "cuda":
