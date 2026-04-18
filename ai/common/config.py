@@ -289,6 +289,38 @@ class Config:
     # Paths
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "/data"))
     model_dir: str = field(default_factory=lambda: os.getenv("MODEL_DIR", "/data/models"))
+    report_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_REPORT_DIR", "/data/reports"))
+
+    # Phase 3 — Full-system training pipeline thresholds (env-overridable)
+    training_thresholds_model_acc: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_THRESHOLD_MODEL_ACC", "0.50"
+    )))
+    training_thresholds_ensemble_acc: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_THRESHOLD_ENSEMBLE_ACC", "0.50"
+    )))
+    training_thresholds_quarantine_max: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_THRESHOLD_QUARANTINE_MAX", "0.10"
+    )))
+    training_thresholds_min_nodes_alive: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_THRESHOLD_MIN_NODES_ALIVE", "3"
+    )))
+    training_thresholds_min_holdout_matches: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_THRESHOLD_MIN_HOLDOUT_MATCHES", "5"
+    )))
+    verification_window_weeks: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_VERIFICATION_WINDOW_WEEKS", "4"
+    )))
+
+    @property
+    def training_thresholds(self) -> dict[str, float | int]:
+        """Phase 3: numeric thresholds driving full-pipeline pass/fail verdict."""
+        return {
+            "model_acc": self.training_thresholds_model_acc,
+            "ensemble_acc": self.training_thresholds_ensemble_acc,
+            "quarantine_max": self.training_thresholds_quarantine_max,
+            "min_nodes_alive": self.training_thresholds_min_nodes_alive,
+            "min_holdout_matches": self.training_thresholds_min_holdout_matches,
+        }
 
     @property
     def pg_dsn(self) -> str:
@@ -327,6 +359,9 @@ class Config:
         _bounded("training_noise_pct", self.training_noise_pct, 0.0, 1.0)
         _bounded("training_test_split", self.training_test_split, 0.0, 1.0, allow_eq_hi=False)
         _bounded("stale_confidence_penalty", self.stale_confidence_penalty, 0.0, 1.0)
+        _bounded("training_thresholds_model_acc", self.training_thresholds_model_acc, 0.0, 1.0)
+        _bounded("training_thresholds_ensemble_acc", self.training_thresholds_ensemble_acc, 0.0, 1.0)
+        _bounded("training_thresholds_quarantine_max", self.training_thresholds_quarantine_max, 0.0, 1.0)
 
         # Positive integers
         for name, value in (
@@ -342,6 +377,9 @@ class Config:
             ("scrape_http_timeout", self.scrape_http_timeout),
             ("footballdata_http_timeout", self.footballdata_http_timeout),
             ("redis_socket_timeout", self.redis_socket_timeout),
+            ("training_thresholds_min_nodes_alive", self.training_thresholds_min_nodes_alive),
+            ("training_thresholds_min_holdout_matches", self.training_thresholds_min_holdout_matches),
+            ("verification_window_weeks", self.verification_window_weeks),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")
@@ -360,6 +398,8 @@ class Config:
             issues.append("data_dir is empty")
         if not self.model_dir:
             issues.append("model_dir is empty")
+        if not self.report_dir:
+            issues.append("report_dir is empty")
 
         # Sample weights must parse and have at least 3 entries (Home/Draw/Away)
         try:

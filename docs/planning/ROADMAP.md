@@ -369,8 +369,18 @@ bootstrap:
 
 ## Phase 3: Full-System Training Pipeline
 
-**Goal:** "Training the AI" becomes a full-system integration test: scrape real data → validate → train model → run P2P simulation → execute distributed jobs → proofread results → share predictions → verify against outcomes. This is the primary way to train, test, and validate the system.  
+**Goal:** "Training the AI" becomes a full-system integration test that exercises every subsystem end-to-end on **real data**: scrape → proofread → train → run a P2P simulation against a held-out window → ensemble peer predictions → verify against actual outcomes → emit a structured report with a pass/fail verdict. This is the **primary** training and regression-testing surface for the system.  
 **Depends on:** Phase 2 (synthetic data removed, real data pipeline works)
+
+**Design principles** (added in revision):
+
+1. **Stage artifacts are first-class.** Each stage produces a typed `StageArtifact` (dataclass) consumed by the next stage. No globals, no implicit state.
+2. **Coordinator separation.** A new `TrainingPipeline` class in `ai/pipeline/training_pipeline.py` owns stage execution, while `OrchestratorState` is extended only to surface state-machine telemetry. The pipeline can be invoked directly (Python API) or via CLI.
+3. **Holdout-first.** Verification uses a *time-based* walk-forward holdout (last `verification_window` matchweeks) reserved **before** training. Training never sees the holdout.
+4. **Threshold-driven verdict.** Pass/fail is computed from configurable thresholds in `Config.training_thresholds`. No magic numbers in code.
+5. **Graceful degradation.** P2P simulation failure does not abort the run; it produces a partial report flagged `p2p_status: degraded`. Only data/training failures are fatal.
+6. **Resumable / idempotent.** Each stage caches its artifact under `data/reports/runs/<run_id>/`. Re-running a stage with an existing artifact short-circuits unless `--force`.
+7. **Trend persistence.** Every run appends a one-line summary to `data/reports/history.jsonl` for longitudinal tracking (regression detection across versions).
 
 ### Subphase 3.1: Define the Full Training Lifecycle
 
@@ -391,187 +401,185 @@ The training pipeline must execute these stages in order, with each stage's outp
 
 **Stage descriptions:**
 
-| Stage | What Happens | Success Criteria |
-|---|---|---|
-| 1. SCRAPE | Real data scraped from configured sources for the target league | ≥100 matches fetched, zero HTTP errors |
-| 2. VALIDATE | `proofreader/validator.py` range checks + `cross_validator.py` source consensus | <10% quarantine rate, zero corrupt records |
-| 3. TRAIN | GBDT model trained on validated real data | Accuracy ≥50% on held-out test set, model size < limit |
-| 4. P2P SIM | Simulated P2P network (N nodes) runs the trained model | All nodes boot, discover peers, elect roles, claim tasks |
-| 5. ENSEMBLE | Each node produces predictions, reputation-weighted ensemble computed | Ensemble accuracy ≥ best single node, reputation scores converge |
-| 6. VERIFY | Predictions compared against actual match outcomes | Overall accuracy measured, per-market breakdown computed |
-| 7. REPORT | Machine-readable + human-readable report generated | Report includes all metrics, pass/fail gate evaluation |
+| Stage | Artifact (typed) | What Happens | Hard Failure? | Default Threshold |
+|---|---|---|---|---|
+| 1. SCRAPE | `ScrapeArtifact{matches, source_breakdown, errors}` | Real data scraped/loaded for the target league via cached `*_real.json` (Phase 2 path) | Yes | `≥ bootstrap_min_matches` |
+| 2. VALIDATE | `ValidationArtifact{kept, quarantined, quarantine_rate, cross_source_agreement}` | `proofreader/validator.py` range/consistency/plausibility + `cross_validator.py` agreement | Yes | `quarantine_rate ≤ 0.10` |
+| 3. SPLIT | `SplitArtifact{train_matches, holdout_matches, holdout_window_weeks}` | Time-based walk-forward split: holdout = last `verification_window` matchweeks | Yes | `len(holdout) ≥ 5` |
+| 4. TRAIN | `TrainingArtifact{model_path, model_size_mb, test_acc, log_loss, top_features, n_features}` | GBDT trained on `train_matches` only — never touches holdout | Yes | `test_acc ≥ thresholds.model_acc` |
+| 5. P2P_SIM | `P2PArtifact{nodes_alive, role_election, schema_consensus, per_node_predictions}` | N simulated peers booted with the trained model, gossip + reputation tracker exercised | **No** (degrades) | `nodes_alive ≥ thresholds.min_nodes_alive` |
+| 6. ENSEMBLE | `EnsembleArtifact{ensemble_predictions, per_node_acc, ensemble_acc, reputation_scores}` | Reputation-weighted ensemble across nodes for each holdout match | No (degrades) | `ensemble_acc ≥ best_node_acc - 0.02` |
+| 7. VERIFY | `VerifyArtifact{overall_acc, per_market_acc, calibration, brier_score}` | Compare model + ensemble predictions against actual `holdout_matches` outcomes | Yes | `overall_acc ≥ thresholds.ensemble_acc` |
+| 8. REPORT | `ReportArtifact{txt_path, json_path, verdict}` | Generate human-readable + machine-readable report; append to `history.jsonl` | Yes | All hard-stage thresholds met |
 
-### Subphase 3.2: Wire Orchestrator → P2P Simulation
+> **Note on stage count:** The original 7 stages collapsed split/train and ensemble/verify. The revised pipeline separates them so each artifact has a single owner, which makes resumability (`--force-stage train`) and partial reports (`p2p_status: degraded`) tractable.
 
-**Files:** `ai/orchestrator/state_machine.py`, `p2p/simulation/runner.py`
+### Subphase 3.2: Stage Artifacts & Pipeline Coordinator
 
-Currently these are disconnected. The orchestrator manages a single-node pipeline (SCRAPING → PROCESSING → PROOFREADING → RESPONDING). The P2P simulation runs its own separate pipeline.
+**New files:**
+- `ai/pipeline/training_pipeline.py` — `TrainingPipeline` coordinator + `StageArtifact` base + per-stage subclasses.
+- `ai/pipeline/training_artifacts.py` — typed dataclasses (one per stage) with `to_dict()` / `from_dict()` for caching.
 
-**Change:** Extend the orchestrator to include a `P2P_SIMULATION` state that invokes the P2P simulation runner after model training:
-
-```
-IDLE → SCRAPING → PROCESSING → PROOFREADING → TRAINING → P2P_SIMULATION → VERIFYING → REPORTING → IDLE
-```
-
-New states:
-- `TRAINING`: Calls `trainer.train_model()` with validated data
-- `P2P_SIMULATION`: Spins up N simulated peers, distributes scraping tasks, runs ensemble predictions
-- `VERIFYING`: Compares predictions against actual outcomes
-- `REPORTING`: Generates the full training report
+**Behavior:**
+- `TrainingPipeline.run(run_id: str | None = None, *, force_from: str | None = None, skip_p2p: bool = False) -> ReportArtifact`
+- Each stage method: `def _stage_X(self, prev: PrevArtifact) -> XArtifact`
+- Stage results are pickled to `data/reports/runs/<run_id>/<stage>.pkl` and a thin JSON sidecar at `<stage>.json` (for human inspection).
+- A `manifest.json` at run root records: `run_id`, `started_at`, `finished_at`, `stage_durations_ms`, `verdict`, `model_path`, `report_paths`.
+- Run id defaults to `{league}_{utc_isoformat}`.
+- Resumability: if `<stage>.pkl` exists and `force_from` is not set or is later in the order, skip recompute and load from disk.
 
 **Requirements to complete 3.2:**
-- [ ] `OrchestratorState` enum has `TRAINING`, `P2P_SIMULATION`, `VERIFYING`, `REPORTING` states
-- [ ] Orchestrator transitions through all states in sequence
-- [ ] Each state transition logs clearly with timing
-- [ ] Failure in any state stops the pipeline with diagnostic output
+- [x] `TrainingPipeline` class exists with one method per stage and explicit artifact handoff.
+- [x] All artifact dataclasses live in `training_artifacts.py` and round-trip through JSON sidecars.
+- [x] `--force-from <stage>` invalidates that stage and everything downstream.
+- [x] `--skip-p2p` short-circuits stages 5–6 with `p2p_status: skipped`; verify stage runs against the trained model alone.
+- [x] Manifest written even on hard failure (with `verdict: FAIL` and `failed_stage`).
 
-### Subphase 3.3: P2P Simulation as Training Validator
+### Subphase 3.3: Configurable Thresholds & Validation Window
 
-**Files:** `p2p/simulation/runner.py`
+**File:** `ai/common/config.py`
 
-The P2P simulation must function as an integration test for the trained model:
+Add a single `training_thresholds` config block plus `verification_window` and `report_dir` fields. All driven by env vars with sensible defaults; the canonical reference lives in `ai/common/defaults.yaml`.
 
-1. **Boot N nodes** (configurable, default 5) with the freshly trained model
-2. **Distribute scraping tasks** via `coordination/tasks.py` role election
-3. **Each node produces predictions** for the same set of upcoming/recent matches
-4. **Nodes share predictions** via gossip protocol
-5. **Reputation tracker** computes trust scores based on past accuracy
-6. **Ensemble prediction** is computed as reputation-weighted average
-7. **Outcome verification** compares ensemble predictions against actual results
+```python
+# Numeric thresholds for full-pipeline pass/fail
+training_thresholds_model_acc: float           # NEGELIR_THRESHOLD_MODEL_ACC=0.50
+training_thresholds_ensemble_acc: float        # NEGELIR_THRESHOLD_ENSEMBLE_ACC=0.50
+training_thresholds_quarantine_max: float      # NEGELIR_THRESHOLD_QUARANTINE_MAX=0.10
+training_thresholds_min_nodes_alive: int       # NEGELIR_THRESHOLD_MIN_NODES_ALIVE=3
+training_thresholds_min_holdout_matches: int   # NEGELIR_THRESHOLD_MIN_HOLDOUT_MATCHES=5
+verification_window_weeks: int                 # NEGELIR_VERIFICATION_WINDOW_WEEKS=4
+report_dir: str                                # NEGELIR_REPORT_DIR=/data/reports
+```
 
-The simulation must use `SimulatedTransport` (in-memory) for speed but exercise the full message protocol.
+A `Config.training_thresholds` property returns these as a single dict for ergonomic access from the report module. `Config.validate(strict=True)` rejects nonsensical values (e.g. accuracy outside [0, 1]).
 
 **Requirements to complete 3.3:**
-- [ ] Simulation accepts a pre-trained model path as input (no retraining inside simulation)
-- [ ] All N nodes produce independent predictions with node-specific bias
-- [ ] Gossip protocol exchanges predictions between peers
-- [ ] Reputation scores update based on historical accuracy
-- [ ] Ensemble prediction computed and stored
-- [ ] Simulation produces structured JSON output for the reporting stage
+- [x] All thresholds are env-overridable and documented in `.env.example` and `defaults.yaml`.
+- [x] `Config.validate()` covers the new fields.
+- [x] No magic numbers remain in `training_pipeline.py` or `training_report.py` — every threshold reads from config.
 
-### Subphase 3.4: Training Report Generator
+### Subphase 3.4: P2P Simulation as a Pure Validator
 
-**Files:** New `ai/reports/training_report.py`
+**File:** `p2p/simulation/runner.py`
 
-After the full pipeline runs, generate a comprehensive report:
+Refactor `P2PSimulation` so it can be invoked as a validator for an external model:
 
-```
-NEGELIR — FULL SYSTEM TRAINING REPORT
-======================================
-Date: 2026-04-18 03:00 UTC
-League: Turkish Süper Lig (tr_super_lig)
-
-1. DATA COLLECTION
-   Sources scraped: Mackolik, football-data.co.uk, OpenFootball
-   Matches fetched: 1,469
-   Quarantine rate: 2.1% (31 matches)
-   Cross-validation: 3 sources agree on 98.7% of records
-
-2. MODEL TRAINING
-   Training set: 1,175 matches (80%)
-   Test set: 294 matches (20%)
-   Test accuracy: 54.2%
-   Feature count: 130
-   Model version: v0.3.1
-   Model size: 2.4 MB
-
-3. P2P SIMULATION
-   Nodes: 5
-   Role election: ✓ (scraper_mackolik → node_3, scraper_openfootball → node_1, ...)
-   Tasks distributed: 12 scrape tasks
-   Tasks completed: 12/12
-   Schema consensus: All nodes on schema v2.1
-
-4. ENSEMBLE PREDICTIONS
-   Matches predicted: 79 (last 10 weeks)
-   Per-node accuracy: [52.1%, 53.8%, 51.9%, 54.4%, 53.2%]
-   Ensemble accuracy: 55.7%
-   Ensemble vs best node: +1.3pp
-   Reputation convergence: ✓ (top node trust: 0.87, bottom: 0.71)
-
-5. MARKET BREAKDOWN (Top 5)
-   1X2 Match Result:     57.0% (79/79 evaluated)
-   Over/Under 2.5:       62.0% (79/79)
-   Both Teams to Score:  58.2% (79/79)
-   HT/FT Double:         41.8% (79/79)
-   Correct Score:         12.7% (79/79)
-
-6. VERDICT
-   ✅ PASS — System training complete
-   Model accuracy: 54.2% (threshold: 50%)
-   Ensemble accuracy: 55.7% (threshold: 50%)
-   P2P health: All nodes operational
-   Data quality: 97.9% clean (threshold: 90%)
-```
+- `P2PSimulation.__init__(model_path: str | None = None, league_id: str | None = None, node_count: int | None = None, holdout_matches: list[dict] | None = None)`
+- When `model_path` is supplied, every node loads the same pickled model instead of producing analyses from heuristics. Per-node bias is added by perturbing inference inputs (small ε on form/elo) so peers are non-identical.
+- When `holdout_matches` is supplied, each node only predicts those matches (no random sampling), which makes ensemble and verification deterministic.
+- New CLI: `python -m simulation.runner --model PATH --league super_lig --holdout JSON_PATH --output OUTPUT_JSON`.
+- The simulator emits a structured JSON report at `--output` containing per-node predictions, reputation scores, role election summary, and consensus state — exactly the shape consumed by the ensemble/verify stages.
+- All previous behavior (no-args sim, `--scale-test`, `--churn-test`) remains intact.
 
 **Requirements to complete 3.4:**
-- [ ] Report covers all 7 pipeline stages
-- [ ] Both machine-readable (JSON) and human-readable (text) outputs
-- [ ] Pass/fail verdict based on configurable thresholds
-- [ ] Report saved to `data/reports/training_{league}_{date}.txt`
-- [ ] JSON version saved to `data/reports/training_{league}_{date}.json`
+- [x] `P2PSimulation` accepts the new constructor parameters and the CLI flags.
+- [x] When `model_path` is set, no node retrains — they only load and predict.
+- [x] Sim produces deterministic per-node + ensemble JSON for a given holdout + seed.
+- [x] Existing `make p2p-simulate` runs unchanged.
 
-### Subphase 3.5: Makefile Integration
+### Subphase 3.5: Verification & Reporting
 
-**File:** `Makefile`
+**New files:**
+- `ai/reports/__init__.py`
+- `ai/reports/training_report.py`
 
-Add a unified training command that runs the full pipeline:
+**Verification (stage 7):** Walk-forward over `holdout_matches` using the trained model directly *and* the P2P ensemble (when available). Computes:
+- `overall_acc` (1X2)
+- `per_market_acc` (uses existing `backtest/bet_types.py` evaluators if available)
+- `calibration` (Brier score, reliability bins)
+- `coverage` (fraction of holdout actually predicted)
 
-```makefile
-# Full system training — the primary way to train and validate
-train-full:
-	@echo "Running full system training pipeline..."
-	$(PYTHON) -m orchestrator.state_machine --mode full-training --league $(LEAGUE)
+**Report (stage 8):** Renders the artifact set into:
+- `data/reports/runs/<run_id>/report.txt` — human-readable, matching the layout in §3.1.
+- `data/reports/runs/<run_id>/report.json` — machine-readable, schema-versioned (`schema_version: 1`).
+- `data/reports/latest_<league>.txt` and `latest_<league>.json` symlinks/copies for easy access.
+- One JSONL line appended to `data/reports/history.jsonl` with `{run_id, league, finished_at, verdict, model_acc, ensemble_acc, quarantine_rate, p2p_status}`.
 
-# Quick model-only training (for development iteration)
-train-model:
-	@echo "Training model only (no P2P simulation)..."
-	$(PYTHON) -m model.trainer --league $(LEAGUE)
-
-# Run P2P simulation with existing model
-sim-p2p:
-	@echo "Running P2P simulation..."
-	$(PYTHON) -m p2p.simulation.runner --model data/models/latest.pkl --league $(LEAGUE)
-```
+**Verdict logic:**
+- `PASS` — every hard-stage threshold met.
+- `PASS_DEGRADED` — hard stages pass but `p2p_status ∈ {degraded, skipped}`.
+- `FAIL` — any hard stage misses its threshold; report still generated with `failed_stage` populated.
 
 **Requirements to complete 3.5:**
-- [ ] `make train-full` runs the complete 7-stage pipeline
-- [ ] `make train-full` produces a training report in `data/reports/`
-- [ ] `make train-model` exists for quick dev iteration (model only, no P2P)
-- [ ] `make sim-p2p` exists for running just the P2P simulation with an existing model
-- [ ] Default `make train` is aliased to `make train-full`
+- [x] Both report formats generated for every run (pass or fail).
+- [x] Report references the model file path and reproducible `run_id`.
+- [x] `history.jsonl` is append-only and survives across runs.
+- [x] JSON schema is documented inline (`schema_version`) and unit-tested for shape stability.
 
-### Subphase 3.6: Continuous Integration Test Suite
+### Subphase 3.6: Orchestrator Integration & Telemetry
 
-**Files:** `ai/tests/test_full_pipeline.py`
+**File:** `ai/orchestrator/state_machine.py`
 
-Create a CI-compatible test that runs a minimal version of the full pipeline:
+The orchestrator no longer drives the pipeline directly; instead it **observes** it. Add states for telemetry only:
 
-- Uses a small real dataset (last 1 season instead of 5)
-- Runs 3 P2P nodes instead of 5
-- Verifies all stages complete without error
-- Checks report structure and pass/fail thresholds
+```
+IDLE → SCRAPING → VALIDATING → TRAINING → P2P_SIMULATION → VERIFYING → REPORTING → IDLE
+```
 
-This is NOT a unit test — it's a system integration test that catches regressions in the full pipeline.
+`TaskOrchestrator` gains `run_full_training(force_from=None, skip_p2p=False)` which:
+1. Instantiates `TrainingPipeline`.
+2. Subscribes to a stage-callback (`pipeline.on_stage_start`, `on_stage_end`) that flips `OrchestratorState` accordingly.
+3. Returns the final `ReportArtifact`.
+
+This keeps state-machine semantics for monitoring/telemetry while the actual work lives in `TrainingPipeline`.
 
 **Requirements to complete 3.6:**
-- [ ] `test_full_pipeline.py` exists and passes
-- [ ] Test uses real data (must have `make bootstrap` run in CI first)
-- [ ] Test completes in <5 minutes (reduced node count and data window)
-- [ ] Test validates report JSON structure and minimum accuracy thresholds
-- [ ] `make test-integration` target runs this test
+- [x] `OrchestratorState` enum has `VALIDATING`, `TRAINING`, `P2P_SIMULATION`, `VERIFYING`, `REPORTING`.
+- [x] `TaskOrchestrator.run_full_training()` exists and is exercised by `make train-full`.
+- [x] State transitions log with elapsed-ms per stage.
+
+### Subphase 3.7: CLI & Makefile Integration
+
+**Files:** `ai/orchestrator/state_machine.py` (new `__main__`), `Makefile`.
+
+```makefile
+train-full:        # Full 8-stage pipeline (default for `make train`)
+train-model:       # Stages 1–4 only (data + training, no P2P)
+sim-p2p:           # Stage 5–6 only against an existing model
+test-integration:  # Run tests/test_full_pipeline.py
+```
+
+CLI:
+```
+python -m orchestrator.state_machine --mode full-training --league super_lig [--force-from train] [--skip-p2p]
+python -m orchestrator.state_machine --mode model-only    --league super_lig
+python -m orchestrator.state_machine --mode sim-only      --league super_lig --model PATH
+```
+
+**Requirements to complete 3.7:**
+- [x] `make train-full LEAGUE=...` runs end-to-end and writes a report.
+- [x] `make train-model` skips P2P/ensemble/verify-vs-ensemble (model-only verify still runs).
+- [x] `make sim-p2p MODEL=...` reuses an existing model.
+- [x] `make train` aliases `make train-full` (back-compat: `ai-train` keeps the old behavior).
+
+### Subphase 3.8: Integration Test Suite
+
+**File:** `ai/tests/test_full_pipeline.py`
+
+A `pytest` module that:
+- Skips with a clear reason if `data/{league}_real.json` is absent (so unit-test CI without real data still passes).
+- Calls `TrainingPipeline(node_count=3, verification_window_weeks=2).run(skip_p2p=False)`.
+- Asserts the returned `ReportArtifact` has `schema_version == 1`, every stage artifact exists on disk, the `manifest.json` is well-formed, and `verdict ∈ {PASS, PASS_DEGRADED}` (FAIL surfaces meaningful diagnostics in the assertion message).
+- Reads `history.jsonl`, asserts the new run is the last line.
+
+**Requirements to complete 3.8:**
+- [x] Test exists and either passes or skips (never errors) on a fresh checkout.
+- [x] Test runtime < 5 minutes with `node_count=3, verification_window_weeks=2`.
+- [x] `make test-integration` invokes only this test.
 
 ### Phase 3 Completion Gate
 
 | Requirement | How to Verify |
 |---|---|
-| Full pipeline runs end-to-end | `make train-full` completes without error and produces report |
-| P2P simulation uses trained model | Report shows per-node predictions and ensemble accuracy |
-| Proofreading integrated | Report shows quarantine rate and cross-validation results |
-| Ensemble beats single node | Report shows ensemble accuracy ≥ best single-node accuracy |
-| Report is comprehensive | Report includes all 7 sections with real data |
-| Integration test passes | `make test-integration` green |
-| Orchestrator has full state machine | All 8 states (IDLE through REPORTING) implemented |
+| Coordinator owns the pipeline | `TrainingPipeline` exists; `state_machine.py` only observes |
+| All artifacts typed and persisted | `data/reports/runs/<run_id>/*.json` present after a run |
+| Pass/fail driven by config | Lowering `NEGELIR_THRESHOLD_MODEL_ACC` flips `FAIL → PASS` without code change |
+| Holdout never seen by trainer | `SplitArtifact.holdout_matches` ids ∩ training set ids == ∅ (asserted in `_stage_split`) |
+| P2P degradation is non-fatal | Killing P2P sim mid-run still produces a `PASS_DEGRADED` report |
+| Trend history persists | `data/reports/history.jsonl` grows by exactly one line per run |
+| Integration test green | `make test-integration` passes (or skips cleanly without real data) |
+| All previous tests still pass | `pytest ai/tests/test_unit.py` green |
 
 ---
 

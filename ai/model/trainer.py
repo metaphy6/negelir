@@ -22,10 +22,17 @@ from model.features import inject_noise, FEATURE_COLUMNS
 log = get_logger("model.trainer")
 
 
-def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
+def train_model(save_path: str | None = None,
+                matches: list[dict] | None = None) -> xgb.XGBClassifier:
     """
     Train the GBDT base model on real scraped data.
     Fails loudly if real data is unavailable — no fallback path in production.
+
+    Args:
+        save_path: optional path to save model; defaults to cfg.model_dir
+        matches: optional pre-loaded match list (used by Phase 3 pipeline to
+                 inject the post-holdout split). When None, loads via
+                 `load_real_matches()`.
     """
     section_banner("GBDT Model Training")
 
@@ -41,7 +48,7 @@ def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
 
     league_id = cfg.default_league_id
     min_required = cfg.training_min_matches
-    raw_matches = load_real_matches()
+    raw_matches = matches if matches is not None else load_real_matches()
     raw_count = len(raw_matches)
 
     if raw_count == 0:

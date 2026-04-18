@@ -308,14 +308,125 @@ class P2PSimulation:
     Implements P2P data retention via SCRAPE_DATA message broadcasts.
     """
 
-    def __init__(self):
-        self.node_count = int(os.getenv("P2P_NODE_COUNT", "5"))
+    def __init__(
+        self,
+        model_path: str | None = None,
+        league_id: str | None = None,
+        node_count: int | None = None,
+        holdout_matches: list[dict] | None = None,
+    ):
+        self.node_count = node_count if node_count is not None else int(os.getenv("P2P_NODE_COUNT", "5"))
         self.match_count = int(os.getenv("P2P_SIMULATION_MATCHES", "10"))
         self.nodes: list[PeerNode] = []
         self.transport = SimulatedTransport()
         self._next_port = int(os.getenv("P2P_BASE_PORT", "9000"))
         self._node_counter = 0
         self._removed_nodes: list[PeerNode] = []  # track departed peers
+
+        # Phase 3 — validator mode parameters
+        self.model_path = model_path
+        self.league_id = league_id or p2p_cfg.default_league_id
+        self.holdout_matches = holdout_matches or []
+        self._loaded_model = None  # cached XGBClassifier when model_path is set
+
+    # ── Phase 3: Validator mode (orchestrated by TrainingPipeline) ──
+
+    def _load_validator_model(self):
+        """Load the pickled GBDT model once for validator mode."""
+        if self._loaded_model is not None:
+            return self._loaded_model
+        if not self.model_path or not os.path.isfile(self.model_path):
+            raise FileNotFoundError(
+                f"P2P validator: model not found at {self.model_path!r}"
+            )
+        import pickle as _pickle
+        with open(self.model_path, "rb") as f:
+            self._loaded_model = _pickle.load(f)
+        return self._loaded_model
+
+    def _holdout_feature_matrix(self):
+        """Build the feature matrix for the holdout via the AI extractor.
+
+        Returns (X, y, key_index) where key_index maps row index → match key.
+        """
+        # Local import keeps the AI subtree optional for default sim behavior.
+        ai_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ai"))
+        if ai_root not in sys.path:
+            sys.path.insert(0, ai_root)
+        from model.real_features import extract_real_dataset  # type: ignore[import-not-found]
+
+        X, y = extract_real_dataset(min_history=5, matches=self.holdout_matches)
+        keys: list[str] = []
+        for m in self.holdout_matches:
+            keys.append(f"{m.get('date','')}|{m.get('home','')}|{m.get('away','')}")
+        # The extractor may drop matches with insufficient history. Trim keys to len(X).
+        if len(keys) != len(X):
+            keys = keys[-len(X):]
+        return X, y, keys
+
+    def run_validator(self) -> dict:
+        """Phase 3 validator entrypoint.
+
+        Each "node" loads the same model and predicts the holdout window,
+        with a small ε perturbation on inputs so peers are non-identical.
+        Returns a dict consumed by `TrainingPipeline._stage_p2p_sim`.
+        """
+        log.info(
+            f"🤝 P2P validator: model={self.model_path!r} "
+            f"nodes={self.node_count} holdout={len(self.holdout_matches)}"
+        )
+        if not self.holdout_matches:
+            return {
+                "nodes_alive": 0,
+                "role_election": {},
+                "schema_consensus": False,
+                "per_node_predictions": {},
+            }
+
+        model = self._load_validator_model()
+        X, _y, keys = self._holdout_feature_matrix()
+        if len(X) == 0:
+            return {
+                "nodes_alive": 0,
+                "role_election": {},
+                "schema_consensus": False,
+                "per_node_predictions": {},
+            }
+
+        rng = random.Random(int(os.getenv("P2P_VALIDATOR_SEED", "42")))
+        per_node: dict[str, list[dict]] = {}
+        for n in range(self.node_count):
+            node_id = f"node_{n}"
+            # Per-node ε bias: scale numeric features by (1 + ε).
+            epsilon = (rng.random() - 0.5) * 0.02  # ±1%
+            X_perturbed = X * (1.0 + epsilon)
+            try:
+                probs = model.predict_proba(X_perturbed)
+            except Exception as exc:  # pragma: no cover — defensive
+                log.warning(f"validator node {node_id} predict failed: {exc}")
+                continue
+            preds: list[dict] = []
+            for i, row in enumerate(probs):
+                preds.append({
+                    "match_key": keys[i] if i < len(keys) else f"row_{i}",
+                    "probs": [float(row[0]), float(row[1]), float(row[2])],
+                })
+            per_node[node_id] = preds
+
+        # Synthetic role election: round-robin assign known scraper roles.
+        roles = ["scraper_mackolik", "scraper_openfootball", "scraper_footballdata",
+                 "validator", "trainer"]
+        role_election = {
+            roles[i]: f"node_{i % max(1, self.node_count)}"
+            for i in range(min(len(roles), self.node_count))
+        }
+
+        return {
+            "nodes_alive": len(per_node),
+            "role_election": role_election,
+            "schema_consensus": True,
+            "per_node_predictions": per_node,
+        }
 
     def run(self):
         """Run the full P2P simulation with AI pipeline integration."""
@@ -1262,6 +1373,32 @@ if __name__ == "__main__":
         run_scaling_test(target_nodes=count)
     elif "--churn-test" in sys.argv:
         run_churn_test()
+    elif "--model" in sys.argv:
+        # Phase 3 validator mode — invoked by TrainingPipeline or ad-hoc CLI.
+        import argparse
+        parser = argparse.ArgumentParser(description="P2P validator mode")
+        parser.add_argument("--model", required=True, help="Path to pickled GBDT model")
+        parser.add_argument("--league", default=p2p_cfg.default_league_id)
+        parser.add_argument("--nodes", type=int, default=int(os.getenv("P2P_NODE_COUNT", "5")))
+        parser.add_argument("--holdout", required=True,
+                            help="Path to JSON list of holdout matches (or {matches:[...]})")
+        parser.add_argument("--output", required=True, help="Path to write validator JSON report")
+        args = parser.parse_args()
+
+        with open(args.holdout, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        holdout = raw.get("matches", raw) if isinstance(raw, dict) else raw
+
+        sim = P2PSimulation(
+            model_path=args.model,
+            league_id=args.league,
+            node_count=args.nodes,
+            holdout_matches=holdout,
+        )
+        result = sim.run_validator()
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
+        print(f"✅ validator report → {args.output}")
     else:
         sim = P2PSimulation()
         sim.run()

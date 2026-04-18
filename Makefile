@@ -98,18 +98,39 @@ bootstrap: env ## Scrape + validate real data cache before training
 	@echo "✅ Bootstrap complete. $(LEAGUE) data is ready for training."
 
 .PHONY: train
-train: env ## Train model with cached real data (fails if bootstrap cache missing)
+train: train-full ## Phase 3 alias — full-system training pipeline (back-compat: see ai-train for legacy single-stage trainer)
+
+.PHONY: train-full
+train-full: env ## Phase 3 — Full 8-stage training pipeline (scrape → validate → split → train → p2p → ensemble → verify → report)
 	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
 	$(COMPOSE) run --rm \
 		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
-		ai python -m model.trainer
+		ai python -m orchestrator.state_machine --mode full-training --league $(LEAGUE)
+
+.PHONY: train-model
+train-model: env ## Phase 3 — Stages 1–4 only (data + training, skips P2P/ensemble)
+	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
+	$(COMPOSE) run --rm \
+		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
+		ai python -m orchestrator.state_machine --mode model-only --league $(LEAGUE)
+
+.PHONY: sim-p2p
+sim-p2p: env ## Phase 3 — P2P validator stage only (requires existing trained model: MODEL=path)
+	@test -n "$(MODEL)" || (echo "❌ MODEL=path/to/model.pkl is required" && exit 1)
+	$(COMPOSE) run --rm \
+		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
+		ai python -m orchestrator.state_machine --mode sim-only --league $(LEAGUE) --model $(MODEL)
 
 .PHONY: ai-pipeline
 ai-pipeline: env ## Run the full AI pipeline (scrape → process → analyze → respond)
 	$(COMPOSE) run --rm ai python -m pipeline.runner
 
 .PHONY: ai-train
-ai-train: train ## Backward-compatible alias for real-data training
+ai-train: env ## Legacy single-stage trainer (no P2P, no holdout split, no report)
+	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
+	$(COMPOSE) run --rm \
+		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
+		ai python -m model.trainer
 
 .PHONY: ai-demo
 ai-demo: env ## Run Turkish Q&A demo questions
@@ -277,6 +298,14 @@ test-p2p: env ## Run P2P module tests
 		-w $(WORKSPACE_DIR) \
 		-e PYTHONPATH=$(TEST_PYTHONPATH) \
 		p2p python -m pytest p2p/tests -v
+
+.PHONY: test-integration
+test-integration: env ## Phase 3 — Full-pipeline integration test (skips cleanly if real data missing)
+	$(COMPOSE) run --rm \
+		-v $(PWD):$(WORKSPACE_DIR) \
+		-w $(WORKSPACE_DIR) \
+		-e PYTHONPATH=$(TEST_PYTHONPATH) \
+		ai python -m pytest ai/tests/test_full_pipeline.py -v -s
 
 # ── Cleanup ─────────────────────────────────────────────────
 
