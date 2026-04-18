@@ -1,6 +1,6 @@
 # Negelir — P2P Simulation Gap-Closing & Roadmap Coverage Report
 
-> **Note (2026-04-18):** Test counts have since grown beyond the 224 reported here. See [QID_TEST_REPORT.md](QID_TEST_REPORT.md) for latest (308+ tests).
+> **Note (2026-04-18):** Test counts have since grown beyond the 224 reported here. See [QID_TEST_REPORT.md](../reports/QID_TEST_REPORT.md) for latest (308+ tests).
 
 **Date**: April 5, 2026  
 **Test Results**: 224 total tests (140 AI + 84 P2P) — all passing

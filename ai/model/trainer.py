@@ -25,7 +25,7 @@ log = get_logger("model.trainer")
 def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
     """
     Train the GBDT base model on real scraped data.
-    Fails loudly if real data is unavailable — no synthetic fallback in production.
+    Fails loudly if real data is unavailable — no fallback path in production.
     """
     section_banner("GBDT Model Training")
 
@@ -37,9 +37,41 @@ def train_model(save_path: str | None = None) -> xgb.XGBClassifier:
         random_seed=cfg.training_random_seed,
     )
 
-    from model.real_features import extract_real_dataset
-    X, y = extract_real_dataset(min_history=5)
-    log.info(f"🏟️  Training on REAL data: {len(X)} matches")
+    from model.real_features import load_real_matches, extract_real_dataset
+
+    league_id = cfg.default_league_id
+    min_required = cfg.training_min_matches
+    raw_matches = load_real_matches()
+    raw_count = len(raw_matches)
+
+    if raw_count == 0:
+        raise RuntimeError(
+            f"No real matches found for league '{league_id}'. "
+            f"Run `make bootstrap LEAGUE={league_id}` first "
+            f"(or `make scrape --league {league_id}`)."
+        )
+
+    try:
+        X, y = extract_real_dataset(min_history=5, matches=raw_matches)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to build training dataset for league '{league_id}' "
+            f"from {raw_count} raw matches: {exc}. "
+            f"Run `make bootstrap LEAGUE={league_id}` first."
+        ) from exc
+
+    if len(X) < min_required:
+        raise RuntimeError(
+            f"Insufficient training data for league '{league_id}': "
+            f"usable={len(X)}, required>={min_required}, raw={raw_count}. "
+            "Collect more real history before training. "
+            f"Run `make bootstrap LEAGUE={league_id}` first."
+        )
+
+    log.info(
+        f"🏟️  Training on REAL data: {len(X)} usable matches "
+        f"(raw={raw_count}, required>={min_required})"
+    )
 
     X = inject_noise(X, noise_pct=cfg.training_noise_pct, seed=cfg.training_random_seed)
 

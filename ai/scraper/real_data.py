@@ -1,7 +1,56 @@
 """
 Negelir — Real Data Scraper
-============================
-Scrapes real Turkish Süper Lig match data from multiple public sources.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+- [analysis/GEMINI_3_1.md](analysis/GEMINI_3_1.md)## Research and External Analysis- [SETUP.md](SETUP.md)## Setup and Operations- [QID_TEST_REPORT.md](QID_TEST_REPORT.md)- [GENERIC_INPUT_HANDLING.md](GENERIC_INPUT_HANDLING.md)## NLP, Input, and Query Intent- [MULTI_MARKET_BACKTEST_REPORT.md](MULTI_MARKET_BACKTEST_REPORT.md)- [BACKTEST_TEST_REPORT.md](BACKTEST_TEST_REPORT.md)## Backtesting and Evaluation- [P2P_REALISM_REPORT.md](P2P_REALISM_REPORT.md)- [P2P_DATA_RETENTION.md](P2P_DATA_RETENTION.md)- [P2P_NETWORK.md](P2P_NETWORK.md)## P2P and Network- [SCRAPING.md](SCRAPING.md)- [DATA_SOURCES.md](DATA_SOURCES.md)## Data Sources and Scraping- [PHASE2_SYNTHETIC_DATA_PURGE_REPORT.md](PHASE2_SYNTHETIC_DATA_PURGE_REPORT.md)## Refactor and Compliance Reports- [REFACTORING_ROADMAP.md](REFACTORING_ROADMAP.md)- [MULTI_LEAGUE_ROADMAP.md](MULTI_LEAGUE_ROADMAP.md)- [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md)- [ROADMAP.md](ROADMAP.md)## Roadmaps and Planning- [GLOBAL_EXPANSION_ASSESSMENT.md](GLOBAL_EXPANSION_ASSESSMENT.md)- [FEASIBILITY.md](FEASIBILITY.md)- [AUTONOMOUS_PIPELINE.md](AUTONOMOUS_PIPELINE.md)- [ARCHITECTURE.md](ARCHITECTURE.md)## Architecture and System DesignThis file organizes all project documents by topic so the docs folder is easier to navigate.============================
+Scrapes real league match data from multiple public sources.
 
 Sources:
   1. openfootball/football.json (GitHub) — Real scores, HT scores, dates
@@ -23,19 +72,10 @@ from datetime import datetime
 import requests
 
 from common.config import cfg
+from common.league_config import get_league_config
 from common.logger import get_logger
 
 log = get_logger("scraper.real_data")
-
-# ── Configuration (values sourced from config / .env) ────
-OPENFOOTBALL_BASE = cfg.scrape_openfootball_base
-FOOTBALLDATA_UK_BASE = cfg.scrape_footballdata_base
-
-# Turkish Süper Lig seasons available on openfootball (from .env)
-OPENFOOTBALL_SEASONS = cfg.openfootball_seasons
-
-# football-data.co.uk season codes → labels (from .env)
-FOOTBALLDATA_UK_SEASONS = cfg.footballdata_uk_seasons
 
 # ── Team name normalisation ─────────────────────────────
 # Built from locale_tr.yaml source_aliases + historical_source_aliases
@@ -90,14 +130,17 @@ class RealMatch:
 
 
 class RealDataScraper:
-    """Scrapes and merges real Turkish Süper Lig data from multiple sources."""
+    """Scrapes and merges real league data from multiple sources."""
 
     def __init__(
         self,
+        league_id: str | None = None,
         rate_limit: float | None = None,
         scrape_http_timeout: int | None = None,
         footballdata_http_timeout: int | None = None,
     ):
+        self.league_id = league_id if league_id is not None else cfg.default_league_id
+        self.league_config = get_league_config(self.league_id)
         self.rate_limit = rate_limit if rate_limit is not None else cfg.real_data_rate_limit
         self.scrape_http_timeout = (
             scrape_http_timeout if scrape_http_timeout is not None else cfg.scrape_http_timeout
@@ -107,6 +150,10 @@ class RealDataScraper:
             if footballdata_http_timeout is not None
             else cfg.footballdata_http_timeout
         )
+        self.openfootball_base = cfg.scrape_openfootball_base
+        self.footballdata_uk_base = cfg.scrape_footballdata_base
+        self.openfootball_seasons = cfg.openfootball_seasons
+        self.footballdata_uk_seasons = cfg.footballdata_uk_seasons
         self._last_request = 0.0
         self.session = requests.Session()
         self.session.headers["User-Agent"] = cfg.scrape_user_agent
@@ -131,8 +178,8 @@ class RealDataScraper:
         """Fetch all available Turkish Süper Lig seasons from openfootball."""
         all_matches = []
 
-        for season_dir, season_label in OPENFOOTBALL_SEASONS:
-            url = f"{OPENFOOTBALL_BASE}/{season_dir}/tr.1.json"
+        for season_dir, season_label in self.openfootball_seasons:
+            url = f"{self.openfootball_base}/{season_dir}/{self.league_config.openfootball_path}"
             log.info(f"📥 Fetching {season_label} from openfootball...")
 
             resp = self._throttled_get(url)
@@ -186,8 +233,8 @@ class RealDataScraper:
         """
         all_matches = []
 
-        for code, season_label in FOOTBALLDATA_UK_SEASONS.items():
-            url = f"{FOOTBALLDATA_UK_BASE}/{code}/T1.csv"
+        for code, season_label in self.footballdata_uk_seasons.items():
+            url = f"{self.footballdata_uk_base}/{code}/{self.league_config.footballdata_country}.csv"
             log.info(f"📥 Fetching {season_label} from football-data.co.uk...")
 
             resp = self._throttled_get(url, timeout=self.footballdata_http_timeout)
@@ -399,7 +446,8 @@ class RealDataScraper:
         has_shots = sum(1 for m in matches if m.home_shots is not None)
 
         return {
-            "league": "Turkish Süper Lig",
+            "league": self.league_config.league_name,
+            "league_id": self.league_config.league_id,
             "seasons": seasons,
             "generated": False,
             "source": "real",
@@ -470,10 +518,20 @@ def main():
     """CLI entry point for real data scraping."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Scrape real Turkish Süper Lig data")
+    parser = argparse.ArgumentParser(description="Scrape real match data and save league cache")
+    parser.add_argument(
+        "--league",
+        default=cfg.default_league_id,
+        help=f"League ID label for output path and logs (default: {cfg.default_league_id})",
+    )
+    parser.add_argument(
+        "--seasons",
+        default="configured",
+        help="Season scope hint (currently informational; scraper uses configured season set)",
+    )
     parser.add_argument(
         "--output", "-o",
-        default="/data/tr_super_lig_real.json",
+        default=None,
         help="Output JSON file path",
     )
     parser.add_argument(
@@ -484,8 +542,10 @@ def main():
     )
     args = parser.parse_args()
 
-    scraper = RealDataScraper(rate_limit=args.rate_limit)
-    scraper.scrape_all(output_path=args.output)
+    output_path = args.output or os.path.join(cfg.data_dir, f"{args.league}_real.json")
+
+    scraper = RealDataScraper(league_id=args.league, rate_limit=args.rate_limit)
+    scraper.scrape_all(output_path=output_path)
 
 
 if __name__ == "__main__":

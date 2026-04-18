@@ -16,6 +16,10 @@ class LeagueConfig:
     country: str = "Turkey"
     language: str = "tr"
 
+    # External source mapping
+    openfootball_path: str = "tr.1.json"
+    footballdata_country: str = "T1"
+
     # Structure
     teams_count: int = 19
     rounds_per_season: int = 38
@@ -117,6 +121,8 @@ def english_premier_league() -> LeagueConfig:
         league_name="English Premier League",
         country="England",
         language="en",
+        openfootball_path="en.1.json",
+        footballdata_country="E0",
         teams_count=20,
         rounds_per_season=38,
         promotion_slots=3,
@@ -143,6 +149,8 @@ def german_bundesliga() -> LeagueConfig:
         league_name="German Bundesliga",
         country="Germany",
         language="de",
+        openfootball_path="de.1.json",
+        footballdata_country="D1",
         teams_count=18,
         rounds_per_season=34,
         promotion_slots=3,
@@ -166,6 +174,8 @@ def spanish_la_liga() -> LeagueConfig:
         league_name="Spanish La Liga",
         country="Spain",
         language="es",
+        openfootball_path="es.1.json",
+        footballdata_country="SP1",
         teams_count=20,
         rounds_per_season=38,
         promotion_slots=3,
@@ -192,7 +202,26 @@ LEAGUE_REGISTRY: dict[str, callable] = {
 }
 
 
+LEAGUE_ALIASES: dict[str, str] = {
+    "super_lig": "tr_super_lig",
+    "turkish_super_lig": "tr_super_lig",
+}
+
+
+def normalize_league_id(league_id: str) -> str:
+    """Map legacy IDs to canonical registry IDs."""
+    if not league_id:
+        return "tr_super_lig"
+    return LEAGUE_ALIASES.get(league_id, league_id)
+
+
+def get_available_league_ids() -> list[str]:
+    """List canonical league IDs currently supported by the registry."""
+    return sorted(LEAGUE_REGISTRY.keys())
+
+
 def get_league_config(league_id: str = "tr_super_lig") -> LeagueConfig:
     """Get league config by ID. Falls back to Turkish Süper Lig."""
-    factory = LEAGUE_REGISTRY.get(league_id, turkish_super_lig)
+    resolved = normalize_league_id(league_id)
+    factory = LEAGUE_REGISTRY.get(resolved, turkish_super_lig)
     return factory()

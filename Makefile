@@ -17,6 +17,8 @@ MIN_CONFIDENCE ?= 0.55
 MARKETS_1X2 ?= ms
 MARKETS_GOALS ?= au_1.5,au_2.5,au_3.5,kg,tc,skor,skor_top3
 MARKETS_HALFTIME ?= iy,2y,iy_ms,iy_au_05
+LEAGUE ?= super_lig
+BOOTSTRAP_MIN_MATCHES ?= 100
 
 # Detect OS for cross-platform compatibility
 ifeq ($(OS),Windows_NT)
@@ -79,13 +81,35 @@ infra: env ## Start only infrastructure (PostgreSQL + Redis)
 
 # ── AI Commands ─────────────────────────────────────────────
 
+.PHONY: scrape
+scrape: env ## Scrape and cache real match data for a league (override: LEAGUE=en_premier_league)
+	@echo "📥 Scraping real data for $(LEAGUE)..."
+	$(COMPOSE) run --rm \
+		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
+		ai python -m scraper.real_data --league $(LEAGUE) --output /data/$(LEAGUE)_real.json
+
+.PHONY: bootstrap
+bootstrap: env ## Scrape + validate real data cache before training
+	@echo "🚀 Bootstrapping real data for $(LEAGUE)..."
+	$(MAKE) scrape LEAGUE=$(LEAGUE)
+	$(COMPOSE) run --rm \
+		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
+		ai python -m proofreader.validator --input /data/$(LEAGUE)_real.json --min-matches $(BOOTSTRAP_MIN_MATCHES)
+	@echo "✅ Bootstrap complete. $(LEAGUE) data is ready for training."
+
+.PHONY: train
+train: env ## Train model with cached real data (fails if bootstrap cache missing)
+	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
+	$(COMPOSE) run --rm \
+		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
+		ai python -m model.trainer
+
 .PHONY: ai-pipeline
 ai-pipeline: env ## Run the full AI pipeline (scrape → process → analyze → respond)
 	$(COMPOSE) run --rm ai python -m pipeline.runner
 
 .PHONY: ai-train
-ai-train: env ## Train the GBDT model with synthetic data
-	$(COMPOSE) run --rm ai python -m model.trainer
+ai-train: train ## Backward-compatible alias for real-data training
 
 .PHONY: ai-demo
 ai-demo: env ## Run Turkish Q&A demo questions

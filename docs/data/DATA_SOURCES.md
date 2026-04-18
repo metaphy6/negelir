@@ -1,6 +1,6 @@
 # Data Source Validation Report
 
-> **Note (2026-04-18):** This was the initial source assessment. The live priority chain is now Mackolik (primary) → football-data.co.uk (secondary) → TFF (tertiary). See [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) §1 for the current source priority.
+> **Note (2026-04-18):** This was the initial source assessment. The live priority chain is now Mackolik (primary) → football-data.co.uk (secondary) → TFF (tertiary). See [IMPLEMENTATION_ROADMAP.md](../planning/IMPLEMENTATION_ROADMAP.md) §1 for the current source priority.
 
 **Date:** 2026-04-07  
 **Purpose:** Live-probe every proposed free data source, document exactly what each returns for Turkish Süper Lig, and define the primary/fallback chain for the autonomous pipeline.

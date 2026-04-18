@@ -22,14 +22,15 @@ from node.peer import PeerNode, PeerAnalysis, ScrapedRecord, DataStore, get_p2p_
 from protocol.messages import P2PMessage, MessageType
 from protocol.transport import SimulatedTransport
 from reputation.tracker import compute_network_summary, print_reputation_matrix
+from config import p2p_cfg
 
 log = get_p2p_logger("simulation")
 
 
 # ── Real data loading ────────────────────────────────────────
 
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
-_REAL_DATA_PATH = _DATA_DIR / "tr_super_lig_real.json"
+_DATA_DIR = Path(p2p_cfg.data_dir)
+_REAL_DATA_PATH = _DATA_DIR / f"{p2p_cfg.default_league_id}_real.json"
 
 
 def _load_real_matches(limit: int = 30) -> list[dict]:
@@ -39,7 +40,7 @@ def _load_real_matches(limit: int = 30) -> list[dict]:
     Returns the most recent `limit` matches that have scores.
     """
     if not _REAL_DATA_PATH.exists():
-        log.warning(f"⚠️  Real data not found at {_REAL_DATA_PATH}, using fallback")
+        log.warning(f"⚠️  Real data not found at {_REAL_DATA_PATH}")
         return []
 
     with open(_REAL_DATA_PATH) as f:
@@ -122,47 +123,16 @@ def _load_real_matches(limit: int = 30) -> list[dict]:
     return result
 
 
-# ── Simulated scraping data — now loaded from real data or fallback ──
-_real_matches = _load_real_matches(limit=30)
-
-SIMULATED_SCRAPED_DATA: dict[str, dict] = {}
-if _real_matches:
-    for m in _real_matches[:10]:  # Use 10 matches for the main simulation dict
+def _matches_to_scraped_map(matches: list[dict], limit: int = 10) -> dict[str, dict]:
+    """Convert loaded real matches into the simulation match map."""
+    result: dict[str, dict] = {}
+    for m in matches[:limit]:
         key = f"{m['home_team']}-{m['away_team']}"
-        SIMULATED_SCRAPED_DATA[key] = m
-else:
-    # Fallback: hardcoded data if real data is unavailable
-    SIMULATED_SCRAPED_DATA = {
-        "Galatasaray-Fenerbahçe": {
-            "home_team": "Galatasaray", "away_team": "Fenerbahçe",
-            "match_date": "2026-04-05", "league": "Süper Lig", "week": 30,
-            "home_form": [3, 3, 1, 3, 0], "away_form": [3, 1, 0, 3, 3],
-            "h2h_last5": {"home_wins": 3, "away_wins": 1, "draws": 1, "avg_goals": 2.8},
-            "home_elo": 1720, "away_elo": 1680,
-            "home_avg_scored": 1.9, "away_avg_scored": 1.6,
-            "home_avg_conceded": 0.7, "away_avg_conceded": 0.9,
-            "sentiment_home": 0.72, "sentiment_away": 0.55,
-            "stats": {"possession_h": 56, "possession_a": 44, "shots_on_h": 6, "shots_on_a": 4,
-                      "corners_h": 7, "corners_a": 5, "fouls_h": 14, "fouls_a": 16},
-        },
-        "Beşiktaş-Trabzonspor": {
-            "home_team": "Beşiktaş", "away_team": "Trabzonspor",
-            "match_date": "2026-04-05", "league": "Süper Lig", "week": 30,
-            "home_form": [3, 0, 3, 1, 3], "away_form": [1, 3, 0, 3, 1],
-            "h2h_last5": {"home_wins": 2, "away_wins": 2, "draws": 1, "avg_goals": 3.0},
-            "home_elo": 1650, "away_elo": 1590,
-            "home_avg_scored": 1.6, "away_avg_scored": 1.3,
-            "home_avg_conceded": 1.0, "away_avg_conceded": 1.2,
-            "sentiment_home": 0.60, "sentiment_away": 0.45,
-            "stats": {"possession_h": 52, "possession_a": 48, "shots_on_h": 5, "shots_on_a": 5,
-                      "corners_h": 6, "corners_a": 6, "fouls_h": 12, "fouls_a": 13},
-        },
-    }
+        result[key] = m
+    return result
 
 
-# Build demo questions from whichever data we loaded
-P2P_DEMO_QUESTIONS: list[tuple[str, str]] = []
-_question_templates = [
+_QUESTION_TEMPLATES = [
     "{home} bu maçı kazanır mı?",
     "Bu maçta 2.5 üstü gol olur mu?",
     "İki takım da gol atar mı?",
@@ -171,13 +141,46 @@ _question_templates = [
     "{home} kalesini gol yemeden korur mu?",
     "{away} galip gelebilir mi?",
 ]
-for match_key, data in list(SIMULATED_SCRAPED_DATA.items())[:7]:
-    home = data["home_team"]
-    away = data["away_team"]
-    for tmpl in _question_templates:
-        P2P_DEMO_QUESTIONS.append(
-            (match_key, tmpl.format(home=home, away=away))
+
+
+def _build_demo_questions(scraped_data: dict[str, dict]) -> list[tuple[str, str]]:
+    questions: list[tuple[str, str]] = []
+    for match_key, data in list(scraped_data.items())[:7]:
+        home = data["home_team"]
+        away = data["away_team"]
+        for tmpl in _QUESTION_TEMPLATES:
+            questions.append((match_key, tmpl.format(home=home, away=away)))
+    return questions
+
+
+def _require_real_matches(min_matches: int) -> list[dict]:
+    """Validate minimum real data for simulation startup and return loaded matches."""
+    samples = _load_real_matches(limit=max(min_matches, 5000))
+    found = len(samples)
+    if found < min_matches:
+        league_id = p2p_cfg.default_league_id
+        raise RuntimeError(
+            f"P2P simulation requires real data for league '{league_id}': "
+            f"found={found}, required>={min_matches}, path={_REAL_DATA_PATH}. "
+            f"Run `make scrape --league {league_id}` first "
+            f"(or `make bootstrap LEAGUE={league_id}`)."
         )
+    return samples
+
+
+def _refresh_simulation_seed_data(matches: list[dict], match_limit: int) -> None:
+    """Refresh global simulation seeds from real matches only."""
+    global SIMULATED_SCRAPED_DATA, P2P_DEMO_QUESTIONS
+    SIMULATED_SCRAPED_DATA = _matches_to_scraped_map(matches, limit=match_limit)
+    P2P_DEMO_QUESTIONS = _build_demo_questions(SIMULATED_SCRAPED_DATA)
+
+
+# Initial seeds from available real data only (no hardcoded fallback).
+SIMULATED_SCRAPED_DATA: dict[str, dict] = _matches_to_scraped_map(
+    _load_real_matches(limit=30),
+    limit=10,
+)
+P2P_DEMO_QUESTIONS: list[tuple[str, str]] = _build_demo_questions(SIMULATED_SCRAPED_DATA)
 
 # ── Turkish intent classification (inline TQU for P2P) ───
 import re
@@ -324,6 +327,10 @@ class P2PSimulation:
         console.print("[bold]Scraping → Processing → AI Analysis → P2P Sharing → Turkish Response[/bold]\n")
         start = time.time()
 
+        min_required = max(self.match_count, p2p_cfg.simulation_min_real_matches)
+        real_matches = _require_real_matches(min_required)
+        _refresh_simulation_seed_data(real_matches, match_limit=max(10, self.match_count))
+
         # Phase A: Network Setup
         self._create_nodes()
 
@@ -463,6 +470,14 @@ class P2PSimulation:
         Demonstrates scraping performance, rate limiting, and data intake.
         """
         from rich.table import Table
+
+        if not SIMULATED_SCRAPED_DATA:
+            league_id = p2p_cfg.default_league_id
+            raise RuntimeError(
+                f"No seeded real matches available for P2P simulation. "
+                f"Run `make scrape --league {league_id}` first "
+                f"(or `make bootstrap LEAGUE={league_id}`)."
+            )
 
         console.rule("[bold yellow]🌐 Phase B: Web Scraping Simulation[/bold yellow]", style="yellow")
         log.info("🕷️  Web scraping starting (3 sources, rate-limited)...")
@@ -702,24 +717,15 @@ class P2PSimulation:
 
         match_list = list(processed_matches.items())
         if not match_list:
-            log.warning("⚠️  No processed match data, using synthetic data")
-            match_list = [
-                ("Galatasaray-Fenerbahçe", SIMULATED_SCRAPED_DATA["Galatasaray-Fenerbahçe"]),
-            ]
-
-        # Also add additional synthetic match-ups for reputation building
-        extra_teams = [
-            ("Konyaspor", "Sivasspor"),
-            ("Samsunspor", "Alanyaspor"),
-            ("Kayserispor", "Gaziantep FK"),
-            ("Rizespor", "Pendikspor"),
-            ("Galatasaray", "Beşiktaş"),
-            ("Fenerbahçe", "Trabzonspor"),
-            ("Kasımpaşa", "Antalyaspor"),
-        ]
+            league_id = p2p_cfg.default_league_id
+            raise RuntimeError(
+                f"No validated match data available for league '{league_id}'. "
+                f"Run `make scrape --league {league_id}` first "
+                f"(or `make bootstrap LEAGUE={league_id}`)."
+            )
 
         log.info(f"\n{'═' * 70}")
-        log.info(f"⚽ Phase D: P2P Analysis Rounds ({len(match_list)} scraped + {len(extra_teams)} extra matches)")
+        log.info(f"⚽ Phase D: P2P Analysis Rounds ({len(match_list)} validated matches)")
         log.info(f"{'═' * 70}")
 
         # Process scraped matches first
@@ -733,14 +739,6 @@ class P2PSimulation:
             ))
 
             self._run_single_match_round(match_idx, home, away, match_id, true_home_prob, rng, results, match_data=data)
-
-        # Additional matches for reputation building
-        for extra_idx, (home, away) in enumerate(extra_teams):
-            match_idx = len(match_list) + extra_idx
-            match_id = hashlib.sha256(f"{home}:{away}:{match_idx}".encode()).hexdigest()[:16]
-            true_home_prob = rng.uniform(0.25, 0.65)
-
-            self._run_single_match_round(match_idx, home, away, match_id, true_home_prob, rng, results)
 
         return results
 
@@ -928,6 +926,10 @@ def run_scaling_test(target_nodes: int = 25):
     console.rule(f"[bold cyan]📐 SCALING TEST — {target_nodes} PEERS[/bold cyan]", style="cyan")
     start = time.time()
 
+    min_required = max(10, p2p_cfg.simulation_min_real_matches)
+    real_matches = _require_real_matches(min_required)
+    _refresh_simulation_seed_data(real_matches, match_limit=max(10, min_required))
+
     sim = P2PSimulation()
     sim.node_count = target_nodes
     sim._create_nodes()
@@ -1079,6 +1081,10 @@ def run_churn_test(initial_nodes: int = 10, peak_nodes: int = 25, n_rounds: int 
         style="cyan",
     )
     start = time.time()
+
+    min_required = max(10, p2p_cfg.simulation_min_real_matches)
+    real_matches = _require_real_matches(min_required)
+    _refresh_simulation_seed_data(real_matches, match_limit=max(10, min_required))
 
     sim = P2PSimulation()
     sim.node_count = initial_nodes

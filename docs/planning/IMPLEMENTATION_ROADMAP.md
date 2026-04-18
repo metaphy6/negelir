@@ -3,7 +3,7 @@
 > **Note (2026-04-18):** Several items in this roadmap have been implemented: `scheduler.py`, `self_healing.py`, `schema_fingerprint.py`, `mackolik.py` scraper, `real_data.py` scraper, AI model/scraper config hardcode elimination, P2P `P2PConfig` centralization, and Go server env-driven runtime tuning. Legacy AI env fallback aliases were also removed in favor of canonical keys. For the master execution plan, see [ROADMAP.md](ROADMAP.md).
 
 **Date:** 2026-04-07
-**Scope:** Consolidated roadmap to transform Negelir from a demo-data prototype into a fully autonomous, self-sustaining Turkish football prediction system — combining findings from [AUTONOMOUS_PIPELINE.md](AUTONOMOUS_PIPELINE.md), [DATA_SOURCES.md](DATA_SOURCES.md), and [GENERIC_INPUT_HANDLING.md](GENERIC_INPUT_HANDLING.md).
+**Scope:** Consolidated roadmap to transform Negelir from a demo-data prototype into a fully autonomous, self-sustaining Turkish football prediction system — combining findings from [AUTONOMOUS_PIPELINE.md](../design/AUTONOMOUS_PIPELINE.md), [DATA_SOURCES.md](../data/DATA_SOURCES.md), and [GENERIC_INPUT_HANDLING.md](../guides/GENERIC_INPUT_HANDLING.md).
 
 **Core Constraint:** After `docker compose up`, the system runs with zero human intervention. The only manually provided infrastructure is a signal server for peer matching.
 
@@ -493,7 +493,7 @@ TFF.org is **not suitable as the primary source** due to complex ASP.NET postbac
 
 ## 4. OpenFootball + football-data.co.uk — Tertiary Sources
 
-Per [DATA_SOURCES.md](DATA_SOURCES.md):
+Per [DATA_SOURCES.md](../data/DATA_SOURCES.md):
 
 | Source | Strengths | Weaknesses |
 |---|---|---|

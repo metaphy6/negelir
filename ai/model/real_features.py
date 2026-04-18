@@ -1,6 +1,6 @@
 """
 Negelir — Real feature extraction from live scraped match data.
-Replaces generate_synthetic_dataset() with actual historical data.
+Uses only scraped historical data for training features.
 
 Sources supported:
   - MackolikClient (arsiv.mackolik.com: standings, results, fixtures, match stats)
@@ -351,7 +351,11 @@ def load_real_matches() -> list[dict]:
         log.warning(f"Mackolik scraping failed: {exc}")
 
     # Source 2: local JSON cache
-    cache_paths = ["/data/tr_super_lig_real.json", "data/tr_super_lig_real.json"]
+    league_id = cfg.default_league_id
+    cache_paths = [
+        os.path.join(cfg.data_dir, f"{league_id}_real.json"),
+        os.path.join("data", f"{league_id}_real.json"),
+    ]
     for path in cache_paths:
         if os.path.isfile(path):
             log.info(f"📥 Loading local cache: {path}")
@@ -461,7 +465,10 @@ def _is_derby(home: str, away: str) -> bool:
     return turkish_super_lig().is_derby(home, away)
 
 
-def extract_real_dataset(min_history: int = 5) -> tuple[pd.DataFrame, pd.Series]:
+def extract_real_dataset(
+    min_history: int = 5,
+    matches: list[dict] | None = None,
+) -> tuple[pd.DataFrame, pd.Series]:
     """
     Build a real training dataset from live-scraped match data.
     Each match becomes one training row with 130 features + 1 label.
@@ -472,11 +479,14 @@ def extract_real_dataset(min_history: int = 5) -> tuple[pd.DataFrame, pd.Series]
     Returns:
         (X, y) where X is a DataFrame with FEATURE_COLUMNS, y is 0/1/2 class labels
     """
-    matches = load_real_matches()
+    if matches is None:
+        matches = load_real_matches()
     if not matches:
+        league_id = cfg.default_league_id
         raise RuntimeError(
-            "No real matches available. Run `make scrape` (or scrape sources "
-            "directly) before training."
+            f"No real matches available for league '{league_id}'. "
+            f"Run `make scrape --league {league_id}` first "
+            f"(or `make bootstrap LEAGUE={league_id}`)."
         )
 
     log.info(f"🔧 Extracting features from {len(matches)} real matches...")
@@ -546,9 +556,12 @@ def extract_real_dataset(min_history: int = 5) -> tuple[pd.DataFrame, pd.Series]
         })
 
     if not rows:
+        league_id = cfg.default_league_id
         raise RuntimeError(
-            f"No matches with sufficient history (min={min_history}). "
-            "Increase historical data or lower NEGELIR_MIN_HISTORY."
+            f"No matches with sufficient history for league '{league_id}' "
+            f"(min_history={min_history}, raw_matches={len(matches)}). "
+            f"Run `make bootstrap LEAGUE={league_id}` to collect more data "
+            "or lower NEGELIR_MIN_HISTORY."
         )
 
     X = pd.DataFrame(rows, columns=FEATURE_COLUMNS)

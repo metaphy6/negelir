@@ -202,7 +202,7 @@ Currently `device.py` defines its own hyperparams that **conflict** with `League
 
 ### Subphase 1.8: Environment Template & Documentation
 
-**Files:** New `.env.example`, update `docs/SETUP.md`
+**Files:** New `.env.example`, update `docs/guides/SETUP.md`
 
 Create a comprehensive `.env.example` that documents every configurable value introduced in subphases 1.1-1.7, grouped by subsystem:
 
@@ -237,7 +237,7 @@ NEGELIR_RETRAIN_DAY=sun
 
 **Requirements to complete 1.8:**
 - [ ] `.env.example` exists with every env var and its default
-- [ ] `docs/SETUP.md` references `.env.example` as the canonical config reference
+- [ ] `docs/guides/SETUP.md` references `.env.example` as the canonical config reference
 - [ ] `docker-compose.yml` uses `env_file: .env` pattern
 - [ ] Running the project with zero custom env vars works identically to current behavior
 

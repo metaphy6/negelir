@@ -74,7 +74,7 @@ class SchemaTrainer:
 
     def augment(self, snapshot: DOMSnapshot, n_variants: int = 3) -> list[DOMSnapshot]:
         """
-        Generate synthetic training examples by mutating a snapshot.
+        Generate augmented training examples by mutating a snapshot.
         - Rename CSS classes
         - Modify tag histogram slightly
         """

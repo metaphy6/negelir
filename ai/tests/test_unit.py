@@ -1239,13 +1239,13 @@ class TestQIDFeatureColumnsExpansion:
         assert "qid_score_predict" in qid_cols
 
     def test_synthetic_dataset_shape(self):
-        from model.features import generate_synthetic_dataset
+        from .fixtures import generate_synthetic_dataset
         X, y = generate_synthetic_dataset(n_matches=20, seed=99)
         assert X.shape == (20, 130)
         assert len(y) == 20
 
     def test_qid_synthetic_values_in_range(self):
-        from model.features import generate_synthetic_dataset
+        from .fixtures import generate_synthetic_dataset
         X, _ = generate_synthetic_dataset(n_matches=50, seed=99)
         for col in X.columns:
             if col.startswith("qid_"):
@@ -2381,13 +2381,20 @@ class TestIncrementalRetrain:
     def test_incremental_retrain_produces_valid_model(self):
         from model.trainer import train_model, incremental_retrain
         import tempfile
+        from unittest.mock import patch
+        from .fixtures import generate_synthetic_dataset
+
+        X_train, y_train = generate_synthetic_dataset(n_matches=160, seed=7)
+        raw_stub = [{"id": i} for i in range(250)]
+
         # Train initial model
         with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
             path = f.name
         try:
-            model = train_model(save_path=path)
+            with patch("model.real_features.load_real_matches", return_value=raw_stub), \
+                    patch("model.real_features.extract_real_dataset", return_value=(X_train, y_train)):
+                model = train_model(save_path=path)
             # Create small new dataset
-            from model.features import generate_synthetic_dataset
             X_new, y_new = generate_synthetic_dataset(n_matches=50, seed=99)
             updated = incremental_retrain(path, X_new, y_new, n_rounds=5)
             # Should still produce predictions

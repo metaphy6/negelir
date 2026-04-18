@@ -15,9 +15,10 @@ from common.constants import (
     FOOTBALL_KEYWORDS, BANNED_WORDS, MODEL_VERSION,
 )
 from model.features import (
-    FEATURE_COLUMNS, generate_synthetic_dataset, inject_noise,
+    FEATURE_COLUMNS, inject_noise,
     extract_features_for_match,
 )
+from model.real_features import extract_real_dataset
 from model.inference import GBDTInference
 from proofreader.validator import DataProofreader, RANGES
 from tqu.classifier import classify
@@ -119,17 +120,25 @@ def show_features():
 
 
 # ─────────────────────────────────────────────────────────
-#  3. SYNTHETIC TRAINING DATA SAMPLE
+#  3. REAL TRAINING DATA SAMPLE
 # ─────────────────────────────────────────────────────────
 def show_training_data():
     header(
-        f"3. SYNTHETIC TRAINING DATA — {SHOWCASE_SAMPLE_MATCHES} matches, "
+        f"3. REAL TRAINING DATA — up to {SHOWCASE_SAMPLE_MATCHES} matches, "
         f"{N_FEATURES} features each"
     )
-    X, y = generate_synthetic_dataset(
-        n_matches=SHOWCASE_SAMPLE_MATCHES,
-        seed=SHOWCASE_RANDOM_SEED,
-    )
+    try:
+        X_all, y_all = extract_real_dataset(min_history=5)
+    except Exception as exc:
+        print("\n  ❌ Real dataset unavailable")
+        print(f"  Reason: {exc}")
+        print(f"  Fix: Run `make bootstrap LEAGUE={cfg.default_league_id}` first")
+        return
+
+    sample_n = min(SHOWCASE_SAMPLE_MATCHES, len(X_all))
+    X = X_all.head(sample_n).copy()
+    y = y_all.head(sample_n).copy()
+
     X_noised = inject_noise(
         X,
         noise_pct=SHOWCASE_NOISE_PCT,

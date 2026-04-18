@@ -136,7 +136,15 @@ class PipelineRunner:
 
         # Last resort: use existing real JSON
         log.info("⚠️  Falling back to local data cache")
-        ctx.raw_matches = self._load_cached_matches()
+        try:
+            ctx.raw_matches = self._load_cached_matches()
+        except Exception as exc:
+            return TaskResult(
+                success=False,
+                error=str(exc),
+                duration_ms=(time.time() - t0) * 1000,
+            )
+
         log.info(f"📦 {len(ctx.raw_matches)} matches passed to pipeline")
         return TaskResult(success=True, duration_ms=(time.time() - t0) * 1000)
 
@@ -148,7 +156,7 @@ class PipelineRunner:
         self._ensure_model()
         log.info(f"⚙️  Processing {len(ctx.raw_matches)} match records...")
 
-        # In PoC, features are already numeric from synthetic generation
+        # Features are already numeric from upstream data processors.
         ctx.features = {"processed": True, "match_count": len(ctx.raw_matches)}
         log.info("✅ Feature extraction complete")
         return TaskResult(success=True, duration_ms=(time.time() - t0) * 1000)
@@ -604,11 +612,25 @@ class PipelineRunner:
                     with open(path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     matches = data.get("matches", [])
+                    if not matches:
+                        raise RuntimeError(
+                            f"Cached file exists but has no matches: {path}. "
+                            f"Run `make scrape --league {league_id}` first."
+                        )
                     log.info(f"📦 Loaded {len(matches)} cached matches from {path}")
                     return matches
                 except Exception as exc:
-                    log.warning(f"Cache load failed ({path}): {exc}")
-        return []
+                    raise RuntimeError(
+                        f"Failed to load cached data from {path}: {exc}. "
+                        f"Run `make scrape --league {league_id}` first."
+                    ) from exc
+
+        expected = os.path.join(cfg.data_dir, f"{league_id}_real.json")
+        raise RuntimeError(
+            f"No cached real data found for league '{league_id}'. "
+            f"Expected {expected}. Run `make scrape --league {league_id}` first "
+            f"(or `make bootstrap LEAGUE={league_id}`)."
+        )
 
 
 if __name__ == "__main__":

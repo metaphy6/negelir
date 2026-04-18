@@ -93,6 +93,7 @@ make up-detached     # Or run in background
 
 ### 2️⃣ Run AI Demo
 ```bash
+make bootstrap       # Scrape + validate real data cache (required before training)
 make ai-demo         # Run 22 Turkish Q&A questions
 make ai              # Run full pipeline (scrape → analyze → respond)
 ```
@@ -135,10 +136,13 @@ make test-p2p        # P2P only (24 tests)
 | `make status` | Show running containers |
 | `make ports` | Show exposed ports |
 | **🤖 AI** | |
+| `make scrape` | Scrape real data cache for `LEAGUE` |
+| `make bootstrap` | Scrape + validate cache before training |
+| `make train` | Train model with strict real-data precheck |
 | `make ai` | Run AI pipeline |
 | `make ai-demo` | Run Turkish Q&A demo |
 | `make ai-pipeline` | Full pipeline (scrape → respond) |
-| `make ai-train` | Train GBDT model |
+| `make ai-train` | Alias of `make train` |
 | `make ai-tqu-test` | Test TQU classifier |
 | `make ai-continuous` | 🔄 Continuous AI pipeline |
 | `make ai-continuous-demo` | 🔄 Continuous AI demo |
@@ -316,12 +320,15 @@ negelir/
 │   └── 001_initial.sql
 ├── 📁 data/                   ← Runtime data (Docker volume)
 │   └── models/               ← Trained model files
-└── 📚 docs/                   ← Documentation
-    ├── architecture.md
-    ├── feasibility.md
-    ├── roadmap.md
-    ├── scraping.md
-    └── setup.md
+└── 📚 docs/                   ← Documentation (organized by topic/type)
+       ├── README.md              ← Documentation index
+       ├── design/
+       ├── planning/
+       ├── data/
+       ├── p2p/
+       ├── reports/
+       ├── guides/
+       └── analysis/
 ```
 
 ---

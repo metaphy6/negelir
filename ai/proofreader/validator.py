@@ -10,6 +10,9 @@ Per roadmap §5.1 proofreading logic:
 """
 
 from dataclasses import dataclass, field
+import json
+import os
+import sys
 from common.logger import get_logger
 
 log = get_logger("proofreader")
@@ -171,3 +174,114 @@ class DataProofreader:
                 result.errors.append(
                     f"Implausible score: {home_score}-{away_score}"
                 )
+
+
+def _normalise_input_match(raw_match: dict) -> dict | None:
+    """Normalise a raw match record into validator-compatible fields."""
+    if "home_score" in raw_match and "away_score" in raw_match:
+        return raw_match
+
+    score = raw_match.get("score", {}) if isinstance(raw_match, dict) else {}
+    ft = score.get("ft") if isinstance(score, dict) else None
+    ht = score.get("ht") if isinstance(score, dict) else None
+
+    if not isinstance(ft, (list, tuple)) or len(ft) != 2:
+        return None
+
+    ht_home = 0
+    ht_away = 0
+    if isinstance(ht, (list, tuple)) and len(ht) == 2:
+        ht_home = ht[0]
+        ht_away = ht[1]
+
+    stats = raw_match.get("stats", {}) if isinstance(raw_match, dict) else {}
+    if not isinstance(stats, dict):
+        stats = {}
+
+    return {
+        "home_team": raw_match.get("team1") or raw_match.get("home") or "",
+        "away_team": raw_match.get("team2") or raw_match.get("away") or "",
+        "home_score": ft[0],
+        "away_score": ft[1],
+        "ht_home_score": ht_home,
+        "ht_away_score": ht_away,
+        "stats": stats,
+    }
+
+
+def main() -> int:
+    """CLI entry point for validating scraped match datasets."""
+    import argparse
+
+    from common.config import cfg
+
+    parser = argparse.ArgumentParser(description="Validate real match dataset JSON")
+    parser.add_argument("--input", required=True, help="Path to JSON dataset (expects `matches` array)")
+    parser.add_argument(
+        "--min-matches",
+        type=int,
+        default=cfg.training_min_matches,
+        help=f"Minimum required match count (default: {cfg.training_min_matches})",
+    )
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.input):
+        print(f"ERROR: Input file not found: {args.input}", file=sys.stderr)
+        return 2
+
+    with open(args.input, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    if isinstance(payload, dict):
+        raw_matches = payload.get("matches", [])
+    elif isinstance(payload, list):
+        raw_matches = payload
+    else:
+        print("ERROR: Unsupported JSON structure (expected dict or list)", file=sys.stderr)
+        return 2
+
+    if len(raw_matches) < args.min_matches:
+        print(
+            f"ERROR: Insufficient matches in {args.input}: "
+            f"found={len(raw_matches)}, required>={args.min_matches}",
+            file=sys.stderr,
+        )
+        return 1
+
+    normalised = []
+    skipped = 0
+    for m in raw_matches:
+        nm = _normalise_input_match(m)
+        if nm is None:
+            skipped += 1
+            continue
+        normalised.append(nm)
+
+    if len(normalised) < args.min_matches:
+        print(
+            f"ERROR: Too many malformed records in {args.input}: "
+            f"usable={len(normalised)}, skipped={skipped}, required>={args.min_matches}",
+            file=sys.stderr,
+        )
+        return 1
+
+    proofreader = DataProofreader()
+    result = proofreader.validate_batch(normalised)
+    quarantined = len(result.quarantined)
+    total = len(normalised)
+    quarantine_rate = (quarantined / total) if total else 0.0
+
+    print(
+        "VALIDATION SUMMARY: "
+        f"total={total}, quarantined={quarantined}, "
+        f"quarantine_rate={quarantine_rate:.1%}, warnings={len(result.warnings)}, errors={len(result.errors)}"
+    )
+
+    if not result.is_valid:
+        print("ERROR: Validation failed (quarantine/error threshold exceeded)", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
