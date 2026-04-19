@@ -19,9 +19,8 @@ class OrchestratorState(Enum):
     PROOFREADING = "proofreading"
     RESPONDING = "responding"
     VALIDATING = "validating"
-    # Phase 3 — full-system training pipeline observation states
+    # Phase 3 — training pipeline observation states
     TRAINING = "training"
-    P2P_SIMULATION = "p2p_simulation"
     VERIFYING = "verifying"
     REPORTING = "reporting"
     ERROR = "error"
@@ -130,15 +129,13 @@ class TaskOrchestrator:
     def _on_validating(self):
         log.info("✔️  Result validation phase")
 
-    # ── Phase 3 — Full-System Training Pipeline observer ──────────
+    # ── Phase 3 — Training Pipeline observer ──────────
 
     _STAGE_TO_STATE = {
         "scrape": OrchestratorState.SCRAPING,
         "validate": OrchestratorState.PROOFREADING,
         "split": OrchestratorState.PROCESSING,
         "train": OrchestratorState.TRAINING,
-        "p2p_sim": OrchestratorState.P2P_SIMULATION,
-        "ensemble": OrchestratorState.P2P_SIMULATION,
         "verify": OrchestratorState.VERIFYING,
         "report": OrchestratorState.REPORTING,
     }
@@ -147,17 +144,15 @@ class TaskOrchestrator:
         self,
         *,
         league_id: str | None = None,
-        node_count: int | None = None,
         verification_window_weeks: int | None = None,
         force_from: str | None = None,
-        skip_p2p: bool = False,
     ):
         """Drive the Phase 3 `TrainingPipeline` and surface stage transitions
         through this orchestrator's state machine.
         """
         from pipeline.training_pipeline import TrainingPipeline
 
-        section_banner("Orchestrator: Full-System Training")
+        section_banner("Orchestrator: Training Pipeline")
 
         def _on_start(stage: str, payload: dict):
             target = self._STAGE_TO_STATE.get(stage, OrchestratorState.IDLE)
@@ -168,17 +163,16 @@ class TaskOrchestrator:
 
         pipeline = TrainingPipeline(
             league_id=league_id,
-            node_count=node_count,
             verification_window_weeks=verification_window_weeks,
             on_stage_start=_on_start,
             on_stage_end=_on_end,
         )
         try:
-            report = pipeline.run(force_from=force_from, skip_p2p=skip_p2p)
+            report = pipeline.run(force_from=force_from)
             self.transition(OrchestratorState.IDLE)
             return report
         except Exception as exc:
-            log.error(f"⛔ Full training pipeline failed: {exc}")
+            log.error(f"⛔ Training pipeline failed: {exc}")
             self.transition(OrchestratorState.ERROR)
             raise
 
@@ -187,58 +181,27 @@ def _cli() -> int:
     """CLI entrypoint:
 
     python -m orchestrator.state_machine --mode full-training [--league ID]
-                                         [--force-from STAGE] [--skip-p2p]
-    python -m orchestrator.state_machine --mode model-only --league ID
-    python -m orchestrator.state_machine --mode sim-only --league ID --model PATH
+                                         [--force-from STAGE]
     """
     import argparse
 
     parser = argparse.ArgumentParser(description="Negelir orchestrator CLI")
-    parser.add_argument("--mode", required=True,
-                        choices=["full-training", "model-only", "sim-only"])
+    parser.add_argument("--mode", required=True, choices=["full-training"])
     parser.add_argument("--league", default=None)
-    parser.add_argument("--nodes", type=int, default=None)
     parser.add_argument("--window-weeks", type=int, default=None)
     parser.add_argument("--force-from", default=None,
                         help="Stage to force re-run from (scrape/validate/split/train/...)")
-    parser.add_argument("--skip-p2p", action="store_true")
-    parser.add_argument("--model", default=None, help="Existing model path (sim-only mode)")
     args = parser.parse_args()
 
     orch = TaskOrchestrator()
-    if args.mode == "full-training":
-        report = orch.run_full_training(
-            league_id=args.league,
-            node_count=args.nodes,
-            verification_window_weeks=args.window_weeks,
-            force_from=args.force_from,
-            skip_p2p=args.skip_p2p,
-        )
-    elif args.mode == "model-only":
-        report = orch.run_full_training(
-            league_id=args.league,
-            node_count=args.nodes,
-            verification_window_weeks=args.window_weeks,
-            force_from=args.force_from,
-            skip_p2p=True,
-        )
-    else:  # sim-only
-        from pipeline.training_pipeline import TrainingPipeline
-        from pipeline.training_artifacts import (
-            ScrapeArtifact, SplitArtifact, TrainingArtifact,
-        )
-        if not args.model:
-            parser.error("--model is required for sim-only mode")
-        # Build a minimal pipeline run that re-uses cached scrape/split artifacts.
-        pipe = TrainingPipeline(
-            league_id=args.league,
-            node_count=args.nodes,
-            verification_window_weeks=args.window_weeks,
-        )
-        report = pipe.run(force_from="p2p_sim", skip_p2p=False)
+    report = orch.run_full_training(
+        league_id=args.league,
+        verification_window_weeks=args.window_weeks,
+        force_from=args.force_from,
+    )
 
     print(f"Verdict: {report.verdict}  →  {report.txt_path}")
-    return 0 if report.verdict in ("PASS", "PASS_DEGRADED") else 1
+    return 0 if report.verdict == "PASS" else 1
 
 
 if __name__ == "__main__":

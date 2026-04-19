@@ -553,15 +553,6 @@ def show_data_flow():
                         │ analysis dict
                         ▼
     ┌─────────────────────────────────────────────────────────────────────┐
-    │  P2P CONSENSUS (multi-node)                                        │
-    │  • Local analysis + reputation-weighted peer ensemble              │
-    │  • 50% self-trust + 50% weighted average of peers                  │
-    │  • Sybil resistance: biased nodes lose reputation over time        │
-    │  • Trust levels: new(0.1) → low(0.2) → medium(0.5) → high(1.0)   │
-    └───────────────────┬─────────────────────────────────────────────────┘
-                        │ consensus analysis
-                        ▼
-    ┌─────────────────────────────────────────────────────────────────────┐
     │  TQU — Turkish Question Understanding                              │
     │  Input:  "Galatasaray Fenerbahçe maçını kim kazanır?"              │
     │  Steps:  sanitize → normalize → domain gate → intent classify      │

@@ -2,12 +2,12 @@
 # Negelir — Canonical default configuration reference.
 # -----------------------------------------------------------------------------
 # This file is the single human-readable source of truth for every tunable
-# default in the AI + P2P stacks.
+# default in the AI stack.
 #
-#   * Authoritative runtime values live in `ai/common/config.py` (Config),
-#     `ai/common/league_config.py` (LeagueConfig) and `p2p/config.py`
-#     (P2PConfig); each `field(default_factory=...)` reads the matching
-#     environment variable shown below, falling back to the value listed here.
+#   * Authoritative runtime values live in `ai/common/config.py` (Config) and
+#     `ai/common/league_config.py` (LeagueConfig); each
+#     `field(default_factory=...)` reads the matching environment variable
+#     shown below, falling back to the value listed here.
 #   * `.env.example` mirrors these env-var names — keep all three files in
 #     sync when adding new tunables.
 #   * Nothing imports this file at runtime (it is documentation), so editing a
@@ -203,32 +203,3 @@ league:
       - "Galatasaray son maçta muhteşem bir galibiyet aldı, takım morali çok yüksek"
       - "Fenerbahçe'de sakatlık krizi devam ediyor, taraftar moral bozuk"
       - "Beşiktaş istikrarlı oynuyor, savunma sağlam gidiyor"
-
-# ── P2P network (see p2p/config.py) ──────────────────────────────────────────
-p2p:
-  data_dir: /data            # DATA_DIR  (shared with AI)
-  default_league_id: super_lig             # NEGELIR_DEFAULT_LEAGUE_ID
-  simulation_min_real_matches: 10          # P2P_SIM_MIN_REAL_MATCHES
-  message_ttl_hours: 168                   # P2P_MESSAGE_TTL_HOURS  (7 days)
-  data_ttl_hours: 168                      # P2P_DATA_TTL_HOURS
-  discovery:
-    multicast_group: 239.42.42.1           # P2P_MULTICAST_GROUP
-    multicast_port: 9743                   # P2P_MULTICAST_PORT
-    interval_sec: 30                       # P2P_DISCOVERY_INTERVAL_SEC
-    multicast_ttl: 2                       # P2P_MULTICAST_TTL
-  tcp:
-    host: 0.0.0.0                          # P2P_TCP_HOST
-    port: 9742                             # P2P_TCP_PORT
-    connect_timeout_sec: 5.0               # P2P_TCP_CONNECT_TIMEOUT_SEC
-    read_timeout_sec: 10.0                 # P2P_TCP_READ_TIMEOUT_SEC
-    max_message_size: 1048576              # P2P_TCP_MAX_MESSAGE_SIZE  (1 MiB)
-  simulation:
-    latency_min_ms: 20.0                   # P2P_SIM_LATENCY_MIN_MS
-    latency_max_ms: 150.0                  # P2P_SIM_LATENCY_MAX_MS
-    drop_rate: 0.02                        # P2P_SIM_DROP_RATE
-    k_neighbors: 8                         # P2P_SIM_K_NEIGHBORS
-    gossip_fanout: 3                       # P2P_SIM_GOSSIP_FANOUT
-  schema_gossip:
-    quorum: 3                              # P2P_SCHEMA_QUORUM
-    vote_timeout_sec: 600                  # P2P_SCHEMA_VOTE_TIMEOUT_SEC
-    confidence_floor: 0.6                  # P2P_SCHEMA_CONFIDENCE_FLOOR

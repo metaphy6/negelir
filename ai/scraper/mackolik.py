@@ -1,6 +1,9 @@
 """
 Negelir — arsiv.mackolik.com JSON API Client.
-Phase 1: Core data source for Turkish Süper Lig scraping.
+Phase 1: TR-source adapter for the Turkish Süper Lig (seeded default league).
+Mackolik is a Turkish-language site; for other leagues use openfootball or
+football-data.co.uk via `scraper/real_data.py` (both selected per
+`LeagueConfig`).
 
 Endpoints:
   - CompetitionHandler.aspx: season discovery (years + season IDs)

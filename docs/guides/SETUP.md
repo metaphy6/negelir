@@ -1,146 +1,91 @@
-# Negelir — Setup Guide
+# 🚀 Setup Guide — Zero to Running Stack
 
-## Prerequisites
+> Companion to [`../planning/ROADMAP.md`](../planning/ROADMAP.md).
+> Targets a Linux dev host with Docker + Docker Compose v2.
+> Windows / WSL2 should work; macOS works for CPU-only paths.
 
-| Tool | Minimum Version | Description |
-|------|-----------------|-------------|
-| Docker | 24.0+ | Container runtime |
-| Docker Compose | 2.20+ | Multi-container orchestration |
-| Make | 4.0+ | Build automation |
-| Git | 2.40+ | Version control |
+## 0. Prerequisites
 
-### Optional (local development)
+- Docker Engine 24+ with Compose v2 (`docker compose version`).
+- `make` (any GNU make).
+- ~10 GB free disk for images + seed corpus.
+- (Optional) NVIDIA GPU + recent driver + `nvidia-container-toolkit` for GPU training.
 
-| Tool | Version | Description |
-|------|---------|-------------|
-| Python | 3.11+ | AI module development |
-| Go | 1.22+ | Server development |
-| CUDA | 12.0+ | GPU acceleration (target: RTX 4080) |
-
-> **Infrastructure note:** PostgreSQL, Redis, and the Go middleware server are **local
-> development tools only**. They provide a convenient way to inspect raw scraped data
-> and cached feature payloads during development. They are **not** required to run the
-> AI engine, and they are **not** part of the production deployment. The AI service
-> (`ai/`) is fully self-contained and connects directly to its configured scraping
-> sources.
-
-## Quick Start
+## 1. Clone and bootstrap env
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/metaphy6/negelir.git
+git clone <repo>
 cd negelir
-
-# 2. Create environment file
-cp .env.example .env
-
-# 3. Start all services
-make up
-
-# 4. Health check
-make health
-
-# 5. AI demo
-make ai-demo
+make env             # creates .env from .env.example
 ```
 
-## All Commands
+> Edit `.env` if you need to override anything. **Never commit `.env`.**
+
+## 2. Bring up the mock-data stack (one-time per machine)
 
 ```bash
-make help          # List all commands
-
-# === Core ===
-make up            # Start with Docker Compose
-make down          # Stop all services
-make restart       # Restart all services
-make logs          # Follow all logs
-make health        # Health check
-
-# === AI ===
-make ai            # AI service only
-make ai-demo       # AI demo mode (11 Turkish questions)
-make ai-pipeline   # Run full pipeline
-make ai-train      # Model training
-make ai-tqu-test   # TQU test mode
-
-# === P2P ===
-make p2p            # P2P service
-make p2p-simulate   # P2P simulation (5 nodes, 10 matches)
-
-# === Server ===
-make server         # Go middleware server
-make server-scrape  # Trigger scrape task
-
-# === Database ===
-make db-shell       # Open PostgreSQL shell
-make db-migrate     # Run migrations
-make db-reset       # Reset database
-
-# === Cleanup ===
-make clean          # Clean Docker data
-make nuke           # Delete everything (CAUTION!)
+make mock-ca-init    # generate self-signed root CA
+make mock-certs      # generate per-domain leaf certs
+make hosts-install   # adds .local hostnames to /etc/hosts (sudo)
+make mock-up         # nginx-mock + mocksrv + seeded postgres
+make mock-verify     # offline integrity check
 ```
 
-## GPU Configuration
+> 🌐 You now have a fully local "fake internet". The scrapers will hit it instead of the real sites.
 
-### NVIDIA GPU (recommended: RTX 4080)
+## 3. Bring up the swarm
 
-1. Install NVIDIA Container Toolkit
-2. Set `AI_DEVICE=cuda` in `.env`
-3. Enable the GPU deploy block in `docker-compose.yml`
-
-```yaml
-# In docker-compose.yml under the ai service:
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: 1
-          capabilities: [gpu]
-```
-
-### CPU Mode (default)
-
-No additional configuration required. The system runs in CPU mode automatically.
-Set `AI_DEVICE=cpu` or leave empty.
-
-## Environment Variables
-
-Use `.env.example` as the canonical source of every configurable key.
-
-| Group | Canonical Prefix/Keys | Description |
-|------|------------------------|-------------|
-| AI runtime | `NEGELIR_*` | Scheduler, scraper, model, telemetry defaults for `ai/common/config.py` |
-| P2P network | `P2P_*` | Discovery, transport, gossip consensus, retention, simulation |
-| Server runtime | `DB_*`, `HTTP_*`, `CACHE_*`, `SERVER_PORT` | Go server DB pool, HTTP timeouts, cache TTLs, listen port |
-| Infra connectivity | `POSTGRES_*`, `REDIS_*`, `DATABASE_URL`, `REDIS_URL` | Database/Redis connection settings |
-| Device and logs | `AI_DEVICE`, `AI_LOG_LEVEL` | Inference hardware target and logging verbosity |
-
-Legacy fallback aliases were removed. Set canonical keys directly to avoid ambiguity.
-
-## Troubleshooting
-
-### Docker memory error
 ```bash
-# Increase Docker memory limit (at least 4GB)
-# Docker Desktop → Settings → Resources → Memory
+make up-dev          # postgres + redis + go api + swarm agents (compose dev profile)
+make smoke           # end-to-end happy path
 ```
 
-### PostgreSQL connection error
+If `make smoke` is green you're running.
+
+## 4. Common commands
+
 ```bash
-# Check container logs
-docker compose logs postgres
-
-# Try manual connection
-make db-shell
+make logs                   # tail everything
+make swarmctl-ps            # list agents + heartbeats
+make swarmctl-tail TOPIC=predict.final
+make ai-shell               # shell into the AI image
+make test                   # full test suite
+make backtest WEEKS=3       # offline historical backtest
 ```
 
-### GPU not detected
+## 5. GPU / NPU
+
 ```bash
-# Check NVIDIA driver
-nvidia-smi
-
-# Check inside container
-docker compose exec ai python -c "import xgboost; print(xgboost.build_info())"
+NEGELIR_DEVICE=cuda make up-dev    # force CUDA
+NEGELIR_DEVICE=npu  make up-dev    # force OpenVINO NPU
+NEGELIR_DEVICE=cpu  make up-dev    # force CPU
+NEGELIR_DEVICE=auto make up-dev    # default; picks the best available
 ```
+
+## 6. Tear down
+
+```bash
+make down                # stop containers, keep volumes
+make hosts-uninstall     # remove .local hostnames
+make clean               # remove containers + local images
+make clean-all           # also drop volumes (⚠️ wipes data)
+```
+
+## 7. Refresh seed corpus (rare, deliberate)
+
+```bash
+make mock-capture        # ⚠️ hits the real internet, rate-limited
+git diff infra/mock/seeds/manifest.json  # review what changed
+```
+
+> Captures land as a separate commit, ideally reviewed for shape changes before merging.
+
+## 8. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `x509: certificate signed by unknown authority` inside an agent | CA not mounted into image | `make mock-ca-trust` rebuilds & re-trusts |
+| `mackolik.local: name or service not known` | hosts file not edited | `make hosts-install` |
+| Predictor OOM on training | XGBoost on GPU + tiny VRAM | set `NEGELIR_DEVICE=cpu` for training only |
+| `make smoke` fails on auth | no seeded user | `make seed-dev-user` |
+| Agent missing from `swarmctl ps` | image not built / crashed | `make logs` then `docker compose up -d --build <svc>` |

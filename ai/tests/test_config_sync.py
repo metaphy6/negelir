@@ -2,8 +2,8 @@
 Phase 1 follow-up regression tests.
 
 Goal: prevent silent drift between the runtime configuration surface
-(`ai/common/config.py`, `p2p/config.py`, `ai/common/league_config.py`) and
-the documentation surface (`.env.example`).
+(`ai/common/config.py`, `ai/common/league_config.py`) and the documentation
+surface (`.env.example`).
 
 These tests do not require any external services. They run in any
 environment where the source tree is checked out.
@@ -21,13 +21,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 AI_CONFIG = REPO_ROOT / "ai" / "common" / "config.py"
-P2P_CONFIG = REPO_ROOT / "p2p" / "config.py"
-# Some env vars are still read directly via os.getenv() at the call site
-# (e.g. P2P simulation runner) instead of through a centralized dataclass.
-# They are intentionally documented in .env.example, so include them in the scan.
-_EXTRA_PYTHON_SCAN = (
-    REPO_ROOT / "p2p" / "simulation" / "runner.py",
-)
 
 # Env vars listed in .env.example but intentionally not consumed by the
 # Python config layer (Go server, docker-compose, optional features).
@@ -66,7 +59,7 @@ def _env_example_keys() -> set[str]:
 
 def _python_env_keys() -> set[str]:
     keys: set[str] = set()
-    for path in (AI_CONFIG, P2P_CONFIG, *_EXTRA_PYTHON_SCAN):
+    for path in (AI_CONFIG,):
         keys.update(_GETENV_RE.findall(_read(path)))
     return keys
 
@@ -76,7 +69,7 @@ def test_env_example_exists() -> None:
 
 
 def test_every_python_env_var_is_documented() -> None:
-    """Every os.getenv("FOO") in config.py / p2p/config.py must appear in .env.example."""
+    """Every os.getenv("FOO") in config.py must appear in .env.example."""
     docs = _env_example_keys()
     code = _python_env_keys()
     undocumented = sorted((code - docs) - _DOCS_OPTIONAL_ENV_KEYS)
@@ -87,15 +80,12 @@ def test_every_python_env_var_is_documented() -> None:
 
 
 def test_every_documented_env_var_is_consumed() -> None:
-    """Every NEGELIR_*/P2P_*/SCRAPE_* key in .env.example must be read somewhere."""
+    """Every NEGELIR_*/SCRAPE_* key in .env.example must be read somewhere."""
     docs = _env_example_keys()
     code = _python_env_keys()
-    # Cross-language keys (POSTGRES_*, REDIS_*, AI_*, MACKOLIK_*, OPENFOOTBALL_*,
-    # FOOTBALLDATA_*, BOOTSTRAP_*, DATA_DIR, MODEL_DIR) are consumed by Python
-    # too, but the strict subset below MUST appear in code.
     must_be_consumed = {
         k for k in docs
-        if k.startswith(("NEGELIR_", "P2P_", "SCRAPE_"))
+        if k.startswith(("NEGELIR_", "SCRAPE_"))
     }
     orphans = sorted(must_be_consumed - code - _PYTHON_UNUSED_ENV_KEYS)
     assert not orphans, (
@@ -112,12 +102,12 @@ def test_ai_config_validate_passes_with_defaults() -> None:
     assert issues == [], f"Default Config has validation issues: {issues}"
 
 
-def test_p2p_config_validate_passes_with_defaults() -> None:
-    """`P2PConfig.validate()` must accept the shipped defaults with zero issues."""
-    from p2p.config import P2PConfig
-
-    issues = P2PConfig().validate()
-    assert issues == [], f"Default P2PConfig has validation issues: {issues}"
+def test_p2p_module_removed() -> None:
+    """Phase 0 swarm pivot: p2p/ directory must stay deleted."""
+    assert not (REPO_ROOT / "p2p").exists(), (
+        "p2p/ directory was removed in Phase 0 — do not re-introduce it. "
+        "The swarm replacement lives under roadmap Phase 5+."
+    )
 
 
 def test_ai_config_strict_validate_raises_on_bad_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,7 +120,7 @@ def test_ai_config_strict_validate_raises_on_bad_value(monkeypatch: pytest.Monke
 
 
 def test_league_config_pickle_roundtrip() -> None:
-    """LeagueConfig must survive pickle (P2P sim ships the model + config)."""
+    """LeagueConfig must survive pickle (model bundles ride with config)."""
     from common.league_config import get_league_config
 
     cfg = get_league_config("tr_super_lig")
@@ -141,22 +131,11 @@ def test_league_config_pickle_roundtrip() -> None:
     assert restored.derbies == cfg.derbies
 
 
-def test_p2p_config_pickle_roundtrip() -> None:
-    """P2PConfig must survive pickle so it can ride along with peer state."""
-    from p2p.config import P2PConfig
-
-    cfg = P2PConfig()
-    restored = pickle.loads(pickle.dumps(cfg))
-    assert restored.tcp_port == cfg.tcp_port
-    assert restored.message_ttl_hours == cfg.message_ttl_hours
-    assert restored.sim_drop_rate == cfg.sim_drop_rate
-
-
 def test_no_synthetic_imports_in_production_code() -> None:
     """Phase 2 gate: no production module may import the synthetic generator."""
     forbidden = re.compile(r"\bgenerate_synthetic_dataset\b")
     offenders: list[str] = []
-    for module_root in ("ai", "p2p"):
+    for module_root in ("ai",):
         root = REPO_ROOT / module_root
         for py in root.rglob("*.py"):
             # Tests, fixtures and the test-data CLI are the allowed home.

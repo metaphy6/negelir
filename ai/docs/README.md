@@ -2,12 +2,15 @@
 
 ## Overview
 
-AI engine that analyzes Turkish football matches and produces Turkish-language responses to user questions.
+Multi-league football AI engine. Analyzes matches from any league registered
+in `ai/common/league_config.py` (seeded default: Turkish Süper Lig; Phase 13
+adds top European leagues + cups), and produces user-facing responses in
+Turkish per the project doctrine *"Turkish UX, English infra"*.
 
 ## Modules
 
 ### TQU (Turkish Question Understanding)
-Module that understands and classifies Turkish football questions.
+User-facing question-understanding layer (Turkish input).
 - 10 intent types: `match_winner`, `draw`, `over_under`, `goal_range`, `both_teams_score`, `clean_sheet`, `half_time`, `form_query`, `head_to_head`, `score_predict`
 - Input sanitization: injection prevention, Turkish character normalization
 - Confidence threshold: 0.60

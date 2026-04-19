@@ -69,28 +69,27 @@ def test_full_training_pipeline_end_to_end(tmp_path: Path, monkeypatch) -> None:
 
     pipeline = TrainingPipeline(
         league_id=league,
-        node_count=3,
         verification_window_weeks=2,
         report_dir=str(tmp_path / "reports"),
         on_stage_end=_on_end,
     )
 
-    report = pipeline.run(skip_p2p=False)
+    report = pipeline.run()
 
     # ── Report contract ────────────────────────────────────────
     assert report.schema_version == 1
-    assert report.verdict in {"PASS", "PASS_DEGRADED", "FAIL"}
+    assert report.verdict in {"PASS", "FAIL"}
     assert report.run_id
     assert report.league_id == league
     assert report.txt_path and Path(report.txt_path).is_file()
     assert report.json_path and Path(report.json_path).is_file()
 
-    # JSON report parses and carries all 7 stage sections.
+    # JSON report parses and carries all stage sections.
     with open(report.json_path, "r", encoding="utf-8") as f:
         json_report = json.load(f)
     assert json_report["schema_version"] == 1
     assert json_report["verdict"] == report.verdict
-    for section in ("scrape", "validate", "split", "train", "p2p", "ensemble", "verify"):
+    for section in ("scrape", "validate", "split", "train", "verify"):
         assert section in json_report["stages"], f"missing stage section: {section}"
 
     # ── Per-stage artifact sidecars ────────────────────────────
@@ -140,35 +139,3 @@ def test_full_training_pipeline_end_to_end(tmp_path: Path, monkeypatch) -> None:
         "received only the holdout slice instead of the full chronological history."
     )
     assert verify_section["overall_acc"] > 0.0
-
-
-@pytest.mark.integration
-def test_full_training_pipeline_skip_p2p(tmp_path: Path, monkeypatch) -> None:
-    """skip_p2p=True must yield p2p_status='skipped' and still produce a report."""
-    league = _find_real_league()
-    if league is None:
-        pytest.skip("No cached real-league data; see test_full_training_pipeline_end_to_end.")
-
-    repo_data = Path(__file__).resolve().parent.parent.parent / "data"
-    (tmp_path / "models").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "reports").mkdir(parents=True, exist_ok=True)
-
-    from common.config import cfg
-    monkeypatch.setattr(cfg, "model_dir", str(tmp_path / "models"))
-    monkeypatch.setattr(cfg, "data_dir", str(repo_data))
-    monkeypatch.setattr(cfg, "report_dir", str(tmp_path / "reports"))
-
-    from pipeline.training_pipeline import TrainingPipeline
-
-    pipeline = TrainingPipeline(
-        league_id=league,
-        node_count=3,
-        verification_window_weeks=2,
-        report_dir=str(tmp_path / "reports"),
-    )
-    report = pipeline.run(skip_p2p=True)
-
-    with open(report.json_path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    assert payload["stages"]["p2p"]["p2p_status"] == "skipped"
-    assert report.verdict in {"PASS_DEGRADED", "PASS", "FAIL"}

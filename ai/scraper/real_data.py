@@ -127,7 +127,12 @@ class RealDataScraper:
     # ── Source 1: openfootball ───────────────────────────
 
     def scrape_openfootball(self) -> list[RealMatch]:
-        """Fetch all available Turkish Süper Lig seasons from openfootball."""
+        """Fetch all available seasons for the active league from openfootball.
+
+        Active league = `self.league_config` (defaults to Turkish Süper Lig
+        per `cfg.default_league_id`); the league file is selected via
+        `LeagueConfig.openfootball_path`.
+        """
         all_matches = []
 
         for season_dir, season_label in self.openfootball_seasons:
@@ -178,7 +183,11 @@ class RealDataScraper:
     # ── Source 2: football-data.co.uk CSVs ───────────────
 
     def scrape_footballdata_uk(self) -> list[RealMatch]:
-        """Fetch Turkish Süper Lig CSVs from football-data.co.uk.
+        """Fetch CSVs for the active league from football-data.co.uk.
+
+        The country/division code is read from
+        `LeagueConfig.footballdata_country` (e.g. `T1` for the seeded Turkish
+        Süper Lig default, `E0` for Premier League, `SP1` for La Liga).
 
         These CSVs have detailed stats: shots, cards, fouls, corners, odds.
         Falls back gracefully if the site is unreachable.

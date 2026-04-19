@@ -6,7 +6,7 @@ players, events, form, H2H, half-time, clean sheets, and more.
 Used by:
   - ai/pipeline/runner.py (demo mode)
   - ai/tqu/classifier.py (validation)
-  - p2p/simulation/runner.py (P2P Q&A demo)
+  - ai/tests/historical_prediction_test.py (regression suite)
 """
 
 from common.constants import ALL_TEAM_NAMES, DERBY_PAIRS

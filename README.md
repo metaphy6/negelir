@@ -1,354 +1,248 @@
-# ⚽ Negelir — Turkish Football Match Analysis & Prediction
+# ⚽ Negelir — Multi-League Football Match Analysis & Prediction
 
 > **Ne gelir?** *(Turkish: "What will come?")*
-> A decentralized AI system that scrapes Turkish football data, analyzes matches with gradient-boosted decision trees, and answers questions in natural Turkish.
+> An agent-swarm AI system that scrapes football data from open data sources
+> (mackolik / nesine / tff / openfootball / football-data.co.uk — see
+> [`.env.example`](.env.example)), predicts match outcomes with an ensemble of
+> small models, and answers questions in fluent Turkish — built
+> **container-first**, **config-driven**, and **Turkish-out / English-in** by
+> doctrine. Per-league behaviour lives in `LeagueConfig`; the seeded default is
+> the Turkish Süper Lig and the roadmap (Phase 13) adds top European leagues
+> + cups.
 
 ---
 
-## 🏗️ Architecture Overview
+## 📌 Status
+
+The project is undergoing the **Swarm Pivot** (`v2.0.0`). The legacy P2P
+network has been removed and is being replaced with a swarm of single-purpose
+agents coordinated through a message bus. See
+[`docs/planning/ROADMAP.md`](docs/planning/ROADMAP.md) for the full plan and
+[`docs/tracking/phases.csv`](docs/tracking/phases.csv) for live phase status.
+
+| Phase | Title | Status |
+|---|---|---|
+| 0 | Repo Reset & Cleanup | ✅ in progress |
+| 1 | Centralized Configuration | ⏳ next |
+| 2 | Mock-Data Dev Stack ("Fake Internet") | ⏳ |
+| 3 | Swarm Foundation (Bus, Registry, Supervisor) | ⏳ |
+| 4 | Core Worker Agents | ⏳ |
+| 5 | Predictor Swarm & Consensus | ⏳ |
+| 6+ | Proofreader • Defense • Self-Maintenance • API • NLP • GPU/NPU • Chaos • Multi-League • Cloud • Frontend | ⏳ |
+
+---
+
+## 🏗️ Architecture (target)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    🌐 Go Middleware Server                  │
-│          REST API · Scrape Orchestration · Caching          │
-├─────────────────────────────────────────────────────────────┤
-│           ┌──────────────┐    ┌──────────────┐              │
-│           │ 🐘 PostgreSQL│    │  🔴 Redis    │              │
-│           │   Storage    │    │   Cache      │              │
-│           └──────────────┘    └──────────────┘              │
-├───────────────────────┬─────────────────────────────────────┤
-│  🤖 AI Engine         │  📡 P2P Network                     │
-│  Scraper → Proofreader│  5+ Nodes · Reputation Tracking     │
-│  → Features → GBDT    │  Ensemble Predictions               │
-│  → TQU → TRC          │  Turkish Q&A                        │
-└───────────────────────┴─────────────────────────────────────┘
+   Flutter clients (future, Phase 15)
+              │ HTTPS + JWT
+              ▼
+   ┌─────────────────────────────────────┐
+   │  🟦 Go REST API gateway (Phase 9)   │
+   └────────────────┬────────────────────┘
+                    │ Redis Streams
+                    ▼
+   ┌─────────────────────────────────────────────────────────┐
+   │            🟪 Swarm bus (Redis → NATS later)            │
+   │   topics: scrape.* • predict.* • proof.* • sec.* • …    │
+   └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬─────┘
+      ▼      ▼      ▼      ▼      ▼      ▼      ▼      ▼
+   Scrape  Categ.  Proc.  Pred.  Proof  Drift  Sec   Maint
+                          ×N      ×N
+                          │
+                          ▼
+   ┌──────────────────────────────────────────────────────┐
+   │  🟨 Storage:  PostgreSQL (truth)  •  Redis (cache)   │
+   └──────────────────────────────────────────────────────┘
 ```
 
----
-
-## 📦 Components
-
-### 🤖 AI Engine (`ai/`)
-The brain of Negelir. Processes Turkish football data through a multi-stage pipeline.
-
-| Module | Purpose |
-|--------|---------|
-| 🕷️ `scraper/` | Web scraping engine with CSS selectors for 3 data sources |
-| ✅ `proofreader/` | Data validation — range checks, completeness, anomaly detection |
-| 📊 `model/` | XGBoost GBDT model with 91-feature engineering, Poisson xG ensemble |
-| 🗣️ `tqu/` | **Turkish Question Understanding** — intent classification (9 intents), entity extraction, 1600+ question patterns |
-| 🇹🇷 `trc/` | **Turkish Response Composer** — verdict selection, template-based Turkish answers |
-| 💬 `nlp/` | Rule-based Turkish football sentiment analysis |
-| 🔄 `orchestrator/` | State machine managing pipeline steps |
-| 🧪 `tests/` | 58 unit tests covering sanitizer, classifier, Poisson, betting markets, cards, score prediction |
-
-**9 Intent Types:**
-`match_winner` · `draw` · `over_under` · `goal_range` · `both_teams_score` · `clean_sheet` · `half_time` · `form_query` · `head_to_head`
-
-### 📡 P2P Network (`p2p/`)
-Decentralized prediction network where multiple AI nodes collaborate.
-
-| Module | Purpose |
-|--------|---------|
-| 🖥️ `node/` | `PeerNode` — local GBDT inference, prediction broadcasting |
-| 📨 `protocol/` | Message types, simulated transport layer |
-| ⭐ `reputation/` | Peer accuracy tracking, Sybil-resistant reputation matrix |
-| 🏃 `simulation/` | Full network simulation with 5 nodes, 21 Turkish Q&A questions |
-
-**Simulation Phases:** Network Setup → Web Scraping → Data Validation → P2P Analysis → Turkish Q&A → Reputation Matrix
-
-### 🌐 Go Server (`server/`)
-REST middleware built with Gin.
-
-| Endpoint | Function |
-|----------|----------|
-| `GET /api/v1/health` | 💚 Health check |
-| `POST /api/v1/scrape/trigger` | 🕷️ Trigger scraping pipeline |
-| `GET /api/v1/matches` | ⚽ List cached matches |
-| `GET /api/v1/teams` | 🏟️ Team registry |
-
-### 🗄️ Database (`migrations/`)
-PostgreSQL schema with 8 tables:
-`teams` · `raw_matches` · `team_features` · `analyses` · `outcome_validations` · `peer_reputation` · `scrape_tasks` · `data_quarantine`
-
-### 📁 Data (`data/`)
-Runtime data directory (mounted as Docker volume):
-- `models/` — Trained XGBoost `.pkl` model files
-- Scraped match data (JSON)
-- Historical Turkish Süper Lig fixtures
+Read more in [`docs/design/ARCHITECTURE.md`](docs/design/ARCHITECTURE.md) and
+[`docs/design/SWARM.md`](docs/design/SWARM.md).
 
 ---
 
-## 🚀 Quick Start
+## 📦 Components today
+
+| Path | Role |
+|---|---|
+| [`ai/`](ai) | Python 3.11 — scrapers, proofreader, GBDT model, league configs (`common/league_config.py`), Turkish-language NLP/QA layer, training pipeline |
+| [`server/`](server) | Go REST middleware — will split into `cmd/api` (Phase 9) and `cmd/mocksrv` (Phase 2) |
+| [`migrations/`](migrations) | PostgreSQL schema |
+| [`docs/`](docs) | Master roadmap, design notes, setup guide, phase tracker |
+| [`docs/tracking/`](docs/tracking) | CSV phase log + cross-platform CLI |
+
+---
+
+## 🚀 Quick start
 
 ### Prerequisites
-- 🐳 Docker & Docker Compose
-- 🐧 Linux / macOS / WSL2
+- 🐳 Docker & Docker Compose v2
+- 🐍 Python 3.10+ (only for the local phase-tracker CLI)
+- 🐧 Linux / 🍎 macOS / 🪟 Windows (PowerShell + Docker Desktop)
 
-### 1️⃣ Start Everything
+### 1. Bootstrap env
+
 ```bash
-make up              # Build & start all services (foreground)
-make up-detached     # Or run in background
+make env             # copy .env.example → .env if missing
 ```
 
-### 2️⃣ Run AI Demo
+> Set `POSTGRES_PASSWORD` in `.env` before bringing the stack up — it is intentionally
+> required, with no default.
+
+### 2. Bring the stack up
+
 ```bash
-make bootstrap       # Scrape + validate real data cache (required before training)
-make ai-demo         # Run 22 Turkish Q&A questions
-make ai              # Run full pipeline (scrape → analyze → respond)
+make up              # build + start all services (foreground)
+make up-detached     # background
 ```
 
-### 3️⃣ Run P2P Simulation
+### 3. Train the GBDT (Phase 0 stub pipeline)
+
+The pipeline is league-agnostic — pass any league id registered in
+`ai/common/league_config.py` (currently Turkish Süper Lig is the seeded
+default; more presets land in Phase 13).
+
 ```bash
-make p2p             # Single P2P simulation run
-make p2p-simulate    # Same, via docker compose run
+make bootstrap LEAGUE=super_lig    # one-time real-data scrape + validate
+make train-full LEAGUE=super_lig   # 6 stages: scrape → validate → split → train → verify → report
 ```
 
-### 4️⃣ Continuous Mode 🔄
-```bash
-make ai-continuous        # AI pipeline loops every 30s (Ctrl+C to stop)
-make ai-continuous-demo   # Demo questions loop every 30s
-make p2p-continuous       # P2P simulation loops every 30s
+The legacy P2P / ensemble stages are gone; the swarm-based predictor mesh
+will replace them in Phase 5.
 
-# Custom interval:
-SIMULATION_INTERVAL=60 make ai-continuous
-```
+### 4. Tests
 
-### 5️⃣ Run Tests
 ```bash
-make test            # All tests (AI + P2P)
-make test-ai         # AI only (58 tests)
-make test-p2p        # P2P only (24 tests)
+make test            # all Python tests
+make test-ai         # AI tests only
+make test-integration  # full training pipeline (skipped if no real data cached)
 ```
 
 ---
 
-## 🛠️ All Makefile Commands
+## 🧭 Phase tracker
+
+Every phase milestone is logged to [`docs/tracking/phases.csv`](docs/tracking/phases.csv)
+with date, status, notes, divergences, etc. The
+[`docs/tracking/track.py`](docs/tracking/track.py) CLI is **Python-3 stdlib
+only** and runs identically on Linux, macOS, and Windows.
+
+```bash
+# Linux / macOS
+python3 docs/tracking/track.py list
+python3 docs/tracking/track.py show 0
+python3 docs/tracking/track.py add --phase 1 --status in-progress --note "Started config audit"
+
+# Windows (PowerShell)
+py -3 docs/tracking/track.py list
+```
+
+Or via Make (cross-platform — uses `python3` on POSIX, `python` on Windows):
+
+```bash
+make track-list
+make track-show PHASE=0
+make track-add PHASE=1 STATUS=in-progress NOTE="Started config audit"
+```
+
+See [`docs/tracking/README.md`](docs/tracking/README.md) for the full state
+machine and column definitions.
+
+---
+
+## 🛠️ Makefile cheatsheet
 
 | Command | Description |
-|---------|-------------|
-| **🏗️ Build & Run** | |
-| `make build` | Build all Docker images |
-| `make up` | Start all services (foreground) |
-| `make up-detached` | Start all services (background) |
-| `make down` | Stop & remove containers |
-| `make restart` | Restart all services |
-| `make status` | Show running containers |
-| `make ports` | Show exposed ports |
-| **🤖 AI** | |
-| `make scrape` | Scrape real data cache for `LEAGUE` |
-| `make bootstrap` | Scrape + validate cache before training |
-| `make train` | Train model with strict real-data precheck |
-| `make ai` | Run AI pipeline |
-| `make ai-demo` | Run Turkish Q&A demo |
-| `make ai-pipeline` | Full pipeline (scrape → respond) |
-| `make ai-train` | Alias of `make train` |
-| `make ai-tqu-test` | Test TQU classifier |
-| `make ai-continuous` | 🔄 Continuous AI pipeline |
-| `make ai-continuous-demo` | 🔄 Continuous AI demo |
-| `make ai-shell` | Shell into AI container |
-| **📡 P2P** | |
-| `make p2p` | Run P2P simulation |
-| `make p2p-simulate` | Run P2P simulation (run --rm) |
-| `make p2p-continuous` | 🔄 Continuous P2P simulation |
-| `make p2p-shell` | Shell into P2P container |
-| **🌐 Server** | |
-| `make server` | Start Go server + deps |
-| `make server-health` | Health check |
-| `make server-scrape` | Trigger scraper |
-| `make server-matches` | List cached matches |
-| **🗄️ Database** | |
-| `make infra` | Start PostgreSQL + Redis only |
-| `make db-shell` | Open PostgreSQL CLI |
-| `make db-reset` | ⚠️ Reset database |
-| `make redis-shell` | Open Redis CLI |
-| **📋 Logs** | |
-| `make logs` | Tail all logs |
-| `make logs-ai` | Tail AI logs |
-| `make logs-p2p` | Tail P2P logs |
-| `make logs-server` | Tail server logs |
-| **🧪 Testing** | |
-| `make test` | Run all tests |
-| `make test-ai` | Run AI tests (58) |
-| `make test-p2p` | Run P2P tests (24) |
-| **🧹 Cleanup** | |
-| `make clean` | Remove containers + images |
-| `make clean-all` | ⚠️ Remove everything + volumes |
-| `make clean-data` | Remove data files |
+|---|---|
+| `make env` | Create `.env` from `.env.example` |
+| `make up` / `make down` | Bring the full stack up / down |
+| `make ai` / `make server` / `make infra` | Run a single service group |
+| `make scrape LEAGUE=…` | Scrape and cache real data |
+| `make bootstrap LEAGUE=…` | Scrape + validate cache (gate before training) |
+| `make train-full LEAGUE=…` | Phase-3 training pipeline (current 6-stage form) |
+| `make train-model LEAGUE=…` | Stages 1–4 only (data + training, no verify/report) |
+| `make ai-backtest WEEKS=N` | Multi-market backtest |
+| `make test` / `make test-ai` / `make test-integration` | Test suites |
+| `make track-list` / `make track-add` / `make track-show` | Phase tracker CLI |
+| `make health` / `make status` / `make ports` | Operational status |
+| `make clean` / `make clean-all` | ⚠️ Cleanup (volumes are destroyed by `clean-all`) |
+
+Run `make help` for the complete list.
 
 ---
 
-## 📊 Understanding the Logs
+## ⚙️ Environment variables
 
-### 🤖 AI Pipeline Logs
-```
-⚽ Negelir AI Engine starting...          # Engine boot
-🌐 Checking Go server health...           # Server connectivity
-📄 Page 3/8: 45.2 KB → 4 matches parsed   # Web scraping progress
-🗑️  All HTML discarded from memory         # RAM-only processing
-📦 Model loaded: negelir_gbdt_v0.1.0.pkl  # GBDT model ready
-📝 Duygu: +1.000 ← 'Galatasaray...'       # NLP sentiment score
-🗣️  TQU input: 'Galatasaray kazanır mı?'  # Question received
-🎯 Intent: match_winner (confidence: 0.70) # Classification result
-⛔ Football context not detected           # Non-football rejected
-🤖 Response: Büyük ihtimalle evet...       # Turkish AI response
-✅ Demo complete! (1.5s, 22 questions)     # Pipeline finished
-🔄 Cycle 2                                 # Continuous mode cycle
-💤 Sleeping 30s before next cycle...       # Interval pause
-```
+`.env.example` is the canonical list. Every key documented there is consumed
+either by the Python config layer (`ai/common/config.py`), the Go server, or
+docker-compose itself — `ai/tests/test_config_sync.py` enforces parity.
 
-### 📡 P2P Simulation Logs
-```
-🌐 NEGELIR P2P NETWORK SIMULATION         # Simulation start
-📡 Creating 5 nodes...                     # Network setup
-🕷️  Phase B: Simulated Web Scraping        # Data collection
-✅ Data Quality: 3/3 valid                 # Validation pass
-⚽ Analyzing match: GS vs FB              # AI inference per node
-🗣️ Phase E: Turkish Q&A Pipeline          # Q&A through P2P
-❓ Q1: "Galatasaray bu maçı kazanır mı?"   # Question routed
-🧠 TQU → intent=match_winner              # Classification
-🤖 TRC response composed (180 chars)       # Answer generated
-📊 Final Reputation Matrix                 # Node accuracy report
-⭐ Leader: 1  🟢 High: 3  🟡 Medium: 1     # Reputation summary
-```
+Most-touched knobs:
 
-### 🌐 Go Server Logs
-```
-🟢 Server starting on :8080               # Server boot
-📥 POST /api/v1/scrape/trigger             # Scrape request
-📤 GET /api/v1/matches                     # Data request
-💚 GET /api/v1/health                      # Health check
-```
+| Variable | Default | Purpose |
+|---|---|---|
+| `POSTGRES_PASSWORD` | _(required)_ | Postgres credential — no default by design |
+| `NEGELIR_DEFAULT_LEAGUE_ID` | `super_lig` | League id used when `LEAGUE=` is omitted |
+| `AI_DEVICE` | `auto` | `cpu` / `cuda` / `auto` for ML compute |
+| `AI_LOG_LEVEL` | `DEBUG` | Python log verbosity |
+| `BOOTSTRAP_MIN_MATCHES` | `100` | Gate before training is allowed |
+| `NEGELIR_THRESHOLD_MODEL_ACC` | `0.50` | Minimum test accuracy for a `PASS` verdict |
+| `SIMULATION_INTERVAL` | `30` | Seconds between cycles in continuous modes |
 
-### 🔑 Key Log Symbols
-| Symbol | Meaning |
-|--------|---------|
-| ⚽ | Match/football operation |
-| 🎯 | Successful classification |
-| ⛔ | Rejected (non-football or injection) |
-| 🤖 | AI response output |
-| 📊 | Statistics/metrics |
-| ✅ | Success/complete |
-| ⚠️ | Warning |
-| ❌ | Error/failure |
-| 🔄 | Continuous mode cycle |
-| 💤 | Sleep between cycles |
+Naming convention: `NEGELIR_*` (Python AI), `SCRAPE_*` (scraper sources),
+`POSTGRES_*` / `REDIS_*` (shared), `AI_*` (Python runtime, legacy prefix
+kept for back-compat), Go-only knobs are tagged in the `.env.example`
+header.
 
 ---
 
-## 🏛️ Data Pipeline Flow
+## 🛡️ Doctrine (non-negotiable)
 
-```
-   🌐 Turkish Football Sites
-          │
-          ▼
-   🕷️ Scraper (CSS selectors, rate-limited)
-          │
-          ▼
-   ✅ Proofreader (validation, anomaly detection)
-          │
-          ▼
-   📊 Feature Engineering (91 dimensions)
-          │
-          ▼
-   🧠 GBDT Model (XGBoost, Poisson xG ensemble)
-          │
-          ▼
-   🗣️ TQU (intent + entity extraction)
-          │
-          ▼
-   🇹🇷 TRC (Turkish response composition)
-          │
-          ▼
-   💬 Natural Turkish Answer
-```
+1. **🔧 Single-source configuration** — no magic numbers; every tunable lives in `.env.example` + a config layer.
+2. **📦 Containerized only** — local dev = `docker compose`. There is no host-install path.
+3. **🚫 Real data only in prod paths** — synthetic data is a *test fixture*, never a *fallback*.
+4. **⚡ Smallest model that works** — deterministic > scikit-learn > XGBoost > small transformers > LLM. LLMs only when justified.
+5. **📈 Scale symmetry** — same agent process whether 1 of it or 1000. State lives in Redis / Postgres.
+6. **🇹🇷 Turkish UX / English infra** — user-facing strings TR; code, logs, config keys EN.
+7. **🧪 Adversarial tests are first-class** — every public surface gets a fuzz / injection / chaos test.
+8. **🔁 Phase gates** — a phase ships only when its [Definition of Done](docs/planning/ROADMAP.md#-appendix-b--definition-of-done-per-phase) is fully green in CI.
 
 ---
 
-## 🧠 AI Model Details
-
-- **Algorithm:** XGBoost Gradient Boosted Decision Trees
-- **Features:** 91 dimensions (Elo, form, xG, H2H, sentiment, venue, seasonal)
-- **Ensemble:** 55% XGBoost + 45% Poisson xG model
-- **Scoreline:** Poisson distribution for exact score prediction
-- **Markets:** Over/Under (1.5, 2.5, 3.5), BTTS, Double Chance, DNB, Asian Handicap, Half-Time
-- **Cards:** Foul-based yellow card estimation with derby multiplier
-
----
-
-## 🛡️ Security & Compliance
-
-- 🚫 **Injection Protection** — TQU sanitizer strips prompt injection attempts
-- 🚫 **Banned Words** — Gambling terms (`bahis`, `iddaa`, `kupon`, etc.) never appear in output
-- 🔒 **No Source Identification** — Team names mapped to internal UUIDs, no scraping source metadata exposed
-- 🗑️ **RAM-Only Processing** — Raw HTML discarded immediately after parsing
-- ✅ **Input Validation** — Length limits, URL stripping, HTML sanitization
-
----
-
-## 📁 Project Structure
+## 📁 Project structure
 
 ```
 negelir/
-├── 📄 README.md              ← You are here
-├── 📄 docker-compose.yml     ← Service orchestration
-├── 📄 Makefile               ← 39 commands
-├── 📄 LICENSE
-├── 🤖 ai/                    ← AI Engine (Python 3.11)
-│   ├── main.py
-│   ├── common/               ← Config, constants, logging
-│   ├── scraper/              ← Web scraping + CSS selectors
-│   ├── proofreader/          ← Data validation
-│   ├── model/                ← XGBoost GBDT + features
-│   ├── tqu/                  ← Turkish Question Understanding
-│   ├── trc/                  ← Turkish Response Composer
-│   ├── nlp/                  ← Sentiment analysis
-│   ├── orchestrator/         ← Pipeline state machine
-│   ├── pipeline/             ← End-to-end runner
-│   └── tests/                ← 58 unit tests
-├── 📡 p2p/                    ← P2P Network (Python 3.11)
-│   ├── main.py
-│   ├── node/                 ← PeerNode logic
-│   ├── protocol/             ← Message types & transport
-│   ├── reputation/           ← Accuracy tracking
-│   ├── simulation/           ← Network simulator
-│   └── tests/                ← 24 unit tests
-├── 🌐 server/                 ← Go Middleware (Gin)
-│   ├── cmd/main.go
-│   └── Dockerfile
-├── 🗄️ migrations/             ← PostgreSQL schema
-│   └── 001_initial.sql
-├── 📁 data/                   ← Runtime data (Docker volume)
-│   └── models/               ← Trained model files
-└── 📚 docs/                   ← Documentation (organized by topic/type)
-       ├── README.md              ← Documentation index
-       ├── design/
-       ├── planning/
-       ├── data/
-       ├── p2p/
-       ├── reports/
-       ├── guides/
-       └── analysis/
+├── README.md                 ← you are here
+├── docker-compose.yml        ← service orchestration
+├── Makefile                  ← cross-platform commands
+├── .env.example              ← canonical env-var list
+├── ai/                       ← Python 3.11 AI engine
+│   ├── common/               ← config, constants, league_config, logging
+│   ├── scraper/              ← source-specific scrapers + selectors
+│   ├── proofreader/          ← validators
+│   ├── model/                ← XGBoost trainer, features, device probe
+│   ├── pipeline/             ← training pipeline + artifacts
+│   ├── orchestrator/         ← pipeline state machine
+│   ├── reports/              ← training-run report renderer
+│   ├── tqu/ trc/ nlp/        ← Turkish-language NLP / QA / sentiment (UX layer)
+│   └── tests/
+├── server/                   ← Go middleware (Gin)
+├── migrations/               ← PostgreSQL schema
+├── data/                     ← runtime data (Docker volume)
+└── docs/
+    ├── README.md             ← documentation index
+    ├── planning/ROADMAP.md   ← master roadmap (Swarm Pivot)
+    ├── design/               ← architecture, swarm, security, NLP, …
+    ├── guides/               ← setup & operator guides
+    └── tracking/             ← phases.csv + cross-platform CLI
 ```
-
----
-
-## ⚙️ Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POSTGRES_DB` | `negelir` | Database name |
-| `POSTGRES_USER` | `negelir` | Database user |
-| `POSTGRES_PASSWORD` | _(required, no default)_ | Database password — must be set in `.env` |
-| `SERVER_PORT` | `8080` | Go server port |
-| `P2P_NODE_COUNT` | `5` | Number of P2P nodes |
-| `P2P_SIMULATION_MATCHES` | `10` | Matches per simulation |
-| `SIMULATION_INTERVAL` | `30` | Seconds between continuous cycles |
-| `AI_LOG_LEVEL` | `DEBUG` | AI logging verbosity |
-| `AI_DEVICE` | `auto` | Compute device (cpu/cuda/auto) |
 
 ---
 
 ## 📜 License
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE).
+
+

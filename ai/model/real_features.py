@@ -1,11 +1,13 @@
 """
 Negelir — Real feature extraction from live scraped match data.
-Uses only scraped historical data for training features.
+Uses only scraped historical data for training features. League-agnostic:
+the active league is selected via `cfg.default_league_id` and resolved through
+`LeagueConfig` (seeded default: Turkish Süper Lig).
 
 Sources supported:
   - MackolikClient (arsiv.mackolik.com: standings, results, fixtures, match stats)
   - RealDataScraper (openfootball + football-data.co.uk: scores, cards, shots, odds)
-  - Local JSON cache (data/tr_super_lig_real.json)
+  - Local JSON cache under `data/<league_id>_real.json`
 
 Feature pipeline:
   1. Scrape/load raw match data from all available sources
@@ -737,7 +739,7 @@ def _build_feature_vector(
         home_stats.sh_conceding_rate(5), away_stats.sh_conceding_rate(5),
         # Scoring patterns (v0.2)
         home_stats.goals_per_match_rate(), away_stats.goals_per_match_rate(),
-        # QID features (v0.3) — zeroed, populated at inference time from P2P
+        # QID features (v0.3) — zeroed, populated at inference time from swarm
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
     ]
 

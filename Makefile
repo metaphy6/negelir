@@ -6,7 +6,7 @@
 COMPOSE := docker compose
 ENV_FILE := .env
 WORKSPACE_DIR := /workspace
-TEST_PYTHONPATH := $(WORKSPACE_DIR)/ai:$(WORKSPACE_DIR)/p2p
+TEST_PYTHONPATH := $(WORKSPACE_DIR)/ai
 
 # Tunable defaults for backtest targets (override on the CLI: `make ai-backtest WEEKS=5`)
 WEEKS ?= 3
@@ -25,10 +25,12 @@ ifeq ($(OS),Windows_NT)
 	SHELL := cmd.exe
 	COPY_CMD := copy
 	RM_CMD := del /q
+	PY := python
 else
 	SHELL := /bin/bash
 	COPY_CMD := cp
 	RM_CMD := rm -f
+	PY := python3
 endif
 
 .DEFAULT_GOAL := help
@@ -67,10 +69,6 @@ restart: down up ## Restart all services
 ai: env ## Run only the AI pipeline
 	$(COMPOSE) up --build ai
 
-.PHONY: p2p
-p2p: env ## Run only the P2P simulation
-	$(COMPOSE) up --build p2p
-
 .PHONY: server
 server: env ## Run only the Go server + dependencies
 	$(COMPOSE) up --build postgres redis server
@@ -101,32 +99,25 @@ bootstrap: env ## Scrape + validate real data cache before training
 train: train-full ## Phase 3 alias — full-system training pipeline (back-compat: see ai-train for legacy single-stage trainer)
 
 .PHONY: train-full
-train-full: env ## Phase 3 — Full 8-stage training pipeline (scrape → validate → split → train → p2p → ensemble → verify → report)
+train-full: env ## Phase 3 — Training pipeline (scrape → validate → split → train → verify → report)
 	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
 	$(COMPOSE) run --rm \
 		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
 		ai python -m orchestrator.state_machine --mode full-training --league $(LEAGUE)
 
 .PHONY: train-model
-train-model: env ## Phase 3 — Stages 1–4 only (data + training, skips P2P/ensemble)
+train-model: env ## Phase 3 — Stages 1–4 only (data + training, no verify/report)
 	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
 	$(COMPOSE) run --rm \
 		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
 		ai python -m orchestrator.state_machine --mode model-only --league $(LEAGUE)
-
-.PHONY: sim-p2p
-sim-p2p: env ## Phase 3 — P2P validator stage only (requires existing trained model: MODEL=path)
-	@test -n "$(MODEL)" || (echo "❌ MODEL=path/to/model.pkl is required" && exit 1)
-	$(COMPOSE) run --rm \
-		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
-		ai python -m orchestrator.state_machine --mode sim-only --league $(LEAGUE) --model $(MODEL)
 
 .PHONY: ai-pipeline
 ai-pipeline: env ## Run the full AI pipeline (scrape → process → analyze → respond)
 	$(COMPOSE) run --rm ai python -m pipeline.runner
 
 .PHONY: ai-train
-ai-train: env ## Legacy single-stage trainer (no P2P, no holdout split, no report)
+ai-train: env ## Legacy single-stage trainer (no holdout split, no report)
 	@test -f data/$(LEAGUE)_real.json || (echo "❌ Missing data/$(LEAGUE)_real.json. Run 'make bootstrap LEAGUE=$(LEAGUE)' first." && exit 1)
 	$(COMPOSE) run --rm \
 		-e NEGELIR_DEFAULT_LEAGUE_ID=$(LEAGUE) \
@@ -176,28 +167,26 @@ ai-continuous: env ## Run AI pipeline in continuous loop (Ctrl+C to stop)
 ai-continuous-demo: env ## Run AI demo in continuous loop (Ctrl+C to stop)
 	$(COMPOSE) run --rm ai python main.py --demo --continuous
 
-# ── P2P Commands ────────────────────────────────────────────
+# ── Phase Tracking ──────────────────────────────────────────
 
-.PHONY: p2p-simulate
-p2p-simulate: env ## Run P2P network simulation
-	$(COMPOSE) run --rm p2p python -m simulation.runner
+.PHONY: track-list
+track-list: ## List latest status per roadmap phase
+	@$(PY) docs/tracking/track.py list
 
-.PHONY: p2p-continuous
-p2p-continuous: env ## Run P2P simulation in continuous loop (Ctrl+C to stop)
-	$(COMPOSE) run --rm p2p python main.py --continuous
+.PHONY: track-show
+track-show: ## Show full history for one phase (PHASE=0)
+	@$(PY) docs/tracking/track.py show $(PHASE)
 
-.PHONY: p2p-scale-test
-p2p-scale-test: env ## Stress test P2P with 25 peers (override: make p2p-scale-test P2P_SCALE_NODES=50)
-	$(COMPOSE) run --rm -e P2P_NODE_COUNT=$(or $(P2P_SCALE_NODES),25) p2p \
-		python -m simulation.runner --scale-test --nodes=$(or $(P2P_SCALE_NODES),25)
+.PHONY: track-add
+track-add: ## Append entry (PHASE=N STATUS=… [SUB=…] [NOTE="…"] [DIVERGENCE="…"])
+	@$(PY) docs/tracking/track.py add --phase $(PHASE) --status $(STATUS) \
+		$(if $(SUB),--subphase $(SUB),) \
+		$(if $(NOTE),--note "$(NOTE)",) \
+		$(if $(DIVERGENCE),--divergence "$(DIVERGENCE)",)
 
-.PHONY: p2p-churn-test
-p2p-churn-test: env ## Test dynamic peer join/leave (10→25→10 peers over 40 rounds)
-	$(COMPOSE) run --rm p2p python -m simulation.runner --churn-test
-
-.PHONY: p2p-shell
-p2p-shell: env ## Open a shell in the P2P container
-	$(COMPOSE) run --rm p2p bash
+.PHONY: track-export
+track-export: ## Export the tracker log (FORMAT=md|csv)
+	@$(PY) docs/tracking/track.py export --format $(or $(FORMAT),md)
 
 # ── Server Commands ─────────────────────────────────────────
 
@@ -265,10 +254,6 @@ logs: ## Tail all service logs
 logs-ai: ## Tail AI service logs
 	$(COMPOSE) logs -f ai
 
-.PHONY: logs-p2p
-logs-p2p: ## Tail P2P service logs
-	$(COMPOSE) logs -f p2p
-
 .PHONY: logs-server
 logs-server: ## Tail Go server logs
 	$(COMPOSE) logs -f server
@@ -281,7 +266,7 @@ test: env ## Run all tests
 		-v $(PWD):$(WORKSPACE_DIR) \
 		-w $(WORKSPACE_DIR) \
 		-e PYTHONPATH=$(TEST_PYTHONPATH) \
-		ai python -m pytest ai/tests p2p/tests -v
+		ai python -m pytest ai/tests -v
 
 .PHONY: test-ai
 test-ai: env ## Run AI module tests
@@ -290,14 +275,6 @@ test-ai: env ## Run AI module tests
 		-w $(WORKSPACE_DIR) \
 		-e PYTHONPATH=$(TEST_PYTHONPATH) \
 		ai python -m pytest ai/tests -v
-
-.PHONY: test-p2p
-test-p2p: env ## Run P2P module tests
-	$(COMPOSE) run --rm \
-		-v $(PWD):$(WORKSPACE_DIR) \
-		-w $(WORKSPACE_DIR) \
-		-e PYTHONPATH=$(TEST_PYTHONPATH) \
-		p2p python -m pytest p2p/tests -v
 
 .PHONY: test-integration
 test-integration: env ## Phase 3 — Full-pipeline integration test (skips cleanly if real data missing)

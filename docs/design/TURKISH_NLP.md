@@ -1,0 +1,70 @@
+# 🇹🇷 Turkish-First NLP
+
+> Companion to Phase 10 of [`../planning/ROADMAP.md`](../planning/ROADMAP.md).
+> **Audience:** Turkish-speaking users, often typing fast on mobile.
+> **Reality of input:** missing diacritics, typos, slang, code-switching, mixed case.
+
+## 🧪 Sample inputs we must handle
+
+| Raw input | What it means | What we do |
+|---|---|---|
+| `bugun gs maci kacta` | "Bugün GS maçı kaçta?" | restore diacritics, expand `gs`, intent = `match.kickoff_time` |
+| `Fenerbahce – Besiktas iddaa tahmin` | … | normalize team names, intent = `predict.1x2` |
+| `derbi ms tahmini ne` | "derby maç sonucu tahmini ne" | slang `derbi` → today's derby fixture, intent = `predict.1x2` |
+| `Galatasarayyy 1.5 ust nasil` | … | typo squashing, market = `au_1.5` |
+| `bana onümüzdeki hafta süperliği özetle` | … | intent = `summary.next_week` (multi-fixture) |
+
+## 🔧 Pipeline
+
+```
+raw → unicode NFC → control-char strip → Turkish lowercase
+    → diacritic restoration (table + fastText fallback)
+    → tokenization (Zemberek-py rules)
+    → typo correction (edit-distance over team/player/league lexicon)
+    → intent classifier (fastText, ≤ 20 MB)
+    → entity extraction (gazetteer + small CRF)
+    → confidence check (cfg.tqu_min_intent_conf)
+        ├── high  → dispatch to predictor / data agent
+        └── low   → "Did you mean?" reformulation
+```
+
+## 🗣️ Answer generation
+
+- Default: **template-driven**, jinja2 with Turkish-aware suffix helpers (`{{ team | locative }}` → "Galatasaray'da").
+- Optional: small Turkish LLM (≤ 1 B params, e.g. `Trendyol-LLM-1B-base`) **only** rephrases the templated answer when `cfg.tqu_humanize=true`.
+- The LLM **never** decides the prediction. It rewrites a structured answer for tone.
+- Output passes through a TR-quality proofreader agent (`proofreader.tr.v1`) that:
+  - Validates suffix harmony.
+  - Forbids mid-sentence English.
+  - Flags answers shorter than `cfg.tqu_min_answer_chars` or longer than `cfg.tqu_max_answer_chars`.
+
+## 📚 Lexicons
+
+```
+ai/nlp/lexicon/
+├── teams.tr.yaml         # canonical + aliases (incl. typo'd forms)
+├── players.tr.yaml
+├── leagues.tr.yaml
+├── markets.tr.yaml       # ms, au_2.5, kg, iy_ms, …
+└── dialects.tr.yaml      # slang, regionalisms, common abbreviations
+```
+
+Lexicons are versioned, hot-reloadable on `SIGHUP`, and have a property test
+that asserts every alias maps back to a canonical form.
+
+## 🧪 Test corpus
+
+`ai/tests/fixtures/turkish_queries.yaml` — at least 200 entries grouped:
+
+- **Clean** (50): correct Turkish, full diacritics.
+- **No diacritics** (50): "Fenerbahce", "Besiktas".
+- **Typos** (40): keyboard slips, doubled letters.
+- **Slang / dialect** (30): "derbi", "hoca", "tribün".
+- **Code-switch** (15): mixed TR/EN.
+- **Adversarial** (15): prompt injection, off-topic, abuse.
+
+CI gates:
+
+- ≥ 95 % intent accuracy on clean + no-diacritics + typos.
+- 100 % "did-you-mean" for low-confidence cases (no silent guesses).
+- 100 % rejection on adversarial entries.

@@ -1738,45 +1738,6 @@ class TestCurrentSeasonRemoved:
         assert not hasattr(c, "CURRENT_SEASON"), "CURRENT_SEASON should be removed"
 
 
-# ── Phase 3: Persistent Identity + Scheduler ─────────────────────────────────
-
-
-class TestPersistentIdentity:
-    """Tests for p2p/node/identity.py — persistent node identity."""
-
-    def test_create_new_identity(self, tmp_path):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from node.identity import load_or_create_identity
-        path = tmp_path / "identity.json"
-        identity = load_or_create_identity(path)
-        assert "node_id" in identity
-        assert "created_at" in identity
-        assert len(identity["node_id"]) == 36  # UUID format
-
-    def test_load_existing_identity(self, tmp_path):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from node.identity import load_or_create_identity
-        path = tmp_path / "identity.json"
-        id1 = load_or_create_identity(path)
-        id2 = load_or_create_identity(path)
-        assert id1["node_id"] == id2["node_id"]
-
-    def test_corrupt_file_regenerates(self, tmp_path):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from node.identity import load_or_create_identity
-        path = tmp_path / "identity.json"
-        path.write_text("NOT VALID JSON!!!", encoding="utf-8")
-        identity = load_or_create_identity(path)
-        assert "node_id" in identity
-
-    def test_missing_node_id_regenerates(self, tmp_path):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        import json
-        from node.identity import load_or_create_identity
-        path = tmp_path / "identity.json"
-        path.write_text(json.dumps({"created_at": "2025-01-01"}), encoding="utf-8")
-        identity = load_or_create_identity(path)
-        assert "node_id" in identity
 
 
 class TestNegelirScheduler:
@@ -1842,30 +1803,6 @@ class TestNegelirScheduler:
         sched.shutdown()  # should not raise
 
 
-class TestPhase3MessageTypes:
-    """Verify Phase 3 message types added to protocol."""
-
-    def test_heartbeat_type_exists(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from protocol.messages import MessageType
-        assert MessageType.HEARTBEAT.value == "heartbeat"
-
-    def test_task_claim_type_exists(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from protocol.messages import MessageType
-        assert MessageType.TASK_CLAIM.value == "task_claim"
-
-    def test_task_complete_type_exists(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from protocol.messages import MessageType
-        assert MessageType.TASK_COMPLETE.value == "task_complete"
-
-    def test_all_message_types_count(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from protocol.messages import MessageType
-        assert len(MessageType) == 20  # 7 original + 3 phase3 + 6 phase4 + 4 phase7
-
-
 class TestPhase3MainSignalShutdown:
     """Verify while-True-sleep loops replaced with signal-based shutdown."""
 
@@ -1880,148 +1817,9 @@ class TestPhase3MainSignalShutdown:
         assert "signal.SIGINT" in source or "signal.SIGTERM" in source
         assert "NegelirScheduler" in source or "scheduler" in source.lower()
 
-    def test_p2p_main_uses_signals(self):
-        p2p_main = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                "..", "p2p", "main.py")
-        with open(p2p_main) as f:
-            source = f.read()
-        assert "signal.SIGINT" in source or "signal.SIGTERM" in source
-        assert "_shutdown" in source
 
 
-# ── Phase 4: Distributed Scrape Coordination ─────────────────────────────────
-
-
-class TestRoleElection:
-    """Tests for p2p/coordination/election.py — deterministic role assignment."""
-
-    def test_deterministic_across_calls(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.election import elect_roles, PeerInfo
-        peers = [
-            PeerInfo("node_a", trust_weight=0.9, uptime_hours=100),
-            PeerInfo("node_b", trust_weight=0.7, uptime_hours=200),
-            PeerInfo("node_c", trust_weight=0.5, uptime_hours=50),
-        ]
-        r1 = elect_roles(peers, epoch_day=1)
-        r2 = elect_roles(peers, epoch_day=1)
-        assert r1 == r2
-
-    def test_highest_trust_gets_primary(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.election import elect_roles, PeerInfo
-        peers = [
-            PeerInfo("low", trust_weight=0.3),
-            PeerInfo("high", trust_weight=0.9, uptime_hours=100),
-            PeerInfo("mid", trust_weight=0.6),
-        ]
-        roles = elect_roles(peers, epoch_day=1)
-        assert roles["scraper_mackolik"] == "high"
-        assert roles["indexer"] == "high"
-
-    def test_validators_top_3(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.election import elect_roles, PeerInfo
-        peers = [PeerInfo(f"n{i}", trust_weight=1.0 - i * 0.1) for i in range(5)]
-        roles = elect_roles(peers, epoch_day=1)
-        assert len(roles["validator"]) == 3
-
-    def test_single_peer(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.election import elect_roles, PeerInfo
-        peers = [PeerInfo("solo", trust_weight=0.5)]
-        roles = elect_roles(peers, epoch_day=1)
-        assert roles["scraper_mackolik"] == "solo"
-        assert roles["scraper_openfootball"] == "solo"  # wraps around
-
-    def test_empty_peers(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.election import elect_roles
-        roles = elect_roles([], epoch_day=1)
-        assert roles["scraper_mackolik"] == ""
-        assert roles["validator"] == []
-
-    def test_tie_breaking_by_node_id(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.election import elect_roles, PeerInfo
-        # Same trust and uptime — should break by node_id alphabetically
-        peers = [
-            PeerInfo("zzz", trust_weight=0.5, uptime_hours=10),
-            PeerInfo("aaa", trust_weight=0.5, uptime_hours=10),
-        ]
-        roles = elect_roles(peers, epoch_day=1)
-        assert roles["scraper_mackolik"] == "aaa"
-
-
-class TestTaskQueue:
-    """Tests for p2p/coordination/tasks.py — scrape task queue."""
-
-    def test_create_daily_tasks(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue
-        q = TaskQueue()
-        tasks = q.create_daily_tasks()
-        assert len(tasks) == 2  # standing + fixture
-        assert q.size == 2
-
-    def test_create_daily_with_match_stats(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue
-        q = TaskQueue()
-        tasks = q.create_daily_tasks(recent_match_ids=[100, 200])
-        assert len(tasks) == 4  # 2 base + 2 match_stats
-        assert any(t.target_id == 100 for t in tasks)
-
-    def test_claim_pending_succeeds(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue, ScrapeTask, TaskStatus
-        q = TaskQueue()
-        task = ScrapeTask(source="mackolik", data_type="standing")
-        q.add(task)
-        assert q.claim(task.task_id, "peer_a")
-        assert q.get_task(task.task_id).status == TaskStatus.ASSIGNED
-
-    def test_claim_already_assigned_fails(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue, ScrapeTask
-        q = TaskQueue()
-        task = ScrapeTask(source="mackolik", data_type="standing")
-        q.add(task)
-        assert q.claim(task.task_id, "peer_a")
-        assert not q.claim(task.task_id, "peer_b")  # already assigned
-
-    def test_complete_task(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue, ScrapeTask, TaskStatus
-        q = TaskQueue()
-        task = ScrapeTask(source="mackolik", data_type="standing")
-        q.add(task)
-        q.claim(task.task_id, "peer_a")
-        assert q.complete(task.task_id, "sha256:abc")
-        assert q.get_task(task.task_id).status == TaskStatus.COMPLETED
-        assert q.get_task(task.task_id).content_hash == "sha256:abc"
-
-    def test_complete_unclaimed_fails(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue, ScrapeTask
-        q = TaskQueue()
-        task = ScrapeTask(source="mackolik", data_type="standing")
-        q.add(task)
-        assert not q.complete(task.task_id, "sha256:abc")
-
-    def test_get_pending(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "p2p"))
-        from coordination.tasks import TaskQueue, ScrapeTask
-        q = TaskQueue()
-        t1 = ScrapeTask(source="a", data_type="standing")
-        t2 = ScrapeTask(source="b", data_type="fixture")
-        q.add(t1)
-        q.add(t2)
-        q.claim(t1.task_id, "peer")
-        pending = q.get_pending()
-        assert len(pending) == 1
-        assert pending[0].task_id == t2.task_id
-
+# ── Source Health & Cross-Validation ────────────────────────────────────────
 
 class TestSourceHealthMonitor:
     """Tests for ai/scraper/health.py — source health monitoring."""
@@ -2380,6 +2178,7 @@ class TestIncrementalRetrain:
 
     def test_incremental_retrain_produces_valid_model(self):
         from model.trainer import train_model, incremental_retrain
+        from model.device import get_xgb_params as _real_get_xgb_params
         import tempfile
         from unittest.mock import patch
         from .fixtures import generate_synthetic_dataset
@@ -2387,12 +2186,20 @@ class TestIncrementalRetrain:
         X_train, y_train = generate_synthetic_dataset(n_matches=160, seed=7)
         raw_stub = [{"id": i} for i in range(250)]
 
-        # Train initial model
+        # Phase 0.4 (ROADMAP): cap n_estimators inside this test to avoid
+        # the historical OOM on small CI runners. We're only verifying the
+        # incremental_retrain plumbing, not training quality.
+        def _tiny_xgb_params(*args, **kwargs):
+            params = _real_get_xgb_params(*args, **kwargs)
+            params["n_estimators"] = 20
+            return params
+
         with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
             path = f.name
         try:
             with patch("model.real_features.load_real_matches", return_value=raw_stub), \
-                    patch("model.real_features.extract_real_dataset", return_value=(X_train, y_train)):
+                    patch("model.real_features.extract_real_dataset", return_value=(X_train, y_train)), \
+                    patch("model.trainer.get_xgb_params", side_effect=_tiny_xgb_params):
                 model = train_model(save_path=path)
             # Create small new dataset
             X_new, y_new = generate_synthetic_dataset(n_matches=50, seed=99)
@@ -2808,89 +2615,6 @@ class TestSchemaTrainer:
             assert v.field_locations == snap.field_locations
 
 
-class TestSchemaGossip:
-    """Phase 7.6: P2P schema proposal, voting, and adoption."""
-
-    def setup_method(self):
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
-        from coordination.schema_gossip import SchemaGossipProtocol
-        self.gossip = SchemaGossipProtocol()
-
-    def test_create_proposal_above_floor(self):
-        p = self.gossip.create_proposal(
-            "mackolik", "standings",
-            {"team": ".row .name", "pts": ".row .pts"},
-            confidence=0.8, discovery_layer="heuristic",
-            proposer_id="peer_A",
-        )
-        assert p is not None
-        assert p.votes_for == 1  # proposer auto-votes
-        assert p.proposer_id == "peer_A"
-
-    def test_create_proposal_below_floor_rejected(self):
-        """AC: Confidence < 0.6 rejects proposal."""
-        p = self.gossip.create_proposal(
-            "mackolik", "standings", {},
-            confidence=0.4, discovery_layer="heuristic",
-            proposer_id="peer_A",
-        )
-        assert p is None
-
-    def test_quorum_reached_with_3_votes(self):
-        """AC: Schema adopted after 3 confirming peers."""
-        p = self.gossip.create_proposal(
-            "mackolik", "standings",
-            {"team": ".x"}, confidence=0.9,
-            discovery_layer="heuristic", proposer_id="peer_A",
-        )
-        assert p is not None
-        # peer_A auto-voted (1 vote)
-        adopted = self.gossip.cast_vote(p.proposal_id, "peer_B", True)
-        assert not adopted  # 2 votes, need 3
-        adopted = self.gossip.cast_vote(p.proposal_id, "peer_C", True)
-        assert adopted  # 3 votes = quorum
-
-        assert p.adopted
-        assert len(self.gossip.get_adopted()) == 1
-
-    def test_duplicate_vote_ignored(self):
-        p = self.gossip.create_proposal(
-            "mackolik", "standings", {"team": ".x"},
-            confidence=0.9, discovery_layer="heuristic",
-            proposer_id="peer_A",
-        )
-        self.gossip.cast_vote(p.proposal_id, "peer_B", True)
-        # Duplicate vote from peer_B
-        self.gossip.cast_vote(p.proposal_id, "peer_B", True)
-        assert p.votes_for == 2  # Not 3
-
-    def test_reject_votes_counted(self):
-        p = self.gossip.create_proposal(
-            "mackolik", "standings", {"team": ".x"},
-            confidence=0.9, discovery_layer="heuristic",
-            proposer_id="peer_A",
-        )
-        self.gossip.cast_vote(p.proposal_id, "peer_B", False)
-        assert p.votes_against == 1
-        assert not p.adopted
-
-    def test_vote_on_unknown_proposal(self):
-        result = self.gossip.cast_vote("nonexistent", "peer_X", True)
-        assert result is False
-
-    def test_pending_count(self):
-        self.gossip.create_proposal(
-            "a", "b", {}, confidence=0.7,
-            discovery_layer="heuristic", proposer_id="p1",
-        )
-        self.gossip.create_proposal(
-            "c", "d", {}, confidence=0.8,
-            discovery_layer="heuristic", proposer_id="p2",
-        )
-        assert self.gossip.pending_count == 2
-
-
 class TestPhase7Migration:
     """Phase 7: Verify migration file exists and has correct schema."""
 
@@ -3053,168 +2777,3 @@ class TestSelfHealing:
 # Phase 9: Real Network Transport
 # ═══════════════════════════════════════════════════════════════════
 
-class TestTcpTransport:
-    """Phase 9.1: TCP transport conformance with SimulatedTransport."""
-
-    def setup_method(self):
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
-        from protocol.tcp_transport import TcpTransport
-        self.transport = TcpTransport()
-
-    def test_register_node(self):
-        self.transport.register_node("node_A")
-        assert self.transport.node_count == 1
-        self.transport.register_node("node_B")
-        assert self.transport.node_count == 2
-
-    def test_unregister_node(self):
-        self.transport.register_node("node_A")
-        assert self.transport.unregister_node("node_A")
-        assert self.transport.node_count == 0
-        assert not self.transport.unregister_node("nonexistent")
-
-    def test_local_send_and_receive(self):
-        """AC: TCP transport passes send/receive for local nodes."""
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
-        from protocol.messages import P2PMessage
-        self.transport.register_node("node_A")
-        self.transport.register_node("node_B")
-        msg = P2PMessage(
-            message_type="ping",
-            sender_id="node_A",
-            payload={"test": True},
-        )
-        self.transport.send("node_A", "node_B", msg)
-        pending = self.transport.get_pending("node_B")
-        assert len(pending) == 1
-        assert pending[0].message_type == "ping"
-        assert pending[0].payload["test"] is True
-
-    def test_broadcast_local(self):
-        """AC: Broadcast delivers to all local nodes except sender."""
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
-        from protocol.messages import P2PMessage
-        self.transport.register_node("A")
-        self.transport.register_node("B")
-        self.transport.register_node("C")
-        msg = P2PMessage(message_type="heartbeat", sender_id="A", payload={})
-        self.transport.broadcast("A", msg)
-        assert len(self.transport.get_pending("B")) == 1
-        assert len(self.transport.get_pending("C")) == 1
-        assert len(self.transport.get_pending("A")) == 0  # sender excluded
-
-    def test_get_pending_empty(self):
-        self.transport.register_node("node_A")
-        assert self.transport.get_pending("node_A") == []
-        assert self.transport.get_pending("nonexistent") == []
-
-    def test_wire_serialization_integrity(self):
-        """AC: Messages are serialized/deserialized on the wire."""
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
-        from protocol.messages import P2PMessage
-        self.transport.register_node("A")
-        self.transport.register_node("B")
-        msg = P2PMessage(
-            message_type="scrape_data",
-            sender_id="A",
-            payload={"match_id": 123, "score": [2, 1]},
-        )
-        self.transport.send("A", "B", msg)
-        received = self.transport.get_pending("B")[0]
-        assert received.payload["match_id"] == 123
-        assert received.payload["score"] == [2, 1]
-        # Verify it went through serde (not same object)
-        assert received is not msg
-
-    def test_get_neighbors(self):
-        self.transport.register_node("A")
-        self.transport.register_node("B")
-        self.transport.register_node("C")
-        neighbors = self.transport.get_neighbors("A")
-        assert "B" in neighbors
-        assert "C" in neighbors
-        assert "A" not in neighbors
-
-    def test_add_peer(self):
-        from protocol.tcp_transport import TcpTransport
-        t = TcpTransport()
-        t.add_peer("remote_1", "10.0.0.1", 9742)
-        neighbors = t.get_neighbors("local")
-        assert "remote_1" in neighbors
-
-
-class TestPeerDiscovery:
-    """Phase 9.2: Peer discovery (LAN + WAN)."""
-
-    def setup_method(self):
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "p2p"))
-        from node.discovery import PeerDiscovery
-        self.discovery = PeerDiscovery(node_id="test_node_1", listen_port=9742)
-
-    def test_register_peer(self):
-        self.discovery.register_peer("peer_A", "10.0.0.2", 9742, via="manual")
-        assert self.discovery.peer_count == 1
-        peers = self.discovery.peers
-        assert peers[0].peer_id == "peer_A"
-        assert peers[0].host == "10.0.0.2"
-
-    def test_self_registration_ignored(self):
-        """Own node_id should not be registered as a peer."""
-        self.discovery.register_peer("test_node_1", "127.0.0.1", 9742)
-        assert self.discovery.peer_count == 0
-
-    def test_build_and_parse_announce(self):
-        data = self.discovery._build_announce()
-        import json
-        msg = json.loads(data.decode("utf-8"))
-        assert msg["type"] == "negelir_announce"
-        assert msg["node_id"] == "test_node_1"
-        assert msg["port"] == 9742
-
-    def test_process_announce_from_other(self):
-        """Process LAN announcement from another peer."""
-        import json
-        announce = json.dumps({
-            "type": "negelir_announce",
-            "node_id": "peer_B",
-            "port": 9742,
-            "ts": 0,
-        }).encode()
-        peer = self.discovery.process_announce(announce, ("192.168.1.5", 9743))
-        assert peer is not None
-        assert peer.peer_id == "peer_B"
-        assert peer.host == "192.168.1.5"
-        assert self.discovery.peer_count == 1
-
-    def test_process_announce_ignores_self(self):
-        import json
-        announce = json.dumps({
-            "type": "negelir_announce",
-            "node_id": "test_node_1",
-            "port": 9742,
-            "ts": 0,
-        }).encode()
-        peer = self.discovery.process_announce(announce, ("127.0.0.1", 9743))
-        assert peer is None
-        assert self.discovery.peer_count == 0
-
-    def test_prune_stale_peers(self):
-        import time
-        self.discovery.register_peer("old_peer", "10.0.0.1", 9742)
-        # Manually make it stale
-        self.discovery._discovered["old_peer"].last_seen = time.time() - 600
-        self.discovery.prune_stale(max_age_sec=300)
-        assert self.discovery.peer_count == 0
-
-    def test_add_seed_node(self):
-        self.discovery.add_seed_node("seed.example.com", 9742)
-        assert ("seed.example.com", 9742) in self.discovery.seed_nodes
-
-    def test_parse_invalid_announce(self):
-        peer = self.discovery.process_announce(b"garbage", ("1.2.3.4", 9999))
-        assert peer is None

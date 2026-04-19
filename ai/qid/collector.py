@@ -90,7 +90,7 @@ class QueryIntentCollector:
     """
     Thread-safe collector for query intent observations.
 
-    Each node (local or P2P) feeds classified queries here.
+    Each node (local or swarm peer) feeds classified queries here.
     Before inference the model extracts a 10-feature intent distribution
     vector for the match being predicted.
     """
@@ -118,7 +118,7 @@ class QueryIntentCollector:
             )
 
     def record_batch(self, match_id: str, records: list[dict]) -> int:
-        """Merge a batch of records (e.g. received from P2P peer).
+        """Merge a batch of records (e.g. received from a swarm peer).
         Each dict: {"intent_id": str, "confidence": float, "source": str}.
         Returns count of records actually added."""
         added = 0
@@ -160,7 +160,7 @@ class QueryIntentCollector:
             return list(self._profiles.keys())
 
     def to_broadcast_payload(self, match_id: str) -> dict | None:
-        """Serialise local query records for a match into a P2P payload."""
+        """Serialise local query records for a match into a swarm payload."""
         with self._lock:
             profile = self._profiles.get(match_id)
         if profile is None or profile.volume == 0:

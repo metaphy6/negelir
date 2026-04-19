@@ -24,8 +24,6 @@ from common.config import cfg
 from common.logger import get_logger
 
 from pipeline.training_artifacts import (
-    EnsembleArtifact,
-    P2PArtifact,
     ReportArtifact,
     ScrapeArtifact,
     SplitArtifact,
@@ -47,8 +45,6 @@ class StageBundle:
     validate: ValidationArtifact
     split: SplitArtifact
     train: TrainingArtifact
-    p2p: P2PArtifact
-    ensemble: EnsembleArtifact
     verify: VerifyArtifact
 
 
@@ -56,9 +52,8 @@ def compute_verdict(bundle: StageBundle, *, failed_stage: str | None = None) -> 
     """Return (verdict, failed_stage_name) using thresholds from cfg.
 
     Verdict:
-      PASS           — every hard-stage threshold met, P2P healthy.
-      PASS_DEGRADED  — hard stages pass but p2p_status in {degraded, skipped}.
-      FAIL           — any hard stage misses its threshold.
+      PASS  — every hard-stage threshold met.
+      FAIL  — any hard stage misses its threshold.
     """
     th = cfg.training_thresholds
 
@@ -74,11 +69,6 @@ def compute_verdict(bundle: StageBundle, *, failed_stage: str | None = None) -> 
     if bundle.verify.overall_acc < float(th["ensemble_acc"]):
         return "FAIL", "verify"
 
-    if bundle.p2p.p2p_status in ("degraded", "skipped"):
-        return "PASS_DEGRADED", ""
-    if bundle.p2p.nodes_alive < int(th["min_nodes_alive"]):
-        return "PASS_DEGRADED", ""
-
     return "PASS", ""
 
 
@@ -90,18 +80,12 @@ def render_text(bundle: StageBundle, *, run_id: str, league_id: str,
                 verdict: str, failed_stage: str) -> str:
     th = cfg.training_thresholds
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    verdict_icon = {"PASS": "✅", "PASS_DEGRADED": "⚠️ ", "FAIL": "❌"}[verdict]
+    verdict_icon = {"PASS": "✅", "FAIL": "❌"}[verdict]
 
     top_feats = "\n".join(
         f"     {i+1:>2}. {name}: {imp:.4f}"
         for i, (name, imp) in enumerate(bundle.train.top_features[:5])
     ) or "     (none)"
-
-    per_node = bundle.ensemble.per_node_acc
-    per_node_line = (
-        ", ".join(f"{n}={_format_pct(a)}" for n, a in sorted(per_node.items()))
-        if per_node else "(none)"
-    )
 
     per_market = bundle.verify.per_market_acc
     market_lines = "\n".join(
@@ -110,8 +94,8 @@ def render_text(bundle: StageBundle, *, run_id: str, league_id: str,
     ) or "   (no markets evaluated)"
 
     return f"""\
-NEGELIR — FULL SYSTEM TRAINING REPORT
-======================================
+NEGELIR — TRAINING REPORT
+=========================
 Run ID:  {run_id}
 Date:    {now}
 League:  {league_id}
@@ -144,27 +128,14 @@ Schema:  v{SCHEMA_VERSION}
    Top features:
 {top_feats}
 
-5. P2P SIMULATION
-   Status: {bundle.p2p.p2p_status}
-   Nodes alive: {bundle.p2p.nodes_alive}  (threshold: {int(th['min_nodes_alive'])})
-   Schema consensus: {"✓" if bundle.p2p.schema_consensus else "✗"}
-   Role election entries: {len(bundle.p2p.role_election)}
-   {f"Error: {bundle.p2p.error}" if bundle.p2p.error else ""}
-
-6. ENSEMBLE PREDICTIONS
-   Predicted matches: {len(bundle.ensemble.ensemble_predictions)}
-   Per-node accuracy: {per_node_line}
-   Best single node: {_format_pct(bundle.ensemble.best_node_acc)}
-   Ensemble accuracy: {_format_pct(bundle.ensemble.ensemble_acc)}
-
-7. VERIFICATION VS HOLDOUT OUTCOMES
+5. VERIFICATION VS HOLDOUT OUTCOMES
    Overall accuracy: {_format_pct(bundle.verify.overall_acc)}  (threshold: {_format_pct(float(th['ensemble_acc']))})
    Coverage: {_format_pct(bundle.verify.coverage)}
    Brier score: {bundle.verify.brier_score:.4f}
    Per-market breakdown:
 {market_lines}
 
-8. VERDICT
+6. VERDICT
    {verdict_icon} {verdict}{f" — failed stage: {failed_stage}" if failed_stage else ""}
 """
 
@@ -193,14 +164,6 @@ def render_json(bundle: StageBundle, *, run_id: str, league_id: str,
                 "holdout_window_weeks": bundle.split.holdout_window_weeks,
             },
             "train": bundle.train.to_dict(),
-            "p2p": {k: v for k, v in bundle.p2p.to_dict().items() if k != "per_node_predictions"},
-            "ensemble": {
-                "ensemble_acc": bundle.ensemble.ensemble_acc,
-                "best_node_acc": bundle.ensemble.best_node_acc,
-                "per_node_acc": bundle.ensemble.per_node_acc,
-                "reputation_scores": bundle.ensemble.reputation_scores,
-                "predicted_matches": len(bundle.ensemble.ensemble_predictions),
-            },
             "verify": bundle.verify.to_dict(),
         },
     }
@@ -244,9 +207,8 @@ def write_report(bundle: StageBundle, *, run_dir: str, run_id: str,
             "verdict": verdict,
             "failed_stage": failed,
             "model_acc": bundle.train.test_acc,
-            "ensemble_acc": bundle.verify.overall_acc,
+            "holdout_acc": bundle.verify.overall_acc,
             "quarantine_rate": bundle.validate.quarantine_rate,
-            "p2p_status": bundle.p2p.p2p_status,
         }
         try:
             with open(history_path, "a", encoding="utf-8") as f:
@@ -265,5 +227,4 @@ def write_report(bundle: StageBundle, *, run_dir: str, run_id: str,
         failed_stage=failed,
         txt_path=txt_path,
         json_path=json_path,
-        p2p_status=bundle.p2p.p2p_status,
     )

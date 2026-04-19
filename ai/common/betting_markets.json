@@ -1,8 +1,14 @@
 {
   "_meta": {
-    "source": "İddaa / Nesine / Misli - Turkish Süper Lig football betting markets",
-    "last_updated": "2026-04-16",
-    "description": "Comprehensive list of betting markets available on legal Turkish betting platforms for football matches"
+    "source": "İddaa / Nesine / Misli - Turkish football betting bulletin (Spor Toto Teşkilatı). Catalogue applies to any league offered on the bulletin (Süper Lig, top European leagues, cups). Per-league market availability varies — `available_all_matches: false` markets typically appear only on top-tier matches.",
+    "last_updated": "2026-04-19",
+    "description": "Comprehensive list of betting markets available on legal Turkish betting platforms for football matches",
+    "notes": [
+      "Outcome label convention: '1' = home win, 'X' = draw, '2' = away win. Some combined markets historically used '0' for draw — normalised to 'X' here.",
+      "Card points convention (TR): yellow = 10 pts, red = 25 pts (second yellow counts as both).",
+      "Asian handicap / Asian total goals are offered under the 'asian' category and produce half-win / half-loss settlements on quarter lines.",
+      "Player markets and corner / card markets are typically offered only for top-tier leagues (Süper Lig, top-5 European leagues, UEFA competitions)."
+    ]
   },
   "categories": [
     {
@@ -101,7 +107,7 @@
           "name_en": "Home Team Wins Both Halves",
           "short_code": "EIKY",
           "outcomes": ["Evet", "Hayır"],
-          "available_all_matches": true,
+          "available_all_matches": false,
           "popularity": "low",
           "difficulty": "high"
         },
@@ -111,9 +117,20 @@
           "name_en": "Away Team Wins Both Halves",
           "short_code": "DIKY",
           "outcomes": ["Evet", "Hayır"],
-          "available_all_matches": true,
+          "available_all_matches": false,
           "popularity": "low",
           "difficulty": "high"
+        },
+        {
+          "id": "hangi_takim_kazanir",
+          "name_tr": "Hangi Yarıyı Hangi Takım Kazanır",
+          "name_en": "Which Team Wins Each Half",
+          "short_code": "HYHTK",
+          "outcomes": ["1/1", "1/X", "1/2", "X/1", "X/X", "X/2", "2/1", "2/X", "2/2"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high",
+          "note": "Same shape as IY/MS but interpreted as winner of each half independently."
         }
       ]
     },
@@ -465,10 +482,31 @@
           "name_tr": "İlk Yarıda/İkinci Yarıda Karşılıklı Gol Olur",
           "name_en": "BTTS in First Half / Second Half",
           "short_code": "IY2YKG",
-          "outcomes": ["Hayır / Hayır", "Evet / Hayır", "Evet / Evet", "Hayır / Evet"],
-          "available_all_matches": true,
+          "outcomes": ["Yok/Yok", "Var/Yok", "Var/Var", "Yok/Var"],
+          "available_all_matches": false,
           "popularity": "low",
           "difficulty": "high"
+        },
+        {
+          "id": "hangi_takim_gol_atar",
+          "name_tr": "Hangi Takım(lar) Gol Atar",
+          "name_en": "Which Team(s) Score",
+          "short_code": "HTGA",
+          "outcomes": ["Sadece 1", "Her İkisi de", "Sadece 2", "Hiçbiri"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium"
+        },
+        {
+          "id": "gol_olmaz",
+          "name_tr": "Maçta Gol Olmaz Mı? (0:0)",
+          "name_en": "No Goal in Match (0:0)",
+          "short_code": "GOLOLMAZ",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": true,
+          "popularity": "low",
+          "difficulty": "medium",
+          "note": "Equivalent to AU 0.5 → Alt, but listed as a standalone market on the bulletin."
         }
       ]
     },
@@ -541,9 +579,9 @@
           "id": "iy_sonucu_kg",
           "name_tr": "İlk Yarı Sonucu ve İlk Yarı Karşılıklı Gol",
           "name_en": "First Half Result & First Half BTTS",
-          "short_code": "IYKG",
-          "outcomes": ["1 ve Var", "1 ve Yok", "0 ve Var", "0 ve Yok", "2 ve Var", "2 ve Yok"],
-          "available_all_matches": true,
+          "short_code": "IYSKG",
+          "outcomes": ["1 ve Var", "1 ve Yok", "X ve Var", "X ve Yok", "2 ve Var", "2 ve Yok"],
+          "available_all_matches": false,
           "popularity": "medium",
           "difficulty": "high"
         },
@@ -551,10 +589,30 @@
           "id": "iy_sonucu_au_15",
           "name_tr": "İlk Yarı Sonucu ve Altı/Üstü 1.5",
           "name_en": "First Half Result & Over/Under 1.5",
-          "short_code": "IYAU15",
-          "outcomes": ["1 ve Alt", "0 ve Alt", "2 ve Alt", "1 ve Üst", "0 ve Üst", "2 ve Üst"],
-          "available_all_matches": true,
+          "short_code": "IYSAU15",
+          "outcomes": ["1 ve Alt", "X ve Alt", "2 ve Alt", "1 ve Üst", "X ve Üst", "2 ve Üst"],
+          "available_all_matches": false,
           "popularity": "medium",
+          "difficulty": "high"
+        },
+        {
+          "id": "iy_ms_kg",
+          "name_tr": "İlk Yarı / Maç Sonucu ve Karşılıklı Gol",
+          "name_en": "HT/FT & BTTS",
+          "short_code": "IYMSKG",
+          "description_tr": "İlk yarı sonucu, maç sonucu ve karşılıklı gol birlikte",
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high"
+        },
+        {
+          "id": "toplam_gol_kg",
+          "name_tr": "Toplam Gol Aralığı ve Karşılıklı Gol",
+          "name_en": "Total Goals Range & BTTS",
+          "short_code": "TGKG",
+          "outcomes": ["0-1 ve Var", "0-1 ve Yok", "2-3 ve Var", "2-3 ve Yok", "4-5 ve Var", "4-5 ve Yok", "6+ ve Var", "6+ ve Yok"],
+          "available_all_matches": false,
+          "popularity": "low",
           "difficulty": "high"
         }
       ]
@@ -682,7 +740,8 @@
           "outcomes": ["1", "Olmaz", "2"],
           "available_all_matches": false,
           "popularity": "medium",
-          "difficulty": "medium"
+          "difficulty": "medium",
+          "note": "'Olmaz' covers the rare case of a match with zero corners (settled as void / push on most platforms)."
         },
         {
           "id": "kim_cok_korner",
@@ -779,7 +838,7 @@
           "id": "kim_cok_kart",
           "name_tr": "Hangi Takım Daha Fazla Kart Görür",
           "name_en": "Most Cards",
-          "short_code": "KCK",
+          "short_code": "KCKART",
           "outcomes": ["1", "Eşit", "2"],
           "available_all_matches": false,
           "popularity": "low",
@@ -906,10 +965,62 @@
           "name_tr": "Oyuncu X+ Şut Çeker",
           "name_en": "Player X+ Shots",
           "short_code": "OS",
+          "typical_thresholds": [0.5, 1.5, 2.5, 3.5],
           "outcomes": ["Alt", "Üst"],
           "available_all_matches": false,
           "popularity": "low",
+          "difficulty": "high",
+          "note": "Usually offered as 'Şut isabetli/değil' (on target / off target) per-player."
+        },
+        {
+          "id": "oyuncu_kart_gorur",
+          "name_tr": "Oyuncu Kart Görür",
+          "name_en": "Player to be Booked",
+          "short_code": "OKG",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
           "difficulty": "high"
+        },
+        {
+          "id": "oyuncu_asist",
+          "name_tr": "Oyuncu Asist Yapar",
+          "name_en": "Player to Assist",
+          "short_code": "OA",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "oyuncu_iki_gol",
+          "name_tr": "Oyuncu 2+ Gol Atar",
+          "name_en": "Player to Score 2+ Goals",
+          "short_code": "O2G",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high"
+        },
+        {
+          "id": "oyuncu_ilk_gol",
+          "name_tr": "İlk Golü Atan Oyuncu",
+          "name_en": "First Goal Scorer",
+          "short_code": "OIG",
+          "outcomes": "dynamic_player_list",
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "very_high"
+        },
+        {
+          "id": "oyuncu_son_gol",
+          "name_tr": "Son Golü Atan Oyuncu",
+          "name_en": "Last Goal Scorer",
+          "short_code": "OSG",
+          "outcomes": "dynamic_player_list",
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "very_high"
         },
         {
           "id": "oyuncu_sut_takim_kazanir",
@@ -952,29 +1063,122 @@
           "difficulty": "very_high"
         }
       ]
+    },
+    {
+      "category_id": "asian",
+      "category_tr": "Asya Bahisleri",
+      "category_en": "Asian Markets",
+      "markets": [
+        {
+          "id": "asya_handikap",
+          "name_tr": "Asya Handikap",
+          "name_en": "Asian Handicap",
+          "short_code": "AH",
+          "typical_handicaps": [-2.5, -2.25, -2, -1.75, -1.5, -1.25, -1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5],
+          "outcomes": ["1", "2"],
+          "available_all_matches": false,
+          "popularity": "high",
+          "difficulty": "medium",
+          "note": "Quarter lines (e.g. -0.25, +0.75) split the stake across two adjacent integer/half lines, producing half-win or half-loss settlements."
+        },
+        {
+          "id": "asya_au",
+          "name_tr": "Asya Toplam Gol Alt/Üst",
+          "name_en": "Asian Total Goals",
+          "short_code": "AAU",
+          "typical_thresholds": [1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75],
+          "outcomes": ["Alt", "Üst"],
+          "available_all_matches": false,
+          "popularity": "high",
+          "difficulty": "medium"
+        }
+      ]
+    },
+    {
+      "category_id": "specials",
+      "category_tr": "Özel Maç Bahisleri",
+      "category_en": "Match Specials",
+      "markets": [
+        {
+          "id": "penalti_olur",
+          "name_tr": "Maçta Penaltı Olur Mu?",
+          "name_en": "Penalty Awarded in Match",
+          "short_code": "PEN",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "high"
+        },
+        {
+          "id": "kirmizi_kart_olur",
+          "name_tr": "Maçta Kırmızı Kart Olur Mu?",
+          "name_en": "Red Card in Match",
+          "short_code": "KK",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "medium",
+          "difficulty": "high"
+        },
+        {
+          "id": "hangi_takim_kirmizi",
+          "name_tr": "Hangi Takım Kırmızı Kart Görür",
+          "name_en": "Which Team Gets a Red Card",
+          "short_code": "HTKK",
+          "outcomes": ["1", "Olmaz", "2", "Her İkisi"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high"
+        },
+        {
+          "id": "vargol",
+          "name_tr": "VAR Kararı Olur Mu?",
+          "name_en": "VAR Decision in Match",
+          "short_code": "VAR",
+          "outcomes": ["Evet", "Hayır"],
+          "available_all_matches": false,
+          "popularity": "low",
+          "difficulty": "high",
+          "note": "Live-betting only on most platforms."
+        },
+        {
+          "id": "sk_grup",
+          "name_tr": "Skor Grubu",
+          "name_en": "Score Group",
+          "short_code": "SKG",
+          "outcomes": ["Ev Sahibi 1 Farkla", "Ev Sahibi 2+ Farkla", "Beraberlik", "Deplasman 1 Farkla", "Deplasman 2+ Farkla"],
+          "available_all_matches": true,
+          "popularity": "medium",
+          "difficulty": "medium",
+          "note": "Sometimes labelled 'Kazanma Marjı 5-yollu'."
+        }
+      ]
     }
   ],
   "summary": {
-    "total_market_types": 72,
+    "total_market_types": 98,
     "core_markets_always_available": [
       "ms", "cs", "hms", "iy_sonucu", "iy_cs", "2y_sonucu", "iy_ms",
       "au_05", "au_15", "au_25", "au_35", "au_45",
       "iy_au_05", "iy_au_15", "iy_au_25",
       "ev_au_05", "ev_au_15", "dep_au_05", "dep_au_15",
       "kg", "iy_kg", "2y_kg", "toplam_gol", "tek_cift", "iy_tek_cift",
-      "ilk_gol", "hangi_yari_fazla_gol",
+      "ilk_gol", "hangi_yari_fazla_gol", "hangi_takim_gol_atar", "gol_olmaz",
       "ms_au_15", "ms_au_25", "ms_au_35", "ms_kg", "au25_kg",
       "mac_skoru", "iy_skoru",
-      "kazanma_marji", "iy_ms"
+      "kazanma_marji", "iy_ms", "sk_grup"
     ],
     "best_for_prediction_ai": [
       "ms", "au_25", "kg", "iy_sonucu", "toplam_gol", "tek_cift",
       "cs", "hms", "ms_au_25", "ms_kg", "au25_kg",
       "au_15", "au_35", "iy_au_05", "iy_au_15",
-      "ilk_gol", "hangi_yari_fazla_gol",
-      "mac_skoru", "iy_ms"
+      "ilk_gol", "hangi_yari_fazla_gol", "hangi_takim_gol_atar",
+      "mac_skoru", "iy_ms", "sk_grup",
+      "asya_handikap", "asya_au"
     ],
     "platform_columns_nesine": ["1", "X", "2", "Alt", "Üst", "HND", "1-X", "1-2", "X-2", "Var", "Yok"],
-    "platform_columns_misli": ["1", "X", "2", "Alt", "Üst", "HND", "1-X", "1-2", "X-2", "Var", "Yok"]
+    "platform_columns_misli": ["1", "X", "2", "Alt", "Üst", "HND", "1-X", "1-2", "X-2", "Var", "Yok"],
+    "changelog": [
+      "2026-04-19: Added Asian Handicap & Asian Total Goals categories; added Specials (penalty/red/VAR/score group); added 'which teams score', 'no goal', HT/FT-BTTS combined, total-goals-BTTS combined, player cards/assists/2+goals/first-scorer/last-scorer/which-half-which-team. Fixed duplicate IYKG short_code (→ IYSKG/IYSAU15). Normalised draw label '0' → 'X' in combined markets. Standardised IY2YKG outcome labels (Var/Yok ordering). Marked low-availability combined and per-player markets as available_all_matches: false."
+    ]
   }
 }

@@ -73,27 +73,6 @@ class TrainingArtifact(StageArtifact):
 
 
 @dataclass
-class P2PArtifact(StageArtifact):
-    stage: str = "p2p_sim"
-    p2p_status: str = "ok"  # ok | degraded | skipped
-    nodes_alive: int = 0
-    role_election: dict[str, str] = field(default_factory=dict)
-    schema_consensus: bool = False
-    per_node_predictions: dict[str, list[dict]] = field(default_factory=dict)
-    error: str = ""
-
-
-@dataclass
-class EnsembleArtifact(StageArtifact):
-    stage: str = "ensemble"
-    ensemble_predictions: list[dict] = field(default_factory=list)
-    per_node_acc: dict[str, float] = field(default_factory=dict)
-    ensemble_acc: float = 0.0
-    best_node_acc: float = 0.0
-    reputation_scores: dict[str, float] = field(default_factory=dict)
-
-
-@dataclass
 class VerifyArtifact(StageArtifact):
     stage: str = "verify"
     overall_acc: float = 0.0
@@ -113,7 +92,6 @@ class ReportArtifact(StageArtifact):
     failed_stage: str = ""
     txt_path: str = ""
     json_path: str = ""
-    p2p_status: str = "skipped"
 
 
 # Stage execution order — used by the coordinator for `--force-from` semantics
@@ -122,8 +100,6 @@ STAGE_ORDER = (
     "validate",
     "split",
     "train",
-    "p2p_sim",
-    "ensemble",
     "verify",
     "report",
 )

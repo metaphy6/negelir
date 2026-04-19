@@ -158,7 +158,12 @@ class Config:
 
     @property
     def openfootball_seasons(self) -> list[tuple[str, str]]:
-        """List of (season_dir, label) pairs for openfootball Turkish Süper Lig."""
+        """List of (season_dir, label) pairs for openfootball.
+
+        The repository covers many leagues; the per-league file is selected
+        by `LeagueConfig.openfootball_path` (e.g. `tr.1.json` for the seeded
+        Turkish Süper Lig default).
+        """
         result = []
         for entry in self._openfootball_seasons_raw.split(","):
             entry = entry.strip()
@@ -291,18 +296,15 @@ class Config:
     model_dir: str = field(default_factory=lambda: os.getenv("MODEL_DIR", "/data/models"))
     report_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_REPORT_DIR", "/data/reports"))
 
-    # Phase 3 — Full-system training pipeline thresholds (env-overridable)
+    # Phase 3 — Training pipeline thresholds (env-overridable)
     training_thresholds_model_acc: float = field(default_factory=lambda: float(os.getenv(
         "NEGELIR_THRESHOLD_MODEL_ACC", "0.50"
     )))
-    training_thresholds_ensemble_acc: float = field(default_factory=lambda: float(os.getenv(
-        "NEGELIR_THRESHOLD_ENSEMBLE_ACC", "0.50"
+    training_thresholds_holdout_acc: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_THRESHOLD_HOLDOUT_ACC", "0.50"
     )))
     training_thresholds_quarantine_max: float = field(default_factory=lambda: float(os.getenv(
         "NEGELIR_THRESHOLD_QUARANTINE_MAX", "0.10"
-    )))
-    training_thresholds_min_nodes_alive: int = field(default_factory=lambda: int(os.getenv(
-        "NEGELIR_THRESHOLD_MIN_NODES_ALIVE", "3"
     )))
     training_thresholds_min_holdout_matches: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_THRESHOLD_MIN_HOLDOUT_MATCHES", "5"
@@ -313,12 +315,12 @@ class Config:
 
     @property
     def training_thresholds(self) -> dict[str, float | int]:
-        """Phase 3: numeric thresholds driving full-pipeline pass/fail verdict."""
+        """Phase 3: numeric thresholds driving pipeline pass/fail verdict."""
         return {
             "model_acc": self.training_thresholds_model_acc,
-            "ensemble_acc": self.training_thresholds_ensemble_acc,
+            "ensemble_acc": self.training_thresholds_holdout_acc,  # legacy key alias
+            "holdout_acc": self.training_thresholds_holdout_acc,
             "quarantine_max": self.training_thresholds_quarantine_max,
-            "min_nodes_alive": self.training_thresholds_min_nodes_alive,
             "min_holdout_matches": self.training_thresholds_min_holdout_matches,
         }
 
@@ -360,7 +362,7 @@ class Config:
         _bounded("training_test_split", self.training_test_split, 0.0, 1.0, allow_eq_hi=False)
         _bounded("stale_confidence_penalty", self.stale_confidence_penalty, 0.0, 1.0)
         _bounded("training_thresholds_model_acc", self.training_thresholds_model_acc, 0.0, 1.0)
-        _bounded("training_thresholds_ensemble_acc", self.training_thresholds_ensemble_acc, 0.0, 1.0)
+        _bounded("training_thresholds_holdout_acc", self.training_thresholds_holdout_acc, 0.0, 1.0)
         _bounded("training_thresholds_quarantine_max", self.training_thresholds_quarantine_max, 0.0, 1.0)
 
         # Positive integers
@@ -377,7 +379,6 @@ class Config:
             ("scrape_http_timeout", self.scrape_http_timeout),
             ("footballdata_http_timeout", self.footballdata_http_timeout),
             ("redis_socket_timeout", self.redis_socket_timeout),
-            ("training_thresholds_min_nodes_alive", self.training_thresholds_min_nodes_alive),
             ("training_thresholds_min_holdout_matches", self.training_thresholds_min_holdout_matches),
             ("verification_window_weeks", self.verification_window_weeks),
         ):
