@@ -3,9 +3,30 @@ Negelir — Configuration loaded from environment variables.
 All settings respect Docker Compose injection.
 """
 
-import json
 import os
+import json
+import re
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
+
+
+# Env-var prefixes considered "owned" by the Python config layer.
+# Strict mode (`NEGELIR_STRICT=1`) refuses unknown keys with these prefixes.
+# `P2P_` is included so the deleted P2P stack errors loudly if reintroduced.
+_OWNED_ENV_PREFIXES: tuple[str, ...] = ("NEGELIR_", "SCRAPE_", "P2P_")
+
+# Pattern that captures every env-var name read via os.getenv in this module.
+_GETENV_RE = re.compile(r"""os\.getenv\(\s*["']([A-Z][A-Z0-9_]*)["']""")
+
+
+def _declared_env_keys() -> frozenset[str]:
+    """Set of every env-var name referenced via os.getenv(...) in this file."""
+    here = os.path.abspath(__file__)
+    try:
+        with open(here, "r", encoding="utf-8") as fh:
+            return frozenset(_GETENV_RE.findall(fh.read()))
+    except OSError:
+        return frozenset()
 
 
 @dataclass
@@ -66,12 +87,12 @@ class Config:
     )))
 
     # Scraping
-    scrape_rate_limit: int = field(default_factory=lambda: int(os.getenv("SCRAPE_RATE_LIMIT_SECONDS", "5")))
+    scrape_rate_limit: int = field(default_factory=lambda: int(os.getenv("SCRAPE_RATE_LIMIT_SECONDS", "2")))
     real_data_rate_limit: float = field(default_factory=lambda: float(os.getenv(
         "NEGELIR_REAL_DATA_RATE_LIMIT", "1.0"
     )))
     scrape_user_agent: str = field(default_factory=lambda: os.getenv(
-        "SCRAPE_USER_AGENT", "Negelir/0.1 (Football Analysis Research)"
+        "SCRAPE_USER_AGENT", "Xops/0.1 (Football Analysis Research)"
     ))
     scrape_respect_robots: bool = field(default_factory=lambda: os.getenv(
         "SCRAPE_RESPECT_ROBOTS_TXT", "true"
@@ -381,6 +402,7 @@ class Config:
             ("redis_socket_timeout", self.redis_socket_timeout),
             ("training_thresholds_min_holdout_matches", self.training_thresholds_min_holdout_matches),
             ("verification_window_weeks", self.verification_window_weeks),
+            ("bootstrap_min_matches", self.bootstrap_min_matches),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")
@@ -428,6 +450,50 @@ class Config:
                     issues.append(f"training_sample_weights[{k}]={v} cannot be negative")
         except (ValueError, TypeError) as e:
             issues.append(f"training_sample_weights parse error: {e}")
+
+        # URL schemes for HTTP endpoints (server + active scrape sources)
+        def _check_url(name: str, value: str) -> None:
+            if not value:
+                return  # empty = optional / disabled
+            try:
+                parsed = urlparse(value)
+            except (ValueError, TypeError):
+                issues.append(f"{name}={value!r} is not a parseable URL")
+                return
+            if parsed.scheme not in ("http", "https"):
+                issues.append(
+                    f"{name}={value!r} must use http:// or https:// (got scheme={parsed.scheme!r})"
+                )
+            if not parsed.netloc:
+                issues.append(f"{name}={value!r} is missing a host")
+
+        _check_url("server_url", self.server_url)
+        _check_url("scrape_source_1", self.scrape_source_1)
+        _check_url("scrape_source_2", self.scrape_source_2)
+        _check_url("scrape_source_3", self.scrape_source_3)
+        _check_url("scrape_source_4", self.scrape_source_4)
+        _check_url("scrape_source_5", self.scrape_source_5)
+        _check_url("scrape_source_fallback", self.scrape_source_fallback)
+        for extra in self.scrape_source_extra.split(","):
+            extra = extra.strip()
+            if extra:
+                _check_url("scrape_source_extra", extra)
+
+        # Strict mode: refuse unknown env keys with prefixes the Python layer owns.
+        # Triggered by NEGELIR_STRICT=1 OR explicit strict=True call.
+        env_strict = os.getenv("NEGELIR_STRICT", "").lower() in ("1", "true", "yes", "on")
+        if strict or env_strict:
+            declared = _declared_env_keys()
+            stray = sorted(
+                k for k in os.environ
+                if k.startswith(_OWNED_ENV_PREFIXES) and k not in declared
+            )
+            for key in stray:
+                issues.append(
+                    f"unknown env key {key!r} matches reserved prefix "
+                    f"({'/'.join(p.rstrip('_') for p in _OWNED_ENV_PREFIXES)}); "
+                    "remove it or add a corresponding field in Config"
+                )
 
         if strict and issues:
             raise ValueError("Config validation failed:\n  - " + "\n  - ".join(issues))

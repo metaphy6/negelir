@@ -148,6 +148,12 @@ ai-continuous: env ## Run AI pipeline in continuous loop (Ctrl+C to stop)
 ai-continuous-demo: env ## Run AI demo in continuous loop (Ctrl+C to stop)
 	@$(XOPS)/ai_commands.py ai-continuous-demo
 
+# ── Lint (Phase 1.4) ────────────────────────────────────────
+
+.PHONY: lint
+lint: ## Run hardcode/no-magic lint over ai/ (Phase 1.4)
+	@$(XOPS)/lint.py lint
+
 # ── Phase Tracking ──────────────────────────────────────────
 # (intentionally inline — already thin Python wrappers around docs/tracking/track.py)
 

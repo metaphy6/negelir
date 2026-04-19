@@ -13,78 +13,66 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/metaphy6/negelir/server/internal/config"
 )
 
-type serverConfig struct {
-	DatabaseURL         string
-	RedisURL            string
-	Port                string
-	DBMaxConns          int32
-	DBConnectTimeout    time.Duration
-	DBPingTimeout       time.Duration
-	DBRetryDelay        time.Duration
-	RedisRetryDelay     time.Duration
-	HTTPReadTimeout     time.Duration
-	HTTPWriteTimeout    time.Duration
-	HTTPShutdownTimeout time.Duration
-	MatchesCacheTTL     time.Duration
-	TeamsCacheTTL       time.Duration
-}
-
 func main() {
-	fmt.Println("🚀 Negelir Middleware Server starting...")
-	cfg := loadServerConfig()
+	fmt.Println("\xf0\x9f\x9a\x80 Negelir Middleware Server starting...")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("\xe2\x9d\x8c Config error: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Database
-	dbConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	dbConfig, err := pgxpool.ParseConfig(cfg.EffectiveDatabaseURL())
 	if err != nil {
-		log.Fatalf("❌ PostgreSQL URL error: %v", err)
+		log.Fatalf("\xe2\x9d\x8c PostgreSQL URL error: %v", err)
 	}
-	dbConfig.MaxConns = cfg.DBMaxConns
-	dbConfig.ConnConfig.ConnectTimeout = cfg.DBConnectTimeout
+	dbConfig.MaxConns = int32(cfg.DBMaxConns)
+	dbConfig.ConnConfig.ConnectTimeout = cfg.DBConnectTimeout()
 
 	pool, err := pgxpool.NewWithConfig(ctx, dbConfig)
 	if err != nil {
-		log.Fatalf("❌ PostgreSQL connection error: %v", err)
+		log.Fatalf("\xe2\x9d\x8c PostgreSQL connection error: %v", err)
 	}
 	defer pool.Close()
 
-	pingCtx, pingCancel := context.WithTimeout(ctx, cfg.DBPingTimeout)
+	pingCtx, pingCancel := context.WithTimeout(ctx, cfg.DBPingTimeout())
 	if err := pool.Ping(pingCtx); err != nil {
 		pingCancel()
-		log.Printf("⚠️  PostgreSQL not ready yet, retrying...")
-		time.Sleep(cfg.DBRetryDelay)
-		pingCtx2, pingCancel2 := context.WithTimeout(ctx, cfg.DBPingTimeout)
+		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  PostgreSQL not ready yet, retrying...")
+		time.Sleep(cfg.DBRetryDelay())
+		pingCtx2, pingCancel2 := context.WithTimeout(ctx, cfg.DBPingTimeout())
 		if err := pool.Ping(pingCtx2); err != nil {
 			pingCancel2()
-			log.Fatalf("❌ Could not connect to PostgreSQL: %v", err)
+			log.Fatalf("\xe2\x9d\x8c Could not connect to PostgreSQL: %v", err)
 		}
 		pingCancel2()
 	} else {
 		pingCancel()
 	}
-	fmt.Println("✅ PostgreSQL connection successful")
+	fmt.Println("\xe2\x9c\x85 PostgreSQL connection successful")
 
 	// Redis
-	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisURL})
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.EffectiveRedisURL()})
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.Printf("⚠️  Redis not ready yet, retrying...")
-		time.Sleep(cfg.RedisRetryDelay)
+		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Redis not ready yet, retrying...")
+		time.Sleep(cfg.RedisRetryDelay())
 		if err := rdb.Ping(ctx).Err(); err != nil {
-			log.Fatalf("❌ Could not connect to Redis: %v", err)
+			log.Fatalf("\xe2\x9d\x8c Could not connect to Redis: %v", err)
 		}
 	}
-	fmt.Println("✅ Redis connection successful")
+	fmt.Println("\xe2\x9c\x85 Redis connection successful")
 
 	// Router
 	if os.Getenv("GIN_MODE") == "" {
@@ -98,9 +86,9 @@ func main() {
 	api := r.Group("/api/v1")
 	{
 		api.GET("/health", healthHandler(pool, rdb))
-		api.GET("/matches", matchesHandler(pool, rdb, cfg.MatchesCacheTTL))
+		api.GET("/matches", matchesHandler(pool, rdb, cfg.MatchesCacheTTL()))
 		api.GET("/matches/:id", matchDetailHandler(pool, rdb))
-		api.GET("/teams", teamsHandler(pool, rdb, cfg.TeamsCacheTTL))
+		api.GET("/teams", teamsHandler(pool, rdb, cfg.TeamsCacheTTL()))
 		api.GET("/teams/:id", teamDetailHandler(pool))
 		api.POST("/scrape/trigger", scrapeTriggerHandler(pool))
 		api.GET("/features/:match_id", featuresHandler(pool, rdb))
@@ -109,15 +97,15 @@ func main() {
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
-		ReadTimeout:  cfg.HTTPReadTimeout,
-		WriteTimeout: cfg.HTTPWriteTimeout,
+		ReadTimeout:  cfg.HTTPReadTimeout(),
+		WriteTimeout: cfg.HTTPWriteTimeout(),
 	}
 
 	// Graceful shutdown
 	go func() {
-		fmt.Printf("📡 Server listening on :%s\n", cfg.Port)
+		fmt.Printf("\xf0\x9f\x93\xa1 Server listening on :%s\n", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("❌ Server error: %v", err)
+			log.Fatalf("\xe2\x9d\x8c Server error: %v", err)
 		}
 	}()
 
@@ -125,16 +113,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	fmt.Println("\n🛑 Server shutting down...")
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout)
+	fmt.Println("\n\xf0\x9f\x9b\x91 Server shutting down...")
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout())
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("❌ Server shutdown error: %v", err)
+		log.Fatalf("\xe2\x9d\x8c Server shutdown error: %v", err)
 	}
 	if err := rdb.Close(); err != nil {
-		log.Printf("⚠️  Redis close error: %v", err)
+		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Redis close error: %v", err)
 	}
-	fmt.Println("✅ Server shut down successfully")
+	fmt.Println("\xe2\x9c\x85 Server shut down successfully")
 }
 
 // --- Middleware ---
@@ -439,57 +427,7 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 }
 
 // --- Helpers ---
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func getEnvInt(key string, fallback int) int {
-	v := getEnv(key, strconv.Itoa(fallback))
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
-}
-
-func getEnvDurationSeconds(key string, fallbackSeconds int) time.Duration {
-	seconds := getEnvInt(key, fallbackSeconds)
-	return time.Duration(seconds) * time.Second
-}
-
-func defaultDatabaseURL() string {
-	host := getEnv("POSTGRES_HOST", "postgres")
-	port := getEnv("POSTGRES_PORT", "5432")
-	db := getEnv("POSTGRES_DB", "negelir")
-	user := getEnv("POSTGRES_USER", "negelir")
-	password := getEnv("POSTGRES_PASSWORD", "")
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port, db)
-}
-
-func defaultRedisURL() string {
-	host := getEnv("REDIS_HOST", "redis")
-	port := getEnv("REDIS_PORT", "6379")
-	return fmt.Sprintf("%s:%s", host, port)
-}
-
-func loadServerConfig() serverConfig {
-	return serverConfig{
-		DatabaseURL:         getEnv("DATABASE_URL", defaultDatabaseURL()),
-		RedisURL:            getEnv("REDIS_URL", defaultRedisURL()),
-		Port:                getEnv("SERVER_PORT", "8080"),
-		DBMaxConns:          int32(getEnvInt("DB_MAX_CONNS", 10)),
-		DBConnectTimeout:    getEnvDurationSeconds("DB_CONNECT_TIMEOUT_SEC", 5),
-		DBPingTimeout:       getEnvDurationSeconds("DB_PING_TIMEOUT_SEC", 5),
-		DBRetryDelay:        getEnvDurationSeconds("DB_RETRY_DELAY_SEC", 3),
-		RedisRetryDelay:     getEnvDurationSeconds("REDIS_RETRY_DELAY_SEC", 2),
-		HTTPReadTimeout:     getEnvDurationSeconds("HTTP_READ_TIMEOUT_SEC", 10),
-		HTTPWriteTimeout:    getEnvDurationSeconds("HTTP_WRITE_TIMEOUT_SEC", 30),
-		HTTPShutdownTimeout: getEnvDurationSeconds("HTTP_SHUTDOWN_TIMEOUT_SEC", 5),
-		MatchesCacheTTL:     getEnvDurationSeconds("CACHE_MATCHES_TTL_SEC", 300),
-		TeamsCacheTTL:       getEnvDurationSeconds("CACHE_TEAMS_TTL_SEC", 600),
-	}
-}
+//
+// All env-binding/defaulting logic now lives in
+// `server/internal/config` (Phase 1.2). Handlers and middleware-only
+// helpers stay here.

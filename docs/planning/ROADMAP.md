@@ -213,22 +213,22 @@ Follow-up to the multi-league reframing tracked under `phase 0 → adapted` (202
 
 ### 1.1 Python config (`ai/common/config.py`)
 
-- [ ] Every value reads from `os.getenv(...)` with a documented default.
-- [ ] `defaults.yaml` mirrors the dataclass for human reference (no double source of truth — `defaults.yaml` is generated from the dataclass in CI).
-- [ ] `Config.validate(strict=False)` checks: types, ranges, weekday names, `lo < hi` on tuple ranges, URL schemes for HTTP endpoints.
-- [ ] Strict mode (`NEGELIR_STRICT=1`) refuses unknown env keys with the `NEGELIR_` / `SCRAPE_` / `P2P_` prefixes (the latter only to error loudly if someone re-introduces them).
+- [x] Every value reads from `os.getenv(...)` with a documented default.
+- [x] `defaults.yaml` mirrors the dataclass for human reference. _Drift between `defaults.yaml` and `.env.example` is enforced by `test_defaults_yaml_mentions_every_documented_tunable` (token-mention check) and `test_defaults_yaml_is_valid_yaml` (real `yaml.safe_load` parse + spot-checks for `paths.report_dir` and `operational.strict`, added in the second audit pass after a regex-only check failed to catch a key glued into another comment line). A full dataclass-driven generator is still on the backlog but no longer required to keep the two files honest._
+- [x] `Config.validate(strict=False)` checks: types, ranges, weekday names, `lo < hi` on tuple ranges, URL schemes for HTTP endpoints.
+- [x] Strict mode (`NEGELIR_STRICT=1`) refuses unknown env keys with the `NEGELIR_` / `SCRAPE_` / `P2P_` prefixes (the latter only to error loudly if someone re-introduces them).
 
 ### 1.2 Go config (`server/internal/config`)
 
-- [ ] Mirror the Python pattern: one `Config struct`, one `Load() (*Config, error)`, env-driven, validated.
-- [ ] Tag every field: `env:"NEGELIR_FOO" default:"42"`. Use `caarlos0/env/v10` or equivalent.
-- [ ] `go test ./internal/config -run TestEnvSync` enforces parity with `.env.example`.
+- [x] Mirror the Python pattern: one `Config struct`, one `Load() (*Config, error)`, env-driven, validated.
+- [x] Tag every field: `env:"NEGELIR_FOO" default:"42"`. Use `caarlos0/env/v10` or equivalent. _Implemented stdlib-only (small surface, easier to audit, no transitive deps)._
+- [x] `go test ./internal/config -run TestEnvSync` enforces parity with `.env.example`.
 
 ### 1.3 Bidirectional sync test (already partially landed)
 
-- [ ] `ai/tests/test_config_sync.py` covers Python ↔ `.env.example`.
-- [ ] **New:** `server/internal/config/sync_test.go` covers Go ↔ `.env.example`.
-- [ ] **New:** a meta-test asserts no env key is owned by *both* Python and Go without a `# shared` marker comment in `.env.example`.
+- [x] `ai/tests/test_config_sync.py` covers Python ↔ `.env.example`.
+- [x] **New:** `server/internal/config/sync_test.go` covers Go ↔ `.env.example`.
+- [x] **New:** a meta-test asserts no env key is owned by *both* Python and Go without a `# shared` marker comment in `.env.example` (`test_shared_env_keys_are_marked` + Go-side `TestSharedKeysAreMarked`).
 
 ### 1.4 Hardcode audit (one-shot scan)
 
@@ -244,6 +244,9 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 
 > 💡 **Example violation → fix:**
 > `if accuracy < 0.55: alert()` → `if accuracy < cfg.drift_accuracy_floor: alert()`
+
+- [x] `xops/lint/no_magic.py` enforces `time.sleep(<literal>)`, `localhost:<port>`, and `requests.<method>("http(s)://…")` over `ai/`. Wired as `make lint`. Use `# no_magic: allow` to acknowledge a deliberate exception.
+- [~] Numeric literal / fuzzy float-threshold rules: deferred — a regex-only check produces too much noise; tracked for a follow-up sub-phase that pairs an AST-based scanner with a per-call allow-list.
 
 ---
 

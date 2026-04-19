@@ -72,11 +72,11 @@ self_healing:
 
 # ── Scraping ─────────────────────────────────────────────────────────────────
 scraping:
-  rate_limit_seconds: 5      # SCRAPE_RATE_LIMIT_SECONDS
+  rate_limit_seconds: 2      # SCRAPE_RATE_LIMIT_SECONDS
   real_data_rate_limit: 1.0  # NEGELIR_REAL_DATA_RATE_LIMIT
-  user_agent: "Negelir/0.1 (Football Analysis Research)"  # SCRAPE_USER_AGENT
+  user_agent: "Xops/0.1 (Football Analysis Research)"  # SCRAPE_USER_AGENT
   respect_robots_txt: true   # SCRAPE_RESPECT_ROBOTS_TXT
-  sources:                   # SCRAPE_SOURCE_1..5 + SCRAPE_SOURCE_FALLBACK
+  sources:                   # SCRAPE_SOURCE_1, SCRAPE_SOURCE_2, SCRAPE_SOURCE_3, SCRAPE_SOURCE_4, SCRAPE_SOURCE_5, SCRAPE_SOURCE_FALLBACK, SCRAPE_SOURCE_EXTRA
     - https://www.mackolik.com
     - https://www.nesine.com
     - https://www.tff.org
@@ -137,6 +137,20 @@ telemetry:
 paths:
   data_dir: /data            # DATA_DIR
   model_dir: /data/models    # MODEL_DIR
+  report_dir: /data/reports  # NEGELIR_REPORT_DIR
+
+# ── Phase 3 — Training-pipeline pass/fail thresholds ───────────────────
+training_thresholds:
+  model_acc: 0.50            # NEGELIR_THRESHOLD_MODEL_ACC
+  holdout_acc: 0.50          # NEGELIR_THRESHOLD_HOLDOUT_ACC
+  quarantine_max: 0.10       # NEGELIR_THRESHOLD_QUARANTINE_MAX
+  min_holdout_matches: 5     # NEGELIR_THRESHOLD_MIN_HOLDOUT_MATCHES
+verification:
+  window_weeks: 4            # NEGELIR_VERIFICATION_WINDOW_WEEKS
+
+# ── Operational toggles ───────────────────────────────────────
+operational:
+  strict: false              # NEGELIR_STRICT  (1/true → fail validate() on unknown reserved-prefix env keys)
 
 # ── LeagueConfig (per-league overrides; see ai/common/league_config.py) ──────
 # Numbers below are the Turkish Süper Lig defaults. Each preset in
