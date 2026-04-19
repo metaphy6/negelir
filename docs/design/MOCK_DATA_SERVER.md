@@ -23,22 +23,25 @@ infra/mock/
 ├── nginx/
 │   ├── nginx.conf            # one server block per vhost
 │   └── snippets/             # tls config, common headers
-├── seeds/
-│   ├── manifest.json         # url, sha256, captured_at, content_type
-│   ├── mackolik.com/...      # frozen html / json / images
-│   ├── nesine.com/...
-│   └── tff.org/...
-└── scripts/
-    ├── gen-ca.sh
-    ├── gen-cert.sh
-    ├── install-hosts.sh      # idempotent /etc/hosts editor
-    └── uninstall-hosts.sh
+└── seeds/
+    ├── manifest.json         # url, sha256, captured_at, content_type
+    ├── mackolik.com/...      # frozen html / json / images
+    ├── nesine.com/...
+    └── tff.org/...
+
+xops/mock/                    # automation lives under xops/ per AGENTS.md §5
+├── gen_ca.py                 # cross-platform (no bash)
+├── gen_cert.py
+├── install_hosts.py          # idempotent /etc/hosts editor
+├── uninstall_hosts.py
+├── capture.py                # one-time real-source capture (Phase 2.4)
+└── verify.py                 # offline integrity check (Phase 2.5)
 ```
 
 ## 🔑 TLS
 
-- `make mock-ca-init` runs `gen-ca.sh` (only if `ca.crt` is missing).
-- `make mock-certs` regenerates leaves when the domain list in `infra/mock/domains.txt` changes.
+- `make mock-ca-init` runs `xops/mock/gen_ca.py` (only if `ca.crt` is missing).
+- `make mock-certs` regenerates leaves when the domain list in `infra/mock/domains.txt` changes (driver: `xops/mock/gen_cert.py`).
 - The CA is **mounted** into:
   - `nginx-mock` (terminates TLS).
   - Every Python image: appended to `/etc/ssl/certs/ca-certificates.crt` via `update-ca-certificates` in the entrypoint.
@@ -71,7 +74,7 @@ base = "https://mackolik.local" if profile == "mock" else "https://www.mackolik.
 
 ## 📦 Seed corpus
 
-- One-time capture: `make mock-capture` runs `scripts/mock/capture.py` against the **real** sources (rate-limited, robots-respecting, user-agent declared).
+- One-time capture: `make mock-capture` runs `xops/mock/capture.py` against the **real** sources (rate-limited, robots-respecting, user-agent declared).
 - Each capture writes: the response body verbatim, status code, headers, and an entry in `manifest.json` with sha256.
 - Captures are committed (small) or LFS'd (large).
 - `make mock-verify` re-hashes everything and refuses to bring up nginx-mock if a seed is corrupt.

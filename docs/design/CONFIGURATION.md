@@ -14,7 +14,7 @@ server/internal/config/
 ├── config.go                     # Go Config struct, the only Go config
 └── sync_test.go                  # parity test against .env.example
 ai/tests/test_config_sync.py      # parity test for the Python side
-scripts/lint/no_magic.py          # lint that forbids magic numbers
+xops/lint/no_magic.py             # lint that forbids magic numbers
 ```
 
 ## 🎛️ Naming conventions
@@ -43,7 +43,7 @@ marks it `# shared`. The meta-test enforces this.
 
 ## 🚫 Forbidden patterns
 
-(enforced by `scripts/lint/no_magic.py` in CI)
+(enforced by `xops/lint/no_magic.py` in CI)
 
 - Numeric literal in non-test code unless inside a `Config` field default.
 - `localhost:<port>` outside test fixtures.

@@ -167,6 +167,7 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 - [x] In `ai/orchestrator/state_machine.py`: remove `--mode sim-only` / `--skip-p2p` paths and the P2P stage from the full pipeline.
 - [x] `grep -RIn "p2p\|P2P\|peer\|gossip\|multicast" ai/ server/ --include='*.py' --include='*.go'` must return **0 lines** outside test fixtures.
       *(Verified 2026-04-19. Only matches: `ai/qid/collector.py` reuses `peer` for swarm peers; `test_config_sync.py::test_p2p_module_removed` is the regression guard; `training_pipeline.py` has a docstring noting the removal.)*
+- [x] **2026-04-19 follow-up audit:** the `p2p/` working tree had been recreated by stray `__pycache__/` and `.pytest_cache/` artifacts (untracked). Re-deleted; `pytest tests/test_config_sync.py::test_p2p_module_removed` is green again. Added to the standing precaution list in §0.4.
 
 ### 0.3 Reset documentation
 
@@ -180,6 +181,7 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 - [x] `make test-ai` passes — `TestIncrementalRetrain` fixed by patching `model.trainer.get_xgb_params` to cap `n_estimators=20` inside the test (verified 2026-04-19: 355/355 ai tests pass in ~3 min).
 - [x] `make test` passes (no `make test-p2p` to run anymore — that target is gone). Go side: `go test ./...` clean (no test files yet; compiles).
 - [x] No `make` target prints `❌` on a fresh clone after `make env`. Verified P2P-free Makefile via `grep -n "p2p\|P2P" Makefile` → 0 matches.
+- [x] **Stale-tree precaution:** `p2p/` must not reappear even as an empty directory holding `__pycache__/` or `.pytest_cache/`. The regression test `test_p2p_module_removed` checks `(REPO_ROOT / "p2p").exists()` (not `git ls-files`), so any process that recreates the directory will turn CI red. If it happens, run `rm -rf p2p` (no tracked files to lose) and re-run the suite.
 
 ### 0.5 Stale single-league artifacts (post-reframing cleanup)
 
@@ -230,7 +232,7 @@ Follow-up to the multi-league reframing tracked under `phase 0 → adapted` (202
 
 ### 1.4 Hardcode audit (one-shot scan)
 
-Forbidden patterns enforced by a `scripts/lint/no_magic.py` lint step:
+Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.md §5, all repo automation lives under `xops/`; the legacy `scripts/` folder was retired):
 
 | Pattern | Allowed where |
 |---|---|
@@ -290,13 +292,13 @@ Forbidden patterns enforced by a `scripts/lint/no_magic.py` lint step:
 ### 2.4 Seed corpus
 
 - [ ] `infra/mock/seeds/` holds **frozen** captures: `*.html`, `*.json`, response headers, status codes.
-- [ ] One Python helper, `scripts/mock/capture.py`, performs a one-time real scrape (rate-limited, robots-respecting) and writes seeds. **Ran by hand, never in CI.**
+- [ ] One Python helper, `xops/mock/capture.py`, performs a one-time real scrape (rate-limited, robots-respecting) and writes seeds. **Ran by hand, never in CI.**
 - [ ] nginx serves seeds verbatim via `try_files` and a tiny `lua` block for query-string routing.
 - [ ] Seeds carry a `manifest.json` recording: source URL, capture date, sha256, byte size.
 
 ### 2.5 Integrity guarantees
 
-- [ ] `scripts/mock/verify.py` re-hashes every seed and compares to `manifest.json`. Runs in `make test`.
+- [ ] `xops/mock/verify.py` re-hashes every seed and compares to `manifest.json`. Runs in `make test`.
 - [ ] **Property test:** for any URL the scraper would issue against the real source, the mock returns the same shape (a `pytest` parametrized over `manifest.json`).
 
 ### 2.6 Makefile UX
