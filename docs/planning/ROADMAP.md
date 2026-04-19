@@ -181,6 +181,24 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 - [x] `make test` passes (no `make test-p2p` to run anymore — that target is gone). Go side: `go test ./...` clean (no test files yet; compiles).
 - [x] No `make` target prints `❌` on a fresh clone after `make env`. Verified P2P-free Makefile via `grep -n "p2p\|P2P" Makefile` → 0 matches.
 
+### 0.5 Stale single-league artifacts (post-reframing cleanup)
+
+Follow-up to the multi-league reframing tracked under `phase 0 → adapted` (2026-04-19). These are static reference assets that survived Phase 0 with TR-Süper-Lig-only framing or with internal data errors.
+
+- [x] `README.md` — killed the 354-line stale P2P duplicate; reframed header + pitch as multi-league football with TR Süper Lig as the seeded default.
+- [x] `ai/docs/README.md` — overview reframed; doctrine §6 ("Turkish UX, English infra") cited explicitly.
+- [x] Docstrings corrected in `ai/common/config.py`, `ai/scraper/real_data.py`, `ai/model/real_features.py`, `ai/scraper/mackolik.py` (the last is now correctly labelled "TR-source adapter for the seeded default league").
+- [x] `ai/common/betting_markets.json` — catalogue audit (2026-04-19):
+  - Reframed `_meta.source` from "Turkish Süper Lig" to "any league offered on the Spor Toto Teşkilatı bulletin".
+  - Fixed duplicate `short_code` collisions: `IYKG` (combined HT-result-and-BTTS vs first-half BTTS) → `IYSKG`/`IYSAU15`; `KCK` (cards vs corners) → `KCKART`.
+  - Normalised draw label `"0"` → `"X"` in combined markets.
+  - Standardised `iy_2y_kg` outcome labels to the `Var/Yok` convention used elsewhere.
+  - Demoted "wins both halves" markets to `available_all_matches: false` (top-tier only on TR bulletins).
+  - Added 26 genuinely-offered markets that were missing: `hangi_takim_kazanir` (which-team-wins-each-half), `hangi_takim_gol_atar` (4-way which-teams-score), `gol_olmaz` (no-goal), HT/FT-BTTS combined, total-goals-BTTS combined, full player-markets set (cards/assists/2+goals/first-scorer/last-scorer), new **Asian** category (Asian Handicap with full quarter-line ladder + Asian Total Goals), new **Specials** category (penalty / red card / which-team-red / VAR / 5-way score group).
+  - `total_market_types` corrected: 72 → 98 (was wrong even before the additions).
+  - Added `_meta.notes` documenting label conventions, card-points formula, and Asian quarter-line settlement.
+  - Added `summary.changelog` row stamping the revision.
+
 > 💡 **Example commit:** `chore(p2p): remove P2P stack — superseded by swarm pivot`
 > Single squash commit; no half-removed files.
 

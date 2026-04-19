@@ -16,7 +16,9 @@
    Single source of truth. Supersedes every other planning artifact.
 4. [`docs/tracking/README.md`](docs/tracking/README.md) — tracker schema,
    state machine, CLI usage.
-5. The relevant `docs/design/*.md` for the area you are touching
+5. [`xops/README.md`](xops/README.md) — repo automation layout (Makefile
+   dispatch scripts, CI/CD glue, deployment helpers).
+6. The relevant `docs/design/*.md` for the area you are touching
    (`SWARM.md`, `CONFIGURATION.md`, `MOCK_DATA_SERVER.md`, `SECURITY.md`,
    `COMPUTE_DEVICES.md`, `LANGUAGE_CHOICES.md`, `TURKISH_NLP.md`,
    `TESTING_STRATEGY.md`).
@@ -149,6 +151,19 @@ Use this loop for every non-trivial change:
 - **Cross-platform.** Anything you add to the `Makefile`, scripts,
   or tooling must work on Linux, macOS, and Windows. The tracker CLI
   is the reference example (stdlib-only, ANSI auto-detect, ISO-8601 UTC).
+- **All repo automation lives under `xops/`.** Per-Makefile-target logic
+  goes in `xops/makefile/<module>.py` (one module per Makefile section,
+  one function per target, dispatched via `_common.dispatch()`); CI/CD
+  helpers go in `xops/ci/`; deploy glue in `xops/deploy/`; etc. Do **not**
+  create a top-level `scripts/` folder — that name is too generic and
+  was retired in favour of `xops/`. See [`xops/README.md`](xops/README.md)
+  for the full convention. Make targets stay as one-line dispatchers
+  (`@$(XOPS)/<module>.py <subcommand>`); Make owns the dependency graph,
+  Python owns the work.
+- **Adding a new Make target.** (1) Pick or add the right module under
+  `xops/makefile/`. (2) Add `cmd_<target>(argv)` and register it in that
+  module's `COMMANDS` dict. (3) Add a one-line Make target that calls
+  `@$(XOPS)/<module>.py <target>`. (4) Confirm via `make help`.
 - **No P2P, peers (in network sense), gossip, or multicast** in new code
   outside the regression test. The word `peer` is reused in the swarm
   agent context and is fine there.
@@ -179,6 +194,11 @@ docs/guides/SETUP.md            # local dev setup
 .env.example                    # every env var, documented
 ai/common/config.py             # Python config layer
 server/internal/config/         # Go config layer (Phase 1.2)
+xops/                           # all repo automation (CI/CD, deploy, …)
+xops/makefile/                  # per-Makefile-target dispatchers
+xops/makefile/_common.py        # shared helpers (compose runner, logger)
+xops/makefile/git_helper.py     # `make git` driver — HUMAN-ONLY
+xops/README.md                  # xops conventions & how to extend
 ```
 
 ```bash
