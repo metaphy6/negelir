@@ -3,6 +3,15 @@
 > Companion to [`../planning/ROADMAP.md`](../planning/ROADMAP.md).
 > This doc focuses on **structure** — what runs where, talks to whom, and why.
 
+> **Pivot v3 status (2026-04-20).** The L3 "Swarm" layer was split into
+> **two** sibling layers: `datasource/` (ingest, schema, mock-stack,
+> patcher, gitops, emitter) and `swarm/` (predictors, consensus,
+> proofreaders, drift, defense, NLP, reactors). Reads of L2 by L3 are
+> mediated by `datasource/emitter/` (Phase 16) and one-directional
+> only. The canonical component map is
+> [`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md); this document keeps the
+> conceptual five-layer stack as the public mental model.
+
 ---
 
 ## 🧱 Layers
@@ -13,7 +22,13 @@
 ├───────────────────────────────────────────────────────────┤
 │   L4 — Public API       Go REST gateway, JWT, rate-limit  │
 ├───────────────────────────────────────────────────────────┤
-│   L3 — Swarm            Many small agents, message bus    │
+│   L3b — Swarm           Predictors / consensus / proof    │
+│                         readers / drift / defense / NLP   │
+│                         (lives in swarm/)                 │
+├───────────────────────────────────────────────────────────┤
+│   L3a — Datasource      Scrapers / watcher / refresher /  │
+│                         patcher / gitops / emitter        │
+│                         (lives in datasource/)            │
 ├───────────────────────────────────────────────────────────┤
 │   L2 — Storage          PostgreSQL (truth), Redis (warm)  │
 ├───────────────────────────────────────────────────────────┤
@@ -23,8 +38,9 @@
 
 Each layer talks **only to the layer immediately above and below it**. This rule
 keeps deployments swappable: replace L1 with the mock stack for tests, replace
-L4 with a CLI for batch jobs, scale L3 horizontally without touching anything
-else.
+L4 with a CLI for batch jobs, scale L3a/L3b horizontally without touching anything
+else. The **L3a → L3b** boundary is the [Emitter](EMITTER.md) feed contract; the
+**L3a → L2** boundary is owned exclusively by `datasource/emitter/` writers.
 
 ## 🔄 Request lifecycle (Turkish QA → answer)
 

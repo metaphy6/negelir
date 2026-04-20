@@ -120,7 +120,8 @@ rule.
 ## 5. `patcher`
 
 **Path:** `datasource/patcher/`
-**Language:** Python 3.12 + local LLM
+**Language:** Python 3.12 + Anthropic Agent SDK (Haiku → Sonnet → Opus,
+harness-routed; see [SCRAPER_PATCHER.md §12](SCRAPER_PATCHER.md#12-model-providers-anthropic-agent-sdk))
 **Runtime:** single process, gated by `NEGELIR_PATCHER=1`.
 
 Covered in depth in [`SCRAPER_PATCHER.md`](SCRAPER_PATCHER.md). Short

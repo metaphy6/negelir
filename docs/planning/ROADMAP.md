@@ -305,7 +305,7 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 ### 2.1 Topology
 
 ```
-       /etc/hosts (managed by `make hosts-install`)
+       /etc/hosts (managed by `make hosts.install`)
             │
             ▼
    ┌───────────────────────┐        ┌───────────────────────┐
@@ -328,7 +328,7 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 
 ### 2.3 Hosts-file integration
 
-`make hosts-install` adds:
+`make hosts.install` adds:
 
 ```
 127.0.0.1   mackolik.local nesine.local tff.local openfootball.local
@@ -337,7 +337,7 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 > ⚠️ Uses `.local` TLDs to avoid colliding with real DNS. The scraper config flips between
 > real and mock by an env switch (`NEGELIR_SCRAPE_PROFILE=real|mock`); no code changes.
 
-`make hosts-uninstall` cleanly removes them. Both targets are **idempotent** and bail out with a clear message if `/etc/hosts` is not writable, suggesting `sudo`.
+`make hosts.uninstall` cleanly removes them. Both targets are **idempotent** and bail out with a clear message if `/etc/hosts` is not writable, suggesting `sudo`.
 
 ### 2.4 Seed corpus
 
@@ -354,13 +354,15 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 ### 2.6 Makefile UX
 
 ```
-make mock-up           # bring up nginx-mock + seeded postgres
-make mock-down         # tear down
-make hosts-install     # write /etc/hosts entries (sudo)
-make hosts-uninstall   # remove them
-make mock-ca-trust     # rebuild & re-trust CA inside agent images
-make mock-capture      # ⚠️ hits the real internet, refreshes seeds
-make mock-verify       # offline integrity check
+make mock.up           # bring up nginx-mock + seeded postgres
+make mock.down         # tear down
+make hosts.install     # write /etc/hosts entries (sudo)
+make hosts.uninstall   # remove them
+make mock.trust        # install dev CA into the host trust store (sudo, opt-in)
+make mock.untrust      # remove it (sudo)
+make mock.capture      # ⚠️ hits the real internet, refreshes seeds
+make mock.verify       # offline integrity check
+make mock.smoke        # E2E: reset → capture → up → curl every vhost
 ```
 
 ### 2.7 Server-as-mock redesign
@@ -979,7 +981,11 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 
 - [ ] All six planes emit NDJSON live feeds and hourly Parquet snapshots against the mock stack.
 - [ ] `FeedReader` is the only supported way for `swarm/*` to read ingested data.
-- [ ] `test_swarm_isolation.py` and `test_no_db_imports.py` both green in CI.
+- [ ] `test_swarm_isolation.py` (no `datasource.*` imports outside `FeedReader`) and `test_no_db_imports.py` (no `psycopg`/`redis` under `swarm/`) both green in CI — they are complementary, not duplicates.
+- [ ] All EMITTER §6.1 writer-guarantee tests green: `test_atomic_manifest`, `test_at_least_once_duplicates`, `test_monotonic_captured_at`, `test_utc_only`, `test_append_only`, `test_midnight_rotation`.
+- [ ] All EMITTER §7.3 storage tests green: `test_s3_roundtrip`, `test_retention` (object-lock test may stay `xfail` until Phase 14).
+- [ ] All EMITTER §8.1 reader-contract tests green: `test_reader_roundtrip`, `test_reader_handles_version_skew`, `test_reader_rejects_guessed_paths`.
+- [ ] Versioned-schema coexistence verified: `test_emitter_writes_all_active_versions` and `test_reads_versioned` green with `score@v1` and `score@v2` active simultaneously.
 - [ ] At least one live predictor and one trainer run migrated to feeds with parity maintained.
 - [ ] `datasource_emitter` component bumped to ≥ `1.0.0`; `swarm` component bumped to reflect the read-surface change.
 
@@ -1050,9 +1056,12 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 ### 17.8 Definition of Done
 
 - [ ] A deliberately tampered seed triggers an artifact → a patcher bundle → a PR → a passing CI → (if cool-down elapses in fake-clock test) an auto-merge. End-to-end integration test: `datasource/patcher/tests/test_closed_loop.py`.
-- [ ] All kill switches verified in CI.
+- [ ] **§1 guarantee #9 (no AI without artifact)** verified: `test_no_ai_without_artifact.py` green; the patcher refuses to call any LLM endpoint unless invoked with a serialized detector artifact.
+- [ ] All kill switches verified in CI (`test_kill_switches.py` covers all three SCRAPER_PATCHER §8 levels).
 - [ ] All five gates independently verified green + red (9 tests).
 - [ ] Shadow regression test injects a 3 % log-loss delta and confirms Gate 4 blocks.
+- [ ] **GitOps §1 guarantees #4, #7, #8** verified: `test_squash_trailer_format.py`, `test_only_gitops_holds_token.py`, `test_no_direct_push_to_main.py` all green.
+- [ ] **Cost & safety floor verified**: `test_budget_caps.py`, `test_cost_ledger_accuracy.py`, `test_tool_allow_list.py`, `test_model_pin_enforced.py`, `test_past_success_seeded.py`, `test_pre_llm_reproduction_skips_api.py`, and `test_prompt_injection_separated.py` all green.
 - [ ] `datasource_patcher` and `datasource_gitops` components bumped to ≥ `1.0.0`.
 
 ---
@@ -1173,7 +1182,7 @@ Every phase ships only when **all** of the following are true:
 2. ✅ A new section in `docs/design/` (or update of one) exists for any architectural choice.
 3. ✅ `make test` is green on a fresh clone, including any new adversarial / chaos tests.
 4. ✅ `make lint` is green (`no_magic.py`, `ruff`, `mypy --strict` for new modules, `golangci-lint`).
-5. ✅ `make up-dev` brings the system up and a smoke script (`make smoke`) passes.
+5. ✅ `make up` brings the system up and a smoke script (`make smoke`, lands with the Go API in Phase 9; until then the canonical green-bar is `make test`) passes.
 6. ✅ The phase has a one-paragraph entry added to `CHANGELOG.md` (under "Unreleased") describing the user-visible delta.
 7. ✅ No new env var exists that is undocumented in `.env.example`.
 8. ✅ No new agent exists without a `README.md` describing topics, schema, model size, device requirements.

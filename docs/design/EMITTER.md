@@ -272,6 +272,17 @@ Guessing paths is forbidden.
   of NDJSON has non-decreasing `captured_at` within each source.
 - `datasource/emitter/tests/test_utc_only.py` — no `offset != Z`
   timestamp survives the pipeline.
+- `datasource/emitter/tests/test_append_only.py` — guarantee #4: any
+  attempt to truncate or rewrite an existing NDJSON byte range or to
+  overwrite a Parquet snapshot file fails (writer holds an
+  append-only file handle; Parquet path uses `mode="wb"` exactly
+  once per filename).
+- `datasource/emitter/tests/test_midnight_rotation.py` — guarantee
+  #6: with a fake clock crossing 00:00 UTC, the previous day's
+  hot `*.ndjson` is closed, zstd-compressed at the configured
+  level, renamed to `*.ndjson.zst`, and a new hot file is opened
+  for the new UTC date; both files are referenced by
+  `manifest.json`.
 
 ---
 
@@ -303,6 +314,12 @@ Guessing paths is forbidden.
   local-disk driver.
 - `datasource/emitter/tests/test_retention.py` — `make feeds.prune`
   after a fake 40-day run keeps snapshots, discards expired NDJSON.
+- `datasource/emitter/tests/test_object_lock_immutability.py` —
+  *(deferred to Phase 14)* against MinIO with object-lock enabled,
+  any attempt to overwrite or delete a Parquet snapshot inside the
+  retention window fails with the expected S3 error code. Marked
+  `xfail(reason="phase-14 prerequisite")` until the cloud track
+  lands.
 
 ---
 
@@ -343,6 +360,21 @@ isolation test in `common/tests/test_swarm_isolation.py`.
   opts into the version set they understand.
 - `common/feeds/tests/test_reader_rejects_guessed_paths.py` — reader
   refuses any path not referenced by `manifest.json`.
+- `datasource/emitter/tests/test_emitter_writes_all_active_versions.py`
+  *(landed by ROADMAP §16.6)* — when the registry has both `score@v1`
+  and `score@v2` active, the writer emits Records on both feeds in
+  the same tick.
+- `datasource/emitter/tests/test_reads_versioned.py`
+  *(landed by ROADMAP §16.6)* — a reader pinned to `score@v1` ignores
+  `score@v2` records and vice-versa; per-version manifest entries are
+  consistent.
+- **Swarm-isolation pair** *(landed by ROADMAP §16.5 / §18.1)*:
+  `swarm/tests/test_no_db_imports.py` (no `psycopg` / `redis` import
+  anywhere under `swarm/`) and `common/tests/test_swarm_isolation.py`
+  (no `datasource.*` import and no path manipulation outside
+  `FeedReader`). The two are complementary, not duplicates: the
+  former bans transport libraries, the latter bans cross-component
+  references.
 
 ---
 

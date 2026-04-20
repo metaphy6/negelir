@@ -52,6 +52,15 @@ progress.
 | `fixture` | `infra/mock/seeds/<source>/**`, `infra/mock/seeds/manifest.json` (refresh only — do not fabricate bytes) |
 | `detector_tuning` *(deferred)* | YAML threshold files only — `datasource/{watcher,refresher}/thresholds/*.yaml`, `datasource/pipeline/profiles/<source>.yaml` |
 
+> **Pivot v3 transitional paths.** Until ROADMAP Phase R1/R2 lands the
+> `datasource/`, `swarm/`, and `common/` packages, the equivalent
+> sources still live under `ai/` (e.g. `ai/scraper/`, `ai/common/`).
+> The diagnostic bundle's `failing_code_excerpt`, `git_history`, and
+> any explicit path fields are the source of truth — edit the file the
+> bundle points to, not its post-Pivot equivalent. The scope
+> allow-lists above describe the steady-state layout per
+> [`docs/design/COMPONENT_LAYOUT.md`](docs/design/COMPONENT_LAYOUT.md).
+
 You may **never** edit:
 
 - Anything under `swarm/` (predictor logic — different lifecycle, not

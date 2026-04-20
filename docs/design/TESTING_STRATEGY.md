@@ -43,13 +43,15 @@ chaos-disk-full        fills /tmp; assert graceful degradation, no crash
 
 ## 🧰 Smoke + happy path
 
-`make smoke` — must pass on every PR after `make up-dev`:
+`make smoke` *(target lands with the Go API in Phase 9; today the
+canonical green-bar is `make test` over `make up`)* — must pass on
+every PR. The intended Phase 12 happy path:
 
 1. `POST /v1/auth/login` with the seeded dev user.
 2. `GET /v1/leagues` returns at least one league.
 3. `GET /v1/leagues/tr_super_lig/fixtures` returns ≥ 1 fixture.
 4. `POST /v1/qa` with `{"text": "Bugün maç var mı?"}` returns 200 with TR text.
-5. `swarmctl ps` shows all agents with green heartbeats.
+5. `swarmctl ps` *(introduced in Phase 3)* shows all agents with green heartbeats.
 
 ## 📊 Coverage
 

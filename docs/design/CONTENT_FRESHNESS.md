@@ -50,10 +50,10 @@ Only when both answers are "yes" does an event leave the agent.
 | Re-downloading whole pages on a timer | Wasteful and pointless when nothing changed | Capture layer (§6) uses conditional GET; 304 short-circuits the rest |
 | Refreshing the entire site | Sites are not the unit of change — *records* are | Per-record diff (§7) |
 | Refreshing the seed corpus | That is `make mock.capture`, agent-runnable but human-driven | DATA_PIPELINE §3 + `xops/mock/capture_engine.py` |
-| Detecting DOM / HTML structural drift | That's the Source-Watcher's job | `ai/swarm/source_watcher/` (Phase 2.8) |
+| Detecting DOM / HTML structural drift | That's the Source-Watcher's job | `datasource/watcher/` (post-Pivot v3, see [`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md) §3; current path during the migration is `ai/swarm/source_watcher/`, Phase 2.8) |
 | Cleaning article text, parsing tables | That's the extractor's job (§4) | Per-source extractors |
-| Computing sentiment, entities, narrative tags | That's NLP's job, downstream of our events | `ai/nlp/sentiment.py`, Phase 10 |
-| Deciding whether to retrain | Trainer subscribes to our events and decides | `ai/model/trainer.py`, Phase 5/6 |
+| Computing sentiment, entities, narrative tags | That's NLP's job, downstream of our events | `swarm/nlp/sentiment.py` (post-Pivot v3; today: `ai/nlp/sentiment.py`), Phase 10 |
+| Deciding whether to retrain | Trainer subscribes to our events and decides | `swarm/predictors/.../trainer.py` (post-Pivot v3; today: `ai/model/trainer.py`), Phase 5/6 |
 | Live websocket streams | Polling is enough for v1; same record contract holds when streams arrive later | Future Phase |
 
 > See **§15** for the full event-to-reactor matrix that names every
@@ -197,7 +197,8 @@ so a later analyst can audit drift in identity quality.
 - **Article body**: stripped of nav/ads/cookie banners *by extractor*;
   the normalizer only does whitespace collapse + NFC.
 
-These rules live in `ai/swarm/content_freshness/canonical.py` and are
+These rules live in `datasource/refresher/canonical.py` (during the
+R2/R3 migration: `ai/swarm/content_freshness/canonical.py`) and are
 **pure functions**. Versioned via a `CANONICAL_VERSION` constant.
 
 ---
@@ -206,7 +207,8 @@ These rules live in `ai/swarm/content_freshness/canonical.py` and are
 
 The `Record` envelope is owned by
 [`DATA_PIPELINE.md §4`](DATA_PIPELINE.md#4-the-record-contract--what-the-ai-actually-sees)
-and lives in `ai/common/schemas/records.py`. This agent only
+and lives in `common/schemas/records.py` post-Pivot v3
+(transitional shim: `ai/common/schemas/records.py`). This agent only
 constrains the freshness-relevant subset: the six `record_type`s
 listed in §0.1 and the `payload` keys each differ in §7 reads from.
 
@@ -717,22 +719,34 @@ deterministic, and replayable.
 
 ## 16. Phased delivery (each phase shippable on its own)
 
-| Phase | Scope | Done when |
-|---|---|---|
-| **3.1** Skeleton | Package layout, schemas, config, identity resolver, canonical rules, snapshot store, in-memory bus, no extractors yet | Unit tests green; `make freshness.reindex` works on empty store |
-| **3.2** First source | Mackolik fixture+score extractors only; mock-vhost integration tests; events to Redis stream | Detection latency < 60s in mock soak; zero false retractions in 24h run |
-| **3.3** Article + commentary | Mackolik articles + commentary extractors; sentiment hookup | Sentiment writes keyed by event_id are idempotent on replay |
-| **3.4** Multi-source | TFF + openfootball + (read-only) Nesine odds | Per-source dashboards live |
-| **3.5** Live cadence | `during_match` cadence based on fixture state | Tightening + relaxing demonstrated in soak |
-| **3.6** Hardening | WAL, lease, multi-replica, alerts | Chaos test: kill -9 mid-tick produces no orphans |
-| **3.7** Reactor SDK + first reactors | Reactor base class (idempotent on `event_id`, per-reactor consumer group, processed-events table); ship `feature-store-reactor` + `cache-reactor` first | Reactor invariants in §15.2 hold under chaos test |
-| **3.8** Trainer reactor | Debounce window, qualifying-event filter, accuracy-floor check, cooldown (§15.3) | Synthetic finalized match → retrain kicked within debounce + cooldown limits |
-| **3.9** NLP + predictor + market reactors | Wire `nlp-reactor`, `live-predictor-reactor`, `market-reactor` per §15.1 | End-to-end soak: every event class produces its mapped side-effect within latency budget |
+> **Phase numbering convention.** The `F1`–`F9` labels below are
+> **freshness-internal** sub-phases of the agent’s own delivery; they
+> are **not** the same as ROADMAP Phase 3.x (Swarm Foundation — bus,
+> registry, supervisor) or Phase 4.x (Core Worker Agents). The
+> roadmap-level entry points for this work are
+> **ROADMAP §3** (the agent ships against the bus and SDK from there)
+> and **ROADMAP §4.7** (the reactor SDK + the trainer / live-predictor
+> reactors land there). Within those phases, ship in the F1–F9 order
+> below.
 
-Each phase ships its own version bump on a new component
-`content_freshness` in
-[`xops/versioning/chart.json`](../../xops/versioning/chart.json), and
-one tracker row per shipped sub-phase per AGENTS.md §3.
+| Sub-phase | Scope | Done when |
+|---|---|---|
+| **F1** Skeleton | Package layout, schemas, config, identity resolver, canonical rules, snapshot store, in-memory bus, no extractors yet | Unit tests green; `make freshness.reindex` works on empty store |
+| **F2** First source | Mackolik fixture+score extractors only; mock-vhost integration tests; events to Redis stream | Detection latency < 60s in mock soak; zero false retractions in 24h run |
+| **F3** Article + commentary | Mackolik articles + commentary extractors; sentiment hookup | Sentiment writes keyed by event_id are idempotent on replay |
+| **F4** Multi-source | TFF + openfootball + (read-only) Nesine odds | Per-source dashboards live |
+| **F5** Live cadence | `during_match` cadence based on fixture state | Tightening + relaxing demonstrated in soak |
+| **F6** Hardening | WAL, lease, multi-replica, alerts | Chaos test: kill -9 mid-tick produces no orphans |
+| **F7** Reactor SDK + first reactors | Reactor base class (idempotent on `event_id`, per-reactor consumer group, processed-events table); ship `feature-store-reactor` + `cache-reactor` first | Reactor invariants in §15.2 hold under chaos test |
+| **F8** Trainer reactor | Debounce window, qualifying-event filter, accuracy-floor check, cooldown (§15.3) | Synthetic finalized match → retrain kicked within debounce + cooldown limits |
+| **F9** NLP + predictor + market reactors | Wire `nlp-reactor`, `live-predictor-reactor`, `market-reactor` per §15.1 | End-to-end soak: every event class produces its mapped side-effect within latency budget |
+
+Each freshness sub-phase ships its own version bump on the
+`datasource_refresher` component in
+[`xops/versioning/chart.json`](../../xops/versioning/chart.json) (the
+chart key chosen by [`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md) §5 —
+*not* a separate `content_freshness` key), and one tracker row per
+shipped sub-phase per AGENTS.md §3.
 
 ---
 
@@ -766,16 +780,26 @@ must be **decided** so the code is not ambiguous later.
    configurable so an ops-level disk encryption layer is possible
    later.
 8. **Where the agent runs**: own container vs. inside the AI
-   container. Recommendation: own container (`compose: freshness`) —
+   container. Recommendation: own container (per Pivot v3 the service
+   is named `refresher` under the `datasource` compose profile — see
+   [`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md) §4) —
    different cadence, different blast radius, independent restarts.
 
 ---
 
 ## 18. What to build first if approved
 
+> **Path note.** The package directory below uses the **post-Pivot v3**
+> layout (`datasource/refresher/`, per
+> [`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md) §3). During the R2/R3
+> migration window the work may temporarily land at
+> `ai/swarm/content_freshness/` behind the same shim policy that
+> covers the source-watcher move. The contracts in §§1–15 are
+> path-independent.
+
 Strict order, each step independently testable:
 
-1. `ai/swarm/content_freshness/` package skeleton + `schemas.py` +
+1. `datasource/refresher/` package skeleton + `schemas.py` +
    `canonical.py` (with unit tests).
 2. `identity.py` resolver + alias table + tests against a Turkish-name
    corpus.
@@ -790,7 +814,7 @@ Strict order, each step independently testable:
    dedup-by-event-id test.
 8. `make freshness.run` (one-shot) and `make freshness.up` (loop, in
    container).
-9. Soak harness in `ai/swarm/content_freshness/tests/soak/`.
+9. Soak harness in `datasource/refresher/tests/soak/`.
 
 Everything else (more sources, sentiment hookup, retrain trigger) is
 a clean addition on top of the above, because the contracts above are

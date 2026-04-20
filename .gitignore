@@ -19,9 +19,9 @@ server/tmp/
 
 # ── Environment ──
 # Real env file lives at xops/env/.env; the .example sibling is tracked.
-xops/env/.env
+# xops/env/.env
 # Legacy locations (in case anyone resurrects them):
-.env
+# .env
 
 # ── IDE ──
 .vscode/settings.json

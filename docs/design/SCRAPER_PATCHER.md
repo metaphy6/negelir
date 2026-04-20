@@ -108,9 +108,10 @@ patcher's only input.
 ## 3. `patcher` — the code author
 
 **Path:** `datasource/patcher/`
-**Language:** Python 3.12 + local LLM
+**Language:** Python 3.12 + Anthropic Agent SDK (see §12)
 **Runtime:** single process; `NEGELIR_PATCHER=1` required to run.
-**Resource:** one GPU (or CPU with graceful slowdown); see §4.
+**Resource:** no GPU dependency — the patcher container does not
+compete with predictor training for the dev rig's GPU.
 
 ### 3.1 The loop
 
@@ -366,6 +367,24 @@ on every use. The App's private key lives in `xops/env/.env` as
   real-world safety net).
 - `datasource/gitops/tests/test_token_scope.py` — rejects tokens
   that have broader scope than the allow-list.
+- `datasource/gitops/tests/test_no_direct_push_to_main.py` —
+  guarantee §1.8: every gitops push targets a `patcher/<artifact_id>`
+  branch; any code path that would push refs/heads/main (or `master`,
+  or any protected branch from `cfg.gitops_protected_branches`) raises
+  before invoking the GitHub API. Complements GitHub branch protection
+  with an in-process assertion so the regression is visible in CI, not
+  only in production.
+- `datasource/gitops/tests/test_squash_trailer_format.py` —
+  guarantee §1.4: the commit message produced for the squash-merge
+  contains the full standardized trailer block (`Scope:`,
+  `Gauntlet:`, `Model:`, `Patcher-Bundle-ID:`) with non-empty values
+  in the documented order. A property-style fuzz over 50 random
+  bundle inputs ensures no field is dropped or re-ordered.
+- `datasource/gitops/tests/test_only_gitops_holds_token.py` —
+  guarantee §1.7: a grep over the repo asserts that
+  `NEGELIR_GITOPS_GITHUB_APP_KEY` is read only from
+  `datasource/gitops/**` and that no other component imports a
+  GitHub client library or sets `GH_TOKEN` / `GITHUB_TOKEN`.
 
 ---
 
@@ -496,19 +515,43 @@ All three are documented in `xops/env/.env.example` and verified in
 
 ---
 
-## 10. Phased rollout (cross-reference to ROADMAP Phase R3)
+## 10. Phased rollout (overview)
+
+High-level cross-reference to ROADMAP Phase 17 / R3. The **canonical,
+refined sub-phase table that includes the Anthropic-tier ramp** lives
+at §12.15. This section is the operator-facing one-pager.
 
 | Sub-phase | Capability | Blast radius |
 |---|---|---|
 | R3.a | Artifact schema + detectors wired; no patcher yet | Zero |
-| R3.b | `patcher` in dry-run mode: produces bundles, stores them, never hands to `gitops` | Zero |
-| R3.c | `gitops` opens PRs; auto-merge **disabled** (`NEGELIR_GITOPS_AUTOMERGE=0`) | Humans decide |
-| R3.d | Auto-merge enabled with 30-day cool-down + mandatory human review on first 10 per source | Bounded |
+| R3.b | `patcher` in dry-run mode: produces bundles, stores them, never hands to `gitops`; **no API calls** | Zero |
+| R3.b' | First $5 of real Anthropic spend, Tier-1 (Haiku) only against mock-stack artifacts | Bounded |
+| R3.c | `gitops` opens PRs; auto-merge **disabled** (`NEGELIR_GITOPS_AUTOMERGE=0`); Haiku + Sonnet enabled | Humans decide |
+| R3.d | Auto-merge enabled with 30-day cool-down + mandatory human review on first 10 per source; Opus enabled | Bounded |
 | R3.e | Cool-down relaxed to 7 days once 50 consecutive patcher PRs merged without post-merge regression | Target state |
 | R3.f | Revert watchdog live | Target state |
 
 Every step is config-flag gated; rollbacks are a one-line change to
-`xops/env/.env`.
+`xops/env/.env`. See §12.15 for the canonical (model-aware) version of
+this table.
+
+---
+
+## 11. Operator runbook pointers
+
+This section is intentionally a stub. The operator-facing runbooks
+(how to disable the loop in an incident, how to read the cost ledger,
+how to revert a bad merge by hand) live in `docs/guides/PATCHER_OPS.md`
+and will land alongside Phase 17 R3.b. Until then the canonical
+emergency procedure is:
+
+1. Flip `NEGELIR_PATCHER=0` in `xops/env/.env` (kill switch §8.1).
+2. Optional: flip `NEGELIR_GITOPS_AUTOMERGE=0` to keep PRs open
+   without merging (kill switch §8.2).
+3. Most forceful: suspend the GitHub App from the GitHub UI
+   (kill switch §8.3).
+
+All three are exercised by `test_kill_switches.py` (§17.7).
 
 ---
 
@@ -867,9 +910,15 @@ Required to ship Phase 17 sub-phase by sub-phase. All in
   we require the common utility to be under `common/` (which is not
   an allowed scope) or to have its own dedicated scope. We haven't
   ruled on this yet; tracked in an R3.x sub-phase TBD.
-- **First-time model training for the patcher.** The model is a
-  vanilla instruct coder. We may fine-tune it on this repo's diff
-  history once we have ≥ 500 merged patcher PRs. Decision deferred.
+- **Custom model adaptation.** Anthropic's Agent SDK does not expose
+  fine-tuning. Once we have ≥ 500 merged patcher PRs, the cheap
+  alternative is **prompt-side adaptation** — generate a curated
+  "recurring patterns" digest from the PR history and inject it into
+  the L2 scope context (§12.5). The expensive alternative is moving
+  off Anthropic to a fine-tunable model (qwen2.5-coder /
+  deepseek-coder family); this is the same fallback design the
+  pre-Pivot-v3 §4.4 documented and stays as a contingency only.
+  Decision deferred until the corpus is large enough.
 - **Whether the patcher can ever touch `swarm/*`.** Current answer:
   **no**. The patcher is a scraping-loop component, not a model-
   editing component. If we ever want an "auto-retrainer" of models,

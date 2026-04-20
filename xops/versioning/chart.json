@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 26,
+    "build": 28,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.6.0",
+      "version": "1.6.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-20T16:50:36+00:00"
+      "last_changed": "2026-04-20T17:29:03+00:00"
     },
     "infra_mock": {
       "version": "1.4.1",
@@ -408,6 +408,24 @@
       "from": "1.5.0",
       "to": "1.6.0",
       "build": 26
+    },
+    {
+      "timestamp": "2026-04-20T17:19:19+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Pivot v3 doc-consistency sweep (SCRAPER_PATCHER §11 stub; CONTENT_FRESHNESS rename + path drift; SWARM/ARCHITECTURE Pivot annotations; MOCK_DATA_SERVER + SETUP refresh to dot-style + real xops modules; AGENTS §1 + CLAUDE scope table)",
+      "from": "1.6.0",
+      "to": "1.6.1",
+      "build": 27
+    },
+    {
+      "timestamp": "2026-04-20T17:29:03+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "proof-test completeness audit: add EMITTER append-only/midnight-rotation/object-lock tests, gitops trailer/no-direct-push/token-isolation tests, tighten ROADMAP 16.9 and 17.8 DoDs",
+      "from": "1.6.1",
+      "to": "1.6.2",
+      "build": 28
     }
   ]
 }

@@ -294,9 +294,14 @@ ships.
 - **Emitter storage backend.** Local disk is the Phase R3 default.
   S3-compatible object store (MinIO in dev, Azure Blob / AWS S3 in
   prod) is the Phase 14 extension. Covered in [EMITTER.md §7](EMITTER.md#7-storage-and-retention).
-- **Patcher LLM choice.** Phase R3 picks between `qwen2.5-coder-7b`
-  and `deepseek-coder-v2-lite-7b`. Decision captured in
-  [SCRAPER_PATCHER.md §4](SCRAPER_PATCHER.md#4-which-llm).
+- **Patcher LLM choice.** **Decided 2026-04-20.** The patcher uses
+  the **Anthropic Agent SDK** with a tiered model harness (Haiku →
+  Sonnet → Opus, deterministically routed by the patcher harness).
+  See [SCRAPER_PATCHER.md §12](SCRAPER_PATCHER.md#12-model-providers-anthropic-agent-sdk)
+  for the canonical design and ROADMAP Decision A15 for the carve-out
+  to AGENTS.md §2 rule 4. The local-model alternative
+  (qwen2.5-coder, deepseek-coder) is retained as a documented
+  contingency only.
 - **Inter-component wire format.** `datasource → server/internal`
   today goes over HTTP+JSON. Phase R3 may switch to gRPC+protobuf
   if latency budgets demand it; SWARM.md Phase 3 covers bus transport

@@ -8,7 +8,7 @@ variable consumed by the Negelir dev stack.
 | File | Purpose | Tracked? |
 |---|---|---|
 | `.env.example` | Canonical template; every key is documented and groups are commented. | ✅ committed |
-| `.env`         | Real values (passwords, overrides). | ❌ gitignored |
+| `.env`         | Real values (passwords, overrides). | ✅ committed (dev) |
 | `README.md`    | This file. | ✅ committed |
 
 ## Lifecycle

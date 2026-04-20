@@ -23,10 +23,25 @@
    centralized SemVer chart. **Every meaningful change to a tracked
    component must include a `make version.bump` in the same commit.**
    See §6.1 below for the rule.
-7. The relevant `docs/design/*.md` for the area you are touching
-   (`SWARM.md`, `CONFIGURATION.md`, `MOCK_DATA_SERVER.md`, `SECURITY.md`,
-   `COMPUTE_DEVICES.md`, `LANGUAGE_CHOICES.md`, `TURKISH_NLP.md`,
-   `TESTING_STRATEGY.md`).
+7. The relevant `docs/design/*.md` for the area you are touching.
+   **Pivot v3 anchor docs** (binding for any cross-component change):
+   [`COMPONENT_LAYOUT.md`](docs/design/COMPONENT_LAYOUT.md) (the
+   four-component map), [`DATA_PIPELINE.md`](docs/design/DATA_PIPELINE.md)
+   (the five-plane data scope + Record contract),
+   [`DATA_SOURCE.md`](docs/design/DATA_SOURCE.md) (the six datasource
+   sub-components), [`EMITTER.md`](docs/design/EMITTER.md) (the
+   datasource → swarm feed contract; Phase 16),
+   [`SCRAPER_PATCHER.md`](docs/design/SCRAPER_PATCHER.md) (the auto-patch
+   loop; Phase 17 — binding contract for the patcher harness).
+   Other per-area docs: `SWARM.md`, `CONFIGURATION.md`,
+   `MOCK_DATA_SERVER.md`, `SECURITY.md`, `COMPUTE_DEVICES.md`,
+   `LANGUAGE_CHOICES.md`, `TURKISH_NLP.md`, `TESTING_STRATEGY.md`,
+   `CONTENT_FRESHNESS.md`, `SWARM_NETWORK.md`.
+8. [`CLAUDE.md`](CLAUDE.md) — operating brief for the
+   scraper-patcher harness (cached as L1 context per
+   `SCRAPER_PATCHER.md` §12.5). Required reading **only** if you are
+   modifying the patcher, its scope contracts, or the gates that
+   enforce them; otherwise informational.
 
 If the user request conflicts with `ROADMAP.md`, **ask before deviating**.
 Do not silently re-plan the project.
