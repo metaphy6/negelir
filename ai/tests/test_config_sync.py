@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ENV_EXAMPLE = REPO_ROOT / ".env.example"
+ENV_EXAMPLE = REPO_ROOT / "xops" / "env" / ".env.example"
 AI_CONFIG = REPO_ROOT / "ai" / "common" / "config.py"
 GO_CONFIG = REPO_ROOT / "server" / "internal" / "config" / "config.go"
 DEFAULTS_YAML = REPO_ROOT / "ai" / "common" / "defaults.yaml"

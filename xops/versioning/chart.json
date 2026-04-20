@@ -1,0 +1,350 @@
+{
+  "_comment": "Negelir centralized version chart. Single source of truth. Edit ONLY through `make version.bump`. Hand-edits will fail the canonical-form test.",
+  "schema": 1,
+  "project": {
+    "name": "negelir",
+    "version": "1.2.0",
+    "build": 19,
+    "released": null
+  },
+  "components": {
+    "ai": {
+      "version": "1.0.0",
+      "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
+      "last_changed": "2026-04-20T00:00:00+00:00"
+    },
+    "server": {
+      "version": "1.2.4",
+      "description": "Go REST API + mocksrv binary.",
+      "last_changed": "2026-04-20T10:32:12+00:00"
+    },
+    "xops": {
+      "version": "3.0.0",
+      "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
+      "last_changed": "2026-04-20T10:53:06+00:00"
+    },
+    "docs": {
+      "version": "1.3.0",
+      "description": "Roadmap, design docs, tracking, guides.",
+      "last_changed": "2026-04-20T11:53:44+00:00"
+    },
+    "infra_mock": {
+      "version": "1.4.1",
+      "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
+      "last_changed": "2026-04-20T10:19:41+00:00"
+    },
+    "source_watcher": {
+      "version": "1.4.0",
+      "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
+      "last_changed": "2026-04-20T09:43:24+00:00"
+    }
+  },
+  "changelog": [
+    {
+      "timestamp": "2026-04-20T08:18:44+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "versioning CLI + chart.json + mock/hosts dispatchers landed",
+      "from": "1.0.0",
+      "to": "1.1.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-04-20T08:18:44+00:00",
+      "component": "infra_mock",
+      "level": "minor",
+      "note": "Phase 2 scaffolding: ca/certs/seeds dirs + manifest schema + verify CLI",
+      "from": "1.0.0",
+      "to": "1.1.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-04-20T08:18:44+00:00",
+      "component": "source_watcher",
+      "level": "minor",
+      "note": "Phase 2.8 skeleton: deterministic differ + classifier + 9 tests",
+      "from": "1.0.0",
+      "to": "1.1.0",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-04-20T08:18:44+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "ROADMAP additions: S0.6 versioning + S2.8 source-watcher",
+      "from": "1.0.0",
+      "to": "1.1.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-04-20T08:49:10+00:00",
+      "component": "infra_mock",
+      "level": "minor",
+      "note": "real CA + cert generation, nginx vhost generator, capture engine framework, mocksrv Go binary, real hosts file writer",
+      "from": "1.1.0",
+      "to": "1.2.0",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-04-20T08:49:10+00:00",
+      "component": "source_watcher",
+      "level": "minor",
+      "note": "snapshot store, planner, scheduler + property/adversarial differ tests",
+      "from": "1.1.0",
+      "to": "1.2.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-04-20T08:49:10+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "added mocksrv binary (cmd/mocksrv) for Phase 2 mock-data backend",
+      "from": "1.0.0",
+      "to": "1.1.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-04-20T08:49:10+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "wired real implementations into mock.* and hosts.* dispatchers; added capture engine framework",
+      "from": "1.1.0",
+      "to": "1.2.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-04-20T08:49:10+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 2 + Phase 2.8 implementations landed",
+      "from": "1.0.0",
+      "to": "1.1.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-04-20T09:14:26+00:00",
+      "component": "infra_mock",
+      "level": "minor",
+      "note": "Phase 2 complete: live seeds captured, compose overlay, all DoD boxes green",
+      "from": "1.2.0",
+      "to": "1.3.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-04-20T09:14:26+00:00",
+      "component": "source_watcher",
+      "level": "minor",
+      "note": "Phase 2.8 complete: summarizer stub + fixture integ + tampered-seed E2E + watch.* CLI",
+      "from": "1.2.0",
+      "to": "1.3.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-04-20T09:14:26+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "cmd/api/ split + Dockerfile builds both binaries + mocksrv compose service",
+      "from": "1.1.0",
+      "to": "1.2.0",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-04-20T09:14:26+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "watch.py dispatcher; mock.capture unblocked for agents; tests.py includes xops+swarm",
+      "from": "1.2.0",
+      "to": "1.3.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-04-20T09:14:26+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 2 + 2.8 DoD boxes ticked; AGENTS.md: only git is AI-restricted",
+      "from": "1.1.0",
+      "to": "1.2.0",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-04-20T09:14:26+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 2 + 2.8 ship complete",
+      "from": "1.1.0",
+      "to": "1.2.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-04-20T09:23:57+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "mock.up: -seeds flag (not -manifest); mocknet aliases replace extra_hosts:127.0.0.1; mock.up forces --build",
+      "from": "1.3.0",
+      "to": "1.3.1",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-04-20T09:23:57+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "mocksrv 404 hint drops stale HUMAN-ONLY text",
+      "from": "1.2.0",
+      "to": "1.2.1",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-04-20T09:23:57+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "mock.up --build flag",
+      "from": "1.3.0",
+      "to": "1.3.1",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-04-20T09:43:24+00:00",
+      "component": "source_watcher",
+      "level": "minor",
+      "note": "HTML probe rules (status, sha256, raw_len), bulk truncation escalation, type-coercion downgrade — see phase2-source-watcher-stress.md",
+      "from": "1.3.0",
+      "to": "1.4.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-04-20T09:43:24+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "watch._fetch_seed captures _sha256 + _status from headers sidecar",
+      "from": "1.3.1",
+      "to": "1.3.2",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-04-20T10:02:37+00:00",
+      "component": "infra_mock",
+      "level": "minor",
+      "note": "idempotent capture + depth-1 crawl + fast compose overlay + smoke target",
+      "from": "1.3.1",
+      "to": "1.4.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-04-20T10:02:37+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "mocksrv home-page fallback for unknown paths",
+      "from": "1.2.1",
+      "to": "1.2.2",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-04-20T10:02:37+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "mock.reset/browser/smoke/sources targets; FORCE/DEPTH on capture",
+      "from": "1.3.2",
+      "to": "1.4.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-04-20T10:02:37+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "SWARM_NETWORK.md design doc",
+      "from": "1.2.0",
+      "to": "1.2.1",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-04-20T10:19:41+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "mocksrv home-fallback now picks any entry per host (HTML preferred); fixes openfootball.local 404",
+      "from": "1.2.2",
+      "to": "1.2.3",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-04-20T10:19:41+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "docker-compose collapsed: fast tier IS now the dev default; fast.yml deleted; mock.smoke budget tuned",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-04-20T10:19:41+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "mock.smoke MAX_PAGES=3 default for sub-30s smoke; up.fast removed",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-04-20T10:32:12+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "env files relocated to xops/env/; compose --env-file auto-injected by _common; mock.up routed through same helper",
+      "from": "1.4.1",
+      "to": "1.5.0",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-04-20T10:32:12+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "sync_test.go now walks to xops/env/.env.example; repo-root inferred 3 levels up",
+      "from": "1.2.3",
+      "to": "1.2.4",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-04-20T10:32:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "README, AGENTS, CONFIGURATION, SETUP updated for xops/env path",
+      "from": "1.2.1",
+      "to": "1.2.2",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-04-20T10:49:11+00:00",
+      "component": "xops",
+      "level": "major",
+      "note": "Makefile collapsed 78→44 active targets; standardised on domain.action; deprecation shims for one release",
+      "from": "1.5.0",
+      "to": "2.0.0",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-04-20T10:49:11+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "cheatsheet trimmed to daily commands; sync to new make target names",
+      "from": "1.2.2",
+      "to": "1.2.3",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-04-20T10:53:06+00:00",
+      "component": "xops",
+      "level": "major",
+      "note": "removed all legacy verb-noun Make aliases and dead dispatcher entry points",
+      "from": "2.0.0",
+      "to": "3.0.0",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-04-20T11:53:44+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "add CONTENT_FRESHNESS.md design sketch for Phase 3 content-freshness agent",
+      "from": "1.2.3",
+      "to": "1.3.0",
+      "build": 19
+    }
+  ]
+}

@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-`make scrape|bootstrap|train*|ai-pipeline|ai-train|ai-demo|ai-backtest*|
-       ai-tqu-test|ai-shell|ai-continuous|ai-continuous-demo`
+`make scrape|bootstrap|train|train-model|backtest|ai.*`
 
 All AI-container workloads. Each subcommand accepts an argparse-style
 namespace built from the trailing argv, so the Makefile can pass
 `--league`, `--weeks`, `--min-confidence`, `--markets` cleanly.
+
+Env-var:
+    MODE=demo  → `make ai.continuous` runs `main.py --demo --continuous`
+    MODE=anything-else (or unset) runs `main.py --continuous`
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -61,7 +65,6 @@ def cmd_bootstrap(argv):
     p.add_argument("--min-matches", type=int, default=100)
     a = p.parse_args(argv)
     info(f"🚀 Bootstrapping real data for {a.league}…")
-    # Stage 1: scrape (subprocess so we can chain validate after)
     compose_run(
         "run", "--rm",
         "-e", f"NEGELIR_DEFAULT_LEAGUE_ID={a.league}",
@@ -69,7 +72,6 @@ def cmd_bootstrap(argv):
         "--league", a.league,
         "--output", f"/data/{a.league}_real.json",
     )
-    # Stage 2: validate
     compose_run(
         "run", "--rm",
         "-e", f"NEGELIR_DEFAULT_LEAGUE_ID={a.league}",
@@ -101,20 +103,12 @@ def cmd_ai_pipeline(_argv):
     _ai("python", "-m", "pipeline.runner")
 
 
-def cmd_ai_train(argv):
-    p = argparse.ArgumentParser()
-    p.add_argument("--league", default="super_lig")
-    a = p.parse_args(argv)
-    _require_league_data(a.league)
-    _ai("python", "-m", "model.trainer", league=a.league)
-
-
 def cmd_ai_demo(_argv):
     _ai("python", "-m", "pipeline.runner", "--demo")
 
 
-def cmd_ai_backtest(argv):
-    p = argparse.ArgumentParser(prog="ai_commands.py ai-backtest")
+def cmd_backtest(argv):
+    p = argparse.ArgumentParser(prog="ai_commands.py backtest")
     p.add_argument("--weeks", type=int, default=3)
     p.add_argument("--min-confidence", type=float, default=None)
     p.add_argument("--markets", default=None)
@@ -127,35 +121,30 @@ def cmd_ai_backtest(argv):
     _ai("python", "-m", "backtest.evaluator", "--weeks", str(a.weeks), *extra)
 
 
-def cmd_ai_tqu_test(_argv):
-    _ai("python", "-m", "tqu.classifier")
-
-
 def cmd_ai_shell(_argv):
     _ai("bash")
 
 
 def cmd_ai_continuous(_argv):
-    _ai("python", "main.py", "--continuous")
-
-
-def cmd_ai_continuous_demo(_argv):
-    _ai("python", "main.py", "--demo", "--continuous")
+    mode = os.environ.get("MODE", "").strip().lower()
+    if mode == "demo":
+        _ai("python", "main.py", "--demo", "--continuous")
+    else:
+        _ai("python", "main.py", "--continuous")
 
 
 COMMANDS = {
-    "scrape": cmd_scrape,
-    "bootstrap": cmd_bootstrap,
-    "train-full": cmd_train_full,
+    # Daily verbs
+    "scrape":      cmd_scrape,
+    "bootstrap":   cmd_bootstrap,
+    "train-full":  cmd_train_full,
     "train-model": cmd_train_model,
-    "ai-pipeline": cmd_ai_pipeline,
-    "ai-train": cmd_ai_train,
-    "ai-demo": cmd_ai_demo,
-    "ai-backtest": cmd_ai_backtest,
-    "ai-tqu-test": cmd_ai_tqu_test,
-    "ai-shell": cmd_ai_shell,
-    "ai-continuous": cmd_ai_continuous,
-    "ai-continuous-demo": cmd_ai_continuous_demo,
+    "backtest":    cmd_backtest,
+    # ai.* domain
+    "ai.pipeline":   cmd_ai_pipeline,
+    "ai.demo":       cmd_ai_demo,
+    "ai.shell":      cmd_ai_shell,
+    "ai.continuous": cmd_ai_continuous,
 }
 
 

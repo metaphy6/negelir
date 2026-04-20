@@ -16,7 +16,7 @@
 ```bash
 git clone <repo>
 cd negelir
-make env             # creates .env from .env.example
+make env             # creates xops/env/.env from xops/env/.env.example
 ```
 
 > Edit `.env` if you need to override anything. **Never commit `.env`.**
@@ -48,7 +48,7 @@ If `make smoke` is green you're running.
 make logs                   # tail everything
 make swarmctl-ps            # list agents + heartbeats
 make swarmctl-tail TOPIC=predict.final
-make ai-shell               # shell into the AI image
+make ai.shell               # shell into the AI image
 make test                   # full test suite
 make backtest WEEKS=3       # offline historical backtest
 ```
@@ -68,7 +68,7 @@ NEGELIR_DEVICE=auto make up-dev    # default; picks the best available
 make down                # stop containers, keep volumes
 make hosts-uninstall     # remove .local hostnames
 make clean               # remove containers + local images
-make clean-all           # also drop volumes (⚠️ wipes data)
+make clean.all           # also drop volumes (⚠️ wipes data)
 ```
 
 ## 7. Refresh seed corpus (rare, deliberate)

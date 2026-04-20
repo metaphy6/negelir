@@ -6,13 +6,13 @@
 ## 📐 Layout
 
 ```
-.env.example                      # canonical env-var documentation
+xops/env/.env.example             # canonical env-var documentation
 ai/common/
 ├── config.py                     # Python @dataclass Config, the only Python config
 └── defaults.yaml                 # generated from config.py for human readers
 server/internal/config/
 ├── config.go                     # Go Config struct, the only Go config
-└── sync_test.go                  # parity test against .env.example
+└── sync_test.go                  # parity test against xops/env/.env.example
 ai/tests/test_config_sync.py      # parity test for the Python side
 xops/lint/no_magic.py             # lint that forbids magic numbers
 ```
@@ -29,12 +29,12 @@ xops/lint/no_magic.py             # lint that forbids magic numbers
 | `SEC_` | security agents | `SEC_INPUT_MAX_LEN`, `SEC_BURST_THRESHOLD` |
 | `SWARM_` | bus / agents platform | `SWARM_HEARTBEAT_SEC`, `SWARM_BUS_KIND` |
 
-A single key may not be owned by both Python and Go unless `.env.example`
+A single key may not be owned by both Python and Go unless `xops/env/.env.example`
 marks it `# shared`. The meta-test enforces this.
 
 ## ✅ Validation rules
 
-- Every key in `.env.example` is read by at least one config layer.
+- Every key in `xops/env/.env.example` is read by at least one config layer.
 - Every config field has a sane default; validation rejects out-of-range values on startup.
 - Strict mode (`NEGELIR_STRICT=1`) refuses unknown keys with our prefixes — catches typos and stale configs.
 - Tuple-range fields (e.g. `feature_ranges`) check `lo < hi`.
@@ -55,9 +55,9 @@ marks it `# shared`. The meta-test enforces this.
 
 The `test_config_sync.py` and `sync_test.go` tests assert:
 
-1. Every key documented in `.env.example` is consumed by at least one config layer.
-2. Every key consumed by a config layer is documented in `.env.example`.
-3. Defaults in `.env.example` match defaults in code.
+1. Every key documented in `xops/env/.env.example` is consumed by at least one config layer.
+2. Every key consumed by a config layer is documented in `xops/env/.env.example`.
+3. Defaults in `xops/env/.env.example` match defaults in code.
 4. Pickle round-trip succeeds for the Python `Config` (config-as-data).
 5. No Phase-2 synthetic-data env keys leak back in.
 

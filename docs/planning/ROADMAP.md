@@ -204,6 +204,21 @@ Follow-up to the multi-league reframing tracked under `phase 0 → adapted` (202
 > 💡 **Example commit:** `chore(p2p): remove P2P stack — superseded by swarm pivot`
 > Single squash commit; no half-removed files.
 
+### 0.6 Centralized version chart (cross-cutting)
+
+**Goal:** Every main component (`ai`, `server`, `xops`, `docs`, `infra_mock`, `source_watcher`, …) and the umbrella Negelir application carry an explicit SemVer, controlled from one place, mutated only through a stdlib-only Python CLI.
+
+- [x] `xops/versioning/chart.json` — single source of truth. Schema: `{schema, project:{name,version,build,released}, components:{<key>:{version,description,last_changed}}, changelog[]}`. Every component starts at `1.0.0`; `project.build` increments on each component bump and resets when `project.version` itself bumps.
+- [x] `xops/versioning/version.py` — CLI: `show [--changelog N]`, `bump --component <key> --level <major|minor|patch> [--note "..."]`, `validate`, `components`. Stdlib only. Importable as a library.
+- [x] `xops/versioning/tests/test_version.py` — 19 tests covering: SemVer parse/bump, schema validation, component bump (build increments + `last_changed` stamps), `bump --component project` resets build to 0, save/load round-trip, **canonical-form guard** that fails on hand edits.
+- [x] Makefile dispatcher: `make version.show`, `make version.bump COMPONENT=<key> LEVEL=<major|minor|patch> [NOTE="..."]`, `make version.validate`, `make version.components`.
+- [x] AGENTS.md §6.1 documents the discipline: *every* PR that meaningfully changes a component must include a `version.bump` in the same commit. The canonical-form test guards against silent edits.
+- [ ] CI gate: `pytest xops/versioning/tests/` runs as part of `make test`. *(Today these tests pass standalone; wiring them into the default `make test` target is part of the Phase 1 lint/CI sweep.)*
+
+> 💡 **Example bump:**
+> `make version.bump COMPONENT=infra_mock LEVEL=minor NOTE="Phase 2 scaffolding landed"`
+> → `infra_mock 1.0.0 → 1.1.0`, `negelir build 0 → 1`, changelog entry appended.
+
 ---
 
 ## ⚙️ Phase 1 — Centralized Configuration & Hardcode Audit
@@ -261,7 +276,7 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
        /etc/hosts (managed by `make hosts-install`)
             │
             ▼
-   ┌──────────────────────┐         ┌───────────────────────┐
+   ┌───────────────────────┐        ┌───────────────────────┐
    │  nginx-mock           │ ──────▶│  postgres (read-only  │
    │  (TLS, self-signed CA)│        │   snapshot of seeds)  │
    │  vhosts:              │        └───────────────────────┘
@@ -269,15 +284,15 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
    │   • nesine.com        │
    │   • tff.org           │
    │   • api.openfootball  │
-   └──────────────────────┘
+   └───────────────────────┘
 ```
 
 ### 2.2 Self-signed CA & per-domain certs
 
-- [ ] `infra/mock/ca/`: one root CA, generated on first `make mock-ca-init` (idempotent).
-- [ ] `infra/mock/certs/`: leaf certs for each fake domain, regenerated when the domain list changes.
-- [ ] CA is mounted into both `nginx-mock` and every Python/Go agent container at `/etc/ssl/negelir-ca.crt`. Containers append it to their trust store at start (`update-ca-certificates`).
-- [ ] **No host-side cert install** — everything happens inside containers and via `/etc/hosts` only.
+- [x] `infra/mock/ca/`: one root CA, generated on first `make mock.ca-init` (idempotent — re-runs are no-ops unless `--force`). Implemented in `xops/mock/ca.py` via openssl shell-out; 11 unit tests incl. real chain-verify + tamper detection.
+- [x] `infra/mock/certs/`: leaf certs for each fake domain, regenerated when the domain list changes. `ca.issue_leaf(host)` drops `<host>/{key.pem, crt.pem, chain.pem}` and refreshes the serial file.
+- [x] CA is mounted into `nginx-mock` and every agent container at `/etc/ssl/negelir-ca.crt` via `docker-compose.mock.yml`. `SSL_CERT_FILE` + `REQUESTS_CA_BUNDLE` are set on agent services so Python/requests/urllib pick it up without an image rebuild.
+- [x] **No host-side cert install** — `/etc/hosts` is the only host-level edit; the root cert lives inside container mounts only.
 
 ### 2.3 Hosts-file integration
 
@@ -294,15 +309,15 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 
 ### 2.4 Seed corpus
 
-- [ ] `infra/mock/seeds/` holds **frozen** captures: `*.html`, `*.json`, response headers, status codes.
-- [ ] One Python helper, `xops/mock/capture.py`, performs a one-time real scrape (rate-limited, robots-respecting) and writes seeds. **Ran by hand, never in CI.**
-- [ ] nginx serves seeds verbatim via `try_files` and a tiny `lua` block for query-string routing.
-- [ ] Seeds carry a `manifest.json` recording: source URL, capture date, sha256, byte size.
+- [x] `infra/mock/seeds/` holds **frozen** captures: `*.html`, `*.json`, response headers (sibling `<file>.headers.json`), status codes. Seeded for all 4 sources on 2026-04-20.
+- [x] `xops/mock/capture_engine.py` + `xops/makefile/mock.py::capture` perform rate-limited captures (1.5s inter-request delay; only declared paths, no crawling). Agent-runnable per AGENTS.md §2 #10; only git ops remain AI-restricted.
+- [x] nginx serves seeds via `mocksrv` upstream (manifest-keyed `(host, path)` routing; `try_files`-style exact-match — no lua needed since mocksrv handles path logic in Go).
+- [x] `infra/mock/seeds/manifest.json` records per entry: source URL, capture date, sha256, byte size, status, content_type. Re-generated atomically by `capture_all()`.
 
 ### 2.5 Integrity guarantees
 
-- [ ] `xops/mock/verify.py` re-hashes every seed and compares to `manifest.json`. Runs in `make test`.
-- [ ] **Property test:** for any URL the scraper would issue against the real source, the mock returns the same shape (a `pytest` parametrized over `manifest.json`).
+- [x] `xops/mock/verify.py` re-hashes every seed and compares to `manifest.json`. Now wired into `make test` via `xops/makefile/tests.py` (runs alongside AI + swarm + versioning suites).
+- [x] **Property test:** `xops/mock/tests/test_manifest_contract.py` parametrizes over every manifest entry and asserts (a) payload file exists, (b) sha256 matches, (c) byte count matches, (d) extension matches `content_type`, (e) every registered source in `xops/mock/sources.py` has at least one seed.
 
 ### 2.6 Makefile UX
 
@@ -320,12 +335,55 @@ make mock-verify       # offline integrity check
 
 The current `server/` (Go) is **repurposed** as the mock-source backend:
 
-- [ ] Move existing API code to `server/cmd/api/` (will become Phase 9 surface).
-- [ ] New binary: `server/cmd/mocksrv/` — serves seed data via the same upstream API surface mackolik/nesine expose.
-- [ ] nginx-mock proxies `/` of each fake vhost to `mocksrv`.
-- [ ] The Go server gains **two run modes** in `server/internal/config`: `MODE=api` (Phase 9) and `MODE=mocksrv` (Phase 2). Same binary, different topic on startup.
+- [x] Move existing API code to `server/cmd/api/` (will become Phase 9 surface). Done 2026-04-20; Dockerfile now builds both `/bin/server` and `/bin/mocksrv`.
+- [x] New binary: `server/cmd/mocksrv/` — stdlib-only Go HTTP server; manifest-keyed `(host, path) → entry` routing; `/__mocksrv/health` + `/__mocksrv/reload` endpoints; 6 tests.
+- [x] nginx-mock proxies `/` of each fake vhost to `mocksrv:8090` via deterministic vhost configs generated by `xops/mock/nginx.py`. `X-Negelir-Mock-Source` header carries the vhost so mocksrv can route.
+- [x] Two run modes wired in `server/internal/config` (`MODE=api`, `MODE=mocksrv`) and the compose overlay (`docker-compose.mock.yml`) starts both services on a dedicated `mocknet` bridge.
 
 > 💡 **Example flow:** scraper container resolves `mackolik.local` → 127.0.0.1 → nginx-mock → mocksrv → postgres seed table. The scraper code is **identical** to production scraping; only the URL changes via config.
+
+### 2.8 Source-Watcher Agent (cross-cutting; powers the dev stack)
+
+**Goal:** A long-running agent that periodically diffs the live upstream sources against the seed corpus + the scraper's expected schema, classifies each delta (cosmetic / semantic / schema-breaking), records it as audit history, and proposes scoped updates to the mock stack and the scrapers' selectors. The mock stack is only as good as its freshness watchdog — this is that watchdog.
+
+**Why it lives here, not in Phase 8:** the Phase 2 dev stack must be trustworthy from day one. A stale mock is worse than no mock. The agent ships with Phase 2 (skeleton + deterministic differ + classifier today; full scheduling, AI summarization, and PR-opening land in Phase 8 once the swarm bus from Phase 3 is available).
+
+**Doctrine constraint:** per Guiding Principle #4 (smallest model that works), the **classification rules are deterministic** — they never depend on an LLM. The optional LLM summarizer added in Phase 8 only ever *narrates* what the rules already decided; it never overrides them. This is what makes the agent testable and auditable.
+
+#### 2.8.1 Module skeleton (this phase)
+
+- [x] `ai/swarm/__init__.py` + `ai/swarm/source_watcher/__init__.py` — package home.
+- [x] `differ.py` — pure recursive structural diff over JSON-compatible payloads. Returns `FieldDiff(path, kind, old, new)` records where `kind ∈ {added, removed, changed, type_changed}`.
+- [x] `classifier.py` — rule-based mapping from `FieldDiff` → `{cosmetic, semantic, schema_breaking}`. `worst_severity()` for quick gating.
+- [x] `tests/test_differ.py` — 9 tests covering diff (identical / add / remove / change / type-change / nested-list / summary-counts) and classifier (removed → breaking, added → semantic, whitespace → cosmetic, worst-of).
+
+#### 2.8.2 Snapshot store + scheduler (next)
+
+- [x] `snapshot_store.py` — append-only on-disk store under `infra/mock/seeds/history/<source>/<iso-date>.json`. Each entry records: URL, headers, status, sha256, timestamp.
+- [x] `planner.py` — turns a classified diff into an actionable update plan: which seed files to refresh, which scraper selectors to flag, which `LeagueConfig` fields to revisit.
+- [x] `scheduler.py` — periodic runner (cron-style cadence from `cfg.source_watcher_interval_min`). Skips network when `NEGELIR_SCRAPE_PROFILE=mock`.
+- [x] CLI: `make watch.run` (one-shot), `make watch.history SOURCE=mackolik.local`, `make watch.sources`. Dispatchers in `xops/makefile/watch.py`; exercised end-to-end against the real seed corpus.
+
+#### 2.8.3 LLM summarizer (Phase 8 graduation)
+
+- [x] `summarizer.py` — stub landed behind an explicit `enabled=False` default. Produces TR-language narration from a `UpdatePlan`; falls back to a deterministic plan-derived string when the LLM is disabled, unreachable, or returns empty text. Phase 8 will swap in a real client without changing the caller.
+- [x] Hard-fail tests (`test_summarizer_negative.py`, 6 tests): disabled→fallback, enabled-without-llm→fallback, `ConnectionError`/`TimeoutError`/empty-response all degrade to fallback rather than raise; the plan's `severity`/`actions` cannot be mutated by the summarizer.
+
+#### 2.8.4 Tests (first-class — Guiding Principle #7)
+
+- [x] Unit tests on differ + classifier (this phase).
+- [x] Property test: for any pair of payloads, `classify(diff_json(a, a))` is empty; `classify(diff_json(a, b))` is non-empty iff `a != b`.
+- [x] Adversarial fuzzing: random-tree generator (stdlib `random`, no `hypothesis` dep) to assert the differ is symmetric and produces unique paths across 200+ randomized cases.
+- [x] Integration test: snapshot store + planner against a frozen pair of seed files (`ai/swarm/source_watcher/tests/fixtures/openfootball_v{1,2_breaking}.json` + `test_fixture_integration.py`).
+- [x] **Negative test:** if the LLM summarizer is enabled and the LLM endpoint is unreachable, the agent must still complete its run and persist the deterministic plan (`test_summarizer_negative.py`).
+
+#### 2.8.5 Definition of Done for §2.8
+
+- [x] Skeleton landed; all unit tests green.
+- [x] Scheduler implemented + tested with fake clock; exercised on the dev stack via `make watch.run` (4/4 sources snapshotted + re-run shows `unchanged` on identical seeds).
+- [x] Drift events recorded under `infra/mock/seeds/history/` (first `watch.run` produced 4 `first_snapshot` entries on 2026-04-20).
+- [x] End-to-end test where a deliberately tampered seed triggers a `schema_breaking` classification and the planner emits a non-empty update plan (`test_e2e_tampered_seed.py::test_tampered_seed_triggers_schema_breaking_plan` + `test_fixture_integration.py::test_openfootball_v1_vs_v2_schema_breaking`).
+- [x] `source_watcher` component bumped to `1.2.0` in `xops/versioning/chart.json` (will move to ≥ `2.0.0` once Phase 8 LLM integration is live).
 
 ---
 

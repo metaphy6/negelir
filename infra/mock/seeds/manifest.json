@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "captured_at": "2026-04-20T10:30:25+00:00",
+  "entries": [
+    {
+      "source": "mackolik.local",
+      "url": "https://www.mackolik.com/",
+      "path": "mackolik/home.html",
+      "captured_at": "2026-04-20T10:30:25+00:00",
+      "sha256": "8b70f32d7d72676547d353a99031e33b663c2478ad49b4927ff09625eb95535b",
+      "bytes": 117051,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "source": "nesine.local",
+      "url": "https://www.nesine.com/",
+      "path": "nesine/home.html",
+      "captured_at": "2026-04-20T10:30:25+00:00",
+      "sha256": "31debd5ee532b18eb463867c520c6197a3d60ba499f3a2550f9085e8c9def101",
+      "bytes": 585223,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "source": "tff.local",
+      "url": "https://www.tff.org/",
+      "path": "tff/home.html",
+      "captured_at": "2026-04-20T10:30:25+00:00",
+      "sha256": "d0d69ebe36392a5230b9eb6e2a370f8e466558b1cfd35b61004ed278a41c4eb0",
+      "bytes": 144883,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "source": "openfootball.local",
+      "url": "https://raw.githubusercontent.com/openfootball/football.json/master/2024-25/tr.1.json",
+      "path": "openfootball/tr1_2024_25.json",
+      "captured_at": "2026-04-20T10:30:25+00:00",
+      "sha256": "6bfa0c16f87ea59ab79c60873ad3d3c0288e3198e4d6d0f56a2ebcb117e708c4",
+      "bytes": 94975,
+      "status": 200,
+      "content_type": "application/json"
+    }
+  ]
+}

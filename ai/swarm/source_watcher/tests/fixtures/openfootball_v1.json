@@ -1,0 +1,19 @@
+{
+  "name": "Turkish Süper Lig 2024-25",
+  "season": "2024-25",
+  "rounds": [
+    {
+      "matchday": 1,
+      "matches": [
+        {"home": "Galatasaray", "away": "Fenerbahçe", "date": "2024-08-09", "score": {"ft": [2, 1]}},
+        {"home": "Beşiktaş", "away": "Trabzonspor", "date": "2024-08-10", "score": {"ft": [1, 1]}}
+      ]
+    }
+  ],
+  "teams": [
+    {"id": "GS", "name": "Galatasaray"},
+    {"id": "FB", "name": "Fenerbahçe"},
+    {"id": "BJK", "name": "Beşiktaş"},
+    {"id": "TS", "name": "Trabzonspor"}
+  ]
+}

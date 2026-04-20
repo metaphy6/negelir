@@ -22,6 +22,32 @@ if _COMPOSE_OVERRIDE:
 else:
     COMPOSE = ["docker", "compose"]
 
+# ── Project env file (single source of truth) ─────────────────
+# Every `docker compose` invocation made through compose_run/compose_exec
+# is auto-prefixed with `--env-file xops/env/.env` so Compose's own
+# variable substitution (ports, healthchecks, the POSTGRES_PASSWORD
+# guard) sees the same values the containers do via env_file:.
+# Override with NEGELIR_ENV_FILE=/abs/path/to/other.env if needed.
+
+_ENV_FILE_OVERRIDE = os.environ.get("NEGELIR_ENV_FILE")
+ENV_FILE: Path = (
+    Path(_ENV_FILE_OVERRIDE).resolve()
+    if _ENV_FILE_OVERRIDE
+    else REPO_ROOT / "xops" / "env" / ".env"
+)
+ENV_EXAMPLE: Path = REPO_ROOT / "xops" / "env" / ".env.example"
+
+
+def _compose_with_env() -> List[str]:
+    """COMPOSE base + --env-file (only if the file actually exists).
+
+    The file existence check lets `make env` run before any other target
+    without Docker complaining about a missing env-file.
+    """
+    if ENV_FILE.is_file():
+        return [*COMPOSE, "--env-file", str(ENV_FILE)]
+    return list(COMPOSE)
+
 # ── Pretty logger (emoji-prefixed; no third-party deps) ───────
 
 
@@ -71,8 +97,8 @@ def run(
 def compose_run(
     *args: str, check: bool = True, env: Optional[dict] = None
 ) -> subprocess.CompletedProcess:
-    """`docker compose <args>` as a subprocess. Use for orchestration."""
-    return run([*COMPOSE, *args], check=check, env=env)
+    """`docker compose --env-file xops/env/.env <args>` as a subprocess."""
+    return run([*_compose_with_env(), *args], check=check, env=env)
 
 
 def exec_(cmd: Sequence[str]) -> NoReturn:
@@ -89,7 +115,7 @@ def exec_(cmd: Sequence[str]) -> NoReturn:
 
 def compose_exec(*args: str) -> NoReturn:
     """Like `compose_run` but `execvp`s into docker compose."""
-    exec_([*COMPOSE, *args])
+    exec_([*_compose_with_env(), *args])
 
 
 # ── Tiny dispatch helper ──────────────────────────────────────

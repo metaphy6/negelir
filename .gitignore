@@ -18,7 +18,10 @@ server/tmp/
 # !data/.gitkeep
 
 # ── Environment ──
-# .env
+# Real env file lives at xops/env/.env; the .example sibling is tracked.
+xops/env/.env
+# Legacy locations (in case anyone resurrects them):
+.env
 
 # ── IDE ──
 .vscode/settings.json

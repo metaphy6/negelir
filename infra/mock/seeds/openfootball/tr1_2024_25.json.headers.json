@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-04-20T10:30:25+00:00",
+  "headers": {
+    "accept-ranges": "bytes",
+    "access-control-allow-origin": "*",
+    "cache-control": "max-age=300",
+    "connection": "close",
+    "content-length": "94975",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    "content-type": "text/plain; charset=utf-8",
+    "cross-origin-resource-policy": "cross-origin",
+    "date": "Mon, 20 Apr 2026 10:30:26 GMT",
+    "etag": "\"24088ce91efaa1040c984e1a6f3c4cad523e6c807b965998b8c90f0261d57db1\"",
+    "expires": "Mon, 20 Apr 2026 10:35:26 GMT",
+    "source-age": "139",
+    "strict-transport-security": "max-age=31536000",
+    "vary": "Authorization,Accept-Encoding",
+    "via": "1.1 varnish",
+    "x-cache": "HIT",
+    "x-cache-hits": "1",
+    "x-content-type-options": "nosniff",
+    "x-fastly-request-id": "785497593f72d870096c8eb3790310f36cde1a60",
+    "x-frame-options": "deny",
+    "x-github-request-id": "F0DE:11DDC8:273293E:2BB2618:69E5FD01",
+    "x-served-by": "cache-lin1730077-LIN",
+    "x-timer": "S1776681026.324514,VS0,VE1",
+    "x-xss-protection": "1; mode=block"
+  },
+  "status": 200,
+  "url": "https://raw.githubusercontent.com/openfootball/football.json/master/2024-25/tr.1.json"
+}

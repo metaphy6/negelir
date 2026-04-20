@@ -1,0 +1,22 @@
+{
+  "captured_at": "2026-04-20T10:30:25+00:00",
+  "headers": {
+    "cache-control": "public, private, max-age=24, s-maxage=30",
+    "connection": "Transfer-Encoding",
+    "content-security-policy": "default-src https:; script-src https: 'unsafe-inline' 'unsafe-eval'; style-src https: 'unsafe-inline'; img-src * 'self' https: data:; connect-src https: wss:; font-src https: data:; media-src https: blob:;",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Mon, 20 Apr 2026 10:30:25 GMT",
+    "server": "nginx/1.24.0 (Ubuntu)",
+    "strict-transport-security": "max-age=63072000",
+    "transfer-encoding": "chunked",
+    "vary": "Accept-Encoding",
+    "x-aspnet-version": "4.0.30319",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "SAMEORIGIN",
+    "x-powered-by": "ASP.NET",
+    "x-us": "UPDATING",
+    "x-xss-protection": "1"
+  },
+  "status": 200,
+  "url": "https://www.mackolik.com/"
+}

@@ -55,7 +55,7 @@ Data validation and quarantine module.
 
 ```bash
 # With Docker
-make ai-demo
+make ai.demo
 
 # Direct execution
 cd ai && python -m pipeline.runner

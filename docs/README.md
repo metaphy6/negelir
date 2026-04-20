@@ -18,6 +18,7 @@ There are no archives — the canonical, current plan lives here.
 | Understand the **whole plan, top-to-bottom** | [`planning/ROADMAP.md`](planning/ROADMAP.md) |
 | See the **system architecture** | [`design/ARCHITECTURE.md`](design/ARCHITECTURE.md) |
 | Understand the **agent swarm** | [`design/SWARM.md`](design/SWARM.md) |
+| Detect **new content on data sources** (proposed agent) | [`design/CONTENT_FRESHNESS.md`](design/CONTENT_FRESHNESS.md) |
 | Know **why we picked our languages** | [`design/LANGUAGE_CHOICES.md`](design/LANGUAGE_CHOICES.md) |
 | Set up the **fake-data dev environment** | [`design/MOCK_DATA_SERVER.md`](design/MOCK_DATA_SERVER.md) |
 | Understand **identity / API security** | [`design/SECURITY.md`](design/SECURITY.md) |
@@ -39,6 +40,7 @@ docs/
 ├── design/
 │   ├── ARCHITECTURE.md              ← high-level system diagram
 │   ├── SWARM.md                     ← agent roles, consensus, message bus
+│   ├── CONTENT_FRESHNESS.md         ← proposed Phase 3 freshness agent (sketch)
 │   ├── LANGUAGE_CHOICES.md          ← Python vs Rust vs Go decision
 │   ├── MOCK_DATA_SERVER.md          ← fake-internet dev stack
 │   ├── SECURITY.md                  ← identity, mTLS, rate limit, threat model

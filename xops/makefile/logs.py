@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
-"""`make logs|logs-ai|logs-server` — tail container logs."""
+"""
+`make logs` — tail container logs.
+
+Env-var:
+    SVC=ai|server|postgres|… → tail one service (default: all services)
+"""
 
 from __future__ import annotations
 
+import os
 import sys
 
 from _common import compose_exec, dispatch
 
 
-def cmd_logs(_argv):        compose_exec("logs", "-f")
-def cmd_logs_ai(_argv):     compose_exec("logs", "-f", "ai")
-def cmd_logs_server(_argv): compose_exec("logs", "-f", "server")
+def cmd_logs(_argv):
+    svc = os.environ.get("SVC", "").strip()
+    args = ["logs", "-f"]
+    if svc:
+        args.append(svc)
+    compose_exec(*args)
 
 
 COMMANDS = {
     "logs": cmd_logs,
-    "logs-ai": cmd_logs_ai,
-    "logs-server": cmd_logs_server,
 }
 
 

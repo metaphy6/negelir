@@ -1,6 +1,14 @@
 # ─────────────────────────────────────────────────────────
-#  Negelir — Full Development Stack
-#  Usage: make up  (or docker compose up --build)
+#  Negelir — Full Development Stack (fast = default)
+#
+#  Env values come from xops/env/.env (template:
+#  xops/env/.env.example). Each service uses `env_file:` so this
+#  file stays free of value duplication; the only inline overrides
+#  are container-internal hostnames and a single hard guard for the
+#  Postgres password.
+#
+#  Usage: `make up`  (auto-loads xops/env/.env via --env-file).
+#         Raw `docker compose` calls must pass --env-file xops/env/.env.
 # ─────────────────────────────────────────────────────────
 
 services:
@@ -8,17 +16,43 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    env_file:
+      - ./xops/env/.env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-negelir}
-      POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
+      # Hard guard: refuse to boot without an explicit password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in xops/env/.env (no default; see xops/env/.env.example)}
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=200
+      - -c
+      - wal_level=minimal
+      - -c
+      - max_wal_senders=0
+      - -c
+      - checkpoint_timeout=30min
+      - -c
+      - checkpoint_completion_target=0.9
     ports:
       - "5432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,size=1g
     volumes:
-      - pg_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-negelir}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -27,10 +61,24 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --tcp-keepalive
+      - "60"
+      - --io-threads
+      - "2"
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
+    tmpfs:
+      - /data:rw,size=512m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -45,28 +93,16 @@ services:
     restart: unless-stopped
     ports:
       - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    env_file:
+      - ./xops/env/.env
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB:-negelir}
-      POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      DATABASE_URL: ${DATABASE_URL:-}
-      REDIS_URL: ${REDIS_URL:-}
-      SERVER_PORT: ${SERVER_PORT:-8080}
-      DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
-      DB_CONNECT_TIMEOUT_SEC: ${DB_CONNECT_TIMEOUT_SEC:-5}
-      DB_PING_TIMEOUT_SEC: ${DB_PING_TIMEOUT_SEC:-5}
-      DB_RETRY_DELAY_SEC: ${DB_RETRY_DELAY_SEC:-3}
-      REDIS_RETRY_DELAY_SEC: ${REDIS_RETRY_DELAY_SEC:-2}
-      HTTP_READ_TIMEOUT_SEC: ${HTTP_READ_TIMEOUT_SEC:-10}
-      HTTP_WRITE_TIMEOUT_SEC: ${HTTP_WRITE_TIMEOUT_SEC:-30}
-      HTTP_SHUTDOWN_TIMEOUT_SEC: ${HTTP_SHUTDOWN_TIMEOUT_SEC:-5}
-      CACHE_MATCHES_TTL_SEC: ${CACHE_MATCHES_TTL_SEC:-300}
-      CACHE_TEAMS_TTL_SEC: ${CACHE_TEAMS_TTL_SEC:-600}
+      # Container-internal hostnames (override the host-side defaults
+      # that .env carries for `python -m ...` outside Docker).
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
       LOG_LEVEL: ${SERVER_LOG_LEVEL:-debug}
+      # Hard guard mirrored here so the server fails fast too.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in xops/env/.env (no default; see xops/env/.env.example)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,36 +116,15 @@ services:
     build:
       context: ./ai
       dockerfile: Dockerfile
+    env_file:
+      - ./xops/env/.env
     environment:
+      # Container-internal hostnames + fixed runtime knobs.
       POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB:-negelir}
-      POSTGRES_USER: ${POSTGRES_USER:-negelir}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (no default; see .env.example)}
       REDIS_HOST: redis
-      REDIS_PORT: 6379
       SERVER_URL: http://server:8080
-      AI_LOG_LEVEL: ${AI_LOG_LEVEL:-DEBUG}
-      AI_DEVICE: ${AI_DEVICE:-auto}
-      SCRAPE_RATE_LIMIT_SECONDS: ${SCRAPE_RATE_LIMIT_SECONDS:-2}
-      SCRAPE_USER_AGENT: ${SCRAPE_USER_AGENT:-Negelir/0.1 (Football Analysis Research)}
-      SCRAPE_RESPECT_ROBOTS_TXT: ${SCRAPE_RESPECT_ROBOTS_TXT:-true}
-      SCRAPE_SOURCE_1: ${SCRAPE_SOURCE_1:-https://www.mackolik.com}
-      SCRAPE_SOURCE_2: ${SCRAPE_SOURCE_2:-https://www.nesine.com}
-      SCRAPE_SOURCE_3: ${SCRAPE_SOURCE_3:-https://www.tff.org}
-      SCRAPE_SOURCE_4: ${SCRAPE_SOURCE_4:-https://raw.githubusercontent.com/openfootball/football.json/master}
-      SCRAPE_SOURCE_5: ${SCRAPE_SOURCE_5:-https://www.football-data.co.uk/mmz4281}
-      SCRAPE_SOURCE_FALLBACK: ${SCRAPE_SOURCE_FALLBACK:-https://arsiv.mackolik.com}
-      SCRAPE_SOURCE_EXTRA: ${SCRAPE_SOURCE_EXTRA:-}
-      MACKOLIK_SEASON_2025_2026: ${MACKOLIK_SEASON_2025_2026:-70381}
-      MACKOLIK_SEASON_2024_2025: ${MACKOLIK_SEASON_2024_2025:-67287}
-      MACKOLIK_SEASON_2023_2024: ${MACKOLIK_SEASON_2023_2024:-62682}
-      MACKOLIK_SEASON_2022_2023: ${MACKOLIK_SEASON_2022_2023:-59539}
-      MACKOLIK_SEASON_2021_2022: ${MACKOLIK_SEASON_2021_2022:-55775}
-      OPENFOOTBALL_SEASONS: ${OPENFOOTBALL_SEASONS:-2018-19:2018-19,2019-20:2019-20,2020-21:2020-21,2024-25:2024-25,2025-26:2025-26}
-      FOOTBALLDATA_UK_SEASONS: ${FOOTBALLDATA_UK_SEASONS:-2526:2025-26,2425:2024-25,2324:2023-24,2223:2022-23,2122:2021-22,2021:2020-21,1920:2019-20,1819:2018-19}
       PYTHONUNBUFFERED: "1"
-      SIMULATION_INTERVAL: ${SIMULATION_INTERVAL:-30}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in xops/env/.env (no default; see xops/env/.env.example)}
     depends_on:
       server:
         condition: service_started
@@ -119,7 +134,3 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/data
-
-volumes:
-  pg_data:
-  redis_data:

@@ -1,0 +1,22 @@
+{
+  "captured_at": "2026-04-20T10:30:25+00:00",
+  "headers": {
+    "accept-ranges": "bytes",
+    "age": "217",
+    "allow": "GET, HEAD, POST",
+    "cache-control": "max-age=120",
+    "connection": "close",
+    "content-length": "144883",
+    "content-type": "text/html; charset=windows-1254",
+    "date": "Mon, 20 Apr 2026 10:30:26 GMT",
+    "server": "MerlinCDN",
+    "set-cookie": "TS012536b0=014f2d3f28849d49283f42312118a3dbff315032f2818a72a1d506309f67273a072e683ddd44554c607fbc1c36e8ff43cc1c9469310b3f0a9b299a97c6404007ff0e5a4f666ba56234751a29314c08296e757bd7cb; Path=/; Domain=.tff.org",
+    "vary": "Accept-Encoding",
+    "via": "HTTP/1.1 Merlin CDN",
+    "x-cache-status": "STALE",
+    "x-edge": "tr-ist-sh-s04",
+    "x-midtier": "tr-ist-sh-s15"
+  },
+  "status": 200,
+  "url": "https://www.tff.org/"
+}

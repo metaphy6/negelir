@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""`make env` — bootstrap the .env file from .env.example."""
+"""`make env` — bootstrap xops/env/.env from xops/env/.env.example."""
 
 from __future__ import annotations
 
 import shutil
 import sys
 
-from _common import REPO_ROOT, dispatch, info, ok
+from _common import ENV_EXAMPLE, ENV_FILE, dispatch, info, ok
 
 
 def cmd_env(_argv):
-    src = REPO_ROOT / ".env.example"
-    dst = REPO_ROOT / ".env"
+    src = ENV_EXAMPLE
+    dst = ENV_FILE
+    dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
-        info(f".env exists ({dst})")
+        info(f"env file exists ({dst.relative_to(src.parent.parent.parent)})")
         return 0
     if not src.exists():
         print(f"❌ Missing template: {src}", file=sys.stderr)
         return 1
     shutil.copyfile(src, dst)
-    ok(f"Created .env from .env.example ({dst})")
+    ok(f"Created {dst.relative_to(src.parent.parent.parent)} from {src.relative_to(src.parent.parent.parent)}")
     return 0
 
 

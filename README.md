@@ -3,7 +3,7 @@
 > **Ne gelir?** *(Turkish: "What will come?")*
 > An agent-swarm AI system that scrapes football data from open data sources
 > (mackolik / nesine / tff / openfootball / football-data.co.uk — see
-> [`.env.example`](.env.example)), predicts match outcomes with an ensemble of
+> [`xops/env/.env.example`](xops/env/.env.example)), predicts match outcomes with an ensemble of
 > small models, and answers questions in fluent Turkish — built
 > **container-first**, **config-driven**, and **Turkish-out / English-in** by
 > doctrine. Per-league behaviour lives in `LeagueConfig`; the seeded default is
@@ -84,17 +84,17 @@ Read more in [`docs/design/ARCHITECTURE.md`](docs/design/ARCHITECTURE.md) and
 ### 1. Bootstrap env
 
 ```bash
-make env             # copy .env.example → .env if missing
+make env             # copy xops/env/.env.example → xops/env/.env if missing
 ```
 
-> Set `POSTGRES_PASSWORD` in `.env` before bringing the stack up — it is intentionally
+> Set `POSTGRES_PASSWORD` in `xops/env/.env` before bringing the stack up — it is intentionally
 > required, with no default.
 
 ### 2. Bring the stack up
 
 ```bash
 make up              # build + start all services (foreground)
-make up-detached     # background
+make up DETACH=1     # background
 ```
 
 ### 3. Train the GBDT (Phase 0 stub pipeline)
@@ -105,7 +105,7 @@ default; more presets land in Phase 13).
 
 ```bash
 make bootstrap LEAGUE=super_lig    # one-time real-data scrape + validate
-make train-full LEAGUE=super_lig   # 6 stages: scrape → validate → split → train → verify → report
+make train      LEAGUE=super_lig   # 6 stages: scrape → validate → split → train → verify → report
 ```
 
 The legacy P2P / ensemble stages are gone; the swarm-based predictor mesh
@@ -114,9 +114,9 @@ will replace them in Phase 5.
 ### 4. Tests
 
 ```bash
-make test            # all Python tests
-make test-ai         # AI tests only
-make test-integration  # full training pipeline (skipped if no real data cached)
+make test               # all Python tests
+make test.ai            # AI tests only
+make test.integration   # full training pipeline (skipped if no real data cached)
 ```
 
 ---
@@ -141,9 +141,9 @@ py -3 docs/tracking/track.py list
 Or via Make (cross-platform — uses `python3` on POSIX, `python` on Windows):
 
 ```bash
-make track-list
-make track-show PHASE=0
-make track-add PHASE=1 STATUS=in-progress NOTE="Started config audit"
+make track.list
+make track.show PHASE=0
+make track.add PHASE=1 STATUS=in-progress NOTE="Started config audit"
 ```
 
 See [`docs/tracking/README.md`](docs/tracking/README.md) for the full state
@@ -153,30 +153,47 @@ machine and column definitions.
 
 ## 🛠️ Makefile cheatsheet
 
+The Makefile is organised into **daily verbs** (short, unprefixed) and
+**`domain.action`** subcommands. Run `make help` to see the full list.
+
+### Daily commands
+
 | Command | Description |
 |---|---|
-| `make env` | Create `.env` from `.env.example` |
-| `make up` / `make down` | Bring the full stack up / down |
-| `make ai` / `make server` / `make infra` | Run a single service group |
+| `make env` | Create `xops/env/.env` from `xops/env/.env.example` |
+| `make up` / `make down` | Bring the full stack up / down (`DETACH=1` to background) |
+| `make logs` | Tail logs (`SVC=ai` for one service) |
 | `make scrape LEAGUE=…` | Scrape and cache real data |
 | `make bootstrap LEAGUE=…` | Scrape + validate cache (gate before training) |
-| `make train-full LEAGUE=…` | Phase-3 training pipeline (current 6-stage form) |
-| `make train-model LEAGUE=…` | Stages 1–4 only (data + training, no verify/report) |
-| `make ai-backtest WEEKS=N` | Multi-market backtest |
-| `make test` / `make test-ai` / `make test-integration` | Test suites |
-| `make track-list` / `make track-add` / `make track-show` | Phase tracker CLI |
-| `make health` / `make status` / `make ports` | Operational status |
-| `make clean` / `make clean-all` | ⚠️ Cleanup (volumes are destroyed by `clean-all`) |
+| `make train LEAGUE=…` | Full 6-stage training pipeline |
+| `make backtest WEEKS=N` | Multi-market backtest (also `MIN_CONFIDENCE=…`, `MARKETS=…`) |
+| `make test` | Run the full test suite |
+| `make help` | Print every documented target |
 
-Run `make help` for the complete list.
+### Domains (selection)
+
+| Family | Examples |
+|---|---|
+| `ai.*` | `ai.pipeline`, `ai.demo`, `ai.shell`, `ai.continuous` |
+| `db.*` / `cache.*` | `db.migrate`, `db.seed`, `db.shell`, `db.reset`, `cache.shell` |
+| `api` | `make api ENDPOINT=health` (also `matches`, `teams`, `scrape/trigger METHOD=POST`) |
+| `mock.*` | Phase 2 mock-data dev stack (`mock.up`, `mock.smoke`, `mock.capture`, …) |
+| `hosts.*` / `watch.*` | `/etc/hosts` for mock vhosts; source-watcher agent |
+| `track.*` / `version.*` | Phase tracker + versioning chart |
+| `clean` / `clean.all` | ⚠️ Volumes destroyed by `clean.all`; add `DATA=1` to also wipe `./data` |
+
+> Legacy `verb-noun` names (`db-seed`, `train-full`, `ai-backtest`, `track-list`, …)
+> still work but print a deprecation warning. They are slated for removal one
+> release after this rename.
 
 ---
 
 ## ⚙️ Environment variables
 
-`.env.example` is the canonical list. Every key documented there is consumed
+`xops/env/.env.example` is the canonical list. Every key documented there is consumed
 either by the Python config layer (`ai/common/config.py`), the Go server, or
-docker-compose itself — `ai/tests/test_config_sync.py` enforces parity.
+docker-compose itself — `ai/tests/test_config_sync.py` enforces parity. See
+[`xops/env/README.md`](xops/env/README.md) for the env-folder conventions.
 
 Most-touched knobs:
 
@@ -192,14 +209,14 @@ Most-touched knobs:
 
 Naming convention: `NEGELIR_*` (Python AI), `SCRAPE_*` (scraper sources),
 `POSTGRES_*` / `REDIS_*` (shared), `AI_*` (Python runtime, legacy prefix
-kept for back-compat), Go-only knobs are tagged in the `.env.example`
+kept for back-compat), Go-only knobs are tagged in the `xops/env/.env.example`
 header.
 
 ---
 
 ## 🛡️ Doctrine (non-negotiable)
 
-1. **🔧 Single-source configuration** — no magic numbers; every tunable lives in `.env.example` + a config layer.
+1. **🔧 Single-source configuration** — no magic numbers; every tunable lives in `xops/env/.env.example` + a config layer.
 2. **📦 Containerized only** — local dev = `docker compose`. There is no host-install path.
 3. **🚫 Real data only in prod paths** — synthetic data is a *test fixture*, never a *fallback*.
 4. **⚡ Smallest model that works** — deterministic > scikit-learn > XGBoost > small transformers > LLM. LLMs only when justified.
@@ -217,7 +234,7 @@ negelir/
 ├── README.md                 ← you are here
 ├── docker-compose.yml        ← service orchestration
 ├── Makefile                  ← cross-platform commands
-├── .env.example              ← canonical env-var list
+├── xops/env/.env.example     ← canonical env-var list (see xops/env/README.md)
 ├── ai/                       ← Python 3.11 AI engine
 │   ├── common/               ← config, constants, league_config, logging
 │   ├── scraper/              ← source-specific scrapers + selectors

@@ -21,7 +21,16 @@ def _pytest(*targets: str) -> None:
     )
 
 
-def cmd_test(_argv):             _pytest("ai/tests")
+def cmd_test(_argv):
+    """Full suite: AI, xops (incl. mock manifest contract), swarm agents, versioning."""
+    _pytest(
+        "ai/tests",
+        "ai/swarm",
+        "xops/mock/tests",
+        "xops/versioning/tests",
+    )
+
+
 def cmd_test_ai(_argv):          _pytest("ai/tests")
 def cmd_test_integration(_argv): _pytest("ai/tests/test_full_pipeline.py", "-s")
 

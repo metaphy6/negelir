@@ -9,8 +9,9 @@ import (
 	"testing"
 )
 
-// envExamplePath returns the absolute path to the repo's .env.example,
-// walking up from this file until found.
+// envExamplePath returns the absolute path to the repo's
+// xops/env/.env.example, walking up from this file until the repo root
+// (identified by the xops/env directory) is found.
 func envExamplePath(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -18,7 +19,7 @@ func envExamplePath(t *testing.T) string {
 		t.Fatalf("getwd: %v", err)
 	}
 	for i := 0; i < 8; i++ {
-		candidate := filepath.Join(dir, ".env.example")
+		candidate := filepath.Join(dir, "xops", "env", ".env.example")
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
@@ -28,7 +29,7 @@ func envExamplePath(t *testing.T) string {
 		}
 		dir = parent
 	}
-	t.Fatalf(".env.example not found walking up from %s", dir)
+	t.Fatalf("xops/env/.env.example not found walking up from %s", dir)
 	return ""
 }
 
@@ -82,7 +83,9 @@ func TestEnvSync(t *testing.T) {
 func TestSharedKeysAreMarked(t *testing.T) {
 	docs, shared := parseEnvExample(t)
 
-	root := filepath.Dir(envExamplePath(t))
+	// envExamplePath returns .../xops/env/.env.example; the repo root is
+	// three levels up.
+	root := filepath.Dir(filepath.Dir(filepath.Dir(envExamplePath(t))))
 	pyPath := filepath.Join(root, "ai", "common", "config.py")
 	pyBody, err := os.ReadFile(pyPath)
 	if err != nil {

@@ -63,9 +63,9 @@ The CLI is invoked the same way on every platform — only the launcher differs.
 Or via the Makefile (which picks the right launcher automatically):
 
 ```bash
-make track-list
-make track-show PHASE=0
-make track-add  PHASE=1 STATUS=in-progress NOTE="started config audit"
+make track.list
+make track.show PHASE=0
+make track.add  PHASE=1 STATUS=in-progress NOTE="started config audit"
 ```
 
 ### Subcommands

@@ -12,19 +12,34 @@ Docker.
 ```
 xops/
 ├── README.md            ← you are here
-└── makefile/            ← scripts dispatched from the project Makefile
-    ├── __init__.py      ← module map + conventions
-    ├── _common.py       ← shared helpers (compose runner, logger, paths)
-    ├── env.py           ← `make env`
-    ├── services.py      ← `make build|up|up-detached|down|restart|ai|server|infra`
-    ├── ai_commands.py   ← `make scrape|bootstrap|train*|ai-*` (AI workloads)
-    ├── server_api.py    ← `make server-*`        (Go server REST helpers)
-    ├── db.py            ← `make db-*|redis-shell`
-    ├── logs.py          ← `make logs|logs-ai|logs-server`
-    ├── tests.py         ← `make test|test-ai|test-integration`
-    ├── cleanup.py       ← `make clean|clean-all|clean-data`
-    ├── status.py        ← `make health|status|ports`
-    └── git_helper.py    ← `make git|git.dry`     (HUMAN-ONLY)
+├── makefile/            ← scripts dispatched from the project Makefile
+│   ├── __init__.py      ← module map + conventions
+│   ├── _common.py       ← shared helpers (compose runner, logger, paths)
+│   ├── env.py           ← `make env`
+│   ├── services.py      ← `make build|up|up-detached|down|restart|ai|server|infra`
+│   ├── ai_commands.py   ← `make scrape|bootstrap|train*|ai-*` (AI workloads)
+│   ├── server_api.py    ← `make server-*`        (Go server REST helpers)
+│   ├── db.py            ← `make db-*|redis-shell`
+│   ├── logs.py          ← `make logs|logs-ai|logs-server`
+│   ├── tests.py         ← `make test|test-ai|test-integration`
+│   ├── cleanup.py       ← `make clean|clean-all|clean-data`
+│   ├── status.py        ← `make health|status|ports`
+│   ├── lint.py          ← `make lint`
+│   ├── mock.py          ← `make mock.*`          (Phase 2 dev stack)
+│   ├── hosts.py         ← `make hosts.*`         (Phase 2.3 /etc/hosts)
+│   ├── version.py       ← `make version.*`       (SemVer chart CLI)
+│   └── git_helper.py    ← `make git|git.dry`     (HUMAN-ONLY)
+├── lint/                ← `xops.lint.*` rules consumed by `make lint`
+│   └── no_magic.py      ← Phase 1.4 hardcode audit
+├── mock/                ← Phase 2 mock-data helpers (host-side, stdlib only)
+│   ├── manifest.py      ← seed-corpus schema + sha256 verifier
+│   ├── verify.py        ← offline integrity check (runs in CI)
+│   ├── capture.py       ← one-shot real-internet refresher (HUMAN-ONLY)
+│   └── tests/           ← pytest suite
+└── versioning/          ← centralized SemVer chart
+    ├── chart.json       ← single source of truth — only mutated by version.py
+    ├── version.py       ← CLI: show / bump / validate / components
+    └── tests/           ← canonical-form guard + bump semantics tests
 ```
 
 Future siblings of `makefile/` will hold scripts grouped by surface:

@@ -18,7 +18,12 @@
    state machine, CLI usage.
 5. [`xops/README.md`](xops/README.md) — repo automation layout (Makefile
    dispatch scripts, CI/CD glue, deployment helpers).
-6. The relevant `docs/design/*.md` for the area you are touching
+6. [`xops/versioning/chart.json`](xops/versioning/chart.json) +
+   [`xops/versioning/version.py`](xops/versioning/version.py) — the
+   centralized SemVer chart. **Every meaningful change to a tracked
+   component must include a `make version.bump` in the same commit.**
+   See §6.1 below for the rule.
+7. The relevant `docs/design/*.md` for the area you are touching
    (`SWARM.md`, `CONFIGURATION.md`, `MOCK_DATA_SERVER.md`, `SECURITY.md`,
    `COMPUTE_DEVICES.md`, `LANGUAGE_CHOICES.md`, `TURKISH_NLP.md`,
    `TESTING_STRATEGY.md`).
@@ -35,7 +40,7 @@ Every PR, every diff, every agent run must respect them:
 
 | # | Rule | Concretely |
 |---|---|---|
-| 1 | **Single-source configuration** | New tunables go through `ai/common/config.py` (Python) or `server/internal/config` (Go) and are documented in `.env.example`. No magic numbers, no hardcoded URLs, no inline thresholds. |
+| 1 | **Single-source configuration** | New tunables go through `ai/common/config.py` (Python) or `server/internal/config` (Go) and are documented in `xops/env/.env.example`. No magic numbers, no hardcoded URLs, no inline thresholds. |
 | 2 | **Containerized only** | All run/test instructions assume `docker compose`. Never tell the user to `pip install` or `go install` on the host. |
 | 3 | **No fabricated production data** | Synthetic data is only allowed inside `*/tests/`. Production code must never silently fall back to fake data. |
 | 4 | **Smallest model that works** | Prefer deterministic code → scikit-learn / XGBoost → small transformers (≤ 100 MB) → mid LLMs only with explicit justification in the agent's `README`. |
@@ -44,6 +49,7 @@ Every PR, every diff, every agent run must respect them:
 | 7 | **Adversarial tests are first-class** | Every public surface (HTTP, bus topic, scrape callback) needs at least one fuzzing / injection / chaos test. |
 | 8 | **Phase gates** | A phase ships only when its checklist in `ROADMAP.md` and the matching DoD in Appendix B are fully green. |
 | 9 | **No P2P revival** | The P2P stack was deleted in Phase 0. The regression test `ai/tests/test_config_sync.py::test_p2p_module_removed` will fail if `p2p/` reappears. The replacement is the swarm-AI architecture (Phase 3+). |
+| 10 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. All other tooling — including `make mock.capture` which hits real upstreams, `make mock.up`/`mock.down`, running tests, invoking `docker compose`, rendering certs, editing `/etc/hosts` (with a caveat: needs `sudo`, so defer the actual write to the user) — is open for agent use. When in doubt about whether a git operation is needed, ask the user rather than running it. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
 
 ---
 
@@ -88,11 +94,14 @@ py -3 docs\tracking\track.py start 1 --note "Begin config audit"
 Or via Makefile shortcuts (recommended — picks the right Python launcher):
 
 ```bash
-make track-list
-make track-show  PHASE=0
-make track-add   PHASE=1 STATUS=in-progress NOTE="started config audit"
-make track-export FORMAT=md   # or FORMAT=csv
+make track.list
+make track.show  PHASE=0
+make track.add   PHASE=1 STATUS=in-progress NOTE="started config audit"
+make track.export FORMAT=md   # or FORMAT=csv
 ```
+
+> Legacy `verb-noun` aliases (`track-list`, `db-seed`, `train-full`, …)
+> still dispatch to the new names but print a deprecation warning.
 
 ### 3.3 Pairing tracker entries with code
 
@@ -167,6 +176,20 @@ Use this loop for every non-trivial change:
 - **No P2P, peers (in network sense), gossip, or multicast** in new code
   outside the regression test. The word `peer` is reused in the swarm
   agent context and is fine there.
+- **Phase 2 mock-data discipline.** All scrapers in dev / CI must
+  resolve to the mock vhosts (`mackolik.local`, `nesine.local`,
+  `tff.local`, `openfootball.local`) via `NEGELIR_SCRAPE_PROFILE=mock`.
+  **Never** point a test at a real upstream at test runtime. Refresh
+  the seed corpus via `make mock.capture` (agents may run this; it is
+  rate-limited and respects `robots.txt` via the source registry);
+  validate with `make mock.verify`. Any change to the seed corpus must
+  keep `infra/mock/seeds/manifest.json` in sync — the verify test will
+  fail on drift.
+- **Source-watcher classifications stay deterministic.** Per ROADMAP
+  §2.8 doctrine, the classifier rules in
+  `ai/swarm/source_watcher/classifier.py` must remain LLM-free. Any
+  Phase 8 LLM hook is narration only — it must not change the rule
+  outputs. Tests guard this.
 
 ---
 
@@ -177,6 +200,62 @@ Use this loop for every non-trivial change:
 | Python (AI / agents) | `ai/common/config.py` | `ai/tests/` (pytest) | 3.8+; stdlib preferred for tooling. |
 | Go (server / mocksrv) | `server/internal/config` | `server/...` (`go test`) | Mirrors the Python config pattern. Two run modes: `MODE=api` and `MODE=mocksrv`. |
 | Tooling / scripts | n/a | smoke-test in CI | Cross-platform (no bash-isms in shared scripts). |
+
+### 6.1 Versioning discipline (mandatory)
+
+Every main component carries an explicit SemVer in
+[`xops/versioning/chart.json`](xops/versioning/chart.json). The umbrella
+`negelir` project also carries a SemVer plus a `build` counter that
+increments on every component bump.
+
+**The rule:** *any* PR / commit that meaningfully changes a tracked
+component **must include a matching `make version.bump`** in the same
+commit. "Meaningful" is anything that would be visible to another
+developer, contributor, or downstream consumer (new features, bug
+fixes, behavior changes, API/interface changes, migration steps). Pure
+docstring tweaks or typo fixes inside a single component don't require
+a bump.
+
+**Levels** (standard SemVer):
+
+| Level | Use when… |
+|---|---|
+| `patch` | Internal fix or refactor; no API change. |
+| `minor` | New feature or new public surface that is backward-compatible. |
+| `major` | Breaking change to a public surface (CLI flags, config keys, message schemas, on-disk formats). |
+
+**How to bump:**
+
+```bash
+make version.bump COMPONENT=ai LEVEL=patch NOTE="fixed off-by-one in retrain trigger"
+make version.bump COMPONENT=infra_mock LEVEL=minor NOTE="Phase 2 scaffolding landed"
+make version.bump COMPONENT=project LEVEL=minor NOTE="Phase 2 dev stack live"   # umbrella
+```
+
+**Components** (initial set; add new keys by hand-editing `chart.json`
+and re-running `make version.validate` — once added, *only* the CLI
+may touch the version):
+
+```
+ai              — Python AI pipeline (scrapers, model, NLP, orchestrator)
+server          — Go REST API + mocksrv binary
+xops            — Repo automation
+docs            — Roadmap, design docs, tracking, guides
+infra_mock      — Mock-data dev stack (Phase 2)
+source_watcher  — Source-watcher AI agent (Phase 2.8)
+```
+
+**Hard rules:**
+
+- ❌ Never edit `chart.json` by hand for routine bumps. The
+  `test_chart_is_canonical` round-trip test will fail and CI will
+  block the merge.
+- ❌ Never "batch" multiple component bumps into a single commit
+  unless they're genuinely a single logical change. One commit, one
+  meaningful concern.
+- ✅ The `build` counter is the project's monotonic heartbeat — every
+  component bump nudges it. Use it in release artifacts.
+- ✅ Bumping `project` resets `build` to `0` automatically.
 
 ---
 
@@ -191,25 +270,37 @@ docs/tracking/track.py          # tracker CLI (stdlib only)
 docs/tracking/README.md         # tracker schema + CLI usage
 docs/design/                    # per-area design docs
 docs/guides/SETUP.md            # local dev setup
-.env.example                    # every env var, documented
+.env.example                    # legacy path — moved to xops/env/.env.example
+xops/env/.env.example           # canonical env-var template (every key documented)
+xops/env/.env                   # active values (gitignored)
+xops/env/README.md              # env-folder conventions
 ai/common/config.py             # Python config layer
 server/internal/config/         # Go config layer (Phase 1.2)
 xops/                           # all repo automation (CI/CD, deploy, …)
 xops/makefile/                  # per-Makefile-target dispatchers
 xops/makefile/_common.py        # shared helpers (compose runner, logger)
 xops/makefile/git_helper.py     # `make git` driver — HUMAN-ONLY
+xops/versioning/chart.json      # centralized SemVer chart (single source)
+xops/versioning/version.py      # version CLI (used by `make version.*`)
+xops/mock/                      # Phase 2 mock-data helpers (manifest, verify, capture)
+infra/mock/                     # Phase 2 mock-data root (CA, certs, seeds, nginx vhosts)
+ai/swarm/source_watcher/        # Phase 2.8 source-drift detector (deterministic core)
 xops/README.md                  # xops conventions & how to extend
 ```
 
 ```bash
 # Daily commands you will use
-make env                        # bootstrap .env from .env.example
+make env                        # bootstrap xops/env/.env from xops/env/.env.example
 make up / make down             # bring stack up/down
-make test-ai                    # Python tests
+make test.ai                    # Python tests
 make test                       # full suite (Python + Go)
-make track-list                 # current phase status
-make track-show PHASE=0         # full history for one phase
-make track-add  PHASE=1 STATUS=in-progress NOTE="…"
+make track.list                 # current phase status
+make track.show PHASE=0         # full history for one phase
+make track.add  PHASE=1 STATUS=in-progress NOTE="…"
+make version.show               # show project + component versions
+make version.bump COMPONENT=<key> LEVEL=<patch|minor|major> NOTE="..."
+make mock.verify                # offline integrity check of Phase 2 seed corpus
+make hosts.preview              # list mock hostnames
 ```
 
 ---

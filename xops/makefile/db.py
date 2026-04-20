@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-`make db-migrate|db-seed|db-shell|db-reset|redis-shell`
+`make db.migrate|db.seed|db.shell|db.reset|cache.shell`
 
-The original db-migrate target used a bash for-loop to apply every
+The original db.migrate target used a bash for-loop to apply every
 migration via `docker compose exec`. Re-implemented here in Python so
 Windows operators can run the same command.
 """
@@ -39,8 +39,6 @@ def cmd_db_migrate(_argv):
         rel = f.relative_to(REPO_ROOT)
         step(str(rel))
         sql = f.read_text(encoding="utf-8")
-        # Pipe SQL via stdin; works regardless of whether the file is
-        # bind-mounted into the postgres container.
         result = subprocess.run(
             [*COMPOSE, "exec", "-T", "postgres",
              "psql", "-U", "negelir", "-d", "negelir"],
@@ -60,7 +58,7 @@ def cmd_db_seed(_argv):
         "-v", f"{REPO_ROOT}/data:/data:ro",
         "ai", "python", "/data/seed_db.py",
     )
-    ok("Seed complete — now try: make server-matches")
+    ok("Seed complete — now try: make api ENDPOINT=matches")
     return 0
 
 
@@ -82,17 +80,17 @@ def cmd_db_reset(_argv):
     return 0
 
 
-def cmd_redis_shell(_argv):
+def cmd_cache_shell(_argv):
     compose_run("up", "-d", "redis")
     compose_exec("exec", "redis", "redis-cli")
 
 
 COMMANDS = {
-    "db-migrate": cmd_db_migrate,
-    "db-seed": cmd_db_seed,
-    "db-shell": cmd_db_shell,
-    "db-reset": cmd_db_reset,
-    "redis-shell": cmd_redis_shell,
+    "db.migrate":  cmd_db_migrate,
+    "db.seed":     cmd_db_seed,
+    "db.shell":    cmd_db_shell,
+    "db.reset":    cmd_db_reset,
+    "cache.shell": cmd_cache_shell,
 }
 
 
