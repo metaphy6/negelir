@@ -118,6 +118,51 @@ def compose_exec(*args: str) -> NoReturn:
     exec_([*_compose_with_env(), *args])
 
 
+# ── sudo helpers ──────────────────────────────────────────────
+
+
+def is_root() -> bool:
+    """True when the current process already has root privileges (POSIX only)."""
+    geteuid = getattr(os, "geteuid", None)
+    return geteuid is not None and geteuid() == 0
+
+
+def sudo_run(
+    cmd: Sequence[str],
+    *,
+    reason: str = "",
+    check: bool = True,
+    stdin: Optional[str] = None,
+) -> subprocess.CompletedProcess:
+    """Run ``cmd`` under ``sudo`` only when the current EUID is not root.
+
+    On Windows this raises ``RuntimeError`` — the Make targets that call
+    this print a clearer message before getting here. ``stdin`` (if
+    provided) is piped into the command (used for ``sudo tee`` writes).
+
+    Per AGENTS.md §10, only the mock-stack provisioning targets
+    (``hosts.install``, ``hosts.uninstall``, ``mock.trust``,
+    ``mock.untrust``) are permitted callers.
+    """
+    if os.name == "nt":
+        raise RuntimeError(
+            "sudo_run is POSIX-only. On Windows run Make from an elevated shell."
+        )
+    if is_root():
+        full = list(cmd)
+    else:
+        if reason:
+            info(f"sudo: {reason}")
+        full = ["sudo", *cmd]
+    return subprocess.run(
+        full,
+        check=check,
+        input=stdin,
+        text=stdin is not None,
+        cwd=str(REPO_ROOT),
+    )
+
+
 # ── Tiny dispatch helper ──────────────────────────────────────
 
 

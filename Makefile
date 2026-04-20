@@ -250,6 +250,18 @@ mock.sources: ## Print the registered mock sources
 mock.browser: ## Print exact sudo commands to make *.local browser-ready
 	@$(XOPS)/mock.py browser
 
+.PHONY: mock.trust
+mock.trust: ## [sudo] Install dev root CA into system + every Firefox profile
+	@$(XOPS)/mock.py trust
+
+.PHONY: mock.untrust
+mock.untrust: ## [sudo] Remove dev root CA from system + every Firefox profile
+	@$(XOPS)/mock.py untrust
+
+.PHONY: mock.setup
+mock.setup: ## [sudo] One-shot: hosts.install + mock.trust + mock.up
+	@$(XOPS)/mock.py setup
+
 # ── /etc/hosts integration ──────────────────────────────────
 
 .PHONY: hosts.install

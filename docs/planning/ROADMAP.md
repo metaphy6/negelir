@@ -1,13 +1,31 @@
-# 🗺️ Negelir — Master Roadmap (Swarm Pivot Edition)
+# 🗺️ Negelir — Master Roadmap (Production Pivot v3)
 
-> **Version:** 2.0.0 — *Swarm Pivot*
-> **Date:** 2026-04-19
+> **Version:** 3.0.0 — *Production Pivot*
+> **Date:** 2026-04-20
 > **Status:** Active. Single source of truth.
-> **Supersedes:** all prior `ROADMAP.md`, `MULTI_LEAGUE_ROADMAP.md`, `IMPLEMENTATION_ROADMAP.md`, `REFACTORING_ROADMAP.md`, `FEASIBILITY.md`, and any P2P planning doc. **Those documents have been deleted; this is what remains.**
+> **Supersedes:** v2.0.0 Swarm Pivot (all prior prior roadmaps already superseded by v2).
+> The **phase numbering from v2.0.0 is preserved intact** — Phases 0–15 still carry the same meaning and the same completion status. v3 **adds** a cross-cutting restructuring track (Phases **R1–R5**) and three new feature phases (**16 Emitter**, **17 Patcher + GitOps**, **18 Datasource Cohesion**) that re-shape ownership boundaries for everything from Phase 3 onward.
 
 ---
 
-## 📜 Pivot Summary
+## 📜 Production Pivot v3 — Why
+
+Through Phase 2.8 the project ran as two top-level components: `ai/` and `server/`. That was fine for dev, but three structural debts showed up as we approached Phase 3+:
+
+1. **Concern mixing.** The AI swarm had to know how scraping worked. Predictors and scrapers lived in the same module tree.
+2. **Dev vs. prod asymmetry.** The mock stack looked like "scaffolding," not a production capability we can point the real operators at.
+3. **Growing feature surface inside `ai/`.** A content-refresher, an auto-patcher, and a GitOps worker were already on the board; putting them in `ai/` would make it a junk drawer.
+
+v3 introduces a **four-component layout** (`server/`, `datasource/`, `swarm/`, `common/`) defined in [`docs/design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) and plumbs the in-between via a new **emitter** + **feed** contract defined in [`docs/design/EMITTER.md`](../design/EMITTER.md). It also promotes the two most-requested future agents to real phases:
+
+- **Emitter** (Phase 16) — the component that converts DB+Redis state into the NDJSON/Parquet feeds the swarm consumes. Ends the swarm's dependency on Postgres.
+- **Patcher + GitOps** (Phase 17) — the auto-patching scraper loop, including the 7-day auto-merge policy behind a 5-gate safety net. See [`docs/design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md).
+
+The v2 Swarm Pivot remains correct. v3 is about **who owns what** and **what they trade in**, not about replacing the bus, the predictors, or the DoD.
+
+---
+
+## 📜 v2 Pivot Summary (retained for archaeology)
 
 The previous design used a **P2P gossip / multicast network** to spread schema changes
 and run distributed validation. After review, this approach is **discarded**:
@@ -46,6 +64,10 @@ The replacement is a **Swarm-AI Agents architecture**:
 - [Phase 13 — Multi-League Expansion](#-phase-13--multi-league-expansion)
 - [Phase 14 — Cloud-Ready Packaging (Docker → K8s → CSP-Agnostic)](#-phase-14--cloud-ready-packaging-docker--k8s--csp-agnostic)
 - [Phase 15 — Frontend Handoff (Flutter, Future)](#-phase-15--frontend-handoff-flutter-future)
+- [Phase 16 — Emitter & Feed Contract (Production Pivot v3)](#-phase-16--emitter--feed-contract-production-pivot-v3)
+- [Phase 17 — Scraper-Patcher + GitOps (Production Pivot v3)](#-phase-17--scraper-patcher--gitops-production-pivot-v3)
+- [Phase 18 — Datasource Cohesion & Swarm Isolation (Production Pivot v3)](#-phase-18--datasource-cohesion--swarm-isolation-production-pivot-v3)
+- [Phase R — Restructure Track (Production Pivot v3)](#-phase-r--restructure-track-production-pivot-v3)
 - [Appendix A — Decision Log](#-appendix-a--decision-log)
 - [Appendix B — Definition of Done (Per Phase)](#-appendix-b--definition-of-done-per-phase)
 
@@ -115,6 +137,11 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 
 ## 📋 Phase Overview
 
+> **Cross-cutting data scope.** Every phase from 2 onward operates on the
+> data planes, sources, and Record envelope defined in
+> [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md). Read it before
+> implementing any phase that touches scrapes, features, or training.
+
 | # | Phase | Outcome | Depends On |
 |---|---|---|---|
 | **0** | Repo Reset & Cleanup | P2P removed, docs fresh, tests still green | — |
@@ -133,6 +160,10 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 | **13** | Multi-League Preset Expansion | Pre-configured `LeagueConfig` presets for top European leagues + cups (architecture is already league-agnostic from Phase 4) | 4 |
 | **14** | Cloud-Ready Packaging | Docker → K8s manifests, CSP-agnostic | 9 |
 | **15** | Frontend Handoff (Flutter) | API contract frozen, sample client | 9 |
+| **16** | **Emitter & Feed Contract** *(Pivot v3)* | DB/Redis state → NDJSON/Parquet feeds; swarm stops reading DB | R2 |
+| **17** | **Scraper-Patcher + GitOps** *(Pivot v3)* | Auto-patching scraper with 5-gate 7-day auto-merge | 16, R3 |
+| **18** | **Datasource Cohesion & Swarm Isolation** *(Pivot v3)* | Three-way isolation tests green; `ai/` tree deleted | 16, 17, R4 |
+| **R1–R5** | **Restructure Track** *(Pivot v3)* | Rename chart keys; move modules; absorb mock into `server`; delete shims | 2, runs in parallel with 3–8 |
 
 ```
 0 ─→ 1 ─→ 2 ─→ 3 ─→ 4 ─→ 5 ─→ 6 ─→ 9 ─→ 14 ─→ 15
@@ -269,6 +300,7 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 
 **Goal:** Spin up a local stack that *is* mackolik / nesine / tff / openfootball — same DOM, same JSON, same headers, same TLS — so scraping never hits the real internet during dev or CI.
 **Depends on:** Phase 0
+**Data scope reference:** [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md) defines the five planes (reference, schedule, live, editorial, market), the four sources, and the Record envelope every later phase consumes. Phase 2 stands the mock vhosts that serve those bytes.
 
 ### 2.1 Topology
 
@@ -450,6 +482,7 @@ A tiny Go binary `cmd/swarmctl`:
 
 **Goal:** A clean linear pipeline of small, replaceable agents that turn a scrape request into a normalized `Match` row in Postgres.
 **Depends on:** Phase 2, Phase 3
+**Data scope reference:** [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md) is the contract this phase implements end-to-end. Records produced here become the input to Phase 5 predictors and Phase 10 NLP. The per-record change-detection rules used by the trainer-gating events are owned by [`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md).
 
 ### 4.1 Scraper agents
 
@@ -494,7 +527,36 @@ One per content kind (fixture, match-detail, lineup, odds).
 - [ ] Aggregates per-topic counters, error rates, latency histograms.
 - [ ] Pushes to Prometheus (pull) and to a `telemetry.events` Postgres table for forensic queries.
 
-### 4.7 Definition of Done
+### 4.7 Freshness-event reactors (`reactor.<name>.v1`)
+
+**Why a dedicated sub-phase.** Phase 4 produces `Record`s and emits
+the `freshness.events.v1` stream defined by
+[`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md). The
+*reactions* — re-running the live predictor on a score change,
+re-computing lineup features when an XI moves, debouncing retrains,
+flagging value odds — are owned by **named reactors**, not by the
+freshness module itself. CONTENT_FRESHNESS §15 is the spec; this
+sub-phase is the implementation hook in the roadmap.
+
+- [ ] Reactor base class in `ai/swarm/reactors/_base.py` enforcing
+      §15.2 invariants: idempotent on `event_id` (per-reactor
+      `processed_events` table), plane-bounded blast radius, no
+      back-emission to `freshness.events.v1`, bounded replay window.
+- [ ] First-cut reactors: `feature-store-reactor` and `cache-reactor`
+      (smallest blast radius, exercise the SDK).
+- [ ] Trainer reactor with debounce window, qualifying-event filter,
+      accuracy-floor check, and cooldown (CONTENT_FRESHNESS §15.3).
+      Publishes `model.trained` on `models.events.v1`.
+- [ ] Live-predictor / NLP / market reactors per §15.1.
+- [ ] Reactor failure isolation: each runs in its own consumer group;
+      `reactor.degraded` emitted after `N` consecutive failures.
+- [ ] Replay command: `make reactor.replay REACTOR=<name> SINCE=<ts>`
+      for operator-driven recovery (no automatic replay on restart).
+- [ ] Tests: per-reactor idempotency probe (replay same event twice
+      → one side-effect); chaos test (kill -9 mid-side-effect → no
+      half-state).
+
+### 4.8 Definition of Done
 
 - [ ] `make swarm-demo LEAGUE=tr_super_lig` triggers one scrape → one row in Postgres in < 10 s on the mock stack.
 - [ ] Killing any single agent for 30 s and restarting it does not lose messages (consumer-group durability).
@@ -860,6 +922,227 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 
 ---
 
+## 📤 Phase 16 — Emitter & Feed Contract (Production Pivot v3)
+
+**Goal:** A dedicated `datasource/emitter` component projects Postgres + Redis state into NDJSON live feeds and Parquet training snapshots. After this phase, the swarm **only** reads feeds — no swarm code opens a DB connection, ever.
+**Depends on:** Phase R2 (modules moved to `datasource/`).
+**Anchor docs:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md), [`design/EMITTER.md`](../design/EMITTER.md), [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md).
+
+### 16.1 Feed contract (frozen before code lands)
+
+- [ ] `common/schemas/feeds/registry.json` ships with `v1` for all six record types (reference, schedule, score, lineup, editorial, market).
+- [ ] JSONSchema 2020-12 files land under `common/schemas/feeds/` and are loaded by both emitter (writer) and `FeedReader` (reader).
+- [ ] Contract test `common/schemas/tests/test_registry_consistent.py` passes.
+
+### 16.2 `FeedWriter` + NDJSON (R3.1–R3.2)
+
+- [ ] `datasource/emitter/writer.py` — per-`(plane, source)` append-only writer with atomic daily rotation at 00:00 UTC.
+- [ ] `manifest.json` updated atomically per tick (EMITTER §5).
+- [ ] Proof tests: `test_atomic_manifest.py`, `test_at_least_once_duplicates.py`, `test_monotonic_captured_at.py`, `test_utc_only.py` (all specified in EMITTER §6.1).
+- [ ] One live NDJSON feed running end-to-end for the `reference` plane against mock seeds; property-based fuzzer covers the writer.
+
+### 16.3 Parquet training snapshots (R3.3)
+
+- [ ] `datasource/emitter/snapshot.py` — hourly hive-partitioned snapshots (`asof=YYYY-MM-DDThh/source=<s>/part-0000.parquet`).
+- [ ] Schema generator converts `common/schemas/records.py` TypedDicts into pyarrow schemas; drift CI test fails if they diverge.
+- [ ] Proof test: `test_parquet_snapshot_identical_to_ndjson_union` — the union of a day's NDJSON ≡ that day's Parquet snapshots (modulo compression).
+
+### 16.4 `FeedReader` (R3.4)
+
+- [ ] `common/feeds/__init__.py` exposes `FeedReader.stream(plane, sources, since)` and `FeedReader.snapshot(plane, as_of, sources)`.
+- [ ] Reader rejects any path not referenced in `manifest.json`.
+- [ ] Proof tests: `test_reader_roundtrip.py`, `test_reader_handles_version_skew.py`, `test_reader_rejects_guessed_paths.py` (all specified in EMITTER §8.1).
+
+### 16.5 Swarm migration to feeds (R3.4)
+
+- [ ] One predictor (`pred.elo.v1`) migrated to read from `FeedReader` only; parity test against the DB-reading version on 4 weeks of mock history shows identical outputs.
+- [ ] `swarm/tests/test_no_db_imports.py` — no file under `swarm/` imports `psycopg` or `redis`. **This is the cornerstone swarm-isolation test.**
+- [ ] All other predictors migrated over the phase; each migration gates on an individual parity check.
+
+### 16.6 Versioned-schemas evolution (R3.5)
+
+- [ ] Land a second active version of `score.v2` (additive) and confirm emitter writes both while a `score.v1`-pinned predictor stays green.
+- [ ] Proof test: `test_emitter_writes_all_active_versions.py`, `test_reads_versioned.py`.
+
+### 16.7 Storage backends (R3.6)
+
+- [ ] Local-disk driver (default) and S3-compatible driver (MinIO in dev, Azure Blob / AWS S3 in prod) behind one `FeedsStore` protocol.
+- [ ] Proof test: `test_s3_roundtrip.py` against MinIO in a compose-side container.
+
+### 16.8 Retention & cold rollup (R3.7; Phase 14 prerequisite)
+
+- [ ] `make feeds.prune` with configurable retention (default 30 days NDJSON, 365 days snapshots).
+- [ ] Monthly cold rollup (`cold/<plane>/<YYYY-MM>/<source>.parquet`).
+- [ ] Proof test: `test_retention.py`, `test_cold_rollup_coverage.py`.
+
+### 16.9 Definition of Done
+
+- [ ] All six planes emit NDJSON live feeds and hourly Parquet snapshots against the mock stack.
+- [ ] `FeedReader` is the only supported way for `swarm/*` to read ingested data.
+- [ ] `test_swarm_isolation.py` and `test_no_db_imports.py` both green in CI.
+- [ ] At least one live predictor and one trainer run migrated to feeds with parity maintained.
+- [ ] `datasource_emitter` component bumped to ≥ `1.0.0`; `swarm` component bumped to reflect the read-surface change.
+
+---
+
+## 🛠️ Phase 17 — Scraper-Patcher + GitOps (Production Pivot v3)
+
+**Goal:** Close the loop between "a scraper broke" and "a PR fixed it." Ship the `datasource/patcher` + `datasource/gitops` components with the guardrails specified in [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md).
+**Depends on:** Phase 16 (feeds in place — shadow regression gate needs them), Phase R3 (skeletons landed).
+**Anchor docs:** [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md), [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md).
+
+> ⚠️ **Safety rail.** Phase 17 is the riskiest phase in the roadmap. It grants an AI component the ability to edit the repository. Every sub-phase is gated by a config flag and every change is reversible by a single env-var flip. See SCRAPER_PATCHER.md §8 Kill Switches.
+
+### 17.1 Failure artifact schema + detectors (R3.a)
+
+- [ ] `common/schemas/patcher/artifacts.json` (JSONSchema) defines the artifact shape (SCRAPER_PATCHER §2).
+- [ ] Every detector writes to `postgres.patcher_artifacts` (append-only) and publishes on the `patcher.artifact.v1` stream.
+- [ ] Proof tests: one per artifact kind (`test_parse_failure_emits_artifact.py`, `test_structural_drift_emits_artifact.py`, `test_content_stall_emits_artifact.py`, `test_extractor_empty_emits_artifact.py`, `test_parity_failure_emits_artifact.py`).
+
+### 17.2 Patcher in dry-run mode (R3.b)
+
+- [ ] `datasource/patcher/` scaffolded: artifact consumer, **diagnostic bundle builder** (SCRAPER_PATCHER §12.3), **classifier router** (§12.2), **Anthropic Agent SDK client**, diff parser, scope enforcer, size enforcer, forbidden-pattern scanner, sandbox runner, gauntlet runner, **cost ledger**.
+- [ ] **Model provider locked.** Anthropic Agent SDK with three pinned model IDs (Haiku → Sonnet → Opus); env vars `NEGELIR_PATCHER_TIER{1,2,3}_MODEL` populated. Local-model alternative (qwen2.5-coder / deepseek-coder) retained as a documented contingency only.
+- [ ] **CLAUDE.md** + per-scope context files under `xops/patcher/context/` shipped (SCRAPER_PATCHER §12.5).
+- [ ] **Tool allow-list enforced** via Agent SDK `can_use_tool` callback (§12.4).
+- [ ] **Pre-LLM reproduction check** wired (§12.9) — non-reproducing artifacts skip the API.
+- [ ] Dry-run mode: patcher stores bundles under `feeds/ops/bundles/` but never hands off to `gitops`. **No real-money API calls in this sub-phase** (mocked SDK responses for development).
+- [ ] Proof tests: all seventeen in SCRAPER_PATCHER §12.14, plus the seven scope-enforcement tests in §3.5.
+
+### 17.2a Budget guard + classifier routing live before any real PR opens (R3.b')
+
+- [ ] Cost ledger writes verified against Anthropic usage API to ±1 % (`test_cost_ledger_accuracy.py`).
+- [ ] Hard caps from §12.6 all enforced and tested:
+  `NEGELIR_PATCHER_MONTHLY_USD_CAP` (default $20), `_PER_DAY_USD_CAP` (default $5), `_PER_ARTIFACT_USD_CAP` (default $0.50).
+- [ ] Deduplication + per-source cooldown + global rate limit live (§12.7) and tested.
+- [ ] Past-success seeding wired into bundle builder (§12.8) and verified by `test_past_success_seeded.py`.
+- [ ] **First $5 of real Anthropic spend** against mock-stack artifacts in this sub-phase. Tier-1 only (Haiku).
+
+### 17.3 GitOps with auto-merge disabled (R3.c)
+
+- [ ] `datasource/gitops/` scaffolded: GitHub App token exchange, branch + PR open, polling loop, label handling.
+- [ ] `NEGELIR_GITOPS_AUTOMERGE=0` is the default. First merges go through human review.
+- [ ] Proof tests: all four in SCRAPER_PATCHER §5.4.
+
+### 17.4 Auto-merge with 30-day cool-down (R3.d)
+
+- [ ] Enable auto-merge with `cfg.gitops_cooldown_days=30`.
+- [ ] Mandatory human review on the first 10 PRs per source; after 10 consecutive clean merges per source, `gitops` may rely on the 5-gate policy alone.
+- [ ] Proof tests: the seven listed in SCRAPER_PATCHER §6.7.
+
+### 17.5 Cool-down relaxed to 7 days (R3.e)
+
+- [ ] Flip `cfg.gitops_cooldown_days` from 30 to 7 only after 50 consecutive patcher merges ship with no post-merge regression (verified by §17.6 watchdog).
+- [ ] The 7-day value from SCRAPER_PATCHER §6 is locked in once this sub-phase completes.
+
+### 17.6 Post-merge regression watchdog (R3.f)
+
+- [ ] `gitops` watchdog subscribes to `freshness.events.v1` and `swarm.drift`; opens revert PR on parity-pass-rate regression > `cfg.gitops_regression_threshold` (default 5 %) within a 1 h window.
+- [ ] Proof tests: `test_regression_triggers_revert.py`, `test_revert_has_same_scope.py`.
+
+### 17.7 Security hardening
+
+- [ ] GitHub App token lifetime ≤ 60 min; scope allow-listed to this repo only.
+- [ ] Sandbox egress restricted to `mocksrv` by network policy; verified by `test_sandbox_isolation.py`.
+- [ ] Secrets-shaped-string regex veto in patcher; verified by `test_forbidden_patterns.py`.
+- [ ] Kill-switch test: `test_kill_switches.py` covers all three levels in SCRAPER_PATCHER §8.
+
+### 17.8 Definition of Done
+
+- [ ] A deliberately tampered seed triggers an artifact → a patcher bundle → a PR → a passing CI → (if cool-down elapses in fake-clock test) an auto-merge. End-to-end integration test: `datasource/patcher/tests/test_closed_loop.py`.
+- [ ] All kill switches verified in CI.
+- [ ] All five gates independently verified green + red (9 tests).
+- [ ] Shadow regression test injects a 3 % log-loss delta and confirms Gate 4 blocks.
+- [ ] `datasource_patcher` and `datasource_gitops` components bumped to ≥ `1.0.0`.
+
+---
+
+## 🧱 Phase 18 — Datasource Cohesion & Swarm Isolation (Production Pivot v3)
+
+**Goal:** Enforce the three-way isolation between `datasource/`, `swarm/`, and `server/`. Delete `ai/` after the migration period.
+**Depends on:** Phase 16 (feeds), Phase 17 (patcher/gitops), Phase R4 (shims deleted).
+**Anchor docs:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §6.
+
+### 18.1 Isolation tests (R4)
+
+- [ ] `common/tests/test_swarm_isolation.py` — no file under `swarm/` imports `psycopg`, `requests`, or `datasource.*`.
+- [ ] `common/tests/test_datasource_isolation.py` — no file under `datasource/` imports `fastapi`, `flask`, or `swarm.*`.
+- [ ] `common/tests/test_server_isolation.py` — no Go file under `server/` calls an ML library (`xgboost`, `torch`, etc.).
+- [ ] All three run in `make test` and block CI on violation.
+
+### 18.2 Shim deletion (R4)
+
+- [ ] Zero CI warnings of the form `"DeprecationWarning: ai.* import is a Pivot v3 shim"`.
+- [ ] `ai/` directory removed (along with its empty `__init__.py`). Single commit with a reassuring message.
+- [ ] `test_ai_tree_gone.py` — asserts the path does not exist; prevents accidental recreation (compare: the P2P regression test).
+
+### 18.3 Compose cohesion (R4)
+
+- [ ] Single `docker-compose.yml` with the profiles listed in COMPONENT_LAYOUT §4.
+- [ ] `docker-compose.mock.yml` overlay removed; `mock` is a profile.
+- [ ] `make up PROFILES=...` default updated; legacy `make up-dev` / `make up-mock` aliases removed.
+
+### 18.4 Versioning finalization (R4)
+
+- [ ] `ai` chart key marked `eol`; `source_watcher` renamed to `datasource_watcher` via the chart `rename` subcommand (recorded in the changelog).
+- [ ] New chart keys all at `≥ 1.0.0` by end of Phase 18: `datasource_scraper`, `datasource_watcher`, `datasource_refresher`, `datasource_patcher`, `datasource_gitops`, `datasource_emitter`, `swarm`, `common`.
+
+### 18.5 Definition of Done
+
+- [ ] All three isolation tests green.
+- [ ] `ai/` tree removed; regression test in place.
+- [ ] Single compose file, single `make up` entry point, no overlays.
+- [ ] Version chart canonical.
+- [ ] A fresh clone runs `make up PROFILES=core,mock,datasource,swarm` and the smoke test passes.
+
+---
+
+## 🏗️ Phase R — Restructure Track (Production Pivot v3)
+
+**Goal:** Move the code without breaking anything. Runs in parallel with Phases 3–8. Each sub-phase is individually reversible.
+**Anchor doc:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 7.
+
+### R1 — Rename + path aliases
+
+- [ ] New chart keys added to `xops/versioning/chart.json`: `datasource_scraper`, `datasource_watcher`, `datasource_refresher`, `datasource_patcher`, `datasource_gitops`, `datasource_emitter`, `swarm`, `common`.
+- [ ] `version.py rename` subcommand lands; used to rename `source_watcher → datasource_watcher` in a single changelog row.
+- [ ] No files move yet; chart is the only change.
+
+### R2 — Scraper + watcher move
+
+- [ ] `ai/scraper/` → `datasource/scraper/`.
+- [ ] `ai/swarm/source_watcher/` → `datasource/watcher/`.
+- [ ] `ai/pipeline/`, `ai/qid/`, `ai/proofreader/` (scrape-time) → `datasource/pipeline/`, `datasource/qid/`, `datasource/proofreader/`.
+- [ ] Shim packages (`ai/scraper/__init__.py`, `ai/swarm/source_watcher/__init__.py`) re-export the new paths; a `DeprecationWarning` fires on import. CI records the warning count per build.
+- [ ] Proof test: `test_shim_import_works.py`, `test_warning_count_non_increasing.py`.
+
+### R3 — New components scaffold
+
+- [ ] `datasource/refresher/`, `datasource/patcher/`, `datasource/gitops/`, `datasource/emitter/` all land as skeletons with their contract tests in place (phases 16 and 17 fill in the logic).
+- [ ] `server/cmd/mock/` (renamed from `mocksrv`) lands; `mocksrv` alias retained for one release.
+- [ ] `common/` tree created: `common/config/`, `common/schemas/`, `common/feeds/`, `common/bus/`.
+
+### R4 — Shim deletion + tree removal
+
+- [ ] Zero shim warnings in CI for two consecutive weeks → delete shims.
+- [ ] `ai/` tree removed.
+- [ ] Isolation tests turned on (§18.1).
+
+### R5 — Mock absorption
+
+- [ ] `docker-compose.mock.yml` removed; `mock` becomes a profile of the base compose.
+- [ ] `server` binary gains `MODE=mock`; `mocksrv` dropped entirely.
+- [ ] `make up PROFILES=core,mock` brings up only the mock stack; scraper validation works identically to today.
+
+### R — Definition of Done
+
+- [ ] All five sub-phases green.
+- [ ] `ai/` path does not exist; `test_ai_tree_gone.py` green.
+- [ ] Every component listed in COMPONENT_LAYOUT §5 has an entry in the chart and a non-empty directory.
+- [ ] `make up PROFILES=all` brings every service up and the smoke test passes end-to-end.
+
+---
+
 ## 📒 Appendix A — Decision Log
 
 | # | Decision | Rationale |
@@ -872,6 +1155,13 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 | **A6** | **GPU-first, NPU-aware, CPU-always-works** | The 4080m is the dev rig; CPU is the cloud floor; NPU is a free win when present. |
 | **A7** | **Turkish UX, English infra** | Audience is Turkey; engineers and tools speak English. Mixed logs are an operational tax we won't pay. |
 | **A8** | **No fabricated data outside `tests/`** | A model trained on fake data is worse than no model — it lies confidently. |
+| **A9** | *(Pivot v3)* **Four-component layout: `server` / `datasource` / `swarm` / `common`** | Ends concern mixing between scrapers and predictors; gives us clean isolation tests; lets the patcher live in one place without polluting `ai/`. See [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md). |
+| **A10** | *(Pivot v3)* **Swarm consumes feeds, not Postgres** | Forces the data contract to be explicit (JSONSchema), makes the swarm portable across environments, and makes training reproducibility trivial (Parquet snapshots are immutable). See [`design/EMITTER.md`](../design/EMITTER.md). |
+| **A11** | *(Pivot v3)* **NDJSON live + Parquet snapshots, not YAML** | YAML is slow to parse, verbose on the wire, and offers nothing for ML pipelines. NDJSON streams cleanly per-record; Parquet is the universal ML columnar format. |
+| **A12** | *(Pivot v3)* **`gitops` is the only component with a GitHub token** | One blast radius, one audit log, one kill switch. Granted via a dedicated GitHub App with repo-scoped permissions and 60-minute tokens. |
+| **A13** | *(Pivot v3)* **5-gate + 7-day auto-merge** | The patcher produces a lot of PRs; blocking every one on a human bottlenecks the fix loop without adding safety. The 5-gate policy plus a calendar-visible cool-down is safer than best-effort reviews on a deluge. See [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md). |
+| **A14** | *(Pivot v3)* **Mock server absorbed into `server` binary** | Same build, same config layer, same deployment story; mock becomes a first-class production capability (for scraper validation in prod-like envs) rather than "dev scaffolding." |
+| **A15** | *(Pivot v3)* **Anthropic Agent SDK (Haiku → Sonnet → Opus, harness-routed) for the patcher** | Frontier coder quality matters most for the diffs the patcher produces; the Agent SDK provides Copilot-grade harness without us re-implementing it; tiered routing keeps cost manageable; budget caps + diagnostic bundle + prompt caching prevent runaway spend; CLAUDE.md plus per-scope context files give the model what it needs without per-call discovery. The five gates do not change — the API model is the *author* of diffs, the gates are the *reviewers*. **AGENTS.md §2 rule 4 ("smallest model that works") gets a narrow carve-out:** components operating inside the patcher's safety perimeter (scope-bounded, gated, sandboxed, budgeted) may use frontier API models. The carve-out is bounded and reversible by a single env var (`NEGELIR_PATCHER=0`). See [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md) §12 and [`CLAUDE.md`](../../CLAUDE.md). |
 
 ---
 

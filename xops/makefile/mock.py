@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import List
@@ -22,7 +24,7 @@ from typing import List
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from xops.makefile._common import COMPOSE, ENV_FILE, dispatch, info, ok, warn  # noqa: E402
+from xops.makefile._common import COMPOSE, ENV_FILE, dispatch, info, ok, sudo_run, warn  # noqa: E402
 
 
 def _mock_compose_base() -> str:
@@ -184,6 +186,31 @@ def cmd_reset(argv: List[str]) -> int:
     return 0
 
 
+def _firefox_profile_dirs() -> List[tuple[str, Path]]:
+    """Detect Firefox profile directories across native / Snap / Flatpak installs.
+
+    Returns ``[(flavour, profile_dir), …]`` with the canonical ``*.default*``
+    profiles. Returns an empty list when no install is found, so the caller
+    can fall back to the generic glob hint. Profiles are detected by reading
+    ``profiles.ini`` is overkill here — Firefox creates exactly one
+    ``*.default*`` per fresh profile, which is what we want to trust.
+    """
+    home = Path.home()
+    roots = [
+        ("native",  home / ".mozilla" / "firefox"),
+        ("snap",    home / "snap" / "firefox" / "common" / ".mozilla" / "firefox"),
+        ("flatpak", home / ".var" / "app" / "org.mozilla.firefox" / ".mozilla" / "firefox"),
+    ]
+    found: List[tuple[str, Path]] = []
+    for flavour, root in roots:
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir()):
+            if child.is_dir() and (".default" in child.name):
+                found.append((flavour, child))
+    return found
+
+
 def cmd_browser(_argv: List[str]) -> int:
     """One-shot guide: trust the CA, install hostnames, hint Firefox NSS.
 
@@ -205,10 +232,24 @@ def cmd_browser(_argv: List[str]) -> int:
         print(f"   sudo cp {crt} /usr/local/share/ca-certificates/negelir-mock.crt")
         print("   sudo update-ca-certificates")
         print()
-        print("# 3) (Firefox uses its own NSS DB — also import there)")
-        print("   for db in $HOME/.mozilla/firefox/*.default*/; do \\")
-        print(f"     certutil -A -n 'negelir-mock' -t 'TC,,' -i {crt} -d \"sql:$db\"; \\")
-        print("   done")
+        print("# 3) Firefox uses its own NSS DB — import there too.")
+        print("   (Quit Firefox first; it locks the DB while running.)")
+        profiles = _firefox_profile_dirs()
+        if profiles:
+            print(f"   # Detected {len(profiles)} Firefox profile(s):")
+            for flavour, prof in profiles:
+                print(f"   #   [{flavour}] {prof}")
+                print(
+                    f"   certutil -A -n 'negelir-mock' -t 'TC,,' "
+                    f"-i {crt} -d \"sql:{prof}\""
+                )
+        else:
+            print("   # (no Firefox profile found — install Firefox or adjust paths below)")
+            print("   for db in $HOME/.mozilla/firefox/*.default*/ \\")
+            print("             $HOME/snap/firefox/common/.mozilla/firefox/*.default*/ \\")
+            print("             $HOME/.var/app/org.mozilla.firefox/.mozilla/firefox/*.default*/; do \\")
+            print(f"     [ -d \"$db\" ] && certutil -A -n 'negelir-mock' -t 'TC,,' -i {crt} -d \"sql:$db\"; \\")
+            print("   done")
         print("   # (chromium/chrome read /etc/ssl/certs — no extra step)")
     elif sysname == "darwin":
         print(
@@ -332,6 +373,147 @@ def cmd_nginx(_argv: List[str]) -> int:
     return 0
 
 
+# ── End-to-end provisioning (sudo allow-list per AGENTS.md §10) ──
+
+_SYSTEM_CA_DEST = Path("/usr/local/share/ca-certificates/negelir-mock.crt")
+
+
+def _certutil_available() -> bool:
+    return shutil.which("certutil") is not None
+
+
+def cmd_trust(_argv: List[str]) -> int:
+    """Install the dev root CA into the system trust store and every
+    detected Firefox NSS profile. POSIX only.
+
+    System bits run via ``sudo`` (per AGENTS.md §10 allow-list); Firefox
+    profile updates run as the invoking user (no elevation needed).
+    """
+    if os.name == "nt":
+        warn("mock.trust is POSIX-only. On Windows use the Import-Certificate hint from `make mock.browser`.")
+        return 1
+    crt = REPO_ROOT / "infra" / "mock" / "ca" / "root.crt"
+    if not crt.exists():
+        warn("Root CA missing — run `make mock.ca-init` first.")
+        return 1
+
+    sysname = platform.system().lower()
+    # ─ System trust store ─
+    if sysname == "linux":
+        if not shutil.which("update-ca-certificates"):
+            warn("`update-ca-certificates` not found — non-Debian distro? Install ca-certificates and retry.")
+            return 1
+        try:
+            sudo_run(["cp", str(crt), str(_SYSTEM_CA_DEST)],
+                     reason=f"install CA → {_SYSTEM_CA_DEST}")
+            sudo_run(["update-ca-certificates"], reason="rebuild system CA bundle")
+        except subprocess.CalledProcessError as exc:
+            warn(f"system trust install failed (exit {exc.returncode})")
+            return 1
+        ok(f"system trust: {_SYSTEM_CA_DEST}")
+    elif sysname == "darwin":
+        try:
+            sudo_run(
+                ["security", "add-trusted-cert", "-d", "-r", "trustRoot",
+                 "-k", "/Library/Keychains/System.keychain", str(crt)],
+                reason="add CA to System keychain",
+            )
+        except subprocess.CalledProcessError as exc:
+            warn(f"keychain add failed (exit {exc.returncode})")
+            return 1
+        ok("system trust: System keychain (trustRoot)")
+    else:
+        warn(f"unknown OS {sysname}; skipping system trust step")
+
+    # ─ Firefox NSS DBs ─
+    profiles = _firefox_profile_dirs()
+    if not profiles:
+        info("no Firefox profile detected — skipping NSS step")
+    elif not _certutil_available():
+        warn("`certutil` not found — install libnss3-tools (Debian/Ubuntu) for Firefox trust.")
+    else:
+        installed = 0
+        for flavour, prof in profiles:
+            try:
+                subprocess.run(
+                    ["certutil", "-A", "-n", "negelir-mock", "-t", "TC,,",
+                     "-i", str(crt), "-d", f"sql:{prof}"],
+                    check=True,
+                )
+                ok(f"Firefox [{flavour}] {prof.name}: trusted")
+                installed += 1
+            except subprocess.CalledProcessError as exc:
+                # cert9.db is locked while Firefox runs — common pitfall.
+                warn(f"Firefox [{flavour}] {prof.name}: certutil failed "
+                     f"(exit {exc.returncode}). Quit Firefox and re-run `make mock.trust`.")
+        info(f"Firefox profiles trusted: {installed}/{len(profiles)}")
+    return 0
+
+
+def cmd_untrust(_argv: List[str]) -> int:
+    """Remove the dev root CA from the system trust store and every
+    detected Firefox NSS profile. POSIX only. Idempotent."""
+    if os.name == "nt":
+        warn("mock.untrust is POSIX-only.")
+        return 1
+    sysname = platform.system().lower()
+    if sysname == "linux":
+        if _SYSTEM_CA_DEST.exists():
+            try:
+                sudo_run(["rm", "-f", str(_SYSTEM_CA_DEST)],
+                         reason=f"remove {_SYSTEM_CA_DEST}")
+                if shutil.which("update-ca-certificates"):
+                    sudo_run(["update-ca-certificates", "--fresh"],
+                             reason="rebuild system CA bundle")
+            except subprocess.CalledProcessError as exc:
+                warn(f"system untrust failed (exit {exc.returncode})")
+        else:
+            info(f"{_SYSTEM_CA_DEST} not present")
+    elif sysname == "darwin":
+        try:
+            sudo_run(
+                ["security", "delete-certificate", "-c", "negelir-mock",
+                 "/Library/Keychains/System.keychain"],
+                reason="remove CA from System keychain",
+                check=False,
+            )
+        except subprocess.CalledProcessError:
+            pass
+
+    if _certutil_available():
+        for flavour, prof in _firefox_profile_dirs():
+            r = subprocess.run(
+                ["certutil", "-D", "-n", "negelir-mock", "-d", f"sql:{prof}"],
+                capture_output=True, text=True,
+            )
+            if r.returncode == 0:
+                ok(f"Firefox [{flavour}] {prof.name}: removed")
+            else:
+                info(f"Firefox [{flavour}] {prof.name}: nothing to remove")
+    return 0
+
+
+def cmd_setup(_argv: List[str]) -> int:
+    """End-to-end: install /etc/hosts entries, trust the CA everywhere,
+    and bring the mock stack up. Idempotent — safe to re-run."""
+    info("Step 1/3: /etc/hosts entries")
+    rc = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "xops" / "makefile" / "hosts.py"), "install"],
+    ).returncode
+    if rc != 0:
+        return rc
+    info("Step 2/3: trust the dev root CA")
+    rc = cmd_trust([])
+    if rc != 0:
+        return rc
+    info("Step 3/3: docker compose up nginx-mock")
+    rc = cmd_up([])
+    if rc != 0:
+        return rc
+    ok("mock stack ready. Try: https://mackolik.local/")
+    return 0
+
+
 COMMANDS = {
     "up": cmd_up,
     "down": cmd_down,
@@ -344,6 +526,9 @@ COMMANDS = {
     "sources": cmd_sources,
     "verify": cmd_verify,
     "nginx": cmd_nginx,
+    "trust": cmd_trust,
+    "untrust": cmd_untrust,
+    "setup": cmd_setup,
 }
 
 

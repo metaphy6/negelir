@@ -14,7 +14,7 @@ from typing import List
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from xops.makefile._common import dispatch, info, warn  # noqa: E402
+from xops.makefile._common import dispatch, info, ok, sudo_run, warn  # noqa: E402
 
 MOCK_HOSTS = (
     "mackolik.local",
@@ -29,11 +29,27 @@ def cmd_install(_argv: List[str]) -> int:
 
     try:
         path, changed = hosts_file.install(hosts=MOCK_HOSTS)
-    except hosts_file.HostsError as exc:
-        warn(str(exc))
-        return 1
+    except hosts_file.HostsError:
+        # Permission denied — re-render the file and pipe through `sudo tee`.
+        path = hosts_file.default_hosts_path()
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
+        new = hosts_file.render(current, hosts=MOCK_HOSTS)
+        if new == current:
+            info(f"{path} already up to date")
+            return 0
+        try:
+            sudo_run(
+                ["tee", str(path)],
+                reason=f"writing {path}",
+                stdin=new,
+            )
+        except (RuntimeError, FileNotFoundError) as exc:
+            warn(f"could not elevate to write {path}: {exc}")
+            return 1
+        ok(f"updated {path} (via sudo)")
+        return 0
     if changed:
-        info(f"updated {path}")
+        ok(f"updated {path}")
     else:
         info(f"{path} already up to date")
     return 0
@@ -44,9 +60,24 @@ def cmd_uninstall(_argv: List[str]) -> int:
 
     try:
         path, changed = hosts_file.uninstall()
-    except hosts_file.HostsError as exc:
-        warn(str(exc))
-        return 1
+    except hosts_file.HostsError:
+        path = hosts_file.default_hosts_path()
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
+        new = hosts_file.render_uninstall(current)
+        if new == current:
+            info(f"{path} had nothing to remove")
+            return 0
+        try:
+            sudo_run(
+                ["tee", str(path)],
+                reason=f"writing {path}",
+                stdin=new,
+            )
+        except (RuntimeError, FileNotFoundError) as exc:
+            warn(f"could not elevate to write {path}: {exc}")
+            return 1
+        ok(f"cleaned {path} (via sudo)")
+        return 0
     info(f"{path} {'cleaned' if changed else 'had nothing to remove'}")
     return 0
 

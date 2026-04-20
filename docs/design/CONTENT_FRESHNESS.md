@@ -5,6 +5,11 @@
 > that detects *real-world content* changes (new fixtures, score
 > updates, lineups, articles, commentary, odds) — as distinct from the
 > Source-Watcher Agent which detects *structural* drift.
+> **Scope reference:** [`DATA_PIPELINE.md`](DATA_PIPELINE.md) defines
+> *what* the project ingests and the five planes (reference, schedule,
+> live, editorial, market). **This document only describes detecting
+> changes inside that scope** — it does not redefine it. If the two
+> docs disagree, DATA_PIPELINE wins.
 > **Doctrine alignment:** AGENTS.md §2 rules 1, 3, 5, 6, 7, 8 and
 > ROADMAP.md §Guiding Principles. Anything contradicting either of
 > those takes precedence over this sketch.
@@ -15,14 +20,71 @@ phantom retractions, and false retraining triggers later.
 
 ---
 
-## 0. Goals, non-goals, and what "reliable" means here
+## 0. Scope — what "freshness" means here, exactly
+
+**Freshness here means: detecting that a *known logical record*
+changed in a *semantically meaningful* way, and emitting one typed
+event per change.** It does not mean re-downloading pages, refreshing
+caches, or rebuilding the seed corpus.
+
+### 0.1 In scope
+
+The agent operates on the `Record` envelope defined in
+[`DATA_PIPELINE.md`](DATA_PIPELINE.md#4-the-record-contract--what-the-ai-actually-sees)
+and only on the six `record_type`s listed there: `fixture`, `score`,
+`lineup`, `article`, `commentary`, `odds`. For each `(source_key,
+record_type, stable_id)` it answers exactly two questions per tick:
+
+1. **Did anything change?** — by comparing the latest normalized
+   record against the prior `current.json` for that triple.
+2. **Does the change matter?** — by running the per-record-type
+   differ (§7) whose thresholds are explicit, configurable, and
+   replayable.
+
+Only when both answers are "yes" does an event leave the agent.
+
+### 0.2 Explicitly out of scope
+
+| Out of scope | Why | Where it actually lives |
+|---|---|---|
+| Re-downloading whole pages on a timer | Wasteful and pointless when nothing changed | Capture layer (§6) uses conditional GET; 304 short-circuits the rest |
+| Refreshing the entire site | Sites are not the unit of change — *records* are | Per-record diff (§7) |
+| Refreshing the seed corpus | That is `make mock.capture`, agent-runnable but human-driven | DATA_PIPELINE §3 + `xops/mock/capture_engine.py` |
+| Detecting DOM / HTML structural drift | That's the Source-Watcher's job | `ai/swarm/source_watcher/` (Phase 2.8) |
+| Cleaning article text, parsing tables | That's the extractor's job (§4) | Per-source extractors |
+| Computing sentiment, entities, narrative tags | That's NLP's job, downstream of our events | `ai/nlp/sentiment.py`, Phase 10 |
+| Deciding whether to retrain | Trainer subscribes to our events and decides | `ai/model/trainer.py`, Phase 5/6 |
+| Live websocket streams | Polling is enough for v1; same record contract holds when streams arrive later | Future Phase |
+
+> See **§15** for the full event-to-reactor matrix that names every
+> downstream consumer and what it actually does on receipt.
+
+### 0.3 The "delta only" promise
+
+The unit of work is **one (source_key, record_type, stable_id) per
+tick**. The agent **never** emits "the page changed", "the site
+refreshed", or "N bytes differ". It emits exactly one of:
+
+- A **typed change event** for that triple (`score.changed`,
+  `lineup.changed`, `article.updated`, …).
+- A **first-seen event** when a new `stable_id` appears
+  (`fixture.added`, `article.added`, …).
+- A **retraction event** after the configured grace period of
+  consecutive misses (`record.retracted`).
+- **Nothing.**
+
+Byte-level deltas that don't move any payload field above its
+per-type threshold (whitespace, ad rotation, CDN reordering, header
+churn, cookie banners) produce **no event**. This is what "quiet by
+default" means in §0.4.
+
+### 0.4 Goals, non-goals, and what "reliable" means here
 
 **Goal.** For every source the project scrapes, detect — within a
-bounded latency — that *new or changed real-world content* exists (a
-fixture appeared, a score moved, a lineup landed, an article was
-published, a commentator updated their take), emit a typed event, and
-gate downstream actions (retrain, re-evaluate, refresh model inputs,
-alert).
+bounded latency — that *new or changed real-world content* exists
+inside the six record types listed in §0.1, emit a typed event per
+record, and gate downstream actions (retrain, re-evaluate, refresh
+model inputs, alert).
 
 **Non-goals.**
 
@@ -142,22 +204,11 @@ These rules live in `ai/swarm/content_freshness/canonical.py` and are
 
 ## 3. Record taxonomy (the contract every extractor implements)
 
-Six record types cover the project's scope. Adding a seventh is a
-deliberate design step, not an extractor's free choice.
-
-```python
-class Record(TypedDict):
-    record_type: Literal["fixture","score","lineup","article","commentary","odds"]
-    stable_id: str                  # see §2
-    identity_method: str
-    source_key: str                 # mackolik / tff / nesine / openfootball
-    captured_at: str                # ISO-8601 UTC
-    upstream_url: str
-    extractor_version: str          # see §10
-    canonical_version: str
-    payload: dict                   # see per-type schemas below
-    raw_ref: str                    # path into snapshot store for byte-replay
-```
+The `Record` envelope is owned by
+[`DATA_PIPELINE.md §4`](DATA_PIPELINE.md#4-the-record-contract--what-the-ai-actually-sees)
+and lives in `ai/common/schemas/records.py`. This agent only
+constrains the freshness-relevant subset: the six `record_type`s
+listed in §0.1 and the `payload` keys each differ in §7 reads from.
 
 Per-type payload schemas (all keys mandatory; missing → extractor
 reports `degraded=True`, agent emits no false-negative):
@@ -171,10 +222,10 @@ reports `degraded=True`, agent emits no false-negative):
 | `commentary` | `match_stable_id?`, `author`, `published_utc`, `body_text`, `body_sha256`, `target_team?`, `target_player?` |
 | `odds` | `match_stable_id`, `bookmaker`, `market`, `selection`, `decimal_odds`, `observed_utc`, `is_suspended: bool` |
 
-The schema is defined once in `ai/common/schemas/content_freshness.py`
-(new) and validated with `jsonschema` at extractor exit. Validation
-failure ⇒ extractor returns a `DegradedExtraction` with the failing
-keys logged; **no silent skips**.
+These payload schemas are validated with `jsonschema` at extractor
+exit. Validation failure ⇒ extractor returns a `DegradedExtraction`
+with the failing keys logged; **no silent skips, no synthetic
+defaults**.
 
 ---
 
@@ -548,22 +599,119 @@ corpora committed under `tests/`.
 
 ---
 
-## 15. Integration points (downstream)
+## 15. What happens when a change is detected — system reaction
 
-- **Retrain trigger**: subscribes to `score.finalized`,
-  `fixture.added`, `lineup.published`. Aggregates by league/window;
-  the orchestrator decides when to run `make train`.
-- **Sentiment pipeline**: subscribes to `article.added`,
-  `article.updated`, `commentary.added/updated`. Pulls `payload_ref`,
-  runs [`ai/nlp/sentiment.py`](../../ai/nlp/sentiment.py), writes
-  back into a sentiment table keyed by `stable_id`. Idempotent on
-  `event_id`.
-- **Server**: optional websocket fan-out for the UI ("X new updates
-  since you last looked").
-- **Source-Watcher**: bidirectional. Freshness agent **subscribes**
-  to `source_watcher`'s `schema_breaking` events to pause its own
-  captures. `source_watcher` **subscribes** to freshness agent's
-  `source.degraded` to escalate severity.
+The freshness module **emits, never acts**. Side-effects belong to
+named subscribers (the *reactors*), each of which owns one downstream
+concern. This split is non-negotiable: the same event must produce
+the same reactions whether replayed offline, fired by a soak test, or
+dispatched by the live scheduler.
+
+### 15.1 Event → reactor matrix
+
+| Event | Severity | Reactor(s) | Side-effect (idempotent on `event_id`) | Latency budget |
+|---|---|---|---|---|
+| `fixture.added` | info | scheduler-reactor, feature-store-reactor | Schedule capture cadence for the new fixture; pre-allocate empty feature row | < 5s |
+| `fixture.rescheduled` | warn | scheduler-reactor, alert-reactor | Re-arm capture cadence; notify ops if shift > 24h | < 5s |
+| `fixture.cancelled` | warn | feature-store-reactor, predictor-reactor, alert-reactor | Mark fixture inactive; void any pending predictions; notify | < 10s |
+| `score.first_seen` | info | live-predictor-reactor, cache-reactor | Spin up live-prediction loop for the match; warm Redis hot keys | < 2s |
+| `score.changed` | info | feature-store-reactor, live-predictor-reactor | Update `current_score`/`minute`/`momentum_*`; re-run live predictor for **this match only** | < 2s |
+| `score.events_updated` | info | feature-store-reactor, narrative-reactor | Append new goal/card/sub event; refresh narrative tags for this match | < 5s |
+| `score.finalized` | info | trainer-reactor, evaluator-reactor, cache-reactor | Add row to retrain candidate set; record outcome for accuracy tracking; invalidate live-cache | < 30s |
+| `lineup.published` | info | feature-store-reactor, predictor-reactor | Materialize lineup features (avg-age, missing-key-player, formation); re-run pre-match predictor | < 10s |
+| `lineup.changed` | warn | feature-store-reactor, predictor-reactor, alert-reactor | Recompute lineup features; re-run predictor; notify if change inside KO − 30 min window | < 10s |
+| `article.added` | info | nlp-reactor | Run sentiment/entity pipeline; store per-fixture sentiment vector | < 60s |
+| `article.updated` | info | nlp-reactor | Re-run sentiment **only** for the updated body; replace prior vector for this `stable_id` | < 60s |
+| `article.retracted` | warn | nlp-reactor, alert-reactor | Soft-delete sentiment row (kept for audit); notify | < 60s |
+| `commentary.added` | info | nlp-reactor | Same as `article.added`, with `target_team`/`target_player` joins | < 60s |
+| `commentary.updated` | info | nlp-reactor | Same as `article.updated` | < 60s |
+| `odds.moved` | info | market-reactor, value-flag-reactor | Append to TimescaleDB hypertable; recompute implied-prob features; flag value if `\|model_p − implied_p\| > threshold` | < 1s |
+| `odds.suspended` | warn | market-reactor, alert-reactor | Mark market suspended; pause value-flag for that selection | < 1s |
+| `source.degraded` | warn | scheduler-reactor, alert-reactor, source-watcher | Drop cadence to 10× normal; notify; correlate with structural drift | < 10s |
+| `record.retracted` | warn | feature-store-reactor, alert-reactor | Soft-delete; **never** hard-delete (audit trail) | < 30s |
+
+### 15.2 Reactor invariants (apply to every row above)
+
+1. **Idempotent on `event_id`.** A reactor that has already acted on
+   a given `event_id` is a no-op. Backed by a per-reactor processed-
+   events table (`reactor_state.processed`).
+2. **Plane-bounded blast radius.** A `score.changed` event for match
+   `M` must only touch `M`'s features and `M`'s live predictor.
+   Cross-match recomputation is forbidden at the reactor layer; it is
+   a separate scheduled job.
+3. **No reactor calls the scrapers.** Reactors read from the snapshot
+   store (via the freshness agent's `payload_ref`) and from Postgres.
+   They never trigger a fetch — only the scheduler does.
+4. **No reactor emits events back to `freshness.events.v1`.**
+   Reactor-emitted events go on dedicated streams
+   (`features.updated.v1`, `predictions.refreshed.v1`,
+   `alerts.fired.v1`) so the freshness agent's input is never its own
+   output (no feedback loops).
+5. **Bounded rework window.** A reactor may re-process events older
+   than `REACTOR_REPLAY_WINDOW` (default 24h) only via an explicit
+   `make reactor.replay` command — never automatically on restart.
+6. **Failure isolation.** A reactor failure does not block other
+   reactors. Each runs in its own consumer group; a stuck reactor
+   triggers `reactor.degraded` after `N` consecutive failures.
+
+### 15.3 The trainer reactor — special handling
+
+The trainer is the most expensive reactor. Its behaviour is spelled
+out separately because "retrain on every event" would be wasteful.
+
+- **Debounce window:** events are aggregated into a sliding
+  `RETRAIN_DEBOUNCE` window (default 30 min). The window resets on
+  each new qualifying event.
+- **Qualifying events:** `score.finalized`, `lineup.changed` (only
+  before kickoff), `dataset.recomposed` (emitted by the operator
+  when historical seeds change). Article/commentary/odds events do
+  **not** qualify on their own.
+- **Decision rule:** retrain fires when EITHER (a) ≥ N qualifying
+  events accumulate in the window (`RETRAIN_MIN_EVENTS`, default 5)
+  OR (b) the per-league accuracy on a holdout slice drops below
+  `RETRAIN_ACCURACY_FLOOR` (default 0.55) — whichever comes first.
+- **Cooldown:** after a retrain, no new retrain may fire for
+  `RETRAIN_COOLDOWN` (default 6h) regardless of event volume.
+- **Output:** publishes `model.trained` on `models.events.v1` with
+  the new model SemVer. Predictors hot-swap on receipt; old model
+  versions are kept for comparison until the next bump.
+
+### 15.4 The reactor configuration surface
+
+Every reactor's tunables live in `ai/common/config.py` under the
+`NEGELIR_REACTOR_*` prefix. Mandatory keys (initial set):
+
+```
+NEGELIR_REACTOR_REPLAY_WINDOW_HOURS=24
+NEGELIR_REACTOR_DEGRADED_AFTER_FAILURES=5
+NEGELIR_REACTOR_RETRAIN_DEBOUNCE_MIN=30
+NEGELIR_REACTOR_RETRAIN_MIN_EVENTS=5
+NEGELIR_REACTOR_RETRAIN_ACCURACY_FLOOR=0.55
+NEGELIR_REACTOR_RETRAIN_COOLDOWN_HOURS=6
+NEGELIR_REACTOR_LIVE_PREDICTOR_MAX_RPS=20
+NEGELIR_REACTOR_NLP_MAX_CONCURRENCY=4
+```
+
+### 15.5 What the freshness agent itself does **not** do
+
+- It does **not** call the trainer.
+- It does **not** invalidate caches.
+- It does **not** write to Postgres `matches`/`features`/`outcomes`.
+- It does **not** notify users.
+- It does **not** decide whether a change is "important enough to act
+  on" beyond the per-type differ thresholds in §7. Importance is the
+  reactor's call.
+
+This separation is the reason the freshness agent is small,
+deterministic, and replayable.
+
+### 15.6 Bidirectional links with the Source-Watcher
+
+- Freshness agent **subscribes** to `source_watcher.schema_breaking`
+  and pauses captures for the affected source until human ack.
+- `source_watcher` **subscribes** to freshness agent's
+  `source.degraded` to escalate severity (a structural drift that
+  also degrades freshness is a P1; a structural drift alone is P3).
 
 ---
 
@@ -577,7 +725,9 @@ corpora committed under `tests/`.
 | **3.4** Multi-source | TFF + openfootball + (read-only) Nesine odds | Per-source dashboards live |
 | **3.5** Live cadence | `during_match` cadence based on fixture state | Tightening + relaxing demonstrated in soak |
 | **3.6** Hardening | WAL, lease, multi-replica, alerts | Chaos test: kill -9 mid-tick produces no orphans |
-| **3.7** Retrain trigger wiring | Orchestrator consumes events, debounces, fires `make train` | End-to-end: synthetic finalized match → retrain kicked within N min |
+| **3.7** Reactor SDK + first reactors | Reactor base class (idempotent on `event_id`, per-reactor consumer group, processed-events table); ship `feature-store-reactor` + `cache-reactor` first | Reactor invariants in §15.2 hold under chaos test |
+| **3.8** Trainer reactor | Debounce window, qualifying-event filter, accuracy-floor check, cooldown (§15.3) | Synthetic finalized match → retrain kicked within debounce + cooldown limits |
+| **3.9** NLP + predictor + market reactors | Wire `nlp-reactor`, `live-predictor-reactor`, `market-reactor` per §15.1 | End-to-end soak: every event class produces its mapped side-effect within latency budget |
 
 Each phase ships its own version bump on a new component
 `content_freshness` in

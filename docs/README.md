@@ -16,9 +16,15 @@ There are no archives — the canonical, current plan lives here.
 | You want to... | Read this |
 |---|---|
 | Understand the **whole plan, top-to-bottom** | [`planning/ROADMAP.md`](planning/ROADMAP.md) |
+| See the **component layout** (Pivot v3) | [`design/COMPONENT_LAYOUT.md`](design/COMPONENT_LAYOUT.md) |
+| Brief **Claude** when it runs inside the patcher harness | [`../CLAUDE.md`](../CLAUDE.md) |
 | See the **system architecture** | [`design/ARCHITECTURE.md`](design/ARCHITECTURE.md) |
 | Understand the **agent swarm** | [`design/SWARM.md`](design/SWARM.md) |
-| Detect **new content on data sources** (proposed agent) | [`design/CONTENT_FRESHNESS.md`](design/CONTENT_FRESHNESS.md) |
+| Understand the **data-source worker group** (Pivot v3) | [`design/DATA_SOURCE.md`](design/DATA_SOURCE.md) |
+| Understand **what data we ingest, process, and feed to the AI** | [`design/DATA_PIPELINE.md`](design/DATA_PIPELINE.md) |
+| Understand the **feed contract** NDJSON/Parquet (Pivot v3) | [`design/EMITTER.md`](design/EMITTER.md) |
+| Understand the **auto-patching scraper loop** (Pivot v3) | [`design/SCRAPER_PATCHER.md`](design/SCRAPER_PATCHER.md) |
+| Detect **changes to records on data sources** | [`design/CONTENT_FRESHNESS.md`](design/CONTENT_FRESHNESS.md) |
 | Know **why we picked our languages** | [`design/LANGUAGE_CHOICES.md`](design/LANGUAGE_CHOICES.md) |
 | Set up the **fake-data dev environment** | [`design/MOCK_DATA_SERVER.md`](design/MOCK_DATA_SERVER.md) |
 | Understand **identity / API security** | [`design/SECURITY.md`](design/SECURITY.md) |
@@ -38,9 +44,14 @@ docs/
 ├── planning/
 │   └── ROADMAP.md                   ← master plan, single source of truth
 ├── design/
+│   ├── COMPONENT_LAYOUT.md          ← (Pivot v3) server / datasource / swarm / common layout
 │   ├── ARCHITECTURE.md              ← high-level system diagram
 │   ├── SWARM.md                     ← agent roles, consensus, message bus
-│   ├── CONTENT_FRESHNESS.md         ← proposed Phase 3 freshness agent (sketch)
+│   ├── DATA_SOURCE.md               ← (Pivot v3) scraper/watcher/refresher/patcher/gitops/emitter group
+│   ├── DATA_PIPELINE.md             ← scrape → process → AI feed framework (anchor doc)
+│   ├── EMITTER.md                   ← (Pivot v3) NDJSON live + Parquet snapshot feed contract
+│   ├── SCRAPER_PATCHER.md           ← (Pivot v3) auto-patching scraper + GitOps worker
+│   ├── CONTENT_FRESHNESS.md         ← record-delta detection (freshness agent)
 │   ├── LANGUAGE_CHOICES.md          ← Python vs Rust vs Go decision
 │   ├── MOCK_DATA_SERVER.md          ← fake-internet dev stack
 │   ├── SECURITY.md                  ← identity, mTLS, rate limit, threat model
@@ -48,6 +59,10 @@ docs/
 │   ├── CONFIGURATION.md             ← single-source config doctrine
 │   ├── TURKISH_NLP.md               ← TR pipeline, dialect & typo tolerance
 │   └── TESTING_STRATEGY.md          ← unit, integration, chaos, adversarial
+├── testing/
+│   ├── phase2-make-targets.md             ← Make-target inventory
+│   ├── phase2-source-watcher-stress.md    ← original deep-review stress notes
+│   └── source-watcher-60pct-stress.md     ← 60% DOM rewrite live demo + improvements
 └── guides/
     └── SETUP.md                     ← zero-to-running-stack on a fresh machine
 ```

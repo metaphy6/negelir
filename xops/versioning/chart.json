@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 19,
+    "build": 26,
     "released": null
   },
   "components": {
@@ -19,14 +19,14 @@
       "last_changed": "2026-04-20T10:32:12+00:00"
     },
     "xops": {
-      "version": "3.0.0",
+      "version": "3.1.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-04-20T10:53:06+00:00"
+      "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.3.0",
+      "version": "1.6.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-20T11:53:44+00:00"
+      "last_changed": "2026-04-20T16:50:36+00:00"
     },
     "infra_mock": {
       "version": "1.4.1",
@@ -345,6 +345,69 @@
       "from": "1.2.3",
       "to": "1.3.0",
       "build": 19
+    },
+    {
+      "timestamp": "2026-04-20T13:22:28+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "mock.browser auto-detects Firefox profiles (native, Snap, Flatpak) and prints exact certutil lines",
+      "from": "3.0.0",
+      "to": "3.0.1",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-04-20T13:29:06+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "agent-driven sudo elevation; mock.trust/untrust/setup; hosts.* auto-elevate via sudo tee",
+      "from": "3.0.1",
+      "to": "3.1.0",
+      "build": 21
+    },
+    {
+      "timestamp": "2026-04-20T13:42:05+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "add DATA_PIPELINE.md (data-scope anchor); rework CONTENT_FRESHNESS §0 to nail delta-only scope; cross-link from ROADMAP",
+      "from": "1.3.0",
+      "to": "1.4.0",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-04-20T13:57:47+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "CONTENT_FRESHNESS §15: full event→reactor matrix + reactor invariants + trainer-reactor spec; ROADMAP §4.7 plans reactor SDK + named reactors",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-04-20T14:05:41+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "60% DOM rewrite stress demo + report",
+      "from": "1.4.1",
+      "to": "1.4.2",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-04-20T15:15:44+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Production Pivot v3: COMPONENT_LAYOUT + DATA_SOURCE + EMITTER + SCRAPER_PATCHER; ROADMAP v3 Phases 16/17/18 + R1-R5; DATA_PIPELINE emitter handoff",
+      "from": "1.4.2",
+      "to": "1.5.0",
+      "build": 25
+    },
+    {
+      "timestamp": "2026-04-20T16:50:36+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Pivot v3 amend: Anthropic Agent SDK (Haiku/Sonnet/Opus tiered) for patcher; CLAUDE.md operating brief; SCRAPER_PATCHER S12 (model providers, diagnostic bundle, cost caps, dedup/cooldown, FP feedback) + S4.5 deferred detector_tuning scope; ROADMAP S17.2/17.2a + Appendix A15",
+      "from": "1.5.0",
+      "to": "1.6.0",
+      "build": 26
     }
   ]
 }
