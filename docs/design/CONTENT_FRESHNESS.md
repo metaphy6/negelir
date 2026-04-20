@@ -340,7 +340,7 @@ Mandatory client behaviour:
 | Backoff | Exponential on 429/503 with `Retry-After` honoured; persisted in the index so a restart doesn't blast the source. |
 | Timeouts | Connect 5s, read 15s, total 30s — all configurable. Timeout ⇒ degraded tick, *not* a "removal" event. |
 | User-Agent | Single canonical UA from config; never rotate to evade blocks (doctrine: no fabricated production data, no adversarial scraping). |
-| TLS | Strict; `verify=True`. Mock vhosts use the local CA already wired by `make mock.ca-trust`. |
+| TLS | Strict; `verify=True`. Mock vhosts use the local CA already wired by `make mock.trust` (per [`MOCK_DATA_SERVER.md`](MOCK_DATA_SERVER.md) §🔑 — the `mock.ca-trust` name was retired during Phase 2). |
 
 **Live-during-match cadence**: the scheduler (§8) reads
 `during_match` from the latest known `fixture` records and tightens
@@ -551,7 +551,7 @@ Mandatory keys (initial set):
 
 ```
 NEGELIR_FRESHNESS_ENABLED=true
-NEGELIR_FRESHNESS_PROFILE=mock|prod                 # mock = read from infra/mock vhosts
+NEGELIR_FRESHNESS_PROFILE=mock|real                 # mock = read from infra/mock vhosts; aligns with NEGELIR_SCRAPE_PROFILE values
 NEGELIR_FRESHNESS_HISTORY_KEEP_PER_RECORD=100
 NEGELIR_FRESHNESS_RAW_KEEP_DAYS=30
 NEGELIR_FRESHNESS_RETRACTION_GRACE_TICKS=3

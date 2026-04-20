@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 28,
+    "build": 29,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.6.2",
+      "version": "1.6.3",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-20T17:29:03+00:00"
+      "last_changed": "2026-04-20T17:36:35+00:00"
     },
     "infra_mock": {
       "version": "1.4.1",
@@ -426,6 +426,15 @@
       "from": "1.6.1",
       "to": "1.6.2",
       "build": 28
+    },
+    {
+      "timestamp": "2026-04-20T17:36:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "CONTENT_FRESHNESS audit: drop stale make mock.ca-trust ref; align FRESHNESS_PROFILE values to mock|real (was mock|prod) per project convention",
+      "from": "1.6.2",
+      "to": "1.6.3",
+      "build": 29
     }
   ]
 }
