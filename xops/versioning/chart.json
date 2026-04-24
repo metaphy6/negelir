@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 33,
+    "build": 34,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.7.1",
+      "version": "1.7.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-24T12:41:57+00:00"
+      "last_changed": "2026-04-24T13:13:13+00:00"
     },
     "infra_mock": {
       "version": "1.4.1",
@@ -520,6 +520,15 @@
       "from": "1.0.1",
       "to": "1.0.2",
       "build": 33
+    },
+    {
+      "timestamp": "2026-04-24T13:13:13+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 1+2 audit: ticked stale CI-gate checkbox (0.6) and dropped P2P_ tripwire bullet (1.1) — both reflect already-shipped state",
+      "from": "1.7.1",
+      "to": "1.7.2",
+      "build": 34
     }
   ]
 }

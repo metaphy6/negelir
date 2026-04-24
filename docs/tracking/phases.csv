@@ -77,3 +77,6 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-04-24T12:27:18+00:00,0,,in-progress,note,"[Phase R prep] Pivot v3 chart keys (datasource_*, swarm, common) seeded at 0.1.0 in xops/versioning/chart.json",
 2026-04-24T12:27:22+00:00,0,,in-progress,note,[Phase R prep] Re-sequenced R1-R5 as stop-the-world (was: parallel with Phases 3-8); Phase 8.3 auto-coder collapsed into Phase 17 pointer; COMPONENT_LAYOUT §6 clarified isolation tests use AST/import-graph (not grep),
 2026-04-24T12:41:54+00:00,0,,in-progress,note,"Added CONFIGURATION.md drift guard (test_configuration_md_examples_exist_in_env_example) + ROADMAP R6 (config single-source consolidation: defaults.yaml as truth, .env.example/CONFIGURATION.md generated)",
+2026-04-24T13:13:01+00:00,1,,completed,note,Phase 1 audit: 16 config-sync tests + Go config (8+2) + lint clean. Doc fix: dropped stale P2P_ tripwire from §1.1 (already removed from code).,
+2026-04-24T13:13:08+00:00,2,,completed,note,Phase 2 audit: 58 mock + 100 source-watcher tests green; mock.verify clean; all 10 Make UX targets present; manifest schema healthy.,
+2026-04-24T13:13:08+00:00,0,,in-progress,note,Phase 0.6 CI gate ticked: pytest xops/versioning/tests/ confirmed wired into make test (xops/makefile/tests.py::cmd_test); 19/19 green.,
