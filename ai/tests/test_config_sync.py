@@ -342,3 +342,38 @@ def test_python_defaults_match_env_example() -> None:
         "one-line reason if the divergence is deliberate.\n  - "
         + "\n  - ".join(sorted(drift))
     )
+
+
+# ── CONFIGURATION.md drift guard ─────────────────────────────────────────
+#
+# CONFIGURATION.md is a doctrine document, not an exhaustive key registry —
+# it cites a handful of NEGELIR_*/SCRAPE_* keys as examples in prose and in
+# the prefix table. The risk we guard against is *stale examples*: an env
+# var gets renamed or removed but the doc still names it. That silently
+# misleads readers.
+#
+# We do NOT require every env key to be documented in CONFIGURATION.md —
+# that's the job of `.env.example` itself, which is the canonical registry.
+
+CONFIGURATION_MD = REPO_ROOT / "docs" / "design" / "CONFIGURATION.md"
+_DOC_KEY_RE = re.compile(r"\b(NEGELIR_[A-Z0-9_]+|SCRAPE_[A-Z0-9_]+)\b")
+
+
+def test_configuration_md_examples_exist_in_env_example() -> None:
+    """Every NEGELIR_*/SCRAPE_* key cited in CONFIGURATION.md must still exist.
+
+    Catches stale doc examples after renames or deletions. Does *not*
+    require comprehensive coverage — `.env.example` is the registry.
+    """
+    if not CONFIGURATION_MD.is_file():
+        pytest.skip("CONFIGURATION.md not present")
+    documented_examples = set(_DOC_KEY_RE.findall(_read(CONFIGURATION_MD)))
+    if not documented_examples:
+        pytest.skip("CONFIGURATION.md cites no concrete env keys")
+    real_keys = _env_example_keys()
+    stale = sorted(documented_examples - real_keys)
+    assert not stale, (
+        "CONFIGURATION.md cites env vars that no longer exist in "
+        f".env.example: {stale}. Update the doc or restore the keys."
+    )
+

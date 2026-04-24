@@ -60,6 +60,17 @@ The `test_config_sync.py` and `sync_test.go` tests assert:
 3. Defaults in `xops/env/.env.example` match defaults in code.
 4. Pickle round-trip succeeds for the Python `Config` (config-as-data).
 5. No Phase-2 synthetic-data env keys leak back in.
+6. **Every `NEGELIR_*` / `SCRAPE_*` example cited in this document still exists in `xops/env/.env.example`** — catches stale doc examples after renames or removals.
+
+> **This document is doctrine, not a registry.** The exhaustive list of
+> tunables lives in [`xops/env/.env.example`](../../xops/env/.env.example)
+> with one `NEGELIR_/SCRAPE_*=<default>` line per knob. Read that file
+> when you need to know *what is configurable*; read this one when you
+> need to know *how configuration is structured and enforced*.
+>
+> **Planned (Phase R6):** collapse the `defaults.yaml` ↔ `.env.example`
+> redundancy by generating `.env.example` from `defaults.yaml` + `Config`
+> field metadata. See ROADMAP §R6.
 
 ## 🌍 Same config, three deployments
 

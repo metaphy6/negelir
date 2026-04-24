@@ -76,3 +76,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-04-24T12:26:41+00:00,0,,in-progress,note,"Audit cleanup: date-derived default_season; P2P deprecation completed (regression test, doctrine rule, owned-prefix tripwire, banner copy removed); rule-10 -> rule-9 renumbered across docs",
 2026-04-24T12:27:18+00:00,0,,in-progress,note,"[Phase R prep] Pivot v3 chart keys (datasource_*, swarm, common) seeded at 0.1.0 in xops/versioning/chart.json",
 2026-04-24T12:27:22+00:00,0,,in-progress,note,[Phase R prep] Re-sequenced R1-R5 as stop-the-world (was: parallel with Phases 3-8); Phase 8.3 auto-coder collapsed into Phase 17 pointer; COMPONENT_LAYOUT §6 clarified isolation tests use AST/import-graph (not grep),
+2026-04-24T12:41:54+00:00,0,,in-progress,note,"Added CONFIGURATION.md drift guard (test_configuration_md_examples_exist_in_env_example) + ROADMAP R6 (config single-source consolidation: defaults.yaml as truth, .env.example/CONFIGURATION.md generated)",

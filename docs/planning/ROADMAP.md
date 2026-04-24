@@ -4,7 +4,7 @@
 > **Date:** 2026-04-20
 > **Status:** Active. Single source of truth.
 > **Supersedes:** v2.0.0 Swarm Pivot (all prior prior roadmaps already superseded by v2).
-> The **phase numbering from v2.0.0 is preserved intact** — Phases 0–15 still carry the same meaning and the same completion status. v3 **adds** a cross-cutting restructuring track (Phases **R1–R5**) and three new feature phases (**16 Emitter**, **17 Patcher + GitOps**, **18 Datasource Cohesion**) that re-shape ownership boundaries for everything from Phase 3 onward.
+> The **phase numbering from v2.0.0 is preserved intact** — Phases 0–15 still carry the same meaning and the same completion status. v3 **adds** a cross-cutting restructuring track (Phases **R1–R6**) and three new feature phases (**16 Emitter**, **17 Patcher + GitOps**, **18 Datasource Cohesion**) that re-shape ownership boundaries for everything from Phase 3 onward.
 
 ---
 
@@ -163,7 +163,7 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 | **16** | **Emitter & Feed Contract** *(Pivot v3)* | DB/Redis state → NDJSON/Parquet feeds; swarm stops reading DB | R2 |
 | **17** | **Scraper-Patcher + GitOps** *(Pivot v3)* | Auto-patching scraper with 5-gate 7-day auto-merge | 16, R3 |
 | **18** | **Datasource Cohesion & Swarm Isolation** *(Pivot v3)* | Three-way isolation tests green; `ai/` tree deleted | 16, 17, R4 |
-| **R1–R5** | **Restructure Track** *(Pivot v3)* | Rename chart keys; move modules; absorb mock into `server`; delete shims | 2, runs in parallel with 3–8 |
+| **R1–R6** | **Restructure Track** *(Pivot v3)* | Rename chart keys; move modules; absorb mock into `server`; delete shims; collapse config triangle | 2, stop-the-world (no parallel feature work) |
 
 ```
 0 ─→ 1 ─→ 2 ─→ 3 ─→ 4 ─→ 5 ─→ 6 ─→ 9 ─→ 14 ─→ 15
@@ -1114,7 +1114,7 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 > turns out to be unrealistic: every Phase 3+ feature ships into one of
 > the four target components (`server/`, `datasource/`, `swarm/`,
 > `common/`) and would have to be rewritten mid-flight if the layout
-> shifts under it. **R1–R5 must run as a single stop-the-world sprint
+> shifts under it. **R1–R6 must run as a single stop-the-world sprint
 > (no concurrent feature work) inserted between Phase 2 and Phase 3, or
 > — if explicitly deferred — between Phase 5 and Phase 6.** Estimated
 > 1–2 weeks of focused work. Each sub-phase is individually reversible
@@ -1153,9 +1153,42 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 - [ ] `server` binary gains `MODE=mock`; `mocksrv` dropped entirely.
 - [ ] `make up PROFILES=core,mock` brings up only the mock stack; scraper validation works identically to today.
 
+### R6 — Config single-source consolidation
+
+**Goal:** end the three-way hand-sync between `defaults.yaml`, `.env.example`,
+and `Config`. Make `defaults.yaml` the single hand-edited source for default
+*values*; promote `Config` (Python) and `server/internal/config` (Go) to the
+single source for *schema*; reduce `.env.example` and `CONFIGURATION.md` to
+generated artifacts.
+
+Motivation: today the triangle test catches drift but does not prevent it —
+contributors must remember to touch all three files. After R6 the triangle
+becomes a build step.
+
+- [ ] `defaults.yaml` becomes the single hand-edited home for default values
+      (today it is partly redundant with `.env.example`).
+- [ ] `make config.export-env` generates `xops/env/.env.example` from
+      `defaults.yaml` + `Config` field metadata (descriptions, types,
+      `# shared` markers). Header line warns the file is generated.
+- [ ] `make config.export-doc` generates the registry section of
+      `docs/design/CONFIGURATION.md` between `<!-- BEGIN GENERATED -->` /
+      `<!-- END GENERATED -->` fences. Narrative prose stays hand-edited
+      above/below the fence.
+- [ ] CI runs both generators and `git diff --exit-code` on the outputs.
+      Drift = red build, not a runtime bug.
+- [ ] The existing triangle tests in `ai/tests/test_config_sync.py` stay
+      green during the transition; they are deleted only after one full
+      release cycle of green generator-diff CI.
+- [ ] Go reads the same `defaults.yaml` (or a generated `.env.defaults`
+      shim that Compose `env_file:`-loads) so server and Python share one
+      source of truth.
+
+**Out of scope for R6:** switching to a different config library
+(Pydantic / viper). The dataclass + struct-tag shape stays.
+
 ### R — Definition of Done
 
-- [ ] All five sub-phases green.
+- [ ] All six sub-phases green.
 - [ ] `ai/` path does not exist; `test_ai_tree_gone.py` green.
 - [ ] Every component listed in COMPONENT_LAYOUT §5 has an entry in the chart and a non-empty directory.
 - [ ] `make up PROFILES=all` brings every service up and the smoke test passes end-to-end.
