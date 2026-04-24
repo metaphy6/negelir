@@ -277,6 +277,17 @@ class Config:
     telemetry_max_stream_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TELEMETRY_MAX_STREAM", "50000")))
     redis_socket_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REDIS_SOCKET_TIMEOUT", "2")))
 
+    # Swarm SDK (Phase 3) — bus, registry, agent runner
+    swarm_bus_kind: str = field(default_factory=lambda: os.getenv("SWARM_BUS_KIND", "redis"))
+    swarm_consumer_group_prefix: str = field(default_factory=lambda: os.getenv("SWARM_CONSUMER_GROUP_PREFIX", "swarm"))
+    swarm_heartbeat_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_HEARTBEAT_SEC", "5")))
+    swarm_registry_ttl_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_REGISTRY_TTL_SEC", "30")))
+    swarm_max_in_flight: int = field(default_factory=lambda: int(os.getenv("SWARM_MAX_IN_FLIGHT", "32")))
+    swarm_retry_budget: int = field(default_factory=lambda: int(os.getenv("SWARM_RETRY_BUDGET", "3")))
+    swarm_dlq_max_len: int = field(default_factory=lambda: int(os.getenv("SWARM_DLQ_MAX_LEN", "10000")))
+    swarm_pending_claim_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_PENDING_CLAIM_SEC", "60")))
+    swarm_metrics_port: int = field(default_factory=lambda: int(os.getenv("SWARM_METRICS_PORT", "9100")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -388,6 +399,15 @@ class Config:
         # Ports
         _bounded("pg_port", self.pg_port, 1, 65535)
         _bounded("redis_port", self.redis_port, 1, 65535)
+        _bounded("swarm_metrics_port", self.swarm_metrics_port, 1, 65535)
+
+        # Swarm bus kind enum
+        _swarm_bus_kinds = {"redis", "memory"}
+        if self.swarm_bus_kind not in _swarm_bus_kinds:
+            issues.append(
+                f"swarm_bus_kind={self.swarm_bus_kind!r} must be one of "
+                f"{sorted(_swarm_bus_kinds)}"
+            )
 
         # Probability / fraction fields
         _bounded("drift_accuracy_floor", self.drift_accuracy_floor, 0.0, 1.0)
@@ -415,6 +435,12 @@ class Config:
             ("training_thresholds_min_holdout_matches", self.training_thresholds_min_holdout_matches),
             ("verification_window_weeks", self.verification_window_weeks),
             ("bootstrap_min_matches", self.bootstrap_min_matches),
+            ("swarm_heartbeat_sec", self.swarm_heartbeat_sec),
+            ("swarm_registry_ttl_sec", self.swarm_registry_ttl_sec),
+            ("swarm_max_in_flight", self.swarm_max_in_flight),
+            ("swarm_retry_budget", self.swarm_retry_budget),
+            ("swarm_dlq_max_len", self.swarm_dlq_max_len),
+            ("swarm_pending_claim_sec", self.swarm_pending_claim_sec),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")

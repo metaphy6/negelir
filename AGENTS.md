@@ -128,7 +128,37 @@ make track.export FORMAT=md   # or FORMAT=csv
   `docs/planning/ROADMAP.md` to `[~]` (in-progress) or leave `[ ]` and
   reference the tracker row in your response.
 
-### 3.4 What **never** to do
+### 3.4 Mandatory: tick the ROADMAP and design-doc checkboxes
+
+The tracker is the **timeline** (when something happened); the
+checkboxes in `docs/planning/ROADMAP.md` and the relevant
+`docs/design/*.md` files are the **state** (what is currently done).
+Both must agree at the end of every change.
+
+For every checklist item your work satisfies — no matter how small —
+flip its `[ ]` to `[x]` **in the same commit** as the implementing
+code and the tracker row. This is non-negotiable:
+
+- ✅ Always re-read the affected phase / design-doc section before
+  declaring done. Tick **every** item that is now true, not just the
+  one you started with.
+- ✅ If a checklist item is *partially* satisfied, leave it `[ ]` and
+  add a note in your tracker row + response explaining what's left.
+  Do not invent a `[~]` half-state in the ROADMAP unless the item is
+  explicitly `blocked` (per §3.3).
+- ✅ If you discover a checklist item is **already complete** but
+  unticked from a prior session, tick it and mention this in your
+  summary.
+- ❌ Never tick an item without verifying it. "Compiles" is not
+  "done" — the DoD in `ROADMAP.md` Appendix B is the bar.
+- ❌ Never tick the phase-rollup checkbox in §0 ("Phase X — …") unless
+  every sub-checkbox under that phase and its DoD are green.
+
+The ROADMAP and design docs are the contract the next agent reads
+first. Stale checkboxes mislead them and waste budget. Treat ticking
+as part of "done", same as tests and version bumps.
+
+### 3.5 What **never** to do
 
 - ❌ Edit `phases.csv` by hand for routine updates. Use the CLI.
 - ❌ Delete or rewrite past rows. Append a corrective row instead.
@@ -154,7 +184,11 @@ Use this loop for every non-trivial change:
    ```bash
    PYTHONPATH=ai python3 -m pytest ai/tests/test_config_sync.py -q
    ```
-6. **Tick the ROADMAP checkbox** if the sub-task is now complete.
+6. **Tick the ROADMAP checkboxes** (§3.4) — flip every `[ ]` your work
+   now satisfies to `[x]`, not just the one you originally targeted.
+   Re-scan the whole sub-phase; you will often have completed adjacent
+   items as a side effect. Do the same for any `docs/design/*.md`
+   checklists touched by the change.
 7. **Write the tracker row** describing what shipped (or diverged /
    blocked / adapted). One row per event.
 8. **Summarize.** Tell the user what changed, what tests ran, and what

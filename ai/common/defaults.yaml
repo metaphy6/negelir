@@ -135,6 +135,18 @@ feature_ranges:
 telemetry:
   max_stream_len: 50000      # NEGELIR_TELEMETRY_MAX_STREAM
 
+# ── Swarm SDK (Phase 3) ──────────────────────────────────────────────────────
+swarm:
+  bus_kind: redis            # SWARM_BUS_KIND  (redis|memory)
+  consumer_group_prefix: swarm   # SWARM_CONSUMER_GROUP_PREFIX
+  heartbeat_sec: 5           # SWARM_HEARTBEAT_SEC
+  registry_ttl_sec: 30       # SWARM_REGISTRY_TTL_SEC
+  max_in_flight: 32          # SWARM_MAX_IN_FLIGHT
+  retry_budget: 3            # SWARM_RETRY_BUDGET
+  dlq_max_len: 10000         # SWARM_DLQ_MAX_LEN
+  pending_claim_sec: 60      # SWARM_PENDING_CLAIM_SEC
+  metrics_port: 9100         # SWARM_METRICS_PORT
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR

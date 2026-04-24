@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/echo.in",
+  "title": "echo.in",
+  "description": "Echo agent input topic. Phase 3 example payload.",
+  "type": "object",
+  "properties": {
+    "i": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": true
+}

@@ -47,6 +47,11 @@ type Config struct {
 	HTTPShutdownTimeoutSec   int    `env:"HTTP_SHUTDOWN_TIMEOUT_SEC" default:"5"`
 	CacheMatchesTTLSec       int    `env:"CACHE_MATCHES_TTL_SEC"     default:"300"`
 	CacheTeamsTTLSec         int    `env:"CACHE_TEAMS_TTL_SEC"       default:"600"`
+
+	// Shared with Python (ai/common/config.py) — used by `swarmctl` to
+	// compute the dead-after-3-missed-heartbeats marker. Marked `# shared`
+	// in .env.example.
+	SwarmHeartbeatSec int `env:"SWARM_HEARTBEAT_SEC" default:"5"`
 }
 
 // Duration helpers — keep callers free of `time.Duration(x) * time.Second`.

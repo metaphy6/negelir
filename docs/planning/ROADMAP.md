@@ -425,16 +425,32 @@ The current `server/` (Go) is **repurposed** as the mock-source backend:
 
 **Goal:** A minimal but complete agent platform: every agent is a process that registers, subscribes to topics, publishes results, heartbeats, and dies safely.
 **Depends on:** Phase 1
+**Pivot v3 placement:** the agent SDK is shared infrastructure consumed by both `swarm/` (AI agents) and `datasource/` (scraper/watcher/refresher/patcher). After Phase R2 it lives at **`common/bus/`**. Until R2 lands, this phase ships under the transitional path **`ai/swarm/sdk/`** with the namespace structured so R2 is a directory move, not a rewrite.
+**Scope discipline:** Phase 3 ships the SDK + bus implementations + registry + observation-only supervisor + an example echo agent. **It does not ship**: real worker agents (Phase 4), a compose service per agent (Phase 4 onward), a Go SDK (Phase 9 prerequisite), CBOR/CDDL framing (Phase 9 hardening), Prometheus scraping (Phase 11/12), OpenTelemetry tracing (Phase 12), or write-side orchestration like `restart`/`scale` (Phase 8 `maint.scaler.v1`).
 
 ### 3.1 Message bus
 
-- [ ] **Local / small prod:** Redis Streams (already in stack). Topics are stream keys; consumer groups give per-agent durability.
+- [x] **Local / small prod:** Redis Streams (already in stack at `redis:7-alpine`). Topics are stream keys; consumer groups give per-agent at-least-once durability.
 - [ ] **Large prod (future):** drop-in NATS JetStream — the SDK exposes a `Bus` interface; Redis and NATS are two implementations.
-- [ ] All messages are **CBOR-encoded** with a strict schema (`schemas/*.cddl`). JSON kept only for human debugging.
+- [x] **In-memory bus** (`InMemoryBus`) for unit tests — same `Bus` interface, no Redis required. **Required deliverable** of this phase.
+- [x] Encoding: **JSON for v1** (human-debuggable, zero new deps; the existing `redis-py` client carries strings natively). The `Bus` interface is encoding-agnostic via a `Codec` seam, so a CBOR+CDDL upgrade in Phase 9 is purely additive — no agent code changes.
 
 ### 3.2 Agent SDK
 
-`ai/swarm/sdk/` (Python) and `server/internal/swarm/` (Go) expose an identical contract:
+`ai/swarm/sdk/` (Python). The package layout is the post-R2 shape, importable as `swarm.sdk.*`-style internally so the R2 move is `git mv ai/swarm/sdk common/bus`:
+
+```
+ai/swarm/sdk/
+├── __init__.py       # public re-exports: Agent, Bus, Message, run
+├── types.py          # Message, Envelope, AgentSpec, Topic newtype
+├── codec.py          # JsonCodec (default); pluggable for CBOR later
+├── bus.py            # Bus protocol; InMemoryBus; RedisStreamsBus
+├── registry.py       # Redis-backed agent_registry hash + heartbeat
+├── agent.py          # Agent base class / Protocol
+├── runner.py         # SIGTERM-safe event loop; consumer-group claim
+├── metrics.py        # in-process counters; /metrics text exposition
+└── tests/            # 40+ unit tests, in-memory bus only
+```
 
 ```python
 class Agent(Protocol):
@@ -444,27 +460,40 @@ class Agent(Protocol):
     async def handle(msg: Message) -> Iterable[Message]: ...
 ```
 
-- [ ] Auto-registers in `agent_registry` Redis hash on start; deregisters on `SIGTERM`.
-- [ ] Heartbeat every `cfg.swarm_heartbeat_sec`; supervisor marks dead after `3×` missed beats.
-- [ ] Built-in metrics: `msg_consumed`, `msg_published`, `errors`, `latency_ms` (Prometheus-format `/metrics`).
-- [ ] Built-in tracing: every message carries a `trace_id`; agents span-wrap their `handle`.
+- [x] Auto-registers in `agent_registry` Redis hash on start (`HSET agent_registry <instance_id> <json>`); deregisters on `SIGTERM` / `SIGINT`.
+- [x] Heartbeat every `cfg.swarm_heartbeat_sec` (default 5s) via `HSET agent_heartbeats <instance_id> <iso8601_utc>`; supervisor marks an instance **stale** after `3×` missed beats.
+- [x] Built-in metrics: `msg_consumed`, `msg_published`, `msg_failed`, `msg_retried`, `msg_dlq`, `latency_ms_p50/p95/p99`. Exposed at `/metrics` in Prometheus text format on `cfg.swarm_metrics_port` (default `9100`).
+- [x] Built-in correlation: every `Message` carries a `trace_id` (UUID4 string in the envelope). Stdlib only — no OpenTelemetry yet (deferred to Phase 12).
 
-### 3.3 Supervisor
+### 3.3 Bus semantics & guarantees (new)
 
-A tiny Go binary `cmd/swarmctl`:
+This sub-phase nails down the contract every agent must obey. Consumers and tests both depend on it.
 
-- [ ] `swarmctl ps` — list registered agents, last heartbeat, message lag.
-- [ ] `swarmctl restart <name>` — safe restart through the orchestrator.
-- [ ] `swarmctl scale <name> <n>` — change desired replica count (writes to `agent_desired_state` hash; docker-compose `--scale` or K8s deployment patches react).
-- [ ] `swarmctl drain <name>` — stop assigning work but let in-flight messages finish.
+- [x] **At-least-once delivery.** Redis Streams + consumer groups guarantee the message is re-delivered on crash. **Handlers must be idempotent** — re-processing the same `(trace_id, topic)` must produce the same effect.
+- [x] **Pending-claim policy.** A message claimed by a dead consumer is reclaimed by another after `cfg.swarm_pending_claim_sec` (default 60s) via `XAUTOCLAIM`.
+- [x] **Retry budget.** Failed handler → re-queued up to `cfg.swarm_retry_budget` times (default 3); exhausted retries → DLQ stream `<topic>.dlq`.
+- [x] **Dead-letter queue.** `<topic>.dlq` is a Redis stream capped at `cfg.swarm_dlq_max_len` (default 10 000) entries with `MAXLEN ~`. Phase 8 supervisor surfaces DLQ depth; Phase 3 only writes to it.
+- [x] **Max in-flight.** Each agent claims at most `cfg.swarm_max_in_flight` (default 32) messages at a time → backpressure without blocking the event loop.
+- [x] **Schema versioning.** Every `Message` envelope carries `{"schema_version": int}`. Producers send the highest they know; consumers refuse anything `> max_supported`. Migrations are explicit, not silent.
+- [ ] **Bus auth.** Local dev: in-network Redis, no auth. Prod hardening (mTLS, ACLs) tracked under Phase 7.
 
-### 3.4 Topic catalog
+### 3.4 Supervisor (read-only in Phase 3)
 
-| Topic prefix | Producer | Consumer(s) | Payload |
+A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocksrv`):
+
+- [x] `swarmctl ps` — list registered agents, last heartbeat (with stale ✗ marker), per-topic message lag (XLEN minus consumer-group pending).
+- [x] `swarmctl topics` — dump topic catalog with stream length + consumer-group pending count.
+- [x] `swarmctl tail <topic> [-n N]` — stream the last N messages (JSON-formatted) for debugging.
+
+> **Scope:** `swarmctl` is **read-only** in Phase 3. Mutating commands (`restart`, `scale`, `drain`) are write authority that belongs to Phase 8 `maint.scaler.v1`. Pre-shipping mutators here would create a blast-radius surface with no safety net.
+
+### 3.5 Topic catalog (control plane)
+
+> **Boundary clarification (Pivot v3).** This catalog covers **bus** topics (control + low-volume coordination). Per [`design/EMITTER.md`](../design/EMITTER.md), high-volume data records (per-Record schedules, fixtures, results) flow through **NDJSON/Parquet feeds**, not the bus, starting Phase 16. The legacy `scrape.raw` / `match.normalized` bus topics from earlier drafts are **not** part of v3.
+
+| Topic | Producer | Consumer(s) | Payload |
 |---|---|---|---|
 | `scrape.request` | API gateway, scheduler | scrapers | `{league, source, target_date}` |
-| `scrape.raw` | scrapers | categorizer | `{source, url, payload, sha256}` |
-| `match.normalized` | processor | predictor, storage | canonical `Match` record |
 | `predict.request` | API gateway | predictor swarm | `{match_id, market}` |
 | `predict.vote` | individual predictors | consensus agent | `{match_id, market, dist, model_id}` |
 | `predict.final` | consensus | proofreader, storage, API cache | calibrated `Prediction` |
@@ -472,11 +501,22 @@ A tiny Go binary `cmd/swarmctl`:
 | `sec.alert` | security agents | supervisor, telemetry | `{kind, source, severity}` |
 | `maint.event` | self-maint | supervisor | `{kind, target, action}` |
 
-### 3.5 Definition-of-Done for Phase 3
+Topic naming is `<area>.<verb>` (lower-snake). `<topic>.dlq` is reserved for dead-letter streams. Creating a new topic requires (a) a row in this table, (b) a JSON Schema in `ai/swarm/sdk/schemas/<topic>.json`, (c) a config-driven consumer-group prefix.
 
-- [ ] A trivial echo-agent (`agents/examples/echo.py`) starts in compose, registers, processes 1000 messages without leak.
-- [ ] `swarmctl ps` shows all running agents with green heartbeats.
-- [ ] Bus implementation can be swapped to a stub (`InMemoryBus`) for unit tests with no agent code change.
+### 3.6 Existing-agent migration (clarification)
+
+The `ai/swarm/source_watcher/` agent shipped in Phase 2.8 is **cron-driven** (its `scheduler.py` ticks on `cfg.source_watcher_interval_min`). It does **not** use the new SDK. It stays standalone through Phase 7 and migrates to the SDK in Phase 8 alongside its LLM-summarizer graduation. Phase 3 only adds *new* SDK-based agents; it does not retrofit existing ones.
+
+### 3.7 Definition-of-Done for Phase 3
+
+- [x] Echo agent (`ai/swarm/sdk/examples/echo.py`) consumes `echo.in`, publishes `echo.out` with payload echoed back, runs against `InMemoryBus` and `RedisStreamsBus` (latter requires `redis` service up).
+- [x] **Throughput / leak test:** agent processes **10 000** echo messages with `InMemoryBus` (in-process); after drain, RSS delta < 5 MB, pending count == 0, registry hash empty, all 10 000 messages observed at the publisher.
+- [x] **Crash-recovery test:** start an agent against `RedisStreamsBus`, kill the process mid-stream, restart it; all in-flight messages re-delivered exactly to the surviving consumer (at-least-once verified, no message lost).
+- [x] **DLQ test:** an agent that always raises sees `cfg.swarm_retry_budget` re-deliveries followed by exactly one entry in `<topic>.dlq`.
+- [x] **InMemoryBus parity:** the unit-test suite runs identically against `InMemoryBus` and (when `REDIS_HOST` resolves) `RedisStreamsBus`. CI uses `InMemoryBus` only — Redis-backed tests are opt-in via `NEGELIR_BUS_INTEGRATION=1`.
+- [x] `swarmctl ps` and `swarmctl topics` show the echo agent and `echo.in` / `echo.out` correctly.
+- [x] All seven config knobs from §3.3 surface in `xops/env/.env.example`, `ai/common/defaults.yaml`, and `ai/common/config.py`. Triangle test stays green.
+- [x] Component bumps: `ai` minor (SDK landed) and a **new** chart key `swarm_sdk` seeded at `0.1.0` *(or, post-R, the existing `swarm` key bumped accordingly)*.
 
 ---
 

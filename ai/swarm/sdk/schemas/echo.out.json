@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/echo.out",
+  "title": "echo.out",
+  "description": "Echo agent output topic. Phase 3 example payload.",
+  "type": "object",
+  "properties": {
+    "i": { "type": "integer", "minimum": 0 },
+    "echoed_by": { "type": "string" }
+  },
+  "required": ["echoed_by"],
+  "additionalProperties": true
+}
