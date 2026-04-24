@@ -12,8 +12,7 @@ from urllib.parse import urlparse
 
 # Env-var prefixes considered "owned" by the Python config layer.
 # Strict mode (`NEGELIR_STRICT=1`) refuses unknown keys with these prefixes.
-# `P2P_` is included so the deleted P2P stack errors loudly if reintroduced.
-_OWNED_ENV_PREFIXES: tuple[str, ...] = ("NEGELIR_", "SCRAPE_", "P2P_")
+_OWNED_ENV_PREFIXES: tuple[str, ...] = ("NEGELIR_", "SCRAPE_")
 
 # Pattern that captures every env-var name read via os.getenv in this module.
 _GETENV_RE = re.compile(r"""os\.getenv\(\s*["']([A-Z][A-Z0-9_]*)["']""")
@@ -27,6 +26,16 @@ def _declared_env_keys() -> frozenset[str]:
             return frozenset(_GETENV_RE.findall(fh.read()))
     except OSError:
         return frozenset()
+
+
+def _derive_default_season() -> str:
+    """Date-derived ``"YYYY-YYYY+1"`` fallback for :attr:`Config.default_season`.
+
+    Imported lazily to avoid a circular import with ``common.logger`` at
+    module-load time.
+    """
+    from common.season import current_season
+    return current_season()
 
 
 @dataclass
@@ -51,7 +60,10 @@ class Config:
 
     # Runtime defaults
     default_league_id: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_LEAGUE_ID", "super_lig"))
-    default_season: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_SEASON", "2025-2026"))
+    default_season: str = field(default_factory=lambda: (
+        os.getenv("NEGELIR_DEFAULT_SEASON")
+        or _derive_default_season()
+    ))
     mackolik_group_id: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MACKOLIK_GROUP_ID", "1")))
     mackolik_league_name_filter: str = field(default_factory=lambda: os.getenv("NEGELIR_MACKOLIK_LEAGUE_FILTER", "Süper Lig"))
 

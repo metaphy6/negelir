@@ -5,7 +5,7 @@
 ## 🎯 Why a swarm?
 
 A swarm is a **set of small, single-purpose processes coordinated by messages**.
-We picked it over P2P, over a monolith, and over a "microservices over HTTP"
+We picked it over a monolith and over a "microservices over HTTP"
 shape because:
 
 - Each agent is **easy to reason about** (one job, one input topic, one output topic).

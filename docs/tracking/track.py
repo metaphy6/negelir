@@ -29,7 +29,7 @@ Usage
     python3 docs/tracking/track.py show 0
     python3 docs/tracking/track.py add --phase 1 --status in-progress \\
         --note "started config audit"
-    python3 docs/tracking/track.py complete 0 --note "P2P removal landed"
+    python3 docs/tracking/track.py complete 0 --note "Phase 0 cleanup landed"
     python3 docs/tracking/track.py diverge 5 --note "swap NATS for Redis pubsub" \\
         --divergence "smaller blast radius for now"
     python3 docs/tracking/track.py export --format md > tracker.md

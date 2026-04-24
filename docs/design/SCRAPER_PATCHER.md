@@ -5,7 +5,7 @@
 > **Audience:** Anyone reviewing whether it's safe to let an AI agent
 > edit this repo, open PRs, and auto-merge them. If you're nervous,
 > this doc is for you.
-> **Doctrine:** AGENTS.md §2 rules 1, 3, 4, 5, 7, 8, 10.
+> **Doctrine:** AGENTS.md §2 rules 1, 3, 4, 5, 7, 8, 9.
 > **Sibling docs:** [`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md),
 > [`DATA_SOURCE.md`](DATA_SOURCE.md),
 > [`CONTENT_FRESHNESS.md`](CONTENT_FRESHNESS.md),
@@ -45,7 +45,7 @@ loop has guardrails. Those guardrails are the point of this doc.
 6. **Post-merge regression triggers auto-revert.** If the first 24 h
    after merge show >5 % parity-test regression, the `gitops`
    worker opens a revert PR immediately and pages a human.
-7. **`git` is AI-restricted** (AGENTS.md §2 rule 10) for normal
+7. **`git` is AI-restricted** (AGENTS.md §2 rule 9) for normal
    agents. The `gitops` worker is the *only* AI component granted
    git capabilities, scoped via a narrow GitHub App token with zero
    access outside the Negelir repo.

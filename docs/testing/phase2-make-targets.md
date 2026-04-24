@@ -125,7 +125,7 @@ the nginx container IP (`172.18.0.3` in this session).
 
 **Symptom:** `mocksrv` 404 responses emitted:
 `"run \`make mock.capture\` (HUMAN-ONLY) to refresh seeds"`.
-Outdated per AGENTS.md §2 rule #10 (only git is AI-restricted).
+Outdated per AGENTS.md §2 rule #9 (only git is AI-restricted).
 
 **Fix:** [server/cmd/mocksrv/main.go](../../server/cmd/mocksrv/main.go#L163)
 — dropped the parenthetical.

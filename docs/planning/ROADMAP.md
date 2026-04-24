@@ -342,7 +342,7 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
 ### 2.4 Seed corpus
 
 - [x] `infra/mock/seeds/` holds **frozen** captures: `*.html`, `*.json`, response headers (sibling `<file>.headers.json`), status codes. Seeded for all 4 sources on 2026-04-20.
-- [x] `xops/mock/capture_engine.py` + `xops/makefile/mock.py::capture` perform rate-limited captures (1.5s inter-request delay; only declared paths, no crawling). Agent-runnable per AGENTS.md §2 #10; only git ops remain AI-restricted.
+- [x] `xops/mock/capture_engine.py` + `xops/makefile/mock.py::capture` perform rate-limited captures (1.5s inter-request delay; only declared paths, no crawling). Agent-runnable per AGENTS.md §2 #9; only git ops remain AI-restricted.
 - [x] nginx serves seeds via `mocksrv` upstream (manifest-keyed `(host, path)` routing; `try_files`-style exact-match — no lua needed since mocksrv handles path logic in Go).
 - [x] `infra/mock/seeds/manifest.json` records per entry: source URL, capture date, sha256, byte size, status, content_type. Re-generated atomically by `capture_all()`.
 
@@ -675,13 +675,12 @@ The point of a swarm is to *disagree well*. Initial roster:
 - [ ] In compose: invokes `docker compose up -d --scale <svc>=N`. In K8s: patches Deployment replicas via the in-cluster API.
 - [ ] **Hard caps** from config to prevent runaway in cloud (`cfg.max_replicas_per_agent`).
 
-### 8.3 Auto-coder agent (`maint.coder.v1`) — *opt-in, isolated*
+### 8.3 Auto-coder agent — *moved to Phase 17*
 
-- [ ] **Disabled by default.** Enable with `NEGELIR_AUTOCODER=1`.
-- [ ] Scope: only `scraper/parsers/*.py`, only against `proof.flag{kind:parse_failed}` cases the schema-healer couldn't fix.
-- [ ] Generates a candidate patch using a small local code-LLM (e.g. `qwen2.5-coder-1.5b` or `starcoder2-3b`) on the GPU.
-- [ ] Patch is tested in a sandboxed container against the failing seed; only commits if **(a)** the new test passes, **(b)** the existing test suite still passes, **(c)** the diff stays under `cfg.autocoder_max_diff_lines`.
-- [ ] Always opens a PR — never pushes to main directly.
+> **Pivot v3 (2026-04-20).** Auto-coding is owned by `datasource/patcher/` and
+> scoped to scraper failures only. Spec: [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md).
+> Roadmap milestone: **Phase 17 — Auto-Patching Scraper**. The
+> standalone `maint.coder.v1` agent is dropped.
 
 ### 8.4 Backup / retention agent (`maint.backup.v1`)
 
@@ -1083,7 +1082,7 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 
 - [ ] Zero CI warnings of the form `"DeprecationWarning: ai.* import is a Pivot v3 shim"`.
 - [ ] `ai/` directory removed (along with its empty `__init__.py`). Single commit with a reassuring message.
-- [ ] `test_ai_tree_gone.py` — asserts the path does not exist; prevents accidental recreation (compare: the P2P regression test).
+- [ ] `test_ai_tree_gone.py` — asserts the path does not exist; prevents accidental recreation.
 
 ### 18.3 Compose cohesion (R4)
 
@@ -1108,7 +1107,18 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 
 ## 🏗️ Phase R — Restructure Track (Production Pivot v3)
 
-**Goal:** Move the code without breaking anything. Runs in parallel with Phases 3–8. Each sub-phase is individually reversible.
+**Goal:** Move the code without breaking anything.
+
+> **Sequencing — stop-the-world (2026-04-20).** Earlier drafts of this
+> roadmap suggested R1–R5 could "run in parallel with Phases 3–8". That
+> turns out to be unrealistic: every Phase 3+ feature ships into one of
+> the four target components (`server/`, `datasource/`, `swarm/`,
+> `common/`) and would have to be rewritten mid-flight if the layout
+> shifts under it. **R1–R5 must run as a single stop-the-world sprint
+> (no concurrent feature work) inserted between Phase 2 and Phase 3, or
+> — if explicitly deferred — between Phase 5 and Phase 6.** Estimated
+> 1–2 weeks of focused work. Each sub-phase is individually reversible
+> within the sprint.
 **Anchor doc:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 7.
 
 ### R1 — Rename + path aliases

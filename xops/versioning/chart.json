@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 29,
+    "build": 31,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-04-20T00:00:00+00:00"
+      "last_changed": "2026-04-24T12:26:53+00:00"
     },
     "server": {
       "version": "1.2.4",
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.6.3",
+      "version": "1.7.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-20T17:36:35+00:00"
+      "last_changed": "2026-04-24T12:26:53+00:00"
     },
     "infra_mock": {
       "version": "1.4.1",
@@ -37,6 +37,46 @@
       "version": "1.4.0",
       "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
       "last_changed": "2026-04-20T09:43:24+00:00"
+    },
+    "datasource_scraper": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) Scraper component — fetches bytes from real or mock upstreams. R2 scaffold.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "datasource_watcher": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) Source-watcher (renamed from source_watcher in R1). R2 scaffold.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "datasource_refresher": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) Content-freshness agent (per-Record change detection). R3 scaffold.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "datasource_patcher": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) Auto-patching scraper. R3 scaffold; gated by NEGELIR_PATCHER=1.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "datasource_gitops": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) PR driver + auto-merge policy. R3 scaffold.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "datasource_emitter": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) Projects DB/Redis state into NDJSON+Parquet feeds. R3 scaffold.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "swarm": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
+    },
+    "common": {
+      "version": "0.1.0",
+      "description": "(Pivot v3) Shared libraries — config schema, Record envelope, feed manifests, bus SDK.",
+      "last_changed": "2026-04-24T12:23:53+00:00"
     }
   },
   "changelog": [
@@ -435,6 +475,33 @@
       "from": "1.6.2",
       "to": "1.6.3",
       "build": 29
+    },
+    {
+      "timestamp": "2026-04-24T12:23:53+00:00",
+      "component": "chart",
+      "level": "seed",
+      "note": "Pivot v3 R1: seeded 8 new component keys at 0.1.0 (datasource_scraper, datasource_watcher, datasource_refresher, datasource_patcher, datasource_gitops, datasource_emitter, swarm, common)",
+      "from": null,
+      "to": "0.1.0",
+      "build": 29
+    },
+    {
+      "timestamp": "2026-04-24T12:26:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "default_season is date-derived (common.season.current_season, July rollover)",
+      "from": "1.0.0",
+      "to": "1.0.1",
+      "build": 30
+    },
+    {
+      "timestamp": "2026-04-24T12:26:53+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Pivot v3 cleanup: P2P deprecation finalized; R-track stop-the-world; Phase 8.3 -> Phase 17 collapse; isolation tests AST clarification",
+      "from": "1.6.3",
+      "to": "1.7.0",
+      "build": 31
     }
   ]
 }

@@ -63,8 +63,7 @@ Every PR, every diff, every agent run must respect them:
 | 6 | **Turkish UX, English infra** | User-facing text & AI input/output in Turkish. Code, comments, log messages, metric names, config keys in English. |
 | 7 | **Adversarial tests are first-class** | Every public surface (HTTP, bus topic, scrape callback) needs at least one fuzzing / injection / chaos test. |
 | 8 | **Phase gates** | A phase ships only when its checklist in `ROADMAP.md` and the matching DoD in Appendix B are fully green. |
-| 9 | **No P2P revival** | The P2P stack was deleted in Phase 0. The regression test `ai/tests/test_config_sync.py::test_p2p_module_removed` will fail if `p2p/` reappears. The replacement is the swarm-AI architecture (Phase 3+). |
-| 10 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. All other tooling — including `make mock.capture` which hits real upstreams, `make mock.up`/`mock.down`, running tests, invoking `docker compose`, rendering certs, **and the dev-stack provisioning targets that require root (`make hosts.install`, `make hosts.uninstall`, `make mock.trust`, `make mock.untrust`, `make mock.setup`)** — is open for agent use. Those four mock-stack targets are the only sanctioned `sudo` callers; they are scoped to writing `/etc/hosts` and to installing the local dev root CA into the system trust store, both of which are reversible by their `*.uninstall`/`*.untrust` counterparts. Anything beyond that allow-list (system package installs, service restarts, anything outside `infra/mock/`) still defers to the user. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
+| 9 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. All other tooling — including `make mock.capture` which hits real upstreams, `make mock.up`/`mock.down`, running tests, invoking `docker compose`, rendering certs, **and the dev-stack provisioning targets that require root (`make hosts.install`, `make hosts.uninstall`, `make mock.trust`, `make mock.untrust`, `make mock.setup`)** — is open for agent use. Those four mock-stack targets are the only sanctioned `sudo` callers; they are scoped to writing `/etc/hosts` and to installing the local dev root CA into the system trust store, both of which are reversible by their `*.uninstall`/`*.untrust` counterparts. Anything beyond that allow-list (system package installs, service restarts, anything outside `infra/mock/`) still defers to the user. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
 
 ---
 
@@ -188,9 +187,6 @@ Use this loop for every non-trivial change:
   `xops/makefile/`. (2) Add `cmd_<target>(argv)` and register it in that
   module's `COMMANDS` dict. (3) Add a one-line Make target that calls
   `@$(XOPS)/<module>.py <target>`. (4) Confirm via `make help`.
-- **No P2P, peers (in network sense), gossip, or multicast** in new code
-  outside the regression test. The word `peer` is reused in the swarm
-  agent context and is fine there.
 - **Phase 2 mock-data discipline.** All scrapers in dev / CI must
   resolve to the mock vhosts (`mackolik.local`, `nesine.local`,
   `tff.local`, `openfootball.local`) via `NEGELIR_SCRAPE_PROFILE=mock`.

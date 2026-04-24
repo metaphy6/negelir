@@ -48,7 +48,7 @@ xops/mock/                    # automation lives under xops/ per AGENTS.md §5
   - `nginx-mock` (terminates TLS).
   - Every Python image: appended to `/etc/ssl/certs/ca-certificates.crt` via `update-ca-certificates` in the entrypoint.
   - Every Go image: same. (Go reads system roots.)
-- **Host trust is opt-in.** `make mock.trust` (and its inverse `make mock.untrust`) install the dev CA into the host trust store via `sudo` — the only sanctioned `sudo` callers per AGENTS.md §2 rule 10. Without it, browsers / `curl` from the host won't trust the CA — by design.
+- **Host trust is opt-in.** `make mock.trust` (and its inverse `make mock.untrust`) install the dev CA into the host trust store via `sudo` — the only sanctioned `sudo` callers per AGENTS.md §2 rule 9. Without it, browsers / `curl` from the host won't trust the CA — by design.
 
 ## 🪪 Hostnames
 

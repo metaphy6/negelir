@@ -41,7 +41,9 @@ ai:
 # ── Runtime defaults (league + season identity) ──────────────────────────────
 runtime:
   default_league_id: super_lig            # NEGELIR_DEFAULT_LEAGUE_ID
-  default_season: "2025-2026"             # NEGELIR_DEFAULT_SEASON
+  # default_season is date-derived (common.season.current_season, July rollover)
+  # when the env var is unset/empty; pin explicitly only to override.
+  default_season: ""                      # NEGELIR_DEFAULT_SEASON
   mackolik_group_id: 1                    # NEGELIR_MACKOLIK_GROUP_ID
   mackolik_league_name_filter: "Süper Lig" # NEGELIR_MACKOLIK_LEAGUE_FILTER
 

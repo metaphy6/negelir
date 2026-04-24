@@ -6,7 +6,7 @@ This is the **primary** training surface. It owns the 6-stage flow
 `ReportArtifact`. The orchestrator state machine only *observes* this
 pipeline via callbacks — it does not drive it.
 
-The legacy P2P-simulation and ensemble stages were removed in the Phase 0
+The legacy simulation and ensemble stages were removed in the Phase 0
 Swarm Pivot; their swarm-based replacement lives in roadmap Phase 5.
 
 See docs/planning/ROADMAP.md for design rationale.

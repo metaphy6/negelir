@@ -262,12 +262,22 @@ Invariants:
 
 These three invariants are enforced by three CI tests:
 
-- `common/tests/test_swarm_isolation.py` — grep-based check that no
-  file under `swarm/` imports `psycopg` / `requests` / `datasource.*`.
+- `common/tests/test_swarm_isolation.py` — asserts no file under
+  `swarm/` imports `psycopg` / `requests` / `datasource.*`.
 - `common/tests/test_datasource_isolation.py` — no file under
   `datasource/` imports `fastapi` / `flask` / `swarm.*`.
 - `common/tests/test_server_isolation.py` — no file under `server/`
   contains `XGBoost` / `torch` imports (Go only).
+
+> **Implementation note.** The Python isolation tests use **AST-based
+> import-graph analysis** (`ast.walk` over each component's `*.py`,
+> collecting `Import` / `ImportFrom` nodes and checking against an
+> explicit per-component allow-list), not naïve `grep`. Grep is too
+> brittle here: `common/bus/` legitimately depends on Redis, and
+> several `swarm/` agents legitimately import `common.bus.*` —
+> distinctions that string matching cannot make. The Go isolation
+> test (`server/`) uses `go list -deps` to walk module imports
+> rather than grepping source.
 
 ---
 

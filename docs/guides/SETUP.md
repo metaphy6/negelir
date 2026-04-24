@@ -97,7 +97,7 @@ git diff infra/mock/seeds/manifest.json  # review what changed
 ```
 
 > Captures land as a separate commit, ideally reviewed for shape changes before merging.
-> AGENTS.md §2 rule 10 allows AI assistants to invoke `make mock.capture`;
+> AGENTS.md §2 rule 9 allows AI assistants to invoke `make mock.capture`;
 > only `git` itself stays human-only.
 
 ## 8. Troubleshooting

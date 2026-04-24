@@ -116,14 +116,6 @@ def test_ai_config_validate_passes_with_defaults() -> None:
     assert issues == [], f"Default Config has validation issues: {issues}"
 
 
-def test_p2p_module_removed() -> None:
-    """Phase 0 swarm pivot: p2p/ directory must stay deleted."""
-    assert not (REPO_ROOT / "p2p").exists(), (
-        "p2p/ directory was removed in Phase 0 — do not re-introduce it. "
-        "The swarm replacement lives under roadmap Phase 5+."
-    )
-
-
 def test_ai_config_strict_validate_raises_on_bad_value(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strict validation must raise on out-of-range values."""
     from common.config import Config

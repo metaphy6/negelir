@@ -1,6 +1,6 @@
 -- Phase 7: Schema snapshots for adaptive scraper intelligence
 -- Stores successful scrape→field mappings as training data
--- and discovered schemas pending/adopted from P2P gossip.
+-- and discovered schemas pending/adopted by the source-watcher / patcher.
 
 CREATE TABLE IF NOT EXISTS schema_snapshots (
     id              SERIAL PRIMARY KEY,

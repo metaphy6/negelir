@@ -1738,6 +1738,61 @@ class TestCurrentSeasonRemoved:
         assert not hasattr(c, "CURRENT_SEASON"), "CURRENT_SEASON should be removed"
 
 
+class TestSeasonRollover:
+    """`current_season()` must derive the season label from a date so the
+    bootstrap default never silently misclassifies fixtures across the
+    summer rollover (C1 follow-up to repo audit, 2026-04-24)."""
+
+    def test_winter_returns_current_season(self):
+        from datetime import date
+        from common.season import current_season
+        assert current_season(date(2026, 4, 24)) == "2025-2026"
+
+    def test_summer_rollover_to_new_season(self):
+        from datetime import date
+        from common.season import current_season
+        # July 1 is the rollover boundary by default
+        assert current_season(date(2026, 6, 30)) == "2025-2026"
+        assert current_season(date(2026, 7, 1)) == "2026-2027"
+
+    def test_following_spring_stays_in_same_season(self):
+        from datetime import date
+        from common.season import current_season
+        assert current_season(date(2027, 4, 24)) == "2026-2027"
+
+    def test_custom_rollover_month(self):
+        from datetime import date
+        from common.season import current_season
+        # August rollover (some leagues): June stays in old season
+        assert current_season(date(2026, 7, 31), rollover_month=8) == "2025-2026"
+        assert current_season(date(2026, 8, 1), rollover_month=8) == "2026-2027"
+
+    def test_invalid_rollover_month_raises(self):
+        import pytest
+        from common.season import current_season
+        with pytest.raises(ValueError):
+            current_season(rollover_month=0)
+        with pytest.raises(ValueError):
+            current_season(rollover_month=13)
+
+    def test_config_default_season_is_date_derived_when_env_unset(self, monkeypatch):
+        from common.config import Config
+        from common.season import current_season
+        monkeypatch.delenv("NEGELIR_DEFAULT_SEASON", raising=False)
+        assert Config().default_season == current_season()
+
+    def test_config_default_season_empty_env_falls_back_to_derived(self, monkeypatch):
+        from common.config import Config
+        from common.season import current_season
+        monkeypatch.setenv("NEGELIR_DEFAULT_SEASON", "")
+        assert Config().default_season == current_season()
+
+    def test_config_default_season_env_override_wins(self, monkeypatch):
+        from common.config import Config
+        monkeypatch.setenv("NEGELIR_DEFAULT_SEASON", "2099-2100")
+        assert Config().default_season == "2099-2100"
+
+
 
 
 class TestNegelirScheduler:

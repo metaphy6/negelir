@@ -5,7 +5,6 @@ on:
   pull_request:
     paths:
       - "ai/**"
-      - "p2p/**"
       - "Makefile"
       - ".github/workflows/phase2-real-data-bootstrap.yml"
 

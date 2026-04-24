@@ -14,11 +14,9 @@
 
 ## 📌 Status
 
-The project is undergoing the **Swarm Pivot** (`v2.0.0`). The legacy P2P
-network has been removed and is being replaced with a swarm of single-purpose
-agents coordinated through a message bus. See
-[`docs/planning/ROADMAP.md`](docs/planning/ROADMAP.md) for the full plan and
-[`docs/tracking/phases.csv`](docs/tracking/phases.csv) for live phase status.
+Active development. See [`docs/planning/ROADMAP.md`](docs/planning/ROADMAP.md)
+for the full plan and [`docs/tracking/phases.csv`](docs/tracking/phases.csv)
+for live phase status.
 
 | Phase | Title | Status |
 |---|---|---|
@@ -108,7 +106,7 @@ make bootstrap LEAGUE=super_lig    # one-time real-data scrape + validate
 make train      LEAGUE=super_lig   # 6 stages: scrape → validate → split → train → verify → report
 ```
 
-The legacy P2P / ensemble stages are gone; the swarm-based predictor mesh
+The legacy ensemble stages are gone; the swarm-based predictor mesh
 will replace them in Phase 5.
 
 ### 4. Tests

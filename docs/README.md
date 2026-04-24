@@ -5,9 +5,8 @@
 > reasons, predicts and answers in **natural Turkish** — runnable on a laptop,
 > scalable to a cloud cluster.
 
-This documentation tree was reset on **2026-04-19** as part of the
-**Swarm Pivot** (P2P removed → Swarm-AI Agents introduced).
-There are no archives — the canonical, current plan lives here.
+This documentation tree was reset on **2026-04-19**. There are no archives —
+the canonical, current plan lives here.
 
 ---
 
@@ -84,7 +83,6 @@ docs/
 
 ## 🚫 What This Project Is **Not**
 
-- ❌ A P2P / gossip network — *removed in the 2026-04-19 Swarm Pivot.*
 - ❌ A production-grade secret-management showcase — local/experimental scope only.
 - ❌ A frontend — Flutter web/mobile is a **future** workstream.
 - ❌ An "everything is an LLM" system — most agents are deterministic or use ≤ 100 MB models.

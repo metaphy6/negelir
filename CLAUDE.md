@@ -160,7 +160,7 @@ that apply to you in this harness:
   strings stay Turkish if they already are.
 - **Rule 7 — Adversarial tests are first-class.** If you add a new
   parser branch, add a test that exercises it.
-- **Rule 10 — Git is AI-restricted.** You do not run `git`. The
+- **Rule 9 — Git is AI-restricted.** You do not run `git`. The
   `gitops` worker handles all git operations.
 
 ---

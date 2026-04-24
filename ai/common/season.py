@@ -1,13 +1,40 @@
 """
 Negelir — Season state machine.
 Phase 2: Replaces hardcoded CURRENT_SEASON with live detection.
+
+Also exposes :func:`current_season` — a date-derived "YYYY-YYYY+1"
+fallback used wherever live season discovery has not yet run (e.g. as
+the bootstrap default for :data:`Config.default_season`). The cutover
+month defaults to July, which matches the Northern-Hemisphere league
+boundary the seeded preset (TR Süper Lig) and every European preset
+in [`league_config.py`](league_config.py) follows.
 """
 
+from datetime import date
 from enum import Enum
 
 from common.logger import get_logger
 
 log = get_logger("common.season")
+
+
+def current_season(today: date | None = None, rollover_month: int = 7) -> str:
+    """Return the current season label as ``"YYYY-YYYY+1"`` from a date.
+
+    Args:
+        today: Reference date. Defaults to today's UTC date.
+        rollover_month: First month of the new season (1–12). July (7)
+            matches every league preset shipped today.
+
+    Returns:
+        Season label, e.g. ``"2026-2027"`` for any date on or after
+        ``rollover_month/1`` of 2026 and before that date in 2027.
+    """
+    if not 1 <= rollover_month <= 12:
+        raise ValueError(f"rollover_month must be 1..12, got {rollover_month}")
+    ref = today or date.today()
+    start_year = ref.year if ref.month >= rollover_month else ref.year - 1
+    return f"{start_year}-{start_year + 1}"
 
 
 class SeasonState(Enum):
