@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 44,
+    "build": 45,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.1.2",
+      "version": "1.1.3",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-04-24T14:23:55+00:00"
+      "last_changed": "2026-04-28T09:04:56+00:00"
     },
     "server": {
       "version": "1.3.0",
@@ -619,6 +619,15 @@
       "from": "1.4.1",
       "to": "1.4.2",
       "build": 44
+    },
+    {
+      "timestamp": "2026-04-28T09:04:56+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 3 audit: extend _OWNED_ENV_PREFIXES to SWARM_; strict mode now catches SWARM_* typos; defaults.yaml triangle test enforces SWARM_ family too",
+      "from": "1.1.2",
+      "to": "1.1.3",
+      "build": 45
     }
   ]
 }

@@ -254,7 +254,7 @@ def test_defaults_yaml_mentions_every_documented_tunable() -> None:
     yml_mentions = set(re.findall(r"\b([A-Z][A-Z0-9_]{3,})\b", yml_body))
     must = {
         k for k in _env_example_keys()
-        if k.startswith(("NEGELIR_", "SCRAPE_"))
+        if k.startswith(("NEGELIR_", "SCRAPE_", "SWARM_"))
     }
     missing = sorted(must - yml_mentions - _DEFAULTS_YAML_OPTIONAL)
     assert not missing, (

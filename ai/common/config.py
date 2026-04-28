@@ -12,7 +12,10 @@ from urllib.parse import urlparse
 
 # Env-var prefixes considered "owned" by the Python config layer.
 # Strict mode (`NEGELIR_STRICT=1`) refuses unknown keys with these prefixes.
-_OWNED_ENV_PREFIXES: tuple[str, ...] = ("NEGELIR_", "SCRAPE_")
+# `SWARM_` was added in Phase 3 (§3.3 DoD: triangle test stays green for
+# the 9 SDK knobs); a typo like `SWARM_HEARTBEET_SEC` must surface, not
+# silently fall through to the dataclass default.
+_OWNED_ENV_PREFIXES: tuple[str, ...] = ("NEGELIR_", "SCRAPE_", "SWARM_")
 
 # Pattern that captures every env-var name read via os.getenv in this module.
 _GETENV_RE = re.compile(r"""os\.getenv\(\s*["']([A-Z][A-Z0-9_]*)["']""")
