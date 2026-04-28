@@ -157,12 +157,17 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 | **10** | Turkish-First NLP Layer | TR input understood, TR output generated, dialect/typo tolerant | 5 |
 | **11** | GPU/CPU/NPU Compute Strategy | RTX 4080m first, CPU + Intel/AMD NPU fallback | 5 |
 | **12** | Adversarial & Chaos Test Suite | Fuzz / inject / chaos in CI | 7, 9 |
-| **13** | Multi-League Preset Expansion | Pre-configured `LeagueConfig` presets for top European leagues + cups (architecture is already league-agnostic from Phase 4) | 4 |
+| **13a** | League + Competition Expansion — Top-5 EU + UEFA + WC/EURO | T1 leagues (top-5 EU + TR), domestic cups + super cups, UEFA UCL/UEL/UECL, FIFA WC, UEFA EURO + qualifiers, Nations League. Per [`design/COMPETITIONS.md`](../design/COMPETITIONS.md) + [`design/LEAGUE_CATALOG.md`](../design/LEAGUE_CATALOG.md). | 4 |
+| **13b** | League Expansion — +10 popular leagues + their cups | Primeira Liga, Eredivisie, Pro League, TR Lig 1, Brasileirão, Liga Profesional Argentina, Liga MX, MLS, J1, K League 1 (each starts T2; promotes to T1 per readiness gate). | 13a |
+| **13c** | Continental + Completeness | CONMEBOL Libertadores/Sudamericana/Recopa, AFC + CAF Champions Leagues, FIFA Club WC + Intercontinental, Copa América/AFCON/Asian Cup/Gold Cup, all WC qualifier confederations. | 13b |
 | **14** | Cloud-Ready Packaging | Docker → K8s manifests, CSP-agnostic | 9 |
 | **15** | Frontend Handoff (Flutter) | API contract frozen, sample client | 9 |
 | **16** | **Emitter & Feed Contract** *(Pivot v3)* | DB/Redis state → NDJSON/Parquet feeds; swarm stops reading DB | R2 |
 | **17** | **Scraper-Patcher + GitOps** *(Pivot v3)* | Auto-patching scraper with 5-gate 7-day auto-merge | 16, R3 |
 | **18** | **Datasource Cohesion & Swarm Isolation** *(Pivot v3)* | Three-way isolation tests green; `ai/` tree deleted | 16, 17, R4 |
+| **19** | **Global Catalog (deferred long-tail)** | Pluggable catalog architecture for every league listed on mackolik/nesine + every WC qualifier confederation. T3 (research) rows added now; promotion to T2/T1 deferred per business demand. | 13c |
+| **20** | **Monetization (built-but-dormant)** | Tier-based entitlement engine + per-token quotas at the Go API. `MONETIZATION_ENABLED=false` default; flips on via single config change. Per [`design/MONETIZATION.md`](../design/MONETIZATION.md). | 9, 13a |
+| **21** | **Enrichment Data Planes** | Add planes 6-9 (transfers, injuries/availability, referees, weather/pitch) + four derived views (market-movement, fixture-congestion, card-context, narrative-pressure). Per [`design/ENRICHMENT_DATA.md`](../design/ENRICHMENT_DATA.md). | 4, 6 |
 | **R1–R6** | **Restructure Track** *(Pivot v3)* | Rename chart keys; move modules; absorb mock into `server`; delete shims; collapse config triangle | 2, stop-the-world (no parallel feature work) |
 
 ```
@@ -173,7 +178,11 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
                           ├─→ 11 ┤
                           └─→ 12 ┘
                           │
-                          └─→ 13 (parallel)
+                          └─→ 13a ─→ 13b ─→ 13c ─→ 19 (parallel)
+                          │
+                          └─→ 21 (parallel; needs 4)
+                          │
+                                  9 ─→ 20
 ```
 
 ---
@@ -882,33 +891,89 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 
 ---
 
-## 🌍 Phase 13 — Multi-League Preset Expansion
+## 🌍 Phase 13 — League + Competition Expansion (split into 13a / 13b / 13c)
 
-**Goal:** Ship pre-tuned `LeagueConfig` presets for the top European leagues and major cups. The architecture is **already league-agnostic** — every agent in Phases 4–12 reads `LeagueConfig` rather than hardcoding any league. This phase only adds *data* (presets, calibration tables, lexicons), not code branches.
-**Depends on:** Phase 4
+**Goal:** Grow from one league (TR Süper Lig) to a globally-meaningful roster. The architecture is **already league-agnostic** — every agent reads `LeagueConfig` + the new `CompetitionConfig` rather than hardcoding. This phase only adds *data* (presets, calibration profiles, lexicons, source seeds), not code branches.
 
-> ℹ️ The seeded default since v2.0.0 is the **Turkish Süper Lig** (`tr_super_lig`, alias `super_lig`). Presets below are added as new entries in `ai/common/league_config.py::LEAGUE_CONFIGS`; no scraper / predictor / proofreader code changes.
+**Anchor docs (binding):** [`design/LEAGUE_CATALOG.md`](../design/LEAGUE_CATALOG.md) (T1/T2/T3 tiers + readiness gates), [`design/COMPETITIONS.md`](../design/COMPETITIONS.md) (cup/tournament shapes + calibration profiles), [`design/ENRICHMENT_DATA.md`](../design/ENRICHMENT_DATA.md) (planes 6-9 needed for cards/player markets).
 
-### 13.1 League preset roster (initial)
+> ℹ️ The seeded default since v2.0.0 is the **Turkish Süper Lig** (`tr_super_lig`). All other leagues land via the catalog file `ai/common/league_catalog.yaml` + per-league preset modules under `ai/common/leagues/<league_id>.py` (LEAGUE_CATALOG.md §6).
+
+### 13a — Top-5 EU + TR + UEFA + WC/EURO (foundation expansion)
+
+**Domestic leagues (T1):**
 
 - [x] 🇹🇷 Süper Lig — *seeded default since v2.0.0*
-- [ ] 🇬🇧 Premier League
+- [ ] 🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League
 - [ ] 🇪🇸 La Liga
 - [ ] 🇩🇪 Bundesliga
 - [ ] 🇮🇹 Serie A
 - [ ] 🇫🇷 Ligue 1
-- [ ] 🇪🇺 Champions League (knockout) — knockout-aware features
 
-### 13.2 LeagueConfig hardening
+**Domestic cups + super cups (T2 → T1 after beta):**
 
-- [ ] Per-league: home-advantage Elo, Dixon-Coles ρ, calibration table, lexicon overrides.
-- [ ] Aliases (`super_lig` → `tr_super_lig`) preserved.
-- [ ] Per-source URL templates live in `LeagueConfig.scrape_endpoints` (already partially modelled today via `openfootball_path` / `footballdata_country`).
+- [ ] 🇹🇷 Türkiye Kupası, TFF Süper Kupa
+- [ ] 🏴󠁧󠁢󠁥󠁮󠁧󠁿 FA Cup, EFL Cup, Community Shield
+- [ ] 🇪🇸 Copa del Rey, Supercopa de España
+- [ ] 🇩🇪 DFB-Pokal, DFL-Supercup
+- [ ] 🇮🇹 Coppa Italia, Supercoppa Italiana
+- [ ] 🇫🇷 Coupe de France, Trophée des Champions
 
-### 13.3 NLP per league
+**Continental club (T2):**
 
-- [ ] Foreign team names get TR transliteration: "Real Madrid" → "Real Madrid", "Bayern" → "Bayern Münih" with both forms accepted on input.
-- [ ] Entity extraction lexicons are *per league*, merged at runtime.
+- [ ] 🇪🇺 UEFA Champions League (qualifying + league phase + knockout)
+- [ ] 🇪🇺 UEFA Europa League (qualifying + league phase + knockout)
+- [ ] 🇪🇺 UEFA Conference League
+- [ ] 🇪🇺 UEFA Super Cup (one-off)
+
+**International (T2):**
+
+- [ ] 🌍 FIFA World Cup (group + knockout)
+- [ ] 🇪🇺 UEFA EURO Championship (group + knockout)
+- [ ] 🌍 WC qualifiers (UEFA confederation)
+- [ ] 🇪🇺 EURO qualifiers
+- [ ] 🇪🇺 UEFA Nations League
+
+**Cross-cutting (one-time platform work to enable 13a/b/c):**
+
+- [ ] `ai/common/league_catalog.yaml` schema + loader committed.
+- [ ] `CompetitionConfig` + `CompetitionStage` types per `COMPETITIONS.md` §2.
+- [ ] `FixturePayloadV2` lands with `competition_id`/`format`/`stage_id`/`leg_index`/`venue_policy` per `COMPETITIONS.md` §3.
+- [ ] CalibrationProfile resolution per `COMPETITIONS.md` §4.5.
+- [ ] Per-league `LeagueConfig` modules under `ai/common/leagues/<league_id>.py` (LEAGUE_CATALOG.md §6).
+- [ ] Tier promotion gate `xops/leagues/readiness.py` (LEAGUE_CATALOG.md §2).
+- [ ] `make test.leagues` target (LEAGUE_CATALOG.md §8).
+
+### 13b — +10 most popular non-Top-5 leagues (T2)
+
+Each starts at T2 (publicly available with widened CI) and promotes to T1 once the readiness gate passes (LEAGUE_CATALOG.md §2.2). Headline domestic cups land alongside their league.
+
+- [ ] 🇵🇹 Primeira Liga
+- [ ] 🇳🇱 Eredivisie
+- [ ] 🇧🇪 Pro League
+- [ ] 🇹🇷 TR Lig 1 (2nd tier — required for Türkiye Kupası identity resolution)
+- [ ] 🇧🇷 Brasileirão Série A
+- [ ] 🇦🇷 Liga Profesional Argentina
+- [ ] 🇲🇽 Liga MX
+- [ ] 🇺🇸 MLS
+- [ ] 🇯🇵 J1 League
+- [ ] 🇰🇷 K League 1
+
+### 13c — Continental + Completeness pass
+
+- [ ] 🌎 CONMEBOL Libertadores, Sudamericana, Recopa
+- [ ] 🌏 AFC Champions League Elite + Two
+- [ ] 🌍 CAF Champions League
+- [ ] ⚽ FIFA Club World Cup
+- [ ] ⚽ FIFA Intercontinental Cup
+- [ ] 🌎 Copa América, AFCON, Asian Cup, Gold Cup
+- [ ] 🌍 WC qualifiers (all confederations not in 13a)
+
+### 13.x NLP per league (cross-cutting; applies to a/b/c)
+
+- [ ] Foreign team names get TR transliteration ("Bayern" → "Bayern Münih" with both forms accepted).
+- [ ] Entity-extraction lexicons per league, merged at runtime.
+- [ ] Phase 10 `transfer_lookup`/`injury_lookup`/`referee_lookup`/`weather_lookup`/`suspension_lookup` intents land alongside `13a` (see Phase 21).
 
 ---
 
@@ -1145,7 +1210,165 @@ client → API gateway → JWT verify → rate-limit (sec.rate.v1)
 
 ---
 
-## 🏗️ Phase R — Restructure Track (Production Pivot v3)
+## � Phase 19 — Global Catalog (deferred long-tail)
+
+**Goal:** Per user directive #6 — *"add all the football leagues like Korean or Brazilian that're listed on mackolik.com and nesine.com alongside world cups (eliminations and championships) … not implementing it yet but revise and set the system ready for such change."* Phase 19 makes the long-tail addition a **single YAML edit per league** with zero platform changes.
+
+**Anchor doc:** [`design/LEAGUE_CATALOG.md`](../design/LEAGUE_CATALOG.md) §5.
+
+### 19.1 Catalog-pluggable architecture (delivered with 13a; verified here)
+
+- [ ] Unit test: AST scan of `ai/` and `server/` rejects any `if league_id == "..."` literal — every league branch reads `league_catalog.yaml`.
+- [ ] T3 has zero maintenance cost when empty: no predictor retraining, no NLP gazetteer hit, no monetization SKU.
+- [ ] Identity strategy stays generic — `stable_id` minting in `CONTENT_FRESHNESS.md` §2 does not bake in any country list.
+- [ ] Source-registry pluggable — adding a new long-tail-league source is a `xops/mock/sources.py` row + extractor + differ; no pipeline changes.
+
+### 19.2 Long-tail ingest (deferred batches; pulled when business demand justifies)
+
+- [ ] Per-batch process: capture seeds → add a T3 row to `league_catalog.yaml` → backtest → promote per LEAGUE_CATALOG.md §2. **No platform changes per league.**
+- [ ] Initial deferred targets: every league listed on mackolik.com bulletin pages + every league on nesine.com that has odds coverage + every WC qualifier confederation not in 13a/c.
+- [ ] Catalog roster grows in the YAML only — Phase 19 does not require new code.
+
+### 19.3 Definition of Done
+
+- [ ] AST-scan test green.
+- [ ] At least 5 T3 rows committed (sample from CONCACAF / AFC / OFC tier-2 leagues) to prove the pluggability — rows stay T3 (admin-only) until business signs off.
+- [ ] Catalog round-trip test (load → serialize → diff = empty) passes.
+
+---
+
+## 💰 Phase 20 — Monetization (built-but-dormant)
+
+**Goal:** Per user directives #4 + #5 — ship a **tier-based commercial layer** (Free / Pro / Premium / Admin) with **edge-only enforcement** at the Go API. The system shipped to production with `MONETIZATION_ENABLED=false` (allow-all); it flips on the day the business is ready to charge — **single config change, no migration, no schema work**.
+
+**Anchor doc:** [`design/MONETIZATION.md`](../design/MONETIZATION.md).
+
+**Depends on:** Phase 9 (auth/identity), Phase 13a (so T1 leagues exist for the Free tier to be functional).
+
+### 20.1 Entitlement engine + policy file
+
+- [ ] `MONETIZATION_ENABLED` env var registered in both `ai/common/config.py` and `server/internal/config`; default `false`.
+- [ ] `xops/monetization/entitlements.yaml` committed with `league_tier_access`, `market_family_access`, `competition_overrides`, `quotas` (MONETIZATION.md §3.2).
+- [ ] `server/internal/auth/entitlements/engine.go` returns `EntitlementDecision`; allow-all when flag is false; lookup-only otherwise (MONETIZATION.md §3.1, §3.3).
+- [ ] Coverage test: every public handler either calls `entitlements.Decide()` or is on the discovery allowlist.
+
+### 20.2 Quotas + rate limiting per token
+
+- [ ] Redis sliding-window counter per `(token_id, window_id)` (MONETIZATION.md §5).
+- [ ] Counter increments even when flag is false (so capacity-planning data exists before flipping).
+- [ ] Burst allowance = `0.5 × calls_per_minute` per tier.
+- [ ] Daily quota report `xops/monetization/quota_report.py` shows what *would* have been denied.
+
+### 20.3 Market families
+
+- [ ] `ai/common/betting_markets.json` v2 schema: every market has a `family` field.
+- [ ] Test: every family in `betting_markets.json` has a row in `market_family_access`.
+- [ ] Test: every `(subscriber_tier, league_tier, market_family)` triple has an explicit decision (MONETIZATION.md §7 exhaustiveness).
+
+### 20.4 Discovery vs. paywall split
+
+- [ ] `server/internal/auth/entitlements/discovery_allowlist.go` — every endpoint that returns publicly-available facts is on it; every endpoint that returns predictions is off it (MONETIZATION.md §9).
+
+### 20.5 Billing-readiness hooks (no payment processor in v1)
+
+- [ ] Token claims carry `Tier`, `SubscriptionID`, `CustomerID`, `ExpiresAt`, `BillingState`.
+- [ ] `BillingState=past_due` triggers soft-downgrade to Free (MONETIZATION.md §10).
+- [ ] No Stripe/Iyzico/Paddle integration in this phase — that is a Phase 20.x add-on.
+
+### 20.6 Audit + observability
+
+- [ ] `entitlement_decisions_total` Prometheus counter labelled by tier × league_tier × market_family × decision × reason.
+- [ ] Sampled audit log at `cfg.entitlement_audit_sample_rate` (default 0.01).
+- [ ] Monetization dashboard panel hidden until flag flips on.
+
+### 20.7 End-to-end smoke
+
+- [ ] Staging: flip `MONETIZATION_ENABLED=true`, confirm the deny matrix matches MONETIZATION.md §7 for sample tokens of every tier, flip back to `false`, confirm allow-all behavior restored.
+
+### 20.8 Definition of Done
+
+- [ ] All §11 tests in MONETIZATION.md green.
+- [ ] Production runs with `MONETIZATION_ENABLED=false`; Free tier is functional discovery surface.
+- [ ] Day-1 readiness: flipping the flag in production is a `kill -HUP` away.
+
+---
+
+## 📡 Phase 21 — Enrichment Data Planes
+
+**Goal:** Per user directive #3 — add the off-pitch signals that materially improve prediction quality but don't fit the original five planes: **transfers, injuries/availability, referees, weather/pitch**, plus four derived views (market-movement, fixture-congestion, card-context, narrative-pressure).
+
+**Anchor doc:** [`design/ENRICHMENT_DATA.md`](../design/ENRICHMENT_DATA.md).
+
+**Depends on:** Phase 4 (storage agent), Phase 6 (proofreader to widen CIs on enrichment-uncertainty), Phase 13a (so the planes have leagues to enrich).
+
+### 21.1 Plane 6 — Roster-state (transfers, contracts, suspensions)
+
+- [ ] Records: `transfer`, `contract`, `suspension` (ENRICHMENT_DATA.md §2.1).
+- [ ] Daily refresh during transfer windows; weekly outside.
+- [ ] Squad-strength delta + cohesion-penalty curve + departure-shock features.
+- [ ] `confidence` field gates whether record mutates roster-state vs only sentiment.
+
+### 21.2 Plane 7 — Health (injuries, availability)
+
+- [ ] Records: `injury`, `availability` (ENRICHMENT_DATA.md §3.1).
+- [ ] Spike-aware capture 24-48h pre-KO.
+- [ ] Per-fixture squad availability vector → reduces `team_strength` by sum of unavailable players' ratings × starter-likelihood.
+- [ ] Availability uncertainty widens proofreader CI bounds.
+- [ ] Post-match retroactive `fit` correction (lineup truth-from-history).
+
+### 21.3 Plane 8 — Officials (referees)
+
+- [ ] Records: `referee_assignment`, `referee_profile` (ENRICHMENT_DATA.md §4.1).
+- [ ] Reactor recomputes referee rolling stats on every officiated-fixture event.
+- [ ] Cards-market + penalty-market features.
+- [ ] Home-bias correction clamped at `cfg.referee_home_bias_clamp`.
+- [ ] `last_minute_change=true` invalidates per-fixture cards/penalty derived features.
+
+### 21.4 Plane 9 — Environment (weather, pitch)
+
+- [ ] Records: `weather_forecast`, `weather_actual`, `pitch_condition` (ENRICHMENT_DATA.md §5.1).
+- [ ] Hourly forecast → actual at KO ±15 min.
+- [ ] Wind/rain/frozen impact on goals + cards markets.
+- [ ] Style-mismatch feature (passing team on worn pitch).
+
+### 21.5 Derived views
+
+- [ ] Market-movement (drift from opening to closing odds → `high_drift_flag`).
+- [ ] Fixture-congestion (days-since-last, matches-in-last-N, travel km).
+- [ ] Card-context overlay (referee × team rolling cards/match).
+- [ ] Public-narrative pressure (article volume × sentiment polarity 72h pre-KO).
+
+### 21.6 Storage + migrations
+
+- [ ] `migrations/004_enrichment_planes.sql` lands all nine new tables (ENRICHMENT_DATA.md §8).
+- [ ] Storage-agent writers + unique-key collision tests.
+
+### 21.7 Feature-flag gating
+
+- [ ] Per-plane `cfg.enrichment_<plane>_enabled` flags.
+- [ ] Disabling a plane → predictor falls back to last-known features + emits `predictor.warning` event.
+
+### 21.8 Tier alignment (cross-cutting with Phase 20)
+
+- [ ] Cards / corners / fouls markets gated to **Pro+** (require Officials + congestion).
+- [ ] Player-prop markets gated to **Premium** (require Roster + Health).
+- [ ] Weather-special markets gated to **Premium** (require Environment).
+
+### 21.9 NLP impact (cross-cutting with Phase 10)
+
+- [ ] Intents added: `transfer_lookup`, `injury_lookup`, `availability_lookup`, `referee_lookup`, `weather_lookup`, `suspension_lookup`. **All template-driven; no LLM.**
+- [ ] TR sample queries in `ai/tests/fixtures/turkish_queries.yaml`.
+
+### 21.10 Definition of Done
+
+- [ ] All four planes have extractor + differ + storage + ≥ 5 unit tests.
+- [ ] At least one freshness rule per plane in `CONTENT_FRESHNESS.md` §7.
+- [ ] Calibration impact measured: predictor log-loss improves by ≥ `cfg.enrichment_promotion_logloss_delta` (default ≥ 0.5%) on the held-out window before any enrichment plane is declared production.
+- [ ] Component bumps: `enrichment_roster`, `enrichment_health`, `enrichment_officials`, `enrichment_environment` chart keys.
+
+---
+
+## �🏗️ Phase R — Restructure Track (Production Pivot v3)
 
 **Goal:** Move the code without breaking anything.
 

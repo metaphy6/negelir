@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 45,
+    "build": 46,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.8.3",
+      "version": "1.9.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T08:41:52+00:00"
+      "last_changed": "2026-04-28T10:11:30+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -77,6 +77,41 @@
       "version": "0.2.0",
       "description": "(Pivot v3) Shared libraries — config schema, Record envelope, feed manifests, bus SDK.",
       "last_changed": "2026-04-24T13:51:12+00:00"
+    },
+    "competitions": {
+      "version": "0.1.0",
+      "description": "(Phase 13a+) CompetitionConfig + CompetitionStage + CalibrationProfile resolver. Anchor: design/COMPETITIONS.md.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "league_catalog": {
+      "version": "0.1.0",
+      "description": "(Phase 13a+) Global league catalog + T1/T2/T3 readiness gating. Anchor: design/LEAGUE_CATALOG.md.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "monetization": {
+      "version": "0.1.0",
+      "description": "(Phase 20) Tier-based entitlement engine + per-token quotas. Ships dormant. Anchor: design/MONETIZATION.md.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "enrichment_roster": {
+      "version": "0.1.0",
+      "description": "(Phase 21) Plane 6 — transfers, contracts, suspensions. Anchor: design/ENRICHMENT_DATA.md §2.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "enrichment_health": {
+      "version": "0.1.0",
+      "description": "(Phase 21) Plane 7 — injuries, per-fixture availability. Anchor: design/ENRICHMENT_DATA.md §3.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "enrichment_officials": {
+      "version": "0.1.0",
+      "description": "(Phase 21) Plane 8 — referee assignments + rolling profiles. Anchor: design/ENRICHMENT_DATA.md §4.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "enrichment_environment": {
+      "version": "0.1.0",
+      "description": "(Phase 21) Plane 9 — weather forecast/actual + pitch condition. Anchor: design/ENRICHMENT_DATA.md §5.",
+      "last_changed": "2026-04-28T09:04:56+00:00"
     }
   },
   "changelog": [
@@ -628,6 +663,15 @@
       "from": "1.1.2",
       "to": "1.1.3",
       "build": 45
+    },
+    {
+      "timestamp": "2026-04-28T10:11:30+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Added LEAGUE_CATALOG, COMPETITIONS, ENRICHMENT_DATA, MONETIZATION design docs; ROADMAP Phase 13 split into 13a/13b/13c; new Phases 19/20/21 added; DATA_PIPELINE §1.1 enrichment overlay",
+      "from": "1.8.3",
+      "to": "1.9.0",
+      "build": 46
     }
   ]
 }

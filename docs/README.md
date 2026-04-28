@@ -23,6 +23,10 @@ the canonical, current plan lives here.
 | Understand **what data we ingest, process, and feed to the AI** | [`design/DATA_PIPELINE.md`](design/DATA_PIPELINE.md) |
 | Understand the **feed contract** NDJSON/Parquet (Pivot v3) | [`design/EMITTER.md`](design/EMITTER.md) |
 | Understand the **auto-patching scraper loop** (Pivot v3) | [`design/SCRAPER_PATCHER.md`](design/SCRAPER_PATCHER.md) |
+| See the **league catalog & tier system** (T1/T2/T3) | [`design/LEAGUE_CATALOG.md`](design/LEAGUE_CATALOG.md) |
+| Understand **competitions** (cups, super cups, continental, intl) | [`design/COMPETITIONS.md`](design/COMPETITIONS.md) |
+| Understand **enrichment data planes** (transfers, injuries, refs, weather) | [`design/ENRICHMENT_DATA.md`](design/ENRICHMENT_DATA.md) |
+| Understand **monetization** (tier-based, dormant flag) | [`design/MONETIZATION.md`](design/MONETIZATION.md) |
 | Detect **changes to records on data sources** | [`design/CONTENT_FRESHNESS.md`](design/CONTENT_FRESHNESS.md) |
 | Know **why we picked our languages** | [`design/LANGUAGE_CHOICES.md`](design/LANGUAGE_CHOICES.md) |
 | Set up the **fake-data dev environment** | [`design/MOCK_DATA_SERVER.md`](design/MOCK_DATA_SERVER.md) |

@@ -35,6 +35,32 @@ Every record we store carries a `plane` tag and the rules for *what
 counts as a change*, *what counts as fresh*, and *who is allowed to
 overwrite it* are defined per-plane (see §6 and CONTENT_FRESHNESS).
 
+### 1.1 Enrichment overlay (planes 6-9 + derived views)
+
+The original five planes cover *what happened on the pitch and what
+the market thinks*. They miss the **off-pitch signal** (transfers,
+injuries, referees, weather) that strongly influences outcomes for
+several markets. Per [`ENRICHMENT_DATA.md`](ENRICHMENT_DATA.md), we
+add four **enrichment planes** with the same Record discipline as
+the originals:
+
+| # | Plane | Examples | Cadence | Anchor section in `ENRICHMENT_DATA.md` |
+|---|---|---|---|---|
+| 6 | **Roster-state** | Transfers, contracts, suspensions | Daily–weekly | §2 |
+| 7 | **Health** | Injuries, per-fixture availability | Daily; spikes 24-48h pre-KO | §3 |
+| 8 | **Officials** | Referee assignments + rolling profiles | Per-match + slow profile | §4 |
+| 9 | **Environment** | Weather forecast/actual, pitch condition | Hourly forecast → actual | §5 |
+
+Plus four **derived views** (no new Postgres tables; computed in the
+feature store from existing planes): market-movement,
+fixture-congestion, card-context, public-narrative-pressure. See
+`ENRICHMENT_DATA.md` §6.
+
+The enrichment planes follow every rule defined in §4-§9 below: same
+Record contract, same identity discipline, same freshness gating,
+same emitter handoff. They are not a separate system — they are
+additional planes in the same pipeline.
+
 ---
 
 ## 2. Sources and what each one supplies
