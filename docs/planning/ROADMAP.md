@@ -677,34 +677,70 @@ sub-phase is the implementation hook in the roadmap.
 
 **Goal:** Many small predictors vote on each match × market. A consensus agent fuses votes into a calibrated probability distribution.
 **Depends on:** Phase 4
+**Pivot v3 placement:** Predictors and consensus live under `swarm/predictors/` per [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md). Until Phase R2 lands the directory move, ship under the transitional path **`ai/swarm/agents/predictors/`** + **`ai/swarm/agents/consensus.py`**, importable as `swarm.agents.*` (matches Phase 4 layout — R2 is a `git mv`, not a rewrite).
+
+**Cross-phase alignment (binding):**
+
+- **Phase 3 §3.2 SDK contract.** Every `pred.*.v1` and `consensus.v1` is an `Agent` (registers in `agent_registry`, heartbeats per `cfg.swarm_heartbeat_sec`, declares `subscribes`/`publishes`, deregisters on `SIGTERM`). Inherits `AgentRunner` retry/DLQ.
+- **Phase 3 §3.3 bus semantics.** Predictors are **idempotent** on `(match_id, market, request_id)` — a redelivered `predict.request` produces the same vote. Consensus is idempotent on `(match_id, market, request_id)` — late votes after a `predict.final` has been published are dropped (`proof.flag` with `kind=late_vote_dropped` for observability), never trigger a second emission.
+- **Phase 3 §3.5 topic catalog (wire authority).** Phase 5 lands the JSON Schemas for `predict.request`, `predict.vote`, `predict.final` at `ai/swarm/sdk/schemas/<topic>.json`, plus `PREDICT_VOTE` constant in `ai/swarm/agents/topics.py` (today only `PREDICT_REQUEST`/`PREDICT_FINAL` exist). Payload dataclasses live in `ai/swarm/agents/payloads.py` next to the Phase 4 ones; `test_schemas_match_payloads.py` is extended to cover them.
+- **Phase 3.4 swarmctl visibility.** Every Phase 5 agent appears in `swarmctl ps`; every new topic appears in `swarmctl topics`. Read-only — Phase 5 adds no mutating commands.
+- **Phase 4.7 reactor wiring.** Two trigger paths fan into `predict.request`, both already stubbed by Phase 4:
+  - `LivePredictorReactor` (live/market planes) consumes `freshness.events.v1` and emits `predict.request` when an in-flight match's score / lineup / odds change. **Phase 5 implements this stub.**
+  - The Phase 9 API gateway emits `predict.request` for explicit user calls. *(Phase 9 dep — surface only.)*
+  - `TrainerReactor` (schedule/live planes) consumes outcomes via `freshness.events.v1` and triggers per-predictor retrain (writes to `agent_desired_state` / nightly job — see §5.4). **Phase 5 implements this stub.**
+- **Phase 4 storage / records.** Predictors read features by querying the storage agent's `match_normalized` rows for the match's `(stable_id, plane)` set; **never** parse `scrape.raw` directly (scope discipline — predictors live in `swarm/`, not `datasource/`). The Phase 4.7 `FeatureStoreReactor`'s dirty set is the prioritization hint, not the data source.
+- **Phase 2 mock stack.** Backtests resolve to mock vhosts via `NEGELIR_SCRAPE_PROFILE=mock`; backtest data is the frozen seed corpus + the `match_normalized` rows it produces. Real upstreams are off-limits per AGENTS.md §5.
 
 ### 5.1 Predictor diversity (intentional, not coincidental)
 
-The point of a swarm is to *disagree well*. Initial roster:
+The point of a swarm is to *disagree well*. Initial roster (ordered by build-effort cheap → expensive):
 
-| ID | Backend | Size | Speciality |
-|---|---|---|---|
-| `pred.elo.v1` | Pure Python | 0 MB | Baseline Elo + home-advantage |
-| `pred.dixon_coles.v1` | NumPy | 0 MB | Bivariate Poisson, classic |
-| `pred.xgb_form.v1` | XGBoost | ~3 MB | Recent-form features |
-| `pred.xgb_xg.v1` | XGBoost | ~3 MB | xG / shot-quality features |
-| `pred.lgbm_market.v1` | LightGBM | ~4 MB | Odds-derived features (when permitted) |
-| `pred.tabnet.v1` | PyTorch CPU/GPU | ~6 MB | Attention over tabular features |
+| ID | Backend | Size on disk | Image-cost delta | Status | Speciality |
+|---|---|---|---|---|---|
+| `pred.elo.v1` | Pure Python | 0 MB | 0 MB | **must** | Baseline Elo + home-advantage |
+| `pred.dixon_coles.v1` | NumPy | 0 MB | 0 MB (numpy already pulled) | **must** | Bivariate Poisson, classic |
+| `pred.xgb_form.v1` | XGBoost | ~3 MB | ~50 MB | **must** | Recent-form features |
+| `pred.xgb_xg.v1` | XGBoost | ~3 MB | shared with form | **must** | xG / shot-quality features |
+| `pred.lgbm_market.v1` | LightGBM | ~4 MB | ~30 MB | **opt-in** behind `cfg.predictor_market_features_enabled` (default `false`); requires the odds processor's `match_normalized.record_type='odds'` rows | Odds-derived features |
+| `pred.tabnet.v1` | PyTorch CPU/GPU | ~6 MB | ~700 MB | **deferred** to Phase 5.5 — only added if backtest (§5.3) shows a calibrated log-loss win over the XGBoost pair on the last 6 months. Doctrine §4 ("smallest model that works") gates this. | Attention over tabular features |
 
-> ⚠️ **No LLM predictors.** They are slow, overconfident on tabular data, and unjustified for this domain. If we ever add one, it goes here with a documented win in backtest.
+> ⚠️ **No LLM predictors.** They are slow, overconfident on tabular data, and unjustified for this domain. If we ever add one, it goes here with a documented backtest win against the XGBoost pair (same gate as TabNet).
 
 ### 5.2 Consensus agent (`consensus.v1`)
 
-- [ ] Collects all `predict.vote` for a `(match_id, market)` until `cfg.consensus_window_ms` or all known predictors voted.
-- [ ] Per-predictor weight learned from a rolling Brier-score window (`cfg.consensus_brier_window`); refreshed nightly.
-- [ ] Output is **calibrated** with isotonic regression per market; calibration tables stored in Postgres and versioned.
-- [ ] Publishes `predict.final` with: distribution, weights used, contributing model IDs, calibration version, confidence.
+- [ ] Collects `predict.vote` for a `(match_id, market, request_id)` until `cfg.consensus_window_ms` elapses **or** every known healthy predictor (per `agent_registry` heartbeat) has voted, whichever fires first.
+- [ ] Per-predictor weight learned from a rolling Brier-score window (`cfg.consensus_brier_window`); refreshed nightly by the `TrainerReactor` (§5.4) — never inside the hot path.
+- [ ] Output is **calibrated** with isotonic regression per `(league, market)`; calibration tables stored in Postgres (new migration `005_predictor.sql`, see §5.4) and versioned.
+- [ ] Publishes `predict.final` with: distribution, weights used, contributing model IDs, calibration version, swarm-confidence, `request_id`.
+- [ ] Single-publication guarantee: a second `predict.final` for the same `(match_id, market, request_id)` is **never** emitted; late votes are logged + dropped (`proof.flag` with `kind=late_vote_dropped`). Idempotency ledger reuses the Phase 4.7 `Ledger` Protocol — in-process for tests, Postgres-backed in prod.
+- [ ] Quorum-empty fallback: if zero votes arrive within the window (every predictor down or DLQ-ed), emit `proof.flag` with `kind=consensus_no_votes` and **no** `predict.final`. The proofreader (Phase 6) handles user-facing degradation.
 
 ### 5.3 Backtesting harness
 
-- [ ] `make backtest WEEKS=N` replays history through the live swarm against frozen mock seeds.
-- [ ] Reports per-predictor accuracy, swarm accuracy, calibration ECE, log-loss, ROI under sample bookmaker odds.
-- [ ] CI gate: swarm beats best individual predictor by ≥ 1 % log-loss on the last 6 months.
+- [ ] `make backtest WEEKS=N` (existing target in [`xops/makefile/ai_commands.py`](../../xops/makefile/ai_commands.py)) replays history through the live swarm against frozen mock seeds. Per `xops/makefile/__init__.py`, `backtest` is grandfathered as a single-noun target alongside `scrape`/`bootstrap`.
+- [ ] Reports per-predictor accuracy, swarm accuracy, calibration ECE, log-loss, ROI under sample bookmaker odds. Output: a JSON report under `data/backtest/<ts>.json` + a Markdown summary.
+- [ ] CI gate (configurable, not hardcoded): swarm log-loss ≤ `(1 - cfg.backtest_swarm_floor_pct)` × best-individual-predictor log-loss, computed per `(league, market)` over the trailing `cfg.backtest_window_weeks`. Default `backtest_swarm_floor_pct = 0.01` (1% improvement). The gate runs only on the leagues / markets with `n_matches ≥ cfg.backtest_min_n` so a sparse market doesn't flap CI.
+
+### 5.4 Migrations + reactor implementations
+
+- [ ] **Migration `005_predictor.sql`**: tables `predictor_weights` (per `(predictor_id, league, market, valid_from)`), `predictor_calibration` (per `(league, market, version, valid_from)` storing the isotonic table as JSONB), `predictor_outcomes` (per `(match_id, market, outcome_at)` for backtest replay).
+- [ ] Implement `LivePredictorReactor.react()` (replaces the Phase 4.7 `NotImplementedError` stub): emit `predict.request` keyed on the freshness event's `(stable_id, market_set)` derived from the record's plane (live → 1X2 + AH; market → AH/OU recompute).
+- [ ] Implement `TrainerReactor.react()`: debounce per `(predictor_id, league)` for `cfg.trainer_debounce_sec`, qualifying-event filter (only `change_kind=created|updated` on planes the predictor consumes), accuracy-floor check against `cfg.drift_accuracy_floor` (the Phase 6 `drift.v1` knob — single source). Publishes `model.trained` on a new `models.events.v1` topic with its own JSON Schema + payload dataclass.
+- [ ] Topic + schema deliverables (per §3.5 wire-authority rule): add `PREDICT_VOTE` and `MODEL_TRAINED` to `topics.py`; add `predict.request.json`, `predict.vote.json`, `predict.final.json`, `models.events.v1.json` schemas; extend `test_schemas_match_payloads.py` and update the §3.5 table row for each.
+
+### 5.5 Definition of Done
+
+- [ ] All §5.1 **must**-status predictors (`elo`, `dixon_coles`, `xgb_form`, `xgb_xg`) implemented + voting against `InMemoryBus` in a `make swarm.demo PHASE=5` extension; `pred.lgbm_market.v1` ships behind a default-off flag; `pred.tabnet.v1` deferred per the gate.
+- [ ] `consensus.v1` produces exactly one `predict.final` per `(match_id, market, request_id)` under at-least-once redelivery (idempotency test in `ai/swarm/agents/tests/test_consensus.py`).
+- [ ] Quorum-empty path emits `proof.flag` with `kind=consensus_no_votes` and **does not** emit `predict.final` (negative test).
+- [ ] Every Phase 5 agent registers in `agent_registry`, heartbeats, and shows up in `swarmctl ps`; every Phase 5 topic shows up in `swarmctl topics` (Phase 3.4 contract preserved).
+- [ ] All Phase 5 messages validate against their JSON Schema at the live emission point (extend `test_phase4_swarm_demo_end_to_end` rather than duplicating).
+- [ ] All Phase 5 config knobs (`consensus_window_ms`, `consensus_min_confidence`, `consensus_brier_window`, `predictor_market_features_enabled`, `trainer_debounce_sec`, `backtest_swarm_floor_pct`, `backtest_window_weeks`, `backtest_min_n`) surface in `xops/env/.env.example`, `ai/common/defaults.yaml`, and `ai/common/config.py` — triangle test stays green.
+- [ ] `LivePredictorReactor` and `TrainerReactor` no longer raise `NotImplementedError`; their idempotency probes (Phase 4.7 pattern) are green in `test_cache_telemetry_reactor.py` (or a new `test_predictor_reactors.py`).
+- [ ] `make backtest WEEKS=12` runs end-to-end against the seed corpus, produces the JSON + Markdown report, and the CI gate (configurable, default 1%) passes on the seed data.
+- [ ] Versioning: bump `swarm` minor (or open a new `swarm_predictors` key in `xops/versioning/chart.json` if §5/§6 work warrants distinct cadence — decide at landing time, not now).
+- [ ] **Postgres-dependent items deferred to Phase 9:** real `predictor_weights` / `predictor_calibration` reads/writes in production (in-memory tables suffice for the CI gate). The migration ships now so Phase 9 wiring is additive.
 
 ---
 

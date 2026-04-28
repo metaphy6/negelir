@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 61,
+    "build": 62,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.4",
+      "version": "1.9.5",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T15:18:14+00:00"
+      "last_changed": "2026-04-28T17:30:12+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -807,6 +807,15 @@
       "from": "0.2.5",
       "to": "0.2.6",
       "build": 61
+    },
+    {
+      "timestamp": "2026-04-28T17:30:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 5 review: added cross-phase alignment block (SDK/bus/§3.5 wire authority/§3.4 swarmctl/§4.7 reactors/Phase 4 storage/§2 mock); split DoD §5.5; added §5.4 migration + reactor implementations (replaces §4.7 NotImplementedError stubs); softened §5.1 (TabNet→deferred behind backtest gate, lgbm→opt-in flag); idempotency on (match_id,market,request_id); CI gate now config-driven (backtest_swarm_floor_pct + min_n)",
+      "from": "1.9.4",
+      "to": "1.9.5",
+      "build": 62
     }
   ]
 }
