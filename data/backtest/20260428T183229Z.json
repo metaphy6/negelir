@@ -1,0 +1,26 @@
+{
+  "n_matches": 62,
+  "correct": 24,
+  "accuracy": 0.3870967741935484,
+  "per_outcome": {
+    "H": {
+      "correct": 24,
+      "total": 24,
+      "recall": 1.0
+    },
+    "D": {
+      "correct": 0,
+      "total": 15,
+      "recall": 0.0
+    },
+    "A": {
+      "correct": 0,
+      "total": 23,
+      "recall": 0.0
+    }
+  },
+  "weeks": 2,
+  "floor_pct": 0.01,
+  "window_start": "2026-02-23T00:00:00+00:00",
+  "window_end": "2026-03-09T00:00:00+00:00"
+}

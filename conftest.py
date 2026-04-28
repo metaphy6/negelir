@@ -20,3 +20,8 @@ def pytest_configure(config):  # noqa: D401
         "markers",
         "live: opt-in tests that hit real upstreams (RUN_LIVE_TESTS=1)",
     )
+    config.addinivalue_line(
+        "markers",
+        "cpu_only: Phase 11 parity tests — predictor / model output must be "
+        "identical (or within ε) on CPU vs the chosen device.",
+    )

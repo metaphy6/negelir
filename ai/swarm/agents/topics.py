@@ -31,18 +31,23 @@ PROOF_FLAG = Topic("proof.flag")
 # Phase 4.6 — telemetry sink
 TELEMETRY = Topic("telemetry")
 
-# Phase 5 — included so producers in Phase 4 can declare downstream;
-# the agents that consume them ship in Phase 5/6.
-PREDICT_REQUEST = Topic("predict.request")
-PREDICT_FINAL = Topic("predict.final")
+# Phase 5 — predictor swarm + consensus topics.
+PREDICT_REQUEST = Topic("predict.request")     # API/reactor → predictors
+PREDICT_VOTE = Topic("predict.vote")           # predictors → consensus
+PREDICT_FINAL = Topic("predict.final")         # consensus → cache/proofreader
+
+# Phase 5 — model lifecycle (TrainerReactor → ops dashboards/registry)
+MODEL_TRAINED = Topic("models.events.v1")
 
 
 __all__ = [
     "FRESHNESS_EVENTS",
     "MATCH_NORMALIZED",
     "MATCH_STORED",
+    "MODEL_TRAINED",
     "PREDICT_FINAL",
     "PREDICT_REQUEST",
+    "PREDICT_VOTE",
     "PROOF_FLAG",
     "SCRAPE_CLASSIFIED",
     "SCRAPE_RAW",

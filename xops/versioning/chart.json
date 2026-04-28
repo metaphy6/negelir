@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 64,
+    "build": 67,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.7",
+      "version": "1.9.8",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T17:51:45+00:00"
+      "last_changed": "2026-04-28T18:58:14+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.2.6",
+      "version": "0.3.1",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T15:18:14+00:00"
+      "last_changed": "2026-04-28T18:58:08+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -834,6 +834,33 @@
       "from": "1.9.6",
       "to": "1.9.7",
       "build": 64
+    },
+    {
+      "timestamp": "2026-04-28T18:40:55+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 5 predictor swarm + consensus.v1 landed",
+      "from": "0.2.6",
+      "to": "0.3.0",
+      "build": 65
+    },
+    {
+      "timestamp": "2026-04-28T18:58:08+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 5 review: backtest gate now scores per-predictor + swarm log-loss/Brier/ECE and applies the §5.3 ratio gate (was comparing accuracy to a 1% threshold); added test_phase5_swarm_demo.py (3 tests: end-to-end through AgentRunner, swarmctl visibility + schema validation at live emission, idempotent replay) and test_predictor_cpu_parity.py (24 tests: determinism, CPU-forced reload parity, VRAM-cap footprint) — closes the §5.5 DoD items for must-quartet voting through the runner stack, swarmctl visibility, schema-at-emission, and Phase 11 cpu_only parity. Suite 627 → 654 passed.",
+      "from": "0.3.0",
+      "to": "0.3.1",
+      "build": 66
+    },
+    {
+      "timestamp": "2026-04-28T18:58:14+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 5 review: §5.3 + §5.5 reflect actual harness (per-predictor + swarm log-loss/Brier/ECE + ratio gate) and tick newly-satisfied DoD items (must-quartet voting through AgentRunner, swarmctl visibility, schema-at-emission, cpu_only parity, version landing). Backtest CI gate now correctly identifies the toy-baseline regime as below the floor — operator-facing only, hard CI block lands with §5.4 trainer.",
+      "from": "1.9.7",
+      "to": "1.9.8",
+      "build": 67
     }
   ]
 }

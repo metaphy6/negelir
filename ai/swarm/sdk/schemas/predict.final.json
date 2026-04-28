@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/predict.final",
+  "title": "predict.final",
+  "description": "Phase 5.2: calibrated swarm consensus. Single-publication per `(match_id, market, request_id)`. `degraded=true` + `degraded_reason` when fewer than `cfg.consensus_min_voters` predictors voted (Phase 12 contract). `prediction_id` is sha256(match_id|market|request_id|calibration_version)[:32]. Mirrors `ai/swarm/agents/payloads.py::PredictFinal`.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "prediction_id",
+    "match_id",
+    "market",
+    "distribution",
+    "weights",
+    "contributing_models",
+    "calibration_version",
+    "swarm_confidence"
+  ],
+  "properties": {
+    "request_id":          { "type": "string", "minLength": 1 },
+    "prediction_id":       { "type": "string", "minLength": 1 },
+    "match_id":            { "type": "string", "minLength": 1 },
+    "market":              { "type": "string", "enum": ["1x2", "ah", "ou_2_5", "btts"] },
+    "distribution":        { "type": "object", "description": "{market_outcomes: dict, score_grid?: 2D list|null}." },
+    "weights":             { "type": "object", "description": "predictor_id → weight used for fusion." },
+    "contributing_models": { "type": "array", "items": { "type": "string" } },
+    "calibration_version": { "type": "integer", "minimum": 0 },
+    "swarm_confidence":    { "type": "number" },
+    "degraded":            { "type": "boolean" },
+    "degraded_reason":     { "type": "string" },
+    "produced_at":         { "type": "string" },
+    "league_id":           { "type": ["string", "null"] },
+    "profile_id":          { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

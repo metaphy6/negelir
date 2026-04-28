@@ -159,6 +159,20 @@ phase4:
   telemetry_metrics_bind: 127.0.0.1   # NEGELIR_TELEMETRY_METRICS_BIND
   reactor_max_event_age_sec: 86400    # NEGELIR_REACTOR_MAX_EVENT_AGE_SEC
 
+# ── Phase 5 — Predictor swarm + consensus ───────────────────────────────────
+phase5:
+  consensus_window_ms: 750            # NEGELIR_CONSENSUS_WINDOW_MS
+  consensus_min_confidence: 0.40      # NEGELIR_CONSENSUS_MIN_CONFIDENCE
+  consensus_min_voters: 3             # NEGELIR_CONSENSUS_MIN_VOTERS
+  consensus_brier_window: 200         # NEGELIR_CONSENSUS_BRIER_WINDOW
+  predictor_market_features_enabled: false  # NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED
+  predictor_max_vram_mb: 1024         # NEGELIR_PREDICTOR_MAX_VRAM_MB
+  trainer_debounce_sec: 300           # NEGELIR_TRAINER_DEBOUNCE_SEC
+  backtest_swarm_floor_pct: 0.01      # NEGELIR_BACKTEST_SWARM_FLOOR_PCT
+  backtest_window_weeks: 12           # NEGELIR_BACKTEST_WINDOW_WEEKS
+  backtest_min_n: 20                  # NEGELIR_BACKTEST_MIN_N
+  api_consensus_overhead_ms: 250      # NEGELIR_API_CONSENSUS_OVERHEAD_MS
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR

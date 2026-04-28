@@ -306,6 +306,21 @@ class Config:
     ))
     reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
 
+    # Phase 5 — Predictor swarm + consensus
+    consensus_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_WINDOW_MS", "750")))
+    consensus_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_CONSENSUS_MIN_CONFIDENCE", "0.40")))
+    consensus_min_voters: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_MIN_VOTERS", "3")))
+    consensus_brier_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_BRIER_WINDOW", "200")))
+    predictor_market_features_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    predictor_max_vram_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_PREDICTOR_MAX_VRAM_MB", "1024")))
+    trainer_debounce_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TRAINER_DEBOUNCE_SEC", "300")))
+    backtest_swarm_floor_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_BACKTEST_SWARM_FLOOR_PCT", "0.01")))
+    backtest_window_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_WINDOW_WEEKS", "12")))
+    backtest_min_n: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_MIN_N", "20")))
+    api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CONSENSUS_OVERHEAD_MS", "250")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -476,9 +491,22 @@ class Config:
             ("swarm_retry_budget", self.swarm_retry_budget),
             ("swarm_dlq_max_len", self.swarm_dlq_max_len),
             ("swarm_pending_claim_sec", self.swarm_pending_claim_sec),
+            # Phase 5
+            ("consensus_window_ms", self.consensus_window_ms),
+            ("consensus_min_voters", self.consensus_min_voters),
+            ("consensus_brier_window", self.consensus_brier_window),
+            ("predictor_max_vram_mb", self.predictor_max_vram_mb),
+            ("trainer_debounce_sec", self.trainer_debounce_sec),
+            ("backtest_window_weeks", self.backtest_window_weeks),
+            ("backtest_min_n", self.backtest_min_n),
+            ("api_consensus_overhead_ms", self.api_consensus_overhead_ms),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")
+
+        # Phase 5 fractions
+        _bounded("consensus_min_confidence", self.consensus_min_confidence, 0.0, 1.0)
+        _bounded("backtest_swarm_floor_pct", self.backtest_swarm_floor_pct, 0.0, 1.0)
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

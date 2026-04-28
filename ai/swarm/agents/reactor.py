@@ -202,23 +202,174 @@ class CacheInvalidationReactor(ReactorBase):
         return ()
 
 
-# ── Stubs for later phases ──────────────────────────────────────
+# ── Phase 5 reactors ────────────────────────────────────────────
 
 
-class TrainerReactor(ReactorBase):  # pragma: no cover - Phase 5 placeholder
+class TrainerReactor(ReactorBase):
+    """Phase 5.4 — debounced retrain trigger.
+
+    Subscribes to ``freshness.events.v1`` and emits ``models.events.v1``
+    when (a) the event is a qualifying create/update, (b) accuracy
+    against the rolling window stays above ``cfg.drift_accuracy_floor``,
+    (c) at least ``cfg.trainer_debounce_sec`` have passed since the
+    last retrain for the same ``(predictor_id, league)`` slice.
+
+    The reactor is intentionally decoupled from the actual training
+    code path; it emits the *event* so the trainer (or an ops job)
+    picks it up. This keeps Phase 5 retrain deterministic + safe to
+    run in tests against ``InMemoryBus``.
+    """
+
     name = "reactor.trainer"
     allowed_planes = ("schedule", "live")
+    publishes: tuple[str, ...] = ()  # set in __init__ once we import topic
+
+    def __init__(
+        self,
+        *,
+        predictor_ids: Iterable[str],
+        ledger: Ledger | None = None,
+        debounce_sec: int | None = None,
+        accuracy_floor: float | None = None,
+        accuracy_lookup: Callable[[str, str | None], float] | None = None,
+        clock: Callable[[], float] | None = None,
+        version_clock: Callable[[], str] | None = None,
+    ) -> None:
+        # Defer the topic + cfg import to runtime so the module-level
+        # imports don't form a cycle (topics.py → predictors → cfg).
+        from common.config import cfg as _cfg  # local import
+        from .topics import MODEL_TRAINED  # local import — Phase 5
+        self.publishes = (MODEL_TRAINED,)
+        self._model_trained_topic = MODEL_TRAINED
+        super().__init__(ledger=ledger)
+        self._predictor_ids: tuple[str, ...] = tuple(predictor_ids)
+        if not self._predictor_ids:
+            raise ValueError(
+                "reactor.trainer: predictor_ids must list at least one"
+            )
+        self._debounce_sec = (
+            debounce_sec if debounce_sec is not None else _cfg.trainer_debounce_sec
+        )
+        self._accuracy_floor = (
+            accuracy_floor if accuracy_floor is not None else _cfg.drift_accuracy_floor
+        )
+        self._accuracy_lookup = accuracy_lookup or (lambda _pid, _lid: 1.0)
+        self._clock = clock or (lambda: datetime.now(timezone.utc).timestamp())
+        self._version_clock = version_clock or (
+            lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+        )
+        self._last_trained: dict[tuple[str, str | None], float] = {}
+        self._lock = threading.Lock()
 
     def react(self, ev: FreshnessEvent, msg: Message) -> Iterable[Message]:
-        raise NotImplementedError("Trainer reactor wires up in Phase 5")
+        # Phase 5.4 qualifying-event filter: only created/updated.
+        if ev.change_kind not in ("created", "updated"):
+            return ()
+
+        # Avoid the relative-import cycle described in __init__.
+        from .payloads import ModelTrained  # local import
+
+        league_id = ev.diff.get("league_id") if isinstance(ev.diff, dict) else None
+        out: list[Message] = []
+        now = self._clock()
+        for predictor_id in self._predictor_ids:
+            slice_key = (predictor_id, league_id)
+            with self._lock:
+                last = self._last_trained.get(slice_key)
+                if last is not None and (now - last) < self._debounce_sec:
+                    continue
+                # Accuracy floor guard — never retrain on a model that
+                # is already drifting; surface as proof.flag externally.
+                acc = float(self._accuracy_lookup(predictor_id, league_id))
+                if acc < self._accuracy_floor:
+                    continue
+                self._last_trained[slice_key] = now
+
+            payload = ModelTrained(
+                predictor_id=predictor_id,
+                profile_id=league_id or "default",
+                league_id=league_id,
+                model_version=self._version_clock(),
+                trained_at=datetime.fromtimestamp(now, tz=timezone.utc).isoformat(timespec="seconds"),
+                metric="accuracy",
+                metric_value=acc,
+                samples=int(ev.record_id or 0),
+                metadata={"trigger": "freshness", "event_id": ev.event_id},
+            )
+            out.append(
+                Message.new(
+                    self._model_trained_topic,
+                    payload.as_dict(),
+                    producer=self.name,
+                    trace_id=msg.envelope.trace_id,
+                )
+            )
+        return out
 
 
-class LivePredictorReactor(ReactorBase):  # pragma: no cover - Phase 5 placeholder
+class LivePredictorReactor(ReactorBase):
+    """Phase 5.4 — emits ``predict.request`` on live/market changes.
+
+    Maps the freshness event's plane to a market set:
+
+      * ``live`` → 1X2 + AH (score / lineup change)
+      * ``market`` → AH + OU2.5 + BTTS (odds tick)
+
+    The reactor writes the request_id itself (``r-<event_id>-<market>``)
+    so a re-delivered freshness event yields the same request_ids.
+    Combined with the deterministic ``prediction_id`` (consensus side),
+    this makes the whole live path idempotent end-to-end.
+    """
+
     name = "reactor.live_predictor"
     allowed_planes = ("live", "market")
+    publishes: tuple[str, ...] = ()
+
+    _PLANE_MARKETS: dict[str, tuple[str, ...]] = {
+        "live": ("1x2", "ah"),
+        "market": ("ah", "ou_2_5", "btts"),
+    }
+
+    def __init__(
+        self,
+        *,
+        ledger: Ledger | None = None,
+        clock_iso: Callable[[], str] | None = None,
+    ) -> None:
+        from .topics import PREDICT_REQUEST  # local import to dodge cycle
+        self.publishes = (PREDICT_REQUEST,)
+        self._predict_request_topic = PREDICT_REQUEST
+        super().__init__(ledger=ledger)
+        self._clock_iso = clock_iso or (
+            lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+        )
 
     def react(self, ev: FreshnessEvent, msg: Message) -> Iterable[Message]:
-        raise NotImplementedError("Live-predictor reactor wires up in Phase 6")
+        from .payloads import PredictRequest  # local import to dodge cycle
+
+        markets = self._PLANE_MARKETS.get(ev.plane, ())
+        out: list[Message] = []
+        league_id = ev.diff.get("league_id") if isinstance(ev.diff, dict) else None
+        for market in markets:
+            req = PredictRequest(
+                request_id=f"r-{ev.event_id}-{market}",
+                match_id=ev.stable_id,
+                market=market,
+                league_id=league_id,
+                profile_id=league_id,
+                requested_at=self._clock_iso(),
+                features={},
+                metadata={"trigger": "freshness", "event_id": ev.event_id},
+            )
+            out.append(
+                Message.new(
+                    self._predict_request_topic,
+                    req.as_dict(),
+                    producer=self.name,
+                    trace_id=msg.envelope.trace_id,
+                )
+            )
+        return out
 
 
 __all__ = [

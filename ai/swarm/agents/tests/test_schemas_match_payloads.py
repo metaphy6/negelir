@@ -14,10 +14,15 @@ import pytest
 from swarm.agents.payloads import (
     FreshnessEvent,
     MatchStored,
+    ModelTrained,
     NormalizedRecord,
+    PredictFinal,
+    PredictRequest,
+    PredictVote,
     ScrapeClassified,
     ScrapeRaw,
     ScrapeRequest,
+    derive_prediction_id,
 )
 
 
@@ -99,6 +104,77 @@ def _example_freshness() -> dict:
 from swarm.sdk.schemas import validate
 
 
+def _example_predict_request() -> dict:
+    return PredictRequest(
+        request_id="req-1",
+        match_id="match-abc",
+        market="1x2",
+        league_id="tr_super_lig",
+        profile_id="tr_super_lig",
+        requested_at="2026-04-28T12:00:00+00:00",
+        features={"home_elo": 1650.0, "away_elo": 1580.0},
+        metadata={"source": "live_predictor_reactor"},
+    ).as_dict()
+
+
+def _example_predict_vote() -> dict:
+    return PredictVote(
+        request_id="req-1",
+        match_id="match-abc",
+        market="1x2",
+        predictor_id="pred.elo.v1",
+        distribution={
+            "market_outcomes": {"H": 0.5, "D": 0.25, "A": 0.25},
+            "score_grid": None,
+        },
+        confidence=0.65,
+        produced_at="2026-04-28T12:00:01+00:00",
+        features_version="v1",
+        metadata={},
+    ).as_dict()
+
+
+def _example_predict_final() -> dict:
+    return PredictFinal(
+        request_id="req-1",
+        prediction_id=derive_prediction_id(
+            match_id="match-abc",
+            market="1x2",
+            request_id="req-1",
+            calibration_version=1,
+        ),
+        match_id="match-abc",
+        market="1x2",
+        distribution={
+            "market_outcomes": {"H": 0.5, "D": 0.25, "A": 0.25},
+            "score_grid": None,
+        },
+        weights={"pred.elo.v1": 1.0},
+        contributing_models=["pred.elo.v1"],
+        calibration_version=1,
+        swarm_confidence=0.65,
+        degraded=False,
+        degraded_reason="",
+        produced_at="2026-04-28T12:00:02+00:00",
+        league_id="tr_super_lig",
+        profile_id="tr_super_lig",
+    ).as_dict()
+
+
+def _example_model_trained() -> dict:
+    return ModelTrained(
+        predictor_id="pred.elo.v1",
+        profile_id="tr_super_lig",
+        league_id="tr_super_lig",
+        model_version="2026-04-28T12:00:00",
+        trained_at="2026-04-28T12:00:00+00:00",
+        metric="accuracy",
+        metric_value=0.55,
+        samples=120,
+        metadata={"trigger": "freshness"},
+    ).as_dict()
+
+
 _CASES: list[tuple[str, dict]] = [
     ("scrape.request", _example_scrape_request()),
     ("scrape.raw", _example_scrape_raw()),
@@ -106,6 +182,10 @@ _CASES: list[tuple[str, dict]] = [
     ("match.normalized", _example_normalized()),
     ("match.stored", _example_match_stored()),
     ("freshness.events.v1", _example_freshness()),
+    ("predict.request", _example_predict_request()),
+    ("predict.vote", _example_predict_vote()),
+    ("predict.final", _example_predict_final()),
+    ("models.events.v1", _example_model_trained()),
 ]
 
 

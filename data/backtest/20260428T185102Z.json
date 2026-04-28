@@ -1,0 +1,136 @@
+{
+  "swarm": {
+    "n_matches": 50,
+    "correct": 19,
+    "accuracy": 0.38,
+    "log_loss": 1.145759081382164,
+    "brier": 0.7033261485446306,
+    "ece": 0.1675498885671074,
+    "per_outcome": {
+      "H": {
+        "correct": 19,
+        "total": 19,
+        "recall": 1.0
+      },
+      "D": {
+        "correct": 0,
+        "total": 13,
+        "recall": 0.0
+      },
+      "A": {
+        "correct": 0,
+        "total": 18,
+        "recall": 0.0
+      }
+    }
+  },
+  "predictors": {
+    "pred.dixon_coles.v1": {
+      "n_matches": 50,
+      "correct": 19,
+      "accuracy": 0.38,
+      "log_loss": 1.0996532757224429,
+      "brier": 0.6673941363971565,
+      "ece": 0.045393289939800074,
+      "per_outcome": {
+        "H": {
+          "correct": 19,
+          "total": 19,
+          "recall": 1.0
+        },
+        "D": {
+          "correct": 0,
+          "total": 13,
+          "recall": 0.0
+        },
+        "A": {
+          "correct": 0,
+          "total": 18,
+          "recall": 0.0
+        }
+      }
+    },
+    "pred.elo.v1": {
+      "n_matches": 50,
+      "correct": 19,
+      "accuracy": 0.38,
+      "log_loss": 1.0862107946569537,
+      "brier": 0.6587275555374329,
+      "ece": 0.01442219553588131,
+      "per_outcome": {
+        "H": {
+          "correct": 19,
+          "total": 19,
+          "recall": 1.0
+        },
+        "D": {
+          "correct": 0,
+          "total": 13,
+          "recall": 0.0
+        },
+        "A": {
+          "correct": 0,
+          "total": 18,
+          "recall": 0.0
+        }
+      }
+    },
+    "pred.xgb_form.v1": {
+      "n_matches": 50,
+      "correct": 19,
+      "accuracy": 0.38,
+      "log_loss": 1.5688047997519121,
+      "brier": 0.9552586648539362,
+      "ece": 0.442830708663274,
+      "per_outcome": {
+        "H": {
+          "correct": 19,
+          "total": 19,
+          "recall": 1.0
+        },
+        "D": {
+          "correct": 0,
+          "total": 13,
+          "recall": 0.0
+        },
+        "A": {
+          "correct": 0,
+          "total": 18,
+          "recall": 0.0
+        }
+      }
+    },
+    "pred.xgb_xg.v1": {
+      "n_matches": 50,
+      "correct": 19,
+      "accuracy": 0.38,
+      "log_loss": 1.1748547523243165,
+      "brier": 0.7225711444384783,
+      "ece": 0.19639775120123681,
+      "per_outcome": {
+        "H": {
+          "correct": 19,
+          "total": 19,
+          "recall": 1.0
+        },
+        "D": {
+          "correct": 0,
+          "total": 13,
+          "recall": 0.0
+        },
+        "A": {
+          "correct": 0,
+          "total": 18,
+          "recall": 0.0
+        }
+      }
+    }
+  },
+  "weeks": 4,
+  "floor_pct": 0.01,
+  "min_n": 20,
+  "window_start": "2026-02-28T00:00:00+00:00",
+  "window_end": "2026-03-09T00:00:00+00:00",
+  "gate_passed": false,
+  "gate_message": "gate failed: swarm log-loss 1.1458 > 1.0753 = (1 - 0.0100) \u00d7 best_individual 1.0862"
+}

@@ -106,6 +106,10 @@ backtest: env ## Multi-market backtest (WEEKS=N MIN_CONFIDENCE=0.55 MARKETS=ms,a
 		$(if $(MIN_CONFIDENCE),--min-confidence $(MIN_CONFIDENCE),) \
 		$(if $(MARKETS),--markets $(MARKETS),)
 
+.PHONY: swarm.backtest
+swarm.backtest: ## Phase 5.5 — replay swarm chain over historical matches (WEEKS=N)
+	@$(XOPS)/ai_commands.py swarm.backtest --weeks $(or $(WEEKS),3)
+
 # ══════════════════════════════════════════════════════════════
 #                       AI (one-shot)
 # ══════════════════════════════════════════════════════════════

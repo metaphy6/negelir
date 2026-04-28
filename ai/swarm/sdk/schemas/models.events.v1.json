@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/models.events.v1",
+  "title": "models.events.v1",
+  "description": "Phase 5.4: TrainerReactor → ops/registry. Emitted after a per-predictor retrain so consensus can refresh its weight on the next nightly rollup. Mirrors `ai/swarm/agents/payloads.py::ModelTrained`.",
+  "type": "object",
+  "required": [
+    "predictor_id",
+    "profile_id",
+    "model_version",
+    "trained_at"
+  ],
+  "properties": {
+    "predictor_id":  { "type": "string", "minLength": 1 },
+    "profile_id":    { "type": "string", "minLength": 1, "description": "Phase 13a CalibrationProfile id; defaults to league_id today." },
+    "league_id":     { "type": ["string", "null"] },
+    "model_version": { "type": "string", "minLength": 1 },
+    "trained_at":    { "type": "string", "description": "ISO-8601 UTC." },
+    "metric":        { "type": "string" },
+    "metric_value":  { "type": "number" },
+    "samples":       { "type": "integer", "minimum": 0 },
+    "metadata":      { "type": "object" }
+  },
+  "additionalProperties": false
+}

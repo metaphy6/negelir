@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/predict.request",
+  "title": "predict.request",
+  "description": "Phase 5.1: API/reactor → predictors. The requester (Phase 9 API or LivePredictorReactor) generates `request_id`; it round-trips unchanged through `predict.vote` and `predict.final`. Mirrors `ai/swarm/agents/payloads.py::PredictRequest`.",
+  "type": "object",
+  "required": ["request_id", "match_id", "market"],
+  "properties": {
+    "request_id":   { "type": "string", "minLength": 1 },
+    "match_id":     { "type": "string", "minLength": 1 },
+    "market":       { "type": "string", "enum": ["1x2", "ah", "ou_2_5", "btts"] },
+    "league_id":    { "type": ["string", "null"] },
+    "profile_id":   { "type": ["string", "null"], "description": "Phase 13a CalibrationProfile id; defaults to league_id until then." },
+    "requested_at": { "type": "string", "description": "ISO-8601 UTC." },
+    "features":     { "type": "object", "description": "Optional pre-computed feature snapshot supplied by the requester." },
+    "metadata":     { "type": "object" }
+  },
+  "additionalProperties": false
+}

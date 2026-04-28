@@ -121,6 +121,28 @@ def cmd_backtest(argv):
     _ai("python", "-m", "backtest.evaluator", "--weeks", str(a.weeks), *extra)
 
 
+def cmd_swarm_backtest(argv):
+    """Phase 5.5 — replay the live swarm chain over historical matches.
+
+    Runs *outside* the ai container so the report files land directly
+    under ``data/backtest/`` on the host. Exits non-zero if the swarm
+    accuracy drops below ``cfg.backtest_swarm_floor_pct`` (CI gate).
+    """
+    p = argparse.ArgumentParser(prog="ai_commands.py swarm.backtest")
+    p.add_argument("--weeks", type=int, default=int(os.environ.get("WEEKS", "3")))
+    p.add_argument("--max-matches", type=int, default=200)
+    a = p.parse_args(argv)
+    import subprocess
+    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    rc = subprocess.call([
+        "python3", os.path.join(here, "xops", "swarm_backtest.py"),
+        "--weeks", str(a.weeks),
+        "--max-matches", str(a.max_matches),
+    ])
+    if rc != 0:
+        sys.exit(rc)
+
+
 def cmd_ai_shell(_argv):
     _ai("bash")
 
@@ -140,6 +162,7 @@ COMMANDS = {
     "train-full":  cmd_train_full,
     "train-model": cmd_train_model,
     "backtest":    cmd_backtest,
+    "swarm.backtest": cmd_swarm_backtest,
     # ai.* domain
     "ai.pipeline":   cmd_ai_pipeline,
     "ai.demo":       cmd_ai_demo,
