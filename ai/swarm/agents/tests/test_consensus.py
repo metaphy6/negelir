@@ -284,3 +284,98 @@ def test_prediction_id_in_final_matches_derive():
         calibration_version=final.calibration_version,
     )
     assert final.prediction_id == expected
+
+
+# ── Phase 5 review (2026-04-28): perf + dead-knob + bound ──────
+
+
+class _CountingCalibrationStore(InMemoryCalibrationStore):
+    """Wraps the in-memory store and counts ``latest()`` invocations.
+
+    Used to lock in the ROADMAP §5.2 invariant: consensus hits the
+    calibration store **at most once** per
+    ``(match_id, market, request_id)`` regardless of how many votes
+    arrive for it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.latest_calls = 0
+
+    def latest(self, profile_id: str, market: str) -> CalibrationTable:  # type: ignore[override]
+        self.latest_calls += 1
+        return super().latest(profile_id, market)
+
+
+def test_calibration_store_is_hit_at_most_once_per_request():
+    """ROADMAP §5.2: 'Single calibration-store hit per request.'
+
+    Three votes for the same key must call ``CalibrationStore.latest``
+    exactly once — the first vote caches the table on
+    ``_PendingFusion`` and ``_finalize`` reuses it.
+    """
+    cal_store = _CountingCalibrationStore()
+    c = _make_consensus(calibration_store=cal_store)
+    list(c.handle(_vote("p.a", {"H": 0.7, "D": 0.2, "A": 0.1})))
+    list(c.handle(_vote("p.b", {"H": 0.6, "D": 0.3, "A": 0.1})))
+    list(c.handle(_vote("p.c", {"H": 0.5, "D": 0.3, "A": 0.2})))
+    assert cal_store.latest_calls == 1, (
+        f"expected exactly 1 calibration-store hit, got {cal_store.latest_calls}"
+    )
+
+
+def test_low_confidence_votes_are_dropped_silently():
+    """SWARM.md consensus algo step 2 + new §5.2 bullet:
+    votes with ``confidence < cfg.consensus_min_confidence`` are dropped
+    without contributing to the fused pmf or to the voter set.
+    """
+    c = _make_consensus(min_confidence=0.5)
+    # p.a votes confidently for H; p.b and p.c are below the floor.
+    list(c.handle(_vote("p.a", {"H": 0.9, "D": 0.05, "A": 0.05}, confidence=0.9)))
+    list(c.handle(_vote("p.b", {"H": 0.1, "D": 0.45, "A": 0.45}, confidence=0.30)))
+    out = c.flush_all()
+    assert len(out) == 1
+    final = PredictFinal.from_dict(out[0].payload)
+    # Only p.a's vote survives → fused pmf must equal p.a's pmf.
+    pmf = final.distribution["market_outcomes"]
+    assert math.isclose(pmf["H"], 0.9, abs_tol=1e-9)
+    assert final.contributing_models == ["p.a"]
+
+
+def test_low_confidence_vote_alone_yields_consensus_no_votes():
+    """If every vote is below the confidence floor, the window flush
+    must emit ``proof.flag(kind=consensus_no_votes)`` — same path as a
+    truly empty window."""
+    from swarm.agents.payloads import PredictRequest as _PR
+    c = _make_consensus(min_confidence=0.95)
+    c.note_request(_PR(
+        request_id="r-low", match_id="m-low", market="1x2", features={},
+    ))
+    list(c.handle(_vote(
+        "p.a", {"H": 0.5, "D": 0.3, "A": 0.2},
+        request_id="r-low", match_id="m-low", confidence=0.5,
+    )))
+    out = c.flush_all()
+    assert len(out) == 1
+    assert out[0].envelope.topic == PROOF_FLAG
+    assert out[0].payload["kind"] == "consensus_no_votes"
+
+
+def test_pending_overflow_evicts_oldest_and_emits_proof_flag():
+    """ROADMAP §5.2: ``_pending`` is bounded by ``cfg.consensus_max_pending``;
+    overflow evicts the oldest insertion and emits
+    ``proof.flag(kind=consensus_overflow)``."""
+    c = _make_consensus(max_pending=2)
+    # Fill: r-1 (oldest), r-2.
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-1", match_id="m-1")))
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-2", match_id="m-2")))
+    # Third distinct key triggers eviction of r-1.
+    out = list(c.handle(
+        _vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-3", match_id="m-3")
+    ))
+    flags = [m for m in out if m.envelope.topic == PROOF_FLAG]
+    assert len(flags) == 1
+    assert flags[0].payload["kind"] == "consensus_overflow"
+    assert flags[0].payload["request_id"] == "r-1"
+    assert flags[0].payload["max_pending"] == 2
+

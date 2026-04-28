@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 69,
+    "build": 70,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T19:13:13+00:00"
+      "last_changed": "2026-04-28T19:29:19+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -879,6 +879,15 @@
       "from": "1.9.8",
       "to": "1.9.9",
       "build": 69
+    },
+    {
+      "timestamp": "2026-04-28T19:29:19+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 5 review: enforce single calibration-store hit; wire consensus_min_confidence (was dead knob); bound _pending via consensus_max_pending; align ROADMAP 5.2/5.6 + SWARM.md with code",
+      "from": "0.4.0",
+      "to": "0.4.1",
+      "build": 70
     }
   ]
 }

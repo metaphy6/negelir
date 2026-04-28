@@ -308,9 +308,10 @@ class Config:
 
     # Phase 5 — Predictor swarm + consensus
     consensus_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_WINDOW_MS", "750")))
-    consensus_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_CONSENSUS_MIN_CONFIDENCE", "0.40")))
+    consensus_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_CONSENSUS_MIN_CONFIDENCE", "0.0")))
     consensus_min_voters: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_MIN_VOTERS", "3")))
     consensus_brier_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_BRIER_WINDOW", "200")))
+    consensus_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_MAX_PENDING", "4096")))
     predictor_market_features_enabled: bool = field(default_factory=lambda: os.getenv(
         "NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED", "false"
     ).lower() in ("true", "1", "yes"))

@@ -162,9 +162,10 @@ phase4:
 # ── Phase 5 — Predictor swarm + consensus ───────────────────────────────────
 phase5:
   consensus_window_ms: 750            # NEGELIR_CONSENSUS_WINDOW_MS
-  consensus_min_confidence: 0.40      # NEGELIR_CONSENSUS_MIN_CONFIDENCE
+  consensus_min_confidence: 0.0       # NEGELIR_CONSENSUS_MIN_CONFIDENCE
   consensus_min_voters: 3             # NEGELIR_CONSENSUS_MIN_VOTERS
   consensus_brier_window: 200         # NEGELIR_CONSENSUS_BRIER_WINDOW
+  consensus_max_pending: 4096         # NEGELIR_CONSENSUS_MAX_PENDING
   predictor_market_features_enabled: false  # NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED
   predictor_max_vram_mb: 1024         # NEGELIR_PREDICTOR_MAX_VRAM_MB
   trainer_debounce_sec: 300           # NEGELIR_TRAINER_DEBOUNCE_SEC

@@ -57,13 +57,36 @@ shape because:
 
 ## 🤝 Consensus algorithm (Phase 5)
 
-For each `(match_id, market)`:
+For each `(match_id, market, request_id)`:
 
-1. Collect votes from every healthy `pred.*.v1` agent up to `cfg.consensus_window_ms`.
-2. Drop votes with `confidence < cfg.consensus_min_confidence`.
-3. Compute weighted average using per-predictor weights (rolling Brier-loss).
-4. Apply per-market isotonic calibration (table loaded from Postgres, version logged).
-5. Publish `predict.final` carrying: distribution, weights, contributing model IDs, calibration version, swarm-confidence.
+1. Collect votes from every **expected** `pred.*.v1` agent until
+   `cfg.consensus_window_ms` elapses **or** every expected voter has
+   voted, whichever fires first. The expected set is constructor-
+   injected; runtime `agent_registry` querying is a Phase 14.x
+   follow-up (see ROADMAP §5.6).
+2. **Drop** votes with `confidence < cfg.consensus_min_confidence`
+   silently — the swarm simply has one fewer voter. Default `0.0`
+   means the filter is off; raise it once your roster's confidences
+   are calibrated. (Wired in 2026-04-28 review; was previously
+   documented but unimplemented.)
+3. Compute weighted average using per-predictor weights (rolling
+   Brier-loss; refreshed nightly by `TrainerReactor`, never on the
+   hot path).
+4. Apply per-`(profile_id, market)` isotonic calibration. The
+   `CalibrationTable` is fetched **at most once per request** —
+   cached on the per-key pending accumulator so neither the
+   late-vote guard nor the final emission re-hits the store
+   (ROADMAP §5.2 invariant; locked in by
+   `test_calibration_store_is_hit_at_most_once_per_request`).
+5. Publish `predict.final` carrying: distribution, weights,
+   contributing model IDs, calibration version, swarm-confidence,
+   `degraded` + `degraded_reason`, deterministic `prediction_id`,
+   `produced_at`.
+
+**Bounded pending set.** The in-flight accumulator is capped at
+`cfg.consensus_max_pending` (default 4096); overflow evicts the
+oldest insertion + emits `proof.flag(kind=consensus_overflow)`.
+Keeps consensus's memory bounded if predictors permanently DLQ.
 
 Quorum rule for Proofreader (Phase 6):
 
@@ -71,7 +94,7 @@ Quorum rule for Proofreader (Phase 6):
 publish_to_cache iff  (pass_count >= ceil(N/2) + 1)  and  (drift.v1 not tripped)
 ```
 
-## 📨 Message envelope (CBOR)
+## 📨 Message envelope (JSON in v1; CBOR upgrade in Phase 9)
 
 ```text
 {
@@ -86,7 +109,11 @@ publish_to_cache iff  (pass_count >= ceil(N/2) + 1)  and  (drift.v1 not tripped)
 }
 ```
 
-CBOR for size + speed; JSON only via `swarmctl tail --json` for humans.
+JSON for v1 (per ROADMAP §3.1) — human-debuggable, zero new deps,
+carried natively by `redis-py`. The `Bus` interface is encoding-
+agnostic via a `Codec` seam, so a CBOR+CDDL upgrade in Phase 9 is
+purely additive (no agent code changes). `swarmctl tail --json`
+stays the human view either way.
 
 ## 🧪 Testability
 

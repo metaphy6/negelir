@@ -46,6 +46,7 @@ from .reactor import InMemoryLedger, Ledger
 from .topics import PREDICT_FINAL, PREDICT_VOTE, PROOF_FLAG
 from .predictors._base import (
     CalibrationStore,
+    CalibrationTable,
     InMemoryCalibrationStore,
 )
 
@@ -76,8 +77,12 @@ class _PendingFusion:
     voters: set[str] = field(default_factory=set)
     # Cached on first vote so consensus only hits the calibration store
     # once per (match, market, request) — not once per vote handle.
+    # Cache the *table itself*, not just the version: ``_finalize`` needs
+    # ``cal.apply(...)`` which is otherwise a second store call (the
+    # ROADMAP §5.2 "single calibration-store hit per request" claim).
     prediction_id: str | None = None
     calibration_version: int = 0
+    calibration_table: "CalibrationTable | None" = None
 
 
 def _fuse_distributions(
@@ -163,6 +168,8 @@ class ConsensusAgent:
         clock_iso: callable | None = None,
         window_ms: int | None = None,
         min_voters: int | None = None,
+        min_confidence: float | None = None,
+        max_pending: int | None = None,
     ) -> None:
         self._expected: tuple[str, ...] = tuple(expected_predictors)
         if not self._expected:
@@ -186,7 +193,18 @@ class ConsensusAgent:
         self._min_voters = (
             min_voters if min_voters is not None else _cfg.consensus_min_voters
         )
+        self._min_confidence = (
+            min_confidence
+            if min_confidence is not None
+            else _cfg.consensus_min_confidence
+        )
+        self._max_pending = (
+            max_pending
+            if max_pending is not None
+            else _cfg.consensus_max_pending
+        )
         self._lock = threading.Lock()
+        # Insertion-ordered dict doubles as an LRU for overflow eviction.
         self._pending: dict[tuple[str, str, str], _PendingFusion] = {}
 
     # ── Bus contract ────────────────────────────────────────────────
@@ -197,11 +215,43 @@ class ConsensusAgent:
             _log.warning("%s: malformed predict.vote: %s", self.name, exc)
             return ()
 
+        # ── Per-vote confidence floor (SWARM.md consensus algo step 2).
+        # Below-threshold votes are dropped silently — consensus simply
+        # has one fewer voter. We log + flag at debug so a misbehaving
+        # predictor is observable without spamming proof.flag.
+        if vote.confidence < self._min_confidence:
+            _log.debug(
+                "%s: dropping low-confidence vote predictor=%s conf=%.3f < %.3f",
+                self.name, vote.predictor_id, vote.confidence,
+                self._min_confidence,
+            )
+            return ()
+
         key = (vote.match_id, vote.market, vote.request_id)
+        overflow_flags: list[Message] = []
 
         with self._lock:
             pending = self._pending.get(key)
             if pending is None:
+                # Pending-set bound: evict oldest insertion + flag.
+                if len(self._pending) >= self._max_pending:
+                    evict_key, evicted = next(iter(self._pending.items()))
+                    del self._pending[evict_key]
+                    overflow_flags.append(
+                        Message.new(
+                            PROOF_FLAG,
+                            {
+                                "kind": "consensus_overflow",
+                                "agent": self.name,
+                                "match_id": evicted.match_id,
+                                "market": evicted.market,
+                                "request_id": evicted.request_id,
+                                "max_pending": self._max_pending,
+                            },
+                            producer=self.name,
+                            trace_id=msg.envelope.trace_id,
+                        )
+                    )
                 pending = _PendingFusion(
                     match_id=vote.match_id,
                     market=vote.market,
@@ -216,10 +266,14 @@ class ConsensusAgent:
                 pending.profile_id = vote.profile_id
                 pending.league_id = pending.league_id or vote.league_id
 
-            # Lazily compute + cache prediction_id once context is known.
+            # Lazily compute + cache prediction_id AND the calibration
+            # table once context is known. _finalize reuses both — this
+            # is what enforces "single calibration-store hit per request"
+            # (ROADMAP §5.2).
             if pending.prediction_id is None:
                 profile_id = self._resolve_profile(pending)
                 cal = self._calibration.latest(profile_id, pending.market)
+                pending.calibration_table = cal
                 pending.calibration_version = cal.version
                 pending.prediction_id = derive_prediction_id(
                     match_id=pending.match_id,
@@ -234,6 +288,7 @@ class ConsensusAgent:
                 # Drop pending bookkeeping; already finalized.
                 self._pending.pop(key, None)
                 return (
+                    *overflow_flags,
                     Message.new(
                         PROOF_FLAG,
                         {
@@ -265,12 +320,12 @@ class ConsensusAgent:
 
             all_in = pending.voters >= set(self._expected)
             if not all_in:
-                return ()
+                return tuple(overflow_flags)
 
             # All expected voters in → finalize now.
             del self._pending[key]
 
-        return self._finalize(pending, msg.envelope.trace_id)
+        return [*overflow_flags, *self._finalize(pending, msg.envelope.trace_id)]
 
     # ── Window flush (called by runner / test) ──────────────────────
     def note_request(self, req: "PredictRequest") -> None:
@@ -345,6 +400,7 @@ class ConsensusAgent:
         if pending.prediction_id is None:
             profile_id = self._resolve_profile(pending)
             cal = self._calibration.latest(profile_id, pending.market)
+            pending.calibration_table = cal
             pending.calibration_version = cal.version
             pending.prediction_id = derive_prediction_id(
                 match_id=pending.match_id,
@@ -384,10 +440,13 @@ class ConsensusAgent:
         raw_pmf = _fuse_distributions(pending.votes, weights, market)
 
         # Calibration: apply isotonic per outcome, then renormalize so
-        # we still publish a valid pmf. (Reuses the table the cached
-        # prediction_id was derived from — single store hit per request.)
+        # we still publish a valid pmf. Reuse the table cached on the
+        # pending key so we hit the calibration store exactly once per
+        # request (ROADMAP §5.2 invariant).
         profile_id = self._resolve_profile(pending)
-        cal = self._calibration.latest(profile_id, market)
+        cal = pending.calibration_table or self._calibration.latest(
+            profile_id, market
+        )
         calibrated = {o: cal.apply(p) for o, p in raw_pmf.items()}
         z = sum(calibrated.values())
         if z > 0.0:
