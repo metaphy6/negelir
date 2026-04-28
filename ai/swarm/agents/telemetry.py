@@ -116,6 +116,24 @@ class TelemetryAgent:
         self._server: HTTPServer | None = None
         self._server_thread: threading.Thread | None = None
 
+    @classmethod
+    def from_config(cls, *, start_http: bool = False) -> "TelemetryAgent":
+        """Build an agent with the metrics exposer wired from `cfg`.
+
+        Centralizes the (port, bind) plumbing so callers cannot drop
+        the bind hardening on the floor. Pass ``start_http=True`` to
+        spin up the exposer in the same call.
+        """
+        from common.config import cfg  # local import keeps cfg load lazy
+
+        agent = cls()
+        if start_http:
+            agent.start_http(
+                int(cfg.telemetry_metrics_port),
+                bind=str(cfg.telemetry_metrics_bind),
+            )
+        return agent
+
     # ── Bus contract ────────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
         # Latency from envelope creation to observation. Naive

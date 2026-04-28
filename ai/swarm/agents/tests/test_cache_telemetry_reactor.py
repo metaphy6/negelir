@@ -195,3 +195,44 @@ def test_in_memory_ledger_is_thread_safe_smoke() -> None:
     for i in range(100):
         assert ledger.already_processed("r", f"e{i}")
     assert not ledger.already_processed("r", "missing")
+
+
+def test_reactor_does_not_mark_when_react_raises() -> None:
+    """Regression for the mark-before-side-effect foot-gun.
+
+    If `react()` raises (transient DB blip, network failure), the bus
+    runner re-delivers. The retry MUST be allowed to succeed — the
+    previous mark-before behavior would short-circuit on the second
+    delivery and silently drop the side effect entirely.
+    """
+    from swarm.agents.reactor import ReactorBase
+
+    calls = {"n": 0}
+
+    class _Flaky(ReactorBase):
+        name = "reactor.flaky"
+        allowed_planes = ("schedule",)
+
+        def react(self, ev, msg):  # noqa: D401
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("boom")
+            return ()
+
+    r = _Flaky()
+    msg = _freshness_msg(record_id=11)
+
+    with pytest.raises(RuntimeError):
+        list(r.handle(msg))
+    # Ledger must be empty so the redelivery actually runs.
+    ev = FreshnessEvent.from_dict(msg.payload)
+    assert not r._ledger.already_processed(r.name, ev.event_id)
+
+    # Second delivery — succeeds, then marks.
+    list(r.handle(msg))
+    assert calls["n"] == 2
+    assert r._ledger.already_processed(r.name, ev.event_id)
+
+    # Third delivery — short-circuited by the ledger.
+    list(r.handle(msg))
+    assert calls["n"] == 2

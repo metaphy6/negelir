@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Iterable, Protocol
+from typing import Any, Iterable, Protocol
 
 from ..sdk.types import Message
 from .payloads import FreshnessEvent, MatchStored, NormalizedRecord
@@ -30,15 +31,17 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+@dataclass(frozen=True)
 class StoreOutcome:
-    """Result of an upsert: (record_id, change_kind, diff)."""
+    """Result of an upsert: (record_id, change_kind, diff).
 
-    __slots__ = ("record_id", "change_kind", "diff")
+    Frozen so callers can't quietly mutate the change_kind / diff
+    after the storage agent has handed it off.
+    """
 
-    def __init__(self, record_id: int, change_kind: str, diff: dict | None = None) -> None:
-        self.record_id = record_id
-        self.change_kind = change_kind
-        self.diff = diff or {}
+    record_id: int
+    change_kind: str            # 'created' | 'updated' | 'unchanged'
+    diff: dict[str, Any] = field(default_factory=dict)
 
 
 class RecordStore(Protocol):
@@ -73,7 +76,7 @@ class InMemoryRecordStore:
 
             diff = _shallow_diff(prev_payload, rec.payload)
             self._rows[key] = (row_id, dict(rec.payload), rec.canonical_version)
-            return StoreOutcome(row_id, "updated", diff)
+            return StoreOutcome(row_id, "updated", diff=diff)
 
     def get(self, source: str, source_match_id: str, record_type: str) -> dict | None:
         with self._lock:

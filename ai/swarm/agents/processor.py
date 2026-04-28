@@ -79,7 +79,16 @@ class ProcessorAgentBase:
         if classified.label != self.label:
             return ()  # not ours
 
-        body = self._decode(classified.raw.bytes_b64)
+        body, decode_err = self._decode(classified.raw.bytes_b64)
+        if decode_err is not None:
+            # Distinguish decode failure from empty parse: the former
+            # is an upstream encoding bug, the latter is a parser-fit
+            # problem. Lumping both into `empty_parse` blinds operators.
+            return (
+                self._flag(
+                    msg, classified, kind="decode_failed", detail=decode_err
+                ),
+            )
         try:
             parsed = list(self.parse(body, classified))
         except Exception as exc:  # noqa: BLE001
@@ -146,17 +155,26 @@ class ProcessorAgentBase:
 
     # ── Helpers ─────────────────────────────────────────────────────
     @staticmethod
-    def _decode(b64: str) -> str:
+    def _decode(b64: str) -> tuple[str, str | None]:
+        """Returns (body, error). ``error`` is ``None`` on success.
+
+        An empty inline payload is *not* an error — it just means the
+        producer used ``bytes_ref`` (Phase 4.1's content-addressed
+        path). Parsers that need bytes will yield nothing and trip
+        ``empty_parse`` instead.
+        """
         if not b64:
-            return ""
+            return "", None
         try:
-            data = base64.b64decode(b64)
-        except ValueError:
-            return ""
+            data = base64.b64decode(b64, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            return "", f"base64 decode failed: {exc}"
         try:
-            return data.decode("utf-8")
+            return data.decode("utf-8"), None
         except UnicodeDecodeError:
-            return data.decode("latin-1", errors="replace")
+            # Latin-1 is lossless — substring tests still work and
+            # the proofreader can flag mojibake separately.
+            return data.decode("latin-1", errors="replace"), None
 
     @staticmethod
     def _stable_id(source: str, source_match_id: str) -> str:
@@ -248,13 +266,16 @@ class MatchDetailProcessorAgent(ProcessorAgentBase):
         )
         if not m:
             return
-        home, hs, as_, away = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4)
-        smid = f"{home.strip()}_vs_{away.strip()}"
+        home = m.group(1).strip()
+        away = m.group(4).strip()
+        home_score = int(m.group(2))
+        away_score = int(m.group(3))
+        smid = f"{home}_vs_{away}"
         yield smid, {
-            "home_team": home.strip(),
-            "away_team": away.strip(),
-            "home_score": hs,
-            "away_score": as_,
+            "home_team": home,
+            "away_team": away,
+            "home_score": home_score,
+            "away_score": away_score,
         }
 
 

@@ -65,6 +65,29 @@ def test_processor_flags_empty_parse() -> None:
     assert out[0].payload["kind"] == "empty_parse"
 
 
+def test_processor_flags_decode_failure_distinctly() -> None:
+    """Garbled base64 must surface as `decode_failed`, not `empty_parse`,
+    so operators can tell an upstream encoding bug apart from a parser
+    miss.
+    """
+    raw = ScrapeRaw(
+        source="openfootball",
+        target="/fixture_list",
+        bytes_sha256="0" * 64,
+        http_status=200,
+        content_type="application/json",
+        bytes_b64="!!! not base64 !!!",
+    )
+    payload = ScrapeClassified(
+        raw=raw, label="fixture_list", confidence=0.9, classifier_id="rules.v1"
+    )
+    msg = Message.new("scrape.classified", payload.as_dict(), producer="test")
+    out = list(FixtureProcessorAgent().handle(msg))
+    assert len(out) == 1
+    assert out[0].envelope.topic == PROOF_FLAG
+    assert out[0].payload["kind"] == "decode_failed"
+
+
 def test_match_detail_processor_extracts_score() -> None:
     body = b"Galatasaray 3 - 2 Fenerbahce"
     out = list(MatchDetailProcessorAgent().handle(_classified_msg("match_detail", body)))

@@ -123,25 +123,27 @@ class ReactorBase:
         except ValueError:
             pass  # age unknown — let the ledger guard repeats
 
-        # Idempotency guard. Use the deterministic, content-derived
+        # Idempotency guard. Key is the deterministic, content-derived
         # event_id from the payload — NOT envelope.message_id, which
         # is fresh per emission and would let upstream retries / a
         # second storage replica trigger this reactor twice
         # (CONTENT_FRESHNESS §15.2).
+        #
+        # Order: check → react → mark. The classic "inbox" pattern.
+        # Side effects in this reactor set are themselves idempotent
+        # (`cache.invalidate(k)`, `set.add(record_id)`), so a crash
+        # between react() and mark_processed() at worst replays the
+        # side effect once — never silently swallows it. By contrast,
+        # mark-before-react would *lose* the side effect entirely if
+        # react() raised on the first delivery (bus would re-deliver,
+        # the ledger guard would short-circuit, and the work would
+        # never run).
         if self._ledger.already_processed(self.name, ev.event_id):
             return ()
-        # Mark *before* side effect so a crash mid-effect cannot
-        # trigger a second run. Recovery semantics:
-        # at-least-once delivery + at-most-once side effect.
-        self._ledger.mark_processed(self.name, ev.event_id)
 
-        try:
-            return list(self.react(ev, msg))
-        except Exception:
-            # Re-raise so the runner counts the retry; the ledger
-            # entry stays so the same event_id will not re-trigger.
-            # Operators replay via `make reactor.replay REACTOR=... SINCE=...`.
-            raise
+        result = list(self.react(ev, msg))  # may raise → runner retries
+        self._ledger.mark_processed(self.name, ev.event_id)
+        return result
 
     # ── Subclass override ───────────────────────────────────────────
     def react(self, ev: FreshnessEvent, msg: Message) -> Iterable[Message]:

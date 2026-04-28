@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 52,
+    "build": 53,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.2.1",
+      "version": "0.2.2",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T13:24:56+00:00"
+      "last_changed": "2026-04-28T13:36:35+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -726,6 +726,15 @@
       "from": "1.1.4",
       "to": "1.1.5",
       "build": 52
+    },
+    {
+      "timestamp": "2026-04-28T13:36:35+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 4 audit pass 2: reactor ledger inbox semantics + decode_failed proof flag + StoreOutcome dataclass + telemetry from_config",
+      "from": "0.2.1",
+      "to": "0.2.2",
+      "build": 53
     }
   ]
 }
