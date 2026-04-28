@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 62,
+    "build": 63,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.5",
+      "version": "1.9.6",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T17:30:12+00:00"
+      "last_changed": "2026-04-28T17:34:58+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -816,6 +816,15 @@
       "from": "1.9.4",
       "to": "1.9.5",
       "build": 62
+    },
+    {
+      "timestamp": "2026-04-28T17:34:58+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 5 forward-alignment review: added forward-phase contracts block (§6 proofreader is the gate / §6.2 score_grid in payload / §9.3 request_id round-trip + timeout relationship / §10 produced_at + prediction_id / §11 ≤1GB VRAM + cpu_only parity / §12 degraded flag / §13a CalibrationProfile resolution / §14 consensus replicas:1 / §16 CalibrationStore Protocol for feed migration / §17 patcher does not touch swarm). §5.2 payload typed (score_grid, degraded, prediction_id, produced_at). §5.4 migration profile_id-keyed + CalibrationStore Protocol. §5.5 DoD adds Phase 11/12/9 forward-tests + 3 new cfg knobs (consensus_min_voters, predictor_max_vram_mb, api_consensus_overhead_ms).",
+      "from": "1.9.5",
+      "to": "1.9.6",
+      "build": 63
     }
   ]
 }
