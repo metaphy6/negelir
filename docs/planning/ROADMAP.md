@@ -8,6 +8,34 @@
 
 ---
 
+## 🧭 Implementation Alignment Snapshot (2026-04-28)
+
+> Living header — refreshed whenever a phase ships. Authoritative state
+> always lives in the per-phase checkboxes below; this is a quick map
+> for new readers.
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0 — Repo reset | ✅ done | P2P fully removed; `test_p2p_module_removed` guards regression. |
+| 1 — Centralized config | ✅ done | Triangle test green; numeric/float-threshold AST scanner still on backlog (§1.4). |
+| 2 — Mock dev stack | ✅ done | All four vhosts live via `nginx-mock` → `mocksrv` (manifest-keyed seeds, **no postgres**). |
+| 2.8 — Source-watcher | ✅ done | Cron-driven; LLM summarizer stubbed behind `enabled=False` until Phase 8. |
+| 3 — Swarm foundation | ✅ done | SDK at `ai/swarm/sdk/`; all 7 §3.7 DoD tests green; NATS + bus auth deferred. |
+| 4 — Worker agents | ✅ done | All 6 Phase 4 topics flow end-to-end via `make swarm.demo`; Postgres-backed gates deferred to Phase 9. |
+| 5 — Predictor swarm | 🛠 design only | §5.1–§5.5 scoped + cross-phase contracts wired; no code yet. |
+| 6+ | ⏳ not started | Ordered per dependency graph. |
+| 13a Süper Lig seed | ✅ done | Other T1 leagues land with the 13a sprint. |
+| R1 — chart rename | 🟡 partial | All new chart keys seeded; `version.py rename` + the `source_watcher → datasource_watcher` collapse stay open. |
+| R2–R6 | ⏳ not started | Deferred-path window: lands between Phase 5 design and Phase 6 kickoff (see §Phase R sequencing note). |
+| 16/17/18 | ⏳ design only | Anchor docs (EMITTER, SCRAPER_PATCHER, COMPONENT_LAYOUT) are binding; no code yet. |
+
+**Doctrine reminder:** every checkbox flip ships in the same commit as
+the implementing code, the matching tracker row, and the
+`make version.bump` for the affected component (per AGENTS.md §3.4 +
+§6.1). Stale checkboxes mislead the next agent and waste budget.
+
+---
+
 ## 📜 Production Pivot v3 — Why
 
 Through Phase 2.8 the project ran as two top-level components: `ai/` and `server/`. That was fine for dev, but three structural debts showed up as we approached Phase 3+:
@@ -124,8 +152,13 @@ These apply to **every** phase, **every** PR, **every** agent. They are non-nego
                                   │
                 ┌─────────────────┴──────────────────┐
                 │  🟫  Mock-Data Dev Stack (Phase 2) │
-                │  nginx + self-signed certs +       │
-                │  fake mackolik / nesine / tff      │
+                │  nginx-mock (self-signed CA + per- │
+                │  vhost certs) → Go mocksrv ──┐     │
+                │  fake mackolik / nesine /    │     │
+                │  tff / openfootball          ▼     │
+                │              infra/mock/seeds/     │
+                │              (manifest.json +      │
+                │               frozen captures)     │
                 └────────────────────────────────────┘
 ```
 
@@ -317,16 +350,22 @@ Forbidden patterns enforced by an `xops/lint/no_magic.py` lint step (per AGENTS.
        /etc/hosts (managed by `make hosts.install`)
             │
             ▼
-   ┌───────────────────────┐        ┌───────────────────────┐
-   │  nginx-mock           │ ──────▶│  postgres (read-only  │
-   │  (TLS, self-signed CA)│        │   snapshot of seeds)  │
-   │  vhosts:              │        └───────────────────────┘
-   │   • mackolik.com      │
-   │   • nesine.com        │
-   │   • tff.org           │
-   │   • api.openfootball  │
+   ┌───────────────────────┐        ┌───────────────────────────┐
+   │  nginx-mock           │ ──────▶│  Go mocksrv (server bin   │
+   │  (TLS, self-signed CA)│        │   MODE=mocksrv) — reads   │
+   │  vhosts:              │        │   infra/mock/seeds/       │
+   │   • mackolik.local    │        │   manifest.json and       │
+   │   • nesine.local      │        │   serves frozen captures  │
+   │   • tff.local         │        │   keyed by (host, path)   │
+   │   • openfootball.local│        └───────────────────────────┘
    └───────────────────────┘
 ```
+
+> ℹ️ **No postgres in the mock path.** Earlier drafts of this roadmap
+> sketched a postgres-backed seed table; the actual implementation in §2.7
+> is file-system + manifest based (simpler, faster, exactly mirrors the
+> on-disk seed corpus). Postgres only appears later, behind the Phase 4
+> storage agent and the Phase 9 API surface.
 
 ### 2.2 Self-signed CA & per-domain certs
 
@@ -1322,7 +1361,7 @@ Each starts at T2 (publicly available with widened CI) and promotes to T1 once t
 
 ---
 
-## � Phase 19 — Global Catalog (deferred long-tail)
+## 🌐 Phase 19 — Global Catalog (deferred long-tail)
 
 **Goal:** Per user directive #6 — *"add all the football leagues like Korean or Brazilian that're listed on mackolik.com and nesine.com alongside world cups (eliminations and championships) … not implementing it yet but revise and set the system ready for such change."* Phase 19 makes the long-tail addition a **single YAML edit per league** with zero platform changes.
 
@@ -1480,27 +1519,32 @@ Each starts at T2 (publicly available with widened CI) and promotes to T1 once t
 
 ---
 
-## �🏗️ Phase R — Restructure Track (Production Pivot v3)
+## 🏗️ Phase R — Restructure Track (Production Pivot v3)
 
 **Goal:** Move the code without breaking anything.
 
-> **Sequencing — stop-the-world (2026-04-20).** Earlier drafts of this
-> roadmap suggested R1–R5 could "run in parallel with Phases 3–8". That
-> turns out to be unrealistic: every Phase 3+ feature ships into one of
+> **Sequencing — stop-the-world (2026-04-20; deferred path chosen 2026-04-28).**
+> Earlier drafts suggested R1–R5 could "run in parallel with Phases 3–8". That
+> turned out to be unrealistic: every Phase 3+ feature ships into one of
 > the four target components (`server/`, `datasource/`, `swarm/`,
 > `common/`) and would have to be rewritten mid-flight if the layout
-> shifts under it. **R1–R6 must run as a single stop-the-world sprint
-> (no concurrent feature work) inserted between Phase 2 and Phase 3, or
-> — if explicitly deferred — between Phase 5 and Phase 6.** Estimated
-> 1–2 weeks of focused work. Each sub-phase is individually reversible
-> within the sprint.
+> shifts under it. **R1–R6 run as a single stop-the-world sprint (no
+> concurrent feature work).** The original plan offered two insertion
+> windows: between Phase 2 and Phase 3, or — if explicitly deferred —
+> between Phase 5 and Phase 6. **The deferred window has been chosen
+> implicitly:** Phases 3 and 4 already shipped under the transitional
+> `ai/swarm/sdk/` + `ai/swarm/agents/` paths agreed in their own
+> alignment blocks (R2 is a `git mv`, not a rewrite). The R sprint
+> therefore lands between Phase 5 design completion and Phase 6
+> implementation kickoff. Estimated 1–2 weeks of focused work. Each
+> sub-phase is individually reversible within the sprint.
 **Anchor doc:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 7.
 
 ### R1 — Rename + path aliases
 
-- [ ] New chart keys added to `xops/versioning/chart.json`: `datasource_scraper`, `datasource_watcher`, `datasource_refresher`, `datasource_patcher`, `datasource_gitops`, `datasource_emitter`, `swarm`, `common`.
-- [ ] `version.py rename` subcommand lands; used to rename `source_watcher → datasource_watcher` in a single changelog row.
-- [ ] No files move yet; chart is the only change.
+- [x] New chart keys added to `xops/versioning/chart.json`: `datasource_scraper`, `datasource_watcher`, `datasource_refresher`, `datasource_patcher`, `datasource_gitops`, `datasource_emitter`, `swarm`, `common` (all seeded at `0.1.0` / `0.2.x`; verified 2026-04-28).
+- [ ] `version.py rename` subcommand lands; used to rename `source_watcher → datasource_watcher` in a single changelog row. *(Today both keys coexist — `source_watcher@1.4.0` and `datasource_watcher@0.1.0`. The rename ships with the actual file move in R2.)*
+- [x] No files move yet; chart is the only change so far.
 
 ### R2 — Scraper + watcher move
 

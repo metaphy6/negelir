@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 63,
+    "build": 64,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.6",
+      "version": "1.9.7",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T17:34:58+00:00"
+      "last_changed": "2026-04-28T17:51:45+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -825,6 +825,15 @@
       "from": "1.9.5",
       "to": "1.9.6",
       "build": 63
+    },
+    {
+      "timestamp": "2026-04-28T17:51:45+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP audit: alignment snapshot, mock topology fix (no postgres), R1 partial-tick, Phase R sequencing made explicit, emoji repairs",
+      "from": "1.9.6",
+      "to": "1.9.7",
+      "build": 64
     }
   ]
 }
