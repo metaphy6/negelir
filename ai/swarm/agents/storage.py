@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime, timezone
 from typing import Iterable, Protocol
 
 from ..sdk.types import Message
@@ -23,6 +24,10 @@ from .payloads import FreshnessEvent, MatchStored, NormalizedRecord
 from .topics import FRESHNESS_EVENTS, MATCH_NORMALIZED, MATCH_STORED
 
 _log = logging.getLogger(__name__)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class StoreOutcome:
@@ -97,11 +102,13 @@ def _shallow_diff(before: dict, after: dict) -> dict:
 
 class StorageAgent:
     name = "storage.v1"
-    subscribes = [MATCH_NORMALIZED]
-    publishes = [MATCH_STORED, FRESHNESS_EVENTS]
+    subscribes = (MATCH_NORMALIZED,)
+    publishes = (MATCH_STORED, FRESHNESS_EVENTS)
 
     def __init__(self, store: RecordStore | None = None) -> None:
-        self.store: RecordStore = store or InMemoryRecordStore()
+        # Explicit None check — see CacheAgent for the same foot-gun
+        # (a backend that defines __len__ is falsy when empty).
+        self.store: RecordStore = InMemoryRecordStore() if store is None else store
 
     def handle(self, msg: Message) -> Iterable[Message]:
         try:
@@ -111,6 +118,7 @@ class StorageAgent:
             return ()
 
         outcome = self.store.upsert(rec)
+        now = _utc_now_iso()
 
         stored = MatchStored(
             record_id=outcome.record_id,
@@ -119,6 +127,7 @@ class StorageAgent:
             source=rec.source,
             stable_id=rec.stable_id,
             change_kind=outcome.change_kind,
+            stored_at=now,
         )
         out: list[Message] = [
             Message.new(
@@ -129,12 +138,23 @@ class StorageAgent:
             )
         ]
         if outcome.change_kind in ("created", "updated"):
-            ev = FreshnessEvent(
-                record_id=outcome.record_id,
-                plane=rec.plane,
+            event_id = FreshnessEvent.derive_event_id(
+                source=rec.source,
+                stable_id=rec.stable_id,
                 record_type=rec.record_type,
                 change_kind=outcome.change_kind,
-                diff_summary=outcome.diff,
+                diff=outcome.diff,
+            )
+            ev = FreshnessEvent(
+                event_id=event_id,
+                record_id=outcome.record_id,
+                source=rec.source,
+                stable_id=rec.stable_id,
+                record_type=rec.record_type,
+                plane=rec.plane,
+                change_kind=outcome.change_kind,
+                diff=outcome.diff,
+                emitted_at=now,
             )
             out.append(
                 Message.new(

@@ -33,7 +33,7 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from ..sdk.types import Message
 from .cache import CacheBackend, make_record_key
@@ -77,8 +77,8 @@ class ReactorBase:
     allowed_planes: tuple[str, ...] = ()
     max_age_sec: int = 24 * 3600  # one day default
 
-    subscribes = [FRESHNESS_EVENTS]
-    publishes: list = []  # subclasses may add — but never FRESHNESS_EVENTS
+    subscribes = (FRESHNESS_EVENTS,)
+    publishes: tuple[str, ...] = ()  # subclasses may add — but never FRESHNESS_EVENTS
 
     def __init__(self, ledger: Ledger | None = None) -> None:
         if not self.name:
@@ -92,7 +92,7 @@ class ReactorBase:
             raise ValueError(
                 f"{self.name}: allowed_planes must list at least one plane"
             )
-        self._ledger = ledger or InMemoryLedger()
+        self._ledger = InMemoryLedger() if ledger is None else ledger
 
     # ── Bus contract ────────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -105,27 +105,35 @@ class ReactorBase:
         if ev.plane not in self.allowed_planes:
             return ()  # plane scope guard
 
-        # Bounded replay window.
+        # Bounded replay window — driven by the payload's emitted_at
+        # (which is what reactors care about), with envelope.created_at
+        # as a fallback for legacy producers.
+        ts_str = ev.emitted_at or msg.envelope.created_at
         try:
-            ts = datetime.fromisoformat(msg.envelope.created_at)
-            now = datetime.now(ts.tzinfo or timezone.utc)
+            ts = datetime.fromisoformat(ts_str)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
             if (now - ts).total_seconds() > self.max_age_sec:
                 _log.info(
                     "%s: dropping stale event %s (age > %ds)",
-                    self.name, msg.envelope.message_id, self.max_age_sec,
+                    self.name, ev.event_id, self.max_age_sec,
                 )
                 return ()
         except ValueError:
             pass  # age unknown — let the ledger guard repeats
 
-        # Idempotency guard.
-        event_id = msg.envelope.message_id
-        if self._ledger.already_processed(self.name, event_id):
+        # Idempotency guard. Use the deterministic, content-derived
+        # event_id from the payload — NOT envelope.message_id, which
+        # is fresh per emission and would let upstream retries / a
+        # second storage replica trigger this reactor twice
+        # (CONTENT_FRESHNESS §15.2).
+        if self._ledger.already_processed(self.name, ev.event_id):
             return ()
         # Mark *before* side effect so a crash mid-effect cannot
         # trigger a second run. Recovery semantics:
         # at-least-once delivery + at-most-once side effect.
-        self._ledger.mark_processed(self.name, event_id)
+        self._ledger.mark_processed(self.name, ev.event_id)
 
         try:
             return list(self.react(ev, msg))
@@ -175,27 +183,20 @@ class CacheInvalidationReactor(ReactorBase):
         self,
         cache: CacheBackend,
         *,
-        store_lookup: callable | None = None,
         ledger: Ledger | None = None,
     ) -> None:
-        """``store_lookup(record_id) -> (source, source_match_id, record_type) | None``
-
-        Required so we can build the cache key from the record id.
-        Tests pass a closure over the in-memory store; production
-        wires a tiny SQL select.
+        """The cache key is derived directly from ``ev.source``,
+        ``ev.stable_id`` and ``ev.record_type`` (all present on
+        every FreshnessEvent), so no store lookup is required —
+        the reactor stays loosely coupled from the storage layer.
         """
         super().__init__(ledger=ledger)
         self.cache = cache
-        self._store_lookup = store_lookup
 
     def react(self, ev: FreshnessEvent, msg: Message) -> Iterable[Message]:
-        if self._store_lookup is None:
-            return ()
-        located = self._store_lookup(ev.record_id)
-        if located is None:
-            return ()
-        source, source_match_id, record_type = located
-        self.cache.invalidate(make_record_key(source, source_match_id, record_type))
+        self.cache.invalidate(
+            make_record_key(ev.source, ev.stable_id, ev.record_type)
+        )
         return ()
 
 

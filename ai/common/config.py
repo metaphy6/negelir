@@ -301,6 +301,9 @@ class Config:
     cache_record_ttl_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CACHE_RECORD_TTL_SEC", "600")))
     cache_prediction_ttl_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CACHE_PREDICTION_TTL_SEC", "300")))
     telemetry_metrics_port: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TELEMETRY_METRICS_PORT", "9101")))
+    telemetry_metrics_bind: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_TELEMETRY_METRICS_BIND", "127.0.0.1"
+    ))
     reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
 
     # Bootstrap / data validation
@@ -425,6 +428,13 @@ class Config:
             issues.append(
                 f"scrape_profile={self.scrape_profile!r} not in ('mock', 'real')"
             )
+
+        # Telemetry metrics bind: minimal sanity. Reject empty / whitespace
+        # strings so we never silently bind to "" (= 0.0.0.0). A full
+        # IP/hostname grammar isn't worth re-implementing — `socket.bind`
+        # will reject anything truly malformed at startup.
+        if not self.telemetry_metrics_bind or not self.telemetry_metrics_bind.strip():
+            issues.append("telemetry_metrics_bind must be a non-empty host/IP")
 
         # Swarm bus kind enum
         _swarm_bus_kinds = {"redis", "memory"}

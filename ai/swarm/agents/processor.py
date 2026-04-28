@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from ..sdk.types import Message
@@ -27,6 +28,10 @@ from .payloads import NormalizedRecord, ScrapeClassified
 from .topics import MATCH_NORMALIZED, PROOF_FLAG, SCRAPE_CLASSIFIED
 
 _log = logging.getLogger(__name__)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 _PLANE_BY_TYPE: dict[str, str] = {
@@ -53,8 +58,8 @@ class ProcessorAgentBase:
     label: str = ""
     record_type: str = ""
 
-    publishes = [MATCH_NORMALIZED, PROOF_FLAG]
-    subscribes = [SCRAPE_CLASSIFIED]
+    publishes: tuple[str, ...] = (MATCH_NORMALIZED, PROOF_FLAG)
+    subscribes: tuple[str, ...] = (SCRAPE_CLASSIFIED,)
 
     def __init__(self) -> None:
         if not self.label or not self.record_type:
@@ -98,6 +103,7 @@ class ProcessorAgentBase:
             )
 
         out: list[Message] = []
+        captured_at = _utc_now_iso()
         for source_match_id, payload in parsed:
             stable_id = self._stable_id(classified.raw.source, source_match_id)
             try:
@@ -112,6 +118,7 @@ class ProcessorAgentBase:
                     league_id=classified.raw.league_id,
                     competition_id=classified.raw.competition_id,
                     raw_sha256=classified.raw.bytes_sha256,
+                    captured_at=captured_at,
                 )
             except ValueError as exc:
                 out.append(

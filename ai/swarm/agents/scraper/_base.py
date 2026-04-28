@@ -23,7 +23,7 @@ import hashlib
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from common.config import cfg
 
@@ -76,15 +76,17 @@ class ScraperAgentBase:
     mock_host: str = ""
     real_host: str = ""
 
-    # SDK contract — names visible to the runner / registry
-    subscribes: list = [SCRAPE_REQUEST]
-    publishes: list = [SCRAPE_RAW, PROOF_FLAG]
+    # SDK contract — names visible to the runner / registry. Tuples
+    # so a subclass cannot accidentally mutate the parent's list.
+    subscribes: tuple[str, ...] = (SCRAPE_REQUEST,)
+    publishes: tuple[str, ...] = (SCRAPE_RAW, PROOF_FLAG)
 
     def __init__(
         self,
         *,
         client: FetchClient | None = None,
-        clock: callable = time.monotonic,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if not self.source_key:
             raise ValueError(
@@ -93,6 +95,7 @@ class ScraperAgentBase:
         self.name = f"scraper.{self.source_key}.v1"
         self._client = client or _RealFetchClient()
         self._clock = clock
+        self._sleep = sleep
         # Token bucket per-source: at most one fetch per `scrape_rate_limit` sec.
         self._next_allowed_at = 0.0
 
@@ -193,7 +196,9 @@ class ScraperAgentBase:
     def _wait_for_token(self) -> None:
         now = self._clock()
         if now < self._next_allowed_at:
-            time.sleep(self._next_allowed_at - now)
+            # Use the injected sleep so tests with a fake clock don't
+            # block on the real wall clock.
+            self._sleep(self._next_allowed_at - now)
         self._next_allowed_at = self._clock() + float(cfg.scrape_rate_limit)
 
 

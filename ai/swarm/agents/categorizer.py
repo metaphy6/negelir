@@ -99,8 +99,8 @@ class RulesClassifier:
 
 class CategorizerAgent:
     name = "categorizer.v1"
-    subscribes = [SCRAPE_RAW]
-    publishes = [SCRAPE_CLASSIFIED, PROOF_FLAG]
+    subscribes: tuple[str, ...] = (SCRAPE_RAW,)
+    publishes: tuple[str, ...] = (SCRAPE_CLASSIFIED, PROOF_FLAG)
 
     def __init__(self, classifier: Classifier | None = None) -> None:
         self._classifier: Classifier = classifier or RulesClassifier()

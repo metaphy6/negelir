@@ -108,8 +108,8 @@ class _MetricsHandler(BaseHTTPRequestHandler):  # pragma: no cover - thin HTTP s
 
 class TelemetryAgent:
     name = "telemetry.v1"
-    subscribes = list(_WATCHED_TOPICS)
-    publishes: list = []
+    subscribes = tuple(_WATCHED_TOPICS)
+    publishes: tuple[str, ...] = ()
 
     def __init__(self) -> None:
         self.counters = _Counters()
@@ -118,12 +118,16 @@ class TelemetryAgent:
 
     # ── Bus contract ────────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
-        # Latency from envelope creation to observation.
+        # Latency from envelope creation to observation. Naive
+        # timestamps are treated as UTC so latency math doesn't
+        # silently swing across local-vs-UTC boundaries.
         try:
             ts = datetime.fromisoformat(msg.envelope.created_at)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
             latency_ms = max(
                 0.0,
-                (datetime.now(ts.tzinfo) - ts).total_seconds() * 1000.0,
+                (datetime.now(timezone.utc) - ts).total_seconds() * 1000.0,
             )
         except ValueError:
             latency_ms = 0.0
@@ -131,8 +135,15 @@ class TelemetryAgent:
         return ()
 
     # ── Optional HTTP exposer ───────────────────────────────────────
-    def start_http(self, port: int) -> None:
-        """Start a tiny /metrics HTTP server. Idempotent."""
+    def start_http(self, port: int, *, bind: str = "127.0.0.1") -> None:
+        """Start a tiny /metrics HTTP server. Idempotent.
+
+        Defaults to ``127.0.0.1`` so an unauthenticated metrics
+        endpoint is **not** exposed on every interface (OWASP A05).
+        Container deployments that need cross-pod scrape pass
+        ``bind="0.0.0.0"`` explicitly and rely on network policy /
+        firewalling for protection.
+        """
         if self._server is not None:
             return
         handler = type(
@@ -140,14 +151,14 @@ class TelemetryAgent:
             (_MetricsHandler,),
             {"counters": self.counters},
         )
-        self._server = HTTPServer(("0.0.0.0", port), handler)
+        self._server = HTTPServer((bind, port), handler)
         self._server_thread = threading.Thread(
             target=self._server.serve_forever,
             name="telemetry-metrics",
             daemon=True,
         )
         self._server_thread.start()
-        _log.info("%s: prometheus exposer on :%d/metrics", self.name, port)
+        _log.info("%s: prometheus exposer on %s:%d/metrics", self.name, bind, port)
 
     def stop_http(self) -> None:
         if self._server is None:

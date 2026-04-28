@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from common.config import cfg
 
@@ -41,7 +41,7 @@ class CacheBackend(Protocol):
 class InMemoryCacheBackend:
     """Thread-safe in-memory backend for tests + swarm-demo."""
 
-    def __init__(self, *, clock: callable = time.monotonic) -> None:
+    def __init__(self, *, clock: Callable[[], float] = time.monotonic) -> None:
         self._lock = threading.Lock()
         self._data: dict[str, tuple[str, float]] = {}
         self._clock = clock
@@ -70,14 +70,23 @@ class InMemoryCacheBackend:
             return len(self._data)
 
 
-def make_record_key(source: str, source_match_id: str, record_type: str) -> str:
-    return f"record:{source}:{source_match_id}:{record_type}"
+def make_record_key(source: str, key_id: str, record_type: str) -> str:
+    """Build the canonical cache key for a normalized record.
+
+    ``key_id`` is the deterministic identifier the API uses to look
+    the record up — today the storage agent passes ``stable_id``
+    (sha1 of source + source_match_id, truncated). The parameter is
+    deliberately *not* called ``source_match_id`` to make the contract
+    explicit: callers may pass any stable, deterministic id, but it
+    must agree with what the API resolver expects.
+    """
+    return f"record:{source}:{key_id}:{record_type}"
 
 
 class CacheAgent:
     name = "cache.v1"
-    subscribes = [MATCH_STORED]
-    publishes: list = []  # cache writes are side-effects, not bus events
+    subscribes: tuple[str, ...] = (MATCH_STORED,)
+    publishes: tuple[str, ...] = ()  # cache writes are side-effects, not bus events
 
     def __init__(self, backend: CacheBackend | None = None) -> None:
         # Explicit None check — backends with __len__ (the in-memory one)

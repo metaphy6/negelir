@@ -55,7 +55,15 @@ def test_payload_change_emits_updated_with_diff() -> None:
     assert len(out) == 2
     assert MatchStored.from_dict(out[0].payload).change_kind == "updated"
     ev = FreshnessEvent.from_dict(out[1].payload)
-    assert ev.diff_summary == {"away_team": ["FB", "TS"]}
+    assert ev.diff == {"away_team": ["FB", "TS"]}
+    # Deterministic content-derived event id (CONTENT_FRESHNESS §15.2).
+    assert ev.event_id == FreshnessEvent.derive_event_id(
+        source=ev.source,
+        stable_id=ev.stable_id,
+        record_type=ev.record_type,
+        change_kind=ev.change_kind,
+        diff=ev.diff,
+    )
 
 
 def test_in_memory_store_thread_safety_smoke() -> None:

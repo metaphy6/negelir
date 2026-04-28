@@ -156,6 +156,7 @@ phase4:
   cache_record_ttl_sec: 600           # NEGELIR_CACHE_RECORD_TTL_SEC
   cache_prediction_ttl_sec: 300       # NEGELIR_CACHE_PREDICTION_TTL_SEC
   telemetry_metrics_port: 9101        # NEGELIR_TELEMETRY_METRICS_PORT
+  telemetry_metrics_bind: 127.0.0.1   # NEGELIR_TELEMETRY_METRICS_BIND
   reactor_max_event_age_sec: 86400    # NEGELIR_REACTOR_MAX_EVENT_AGE_SEC
 
 # ── Storage paths ────────────────────────────────────────────────────────────
