@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -113,6 +114,10 @@ def test_custom_ip_used(tmp_hosts: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX-only chmod test")
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root bypasses POSIX read-only file mode; chmod 0o400 won't trigger PermissionError",
+)
 def test_install_wraps_permission_error(tmp_hosts: Path) -> None:
     tmp_hosts.chmod(0o400)  # read-only
     try:

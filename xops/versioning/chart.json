@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 42,
+    "build": 44,
     "released": null
   },
   "components": {
@@ -24,14 +24,14 @@
       "last_changed": "2026-04-20T13:29:06+00:00"
     },
     "docs": {
-      "version": "1.8.2",
+      "version": "1.8.3",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-24T14:23:57+00:00"
+      "last_changed": "2026-04-28T08:41:52+00:00"
     },
     "infra_mock": {
-      "version": "1.4.1",
+      "version": "1.4.2",
       "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
-      "last_changed": "2026-04-20T10:19:41+00:00"
+      "last_changed": "2026-04-28T08:41:52+00:00"
     },
     "source_watcher": {
       "version": "1.4.0",
@@ -601,6 +601,24 @@
       "from": "1.8.1",
       "to": "1.8.2",
       "build": 42
+    },
+    {
+      "timestamp": "2026-04-28T08:41:52+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 0/1 audit: drop stale P2P_* mention from xops/env/.env.example strict-mode comment (P2P tripwire was removed 2026-04-24)",
+      "from": "1.8.2",
+      "to": "1.8.3",
+      "build": 43
+    },
+    {
+      "timestamp": "2026-04-28T08:41:52+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "Phase 2 audit: skip test_install_wraps_permission_error when running as root (chmod 0o400 doesn't trigger PermissionError for euid=0)",
+      "from": "1.4.1",
+      "to": "1.4.2",
+      "build": 44
     }
   ]
 }
