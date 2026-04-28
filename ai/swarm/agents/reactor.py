@@ -293,8 +293,16 @@ class TrainerReactor(ReactorBase):
                 trained_at=datetime.fromtimestamp(now, tz=timezone.utc).isoformat(timespec="seconds"),
                 metric="accuracy",
                 metric_value=acc,
-                samples=int(ev.record_id or 0),
-                metadata={"trigger": "freshness", "event_id": ev.event_id},
+                # `samples` is the trainer's training-set size — the
+                # reactor doesn't know it (the trainer fills it in
+                # when the actual job runs). Surface the source
+                # event_id + record_id via metadata for traceability.
+                samples=0,
+                metadata={
+                    "trigger": "freshness",
+                    "event_id": ev.event_id,
+                    "record_id": ev.record_id,
+                },
             )
             out.append(
                 Message.new(

@@ -74,6 +74,10 @@ class _PendingFusion:
     first_seen_ms: float = 0.0
     votes: list[PredictVote] = field(default_factory=list)
     voters: set[str] = field(default_factory=set)
+    # Cached on first vote so consensus only hits the calibration store
+    # once per (match, market, request) — not once per vote handle.
+    prediction_id: str | None = None
+    calibration_version: int = 0
 
 
 def _fuse_distributions(
@@ -194,26 +198,6 @@ class ConsensusAgent:
             return ()
 
         key = (vote.match_id, vote.market, vote.request_id)
-        prediction_id = self._prediction_id(vote.match_id, vote.market, vote.request_id)
-
-        # ── Single-publication / late-vote guard ───────────────────
-        if self._ledger.already_processed(self.name, prediction_id):
-            return (
-                Message.new(
-                    PROOF_FLAG,
-                    {
-                        "kind": "late_vote_dropped",
-                        "agent": self.name,
-                        "predictor_id": vote.predictor_id,
-                        "match_id": vote.match_id,
-                        "market": vote.market,
-                        "request_id": vote.request_id,
-                        "prediction_id": prediction_id,
-                    },
-                    producer=self.name,
-                    trace_id=msg.envelope.trace_id,
-                ),
-            )
 
         with self._lock:
             pending = self._pending.get(key)
@@ -222,11 +206,50 @@ class ConsensusAgent:
                     match_id=vote.match_id,
                     market=vote.market,
                     request_id=vote.request_id,
-                    league_id=None,
-                    profile_id=None,
+                    league_id=vote.league_id,
+                    profile_id=vote.profile_id,
                     first_seen_ms=self._clock_ms(),
                 )
                 self._pending[key] = pending
+            elif pending.profile_id is None and vote.profile_id is not None:
+                # First vote without context, second with — keep it.
+                pending.profile_id = vote.profile_id
+                pending.league_id = pending.league_id or vote.league_id
+
+            # Lazily compute + cache prediction_id once context is known.
+            if pending.prediction_id is None:
+                profile_id = self._resolve_profile(pending)
+                cal = self._calibration.latest(profile_id, pending.market)
+                pending.calibration_version = cal.version
+                pending.prediction_id = derive_prediction_id(
+                    match_id=pending.match_id,
+                    market=pending.market,
+                    request_id=pending.request_id,
+                    calibration_version=cal.version,
+                )
+            prediction_id = pending.prediction_id
+
+            # ── Single-publication / late-vote guard ───────────────
+            if self._ledger.already_processed(self.name, prediction_id):
+                # Drop pending bookkeeping; already finalized.
+                self._pending.pop(key, None)
+                return (
+                    Message.new(
+                        PROOF_FLAG,
+                        {
+                            "kind": "late_vote_dropped",
+                            "agent": self.name,
+                            "predictor_id": vote.predictor_id,
+                            "match_id": vote.match_id,
+                            "market": vote.market,
+                            "request_id": vote.request_id,
+                            "prediction_id": prediction_id,
+                        },
+                        producer=self.name,
+                        trace_id=msg.envelope.trace_id,
+                    ),
+                )
+
             # Idempotency: if the same predictor re-votes for the same
             # request, accept the latest (it's a deterministic re-emit
             # by the runner). Don't double-count.
@@ -247,7 +270,7 @@ class ConsensusAgent:
             # All expected voters in → finalize now.
             del self._pending[key]
 
-        return self._finalize(pending, prediction_id, msg.envelope.trace_id)
+        return self._finalize(pending, msg.envelope.trace_id)
 
     # ── Window flush (called by runner / test) ──────────────────────
     def note_request(self, req: "PredictRequest") -> None:
@@ -258,6 +281,9 @@ class ConsensusAgent:
         for ``flush_expired`` to find. Calling ``note_request`` on
         emission gives the window a starting timestamp so the
         ``consensus_no_votes`` proof.flag actually fires.
+
+        Also seeds ``profile_id``/``league_id`` so the calibration
+        store can be queried correctly even when no vote ever lands.
         """
         key = (req.match_id, req.market, req.request_id)
         with self._lock:
@@ -267,6 +293,8 @@ class ConsensusAgent:
                 match_id=req.match_id,
                 market=req.market,
                 request_id=req.request_id,
+                league_id=req.league_id,
+                profile_id=req.profile_id,
                 first_seen_ms=self._clock_ms(),
             )
 
@@ -283,8 +311,7 @@ class ConsensusAgent:
 
         out: list[Message] = []
         for p in ready:
-            prediction_id = self._prediction_id(p.match_id, p.market, p.request_id)
-            out.extend(self._finalize(p, prediction_id, trace_id=None))
+            out.extend(self._finalize(p, trace_id=None))
         return out
 
     def flush_all(self) -> list[Message]:
@@ -294,36 +321,39 @@ class ConsensusAgent:
             ready = [self._pending.pop(k) for k in keys]
         out: list[Message] = []
         for p in ready:
-            prediction_id = self._prediction_id(p.match_id, p.market, p.request_id)
-            out.extend(self._finalize(p, prediction_id, trace_id=None))
+            out.extend(self._finalize(p, trace_id=None))
         return out
 
     # ── Internals ───────────────────────────────────────────────────
-    def _prediction_id(
-        self, match_id: str, market: str, request_id: str
-    ) -> str:
-        cal = self._calibration.latest(
-            self._profile_for(match_id, request_id), market
-        )
-        return derive_prediction_id(
-            match_id=match_id,
-            market=market,
-            request_id=request_id,
-            calibration_version=cal.version,
-        )
-
-    def _profile_for(self, match_id: str, request_id: str) -> str:
-        # Phase 13a will resolve via CompetitionConfig; until then we
-        # use match_id as a stable, opaque profile bucket so the
-        # CalibrationStore's lookup table is still well-defined.
-        return match_id.split(":", 1)[0] if ":" in match_id else "default"
+    def _resolve_profile(self, pending: _PendingFusion) -> str:
+        """Phase 13a will resolve via CompetitionConfig. Until then we
+        prefer the explicit ``profile_id`` carried on the request/vote
+        (set by API gateway / LivePredictorReactor); fall back to
+        ``league_id`` (Phase 5 default per ROADMAP §5.4); and finally
+        to the literal ``"default"`` so the calibration table lookup
+        is always well-defined.
+        """
+        return pending.profile_id or pending.league_id or "default"
 
     def _finalize(
         self,
         pending: _PendingFusion,
-        prediction_id: str,
         trace_id: str | None,
     ) -> list[Message]:
+        # Resolve calibration once if not already cached (the
+        # quorum-empty path may finalize without ever computing it).
+        if pending.prediction_id is None:
+            profile_id = self._resolve_profile(pending)
+            cal = self._calibration.latest(profile_id, pending.market)
+            pending.calibration_version = cal.version
+            pending.prediction_id = derive_prediction_id(
+                match_id=pending.match_id,
+                market=pending.market,
+                request_id=pending.request_id,
+                calibration_version=cal.version,
+            )
+        prediction_id = pending.prediction_id
+
         # Mark first — single-publication is the primary invariant.
         # Subsequent votes for this prediction_id will be dropped.
         if self._ledger.already_processed(self.name, prediction_id):
@@ -354,8 +384,9 @@ class ConsensusAgent:
         raw_pmf = _fuse_distributions(pending.votes, weights, market)
 
         # Calibration: apply isotonic per outcome, then renormalize so
-        # we still publish a valid pmf.
-        profile_id = self._profile_for(pending.match_id, pending.request_id)
+        # we still publish a valid pmf. (Reuses the table the cached
+        # prediction_id was derived from — single store hit per request.)
+        profile_id = self._resolve_profile(pending)
         cal = self._calibration.latest(profile_id, market)
         calibrated = {o: cal.apply(p) for o, p in raw_pmf.items()}
         z = sum(calibrated.values())

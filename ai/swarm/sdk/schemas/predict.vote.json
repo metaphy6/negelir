@@ -21,6 +21,8 @@
     "confidence":       { "type": "number" },
     "produced_at":      { "type": "string" },
     "features_version": { "type": "string" },
+    "league_id":        { "type": ["string", "null"], "description": "Round-tripped from PredictRequest so consensus + downstream ops can slice without joining by match_id." },
+    "profile_id":       { "type": ["string", "null"], "description": "Round-tripped from PredictRequest; Phase 13a CalibrationProfile id." },
     "metadata":         { "type": "object" }
   },
   "additionalProperties": false

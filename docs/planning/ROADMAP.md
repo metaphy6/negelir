@@ -549,9 +549,9 @@ A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocks
 | `match.normalized` | processors | storage | `NormalizedRecord` — `{record_type, plane, source, source_match_id, stable_id, extractor_version, payload}` + opt `{captured_at}` |
 | `match.stored` | storage | cache, reactors | `{record_id, record_type, plane, source, stable_id, change_kind}` + opt `{stored_at}` (diff lives on `freshness.events.v1`) |
 | `freshness.events.v1` | storage | reactors (consume only) | per `design/CONTENT_FRESHNESS.md` §15.1 |
-| `predict.request` | API gateway | predictor swarm | `{match_id, market}` |
-| `predict.vote` | individual predictors | consensus agent | `{match_id, market, dist, model_id}` |
-| `predict.final` | consensus | proofreader, storage, API cache | calibrated `Prediction` |
+| `predict.request` | API gateway | predictor swarm | `{request_id, match_id, market}` + opt `{league_id, profile_id, requested_at, features, metadata}` |
+| `predict.vote` | individual predictors | consensus agent | `{request_id, match_id, market, predictor_id, distribution, confidence}` + opt `{produced_at, features_version, league_id, profile_id, metadata}` |
+| `predict.final` | consensus | proofreader, storage, API cache | calibrated `Prediction` (typed `distribution` `{market_outcomes, score_grid?}`, `degraded`/`degraded_reason`, `prediction_id`, `produced_at`, `weights`, `contributing_models`, `calibration_version`, `swarm_confidence`) |
 | `proof.flag` | proofreader, scrapers, categorizer, processors | drift, security | `{kind, source, reason, …}` |
 | `telemetry` | (reserved — Phase 5+ producers; nothing emits today) | telemetry agent | `{kind, emitted_at}` + opt `{agent, topic, value, labels}` — sparse, hand-emitted events (deploys, manual replays); not the bulk metrics path |
 | `sec.alert` | security agents | supervisor, telemetry | `{kind, source, severity}` |
@@ -764,6 +764,7 @@ The point of a swarm is to *disagree well*. Initial roster (ordered by build-eff
 - [x] Collects `predict.vote` for a `(match_id, market, request_id)` until `cfg.consensus_window_ms` elapses **or** every known healthy predictor (per `agent_registry` heartbeat) has voted, whichever fires first.
 - [ ] Per-predictor weight learned from a rolling Brier-score window (`cfg.consensus_brier_window`); refreshed nightly by the `TrainerReactor` (§5.4) — never inside the hot path.
 - [x] Output is **calibrated** with isotonic regression per `(profile_id, market)` where `profile_id` resolves via `CompetitionConfig.calibration_profile` (Phase 13a; default `profile_id = league_id` until then). Calibration tables stored via the `CalibrationStore` Protocol (in-memory → Postgres Phase 9 → Feed Phase 16) and versioned.
+      Consensus resolves the profile from the **vote-carried** `profile_id`/`league_id` (round-tripped from the request) — no fragile parsing of `match_id`. Single calibration-store hit per request: `prediction_id` + the table version are cached on the pending key the first time they are needed and reused for both the late-vote guard and the final emission.
 - [x] Publishes `predict.final` with: `distribution = {market_outcomes, score_grid?}` (score grid only when the predictor produces one; null otherwise), weights used, contributing model IDs, calibration version, swarm-confidence (0–1), `degraded` boolean + `degraded_reason` (true when fewer than `cfg.consensus_min_voters` predictors voted), `request_id`, `prediction_id` (sha256 of `match_id|market|request_id|calibration_version`), `produced_at` (ISO-8601 UTC).
 - [x] Single-publication guarantee: a second `predict.final` for the same `(match_id, market, request_id)` is **never** emitted; late votes are logged + dropped (`proof.flag` with `kind=late_vote_dropped`). Idempotency ledger reuses the Phase 4.7 `Ledger` Protocol — in-process for tests, Postgres-backed in prod.
 - [x] Quorum-empty fallback: if zero votes arrive within the window (every predictor down or DLQ-ed), emit `proof.flag` with `kind=consensus_no_votes` and **no** `predict.final`. The proofreader (Phase 6) handles user-facing degradation.

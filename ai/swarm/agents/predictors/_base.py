@@ -204,6 +204,8 @@ class PredictorAgent:
             confidence=float(confidence),
             produced_at=self._clock(),
             features_version=self.features_version,
+            league_id=req.league_id,
+            profile_id=req.profile_id,
             metadata={},
         )
         return (

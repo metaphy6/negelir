@@ -15,39 +15,24 @@ Features (defaults are league-neutral):
 """
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from ._base import PredictorAgent, PredictorContext
+from ._grid import (
+    modal_mass,
+    project_1x2,
+    project_ah_home,
+    project_btts,
+    project_ou25,
+    score_grid,
+)
 
-_MAX_GOALS = 8
 _DEFAULT_HOME_XG = 1.4
 _DEFAULT_AWAY_XG = 1.1
 _DEFAULT_HOME_SHOT_Q = 0.10
 _DEFAULT_AWAY_SHOT_Q = 0.09
 _DEFAULT_HA = 0.10
-
-
-def _poisson(lam: float, k: int) -> float:
-    if lam <= 0.0:
-        return 1.0 if k == 0 else 0.0
-    return math.exp(-lam) * lam ** k / math.factorial(k)
-
-
-def _independent_grid(lam_h: float, lam_a: float) -> list[list[float]]:
-    grid = [[0.0] * (_MAX_GOALS + 1) for _ in range(_MAX_GOALS + 1)]
-    total = 0.0
-    for h in range(_MAX_GOALS + 1):
-        ph = _poisson(lam_h, h)
-        for a in range(_MAX_GOALS + 1):
-            v = ph * _poisson(lam_a, a)
-            grid[h][a] = v
-            total += v
-    if total > 0.0:
-        for h in range(_MAX_GOALS + 1):
-            for a in range(_MAX_GOALS + 1):
-                grid[h][a] /= total
-    return grid
+_CONFIDENCE_MODAL_FLOOR = 0.05
 
 
 class XgbXgPredictor(PredictorAgent):
@@ -80,34 +65,18 @@ class XgbXgPredictor(PredictorAgent):
         self, ctx: PredictorContext
     ) -> tuple[dict[str, Any], float]:
         lam_h, lam_a = self._expected_goals(ctx)
-        grid = _independent_grid(lam_h, lam_a)
-        modal = max(max(row) for row in grid)
-        confidence = max(0.05, min(1.0, modal * 4.0))
+        grid = score_grid(lam_h, lam_a)  # independent (no DC ρ)
+        confidence = max(_CONFIDENCE_MODAL_FLOOR, min(1.0, modal_mass(grid) * 4.0))
 
         market = ctx.request.market
         if market == "1x2":
-            p_h = sum(grid[h][a] for h in range(_MAX_GOALS + 1) for a in range(h))
-            p_d = sum(grid[i][i] for i in range(_MAX_GOALS + 1))
-            p_a = max(0.0, 1.0 - p_h - p_d)
-            outcomes = {"H": p_h, "D": p_d, "A": p_a}
+            outcomes = project_1x2(grid)
         elif market == "ah":
-            p_home = sum(grid[h][a] for h in range(_MAX_GOALS + 1) for a in range(h))
-            outcomes = {"home": p_home, "away": max(0.0, 1.0 - p_home)}
+            outcomes = project_ah_home(grid)
         elif market == "ou_2_5":
-            over = sum(
-                grid[h][a]
-                for h in range(_MAX_GOALS + 1)
-                for a in range(_MAX_GOALS + 1)
-                if h + a >= 3
-            )
-            outcomes = {"over": over, "under": max(0.0, 1.0 - over)}
+            outcomes = project_ou25(grid)
         elif market == "btts":
-            yes = sum(
-                grid[h][a]
-                for h in range(1, _MAX_GOALS + 1)
-                for a in range(1, _MAX_GOALS + 1)
-            )
-            outcomes = {"yes": yes, "no": max(0.0, 1.0 - yes)}
+            outcomes = project_btts(grid)
         else:
             return ({"market_outcomes": {}}, 0.0)
 

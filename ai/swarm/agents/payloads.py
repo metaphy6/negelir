@@ -376,6 +376,8 @@ class PredictVote:
     confidence: float                 # in [0, 1]
     produced_at: str = ""
     features_version: str = ""        # Phase 11 hint
+    league_id: str | None = None      # round-tripped from PredictRequest
+    profile_id: str | None = None     # round-tripped from PredictRequest (Phase 13a)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -406,6 +408,8 @@ class PredictVote:
             confidence=float(data["confidence"]),
             produced_at=str(data.get("produced_at", "")),
             features_version=str(data.get("features_version", "")),
+            league_id=data.get("league_id"),
+            profile_id=data.get("profile_id"),
             metadata=dict(data.get("metadata") or {}),
         )
 

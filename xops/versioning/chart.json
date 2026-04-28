@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 67,
+    "build": 69,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.8",
+      "version": "1.9.9",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T18:58:14+00:00"
+      "last_changed": "2026-04-28T19:13:50+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.3.1",
+      "version": "0.4.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T18:58:08+00:00"
+      "last_changed": "2026-04-28T19:13:13+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -861,6 +861,24 @@
       "from": "1.9.7",
       "to": "1.9.8",
       "build": 67
+    },
+    {
+      "timestamp": "2026-04-28T19:13:13+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 5 review: PredictVote.{league_id,profile_id} round-trip; shared score-grid module with Poisson recurrence (DC + xgb_xg refactor, ~3-5x faster); cached prediction_id per pending key; TrainerReactor.samples bug fix",
+      "from": "0.3.1",
+      "to": "0.4.0",
+      "build": 68
+    },
+    {
+      "timestamp": "2026-04-28T19:13:50+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §3.5 predict.* rows + §5.2 consensus reflect PredictVote profile_id/league_id round-trip + cached prediction_id",
+      "from": "1.9.8",
+      "to": "1.9.9",
+      "build": 69
     }
   ]
 }
