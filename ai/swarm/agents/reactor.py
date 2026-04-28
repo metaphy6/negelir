@@ -213,7 +213,7 @@ class TrainerReactor(ReactorBase):  # pragma: no cover - Phase 5 placeholder
         raise NotImplementedError("Trainer reactor wires up in Phase 5")
 
 
-class LivePredictorReactor(ReactorBase):  # pragma: no cover - Phase 6 placeholder
+class LivePredictorReactor(ReactorBase):  # pragma: no cover - Phase 5 placeholder
     name = "reactor.live_predictor"
     allowed_planes = ("live", "market")
 

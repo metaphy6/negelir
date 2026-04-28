@@ -506,7 +506,7 @@ A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocks
 |---|---|---|---|
 | `scrape.request` | API gateway, scheduler | scrapers | `{source, target}` + opt `{league_id, competition_id, requested_at, metadata}` |
 | `scrape.raw` | scraper agents | categorizer | `{source, target, bytes_sha256, http_status, content_type}` + opt `{bytes_b64, bytes_ref, league_id, competition_id, fetched_at}` |
-| `scrape.classified` | categorizer | processors | `{raw, label, confidence}` + opt `{classifier_id}` |
+| `scrape.classified` | categorizer | processors | `{raw, label, confidence, classifier_id}` |
 | `match.normalized` | processors | storage | `NormalizedRecord` — `{record_type, plane, source, source_match_id, stable_id, extractor_version, payload}` + opt `{captured_at}` |
 | `match.stored` | storage | cache, reactors | `{record_id, record_type, plane, source, stable_id, change_kind}` + opt `{stored_at}` (diff lives on `freshness.events.v1`) |
 | `freshness.events.v1` | storage | reactors (consume only) | per `design/CONTENT_FRESHNESS.md` §15.1 |
@@ -514,6 +514,7 @@ A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocks
 | `predict.vote` | individual predictors | consensus agent | `{match_id, market, dist, model_id}` |
 | `predict.final` | consensus | proofreader, storage, API cache | calibrated `Prediction` |
 | `proof.flag` | proofreader, scrapers, categorizer, processors | drift, security | `{kind, source, reason, …}` |
+| `telemetry` | (reserved — Phase 5+ producers; nothing emits today) | telemetry agent | `{kind, emitted_at}` + opt `{agent, topic, value, labels}` — sparse, hand-emitted events (deploys, manual replays); not the bulk metrics path |
 | `sec.alert` | security agents | supervisor, telemetry | `{kind, source, severity}` |
 | `maint.event` | self-maint | supervisor | `{kind, target, action}` |
 
@@ -548,6 +549,7 @@ The `ai/swarm/source_watcher/` agent shipped in Phase 2.8 is **cron-driven** (it
 - **Phase 2.8 source-watcher.** Stays standalone (cron-driven). Phase 4 scrapers do **not** consume the watcher's drift events — they migrate to the SDK in Phase 8 alongside the LLM-summarizer graduation. Phase 4 only adds *new* SDK-based agents.
 - **Phase 3 §3.5 topic catalog.** The wire authority for every Phase 4 topic. Payload changes go through `ai/swarm/agents/payloads.py` + `ai/swarm/sdk/schemas/<topic>.json`; the §3.5 table is a human summary that must be updated in lock-step.
 - **Phase 3 §3.3 bus semantics.** Every Phase 4 handler must be **idempotent** (at-least-once redelivery), publish at most `swarm_max_in_flight` in-flight, and respect the retry/DLQ contract.
+- **Phase 3 §3.4 swarmctl visibility.** Every Phase 4 agent must show up in `swarmctl ps` (registered, heartbeating) and every new topic must show up in `swarmctl topics`. The supervisor stays read-only — Phase 4 adds no mutating commands.
 
 ### 4.1 Scraper agents
 
@@ -591,7 +593,8 @@ Cache concerns split cleanly between two agents to keep blast radius small:
 - **`cache.v1` (this section)** — *warms* the cache from `match.stored`.
 - **`reactor.cache-invalidation.v1` (§4.7)** — *invalidates* keys when freshness events fire.
 
-- [~] Watches `match.stored` (and Phase 5: `predict.final`); populates the cache with TTLs from `cfg.cache_record_ttl_sec` / `cfg.cache_prediction_ttl_sec`. *(In-memory backend behind `CacheBackend` Protocol; Redis backend lands with the Phase 9 API surface that consumes it.)*
+- [x] Watches `match.stored`; populates the cache with TTL from `cfg.cache_record_ttl_sec`. In-memory backend behind `CacheBackend` Protocol; Redis backend lands with the Phase 9 API surface that consumes it.
+- [ ] Subscribes to `predict.final` and warms with `cfg.cache_prediction_ttl_sec`. *(Phase 5 dep — the producer ships there; the subscription is additive, no schema change.)*
 - [ ] Exposes a tiny gRPC contract to the API gateway for explicit invalidation. *(Deferred to Phase 9 — no consumer exists yet.)*
 
 ### 4.6 Telemetry agent (`telemetry.v1`)
@@ -649,6 +652,9 @@ sub-phase is the implementation hook in the roadmap.
 - [x] Every Phase 4 agent registers in `agent_registry`, heartbeats per
       `cfg.swarm_heartbeat_sec`, and deregisters on `SIGTERM` (inherits
       from Phase 3 `AgentRunner`; covered by SDK suite).
+- [x] Every Phase 4 agent appears in `swarmctl ps` and every Phase 4
+      topic appears in `swarmctl topics` (Phase 3.4 visibility contract
+      preserved — no mutating commands added).
 - [x] Every Phase 4 handler is **idempotent** under at-least-once
       redelivery (storage upserts on `(source, source_match_id,
       record_type)`; reactors short-circuit on the ledger; categorizer
