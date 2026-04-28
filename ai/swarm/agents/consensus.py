@@ -43,7 +43,7 @@ from .payloads import (
     derive_prediction_id,
 )
 from .reactor import InMemoryLedger, Ledger
-from .topics import PREDICT_FINAL, PREDICT_VOTE, PROOF_FLAG
+from .topics import PREDICT_FINAL, PREDICT_REQUEST, PREDICT_VOTE, PROOF_FLAG
 from .predictors._base import (
     CalibrationStore,
     CalibrationTable,
@@ -154,7 +154,11 @@ class ConsensusAgent:
     """Phase 5.2 fusion + calibration agent."""
 
     name = "consensus.v1"
-    subscribes: tuple[Topic, ...] = (PREDICT_VOTE,)
+    # Subscribes to BOTH topics: votes drive fusion, requests "note" the
+    # window so the quorum-empty fallback (§5.2) actually fires when every
+    # predictor crashes / DLQs and never produces a vote. Without this,
+    # ``note_request`` would only ever be reachable from test code.
+    subscribes: tuple[Topic, ...] = (PREDICT_REQUEST, PREDICT_VOTE)
     publishes: tuple[Topic, ...] = (PREDICT_FINAL, PROOF_FLAG)
 
     def __init__(
@@ -209,6 +213,23 @@ class ConsensusAgent:
 
     # ── Bus contract ────────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
+        # Dispatch by topic. The bus delivers both predict.request (so we
+        # can open the window for the quorum-empty path) and predict.vote
+        # (the hot path). Predict.request handling is intentionally tiny:
+        # parse + note_request + return; consensus never publishes
+        # anything in response to a request alone.
+        topic = msg.envelope.topic
+        if topic == PREDICT_REQUEST:
+            try:
+                req = PredictRequest.from_dict(msg.payload)
+            except (KeyError, TypeError, ValueError) as exc:
+                _log.warning(
+                    "%s: malformed predict.request: %s", self.name, exc
+                )
+                return ()
+            self.note_request(req)
+            return ()
+
         try:
             vote = PredictVote.from_dict(msg.payload)
         except (KeyError, TypeError, ValueError) as exc:

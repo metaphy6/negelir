@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 70,
+    "build": 72,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.9",
+      "version": "1.9.10",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T19:13:50+00:00"
+      "last_changed": "2026-04-28T19:42:00+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.4.1",
+      "version": "0.4.2",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T19:29:19+00:00"
+      "last_changed": "2026-04-28T19:42:00+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -888,6 +888,24 @@
       "from": "0.4.0",
       "to": "0.4.1",
       "build": 70
+    },
+    {
+      "timestamp": "2026-04-28T19:42:00+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 5 review: consensus.v1 now subscribes to predict.request (was predict.vote only); handle() dispatches by topic and calls note_request() for requests so the quorum-empty consensus_no_votes flag actually fires in production (previously unreachable from the bus -- only test code called note_request)",
+      "from": "0.4.1",
+      "to": "0.4.2",
+      "build": 71
+    },
+    {
+      "timestamp": "2026-04-28T19:42:00+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §5.2 + SWARM.md consensus algorithm: document predict.request subscription as step 0; close §5.6 follow-up #4",
+      "from": "1.9.9",
+      "to": "1.9.10",
+      "build": 72
     }
   ]
 }

@@ -59,6 +59,14 @@ shape because:
 
 For each `(match_id, market, request_id)`:
 
+0. **Open the window** when a `predict.request` arrives. Consensus
+   subscribes to **both** `predict.request` and `predict.vote` —
+   the request handler is a tiny `note_request()` that records
+   `(match_id, market, request_id)` + the request's `profile_id` /
+   `league_id` and starts the window clock. Without this, the
+   §5 quorum-empty fallback (every predictor crashes / DLQs and
+   no vote ever lands) would be silently unreachable in
+   production. (Wired in 2026-04-28 review; was a hole.)
 1. Collect votes from every **expected** `pred.*.v1` agent until
    `cfg.consensus_window_ms` elapses **or** every expected voter has
    voted, whichever fires first. The expected set is constructor-

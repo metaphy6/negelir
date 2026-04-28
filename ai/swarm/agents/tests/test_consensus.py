@@ -379,3 +379,90 @@ def test_pending_overflow_evicts_oldest_and_emits_proof_flag():
     assert flags[0].payload["request_id"] == "r-1"
     assert flags[0].payload["max_pending"] == 2
 
+
+# ── predict.request subscription (production wire-up) ───────────
+
+
+def _request_msg(
+    *,
+    request_id: str = "r-empty",
+    match_id: str = "m-empty",
+    market: str = "1x2",
+    league_id: str | None = "L1",
+    profile_id: str | None = None,
+    trace_id: str = "trace-Z",
+):
+    from swarm.agents.payloads import PredictRequest as _PR
+    from swarm.agents.topics import PREDICT_REQUEST as _PREDICT_REQUEST
+
+    return Message.new(
+        _PREDICT_REQUEST,
+        _PR(
+            request_id=request_id,
+            match_id=match_id,
+            market=market,
+            league_id=league_id,
+            profile_id=profile_id,
+            features={},
+        ).as_dict(),
+        producer="reactor.live_predictor",
+        trace_id=trace_id,
+    )
+
+
+def test_handle_predict_request_notes_window_for_quorum_empty_path():
+    """Production wire-up: consensus subscribes to predict.request so the
+    §5.2 quorum-empty fallback fires even when zero votes ever arrive
+    (every predictor crashes / DLQs). Without this subscription,
+    ``note_request`` is unreachable from the bus."""
+    c = _make_consensus()
+    out_req = list(c.handle(_request_msg()))
+    assert out_req == []  # request handling is silent
+    # Window now expires with zero votes → consensus_no_votes flag.
+    out = c.flush_all()
+    assert len(out) == 1
+    assert out[0].envelope.topic == PROOF_FLAG
+    assert out[0].payload["kind"] == "consensus_no_votes"
+    assert out[0].payload["request_id"] == "r-empty"
+
+
+def test_predict_request_redelivery_after_finalization_is_a_noop():
+    """At-least-once redelivery: a predict.request that re-arrives after
+    finalization must not trigger a phantom consensus_no_votes (the
+    ledger guard in _finalize is the safety net)."""
+    c = _make_consensus()
+    # Open the window via predict.request, then satisfy quorum.
+    list(c.handle(_request_msg(request_id="r-1", match_id="m-1")))
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2})))
+    list(c.handle(_vote("p.b", {"H": 0.5, "D": 0.3, "A": 0.2})))
+    out = list(c.handle(_vote("p.c", {"H": 0.5, "D": 0.3, "A": 0.2})))
+    assert len(out) == 1 and out[0].envelope.topic == PREDICT_FINAL
+
+    # Replay the request — the bus may at-least-once redeliver it.
+    list(c.handle(_request_msg(request_id="r-1", match_id="m-1")))
+    # Flush should NOT emit a phantom consensus_no_votes.
+    flush_out = c.flush_all()
+    assert flush_out == [], (
+        f"redelivered predict.request after finalize must not emit, got "
+        f"{[m.envelope.topic for m in flush_out]}"
+    )
+
+
+def test_consensus_subscribes_to_both_request_and_vote_topics():
+    """ROADMAP §3.4: every Phase 5 topic shows in `swarmctl topics`.
+    Consensus's `subscribes` is the wire-authority — it must declare
+    both predict.request and predict.vote so the runner / registry
+    surfaces the right routing."""
+    from swarm.agents.topics import PREDICT_REQUEST as _PREQ
+    assert _PREQ in ConsensusAgent.subscribes
+    assert PREDICT_VOTE in ConsensusAgent.subscribes
+
+
+def test_malformed_predict_request_is_logged_and_dropped():
+    """Hardening: a bad predict.request payload must not raise."""
+    from swarm.agents.topics import PREDICT_REQUEST as _PREQ
+    c = _make_consensus()
+    bad = Message.new(_PREQ, {"not": "a request"}, producer="x", trace_id="t")
+    out = list(c.handle(bad))
+    assert out == []
+
