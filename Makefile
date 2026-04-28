@@ -310,8 +310,8 @@ test.integration: env ## Full-pipeline integration test (skips cleanly if real d
 #                       PHASE 4 SWARM DEMO
 # ══════════════════════════════════════════════════════════════
 
-.PHONY: swarm-demo
-swarm-demo: ## Phase 4.8 DoD — end-to-end scrape→categorize→process→store
+.PHONY: swarm.demo
+swarm.demo: ## Phase 4.8 DoD — end-to-end scrape→categorize→process→store
 	@$(XOPS)/swarm.py demo $(if $(LEAGUE),--league $(LEAGUE),)
 
 .PHONY: reactor.replay

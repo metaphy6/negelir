@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 57,
+    "build": 59,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.2",
+      "version": "1.9.3",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T14:11:30+00:00"
+      "last_changed": "2026-04-28T14:49:12+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.2.4",
+      "version": "0.2.5",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T14:11:30+00:00"
+      "last_changed": "2026-04-28T14:49:12+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -771,6 +771,24 @@
       "from": "1.9.1",
       "to": "1.9.2",
       "build": 57
+    },
+    {
+      "timestamp": "2026-04-28T14:49:12+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 4 fifth-pass cross-phase audit: align ROADMAP §4 with Phase 2/3 reality (4-source list incl. openfootball, unified match_normalized table, cache.v1 vs cache-invalidation reactor split, telemetry topic-set explicit, swarm-demo→swarm.demo dot-style canonical, DoD strengthened with idempotency/registry/DLQ/triangle gates)",
+      "from": "0.2.4",
+      "to": "0.2.5",
+      "build": 58
+    },
+    {
+      "timestamp": "2026-04-28T14:49:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §4 Phase 4 fifth-pass cross-phase audit",
+      "from": "1.9.2",
+      "to": "1.9.3",
+      "build": 59
     }
   ]
 }

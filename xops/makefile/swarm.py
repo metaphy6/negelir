@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`make swarm-demo` — Phase 4.8 DoD dispatcher.
+"""`make swarm.demo` — Phase 4.8 DoD dispatcher.
 
 Runs the full scrape→categorize→process→store loop end-to-end against
 ``InMemoryBus`` so the swarm is exercised without requiring Redis.
@@ -97,7 +97,7 @@ def _run_demo(league: str) -> int:
         r.register()
         runners.append(r)
 
-    info(f"swarm-demo: seeding scrape.request for league={league}")
+    info(f"swarm.demo: seeding scrape.request for league={league}")
     bus.publish(
         Message.new(
             SCRAPE_REQUEST,
@@ -106,7 +106,7 @@ def _run_demo(league: str) -> int:
                 target="/datasets/tr.1.json",
                 league_id=league,
             ).as_dict(),
-            producer="swarm-demo",
+            producer="swarm.demo",
         )
     )
 

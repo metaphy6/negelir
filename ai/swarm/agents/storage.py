@@ -49,7 +49,7 @@ class RecordStore(Protocol):
 
 
 class InMemoryRecordStore:
-    """Single-writer in-memory store for tests + swarm-demo.
+    """Single-writer in-memory store for tests + swarm.demo.
 
     Thread-safe so the runner's worker pool cannot lose updates.
     """

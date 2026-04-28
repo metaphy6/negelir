@@ -52,7 +52,7 @@ class Ledger(Protocol):
 
 
 class InMemoryLedger:
-    """Thread-safe ledger. Tests + swarm-demo default."""
+    """Thread-safe ledger. Tests + swarm.demo default."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()

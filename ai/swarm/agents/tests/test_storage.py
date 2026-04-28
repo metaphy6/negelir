@@ -67,7 +67,7 @@ def test_payload_change_emits_updated_with_diff() -> None:
 
 
 def test_in_memory_store_thread_safety_smoke() -> None:
-    # Quick sanity (real chaos test lives in 4.8 swarm-demo).
+    # Quick sanity (real chaos test lives in 4.8 swarm.demo).
     store = InMemoryRecordStore()
     for i in range(50):
         store.upsert(_record(src_id=f"m{i}"))

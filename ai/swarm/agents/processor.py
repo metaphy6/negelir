@@ -8,7 +8,7 @@ Parsing is intentionally minimal at this phase — Phase 4 ships a
 working pipeline; the deep extractors live in `ai/scraper/*` and are
 imported by these processors as the work matures (Phases 5–8 grow
 them). For now, the JSON path covers openfootball and a tiny HTML
-heuristic covers the rest, giving the swarm-demo an end-to-end run.
+heuristic covers the rest, giving the swarm.demo an end-to-end run.
 
 Doctrine: AGENTS.md §2 rule 3 (no fabricated data) — when parsing
 yields nothing recognizable, we flag, never fabricate.

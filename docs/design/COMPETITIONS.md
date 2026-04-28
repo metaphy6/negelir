@@ -436,7 +436,7 @@ Phase 19 + Phase 20):
 - [ ] Two-leg knockout coverage: tie-aggregation reactor passes the
       idempotency suite (replay 2 legs in any order → identical
       `prediction_final` for the tie).
-- [ ] `make swarm-demo COMPETITION=<id>` prints a sample prediction
+- [ ] `make swarm.demo COMPETITION=<id>` prints a sample prediction
       with the calibration profile name in the rationale.
 - [ ] NLP gazetteer carries the competition aliases; sample TR
       query "<competition_alias> nezaman?" resolves the intent

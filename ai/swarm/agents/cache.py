@@ -39,7 +39,7 @@ class CacheBackend(Protocol):
 
 
 class InMemoryCacheBackend:
-    """Thread-safe in-memory backend for tests + swarm-demo."""
+    """Thread-safe in-memory backend for tests + swarm.demo."""
 
     def __init__(self, *, clock: Callable[[], float] = time.monotonic) -> None:
         self._lock = threading.Lock()
