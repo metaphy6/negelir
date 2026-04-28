@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/freshness.events.v1",
+  "title": "freshness.events.v1",
+  "description": "Phase 4.4 → 4.7: per design/CONTENT_FRESHNESS.md §15.1. Storage emits; reactors consume only — back-emission is forbidden by the reactor base class.",
+  "type": "object",
+  "required": ["event_id", "source", "stable_id", "record_type", "plane", "change_kind", "emitted_at"],
+  "properties": {
+    "event_id":    { "type": "string", "description": "Idempotency key for reactor ledgers." },
+    "source":      { "type": "string" },
+    "stable_id":   { "type": "string" },
+    "record_type": { "type": "string", "enum": ["fixture", "match_detail", "lineup", "odds"] },
+    "plane":       { "type": "string", "enum": ["reference", "schedule", "live", "editorial", "market"] },
+    "change_kind": { "type": "string", "enum": ["created", "updated"] },
+    "diff":        { "type": ["object", "null"] },
+    "emitted_at":  { "type": "number" }
+  },
+  "additionalProperties": false
+}

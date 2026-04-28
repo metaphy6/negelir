@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/scrape.request",
+  "title": "scrape.request",
+  "description": "Phase 4.1: instructs a source-scoped scraper agent to fetch a single target URL.",
+  "type": "object",
+  "required": ["source", "target"],
+  "properties": {
+    "source":    { "type": "string", "enum": ["mackolik", "nesine", "tff", "openfootball"] },
+    "target":    { "type": "string", "minLength": 1, "description": "URL or path; resolved against profile host by the scraper." },
+    "league_id": { "type": ["string", "null"] },
+    "request_id":{ "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

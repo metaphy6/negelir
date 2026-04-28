@@ -307,6 +307,18 @@ test.integration: env ## Full-pipeline integration test (skips cleanly if real d
 	@$(XOPS)/tests.py test-integration
 
 # ══════════════════════════════════════════════════════════════
+#                       PHASE 4 SWARM DEMO
+# ══════════════════════════════════════════════════════════════
+
+.PHONY: swarm-demo
+swarm-demo: ## Phase 4.8 DoD — end-to-end scrape→categorize→process→store
+	@$(XOPS)/swarm.py demo $(if $(LEAGUE),--league $(LEAGUE),)
+
+.PHONY: reactor.replay
+reactor.replay: ## Replay freshness events for one reactor (REACTOR=name SINCE=ts)
+	@$(XOPS)/reactor.py replay --reactor $(REACTOR) --since $(SINCE)
+
+# ══════════════════════════════════════════════════════════════
 #                       PHASE TRACKING
 # ══════════════════════════════════════════════════════════════
 

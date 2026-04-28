@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/scrape.classified",
+  "title": "scrape.classified",
+  "description": "Phase 4.2: categorizer label attached to a scrape.raw payload.",
+  "type": "object",
+  "required": ["raw", "label", "confidence"],
+  "properties": {
+    "raw":        { "$ref": "scrape.raw.json" },
+    "label":      { "type": "string", "enum": ["fixture_list", "match_detail", "lineup", "odds", "irrelevant"] },
+    "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "model_id":   { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

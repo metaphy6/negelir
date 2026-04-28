@@ -503,10 +503,15 @@ A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocks
 | Topic | Producer | Consumer(s) | Payload |
 |---|---|---|---|
 | `scrape.request` | API gateway, scheduler | scrapers | `{league, source, target_date}` |
+| `scrape.raw` | scraper agents | categorizer | `{source, target_url, bytes_b64, bytes_sha256, content_type}` |
+| `scrape.classified` | categorizer | processors | `{raw, label, confidence}` |
+| `match.normalized` | processors | storage | `NormalizedRecord` (plane, record_type, source_match_id, payload) |
+| `match.stored` | storage | cache, reactors | `{record_id, source, source_match_id, change_kind, diff}` |
+| `freshness.events.v1` | storage | reactors (consume only) | per `design/CONTENT_FRESHNESS.md` §15.1 |
 | `predict.request` | API gateway | predictor swarm | `{match_id, market}` |
 | `predict.vote` | individual predictors | consensus agent | `{match_id, market, dist, model_id}` |
 | `predict.final` | consensus | proofreader, storage, API cache | calibrated `Prediction` |
-| `proof.flag` | proofreader | drift, security | `{prediction_id, reason}` |
+| `proof.flag` | proofreader, scrapers, categorizer, processors | drift, security | `{kind, source, reason, …}` |
 | `sec.alert` | security agents | supervisor, telemetry | `{kind, source, severity}` |
 | `maint.event` | self-maint | supervisor | `{kind, target, action}` |
 
@@ -539,44 +544,44 @@ The `ai/swarm/source_watcher/` agent shipped in Phase 2.8 is **cron-driven** (it
 
 One agent **per source** (`scraper.mackolik.v1`, `scraper.nesine.v1`, `scraper.tff.v1`).
 
-- [ ] Pulls `scrape.request`, hits the source (mock or real per `NEGELIR_SCRAPE_PROFILE`).
-- [ ] Respects per-source rate limit from config; uses token-bucket from Redis to coordinate with replicas.
-- [ ] Emits `scrape.raw` carrying the raw bytes + content hash.
-- [ ] No parsing here — *raw bytes only*. (Robust to upstream HTML changes.)
-- [ ] Failure modes: `404` → `proof.flag`; `5xx` → exponential backoff + `sec.alert` if it persists.
+- [x] Pulls `scrape.request`, hits the source (mock or real per `NEGELIR_SCRAPE_PROFILE`).
+- [~] Respects per-source rate limit from config; uses token-bucket from Redis to coordinate with replicas. *(in-process token bucket landed; Redis coordination deferred — single replica only today.)*
+- [x] Emits `scrape.raw` carrying the raw bytes + content hash.
+- [x] No parsing here — *raw bytes only*. (Robust to upstream HTML changes.)
+- [~] Failure modes: `404` → `proof.flag`; `5xx` → exponential backoff + `sec.alert` if it persists. *(404 → `proof.flag` done; 5xx currently raises for SDK retry/DLQ; explicit `sec.alert` deferred to Phase 7.)*
 
 > 💡 **Why split scrape from parse?** When mackolik changes its DOM, only the categorizer/processor needs updating. Raw captures stay valid for replay.
 
 ### 4.2 Categorizer agent (`categorizer.v1`)
 
-- [ ] Consumes `scrape.raw`, classifies *what* it is (fixture list, match detail, lineup, odds page, irrelevant).
-- [ ] **No LLM.** A small scikit-learn `LinearSVC` over TF-IDF features, ≤ 5 MB on disk. Trained from labelled seed corpus (Phase 2).
-- [ ] Confidence threshold from config (`NEGELIR_CATEGORIZER_MIN_CONF`). Below threshold → routes to `proof.flag` for human/agent review.
+- [x] Consumes `scrape.raw`, classifies *what* it is (fixture list, match detail, lineup, odds page, irrelevant).
+- [~] **No LLM.** A small scikit-learn `LinearSVC` over TF-IDF features, ≤ 5 MB on disk. Trained from labelled seed corpus (Phase 2). *(Doctrine respected — no LLM. Implementation is rules-based today with `set_model()` hot-swap; trained `LinearSVC` artifact pending labelled corpus.)*
+- [x] Confidence threshold from config (`NEGELIR_CATEGORIZER_MIN_CONF`). Below threshold → routes to `proof.flag` for human/agent review.
 
 ### 4.3 Processor agents (`processor.<kind>.v1`)
 
 One per content kind (fixture, match-detail, lineup, odds).
 
-- [ ] Stateless parsers; each takes raw + categorizer label, emits `match.normalized`.
-- [ ] Use `selectolax` (Python) for HTML — 10× faster than BeautifulSoup, no JS engine needed.
-- [ ] **Schema-first:** output is validated against a Pydantic v2 model before publishing. Bad records go to `proof.flag` with the violation list.
+- [x] Stateless parsers; each takes raw + categorizer label, emits `match.normalized`.
+- [~] Use `selectolax` (Python) for HTML — 10× faster than BeautifulSoup, no JS engine needed. *(JSON walker + regex fallback today; `selectolax` swap planned when real HTML fixtures come online.)*
+- [~] **Schema-first:** output is validated against a Pydantic v2 model before publishing. Bad records go to `proof.flag` with the violation list. *(Validation via frozen `NormalizedRecord` dataclass with plane/record_type guards; Pydantic upgrade deferred — same contract.)*
 
 ### 4.4 Storage agent (`storage.v1`)
 
-- [ ] Single writer for `matches`, `lineups`, `odds`, `outcomes` tables.
-- [ ] Idempotent upserts keyed by `(source, source_match_id)`.
-- [ ] Emits `match.stored` so caches/predictors can warm.
+- [~] Single writer for `matches`, `lineups`, `odds`, `outcomes` tables. *(In-memory `RecordStore` Protocol + `match_normalized` table in `migrations/004_pipeline.sql`; Postgres-backed implementation pending real DB wiring.)*
+- [x] Idempotent upserts keyed by `(source, source_match_id)`.
+- [x] Emits `match.stored` so caches/predictors can warm.
 
 ### 4.5 Cache agent (`cache.v1`)
 
-- [ ] Watches `match.stored` and `predict.final`; populates Redis with TTLs from config.
+- [~] Watches `match.stored` and `predict.final`; populates Redis with TTLs from config. *(In-memory backend behind `CacheBackend` Protocol with `NEGELIR_CACHE_RECORD_TTL_SEC` / `NEGELIR_CACHE_PREDICTION_TTL_SEC`; Redis backend pending Phase 5.)*
 - [ ] Exposes a tiny gRPC contract to the API gateway for explicit invalidation.
 
 ### 4.6 Telemetry agent (`telemetry.v1`)
 
-- [ ] Subscribes to **everything** with a wildcard consumer group.
-- [ ] Aggregates per-topic counters, error rates, latency histograms.
-- [ ] Pushes to Prometheus (pull) and to a `telemetry.events` Postgres table for forensic queries.
+- [x] Subscribes to **everything** with a wildcard consumer group. *(Watches the explicit Phase 4 topic set; bus has no wildcard primitive — list updates with the topic catalog.)*
+- [x] Aggregates per-topic counters, error rates, latency histograms.
+- [~] Pushes to Prometheus (pull) and to a `telemetry.events` Postgres table for forensic queries. *(Prometheus text endpoint via stdlib `http.server` ready; Postgres `telemetry_events` table created in `004_pipeline.sql`; insert wiring pending real DB.)*
 
 ### 4.7 Freshness-event reactors (`reactor.<name>.v1`)
 
@@ -589,27 +594,33 @@ flagging value odds — are owned by **named reactors**, not by the
 freshness module itself. CONTENT_FRESHNESS §15 is the spec; this
 sub-phase is the implementation hook in the roadmap.
 
-- [ ] Reactor base class in `ai/swarm/reactors/_base.py` enforcing
+- [x] Reactor base class in `ai/swarm/reactors/_base.py` enforcing
       §15.2 invariants: idempotent on `event_id` (per-reactor
       `processed_events` table), plane-bounded blast radius, no
       back-emission to `freshness.events.v1`, bounded replay window.
-- [ ] First-cut reactors: `feature-store-reactor` and `cache-reactor`
+      *(Lives at `ai/swarm/agents/reactor.py` per Pivot v3 staging;
+      `reactor_processed_events` table in `004_pipeline.sql`.)*
+- [x] First-cut reactors: `feature-store-reactor` and `cache-reactor`
       (smallest blast radius, exercise the SDK).
 - [ ] Trainer reactor with debounce window, qualifying-event filter,
       accuracy-floor check, and cooldown (CONTENT_FRESHNESS §15.3).
       Publishes `model.trained` on `models.events.v1`.
 - [ ] Live-predictor / NLP / market reactors per §15.1.
-- [ ] Reactor failure isolation: each runs in its own consumer group;
+- [~] Reactor failure isolation: each runs in its own consumer group;
       `reactor.degraded` emitted after `N` consecutive failures.
-- [ ] Replay command: `make reactor.replay REACTOR=<name> SINCE=<ts>`
+      *(Each reactor has its own `AgentRunner` + retry budget → DLQ;
+      explicit `reactor.degraded` topic deferred.)*
+- [x] Replay command: `make reactor.replay REACTOR=<name> SINCE=<ts>`
       for operator-driven recovery (no automatic replay on restart).
-- [ ] Tests: per-reactor idempotency probe (replay same event twice
+- [x] Tests: per-reactor idempotency probe (replay same event twice
       → one side-effect); chaos test (kill -9 mid-side-effect → no
-      half-state).
+      half-state). *(Idempotency probe green in
+      `test_cache_telemetry_reactor.py`; kill -9 chaos test deferred
+      until real Postgres ledger lands.)*
 
 ### 4.8 Definition of Done
 
-- [ ] `make swarm-demo LEAGUE=tr_super_lig` triggers one scrape → one row in Postgres in < 10 s on the mock stack.
+- [~] `make swarm-demo LEAGUE=tr_super_lig` triggers one scrape → one row in Postgres in < 10 s on the mock stack. *(`make swarm-demo` runs end-to-end through the in-memory bus producing 3 normalized records in < 1 s; Postgres-backed run pending the real `RecordStore` implementation.)*
 - [ ] Killing any single agent for 30 s and restarting it does not lose messages (consumer-group durability).
 
 ---

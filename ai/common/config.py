@@ -291,6 +291,18 @@ class Config:
     swarm_pending_claim_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_PENDING_CLAIM_SEC", "60")))
     swarm_metrics_port: int = field(default_factory=lambda: int(os.getenv("SWARM_METRICS_PORT", "9100")))
 
+    # Phase 4 worker agents — scrape → categorize → process → store loop
+    scrape_profile: str = field(default_factory=lambda: os.getenv("SCRAPE_PROFILE", "mock"))
+    scrape_http_max_retries: int = field(default_factory=lambda: int(os.getenv("SCRAPE_HTTP_MAX_RETRIES", "3")))
+    categorizer_min_conf: float = field(default_factory=lambda: float(os.getenv("NEGELIR_CATEGORIZER_MIN_CONF", "0.55")))
+    categorizer_model_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_CATEGORIZER_MODEL_PATH", "data/models/categorizer_v1.joblib"
+    ))
+    cache_record_ttl_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CACHE_RECORD_TTL_SEC", "600")))
+    cache_prediction_ttl_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CACHE_PREDICTION_TTL_SEC", "300")))
+    telemetry_metrics_port: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TELEMETRY_METRICS_PORT", "9101")))
+    reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -403,6 +415,16 @@ class Config:
         _bounded("pg_port", self.pg_port, 1, 65535)
         _bounded("redis_port", self.redis_port, 1, 65535)
         _bounded("swarm_metrics_port", self.swarm_metrics_port, 1, 65535)
+        _bounded("telemetry_metrics_port", self.telemetry_metrics_port, 1, 65535)
+        _bounded("categorizer_min_conf", self.categorizer_min_conf, 0.0, 1.0)
+        _bounded("scrape_http_max_retries", self.scrape_http_max_retries, 0, 100)
+        _bounded("cache_record_ttl_sec", self.cache_record_ttl_sec, 1, 86400 * 30)
+        _bounded("cache_prediction_ttl_sec", self.cache_prediction_ttl_sec, 1, 86400 * 30)
+        _bounded("reactor_max_event_age_sec", self.reactor_max_event_age_sec, 1, 86400 * 365)
+        if self.scrape_profile not in ("mock", "real"):
+            issues.append(
+                f"scrape_profile={self.scrape_profile!r} not in ('mock', 'real')"
+            )
 
         # Swarm bus kind enum
         _swarm_bus_kinds = {"redis", "memory"}

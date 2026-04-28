@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/scrape.raw",
+  "title": "scrape.raw",
+  "description": "Phase 4.1: raw bytes captured from a source. Categorizer/processors operate from this; replay-safe.",
+  "type": "object",
+  "required": ["source", "target_url", "bytes_b64", "bytes_sha256", "fetched_at"],
+  "properties": {
+    "source":      { "type": "string" },
+    "target_url":  { "type": "string", "minLength": 1 },
+    "bytes_b64":   { "type": "string", "description": "Base64-encoded response body." },
+    "bytes_sha256":{ "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "content_type":{ "type": "string" },
+    "status_code": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "fetched_at":  { "type": "number", "description": "POSIX seconds." },
+    "request_id":  { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

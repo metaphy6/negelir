@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/match.normalized",
+  "title": "match.normalized",
+  "description": "Phase 4.3: validated normalized record. See design/DATA_PIPELINE.md for the Record contract and plane semantics.",
+  "type": "object",
+  "required": ["source", "source_match_id", "record_type", "plane", "extractor_version", "captured_at", "payload"],
+  "properties": {
+    "source":            { "type": "string" },
+    "source_match_id":   { "type": "string", "minLength": 1 },
+    "stable_id":         { "type": "string", "description": "sha1(source:smid)[:16]." },
+    "record_type":       { "type": "string", "enum": ["fixture", "match_detail", "lineup", "odds"] },
+    "plane":             { "type": "string", "enum": ["reference", "schedule", "live", "editorial", "market"] },
+    "extractor_version": { "type": "string" },
+    "captured_at":       { "type": "number", "description": "POSIX seconds." },
+    "payload":           { "type": "object" }
+  },
+  "additionalProperties": false
+}

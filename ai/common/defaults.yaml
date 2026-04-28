@@ -147,6 +147,17 @@ swarm:
   pending_claim_sec: 60      # SWARM_PENDING_CLAIM_SEC
   metrics_port: 9100         # SWARM_METRICS_PORT
 
+# ── Phase 4 — Worker agents (scrape → categorize → process → store) ──────────
+phase4:
+  scrape_profile: mock                # SCRAPE_PROFILE  (mock|real)
+  scrape_http_max_retries: 3          # SCRAPE_HTTP_MAX_RETRIES
+  categorizer_min_conf: 0.55          # NEGELIR_CATEGORIZER_MIN_CONF
+  categorizer_model_path: data/models/categorizer_v1.joblib  # NEGELIR_CATEGORIZER_MODEL_PATH
+  cache_record_ttl_sec: 600           # NEGELIR_CACHE_RECORD_TTL_SEC
+  cache_prediction_ttl_sec: 300       # NEGELIR_CACHE_PREDICTION_TTL_SEC
+  telemetry_metrics_port: 9101        # NEGELIR_TELEMETRY_METRICS_PORT
+  reactor_max_event_age_sec: 86400    # NEGELIR_REACTOR_MAX_EVENT_AGE_SEC
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR
