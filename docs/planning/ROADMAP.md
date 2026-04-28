@@ -638,7 +638,7 @@ Cache concerns split cleanly between two agents to keep blast radius small:
 
 ### 4.6 Telemetry agent (`telemetry.v1`)
 
-- [x] Subscribes to the **explicit Phase 4 topic set** (the bus has no wildcard primitive; the subscription list updates in lock-step with §3.5).
+- [x] Subscribes to the **explicit topic set** (Phase 4 + Phase 5 predictor topics — the bus has no wildcard primitive; the subscription list updates in lock-step with §3.5).
 - [x] Aggregates per-topic counters, error rates, latency averages.
 - [~] Pushes to Prometheus (pull) and to a `telemetry_events` Postgres table for forensic queries. *(Prometheus text endpoint via stdlib `http.server` ready; `telemetry_events` table created in `004_pipeline.sql`; insert wiring lands when the Postgres backend ships.)*
 

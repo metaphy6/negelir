@@ -24,6 +24,10 @@ from .topics import (
     FRESHNESS_EVENTS,
     MATCH_NORMALIZED,
     MATCH_STORED,
+    MODEL_TRAINED,
+    PREDICT_FINAL,
+    PREDICT_REQUEST,
+    PREDICT_VOTE,
     PROOF_FLAG,
     SCRAPE_CLASSIFIED,
     SCRAPE_RAW,
@@ -43,6 +47,13 @@ _WATCHED_TOPICS = (
     FRESHNESS_EVENTS,
     PROOF_FLAG,
     TELEMETRY,
+    # Phase 5 — predictor swarm topics. Telemetry is the single
+    # observability surface; missing these meant Phase 5 traffic was
+    # invisible in the Prometheus page.
+    PREDICT_REQUEST,
+    PREDICT_VOTE,
+    PREDICT_FINAL,
+    MODEL_TRAINED,
 )
 
 

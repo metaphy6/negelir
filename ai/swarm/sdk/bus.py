@@ -22,6 +22,7 @@ Common contract for both:
 """
 from __future__ import annotations
 
+import itertools
 import threading
 import time
 from collections import defaultdict, deque
@@ -106,8 +107,10 @@ class InMemoryBus:
         self._streams: dict[Topic, deque[tuple[str, bytes]]] = defaultdict(deque)
         # group → topic → next-index pointer (offset of next un-delivered msg)
         self._group_offsets: dict[tuple[Topic, str], int] = {}
-        # group → list of pending entries (claimed, not yet acked)
-        self._pending: dict[tuple[Topic, str], list[_PendingEntry]] = defaultdict(list)
+        # group → handle → pending entry (claimed, not yet acked).
+        # Dict (insertion-ordered) — O(1) ack vs the prior list scan;
+        # iteration order preserved for reclaim oldest-first.
+        self._pending: dict[tuple[Topic, str], dict[str, _PendingEntry]] = defaultdict(dict)
         # Monotonic id source for delivery handles
         self._next_id = 0
 
@@ -121,7 +124,7 @@ class InMemoryBus:
         with self._lock:
             _ = self._streams[Topic(str(topic))]  # ensure deque exists
             self._group_offsets.setdefault(key, 0)
-            self._pending.setdefault(key, [])
+            self._pending.setdefault(key, {})
 
     def publish(self, msg: Message) -> None:
         raw = self._codec.encode(msg)
@@ -145,10 +148,13 @@ class InMemoryBus:
             self.ensure_group(topic_t, group)
             stream = self._streams[topic_t]
             offset = self._group_offsets[key]
-            available = list(stream)[offset:]
             now = time.monotonic()
-            for handle, raw in available[:count]:
-                self._pending[key].append(_PendingEntry(handle, raw, consumer, now))
+            # itertools.islice walks the deque in O(offset + count) without
+            # materializing the prefix. The prior `list(stream)[offset:]`
+            # was O(N_total) per read — quadratic over a 10K backlog.
+            pending_for_key = self._pending[key]
+            for handle, raw in itertools.islice(stream, offset, offset + count):
+                pending_for_key[handle] = _PendingEntry(handle, raw, consumer, now)
                 out.append(
                     Delivery(handle=handle, topic=topic_t, message=self._codec.decode(raw))
                 )
@@ -159,7 +165,8 @@ class InMemoryBus:
         topic_t = Topic(str(topic))
         key = (topic_t, group)
         with self._lock:
-            self._pending[key] = [p for p in self._pending[key] if p.handle != handle]
+            # O(1) instead of the prior O(N_pending) list scan.
+            self._pending[key].pop(handle, None)
 
     def reclaim(
         self,
@@ -175,8 +182,14 @@ class InMemoryBus:
         cutoff = time.monotonic() - (idle_ms / 1000.0)
         with self._lock:
             self.ensure_group(topic_t, group)
-            for entry in list(self._pending[key]):
-                if entry.delivered_at <= cutoff and len(out) < count:
+            # Insertion order ⇒ oldest-first scan; bail as soon as we hit
+            # an entry younger than the cutoff (delivered_at is monotonic
+            # within a single bus, but reclaim() resets it on re-claim so
+            # we can't early-exit safely — keep the full scan).
+            for entry in self._pending[key].values():
+                if len(out) >= count:
+                    break
+                if entry.delivered_at <= cutoff:
                     entry.consumer = consumer
                     entry.delivered_at = time.monotonic()
                     out.append(

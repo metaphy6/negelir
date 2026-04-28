@@ -78,6 +78,19 @@ def test_telemetry_subscribes_all_phase4_topics() -> None:
     assert set(agent.subscribes) == set(WATCHED_TOPICS)
 
 
+def test_telemetry_watches_phase5_predictor_topics() -> None:
+    """Phase 5 added 4 new topics (predict.request/vote/final + models.events.v1).
+    Telemetry is the single observability surface; missing them meant
+    the predictor swarm flowed past the Prometheus page silently.
+    """
+    agent = TelemetryAgent()
+    subs = set(str(t) for t in agent.subscribes)
+    assert "predict.request" in subs
+    assert "predict.vote" in subs
+    assert "predict.final" in subs
+    assert "models.events.v1" in subs
+
+
 # ── Reactor base ───────────────────────────────────────────────
 
 

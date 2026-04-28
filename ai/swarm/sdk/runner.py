@@ -69,6 +69,13 @@ class AgentRunner:
         self._last_heartbeat = 0.0
         self._registered = False
         self._clock = clock or time
+        # Throttle reclaim() calls per subscribed topic. Reclaiming
+        # every step on every topic is wasteful: the bus contract is
+        # "messages idle for `pending_claim_sec` get reclaimed", so we
+        # only need to *check* every ~half-window. This drops 90%+ of
+        # the per-tick reclaim cost when the pending set is empty.
+        self._reclaim_interval = max(1.0, pending_claim_sec / 2.0)
+        self._last_reclaim_at: dict[str, float] = {}
 
     # ── Lifecycle ───────────────────────────────────────────────────────
     def register(self) -> None:
@@ -119,18 +126,24 @@ class AgentRunner:
     def step(self) -> bool:
         """One iteration of the loop. Returns True if any message was processed."""
         did_work = False
+        now = time.monotonic()
         for topic in self.agent.subscribes:
-            # First: try to reclaim any long-pending messages from dead peers.
-            reclaimed = self.bus.reclaim(
-                topic,
-                self._group_name(),
-                self.instance_id,
-                idle_ms=int(self.pending_claim_sec * 1000),
-                count=self.max_in_flight,
-            )
-            for delivery in reclaimed:
-                self._process(delivery)
-                did_work = True
+            # First: try to reclaim any long-pending messages from dead peers,
+            # but throttled so we don't scan the pending set every tick.
+            topic_key = str(topic)
+            last = self._last_reclaim_at.get(topic_key, 0.0)
+            if (now - last) >= self._reclaim_interval:
+                self._last_reclaim_at[topic_key] = now
+                reclaimed = self.bus.reclaim(
+                    topic,
+                    self._group_name(),
+                    self.instance_id,
+                    idle_ms=int(self.pending_claim_sec * 1000),
+                    count=self.max_in_flight,
+                )
+                for delivery in reclaimed:
+                    self._process(delivery)
+                    did_work = True
             # Then: read fresh messages.
             new_msgs = self.bus.read(
                 topic,

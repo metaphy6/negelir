@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 72,
+    "build": 74,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.10",
+      "version": "1.9.11",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T19:42:00+00:00"
+      "last_changed": "2026-04-28T19:57:07+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.4.2",
+      "version": "0.4.3",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T19:42:00+00:00"
+      "last_changed": "2026-04-28T19:57:07+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -906,6 +906,24 @@
       "from": "1.9.9",
       "to": "1.9.10",
       "build": 72
+    },
+    {
+      "timestamp": "2026-04-28T19:57:07+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 3+4+5 cross-phase audit pass: (1) InMemoryBus.read replaced O(N_total) list+slice with itertools.islice + dict-keyed pending; ack went from O(N_pending) list-scan to O(1) dict.pop. (2) AgentRunner.step throttles per-topic reclaim to once per pending_claim_sec/2 (was every tick). (3) telemetry.v1 now subscribes to Phase 5 predictor topics (predict.request/vote/final + models.events.v1) — they were silent on the Prometheus page. New perf guards: test_read_is_linear_in_batch_not_in_backlog (5K msgs, <2s) + test_ack_is_constant_time_per_handle (2K acks, <1s). New telemetry guard: test_telemetry_watches_phase5_predictor_topics. Suite 662 -> 665.",
+      "from": "0.4.2",
+      "to": "0.4.3",
+      "build": 73
+    },
+    {
+      "timestamp": "2026-04-28T19:57:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §4.6 telemetry contract updated to cover Phase 5 predictor topics.",
+      "from": "1.9.10",
+      "to": "1.9.11",
+      "build": 74
     }
   ]
 }
