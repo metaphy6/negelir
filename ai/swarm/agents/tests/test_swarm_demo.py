@@ -161,6 +161,23 @@ def test_phase4_swarm_demo_end_to_end() -> None:
             dlq_msgs = bus.drain_topic(f"{topic}.dlq")
             assert dlq_msgs == [], f"unexpected DLQ items on {topic}: {dlq_msgs}"
 
+        # ── Wire-contract assertion (Phase 4 fourth-pass audit) ──
+        # Every message that touched the bus must satisfy its registered
+        # JSON schema. Catches drift between payloads.py and schemas/*.json
+        # at the live emission point, not just on hand-crafted fixtures.
+        from swarm.sdk.schemas import known_topics, validate
+        registered = set(known_topics())
+        for topic in bus.topics():
+            topic_str = str(topic)
+            if topic_str not in registered:
+                continue  # e.g. echo.* / future topics without schemas
+            for msg in bus.drain_topic(topic_str):
+                errors = validate(topic_str, msg.payload)
+                assert not errors, (
+                    f"emitted {topic_str} payload violates schema:\n  "
+                    + "\n  ".join(errors)
+                )
+
     finally:
         for r in runners:
             r.deregister()

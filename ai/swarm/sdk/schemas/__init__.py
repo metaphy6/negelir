@@ -27,3 +27,83 @@ def load(topic: str) -> dict[str, Any]:
 def known_topics() -> list[str]:
     """Return the list of topics that ship a schema in this build."""
     return sorted(p.stem for p in _SCHEMA_DIR.glob("*.json"))
+
+
+# ── Lightweight validator (no jsonschema dep) ────────────────────────────
+# Intentionally loose: catches the drift modes we care about (renamed
+# keys, wrong scalar types, unknown keys when additionalProperties=False,
+# enum violations). For deep nested schemas use the per-topic regression
+# tests; for runtime hardening upgrade to the `jsonschema` package later.
+
+_PYTHON_TYPE_MAP: dict[str, tuple[type, ...]] = {
+    "string": (str,),
+    "integer": (int,),
+    "number": (int, float),
+    "boolean": (bool,),
+    "object": (dict,),
+    "array": (list, tuple),
+    "null": (type(None),),
+}
+
+
+def _accepts(spec: dict[str, Any], value: Any) -> bool:
+    types = spec.get("type")
+    if types is None:
+        return True
+    if isinstance(types, str):
+        types = [types]
+    if value is None:
+        return "null" in types
+    for t in types:
+        if isinstance(value, _PYTHON_TYPE_MAP.get(t, ())):
+            # Reject `bool` matching `integer` (Python quirk).
+            if t == "integer" and isinstance(value, bool):
+                continue
+            return True
+    return False
+
+
+def validate(topic: str, payload: dict[str, Any]) -> list[str]:
+    """Return a list of human-readable wire-contract errors for ``payload``.
+
+    Empty list ⇒ payload is consistent with the registered schema.
+    Raises ``FileNotFoundError`` if no schema is registered for ``topic``.
+    """
+    schema = load(topic)
+    errors: list[str] = []
+
+    required = list(schema.get("required", []))
+    properties = dict(schema.get("properties", {}))
+    additional = schema.get("additionalProperties", True)
+
+    for key in required:
+        if key not in payload:
+            errors.append(f"{topic}: missing required key {key!r}")
+
+    if additional is False:
+        for key in payload:
+            if key not in properties:
+                errors.append(
+                    f"{topic}: unknown key {key!r} "
+                    f"(additionalProperties=false)"
+                )
+
+    for key, value in payload.items():
+        spec = properties.get(key)
+        if spec is None:
+            continue
+        # Skip $ref-only properties (validated transitively elsewhere).
+        if "$ref" in spec and "type" not in spec:
+            continue
+        if not _accepts(spec, value):
+            errors.append(
+                f"{topic}.{key}: value {value!r} does not satisfy "
+                f"type={spec.get('type')!r}"
+            )
+        enum = spec.get("enum")
+        if enum is not None and value is not None and value not in enum:
+            errors.append(
+                f"{topic}.{key}: value {value!r} not in declared enum {enum}"
+            )
+
+    return errors

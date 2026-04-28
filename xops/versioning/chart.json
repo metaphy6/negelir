@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 55,
+    "build": 57,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
-      "version": "1.9.1",
+      "version": "1.9.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-28T13:09:31+00:00"
+      "last_changed": "2026-04-28T14:11:30+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.2.3",
+      "version": "0.2.4",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T13:51:53+00:00"
+      "last_changed": "2026-04-28T14:11:30+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -753,6 +753,24 @@
       "from": "3.1.1",
       "to": "3.1.2",
       "build": 55
+    },
+    {
+      "timestamp": "2026-04-28T14:11:30+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 4 fourth-pass: schemas.validate() helper + e2e wire-contract assertion guards drift at live emission",
+      "from": "0.2.3",
+      "to": "0.2.4",
+      "build": 56
+    },
+    {
+      "timestamp": "2026-04-28T14:11:30+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 4 fourth-pass: ROADMAP §3.5 topic-catalog table reflects actual Phase 4 payload fields and v3 boundary",
+      "from": "1.9.1",
+      "to": "1.9.2",
+      "build": 57
     }
   ]
 }

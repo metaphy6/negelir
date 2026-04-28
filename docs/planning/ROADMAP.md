@@ -498,15 +498,17 @@ A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocks
 
 ### 3.5 Topic catalog (control plane)
 
-> **Boundary clarification (Pivot v3).** This catalog covers **bus** topics (control + low-volume coordination). Per [`design/EMITTER.md`](../design/EMITTER.md), high-volume data records (per-Record schedules, fixtures, results) flow through **NDJSON/Parquet feeds**, not the bus, starting Phase 16. The legacy `scrape.raw` / `match.normalized` bus topics from earlier drafts are **not** part of v3.
+> **Boundary clarification (Pivot v3).** This catalog covers **bus** topics (control + low-volume coordination). Per [`design/EMITTER.md`](../design/EMITTER.md), high-volume data records (per-Record schedules, fixtures, results) move via **NDJSON/Parquet feeds**, not the bus, starting Phase 16. Until then (Phase 4–15) the `scrape.raw` / `match.normalized` topics carry pipeline artifacts on the bus; Phase 16 swaps them for feed-pointer envelopes without renaming the topics. The full record diff for a stored row is **not** carried on `match.stored` — it ships on `freshness.events.v1` (see [`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md) §15.1).
 
-| Topic | Producer | Consumer(s) | Payload |
+> **Wire authority.** The dataclasses in `ai/swarm/agents/payloads.py` plus the matching JSON Schemas in `ai/swarm/sdk/schemas/<topic>.json` are the **binding** wire contract; the table below is a human-readable summary that may abbreviate optional fields. Any disagreement between the two is a bug — `ai/swarm/agents/tests/test_schemas_match_payloads.py` keeps them honest.
+
+| Topic | Producer | Consumer(s) | Payload (required + key optional) |
 |---|---|---|---|
-| `scrape.request` | API gateway, scheduler | scrapers | `{league, source, target_date}` |
-| `scrape.raw` | scraper agents | categorizer | `{source, target_url, bytes_b64, bytes_sha256, content_type}` |
-| `scrape.classified` | categorizer | processors | `{raw, label, confidence}` |
-| `match.normalized` | processors | storage | `NormalizedRecord` (plane, record_type, source_match_id, payload) |
-| `match.stored` | storage | cache, reactors | `{record_id, source, source_match_id, change_kind, diff}` |
+| `scrape.request` | API gateway, scheduler | scrapers | `{source, target}` + opt `{league_id, competition_id, requested_at, metadata}` |
+| `scrape.raw` | scraper agents | categorizer | `{source, target, bytes_sha256, http_status, content_type}` + opt `{bytes_b64, bytes_ref, league_id, competition_id, fetched_at}` |
+| `scrape.classified` | categorizer | processors | `{raw, label, confidence}` + opt `{classifier_id}` |
+| `match.normalized` | processors | storage | `NormalizedRecord` — `{record_type, plane, source, source_match_id, stable_id, extractor_version, payload}` + opt `{captured_at}` |
+| `match.stored` | storage | cache, reactors | `{record_id, record_type, plane, source, stable_id, change_kind}` + opt `{stored_at}` (diff lives on `freshness.events.v1`) |
 | `freshness.events.v1` | storage | reactors (consume only) | per `design/CONTENT_FRESHNESS.md` §15.1 |
 | `predict.request` | API gateway | predictor swarm | `{match_id, market}` |
 | `predict.vote` | individual predictors | consensus agent | `{match_id, market, dist, model_id}` |
