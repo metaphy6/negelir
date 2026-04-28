@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/proof.flag",
+  "title": "proof.flag",
+  "description": "Phase 4 cross-cutting: emitted by scrapers, categorizer, processors and (later) proofreaders to surface anomalies that should not silently degrade the pipeline. The shape is intentionally loose because each producer adds its own context fields under the same envelope; only `kind` is universally required.",
+  "type": "object",
+  "required": ["kind"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "Stable, low-cardinality classifier of the anomaly.",
+      "enum": [
+        "upstream_missing",
+        "decode_failed",
+        "empty_parse",
+        "parser_exception",
+        "invalid_record",
+        "low_confidence_classification"
+      ]
+    },
+    "source":      { "type": "string", "description": "Origin source (mackolik, nesine, tff, openfootball, ...)." },
+    "target":      { "type": "string", "description": "URL or path that produced the artefact." },
+    "detail":      { "type": "string", "description": "Free-form human-readable diagnostic." },
+    "label":       { "type": "string", "description": "Categorizer label, when relevant." },
+    "confidence":  { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "threshold":   { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "classifier_id": { "type": "string" },
+    "processor":   { "type": "string", "description": "Producer agent name when emitted by a processor." },
+    "agent":       { "type": "string", "description": "Producer agent name when emitted by other agents." },
+    "http_status": { "type": "integer", "minimum": 100, "maximum": 599 }
+  },
+  "additionalProperties": true
+}

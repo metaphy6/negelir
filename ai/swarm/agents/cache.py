@@ -107,7 +107,11 @@ class CacheAgent:
         key = make_record_key(stored.source, stored.stable_id, stored.record_type)
         # We store a small marker; the API resolves the row by id.
         # Bigger payloads belong in the gRPC cache server, not in-bus.
-        ttl = int(getattr(cfg, "cache_record_ttl_sec", 600))
+        # Read directly from cfg — no `getattr` fallback. The triangle
+        # (config.py + defaults.yaml + .env.example) guarantees the
+        # field exists; a fallback literal here would silently mask
+        # field-rename drift instead of failing loudly.
+        ttl = int(cfg.cache_record_ttl_sec)
         self.backend.set(
             key,
             f"id={stored.record_id}",

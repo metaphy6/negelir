@@ -116,7 +116,26 @@ class CategorizerAgent:
             _log.warning("%s: malformed scrape.raw: %s", self.name, exc)
             return ()
 
-        body_text = self._decode_body(raw)
+        body_text, decode_err = self._decode_body(raw)
+        if decode_err is not None:
+            # Mirror the processor's behaviour (Phase 4.3): a base64
+            # decode failure is an upstream encoding bug and must be
+            # surfaced distinctly so operators can tell it apart from
+            # a low-confidence classification.
+            return (
+                Message.new(
+                    PROOF_FLAG,
+                    {
+                        "kind": "decode_failed",
+                        "source": raw.source,
+                        "target": raw.target,
+                        "detail": decode_err,
+                        "agent": self.name,
+                    },
+                    producer=self.name,
+                    trace_id=msg.envelope.trace_id,
+                ),
+            )
         label, conf = self._classifier.classify(raw, body_text)
         threshold = float(cfg.categorizer_min_conf)
 
@@ -154,20 +173,26 @@ class CategorizerAgent:
         )
 
     @staticmethod
-    def _decode_body(raw: ScrapeRaw) -> str:
+    def _decode_body(raw: ScrapeRaw) -> tuple[str, str | None]:
+        """Returns ``(body, error)``. ``error`` is ``None`` on success.
+
+        Empty inline payload is *not* an error — it simply means the
+        producer used ``bytes_ref`` (Phase 4.1's content-addressed
+        path). Aligned with ``ProcessorAgentBase._decode``.
+        """
         if not raw.bytes_b64:
-            return ""
+            return "", None
         try:
-            data = base64.b64decode(raw.bytes_b64)
-        except ValueError:
-            return ""
+            data = base64.b64decode(raw.bytes_b64, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            return "", f"base64 decode failed: {exc}"
         # Best-effort decode; the categorizer only needs string-shaped
         # signal. Bytes that cannot be decoded as utf-8 fall back to
         # latin-1 (lossless) so substring tests still work.
         try:
-            return data.decode("utf-8")
+            return data.decode("utf-8"), None
         except UnicodeDecodeError:
-            return data.decode("latin-1", errors="replace")
+            return data.decode("latin-1", errors="replace"), None
 
 
 __all__ = ["CategorizerAgent", "Classifier", "RulesClassifier"]

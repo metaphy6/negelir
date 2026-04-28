@@ -37,8 +37,20 @@ ALLOW_PATHS: tuple[str, ...] = (
     "ai/common/config.py",
     "ai/common/defaults.yaml",
 )
+# Tests are exempt anywhere they live under `ai/`. We match by path
+# segment rather than a hard-coded prefix because Phase 3 (SDK) and
+# Phase 4 (worker agents) put their tests under sibling `tests/`
+# directories (`ai/swarm/sdk/tests/`, `ai/swarm/agents/tests/`,
+# `ai/swarm/source_watcher/tests/`), and the lint must keep up
+# without a manual edit each time a new agent package lands.
 ALLOW_DIRS: tuple[str, ...] = (
     "ai/tests/",
+)
+# Substring markers used by `_is_exempt` to catch test trees that are
+# not at the top level (e.g. `ai/swarm/agents/tests/...`). Anything
+# whose POSIX path contains `/tests/` is exempt.
+ALLOW_PATH_FRAGMENTS: tuple[str, ...] = (
+    "/tests/",
 )
 
 # Per-line opt-out marker.
@@ -72,7 +84,9 @@ PATTERNS: tuple[tuple[str, "re.Pattern[str]"], ...] = (
 def _is_exempt(rel: str) -> bool:
     if rel in ALLOW_PATHS:
         return True
-    return any(rel.startswith(d) for d in ALLOW_DIRS)
+    if any(rel.startswith(d) for d in ALLOW_DIRS):
+        return True
+    return any(frag in rel for frag in ALLOW_PATH_FRAGMENTS)
 
 
 def _iter_python_files(roots: Iterable[str]) -> Iterable[Path]:

@@ -2,18 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/freshness.events.v1",
   "title": "freshness.events.v1",
-  "description": "Phase 4.4 → 4.7: per design/CONTENT_FRESHNESS.md §15.1. Storage emits; reactors consume only — back-emission is forbidden by the reactor base class.",
+  "description": "Phase 4.4 \u2192 4.7: per `design/CONTENT_FRESHNESS.md` \u00a715.1. Storage emits; reactors consume only \u2014 back-emission is forbidden by `ReactorBase`. Mirrors `ai/swarm/agents/payloads.py::FreshnessEvent`.",
   "type": "object",
-  "required": ["event_id", "source", "stable_id", "record_type", "plane", "change_kind", "emitted_at"],
+  "required": [
+    "event_id",
+    "record_id",
+    "source",
+    "stable_id",
+    "record_type",
+    "plane",
+    "change_kind"
+  ],
   "properties": {
-    "event_id":    { "type": "string", "description": "Idempotency key for reactor ledgers." },
-    "source":      { "type": "string" },
+    "event_id":    { "type": "string", "minLength": 16, "description": "Deterministic, content-derived idempotency key for reactor ledgers." },
+    "record_id":   { "type": "integer", "minimum": 1 },
+    "source":      { "type": "string", "enum": ["mackolik", "nesine", "tff", "openfootball"] },
     "stable_id":   { "type": "string" },
     "record_type": { "type": "string", "enum": ["fixture", "match_detail", "lineup", "odds"] },
     "plane":       { "type": "string", "enum": ["reference", "schedule", "live", "editorial", "market"] },
-    "change_kind": { "type": "string", "enum": ["created", "updated"] },
-    "diff":        { "type": ["object", "null"] },
-    "emitted_at":  { "type": "number" }
+    "change_kind": { "type": "string", "enum": ["created", "updated", "invalidated"] },
+    "diff":        { "type": "object" },
+    "emitted_at":  { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": false
 }

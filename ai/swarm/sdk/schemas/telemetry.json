@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/telemetry",
+  "title": "telemetry",
+  "description": "Phase 4.6: optional telemetry events. The `telemetry.v1` agent today aggregates over every observed bus topic without publishing back, so this schema describes the *shape* a future producer MUST follow if it ever does emit on this topic. Operationally the topic is reserved for sparse, hand-emitted events (deploys, manual replays); the bus is not the bulk metrics path.",
+  "type": "object",
+  "required": ["kind", "emitted_at"],
+  "properties": {
+    "kind":       { "type": "string", "description": "Stable, low-cardinality event classifier (e.g. `deploy.completed`, `replay.started`)." },
+    "agent":      { "type": "string", "description": "Producer agent name." },
+    "topic":      { "type": "string", "description": "Bus topic the event refers to, when relevant." },
+    "value":      { "type": ["number", "string", "boolean", "null"] },
+    "labels":     { "type": "object", "description": "Free-form low-cardinality label set." },
+    "emitted_at": { "type": "string", "description": "ISO-8601 UTC." }
+  },
+  "additionalProperties": true
+}

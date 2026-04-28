@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 53,
+    "build": 55,
     "released": null
   },
   "components": {
@@ -19,9 +19,9 @@
       "last_changed": "2026-04-24T13:51:08+00:00"
     },
     "xops": {
-      "version": "3.1.1",
+      "version": "3.1.2",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-04-28T13:09:31+00:00"
+      "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "docs": {
       "version": "1.9.1",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.2.2",
+      "version": "0.2.3",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-28T13:36:35+00:00"
+      "last_changed": "2026-04-28T13:51:53+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -735,6 +735,24 @@
       "from": "0.2.1",
       "to": "0.2.2",
       "build": 53
+    },
+    {
+      "timestamp": "2026-04-28T13:51:53+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 4 audit pass 3: schemas rewritten to match payloads + proof.flag/telemetry schemas added + cache.py drops getattr fallback + categorizer mirrors processor decode_failed flag",
+      "from": "0.2.2",
+      "to": "0.2.3",
+      "build": 54
+    },
+    {
+      "timestamp": "2026-04-28T13:51:53+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "no_magic lint exempts every /tests/ tree under ai/ (Phase 3 + Phase 4 test packages were leaking false positives)",
+      "from": "3.1.1",
+      "to": "3.1.2",
+      "build": 55
     }
   ]
 }

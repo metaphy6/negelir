@@ -2,18 +2,30 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/match.normalized",
   "title": "match.normalized",
-  "description": "Phase 4.3: validated normalized record. See design/DATA_PIPELINE.md for the Record contract and plane semantics.",
+  "description": "Phase 4.3: validated normalized record. See `design/DATA_PIPELINE.md` for the Record contract; mirrors `ai/swarm/agents/payloads.py::NormalizedRecord`.",
   "type": "object",
-  "required": ["source", "source_match_id", "record_type", "plane", "extractor_version", "captured_at", "payload"],
+  "required": [
+    "record_type",
+    "plane",
+    "source",
+    "source_match_id",
+    "stable_id",
+    "extractor_version",
+    "payload"
+  ],
   "properties": {
-    "source":            { "type": "string" },
-    "source_match_id":   { "type": "string", "minLength": 1 },
-    "stable_id":         { "type": "string", "description": "sha1(source:smid)[:16]." },
     "record_type":       { "type": "string", "enum": ["fixture", "match_detail", "lineup", "odds"] },
     "plane":             { "type": "string", "enum": ["reference", "schedule", "live", "editorial", "market"] },
+    "source":            { "type": "string", "enum": ["mackolik", "nesine", "tff", "openfootball"] },
+    "source_match_id":   { "type": "string", "minLength": 1 },
+    "stable_id":         { "type": "string", "description": "sha1(source:source_match_id)[:16]." },
     "extractor_version": { "type": "string" },
-    "captured_at":       { "type": "number", "description": "POSIX seconds." },
-    "payload":           { "type": "object" }
+    "payload":           { "type": "object", "description": "Record-type-specific body persisted as JSONB." },
+    "league_id":         { "type": ["string", "null"] },
+    "competition_id":    { "type": ["string", "null"] },
+    "canonical_version": { "type": "integer", "minimum": 1 },
+    "raw_sha256":        { "type": "string" },
+    "captured_at":       { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": false
 }

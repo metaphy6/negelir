@@ -2,14 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/scrape.request",
   "title": "scrape.request",
-  "description": "Phase 4.1: instructs a source-scoped scraper agent to fetch a single target URL.",
+  "description": "Phase 4.1: instructs a source-scoped scraper agent to fetch a single target. Mirrors `ai/swarm/agents/payloads.py::ScrapeRequest`.",
   "type": "object",
   "required": ["source", "target"],
   "properties": {
-    "source":    { "type": "string", "enum": ["mackolik", "nesine", "tff", "openfootball"] },
-    "target":    { "type": "string", "minLength": 1, "description": "URL or path; resolved against profile host by the scraper." },
-    "league_id": { "type": ["string", "null"] },
-    "request_id":{ "type": ["string", "null"] }
+    "source":         { "type": "string", "enum": ["mackolik", "nesine", "tff", "openfootball"] },
+    "target":         { "type": "string", "minLength": 1, "description": "URL or path; the scraper resolves against profile host." },
+    "league_id":      { "type": ["string", "null"] },
+    "competition_id": { "type": ["string", "null"] },
+    "requested_at":   { "type": "string", "description": "ISO-8601 UTC; empty string when unknown." },
+    "metadata":       { "type": "object", "description": "Free-form scheduler hints." }
   },
   "additionalProperties": false
 }

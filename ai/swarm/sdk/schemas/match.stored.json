@@ -2,19 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/match.stored",
   "title": "match.stored",
-  "description": "Phase 4.4: emitted by the storage agent on every upsert. change_kind drives downstream cache + reactor behaviour.",
+  "description": "Phase 4.4: storage agent confirmation. Mirrors `ai/swarm/agents/payloads.py::MatchStored`.",
   "type": "object",
-  "required": ["record_id", "source", "source_match_id", "record_type", "plane", "change_kind"],
+  "required": [
+    "record_id",
+    "record_type",
+    "plane",
+    "source",
+    "stable_id",
+    "change_kind"
+  ],
   "properties": {
-    "record_id":       { "type": "string" },
-    "source":          { "type": "string" },
-    "source_match_id": { "type": "string" },
-    "stable_id":       { "type": "string" },
-    "record_type":     { "type": "string", "enum": ["fixture", "match_detail", "lineup", "odds"] },
-    "plane":           { "type": "string", "enum": ["reference", "schedule", "live", "editorial", "market"] },
-    "change_kind":     { "type": "string", "enum": ["created", "updated", "unchanged"] },
-    "diff":            { "type": ["object", "null"] },
-    "stored_at":       { "type": "number" }
+    "record_id":   { "type": "integer", "minimum": 1 },
+    "record_type": { "type": "string", "enum": ["fixture", "match_detail", "lineup", "odds"] },
+    "plane":       { "type": "string", "enum": ["reference", "schedule", "live", "editorial", "market"] },
+    "source":      { "type": "string", "enum": ["mackolik", "nesine", "tff", "openfootball"] },
+    "stable_id":   { "type": "string" },
+    "change_kind": { "type": "string", "enum": ["created", "updated", "unchanged"] },
+    "stored_at":   { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": false
 }
