@@ -60,7 +60,7 @@ func TestValidateBadPort(t *testing.T) {
 	cfg := &Config{Port: "70000", PostgresPort: "5432", RedisPort: "6379", DBMaxConns: 1,
 		DBConnectTimeoutSec: 1, DBPingTimeoutSec: 1, DBRetryDelaySec: 1, RedisRetryDelaySec: 1,
 		HTTPReadTimeoutSec: 1, HTTPWriteTimeoutSec: 1, HTTPShutdownTimeoutSec: 1,
-		CacheMatchesTTLSec: 1, CacheTeamsTTLSec: 1}
+		CacheMatchesTTLSec: 1, CacheTeamsTTLSec: 1, SwarmHeartbeatSec: 1}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error for SERVER_PORT=70000, got nil")
 	}
@@ -70,7 +70,7 @@ func TestValidateBadDatabaseURL(t *testing.T) {
 	cfg := &Config{Port: "8080", PostgresPort: "5432", RedisPort: "6379", DBMaxConns: 1,
 		DBConnectTimeoutSec: 1, DBPingTimeoutSec: 1, DBRetryDelaySec: 1, RedisRetryDelaySec: 1,
 		HTTPReadTimeoutSec: 1, HTTPWriteTimeoutSec: 1, HTTPShutdownTimeoutSec: 1,
-		CacheMatchesTTLSec: 1, CacheTeamsTTLSec: 1,
+		CacheMatchesTTLSec: 1, CacheTeamsTTLSec: 1, SwarmHeartbeatSec: 1,
 		DatabaseURL: "mysql://nope"}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Fatalf("expected DATABASE_URL scheme error, got %v", err)

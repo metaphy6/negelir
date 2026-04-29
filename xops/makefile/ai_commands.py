@@ -135,7 +135,7 @@ def cmd_swarm_backtest(argv):
     import subprocess
     here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     rc = subprocess.call([
-        "python3", os.path.join(here, "xops", "swarm_backtest.py"),
+        sys.executable, os.path.join(here, "xops", "swarm_backtest.py"),
         "--weeks", str(a.weeks),
         "--max-matches", str(a.max_matches),
     ])

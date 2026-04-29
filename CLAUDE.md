@@ -194,9 +194,11 @@ context. If you need to look something up:
 
 - [`docs/design/COMPONENT_LAYOUT.md`](docs/design/COMPONENT_LAYOUT.md) — what owns what
 - [`docs/design/DATA_PIPELINE.md`](docs/design/DATA_PIPELINE.md) — the Record contract you must respect
+- [`docs/design/DATA_SOURCE.md`](docs/design/DATA_SOURCE.md) — the six datasource sub-components and their boundaries
 - [`docs/design/EMITTER.md`](docs/design/EMITTER.md) — feed schema versioning rules
 - [`docs/design/SCRAPER_PATCHER.md`](docs/design/SCRAPER_PATCHER.md) — your own contract (the binding one)
 - [`docs/design/CONTENT_FRESHNESS.md`](docs/design/CONTENT_FRESHNESS.md) — how detectors decide something is wrong
+- [`docs/design/ENRICHMENT_DATA.md`](docs/design/ENRICHMENT_DATA.md) — supplemental data planes (relevant only when an artifact's scope is enrichment-related)
 
 You do not need to read these in full unless the diagnostic bundle
 points you at one. They exist for context, not for you to consume

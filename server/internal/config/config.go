@@ -133,6 +133,7 @@ func (c *Config) Validate() error {
 		"HTTP_SHUTDOWN_TIMEOUT_SEC": c.HTTPShutdownTimeoutSec,
 		"CACHE_MATCHES_TTL_SEC":     c.CacheMatchesTTLSec,
 		"CACHE_TEAMS_TTL_SEC":       c.CacheTeamsTTLSec,
+		"SWARM_HEARTBEAT_SEC":       c.SwarmHeartbeatSec,
 	} {
 		if sec <= 0 {
 			return fmt.Errorf("%s=%d must be a positive integer (seconds)", name, sec)
@@ -200,6 +201,7 @@ func (c *Config) specs() []fieldSpec {
 		{name: "HTTP_SHUTDOWN_TIMEOUT_SEC", dflt: "5", intDst: &c.HTTPShutdownTimeoutSec},
 		{name: "CACHE_MATCHES_TTL_SEC", dflt: "300", intDst: &c.CacheMatchesTTLSec},
 		{name: "CACHE_TEAMS_TTL_SEC", dflt: "600", intDst: &c.CacheTeamsTTLSec},
+		{name: "SWARM_HEARTBEAT_SEC", dflt: "5", intDst: &c.SwarmHeartbeatSec},
 	}
 }
 

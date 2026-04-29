@@ -33,6 +33,15 @@ def main():
         signal.signal(signal.SIGTERM, _handle_signal)
 
         scheduler = NegelirScheduler()
+        # Continuous mode requires a real scheduling backend; the no-op
+        # fallback would silently skip every cron job. Fail fast so ops
+        # notices instead of seeing a healthy-looking idle process.
+        if not getattr(scheduler, "_use_apscheduler", False):
+            log.error(
+                "Continuous mode requires APScheduler. Install it via "
+                "`pip install apscheduler` (already pinned in ai/requirements.txt)."
+            )
+            sys.exit(2)
         interval = int(os.getenv("SIMULATION_INTERVAL", "30"))
 
         def run_cycle():

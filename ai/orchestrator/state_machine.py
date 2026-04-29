@@ -186,18 +186,26 @@ def _cli() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Negelir orchestrator CLI")
-    parser.add_argument("--mode", required=True, choices=["full-training"])
+    parser.add_argument("--mode", required=True, choices=["full-training", "model-only"])
     parser.add_argument("--league", default=None)
     parser.add_argument("--window-weeks", type=int, default=None)
     parser.add_argument("--force-from", default=None,
                         help="Stage to force re-run from (scrape/validate/split/train/...)")
     args = parser.parse_args()
 
+    # `model-only` skips scrape/validate/split and re-trains from existing
+    # split artefacts. Implemented by routing through the same training
+    # pipeline but pinning `force_from="train"` (the pipeline's resolver
+    # treats earlier stages as already-completed).
+    effective_force_from = args.force_from
+    if args.mode == "model-only" and effective_force_from is None:
+        effective_force_from = "train"
+
     orch = TaskOrchestrator()
     report = orch.run_full_training(
         league_id=args.league,
         verification_window_weeks=args.window_weeks,
-        force_from=args.force_from,
+        force_from=effective_force_from,
     )
 
     print(f"Verdict: {report.verdict}  →  {report.txt_path}")

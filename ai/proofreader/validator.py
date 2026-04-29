@@ -131,11 +131,22 @@ class DataProofreader:
                     f"Possession inconsistent: {home_poss}+{away_poss}={total} (≈100 expected)"
                 )
 
-        # Score consistency
+        # Score consistency. Defensive parsing — bad upstream values must
+        # turn into a quarantine warning, never a hard exception that
+        # aborts the whole batch (see validate_batch contract).
+        def _coerce_int(label: str, raw):
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                result.warnings.append(f"Invalid value type: {label}={raw}")
+                return None
+
         ht_home = match.get("ht_home_score")
         ft_home = match.get("home_score")
         if ht_home is not None and ft_home is not None:
-            if int(ht_home) > int(ft_home):
+            ht_h = _coerce_int("ht_home_score", ht_home)
+            ft_h = _coerce_int("home_score", ft_home)
+            if ht_h is not None and ft_h is not None and ht_h > ft_h:
                 result.errors.append(
                     f"HT score cannot exceed FT: HT={ht_home} > FT={ft_home}"
                 )
@@ -143,7 +154,9 @@ class DataProofreader:
         ht_away = match.get("ht_away_score")
         ft_away = match.get("away_score")
         if ht_away is not None and ft_away is not None:
-            if int(ht_away) > int(ft_away):
+            ht_a = _coerce_int("ht_away_score", ht_away)
+            ft_a = _coerce_int("away_score", ft_away)
+            if ht_a is not None and ft_a is not None and ht_a > ft_a:
                 result.errors.append(
                     f"HT score cannot exceed FT: HT={ht_away} > FT={ft_away}"
                 )
@@ -152,7 +165,9 @@ class DataProofreader:
         home_yellows = stats.get("home_yellows")
         home_fouls = stats.get("home_fouls")
         if home_yellows is not None and home_fouls is not None:
-            if int(home_yellows) > int(home_fouls):
+            hy = _coerce_int("home_yellows", home_yellows)
+            hf = _coerce_int("home_fouls", home_fouls)
+            if hy is not None and hf is not None and hy > hf:
                 result.warnings.append(
                     f"More yellow cards ({home_yellows}) than fouls ({home_fouls}) for home team"
                 )
@@ -163,14 +178,22 @@ class DataProofreader:
         away_score = match.get("away_score")
 
         if home_score is not None and away_score is not None:
-            total = int(home_score) + int(away_score)
+            try:
+                hs = int(home_score)
+                as_ = int(away_score)
+            except (TypeError, ValueError):
+                result.warnings.append(
+                    f"Invalid value type: score={home_score}-{away_score}"
+                )
+                return
+            total = hs + as_
             # A match with 10+ total goals is extremely rare
             if total >= 10:
                 result.warnings.append(
                     f"Unusually high total goals: {total} (statistically rare)"
                 )
             # A single team scoring 8+ is implausible
-            if int(home_score) >= 8 or int(away_score) >= 8:
+            if hs >= 8 or as_ >= 8:
                 result.errors.append(
                     f"Implausible score: {home_score}-{away_score}"
                 )

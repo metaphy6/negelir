@@ -33,6 +33,16 @@
    datasource → swarm feed contract; Phase 16),
    [`SCRAPER_PATCHER.md`](docs/design/SCRAPER_PATCHER.md) (the auto-patch
    loop; Phase 17 — binding contract for the patcher harness).
+   **Domain anchor docs** (binding for league / competition / data /
+   commercial work): [`ARCHITECTURE.md`](docs/design/ARCHITECTURE.md)
+   (top-level system map), [`LEAGUE_CATALOG.md`](docs/design/LEAGUE_CATALOG.md)
+   (which leagues we serve and the readiness gates per Phase 13/19),
+   [`COMPETITIONS.md`](docs/design/COMPETITIONS.md) (non-league formats:
+   knockouts, two-leg ties, group stages),
+   [`ENRICHMENT_DATA.md`](docs/design/ENRICHMENT_DATA.md) (Phase 21
+   enrichment overlays on the five base data planes),
+   [`MONETIZATION.md`](docs/design/MONETIZATION.md) (Phase 20 tier
+   model, built-but-dormant — edge-only enforcement at the Go API).
    Other per-area docs: `SWARM.md`, `CONFIGURATION.md`,
    `MOCK_DATA_SERVER.md`, `SECURITY.md`, `COMPUTE_DEVICES.md`,
    `LANGUAGE_CHOICES.md`, `TURKISH_NLP.md`, `TESTING_STRATEGY.md`,

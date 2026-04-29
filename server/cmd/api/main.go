@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -164,20 +166,38 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duratio
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
+		// Parse and sanitize filter params. Empty values disable that
+		// filter; the cache key includes the *raw* filter value so
+		// distinct (league_id, season) tuples never collide.
+		leagueID := strings.TrimSpace(c.Query("league_id"))
+		season := strings.TrimSpace(c.Query("season"))
+		limit := 50
+		if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 500 {
+				limit = n
+			}
+		}
+
+		cacheKey := fmt.Sprintf("matches:list:%s:%s:%d", leagueID, season, limit)
+
 		// Try cache first
-		cached, err := rdb.Get(ctx, "matches:list").Result()
+		cached, err := rdb.Get(ctx, cacheKey).Result()
 		if err == nil && cached != "" {
 			c.Data(http.StatusOK, "application/json", []byte(cached))
 			return
 		}
 
-		rows, err := pool.Query(ctx, `
+		// Build a parameterised query so league/season are SQL-safe.
+		query := `
 			SELECT id, home_team, away_team, match_date, league_id, season,
 				   home_score, away_score, match_week
 			FROM raw_matches
+			WHERE ($1 = '' OR league_id = $1)
+			  AND ($2 = '' OR season = $2)
 			ORDER BY match_date DESC
-			LIMIT 50
-		`)
+			LIMIT $3
+		`
+		rows, err := pool.Query(ctx, query, leagueID, season, limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch data"})
 			return
@@ -225,7 +245,7 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duratio
 
 		// Write to cache using configured TTL
 		if data, err := json.Marshal(result); err == nil {
-			rdb.Set(ctx, "matches:list", data, cacheTTL)
+			rdb.Set(ctx, cacheKey, data, cacheTTL)
 		}
 
 		c.JSON(http.StatusOK, result)
