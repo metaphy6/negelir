@@ -31,3 +31,29 @@ def test_schema_declares_additional_properties(path: Path) -> None:
     # We don't force the value: contract evolution sometimes wants
     # an open envelope. But the choice must be deliberate.
     assert isinstance(schema["additionalProperties"], (bool, dict))
+
+
+@pytest.mark.parametrize("path", _schema_files(), ids=lambda p: p.name)
+def test_schema_does_not_use_unsupported_constructs(path: Path) -> None:
+    """Pre-Phase-6 audit round-3 SK2: the hand-rolled validator
+    in `ai/swarm/sdk/schemas/__init__.py` only checks `type`,
+    `required`, `properties`, `enum`, `additionalProperties`.
+    Schemas that use `oneOf` / `anyOf` / `allOf` would silently
+    pass any payload past those constructs — a footgun in waiting.
+    `$ref` is currently used (only) in `scrape.classified.json`
+    where the validator effectively treats it as an opaque object;
+    this test grandfathers that single occurrence and bans new ones.
+    """
+    raw = path.read_text(encoding="utf-8")
+    for forbidden in ("oneOf", "anyOf", "allOf"):
+        assert forbidden not in raw, (
+            f"{path.name}: uses `{forbidden}` which the hand-rolled "
+            "validator silently ignores. Either inline the constraint "
+            "or upgrade the validator to a real jsonschema impl."
+        )
+    if "$ref" in raw and path.name != "scrape.classified.json":
+        raise AssertionError(
+            f"{path.name}: `$ref` is grandfathered only in "
+            "scrape.classified.json; the hand-rolled validator does "
+            "not resolve refs. Inline the schema or extend the validator."
+        )

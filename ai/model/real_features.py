@@ -566,6 +566,22 @@ def extract_real_dataset(
             "or lower NEGELIR_MIN_HISTORY."
         )
 
+    # Pre-Phase-6 audit round-3 P2: surface silent dropout. Most matches
+    # at the start of a season fail the `min_history` gate; if the ratio
+    # is high the trainer is effectively training on the league's tail
+    # only, and §6.3 backtest baselines will be skewed.
+    dropped = len(matches) - len(rows)
+    if dropped:
+        ratio = dropped / max(len(matches), 1)
+        msg = (
+            f"min_history={min_history} dropped {dropped}/{len(matches)} "
+            f"matches ({ratio:.1%}) before feature extraction"
+        )
+        if ratio > 0.30:
+            log.warning("⚠️  " + msg)
+        else:
+            log.info(msg)
+
     X = pd.DataFrame(rows, columns=FEATURE_COLUMNS)
     y = pd.Series(labels, name="result_class")
 

@@ -44,6 +44,7 @@ type Config struct {
 	RedisRetryDelaySec       int    `env:"REDIS_RETRY_DELAY_SEC"     default:"2"`
 	HTTPReadTimeoutSec       int    `env:"HTTP_READ_TIMEOUT_SEC"     default:"10"`
 	HTTPWriteTimeoutSec      int    `env:"HTTP_WRITE_TIMEOUT_SEC"    default:"30"`
+	HTTPHandlerTimeoutSec    int    `env:"HTTP_HANDLER_TIMEOUT_SEC"  default:"25"`
 	HTTPShutdownTimeoutSec   int    `env:"HTTP_SHUTDOWN_TIMEOUT_SEC" default:"5"`
 	CacheMatchesTTLSec       int    `env:"CACHE_MATCHES_TTL_SEC"     default:"300"`
 	CacheTeamsTTLSec         int    `env:"CACHE_TEAMS_TTL_SEC"       default:"600"`
@@ -62,6 +63,7 @@ func (c *Config) DBRetryDelay() time.Duration        { return secondsToDuration(
 func (c *Config) RedisRetryDelay() time.Duration     { return secondsToDuration(c.RedisRetryDelaySec) }
 func (c *Config) HTTPReadTimeout() time.Duration     { return secondsToDuration(c.HTTPReadTimeoutSec) }
 func (c *Config) HTTPWriteTimeout() time.Duration    { return secondsToDuration(c.HTTPWriteTimeoutSec) }
+func (c *Config) HTTPHandlerTimeout() time.Duration  { return secondsToDuration(c.HTTPHandlerTimeoutSec) }
 func (c *Config) HTTPShutdownTimeout() time.Duration { return secondsToDuration(c.HTTPShutdownTimeoutSec) }
 func (c *Config) MatchesCacheTTL() time.Duration     { return secondsToDuration(c.CacheMatchesTTLSec) }
 func (c *Config) TeamsCacheTTL() time.Duration       { return secondsToDuration(c.CacheTeamsTTLSec) }
@@ -130,6 +132,7 @@ func (c *Config) Validate() error {
 		"REDIS_RETRY_DELAY_SEC":     c.RedisRetryDelaySec,
 		"HTTP_READ_TIMEOUT_SEC":     c.HTTPReadTimeoutSec,
 		"HTTP_WRITE_TIMEOUT_SEC":    c.HTTPWriteTimeoutSec,
+		"HTTP_HANDLER_TIMEOUT_SEC":  c.HTTPHandlerTimeoutSec,
 		"HTTP_SHUTDOWN_TIMEOUT_SEC": c.HTTPShutdownTimeoutSec,
 		"CACHE_MATCHES_TTL_SEC":     c.CacheMatchesTTLSec,
 		"CACHE_TEAMS_TTL_SEC":       c.CacheTeamsTTLSec,
@@ -198,6 +201,7 @@ func (c *Config) specs() []fieldSpec {
 		{name: "REDIS_RETRY_DELAY_SEC", dflt: "2", intDst: &c.RedisRetryDelaySec},
 		{name: "HTTP_READ_TIMEOUT_SEC", dflt: "10", intDst: &c.HTTPReadTimeoutSec},
 		{name: "HTTP_WRITE_TIMEOUT_SEC", dflt: "30", intDst: &c.HTTPWriteTimeoutSec},
+		{name: "HTTP_HANDLER_TIMEOUT_SEC", dflt: "25", intDst: &c.HTTPHandlerTimeoutSec},
 		{name: "HTTP_SHUTDOWN_TIMEOUT_SEC", dflt: "5", intDst: &c.HTTPShutdownTimeoutSec},
 		{name: "CACHE_MATCHES_TTL_SEC", dflt: "300", intDst: &c.CacheMatchesTTLSec},
 		{name: "CACHE_TEAMS_TTL_SEC", dflt: "600", intDst: &c.CacheTeamsTTLSec},

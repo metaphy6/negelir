@@ -97,8 +97,14 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      r,
+		Addr: ":" + cfg.Port,
+		// Pre-Phase-6 audit round-3 G2: cap per-request handler
+		// compute time independently of the connection-level
+		// Read/Write timeouts. Phase 6 fan-out (proofreader / drift)
+		// can produce slow concurrent queries; without this cap a
+		// runaway handler holds a `pgx` connection until the
+		// client TCP timeout fires.
+		Handler:      http.TimeoutHandler(r, cfg.HTTPHandlerTimeout(), `{"error":"handler timeout"}`),
 		ReadTimeout:  cfg.HTTPReadTimeout(),
 		WriteTimeout: cfg.HTTPWriteTimeout(),
 	}

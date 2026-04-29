@@ -633,3 +633,20 @@ def test_features_version_mismatch_logs_warning_but_does_not_drop(caplog):
         if "features_version mismatch" in rec.getMessage()
     ]
     assert mismatch_logs, "must warn when features_version diverges within fusion window"
+
+
+def test_consensus_does_not_publish_to_match_outcome():
+    """Pre-Phase-6 audit round-3 T3: enforce the storage/predict
+    boundary. `match.outcome.v1` is owned by the storage agent
+    (factual outcome of a played match). Consensus must never
+    publish to it — doing so would re-introduce the very coupling
+    Phase 4 was meant to break. Mirrors the existing proof.flag
+    back-emission ban.
+    """
+    from swarm.agents.consensus import ConsensusAgent  # noqa: F401
+    from swarm.agents.topics import MATCH_OUTCOME
+
+    assert MATCH_OUTCOME not in ConsensusAgent.publishes, (
+        "consensus.publishes must not include match.outcome.v1 — "
+        "outcomes are storage-side data"
+    )

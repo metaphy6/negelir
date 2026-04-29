@@ -144,3 +144,7 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-04-29T10:14:49+00:00,4,,in-progress,note,Pre-Phase-6 audit round-2: C2 — drop logger.propagate=False so caplog/root aggregator can see negelir.* messages,
 2026-04-29T10:15:28+00:00,4,,in-progress,note,Pre-Phase-6 audit round-2: S2 — make MackolikClient a context manager (close/__enter__/__exit__/__del__) so long-lived scrape jobs stop leaking requests.Session sockets,
 2026-04-29T10:16:25+00:00,4,,in-progress,note,Pre-Phase-6 audit round-2: PERF3 — lru_cache(maxsize=64) wraps schema parses; validate() hot path no longer re-reads JSON files per message,
+2026-04-29T11:35:57+00:00,1,,in-progress,note,"Pre-Phase-6 audit round-3: G2 — wrap mux with http.TimeoutHandler (HTTP_HANDLER_TIMEOUT_SEC, default 25s) so a runaway handler can't hold a pgx connection past the client TCP timeout",
+2026-04-29T11:37:14+00:00,4,,in-progress,note,Pre-Phase-6 audit round-3: P2 — log dropout ratio in extract_real_dataset (warn when >30% of matches fail the min_history gate),
+2026-04-29T11:37:46+00:00,4,,in-progress,note,Pre-Phase-6 audit round-3: T3 — boundary test that ConsensusAgent.publishes does not include match.outcome.v1 (storage owns outcomes; mirrors proof.flag back-emission ban),
+2026-04-29T11:38:13+00:00,4,,in-progress,note,Pre-Phase-6 audit round-3: SK2 — guard test bans oneOf/anyOf/allOf in schemas (hand-rolled validator silently ignores them); grandfathers the lone scrape.classified ef,
