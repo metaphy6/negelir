@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/match.outcome.v1",
+  "title": "match.outcome.v1",
+  "description": "Phase 5+ — terminal-state outcome stream emitted by the storage agent when a match_detail record reaches a terminal status. Phase 6 drift agent consumes this to compute rolling Brier per predictor; Phase 6 proofreader uses it to ground-truth live verdicts. Producer is the storage agent only; predictor / consensus agents must NOT publish here (boundary discipline mirrors freshness.events.v1).",
+  "type": "object",
+  "required": [
+    "match_id",
+    "stable_id",
+    "source",
+    "final_home",
+    "final_away",
+    "outcome_1x2",
+    "settled_at"
+  ],
+  "properties": {
+    "match_id":     { "type": "string", "description": "Source-scoped match id (mirrors NormalizedRecord.source_match_id)." },
+    "stable_id":    { "type": "string", "description": "Cross-source canonical id (mirrors NormalizedRecord.stable_id)." },
+    "source":       { "type": "string", "description": "Origin source (mackolik | nesine | tff | openfootball | ...)." },
+    "league_id":    { "type": ["string", "null"] },
+    "competition_id": { "type": ["string", "null"] },
+    "final_home":   { "type": "integer", "minimum": 0 },
+    "final_away":   { "type": "integer", "minimum": 0 },
+    "outcome_1x2":  { "type": "string", "enum": ["H", "D", "A"] },
+    "outcome_ou_2_5": { "type": "string", "enum": ["over", "under"] },
+    "outcome_btts": { "type": "string", "enum": ["yes", "no"] },
+    "settled_at":   { "type": "string", "description": "ISO-8601 UTC timestamp of when storage observed the terminal state." },
+    "record_id":    { "type": "integer", "minimum": 1, "description": "Storage row id of the match_detail record carrying the terminal payload." }
+  },
+  "additionalProperties": false
+}

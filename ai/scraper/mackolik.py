@@ -136,6 +136,35 @@ class MackolikClient:
         self._session = requests.Session()
         self._session.headers["User-Agent"] = cfg.scrape_user_agent
 
+    # ── Resource lifecycle ───────────────────────────────
+
+    def close(self) -> None:
+        """Close the underlying ``requests.Session`` and release its
+        connection pool. Safe to call repeatedly.
+
+        Pre-Phase-6 audit S2: long-lived scrape jobs were leaking
+        sockets when the scraper was instantiated outside a
+        ``with``-block. ``requests.Session.close()`` is itself
+        idempotent.
+        """
+        try:
+            self._session.close()
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            log.debug("MackolikClient: session.close() raised", exc_info=True)
+
+    def __enter__(self) -> "MackolikClient":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        # Best-effort safety net for callers that forgot ``with``.
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001
+            pass
+
     # ── Public API ───────────────────────────────────────
 
     def discover_seasons(self) -> dict[str, int]:

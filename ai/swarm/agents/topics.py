@@ -22,6 +22,12 @@ SCRAPE_CLASSIFIED = Topic("scrape.classified")  # categorizer → processors
 MATCH_NORMALIZED = Topic("match.normalized")  # processors → storage
 MATCH_STORED = Topic("match.stored")          # storage → cache + reactors
 
+# Phase 5+ — terminal-state outcome stream (storage → drift / proofreader).
+# Boundary: storage agent is the SOLE producer. Predictor / consensus
+# agents must not publish here (mirrors the freshness.events back-emission
+# ban). See ROADMAP §6.3 — drift detector consumes this for Brier.
+MATCH_OUTCOME = Topic("match.outcome.v1")
+
 # Phase 4.7 — freshness events (also written to freshness_events table)
 FRESHNESS_EVENTS = Topic("freshness.events.v1")
 
@@ -43,6 +49,7 @@ MODEL_TRAINED = Topic("models.events.v1")
 __all__ = [
     "FRESHNESS_EVENTS",
     "MATCH_NORMALIZED",
+    "MATCH_OUTCOME",
     "MATCH_STORED",
     "MODEL_TRAINED",
     "PREDICT_FINAL",

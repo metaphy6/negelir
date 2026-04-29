@@ -64,13 +64,29 @@ class ScrapingEngine:
             return matches
 
         except requests.ConnectionError:
+            # Expected when the Go server is down; pipeline falls back
+            # to direct scrape. Logged at warning so ops can spot
+            # extended outages but it does not bury the run.
             log.warning("⚠️  Could not connect to Go server — server may not be running")
             return []
         except requests.Timeout:
             log.warning("⚠️  Go server timeout")
             return []
-        except Exception as e:
-            log.error(f"Go server error: {e}")
+        except requests.HTTPError as exc:
+            # 4xx/5xx from the server — distinct from "unreachable".
+            log.error(
+                "Go server returned HTTP error",
+                extra={"status": exc.response.status_code if exc.response else None,
+                       "url": url},
+            )
+            return []
+        except Exception:  # pragma: no cover — defensive
+            # Pre-Phase-6 audit S1: surface unexpected failures with a
+            # stack trace instead of a single-line warning. The
+            # pipeline keeps falling back (returning []) so a transient
+            # bug does not stall the run, but the trace is preserved
+            # for triage.
+            log.exception("Unexpected error fetching matches from Go server")
             return []
 
     def trigger_server_scrape(self) -> bool:
@@ -86,8 +102,14 @@ class ScrapingEngine:
             else:
                 log.warning(f"Scraping failed: HTTP {resp.status_code}")
                 return False
-        except Exception as e:
-            log.warning(f"Scrape trigger error: {e}")
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            log.warning(f"Scrape trigger network error: {exc}")
+            return False
+        except Exception:  # pragma: no cover — defensive
+            # Pre-Phase-6 audit S1: log full trace for unexpected
+            # failures so a regression in the trigger contract is
+            # diagnosable from a single failed run.
+            log.exception("Unexpected error triggering server scrape")
             return False
 
     def check_server_health(self) -> bool:
@@ -96,7 +118,10 @@ class ScrapingEngine:
         try:
             resp = requests.get(url, timeout=cfg.health_check_timeout)
             return resp.status_code == 200
-        except Exception:
+        except (requests.ConnectionError, requests.Timeout):
+            return False
+        except Exception:  # pragma: no cover — defensive
+            log.exception("Unexpected error during Go server health check")
             return False
 
     def _respect_rate_limit(self, domain: str):

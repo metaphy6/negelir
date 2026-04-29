@@ -206,6 +206,15 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duratio
 
 		var matches []gin.H
 		for rows.Next() {
+			// Pre-Phase-6 audit G1: bail if the client has gone away.
+			// Without this we'd keep streaming rows from Postgres into
+			// a buffer that nobody is reading, holding the pgx
+			// connection until the full scan completes.
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			var id int
 			var homeTeam, awayTeam, leagueID, season string
 			var matchDate time.Time
@@ -312,6 +321,12 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duration)
 
 		var teams []gin.H
 		for rows.Next() {
+			// Pre-Phase-6 audit G1.
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			var uuid, displayName, leagueID, internalCode string
 			if err := rows.Scan(&uuid, &displayName, &leagueID, &internalCode); err != nil {
 				continue
@@ -415,6 +430,12 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 
 		var features []gin.H
 		for rows.Next() {
+			// Pre-Phase-6 audit G1.
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			var teamUUID, season string
 			var matchWeek int
 			var elo, form, xg, scored5, conceded5, ppg5 *float64

@@ -208,6 +208,17 @@ class ConsensusAgent:
             if max_pending is not None
             else _cfg.consensus_max_pending
         )
+        # Pre-Phase-6 audit A3: rate-limit consensus.overflow proof.flag
+        # emissions. A saturated pending set evicts on every new vote
+        # — without suppression we'd flood proof.flag with the same
+        # signal. Track last emission wall-clock (in ms, same units as
+        # _clock_ms) and skip until the suppression window elapses.
+        self._overflow_flag_min_interval_ms = float(
+            _cfg.consensus_overflow_flag_min_interval_sec
+        ) * 1000.0
+        # `-inf` sentinel so the first overflow always emits, regardless
+        # of whether tests pin the clock to 0.
+        self._overflow_last_flagged_ms: float = float("-inf")
         self._lock = threading.Lock()
         # Insertion-ordered dict doubles as an LRU for overflow eviction.
         self._pending: dict[tuple[str, str, str], _PendingFusion] = {}
@@ -259,21 +270,29 @@ class ConsensusAgent:
                 if len(self._pending) >= self._max_pending:
                     evict_key, evicted = next(iter(self._pending.items()))
                     del self._pending[evict_key]
-                    overflow_flags.append(
-                        Message.new(
-                            PROOF_FLAG,
-                            {
-                                "kind": ProofFlagKind.CONSENSUS_OVERFLOW,
-                                "agent": self.name,
-                                "match_id": evicted.match_id,
-                                "market": evicted.market,
-                                "request_id": evicted.request_id,
-                                "max_pending": self._max_pending,
-                            },
-                            producer=self.name,
-                            trace_id=msg.envelope.trace_id,
-                        )
+                    now_ms = self._clock_ms()
+                    suppress = (
+                        self._overflow_flag_min_interval_ms > 0
+                        and (now_ms - self._overflow_last_flagged_ms)
+                        < self._overflow_flag_min_interval_ms
                     )
+                    if not suppress:
+                        self._overflow_last_flagged_ms = now_ms
+                        overflow_flags.append(
+                            Message.new(
+                                PROOF_FLAG,
+                                {
+                                    "kind": ProofFlagKind.CONSENSUS_OVERFLOW,
+                                    "agent": self.name,
+                                    "match_id": evicted.match_id,
+                                    "market": evicted.market,
+                                    "request_id": evicted.request_id,
+                                    "max_pending": self._max_pending,
+                                },
+                                producer=self.name,
+                                trace_id=msg.envelope.trace_id,
+                            )
+                        )
                 pending = _PendingFusion(
                     match_id=vote.match_id,
                     market=vote.market,
@@ -337,6 +356,31 @@ class ConsensusAgent:
                         pending.votes[i] = vote
                         break
             else:
+                # Pre-Phase-6 audit A4: soft-warn on features_version
+                # divergence within a fusion window. We do **not** drop
+                # the vote — multiple feature-store versions can co-exist
+                # during a rolling deploy (Phase 11 territory) and the
+                # consensus must still fuse what it has. We just want
+                # the divergence visible in logs / proof.flag so an
+                # operator can correlate it with calibration drift.
+                existing_vers = {
+                    v.features_version
+                    for v in pending.votes
+                    if v.features_version
+                }
+                if vote.features_version and existing_vers and (
+                    vote.features_version not in existing_vers
+                ):
+                    _log.warning(
+                        "%s: features_version mismatch in fusion window — "
+                        "match=%s market=%s request=%s incoming=%s existing=%s",
+                        self.name,
+                        vote.match_id,
+                        vote.market,
+                        vote.request_id,
+                        vote.features_version,
+                        sorted(existing_vers),
+                    )
                 pending.votes.append(vote)
                 pending.voters.add(vote.predictor_id)
 

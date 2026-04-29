@@ -9,7 +9,6 @@ import pickle
 
 import numpy as np
 import xgboost as xgb
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 
 from common.config import cfg
@@ -44,7 +43,7 @@ def train_model(save_path: str | None = None,
         random_seed=cfg.training_random_seed,
     )
 
-    from model.real_features import load_real_matches, extract_real_dataset
+    from model.real_features import load_real_matches, extract_real_dataset, _parse_date
 
     league_id = cfg.default_league_id
     min_required = cfg.training_min_matches
@@ -57,6 +56,20 @@ def train_model(save_path: str | None = None,
             f"Run `make bootstrap LEAGUE={league_id}` first "
             f"(or `make scrape --league {league_id}`)."
         )
+
+    # ── Chronological ordering (Pre-Phase-6 audit P1) ────────────
+    # The downstream `train_test_split` was random, which combined
+    # with rolling-window features causes temporal leakage: a "test"
+    # match's prior matches end up in "train", and "train" matches
+    # later in the season carry rolling stats that encode the test
+    # match's outcome. Sorting by date here + using a sequential
+    # tail slice below gives an honest, time-respecting evaluation.
+    # `.get("date", "")` keeps tests that stub raw_matches without
+    # dates working — sort becomes a stable no-op in that case.
+    raw_matches = sorted(
+        raw_matches,
+        key=lambda m: _parse_date(m["date"]) if m.get("date") else None,
+    ) if all(m.get("date") for m in raw_matches) else list(raw_matches)
 
     try:
         X, y = extract_real_dataset(min_history=5, matches=raw_matches)
@@ -87,15 +100,31 @@ def train_model(save_path: str | None = None,
         lambda cls: cfg.training_sample_weights.get(int(cls), 1.0)
     ).values
 
-    X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
-        X,
-        y,
-        sample_weights,
-        test_size=cfg.training_test_split,
-        random_state=cfg.training_random_seed,
-        stratify=y,
+    # ── Time-based split ──────────────────────────────────────────
+    # `extract_real_dataset` walks chronologically-sorted matches and
+    # only emits a row once both teams have `min_history` priors —
+    # which means rows themselves are chronological. A sequential
+    # tail slice therefore gives a strict "predict later from earlier"
+    # evaluation. We deliberately do NOT stratify or shuffle.
+    test_split = float(cfg.training_test_split)
+    if not 0.0 < test_split < 1.0:
+        raise ValueError(
+            f"training_test_split must be in (0,1); got {test_split!r}"
+        )
+    n_total = len(X)
+    n_test = max(1, int(round(n_total * test_split)))
+    split_at = n_total - n_test
+    X_train = X.iloc[:split_at].reset_index(drop=True)
+    X_test = X.iloc[split_at:].reset_index(drop=True)
+    y_train = y.iloc[:split_at].reset_index(drop=True)
+    y_test = y.iloc[split_at:].reset_index(drop=True)
+    w_train = sample_weights[:split_at]
+    w_test = sample_weights[split_at:]
+    log.info(
+        f"📚 Training set: {len(X_train)}, Test set: {len(X_test)} "
+        f"(time-based split; first {len(X_train)} rows train, "
+        f"last {len(X_test)} test)"
     )
-    log.info(f"📚 Training set: {len(X_train)}, Test set: {len(X_test)}")
 
     # Train XGBoost (3-class)
     model = xgb.XGBClassifier(**params)

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/predict.proofreader_verdict.v1",
+  "title": "predict.proofreader_verdict.v1",
+  "description": "Phase 6 — proofreader verdict on a `predict.final` consensus output. Emitted by the proofreader reactor that subscribes to `predict.final` and applies sanity / cross-source / market-implied checks before downstream consumers (NLP composer, API) accept the prediction. `verdict` is the categorical decision; `score` is a [0,1] proofreading confidence (1 = strong agreement with consensus, 0 = strong disagreement). `flags` enumerate every check that fired so an operator can correlate with proof.flag stream. Mirrors the dataclass that will land in `ai/swarm/agents/payloads.py::ProofreaderVerdict` (Phase 6).",
+  "type": "object",
+  "required": [
+    "request_id",
+    "prediction_id",
+    "match_id",
+    "market",
+    "verdict",
+    "score",
+    "checked_at"
+  ],
+  "properties": {
+    "request_id":         { "type": "string", "minLength": 1, "description": "Request id this verdict pertains to (round-trips from predict.request → predict.final → here)." },
+    "prediction_id":      { "type": "string", "minLength": 1, "description": "Deterministic id of the predict.final being verified." },
+    "match_id":           { "type": "string", "minLength": 1 },
+    "market":             { "type": "string", "enum": ["1x2", "ah", "ou_2_5", "btts"] },
+    "verdict":            { "type": "string", "enum": ["accept", "warn", "reject"], "description": "accept = consensus passes all checks; warn = consensus shipped with caveats (operator-visible); reject = consensus must not be served to clients." },
+    "score":              { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "flags":              { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of every check that fired (e.g. 'odds_implied_disagree', 'home_xg_zero', 'late_vote_majority')." },
+    "checks_run":         { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of every check that was executed; `flags` ⊆ `checks_run`." },
+    "rationale":          { "type": "string", "description": "Optional Turkish-language operator note (CONTENT_FRESHNESS §15.4 narration)." },
+    "checked_at":         { "type": "string", "description": "ISO-8601 UTC timestamp." },
+    "calibration_version":{ "type": "integer", "minimum": 0, "description": "Echo of the predict.final calibration_version, so verdicts can be replayed against an immutable audit trail." }
+  },
+  "additionalProperties": false
+}

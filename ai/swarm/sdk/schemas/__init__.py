@@ -10,6 +10,7 @@ the agents that produce/consume them (Phase 4+).
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,24 @@ _SCHEMA_DIR = Path(__file__).parent
 
 
 def load(topic: str) -> dict[str, Any]:
-    """Load a topic's JSON schema by topic name (e.g. ``"echo.in"``)."""
+    """Load a topic's JSON schema by topic name (e.g. ``"echo.in"``).
+
+    The parsed schema is cached (Pre-Phase-6 audit PERF3); callers
+    must treat the returned dict as **read-only**. Mutating it
+    poisons the cache for every other consumer.
+    """
+    return _load_cached(topic)
+
+
+@lru_cache(maxsize=64)
+def _load_cached(topic: str) -> dict[str, Any]:
+    """Pre-Phase-6 audit PERF3: cache the parsed JSON schema per topic.
+
+    The hot path (``validate()`` on every bus message) was re-reading
+    and re-parsing the schema file each time; with N topics × M
+    messages this became measurable in steady-state. ``maxsize=64``
+    is comfortably above the current topic count.
+    """
     path = _SCHEMA_DIR / f"{topic}.json"
     if not path.exists():
         raise FileNotFoundError(f"no schema registered for topic {topic!r}")
@@ -74,7 +92,12 @@ def validate(topic: str, payload: dict[str, Any]) -> list[str]:
 
     required = list(schema.get("required", []))
     properties = dict(schema.get("properties", {}))
-    additional = schema.get("additionalProperties", True)
+    # Pre-Phase-6 audit SK1: closed-by-default. Every shipped schema
+    # already declares `additionalProperties` explicitly, so flipping
+    # the validator default does not regress any payload — but it
+    # turns "forgot to declare it" into a loud test failure for
+    # future schema authors instead of a silent looseness.
+    additional = schema.get("additionalProperties", False)
 
     for key in required:
         if key not in payload:

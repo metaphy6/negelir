@@ -305,6 +305,14 @@ class Config:
         "NEGELIR_TELEMETRY_METRICS_BIND", "127.0.0.1"
     ))
     reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
+    # Cap on the per-reactor in-memory idempotency ledger. The ledger
+    # keys events by `(reactor_name, event_id)`; with no bound a long-
+    # running swarm or backtest replay accumulates one tuple per
+    # event forever (Pre-Phase-6 audit A1). The LRU evicts oldest
+    # entries when the cap is hit; collisions on evicted ids are
+    # impossible in practice because event_id is content-derived
+    # (CONTENT_FRESHNESS §15.2).
+    reactor_ledger_max_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REACTOR_LEDGER_MAX_SIZE", "100000")))
 
     # Phase 5 — Predictor swarm + consensus
     consensus_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_WINDOW_MS", "750")))
@@ -312,6 +320,12 @@ class Config:
     consensus_min_voters: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_MIN_VOTERS", "3")))
     consensus_brier_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_BRIER_WINDOW", "200")))
     consensus_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CONSENSUS_MAX_PENDING", "4096")))
+    # Pre-Phase-6 audit A3: suppression window for repeat
+    # `consensus.overflow` proof.flag emissions. When the pending set
+    # is saturated, every new vote evicts an older one and would
+    # otherwise emit a fresh flag — flooding proof.flag with the same
+    # signal. We rate-limit the flag to one emission per N seconds.
+    consensus_overflow_flag_min_interval_sec: float = field(default_factory=lambda: float(os.getenv("NEGELIR_CONSENSUS_OVERFLOW_FLAG_MIN_INTERVAL_SEC", "10")))
     predictor_market_features_enabled: bool = field(default_factory=lambda: os.getenv(
         "NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED", "false"
     ).lower() in ("true", "1", "yes"))
@@ -440,6 +454,7 @@ class Config:
         _bounded("cache_record_ttl_sec", self.cache_record_ttl_sec, 1, 86400 * 30)
         _bounded("cache_prediction_ttl_sec", self.cache_prediction_ttl_sec, 1, 86400 * 30)
         _bounded("reactor_max_event_age_sec", self.reactor_max_event_age_sec, 1, 86400 * 365)
+        _bounded("reactor_ledger_max_size", self.reactor_ledger_max_size, 1, 10_000_000)
         if self.scrape_profile not in ("mock", "real"):
             issues.append(
                 f"scrape_profile={self.scrape_profile!r} not in ('mock', 'real')"
@@ -508,6 +523,12 @@ class Config:
         # Phase 5 fractions
         _bounded("consensus_min_confidence", self.consensus_min_confidence, 0.0, 1.0)
         _bounded("backtest_swarm_floor_pct", self.backtest_swarm_floor_pct, 0.0, 1.0)
+        _bounded(
+            "consensus_overflow_flag_min_interval_sec",
+            self.consensus_overflow_flag_min_interval_sec,
+            0.0,
+            3600.0,
+        )
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

@@ -269,6 +269,7 @@ class FreshnessEvent:
 
 __all__ = [
     "FreshnessEvent",
+    "MatchOutcome",
     "MatchStored",
     "ModelTrained",
     "NormalizedRecord",
@@ -279,8 +280,118 @@ __all__ = [
     "ScrapeClassified",
     "ScrapeRaw",
     "ScrapeRequest",
+    "TERMINAL_MATCH_STATUSES",
+    "derive_match_outcome",
     "derive_prediction_id",
 ]
+
+
+# ── Phase 5+ — terminal-state match outcomes ────────────────────
+#
+# The storage agent emits `match.outcome.v1` whenever a match_detail
+# record reaches a terminal status with both final scores present.
+# Phase 6 drift detector + proofreader consume this stream.
+# Producer-side discipline: predictor / consensus agents must NOT
+# publish to MATCH_OUTCOME (mirrors the freshness.events back-emission
+# ban — outcomes are storage-side data, not prediction-side).
+
+
+# Status strings recognised as "match has reached its final score".
+# Sources differ on casing / vocabulary; keep the set narrow + lower
+# every observed status before lookup. New statuses go through review.
+TERMINAL_MATCH_STATUSES: frozenset[str] = frozenset({
+    "final",
+    "finished",
+    "ft",
+    "full_time",
+    "full-time",
+    "completed",
+    "ended",
+})
+
+
+def derive_match_outcome(
+    *,
+    final_home: int,
+    final_away: int,
+) -> dict[str, str]:
+    """Compute the canonical 1x2 / OU 2.5 / BTTS outcomes from a final score.
+
+    Centralised so the storage agent, tests, and any future consumer
+    that reconstructs the outcome tuple agree byte-for-byte.
+    """
+    if final_home > final_away:
+        outcome_1x2 = "H"
+    elif final_home < final_away:
+        outcome_1x2 = "A"
+    else:
+        outcome_1x2 = "D"
+    outcome_ou_2_5 = "over" if (final_home + final_away) > 2.5 else "under"
+    outcome_btts = "yes" if (final_home > 0 and final_away > 0) else "no"
+    return {
+        "outcome_1x2": outcome_1x2,
+        "outcome_ou_2_5": outcome_ou_2_5,
+        "outcome_btts": outcome_btts,
+    }
+
+
+@dataclass(frozen=True)
+class MatchOutcome:
+    """`match.outcome.v1` payload — terminal-state ground truth.
+
+    Emitted exactly once per `(source, source_match_id)` per terminal
+    transition. Phase 6 drift agent treats `(stable_id, settled_at)`
+    as the dedup key, so the storage agent's idempotent upsert path
+    (which already short-circuits on `unchanged`) is the natural
+    single-emission point.
+    """
+
+    match_id: str
+    stable_id: str
+    source: str
+    final_home: int
+    final_away: int
+    outcome_1x2: str            # 'H' | 'D' | 'A'
+    settled_at: str
+    league_id: str | None = None
+    competition_id: str | None = None
+    outcome_ou_2_5: str | None = None  # 'over' | 'under'
+    outcome_btts: str | None = None    # 'yes' | 'no'
+    record_id: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.final_home < 0 or self.final_away < 0:
+            raise ValueError(
+                f"MatchOutcome: final scores must be \u22650 "
+                f"(got {self.final_home}-{self.final_away})"
+            )
+        if self.outcome_1x2 not in ("H", "D", "A"):
+            raise ValueError(
+                f"MatchOutcome.outcome_1x2={self.outcome_1x2!r} "
+                "not in (H, D, A)"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MatchOutcome":
+        return cls(
+            match_id=str(data["match_id"]),
+            stable_id=str(data["stable_id"]),
+            source=str(data["source"]),
+            final_home=int(data["final_home"]),
+            final_away=int(data["final_away"]),
+            outcome_1x2=str(data["outcome_1x2"]),
+            settled_at=str(data["settled_at"]),
+            league_id=data.get("league_id"),
+            competition_id=data.get("competition_id"),
+            outcome_ou_2_5=data.get("outcome_ou_2_5"),
+            outcome_btts=data.get("outcome_btts"),
+            record_id=(
+                int(data["record_id"]) if data.get("record_id") is not None else None
+            ),
+        )
 
 
 # ── proof.flag kind registry ─────────────────────────────────────

@@ -58,7 +58,11 @@ def get_logger(name: str) -> logging.Logger:
     handler.setLevel(level)
     logger.addHandler(handler)
     logger.setLevel(level)
-    logger.propagate = False
+    # Pre-Phase-6 audit C2: keep propagation enabled. Suppressing it
+    # blinds pytest's `caplog` and any aggregator that listens at the
+    # root logger; deduplication of root-handler output should be
+    # solved at the root configuration layer, not by silencing
+    # children.
     return logger
 
 

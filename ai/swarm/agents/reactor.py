@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Protocol
 
@@ -53,11 +54,24 @@ class Ledger(Protocol):
 
 
 class InMemoryLedger:
-    """Thread-safe ledger. Tests + swarm.demo default."""
+    """Thread-safe ledger. Tests + swarm.demo default.
 
-    def __init__(self) -> None:
+    Bounded LRU (Pre-Phase-6 audit A1): without a cap, a long-running
+    swarm or a backtest replay would accumulate one ``(reactor,
+    event_id)`` tuple per event indefinitely. The eviction order is
+    insertion order (oldest first); collisions on evicted ids are
+    harmless because event_id is content-derived (CONTENT_FRESHNESS
+    §15.2) — at worst a stale event re-fires its side effect.
+    """
+
+    def __init__(self, max_size: int | None = None) -> None:
         self._lock = threading.Lock()
-        self._seen: set[tuple[str, str]] = set()
+        if max_size is None:
+            max_size = int(_cfg.reactor_ledger_max_size)
+        if max_size < 1:
+            raise ValueError(f"InMemoryLedger max_size must be >= 1, got {max_size}")
+        self._max_size = max_size
+        self._seen: "OrderedDict[tuple[str, str], None]" = OrderedDict()
 
     def already_processed(self, reactor: str, event_id: str) -> bool:
         with self._lock:
@@ -65,7 +79,13 @@ class InMemoryLedger:
 
     def mark_processed(self, reactor: str, event_id: str) -> None:
         with self._lock:
-            self._seen.add((reactor, event_id))
+            key = (reactor, event_id)
+            if key in self._seen:
+                self._seen.move_to_end(key)
+                return
+            self._seen[key] = None
+            while len(self._seen) > self._max_size:
+                self._seen.popitem(last=False)
 
 
 # ── Reactor base ────────────────────────────────────────────────

@@ -158,6 +158,7 @@ phase4:
   telemetry_metrics_port: 9101        # NEGELIR_TELEMETRY_METRICS_PORT
   telemetry_metrics_bind: 127.0.0.1   # NEGELIR_TELEMETRY_METRICS_BIND
   reactor_max_event_age_sec: 86400    # NEGELIR_REACTOR_MAX_EVENT_AGE_SEC
+  reactor_ledger_max_size: 100000     # NEGELIR_REACTOR_LEDGER_MAX_SIZE
 
 # ── Phase 5 — Predictor swarm + consensus ───────────────────────────────────
 phase5:
@@ -166,6 +167,7 @@ phase5:
   consensus_min_voters: 3             # NEGELIR_CONSENSUS_MIN_VOTERS
   consensus_brier_window: 200         # NEGELIR_CONSENSUS_BRIER_WINDOW
   consensus_max_pending: 4096         # NEGELIR_CONSENSUS_MAX_PENDING
+  consensus_overflow_flag_min_interval_sec: 10  # NEGELIR_CONSENSUS_OVERFLOW_FLAG_MIN_INTERVAL_SEC
   predictor_market_features_enabled: false  # NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED
   predictor_max_vram_mb: 1024         # NEGELIR_PREDICTOR_MAX_VRAM_MB
   trainer_debounce_sec: 300           # NEGELIR_TRAINER_DEBOUNCE_SEC

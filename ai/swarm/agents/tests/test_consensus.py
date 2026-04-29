@@ -46,6 +46,7 @@ def _vote(
     confidence: float = 0.7,
     score_grid=None,
     trace_id: str = "trace-Z",
+    features_version: str = "",
 ) -> Message:
     distribution = {"market_outcomes": pmf, "score_grid": score_grid}
     return Message.new(
@@ -57,6 +58,7 @@ def _vote(
             predictor_id=predictor_id,
             distribution=distribution,
             confidence=confidence,
+            features_version=features_version,
         ).as_dict(),
         producer=predictor_id,
         trace_id=trace_id,
@@ -380,6 +382,46 @@ def test_pending_overflow_evicts_oldest_and_emits_proof_flag():
     assert flags[0].payload["max_pending"] == 2
 
 
+def test_pending_overflow_proof_flag_is_rate_limited(monkeypatch):
+    """Pre-Phase-6 audit A3: repeat overflow events within the
+    suppression window must not produce duplicate proof.flag
+    emissions, but a flag past the window must fire again."""
+    import swarm.agents.consensus as consensus_mod
+
+    monkeypatch.setattr(
+        consensus_mod._cfg, "consensus_overflow_flag_min_interval_sec", 10.0
+    )
+
+    clock = {"now_ms": 0.0}
+    c = _make_consensus(max_pending=2, clock_ms=lambda: clock["now_ms"])
+
+    # Fill + 1st overflow at t=0 → flag.
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-1", match_id="m-1")))
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-2", match_id="m-2")))
+    out1 = list(c.handle(
+        _vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-3", match_id="m-3")
+    ))
+    assert any(m.envelope.topic == PROOF_FLAG for m in out1), "first overflow must flag"
+
+    # 2nd overflow within 1s — must be suppressed.
+    clock["now_ms"] = 1_000.0
+    out2 = list(c.handle(
+        _vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-4", match_id="m-4")
+    ))
+    assert not [m for m in out2 if m.envelope.topic == PROOF_FLAG], (
+        "overflow within suppression window must NOT emit a duplicate flag"
+    )
+
+    # 3rd overflow past suppression window — must flag again.
+    clock["now_ms"] = 11_000.0
+    out3 = list(c.handle(
+        _vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-5", match_id="m-5")
+    ))
+    assert any(m.envelope.topic == PROOF_FLAG for m in out3), (
+        "overflow past suppression window must flag again"
+    )
+
+
 # ── predict.request subscription (production wire-up) ───────────
 
 
@@ -565,3 +607,29 @@ def test_new_window_after_calibration_swap_uses_new_version():
     assert len(finals) == 1
     final = PredictFinal.from_dict(finals[0].payload)
     assert final.calibration_version == 2
+
+
+def test_features_version_mismatch_logs_warning_but_does_not_drop(caplog):
+    """Pre-Phase-6 audit A4: votes with divergent `features_version`
+    must still be fused (rolling deploys produce mixed-version
+    fleets). The mismatch must be observable via WARNING log.
+    """
+    import logging
+
+    c = _make_consensus(min_voters=2)
+    caplog.set_level(logging.WARNING, logger="swarm.agents.consensus")
+
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, features_version="v1.0")))
+    out = list(c.handle(_vote("p.b", {"H": 0.4, "D": 0.4, "A": 0.2}, features_version="v1.1")))
+    out += list(c.handle(_vote("p.c", {"H": 0.6, "D": 0.2, "A": 0.2}, features_version="v1.0")))
+
+    finals = [m for m in out if m.envelope.topic == PREDICT_FINAL]
+    assert len(finals) == 1, "all three voters in → one final"
+    final = PredictFinal.from_dict(finals[0].payload)
+    assert sorted(final.contributing_models) == ["p.a", "p.b", "p.c"]
+
+    mismatch_logs = [
+        rec for rec in caplog.records
+        if "features_version mismatch" in rec.getMessage()
+    ]
+    assert mismatch_logs, "must warn when features_version diverges within fusion window"
