@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 78,
+    "build": 81,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T07:07:24+00:00"
     },
     "docs": {
-      "version": "1.9.12",
+      "version": "1.9.15",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-29T07:08:03+00:00"
+      "last_changed": "2026-04-29T07:53:00+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -960,6 +960,33 @@
       "from": "1.9.11",
       "to": "1.9.12",
       "build": 78
+    },
+    {
+      "timestamp": "2026-04-29T07:30:03+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "add docs/coding/ai/automation.md (resident-engineer agent roadmap)",
+      "from": "1.9.12",
+      "to": "1.9.13",
+      "build": 79
+    },
+    {
+      "timestamp": "2026-04-29T07:40:08+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "rewrite docs/coding/ai/automation.md around VS Code Copilot surface",
+      "from": "1.9.13",
+      "to": "1.9.14",
+      "build": 80
+    },
+    {
+      "timestamp": "2026-04-29T07:53:00+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "trim automation.md to net-new Copilot tasks; remove duplication with AGENTS/CLAUDE",
+      "from": "1.9.14",
+      "to": "1.9.15",
+      "build": 81
     }
   ]
 }
