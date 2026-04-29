@@ -7,6 +7,17 @@ Per roadmap §5.1 proofreading logic:
 4. Cross-source validation
 5. Temporal consistency
 6. Quarantine suspect data
+
+NOTE (Wave A.2, pre-Phase-6): The rule bodies for range/consistency/
+plausibility now live in `ai/swarm/agents/proofreader/checks.py` as
+pure functions, and this module re-exports them so there is a single
+source of truth. The thin OO wrapper (`DataProofreader`,
+`ValidationResult`, `_normalise_input_match`) is preserved verbatim
+for the legacy callers in `ai/pipeline/runner.py`,
+`ai/pipeline/training_pipeline.py`, and `ai/data_showcase.py`. The
+full module + its three callers will be retired once Phase 6.3 lands
+the swarm-side replacement (see `docs/reports/pre-phase6-roadmap.md`
+§3 Wave B + §6.5 locked decision).
 """
 
 from dataclasses import dataclass, field
@@ -14,6 +25,12 @@ import json
 import os
 import sys
 from common.logger import get_logger
+from swarm.agents.proofreader.checks import (
+    RANGES,
+    consistency_check,
+    plausibility_check,
+    range_check,
+)
 
 log = get_logger("proofreader")
 
@@ -26,28 +43,10 @@ class ValidationResult:
     quarantined: list[dict] = field(default_factory=list)
 
 
-# ── Range constraints (per roadmap §5.1) ────────────────
-RANGES = {
-    "home_score":   (0, 15),
-    "away_score":   (0, 15),
-    "possession":   (0, 100),
-    "shots_on":     (0, 40),
-    "shots_off":    (0, 40),
-    "corners":      (0, 25),
-    "fouls":        (0, 40),
-    "yellow_cards": (0, 10),
-    "red_cards":    (0, 5),
-    # Per-team card & foul ranges (v0.2)
-    "home_yellows": (0, 10),
-    "away_yellows": (0, 10),
-    "home_reds":    (0, 5),
-    "away_reds":    (0, 5),
-    "home_fouls":   (0, 40),
-    "away_fouls":   (0, 40),
-    # Half-time scores
-    "ht_home_score": (0, 10),
-    "ht_away_score": (0, 10),
-}
+# `RANGES` re-exported above — preserved at module scope so the
+# `from proofreader.validator import RANGES` import path used by
+# `data_showcase.py` and `tests/test_unit.py` keeps working without
+# changes (Wave A.2 contract).
 
 
 class DataProofreader:
@@ -100,103 +99,25 @@ class DataProofreader:
 
         return batch_result
 
-    def _range_checks(self, match: dict, result: ValidationResult):
-        """Per roadmap: goals 0-15, possession 0-100, cards 0-20, etc."""
-        stats = match.get("stats", {})
-        all_fields = {**match, **stats}
+    # The three check methods now delegate to the canonical swarm-side
+    # pure functions in `ai/swarm/agents/proofreader/checks.py`. The
+    # ValidationResult contract (in-place mutation of errors/warnings)
+    # is preserved so legacy callers and unit tests behave identically.
 
-        for field_name, (lo, hi) in RANGES.items():
-            val = all_fields.get(field_name)
-            if val is not None:
-                try:
-                    val = float(val)
-                    if val < lo or val > hi:
-                        result.errors.append(
-                            f"Out of range: {field_name}={val} (expected: {lo}-{hi})"
-                        )
-                except (ValueError, TypeError):
-                    result.warnings.append(f"Invalid value type: {field_name}={val}")
+    def _range_checks(self, match: dict, result: ValidationResult):
+        errors, warnings = range_check(match)
+        result.errors.extend(errors)
+        result.warnings.extend(warnings)
 
     def _consistency_checks(self, match: dict, result: ValidationResult):
-        """Per roadmap: home+away possession ≈ 100, etc."""
-        stats = match.get("stats", {})
-
-        # Possession check
-        home_poss = stats.get("home_possession")
-        away_poss = stats.get("away_possession")
-        if home_poss is not None and away_poss is not None:
-            total = float(home_poss) + float(away_poss)
-            if abs(total - 100) > 5:
-                result.warnings.append(
-                    f"Possession inconsistent: {home_poss}+{away_poss}={total} (≈100 expected)"
-                )
-
-        # Score consistency. Defensive parsing — bad upstream values must
-        # turn into a quarantine warning, never a hard exception that
-        # aborts the whole batch (see validate_batch contract).
-        def _coerce_int(label: str, raw):
-            try:
-                return int(raw)
-            except (TypeError, ValueError):
-                result.warnings.append(f"Invalid value type: {label}={raw}")
-                return None
-
-        ht_home = match.get("ht_home_score")
-        ft_home = match.get("home_score")
-        if ht_home is not None and ft_home is not None:
-            ht_h = _coerce_int("ht_home_score", ht_home)
-            ft_h = _coerce_int("home_score", ft_home)
-            if ht_h is not None and ft_h is not None and ht_h > ft_h:
-                result.errors.append(
-                    f"HT score cannot exceed FT: HT={ht_home} > FT={ft_home}"
-                )
-
-        ht_away = match.get("ht_away_score")
-        ft_away = match.get("away_score")
-        if ht_away is not None and ft_away is not None:
-            ht_a = _coerce_int("ht_away_score", ht_away)
-            ft_a = _coerce_int("away_score", ft_away)
-            if ht_a is not None and ft_a is not None and ht_a > ft_a:
-                result.errors.append(
-                    f"HT score cannot exceed FT: HT={ht_away} > FT={ft_away}"
-                )
-
-        # Card vs foul plausibility: yellows should not exceed fouls
-        home_yellows = stats.get("home_yellows")
-        home_fouls = stats.get("home_fouls")
-        if home_yellows is not None and home_fouls is not None:
-            hy = _coerce_int("home_yellows", home_yellows)
-            hf = _coerce_int("home_fouls", home_fouls)
-            if hy is not None and hf is not None and hy > hf:
-                result.warnings.append(
-                    f"More yellow cards ({home_yellows}) than fouls ({home_fouls}) for home team"
-                )
+        errors, warnings = consistency_check(match)
+        result.errors.extend(errors)
+        result.warnings.extend(warnings)
 
     def _plausibility_checks(self, match: dict, result: ValidationResult):
-        """Per roadmap: >3σ deviation from historical = suspect."""
-        home_score = match.get("home_score")
-        away_score = match.get("away_score")
-
-        if home_score is not None and away_score is not None:
-            try:
-                hs = int(home_score)
-                as_ = int(away_score)
-            except (TypeError, ValueError):
-                result.warnings.append(
-                    f"Invalid value type: score={home_score}-{away_score}"
-                )
-                return
-            total = hs + as_
-            # A match with 10+ total goals is extremely rare
-            if total >= 10:
-                result.warnings.append(
-                    f"Unusually high total goals: {total} (statistically rare)"
-                )
-            # A single team scoring 8+ is implausible
-            if hs >= 8 or as_ >= 8:
-                result.errors.append(
-                    f"Implausible score: {home_score}-{away_score}"
-                )
+        errors, warnings = plausibility_check(match)
+        result.errors.extend(errors)
+        result.warnings.extend(warnings)
 
 
 def _normalise_input_match(raw_match: dict) -> dict | None:

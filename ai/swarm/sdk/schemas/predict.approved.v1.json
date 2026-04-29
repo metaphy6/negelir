@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/predict.approved.v1",
+  "title": "predict.approved.v1",
+  "description": "Phase 6 — proofreader-aggregator output. Emitted exactly once per `prediction_id` when the proofreader quorum (default ⌊N/2⌋+1, N=cfg.proofreader_replicas) accepts a `predict.final`. The `cache.v1` agent and any user-facing publisher subscribe HERE — never to `predict.final` directly — so a candidate prediction can never reach the API surface without proofreader approval (ROADMAP §736 contract). Carries the full predict.final payload verbatim under `final` so downstream consumers do not need a join. Mirrors `ai/swarm/agents/payloads.py::PredictApproved`.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "prediction_id",
+    "match_id",
+    "market",
+    "approved_at",
+    "approved_by",
+    "verdict_count",
+    "quorum",
+    "final"
+  ],
+  "properties": {
+    "request_id":         { "type": "string", "minLength": 1, "description": "Round-trips from predict.request → predict.final → here." },
+    "prediction_id":      { "type": "string", "minLength": 1, "description": "Deterministic id of the predict.final being approved." },
+    "match_id":           { "type": "string", "minLength": 1 },
+    "market":             { "type": "string", "enum": ["1x2", "ah", "ou_2_5", "btts"] },
+    "approved_at":        { "type": "string", "description": "ISO-8601 UTC timestamp of the aggregator's quorum-met decision." },
+    "approved_by":        { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "description": "Proofreader agent ids (e.g. `proof.sanity.v1`) whose `accept` verdict satisfied quorum." },
+    "verdict_count":      { "type": "integer", "minimum": 1, "description": "Total proofreader verdicts received in the aggregation window." },
+    "quorum":             { "type": "integer", "minimum": 1, "description": "Threshold this prediction crossed (≥ ⌊N/2⌋+1)." },
+    "final":              { "type": "object", "description": "The full predict.final payload, verbatim. Schema = predict.final." },
+    "calibration_version":{ "type": "integer", "minimum": 0, "description": "Echo of final.calibration_version for join-free audit replay." }
+  },
+  "additionalProperties": false
+}

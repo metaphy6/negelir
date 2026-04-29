@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 118,
+    "build": 122,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.10.3",
+      "version": "0.14.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-29T11:38:13+00:00"
+      "last_changed": "2026-04-29T18:17:35+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1320,6 +1320,42 @@
       "from": "0.10.2",
       "to": "0.10.3",
       "build": 118
+    },
+    {
+      "timestamp": "2026-04-29T17:53:46+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Wave A.1+A.3: predict.approved.v1 topic, PredictApproved + ProofreaderVerdict payloads, cache wiring, telemetry watch, boundary-discipline test, swarm.agents.proofreader.checks pure-function rules",
+      "from": "0.10.3",
+      "to": "0.11.0",
+      "build": 119
+    },
+    {
+      "timestamp": "2026-04-29T18:01:48+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Wave B.1: ProofreaderAggregatorAgent + quorum config + 5 proof.flag kinds",
+      "from": "0.11.0",
+      "to": "0.12.0",
+      "build": 120
+    },
+    {
+      "timestamp": "2026-04-29T18:07:53+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Wave B.2: per-replica ProofreaderAgents (sanity/plausibility/consistency) + prediction_checks.py",
+      "from": "0.12.0",
+      "to": "0.13.0",
+      "build": 121
+    },
+    {
+      "timestamp": "2026-04-29T18:17:35+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Wave B.3: DriftAgent + MaintEvent (closes Phase 6 build modulo deferred cross-source/historical/KS-test)",
+      "from": "0.13.0",
+      "to": "0.14.0",
+      "build": 122
     }
   ]
 }

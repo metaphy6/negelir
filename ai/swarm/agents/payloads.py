@@ -433,6 +433,28 @@ class ProofFlagKind(str):
     CONSENSUS_NO_VOTES = "consensus_no_votes"
     CONSENSUS_OVERFLOW = "consensus_overflow"
 
+    # — Phase 6 proofreader aggregator —
+    # Quorum was reached (≥cfg.proofreader_quorum accept/warn votes) but
+    # the aggregator's outbound publish was deduped by the ledger — i.e.
+    # a re-emitted verdict tried to approve a prediction that was
+    # already approved. Informational, not actionable.
+    PROOFREADER_DUPLICATE_APPROVAL = "proofreader_duplicate_approval"
+    # The window elapsed without enough accept/warn verdicts. The
+    # candidate is dropped; no predict.approved.v1 is emitted. The
+    # verdicts received (if any) are listed in `details.verdicts`.
+    PROOFREADER_NO_QUORUM = "proofreader_no_quorum"
+    # A verdict arrived after the aggregator already finalized
+    # (approved or no-quorum) the candidate. Recorded so an operator
+    # can see when a proofreader replica is consistently slow.
+    PROOFREADER_LATE_VERDICT_DROPPED = "proofreader_late_verdict_dropped"
+    # ≥1 reject vote landed and the aggregator therefore refused to
+    # approve, even if the remaining accept/warn votes would have met
+    # quorum. ROADMAP §6.1 contract: a single reject is fatal.
+    PROOFREADER_REJECTED = "proofreader_rejected"
+    # Pending-set saturated; oldest in-flight candidate evicted.
+    # Mirrors the consensus_overflow pattern.
+    PROOFREADER_OVERFLOW = "proofreader_overflow"
+
     @classmethod
     def all_kinds(cls) -> frozenset[str]:
         """Every declared kind. Used by the contract test + telemetry."""
@@ -673,4 +695,210 @@ class ModelTrained:
             metric_value=float(data.get("metric_value", 0.0)),
             samples=int(data.get("samples", 0)),
             metadata=dict(data.get("metadata") or {}),
+        )
+
+
+# ── Phase 6 — proofreader & aggregator payloads ─────────────────
+
+
+_ALLOWED_PROOFREADER_VERDICTS: frozenset[str] = frozenset({"accept", "warn", "reject"})
+
+
+@dataclass(frozen=True)
+class ProofreaderVerdict:
+    """`predict.proofreader_verdict.v1` payload — single proofreader's
+    decision on a `predict.final` candidate.
+
+    Per ROADMAP §6.1: each proofreader runs an independent set of
+    rule-based + statistical checks. ``flags`` ⊆ ``checks_run``; both
+    are sets of stable, low-cardinality check ids (e.g.
+    ``"sanity.probs_sum_to_one"``).
+    """
+
+    request_id: str
+    prediction_id: str
+    match_id: str
+    market: str
+    proofreader_id: str
+    verdict: str                     # 'accept' | 'warn' | 'reject'
+    score: float                     # in [0, 1]
+    checked_at: str
+    flags: list[str] = field(default_factory=list)
+    checks_run: list[str] = field(default_factory=list)
+    rationale: str = ""
+    calibration_version: int = 0
+
+    def __post_init__(self) -> None:
+        if self.verdict not in _ALLOWED_PROOFREADER_VERDICTS:
+            raise ValueError(
+                f"verdict={self.verdict!r} not in "
+                f"{sorted(_ALLOWED_PROOFREADER_VERDICTS)}"
+            )
+        if not 0.0 <= self.score <= 1.0:
+            raise ValueError(f"score={self.score!r} out of [0,1]")
+        # checks_run must be a superset of flags — if a check fired
+        # we must have run it. Cheap invariant; loud failure when
+        # a producer drifts.
+        if set(self.flags) - set(self.checks_run):
+            raise ValueError(
+                "ProofreaderVerdict.flags must be a subset of checks_run"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ProofreaderVerdict":
+        return cls(
+            request_id=str(data["request_id"]),
+            prediction_id=str(data["prediction_id"]),
+            match_id=str(data["match_id"]),
+            market=str(data["market"]),
+            proofreader_id=str(data["proofreader_id"]),
+            verdict=str(data["verdict"]),
+            score=float(data["score"]),
+            checked_at=str(data["checked_at"]),
+            flags=[str(f) for f in (data.get("flags") or [])],
+            checks_run=[str(c) for c in (data.get("checks_run") or [])],
+            rationale=str(data.get("rationale", "")),
+            calibration_version=int(data.get("calibration_version", 0)),
+        )
+
+
+@dataclass(frozen=True)
+class PredictApproved:
+    """`predict.approved.v1` payload — proofreader-aggregator output.
+
+    Per Phase 6 cache-topology decision (Wave A.1): ``predict.final``
+    is a CANDIDATE; ``predict.approved.v1`` is the post-quorum,
+    user-visible decision. The cache subscribes here, never to
+    ``predict.final`` directly. Carries the full ``predict.final``
+    payload verbatim under ``final`` so consumers do not need a join.
+    """
+
+    request_id: str
+    prediction_id: str
+    match_id: str
+    market: str
+    approved_at: str
+    approved_by: list[str]            # proofreader ids that voted accept
+    verdict_count: int                # total verdicts received in window
+    quorum: int                       # threshold this prediction crossed
+    final: dict[str, Any]             # full PredictFinal payload, verbatim
+    calibration_version: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.approved_by:
+            raise ValueError("PredictApproved.approved_by must be non-empty")
+        if self.verdict_count < len(self.approved_by):
+            raise ValueError(
+                "verdict_count cannot be less than len(approved_by)"
+            )
+        if self.quorum < 1:
+            raise ValueError(f"quorum must be >= 1; got {self.quorum}")
+        if len(self.approved_by) < self.quorum:
+            raise ValueError(
+                f"approved_by ({len(self.approved_by)}) below quorum "
+                f"({self.quorum}) — aggregator must not emit"
+            )
+        if not isinstance(self.final, dict) or "prediction_id" not in self.final:
+            raise ValueError(
+                "PredictApproved.final must be the full predict.final dict"
+            )
+        if self.final.get("prediction_id") != self.prediction_id:
+            raise ValueError(
+                "PredictApproved.prediction_id must equal final['prediction_id']"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PredictApproved":
+        return cls(
+            request_id=str(data["request_id"]),
+            prediction_id=str(data["prediction_id"]),
+            match_id=str(data["match_id"]),
+            market=str(data["market"]),
+            approved_at=str(data["approved_at"]),
+            approved_by=[str(a) for a in (data.get("approved_by") or [])],
+            verdict_count=int(data["verdict_count"]),
+            quorum=int(data["quorum"]),
+            final=dict(data["final"]),
+            calibration_version=int(data.get("calibration_version", 0)),
+        )
+
+
+# ── Phase 6.3 — drift / maintenance event ──────────────────────
+
+
+_ALLOWED_MAINT_KINDS: frozenset[str] = frozenset({
+    "retrain_request",      # drift agent: predictor's Brier / KS-test tripped
+    "recalibration_request",  # reserved for Phase 9 (calibration drift)
+})
+
+_ALLOWED_DRIFT_REASONS: frozenset[str] = frozenset({
+    "brier_floor",   # rolling Brier breached `cfg.drift_accuracy_floor`
+    "logloss_floor", # rolling log-loss breached the same floor
+    "feature_ks",    # KS-test on input features rejected stationarity
+})
+
+
+@dataclass(frozen=True)
+class MaintEvent:
+    """`maint.event.v1` payload — drift / maintenance notification.
+
+    The drift agent (Phase 6.3) emits `kind=retrain_request` when a
+    predictor's rolling Brier/log-loss window crosses the floor, or
+    when a feature-distribution KS-test rejects stationarity. The
+    trainer subscribes to schedule a retrain; ops dashboards
+    subscribe for the alert.
+
+    `target` identifies the predictor (e.g. `"pred.elo.v1"`) so the
+    trainer can scope its retrain. `reason` is a closed vocabulary
+    from `_ALLOWED_DRIFT_REASONS` so dashboards can filter without
+    parsing free-form strings.
+    """
+
+    kind: str
+    target: str
+    reason: str
+    league_id: str | None = None
+    market: str | None = None
+    metric: str = ""
+    metric_value: float = 0.0
+    threshold: float = 0.0
+    sample_size: int = 0
+    produced_at: str = ""
+
+    def __post_init__(self) -> None:
+        if self.kind not in _ALLOWED_MAINT_KINDS:
+            raise ValueError(
+                f"MaintEvent.kind={self.kind!r} not in "
+                f"{sorted(_ALLOWED_MAINT_KINDS)}"
+            )
+        if self.kind == "retrain_request" and self.reason not in _ALLOWED_DRIFT_REASONS:
+            raise ValueError(
+                f"MaintEvent(kind=retrain_request).reason={self.reason!r} "
+                f"not in {sorted(_ALLOWED_DRIFT_REASONS)}"
+            )
+        if not self.target:
+            raise ValueError("MaintEvent.target must be a non-empty string")
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MaintEvent":
+        return cls(
+            kind=str(data["kind"]),
+            target=str(data["target"]),
+            reason=str(data["reason"]),
+            league_id=data.get("league_id"),
+            market=data.get("market"),
+            metric=str(data.get("metric", "")),
+            metric_value=float(data.get("metric_value", 0.0)),
+            threshold=float(data.get("threshold", 0.0)),
+            sample_size=int(data.get("sample_size", 0)),
+            produced_at=str(data.get("produced_at", "")),
         )

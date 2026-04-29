@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1",
+  "title": "maint.event.v1",
+  "description": "Phase 6.3: drift agent → trainer/ops. Emitted when a predictor's rolling Brier/log-loss window breaches `cfg.drift_accuracy_floor`, or when a KS-test on input features rejects stationarity at `cfg.drift_pvalue`. Mirrors `ai/swarm/agents/payloads.py::MaintEvent`.",
+  "type": "object",
+  "required": [
+    "kind",
+    "target",
+    "reason"
+  ],
+  "properties": {
+    "kind":         { "type": "string", "enum": ["retrain_request", "recalibration_request"] },
+    "target":       { "type": "string", "minLength": 1, "description": "Predictor id (e.g. 'pred.elo.v1')." },
+    "reason":       { "type": "string", "enum": ["brier_floor", "logloss_floor", "feature_ks"] },
+    "league_id":    { "type": ["string", "null"] },
+    "market":       { "type": ["string", "null"] },
+    "metric":       { "type": "string" },
+    "metric_value": { "type": "number" },
+    "threshold":    { "type": "number" },
+    "sample_size":  { "type": "integer", "minimum": 0 },
+    "produced_at":  { "type": "string", "description": "ISO-8601 UTC." }
+  },
+  "additionalProperties": false
+}

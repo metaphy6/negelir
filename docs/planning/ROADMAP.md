@@ -821,23 +821,23 @@ The point of a swarm is to *disagree well*. Initial roster (ordered by build-eff
 
 ### 6.1 Multi-proofreader voting
 
-- [ ] N proofreader agents (default 3, scalable). Each runs an independent set of rule-based + statistical checks.
-- [ ] A `predict.final` is **published to API cache** only if `≥ ⌊N/2⌋ + 1` proofreaders pass it (simple majority; configurable quorum). Per pre-Phase-6 audit §D4: `⌊N/2⌋+1` gives the standard simple-majority threshold (N=3→2, N=5→3, N=7→4); the previous `⌈N/2⌉+1` formula collapses to **unanimity** for odd N, which is a different policy and was unintentional.
-- [ ] Failed checks emit `proof.flag` with structured reasons.
+- [x] N proofreader agents (default 3, scalable). Each runs an independent set of rule-based + statistical checks. **Implemented (Wave B.1+B.2)** — three replicas (`proofreader.sanity.v1`, `proofreader.plausibility.v1`, `proofreader.consistency.v1`) wrap pure-function checks in [`prediction_checks.py`](../../ai/swarm/agents/proofreader/prediction_checks.py). Default N=3 satisfies `cfg.proofreader_replicas`; operators can spawn more replicas of any one for redundancy without code changes. Per-replica thresholds (`proofreader_sanity_eps`, `proofreader_plausibility_max_prob`, `proofreader_grid_consistency_tol`) live in the standard config triangle.
+- [x] A `predict.final` is **published to API cache** only if `≥ ⌊N/2⌋ + 1` proofreaders pass it (simple majority; configurable quorum). Per pre-Phase-6 audit §D4: `⌊N/2⌋+1` gives the standard simple-majority threshold (N=3→2, N=5→3, N=7→4); the previous `⌈N/2⌉+1` formula collapses to **unanimity** for odd N, which is a different policy and was unintentional. **Implemented** in [`ai/swarm/agents/proofreader/aggregator.py`](../../ai/swarm/agents/proofreader/aggregator.py) — `cfg.proofreader_quorum` (derived property) reads `cfg.proofreader_replicas` and computes `⌊N/2⌋+1`. The cache subscribes only to `predict.approved.v1` (Wave A.1 boundary test enforces this).
+- [x] Failed checks emit `proof.flag` with structured reasons. **Implemented** — five new `ProofFlagKind` values: `proofreader_no_quorum`, `proofreader_rejected`, `proofreader_late_verdict_dropped`, `proofreader_duplicate_approval`, `proofreader_overflow`. Each fires from a distinct aggregator branch with full match / market / request / verdict context, validated by [`test_proofreader_aggregator.py`](../../ai/swarm/agents/tests/test_proofreader_aggregator.py).
 
 ### 6.2 Built-in proofreader checks
 
-- [ ] **Sanity:** probabilities sum to 1 ± ε; no negative; no NaN.
-- [ ] **Plausibility:** away win > 0.85 in a derby — flag for review.
-- [ ] **Consistency:** 1X2 distribution matches 0-0 / 2-1 / … score grid.
-- [ ] **Cross-source:** agreement with implied probability from at least one external odds source (when available).
-- [ ] **Historical:** prediction not wildly out vs. last-3-meetings prior.
+- [x] **Sanity:** probabilities sum to 1 ± ε; no negative; no NaN. **Implemented** in [`ai/swarm/agents/proofreader/prediction_checks.py`](../../ai/swarm/agents/proofreader/prediction_checks.py) (`sanity_check`) and wrapped by `SanityProofreader` in [`replicas.py`](../../ai/swarm/agents/proofreader/replicas.py). Tolerance is `cfg.proofreader_sanity_eps` (default 0.01); failure = `reject` (no warn path — the distribution is malformed). 9 adversarial tests in `test_prediction_checks.py`.
+- [x] **Plausibility:** away win > 0.85 in a derby — flag for review. **Implemented** as `plausibility_check` + `PlausibilityProofreader`. Cap is `cfg.proofreader_plausibility_max_prob` (default 0.85); failure = `warn` (counts toward quorum — operator-visible but not fatal). Boundary test confirms `=cap` accepts, `>cap` warns.
+- [x] **Consistency:** 1X2 distribution matches 0-0 / 2-1 / … score grid. **Implemented** as `grid_consistency_check` + `ConsistencyProofreader`. When a `score_grid` is present, its 1X2 marginals must match `market_outcomes` within `cfg.proofreader_grid_consistency_tol` (default 0.05); divergence = `reject` (contract violation). Abstains gracefully when no grid is attached.
+- [ ] **Cross-source:** agreement with implied probability from at least one external odds source (when available). *Deferred to Phase 9* — no odds data plane yet.
+- [ ] **Historical:** prediction not wildly out vs. last-3-meetings prior. *Deferred to §6.3* — drift agent owns realized-outcome state.
 
 ### 6.3 Drift agent (`drift.v1`)
 
-- [ ] Maintains rolling Brier / log-loss windows per league × market × predictor.
-- [ ] Trips when (a) any window crosses `cfg.drift_accuracy_floor`, or (b) KS-test on input feature distribution rejects stationarity at `cfg.drift_pvalue`.
-- [ ] On trip → `maint.event{kind:retrain_request, target:<predictor>}`.
+- [x] Maintains rolling Brier / log-loss windows per league × market × predictor. **Implemented (Wave B.3)** in [`ai/swarm/agents/drift.py`](../../ai/swarm/agents/drift.py). v1 keeps a rolling Brier window per `(league_id, market)` (the swarm aggregate, since consensus has already merged the individual votes by the time we see `predict.approved.v1`); per-predictor windows wait for a durable `predict.vote` plane (Phase 9). State is in-memory; Postgres lift is a Phase 9 task — the contract here is identical, only the storage backend changes.
+- [~] Trips when (a) any window crosses `cfg.drift_accuracy_floor`, or (b) KS-test on input feature distribution rejects stationarity at `cfg.drift_pvalue`. **(a) implemented** — once a `(league, market)` window is full, mean Brier > `cfg.drift_accuracy_floor` (default 0.30) trips a `retrain_request` with `reason=brier_floor`. Re-trip is debounced until the window recovers below the floor (no spam). **(b) deferred** — KS-test needs the predictor's input feature vector on the bus (currently ephemeral inside the predictor process); the wire format reserves `reason=feature_ks` so the v2 KS-test agent slots in without a schema migration.
+- [x] On trip → `maint.event{kind:retrain_request, target:<predictor>}`. **Implemented** — emits one `MaintEvent` per contributing model (the union of predictors that contributed to predictions in the breached window); `target` carries the predictor_id so the trainer can scope its retrain. New `maint.event.v1` topic + JSON schema; producer is `drift.v1` only (boundary test enforces).
 
 ---
 

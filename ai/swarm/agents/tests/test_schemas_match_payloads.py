@@ -13,12 +13,15 @@ import pytest
 
 from swarm.agents.payloads import (
     FreshnessEvent,
+    MaintEvent,
     MatchStored,
     ModelTrained,
     NormalizedRecord,
+    PredictApproved,
     PredictFinal,
     PredictRequest,
     PredictVote,
+    ProofreaderVerdict,
     ScrapeClassified,
     ScrapeRaw,
     ScrapeRequest,
@@ -175,6 +178,59 @@ def _example_model_trained() -> dict:
     ).as_dict()
 
 
+def _example_proofreader_verdict() -> dict:
+    return ProofreaderVerdict(
+        request_id="req-1",
+        prediction_id=derive_prediction_id(
+            match_id="match-abc",
+            market="1x2",
+            request_id="req-1",
+            calibration_version=1,
+        ),
+        match_id="match-abc",
+        market="1x2",
+        proofreader_id="proof.sanity.v1",
+        verdict="accept",
+        score=0.92,
+        checked_at="2026-04-28T12:00:03+00:00",
+        flags=[],
+        checks_run=["sanity.probs_sum_to_one", "sanity.no_nan"],
+        rationale="",
+        calibration_version=1,
+    ).as_dict()
+
+
+def _example_predict_approved() -> dict:
+    final = _example_predict_final()
+    return PredictApproved(
+        request_id=final["request_id"],
+        prediction_id=final["prediction_id"],
+        match_id=final["match_id"],
+        market=final["market"],
+        approved_at="2026-04-28T12:00:04+00:00",
+        approved_by=["proof.sanity.v1", "proof.consistency.v1"],
+        verdict_count=3,
+        quorum=2,
+        final=final,
+        calibration_version=int(final["calibration_version"]),
+    ).as_dict()
+
+
+def _example_maint_event() -> dict:
+    return MaintEvent(
+        kind="retrain_request",
+        target="pred.elo.v1",
+        reason="brier_floor",
+        league_id="tr_super_lig",
+        market="1x2",
+        metric="brier",
+        metric_value=0.34,
+        threshold=0.30,
+        sample_size=120,
+        produced_at="2026-04-28T12:00:05+00:00",
+    ).as_dict()
+
+
 _CASES: list[tuple[str, dict]] = [
     ("scrape.request", _example_scrape_request()),
     ("scrape.raw", _example_scrape_raw()),
@@ -186,6 +242,9 @@ _CASES: list[tuple[str, dict]] = [
     ("predict.vote", _example_predict_vote()),
     ("predict.final", _example_predict_final()),
     ("models.events.v1", _example_model_trained()),
+    ("predict.proofreader_verdict.v1", _example_proofreader_verdict()),
+    ("predict.approved.v1", _example_predict_approved()),
+    ("maint.event.v1", _example_maint_event()),
 ]
 
 

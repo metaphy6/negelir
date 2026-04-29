@@ -336,6 +336,58 @@ class Config:
     backtest_min_n: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_MIN_N", "20")))
     api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CONSENSUS_OVERHEAD_MS", "250")))
 
+    # ── Phase 6 — Proofreader & drift swarm ─────────────────
+    # Number of distinct proofreader replicas registered in the swarm.
+    # `proofreader_quorum` is computed as ⌊N/2⌋+1 and surfaced via the
+    # property `proofreader_quorum`. v1 default is N=3 (quorum=2) per
+    # the locked decision in `docs/reports/pre-phase6-roadmap.md` §6.2.
+    proofreader_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_PROOFREADER_REPLICAS", "3")))
+    # How long the aggregator waits, after seeing the first verdict
+    # for a (request_id, prediction_id), before declaring "no quorum"
+    # and dropping the candidate. Late verdicts (arriving after the
+    # window) are recorded as `proofreader_late_verdict_dropped`
+    # proof.flag events but do not retroactively approve a prediction.
+    # 200 ms balances "give all 3 replicas a fair shot" against the
+    # API SLA budget (api_consensus_overhead_ms accounts for it).
+    proofreader_quorum_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_PROOFREADER_QUORUM_WINDOW_MS", "200")))
+
+    # ── Phase 6.2 — per-replica check thresholds ───────────────
+    #
+    # `sanity` rejects a prediction whose market_outcomes do not sum
+    # to 1.0 within ±eps. 0.01 (1%) absorbs float-rounding from
+    # consensus + calibration without masking real bugs (the legacy
+    # tolerance was 0.01 too — kept for parity).
+    proofreader_sanity_eps: float = field(default_factory=lambda: float(os.getenv("NEGELIR_PROOFREADER_SANITY_EPS", "0.01")))
+    # `plausibility` warns (does NOT reject — operator-visible yes-vote
+    # toward quorum) when any single market outcome exceeds this cap.
+    # 0.85 picks up "lopsided derby pick" without flagging legit blowout
+    # leaders against bottom-table opponents (those land ≤ 0.80 in our
+    # historical Brier traces).
+    proofreader_plausibility_max_prob: float = field(default_factory=lambda: float(os.getenv("NEGELIR_PROOFREADER_PLAUSIBILITY_MAX_PROB", "0.85")))
+    # `consistency` rejects when score_grid marginals disagree with
+    # market_outcomes by more than this per-outcome tolerance. 0.05
+    # (5 percentage points) catches contract violations without
+    # tripping on grid truncation rounding (we cap the grid at 9-9 so
+    # the tail cuts off ~0.5%).
+    proofreader_grid_consistency_tol: float = field(default_factory=lambda: float(os.getenv("NEGELIR_PROOFREADER_GRID_CONSISTENCY_TOL", "0.05")))
+
+    # ── Phase 6.3 — drift agent ────────────────────────────────
+    #
+    # Rolling Brier / log-loss windows are kept per
+    # (predictor, league, market). When a window's mean metric
+    # crosses the floor we emit `maint.event.v1{kind=retrain_request}`.
+    # 50 samples is the legacy `drift.py` default; balances "react
+    # fast to a regression" with "don't fire on a 5-game variance
+    # blip". Floor 0.30 is the project's documented Brier ceiling
+    # (`docs/design/TESTING_STRATEGY.md` — anything worse than 0.30
+    # is "dart-throwing chimp" territory).
+    drift_window_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DRIFT_WINDOW_SIZE", "50")))
+    drift_accuracy_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_ACCURACY_FLOOR", "0.30")))
+    # KS-test p-value below which the input feature distribution is
+    # declared non-stationary. 0.01 is conservative (only ~1% false
+    # positives at steady state); raise to 0.05 to react faster.
+    drift_pvalue: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_PVALUE", "0.01")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -423,6 +475,17 @@ class Config:
     @property
     def pg_url(self) -> str:
         return f"postgresql://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_db}"
+
+    @property
+    def proofreader_quorum(self) -> int:
+        """Phase 6.1: minimum distinct accept/warn verdicts required for
+        the aggregator to publish `predict.approved.v1`. Computed as
+        ⌊N/2⌋+1 from `proofreader_replicas` so a misconfiguration in
+        the env var is reflected immediately. Always ≥1 (even with
+        replicas=1 we require the single voter to accept).
+        """
+        n = max(int(self.proofreader_replicas), 1)
+        return (n // 2) + 1
 
     def validate(self, *, strict: bool = False) -> list[str]:
         """
@@ -516,6 +579,10 @@ class Config:
             ("backtest_window_weeks", self.backtest_window_weeks),
             ("backtest_min_n", self.backtest_min_n),
             ("api_consensus_overhead_ms", self.api_consensus_overhead_ms),
+            # Phase 6
+            ("proofreader_replicas", self.proofreader_replicas),
+            ("proofreader_quorum_window_ms", self.proofreader_quorum_window_ms),
+            ("drift_window_size", self.drift_window_size),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")
@@ -529,6 +596,15 @@ class Config:
             0.0,
             3600.0,
         )
+
+        # Phase 6.2 — proofreader check thresholds
+        _bounded("proofreader_sanity_eps", self.proofreader_sanity_eps, 0.0, 1.0)
+        _bounded("proofreader_plausibility_max_prob", self.proofreader_plausibility_max_prob, 0.0, 1.0)
+        _bounded("proofreader_grid_consistency_tol", self.proofreader_grid_consistency_tol, 0.0, 1.0)
+
+        # Phase 6.3 — drift agent
+        _bounded("drift_accuracy_floor", self.drift_accuracy_floor, 0.0, 1.0)
+        _bounded("drift_pvalue", self.drift_pvalue, 0.0, 1.0)
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

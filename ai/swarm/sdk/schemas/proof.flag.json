@@ -18,7 +18,12 @@
         "low_confidence_classification",
         "late_vote_dropped",
         "consensus_no_votes",
-        "consensus_overflow"
+        "consensus_overflow",
+        "proofreader_duplicate_approval",
+        "proofreader_no_quorum",
+        "proofreader_late_verdict_dropped",
+        "proofreader_rejected",
+        "proofreader_overflow"
       ]
     },
     "source":      { "type": "string", "description": "Origin source (mackolik, nesine, tff, openfootball, ...)." },

@@ -26,6 +26,7 @@ from .topics import (
     MATCH_NORMALIZED,
     MATCH_STORED,
     MODEL_TRAINED,
+    PREDICT_APPROVED,
     PREDICT_FINAL,
     PREDICT_REQUEST,
     PREDICT_VOTE,
@@ -55,6 +56,8 @@ _WATCHED_TOPICS = (
     PREDICT_VOTE,
     PREDICT_FINAL,
     MODEL_TRAINED,
+    # Phase 6 (Wave A.1) — proofreader-approved, user-visible predictions.
+    PREDICT_APPROVED,
 )
 
 

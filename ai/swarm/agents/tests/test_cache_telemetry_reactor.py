@@ -8,11 +8,15 @@ import pytest
 from swarm.agents.cache import (
     CacheAgent,
     InMemoryCacheBackend,
+    make_prediction_key,
     make_record_key,
 )
 from swarm.agents.payloads import (
     FreshnessEvent,
     MatchStored,
+    PredictApproved,
+    PredictFinal,
+    derive_prediction_id,
 )
 from swarm.agents.reactor import (
     CacheInvalidationReactor,
@@ -24,6 +28,7 @@ from swarm.agents.telemetry import TelemetryAgent, WATCHED_TOPICS
 from swarm.agents.topics import (
     FRESHNESS_EVENTS,
     MATCH_STORED,
+    PREDICT_APPROVED,
     SCRAPE_REQUEST,
 )
 from swarm.sdk.types import Message
@@ -60,6 +65,95 @@ def test_cache_agent_skips_unchanged() -> None:
     assert len(backend) == 0
 
 
+# ── Cache: predict.approved.v1 (Wave A.1) ──────────────────────
+
+
+def _approved_msg(prediction_id: str = "pid-1") -> Message:
+    final = PredictFinal(
+        request_id="req-1",
+        prediction_id=prediction_id,
+        match_id="match-abc",
+        market="1x2",
+        distribution={
+            "market_outcomes": {"H": 0.5, "D": 0.25, "A": 0.25},
+            "score_grid": None,
+        },
+        weights={"pred.elo.v1": 1.0},
+        contributing_models=["pred.elo.v1"],
+        calibration_version=1,
+        swarm_confidence=0.65,
+        produced_at="2026-04-28T12:00:02+00:00",
+        league_id="tr_super_lig",
+        profile_id="tr_super_lig",
+    ).as_dict()
+    approved = PredictApproved(
+        request_id=final["request_id"],
+        prediction_id=final["prediction_id"],
+        match_id=final["match_id"],
+        market=final["market"],
+        approved_at="2026-04-28T12:00:04+00:00",
+        approved_by=["proof.sanity.v1", "proof.consistency.v1"],
+        verdict_count=3,
+        quorum=2,
+        final=final,
+        calibration_version=int(final["calibration_version"]),
+    )
+    return Message.new(PREDICT_APPROVED, approved.as_dict(), producer="t")
+
+
+def test_cache_agent_writes_prediction_on_approved() -> None:
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+    list(agent.handle(_approved_msg(prediction_id="pid-xyz")))
+    key = make_prediction_key("match-abc", "1x2", "pid-xyz")
+    cached = backend.get(key)
+    assert cached is not None
+    # The full predict.final payload must be retrievable verbatim.
+    import json
+    decoded = json.loads(cached)
+    assert decoded["prediction_id"] == "pid-xyz"
+    assert decoded["distribution"]["market_outcomes"] == {
+        "H": 0.5, "D": 0.25, "A": 0.25
+    }
+
+
+def test_cache_agent_uses_prediction_ttl_for_approved(monkeypatch) -> None:
+    """The cache must read `cfg.cache_prediction_ttl_sec`, not
+    `cache_record_ttl_sec`. Override the cfg value and assert the
+    backend.set call carried it through.
+    """
+    from common.config import cfg as _cfg
+
+    seen: list[int] = []
+
+    class _RecordingBackend:
+        def set(self, key: str, value: str, *, ttl_sec: int) -> None:
+            seen.append(ttl_sec)
+
+        def get(self, key: str) -> str | None:
+            return None
+
+        def invalidate(self, key: str) -> None:
+            pass
+
+    monkeypatch.setattr(_cfg, "cache_prediction_ttl_sec", 777)
+    agent = CacheAgent(backend=_RecordingBackend())
+    list(agent.handle(_approved_msg()))
+    assert seen == [777], (
+        f"cache.v1 must use cache_prediction_ttl_sec for predict.approved.v1; "
+        f"got ttl={seen}"
+    )
+
+
+def test_cache_agent_drops_malformed_approved(caplog) -> None:
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+    bad = Message.new(PREDICT_APPROVED, {"not": "valid"}, producer="t")
+    out = list(agent.handle(bad))
+    assert out == []
+    assert len(backend) == 0
+
+
 # ── Telemetry ──────────────────────────────────────────────────
 
 
@@ -89,6 +183,14 @@ def test_telemetry_watches_phase5_predictor_topics() -> None:
     assert "predict.vote" in subs
     assert "predict.final" in subs
     assert "models.events.v1" in subs
+
+
+def test_telemetry_watches_predict_approved() -> None:
+    """Phase 6 (Wave A.1): the user-visible predict.approved.v1 topic
+    must appear in the observability surface."""
+    agent = TelemetryAgent()
+    subs = set(str(t) for t in agent.subscribes)
+    assert "predict.approved.v1" in subs
 
 
 # ── Reactor base ───────────────────────────────────────────────

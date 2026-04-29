@@ -40,21 +40,51 @@ TELEMETRY = Topic("telemetry")
 # Phase 5 — predictor swarm + consensus topics.
 PREDICT_REQUEST = Topic("predict.request")     # API/reactor → predictors
 PREDICT_VOTE = Topic("predict.vote")           # predictors → consensus
-PREDICT_FINAL = Topic("predict.final")         # consensus → cache/proofreader
+PREDICT_FINAL = Topic("predict.final")         # consensus → proofreader (CANDIDATE; never user-visible)
+
+# Phase 6 — proofreader aggregator → user-facing surface.
+# `predict.final` is a CANDIDATE; `predict.approved.v1` is the post-quorum,
+# user-visible decision. The `cache.v1` agent and any API publisher subscribe
+# HERE so a prediction cannot reach clients without proofreader approval
+# (ROADMAP §736 contract). The proofreader_aggregator agent (Phase 6.1) is
+# the SOLE producer.
+PREDICT_APPROVED = Topic("predict.approved.v1")
+
+# Phase 6.1 — individual proofreader replica → aggregator. Each replica
+# (sanity / consistency / plausibility / cross-source / historical, per
+# §6.2) emits exactly one ProofreaderVerdict per (request_id,
+# prediction_id). The aggregator collects them inside the quorum window
+# (`cfg.proofreader_quorum_window_ms`) and approves when ≥`cfg.proofreader_quorum`
+# distinct replicas vote `accept` or `warn`. `reject` votes do not count
+# toward quorum. The proofreader_aggregator agent is the SOLE consumer
+# of this topic.
+PROOFREADER_VERDICT = Topic("predict.proofreader_verdict.v1")
 
 # Phase 5 — model lifecycle (TrainerReactor → ops dashboards/registry)
 MODEL_TRAINED = Topic("models.events.v1")
 
+# Phase 6.3 — maintenance event stream (drift agent → trainer / ops).
+# Carries kinds like `retrain_request` (drift tripped on a predictor's
+# Brier or input KS-test). The trainer subscribes here to schedule a
+# retrain; ops dashboards subscribe for the alert. Producer is the
+# drift agent in v1; future maintenance agents (e.g. recalibration
+# requests, fixture-cache TTL bumps) reuse the same topic with a
+# different `kind`.
+MAINT_EVENT = Topic("maint.event.v1")
+
 
 __all__ = [
     "FRESHNESS_EVENTS",
+    "MAINT_EVENT",
     "MATCH_NORMALIZED",
     "MATCH_OUTCOME",
     "MATCH_STORED",
     "MODEL_TRAINED",
+    "PREDICT_APPROVED",
     "PREDICT_FINAL",
     "PREDICT_REQUEST",
     "PREDICT_VOTE",
+    "PROOFREADER_VERDICT",
     "PROOF_FLAG",
     "SCRAPE_CLASSIFIED",
     "SCRAPE_RAW",

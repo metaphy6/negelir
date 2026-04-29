@@ -9,6 +9,7 @@
     "prediction_id",
     "match_id",
     "market",
+    "proofreader_id",
     "verdict",
     "score",
     "checked_at"
@@ -18,6 +19,7 @@
     "prediction_id":      { "type": "string", "minLength": 1, "description": "Deterministic id of the predict.final being verified." },
     "match_id":           { "type": "string", "minLength": 1 },
     "market":             { "type": "string", "enum": ["1x2", "ah", "ou_2_5", "btts"] },
+    "proofreader_id":     { "type": "string", "minLength": 1, "description": "Stable id of the proofreader instance that produced this verdict (e.g. `proof.sanity.v1`). The aggregator (Phase 6.1) uses this to count distinct verdicts toward quorum." },
     "verdict":            { "type": "string", "enum": ["accept", "warn", "reject"], "description": "accept = consensus passes all checks; warn = consensus shipped with caveats (operator-visible); reject = consensus must not be served to clients." },
     "score":              { "type": "number", "minimum": 0.0, "maximum": 1.0 },
     "flags":              { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of every check that fired (e.g. 'odds_implied_disagree', 'home_xg_zero', 'late_vote_majority')." },

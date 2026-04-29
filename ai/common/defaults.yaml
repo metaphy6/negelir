@@ -176,6 +176,19 @@ phase5:
   backtest_min_n: 20                  # NEGELIR_BACKTEST_MIN_N
   api_consensus_overhead_ms: 250      # NEGELIR_API_CONSENSUS_OVERHEAD_MS
 
+# ── Phase 6 — Proofreader & drift swarm ─────────────────────────────────────
+phase6:
+  proofreader_replicas: 3             # NEGELIR_PROOFREADER_REPLICAS (quorum = ⌊N/2⌋+1)
+  proofreader_quorum_window_ms: 200   # NEGELIR_PROOFREADER_QUORUM_WINDOW_MS
+  # Per-replica check thresholds (§6.2)
+  proofreader_sanity_eps: 0.01                 # NEGELIR_PROOFREADER_SANITY_EPS — sum-to-1 tolerance
+  proofreader_plausibility_max_prob: 0.85      # NEGELIR_PROOFREADER_PLAUSIBILITY_MAX_PROB — single-outcome cap (warn)
+  proofreader_grid_consistency_tol: 0.05       # NEGELIR_PROOFREADER_GRID_CONSISTENCY_TOL — score_grid vs market_outcomes
+  # Drift agent (§6.3)
+  drift_window_size: 50                # NEGELIR_DRIFT_WINDOW_SIZE — rolling Brier/log-loss window
+  drift_accuracy_floor: 0.30           # NEGELIR_DRIFT_ACCURACY_FLOOR — trip-on-breach
+  drift_pvalue: 0.01                   # NEGELIR_DRIFT_PVALUE — KS-test stationarity threshold
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR
