@@ -6,6 +6,17 @@
 > [`docs/design/SCRAPER_PATCHER.md`](docs/design/SCRAPER_PATCHER.md) §12.5.
 > **Anchor doc:** SCRAPER_PATCHER.md is the binding contract; this file
 > is the operating brief.
+>
+> **Scope of this file.** Everything below applies **only** inside the
+> patcher's sandboxed container — it is not general policy for Claude
+> or any other AI assistant working in this repo via VS Code Copilot,
+> Aider, etc. Those general assistants follow [`AGENTS.md`](AGENTS.md)
+> (in particular Rule 9: only `git` is restricted; everything else,
+> including project-scoped system changes, is permitted). The narrow
+> tool allow-list, scope discipline, turn / token / cost limits, and
+> "produce one focused diff" workflow described here exist because the
+> patcher is a constrained automated loop, not because Claude is
+> distrusted in general.
 
 ---
 

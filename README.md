@@ -212,6 +212,55 @@ header.
 
 ---
 
+## 🤖 VS Code / Copilot configuration
+
+The repo ships an opinionated GitHub Copilot setup so any new contributor
+gets the same doctrine-aware behaviour out of the box. Roadmap and
+rationale live in [`docs/coding/ai/automation.md`](docs/coding/ai/automation.md).
+
+| File | Role |
+|---|---|
+| [`.github/copilot-instructions.md`](.github/copilot-instructions.md) | Repo-wide system prompt. Tells Copilot to read [`AGENTS.md`](AGENTS.md) §1 first, defaults to Claude Sonnet 4.5, restates the binding rules (no `git`, single-source config, Turkish UX, tracker + version bump in same commit). |
+| [`.github/instructions/ai-python.instructions.md`](.github/instructions/ai-python.instructions.md) | Auto-applied (`applyTo: ai/**/*.py`). Pytest, config layer, logging, source-watcher discipline. |
+| [`.github/instructions/server-go.instructions.md`](.github/instructions/server-go.instructions.md) | Auto-applied (`applyTo: server/**/*.go`). Modes (`api` vs `mocksrv`), config, table tests, forbidden surfaces. |
+| [`.github/instructions/xops-make.instructions.md`](.github/instructions/xops-make.instructions.md) | Auto-applied (`applyTo: Makefile,xops/makefile/**,xops/mcp/**`). Dispatcher pattern, sanctioned `sudo` callers, cross-platform rules. |
+| [`.github/chatmodes/doctrine-reader.chatmode.md`](.github/chatmodes/doctrine-reader.chatmode.md) | Read-only auditor. Cites `file:line`, never edits. Switch to it from the Copilot Chat mode picker when you want a "what does the doctrine say?" answer. |
+| [`.github/prompts/tour.repo.prompt.md`](.github/prompts/tour.repo.prompt.md) | `/tour.repo` — top-down onboarding tour for new contributors. |
+| [`.github/prompts/audit.config.prompt.md`](.github/prompts/audit.config.prompt.md) | `/audit.config` — finds Rule 1 (single-source config) violations in the named module. |
+| [`.github/prompts/test.gap.prompt.md`](.github/prompts/test.gap.prompt.md) | `/test.gap` — lists untested public surfaces in the named module. |
+| [`.vscode/settings.json`](.vscode/settings.json) | Enables prompt / instruction / chat-mode folders; auto-approves a curated allow-list of read-only Make targets (`track.list`, `version.show`, `lint`, `mock.verify`, `health`, …); explicitly **denies** `git`, ad-hoc `sudo`, `rm -rf`, `pip install`, `go install`, and the mutating mock-stack targets that need root. |
+| [`.vscode/mcp.json`](.vscode/mcp.json) | Registry for project MCP servers. The `negelir-make` server (currently disabled — leading `_`) will expose the read-only Make allow-list to Copilot once the stdio JSON-RPC loop in [`xops/mcp/make_allowlist.py`](xops/mcp/make_allowlist.py) is implemented. |
+| [`xops/mcp/`](xops/mcp/) | Scaffolding for project MCP wrappers. See [`xops/mcp/README.md`](xops/mcp/README.md). |
+
+### How to use it
+
+1. **Open the repo in VS Code** with the GitHub Copilot Chat extension
+   installed. The `.github/instructions/*.instructions.md` files apply
+   automatically based on which file you have open.
+2. **Use slash-prompts**. In Copilot Chat, type `/tour.repo`,
+   `/audit.config`, or `/test.gap` to invoke the matching prompt
+   against your current file or selection.
+3. **Switch to the Doctrine Reader mode** when you want an audit
+   instead of an edit — pick it from the chat mode dropdown. It has
+   no terminal access and refuses to mutate files.
+4. **Trust the auto-approve allow-list**. Copilot can run any of the
+   read-only Make targets in [`.vscode/settings.json`](.vscode/settings.json)
+   without a per-call confirmation. Anything that mutates state
+   (especially `git`) prompts you every time.
+5. **Add a new prompt / mode / MCP tool** by following the catalogue in
+   [`docs/coding/ai/automation.md`](docs/coding/ai/automation.md) §3–§5.
+   Drop a new file under `.github/prompts/`, `.github/chatmodes/`, or
+   `xops/mcp/` and bump the `docs` (or `xops`) version per
+   [`AGENTS.md`](AGENTS.md) §6.1.
+
+> **Doctrine reminder.** Per [`AGENTS.md`](AGENTS.md) Rule 9, Copilot
+> never runs `git`. Use `make git` (the human-only driver) to land
+> commits. Everything else — tests, `docker compose`, tracker rows,
+> version bumps, even root-scoped mock-stack provisioning — is fair
+> game for the agent.
+
+---
+
 ## 🛡️ Doctrine (non-negotiable)
 
 1. **🔧 Single-source configuration** — no magic numbers; every tunable lives in `xops/env/.env.example` + a config layer.

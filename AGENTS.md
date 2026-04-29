@@ -73,7 +73,8 @@ Every PR, every diff, every agent run must respect them:
 | 6 | **Turkish UX, English infra** | User-facing text & AI input/output in Turkish. Code, comments, log messages, metric names, config keys in English. |
 | 7 | **Adversarial tests are first-class** | Every public surface (HTTP, bus topic, scrape callback) needs at least one fuzzing / injection / chaos test. |
 | 8 | **Phase gates** | A phase ships only when its checklist in `ROADMAP.md` and the matching DoD in Appendix B are fully green. |
-| 9 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. All other tooling — including `make mock.capture` which hits real upstreams, `make mock.up`/`mock.down`, running tests, invoking `docker compose`, rendering certs, **and the dev-stack provisioning targets that require root (`make hosts.install`, `make hosts.uninstall`, `make mock.trust`, `make mock.untrust`, `make mock.setup`)** — is open for agent use. Those four mock-stack targets are the only sanctioned `sudo` callers; they are scoped to writing `/etc/hosts` and to installing the local dev root CA into the system trust store, both of which are reversible by their `*.uninstall`/`*.untrust` counterparts. Anything beyond that allow-list (system package installs, service restarts, anything outside `infra/mock/`) still defers to the user. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
+| 9 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. **Everything else is open for agent use** — running tests, `docker compose`, `make` (including the bookkeeping targets `make track.add` / `make version.bump` / `make version.validate`, the mock-data targets `make mock.capture` / `make mock.up` / `make mock.down`, and the sanctioned `sudo` callers `make hosts.install` / `make hosts.uninstall` / `make mock.trust` / `make mock.untrust` / `make mock.setup`), rendering certs, editing files in place, etc. The agent is expected to run the tracker + version-bump commands itself as part of completing a change, not to suggest them and wait. **System-level changes are permitted when they are scoped to making the project work** (installing a missing dev dependency the project needs, writing a hosts entry the mock stack relies on, etc.) provided they (a) do not weaken security, (b) do not destabilise the host, and (c) are reversible. System maintenance unrelated to the project (upgrading unrelated packages, changing global firewall rules, touching other users' files) still defers to the human. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
+| 10 | **Tests track code, always** | Every code change must leave the test suite **truthful**. Concretely: (a) **new feature / public surface** → add tests that exercise the happy path *and* at least one adversarial branch (Rule 7); (b) **bug fix** → add a regression test that fails before the fix and passes after — no exceptions; (c) **refactor / rename / signature change** → update every test that touches the moved surface in the same commit (no leaving stale fixtures or skipped tests behind); (d) **behaviour change** → revise existing assertions so they reflect the new contract, not the old one. **Never weaken or delete a test to make a build green.** If an existing test was wrong, fix it and explain why in the tracker row. If you cannot reach a test you should have written, leave the change out and say so — a passing build with no test for new behaviour is a false positive. Run `make test.ai` (or the relevant subset) before declaring done. |
 
 ---
 
@@ -129,6 +130,9 @@ make track.export FORMAT=md   # or FORMAT=csv
 
 ### 3.3 Pairing tracker entries with code
 
+- The agent writes the tracker row itself (via `make track.add` or
+  `python3 docs/tracking/track.py`) as part of finishing the change.
+  Do not leave it as a TODO for the human.
 - Land the tracker row in the **same commit** as the work it describes,
   so `git blame docs/tracking/phases.csv` matches the code timeline.
 - Use `--subphase N` to mirror roadmap sub-section numbers
@@ -190,18 +194,23 @@ Use this loop for every non-trivial change:
 3. **(If starting fresh)** Write a `start` tracker row.
 4. **Make the change.** Respect the doctrine (§2). Touch only what the
    request requires.
-5. **Verify.** Run the relevant tests. For Phase 0+ work, at minimum:
+5. **Update the tests in the same diff (Rule 10).** New surface →
+   add tests; bug fix → add a regression test that fails before the
+   fix; refactor / rename / behaviour change → revise every
+   affected existing test so it asserts the new contract. Never
+   weaken or delete a test to make a build green.
+6. **Verify.** Run the relevant tests. For Phase 0+ work, at minimum:
    ```bash
    PYTHONPATH=ai python3 -m pytest ai/tests/test_config_sync.py -q
    ```
-6. **Tick the ROADMAP checkboxes** (§3.4) — flip every `[ ]` your work
+7. **Tick the ROADMAP checkboxes** (§3.4) — flip every `[ ]` your work
    now satisfies to `[x]`, not just the one you originally targeted.
    Re-scan the whole sub-phase; you will often have completed adjacent
    items as a side effect. Do the same for any `docs/design/*.md`
    checklists touched by the change.
-7. **Write the tracker row** describing what shipped (or diverged /
+8. **Write the tracker row** describing what shipped (or diverged /
    blocked / adapted). One row per event.
-8. **Summarize.** Tell the user what changed, what tests ran, and what
+9. **Summarize.** Tell the user what changed, what tests ran, and what
    the next sub-phase would be.
 
 ---
@@ -270,6 +279,11 @@ developer, contributor, or downstream consumer (new features, bug
 fixes, behavior changes, API/interface changes, migration steps). Pure
 docstring tweaks or typo fixes inside a single component don't require
 a bump.
+
+**The agent runs the bump itself.** `make version.bump` is part of the
+agent's normal toolset (Rule 9). Do not ask the human to run it after
+the fact — bump as part of finishing the change, in the same turn as
+the code edit and the tracker row.
 
 **Levels** (standard SemVer):
 

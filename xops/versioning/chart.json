@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 81,
+    "build": 84,
     "released": null
   },
   "components": {
@@ -19,14 +19,14 @@
       "last_changed": "2026-04-29T07:07:24+00:00"
     },
     "xops": {
-      "version": "3.1.3",
+      "version": "3.2.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-04-29T07:07:24+00:00"
+      "last_changed": "2026-04-29T08:17:17+00:00"
     },
     "docs": {
-      "version": "1.9.15",
+      "version": "1.10.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-29T07:53:00+00:00"
+      "last_changed": "2026-04-29T08:24:05+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -987,6 +987,33 @@
       "from": "1.9.14",
       "to": "1.9.15",
       "build": 81
+    },
+    {
+      "timestamp": "2026-04-29T08:17:17+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase A foundation of Copilot automation roadmap + AGENTS/CLAUDE doctrine clarification",
+      "from": "1.9.15",
+      "to": "1.10.0",
+      "build": 82
+    },
+    {
+      "timestamp": "2026-04-29T08:17:17+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "add xops/mcp/ scaffolding with locked read-only Make allow-list",
+      "from": "3.1.3",
+      "to": "3.2.0",
+      "build": 83
+    },
+    {
+      "timestamp": "2026-04-29T08:24:05+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "add AGENTS.md Rule 10 (tests track code) and surface in copilot/instruction files",
+      "from": "1.10.0",
+      "to": "1.10.1",
+      "build": 84
     }
   ]
 }
