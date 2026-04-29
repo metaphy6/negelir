@@ -42,9 +42,14 @@ restates only the bits that bite when editing Make / xops.
 
 ## Sanctioned `sudo` callers
 
-Per `AGENTS.md` Rule 9, only these targets may call `sudo`:
+Per `AGENTS.md` Rule 9, only these five targets may call `sudo`:
 `make hosts.install`, `make hosts.uninstall`, `make mock.trust`,
-`make mock.untrust`, `make mock.setup`. Do not introduce new
+`make mock.untrust`, `make mock.setup`. They are scoped to writing
+`/etc/hosts` and installing the local dev root CA — both reversible
+by their `*.uninstall` / `*.untrust` counterparts. The agent **may**
+run them itself when the dev stack needs them; VS Code will prompt
+for confirmation since they are intentionally **not** in the
+`.vscode/settings.json` auto-approve list. Do not introduce new
 `sudo` callers without a doctrine update.
 
 ## Forbidden surfaces

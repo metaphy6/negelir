@@ -228,9 +228,38 @@ rationale live in [`docs/coding/ai/automation.md`](docs/coding/ai/automation.md)
 | [`.github/prompts/tour.repo.prompt.md`](.github/prompts/tour.repo.prompt.md) | `/tour.repo` — top-down onboarding tour for new contributors. |
 | [`.github/prompts/audit.config.prompt.md`](.github/prompts/audit.config.prompt.md) | `/audit.config` — finds Rule 1 (single-source config) violations in the named module. |
 | [`.github/prompts/test.gap.prompt.md`](.github/prompts/test.gap.prompt.md) | `/test.gap` — lists untested public surfaces in the named module. |
-| [`.vscode/settings.json`](.vscode/settings.json) | Enables prompt / instruction / chat-mode folders; auto-approves a curated allow-list of read-only Make targets (`track.list`, `version.show`, `lint`, `mock.verify`, `health`, …); explicitly **denies** `git`, ad-hoc `sudo`, `rm -rf`, `pip install`, `go install`, and the mutating mock-stack targets that need root. |
+| [`.vscode/settings.json`](.vscode/settings.json) | Enables prompt / instruction / chat-mode folders; auto-approves a curated allow-list of read-only Make targets (`track.list`, `version.show`, `lint`, `mock.verify`, `health`, …); explicitly **denies** `git`, `rm -rf`, `pip install`, `go install`. The four sanctioned `sudo` mock-stack targets (`hosts.install`, `mock.trust`, …) are intentionally **not** denied — Copilot may run them but VS Code will prompt for confirmation since they aren't in the auto-approve list. |
 | [`.vscode/mcp.json`](.vscode/mcp.json) | Registry for project MCP servers. The `negelir-make` server (currently disabled — leading `_`) will expose the read-only Make allow-list to Copilot once the stdio JSON-RPC loop in [`xops/mcp/make_allowlist.py`](xops/mcp/make_allowlist.py) is implemented. |
 | [`xops/mcp/`](xops/mcp/) | Scaffolding for project MCP wrappers. See [`xops/mcp/README.md`](xops/mcp/README.md). |
+
+### Planned prompt catalogue
+
+The full Copilot roadmap in
+[`docs/coding/ai/automation.md`](docs/coding/ai/automation.md) defines a
+broader set of slash-prompts that will land alongside the existing
+three. Each is intentionally narrow and read-mostly. The default
+model is **Claude Sonnet 4.5** unless the prompt's reasoning depth
+warrants **Claude Opus 4.7** (per
+[`AGENTS.md`](AGENTS.md) doctrine on the smallest model that works).
+
+| Prompt | Owner mode | Cadence | Default model | Output |
+|---|---|---|---|---|
+| `/test.gap <module>` | Test Author | on demand | Sonnet 4.5 | Ranked list of public functions with no test, plus a first valuable test draft. ✅ **shipped** |
+| `/test.regression <bug>` | Test Author | after a bug report | Sonnet 4.5 | A failing test capturing the bug; stops before the fix. |
+| `/test.flake <test-id>` | Debugger | repeated CI flakes | Opus 4.7 | Reproduction strategy (seed, ordering, time/locale dependency); proposes a deterministic guard. |
+| `/lint.debt <area>` | Doctrine Reader | weekly | Sonnet 4.5 | Inventory of `# noqa`, `// nolint`, `type: ignore`, magic numbers; ordered by blast radius. |
+| `/dead.symbols <area>` | Doctrine Reader | monthly | Sonnet 4.5 | Symbols exported but never imported; references-in-tests filter applied. |
+| `/dup.scan <area>` | Doctrine Reader | quarterly | Opus 4.7 | Cross-module duplication candidates with extraction sketch. |
+| `/deps.stale` | Doctrine Reader | weekly cron | Sonnet 4.5 | Diff of `requirements.txt` / `go.mod` against latest stable; flags CVEs first. |
+| `/deps.cve` | Doctrine Reader | on GHSA notice | Opus 4.7 | Per-dependency exposure map: which modules import the affected symbols. |
+| `/i18n.audit` | Doctrine Reader | weekly | Sonnet 4.5 | TR strings missing from `ai/common/locale_tr.yaml`; EN strings leaking into user-facing surfaces (Rule 6 enforcement). |
+| `/tour.repo` | (any mode) | on demand | Sonnet 4.5 | Top-down onboarding tour. ✅ **shipped** |
+| `/audit.config <module>` | Doctrine Reader | on demand | Sonnet 4.5 | Rule 1 (single-source config) violations. ✅ **shipped** |
+
+To add a new prompt, drop a `<name>.prompt.md` file under
+`.github/prompts/` with frontmatter that pins `mode:` (and `model:`
+if you need to override the default), then update this table and
+bump `docs` per [`AGENTS.md`](AGENTS.md) §6.1.
 
 ### How to use it
 

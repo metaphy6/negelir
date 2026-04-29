@@ -35,9 +35,10 @@ If the user request conflicts with `docs/planning/ROADMAP.md`,
   metric names, config keys are English; user-facing strings stay
   Turkish (`AGENTS.md` Rule 6).
 - **Tracker + version bump in the same commit as code** —
-  `AGENTS.md` §3 and §6.1. Use `make track.add` and
-  `make version.bump`. Suggest them at the end of every turn that
-  produced a diff; let the human run them.
+  `AGENTS.md` §3 and §6.1. Run `make track.add` and
+  `make version.bump` yourself at the end of every turn that
+  produced a diff (Rule 9 — they are part of the agent's normal
+  toolset). Tell the human what you ran.
 - **Tests track code, always (`AGENTS.md` Rule 10).** New feature
   → new tests (happy + adversarial). Bug fix → regression test
   that fails before the fix. Refactor / rename / behaviour change
