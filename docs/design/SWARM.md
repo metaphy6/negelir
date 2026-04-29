@@ -47,6 +47,9 @@ shape because:
 | `consensus.v1` | 5 | `swarm/predictors/` | yes | 1 | no |
 | `proofreader.v1` | 6 | `swarm/proofreaders/` | yes | 3 (quorum) | no |
 | `drift.v1` | 6 | `swarm/drift/` | yes | 1 | no |
+
+> **Boundary note (audit §D1).** `drift.v1` here is the **prediction-quality** drift detector that lives on the swarm side and consumes `predict.final` / `outcome.observed`. It is **not** the same as `datasource.watcher` (formerly `source_watcher`), which detects **schema / source-shape drift** at the ingestion edge. The two never share a topic, a process, or a config key; conflating them is a recurring near-miss and the patcher harness's scope contracts depend on the distinction. See [COMPONENT_LAYOUT.md §3.2](COMPONENT_LAYOUT.md) for the ingestion-side row.
+
 | `sec.input.v1` | 7 | `swarm/defense/` | yes | 2 | optional |
 | `sec.scrape.v1` | 7 | `swarm/defense/` | yes | 1 | no |
 | `sec.rate.v1` | 7 | `swarm/defense/` | yes | 2 | no |
@@ -99,7 +102,7 @@ Keeps consensus's memory bounded if predictors permanently DLQ.
 Quorum rule for Proofreader (Phase 6):
 
 ```
-publish_to_cache iff  (pass_count >= ceil(N/2) + 1)  and  (drift.v1 not tripped)
+publish_to_cache iff  (pass_count >= floor(N/2) + 1)  and  (drift.v1 not tripped)
 ```
 
 ## 📨 Message envelope (JSON in v1; CBOR upgrade in Phase 9)

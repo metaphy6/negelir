@@ -345,6 +345,7 @@ class TestCardEstimation:
 from tqu.questions import FOOTBALL_QUESTIONS, REJECTION_QUESTIONS_LIST
 
 
+@pytest.mark.slow
 class TestExtendedClassification:
     """Validate the classifier against the extended question dataset."""
 
@@ -646,6 +647,7 @@ class TestHistoricalScenarios:
 
 # ── Stress / Bulk Classification Runs ────────────────────────────────────────
 
+@pytest.mark.slow
 class TestBulkClassification:
     """
     Run the classifier against the full 1600+ question dataset multiple times
@@ -2287,6 +2289,7 @@ _skip_live = pytest.mark.skipif(
 
 
 @_skip_live
+@pytest.mark.slow
 class TestMackolikLive:
     """
     Live integration tests against arsiv.mackolik.com.

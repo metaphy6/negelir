@@ -40,6 +40,7 @@ from .payloads import (
     PredictFinal,
     PredictRequest,
     PredictVote,
+    ProofFlagKind,
     derive_prediction_id,
 )
 from .reactor import InMemoryLedger, Ledger
@@ -262,7 +263,7 @@ class ConsensusAgent:
                         Message.new(
                             PROOF_FLAG,
                             {
-                                "kind": "consensus_overflow",
+                                "kind": ProofFlagKind.CONSENSUS_OVERFLOW,
                                 "agent": self.name,
                                 "match_id": evicted.match_id,
                                 "market": evicted.market,
@@ -313,7 +314,7 @@ class ConsensusAgent:
                     Message.new(
                         PROOF_FLAG,
                         {
-                            "kind": "late_vote_dropped",
+                            "kind": ProofFlagKind.LATE_VOTE_DROPPED,
                             "agent": self.name,
                             "predictor_id": vote.predictor_id,
                             "match_id": vote.match_id,
@@ -443,7 +444,7 @@ class ConsensusAgent:
                 Message.new(
                     PROOF_FLAG,
                     {
-                        "kind": "consensus_no_votes",
+                        "kind": ProofFlagKind.CONSENSUS_NO_VOTES,
                         "agent": self.name,
                         "match_id": pending.match_id,
                         "market": pending.market,

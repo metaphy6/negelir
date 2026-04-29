@@ -35,6 +35,7 @@ def _expected_score(home_elo: float, away_elo: float, ha: float) -> float:
 
 class EloPredictor(PredictorAgent):
     predictor_id = "pred.elo.v1"
+    features_version = "elo.v1"
 
     def predict(
         self, ctx: PredictorContext

@@ -27,7 +27,7 @@ from typing import Iterable, Protocol
 from common.config import cfg
 
 from ..sdk.types import Message
-from .payloads import ScrapeClassified, ScrapeRaw
+from .payloads import ProofFlagKind, ScrapeClassified, ScrapeRaw
 from .topics import PROOF_FLAG, SCRAPE_CLASSIFIED, SCRAPE_RAW
 
 _log = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ class CategorizerAgent:
                 Message.new(
                     PROOF_FLAG,
                     {
-                        "kind": "decode_failed",
+                        "kind": ProofFlagKind.DECODE_FAILED,
                         "source": raw.source,
                         "target": raw.target,
                         "detail": decode_err,
@@ -144,7 +144,7 @@ class CategorizerAgent:
                 Message.new(
                     PROOF_FLAG,
                     {
-                        "kind": "low_confidence_classification",
+                        "kind": ProofFlagKind.LOW_CONFIDENCE_CLASSIFICATION,
                         "source": raw.source,
                         "target": raw.target,
                         "label": label,

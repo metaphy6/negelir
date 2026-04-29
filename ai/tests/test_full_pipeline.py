@@ -39,6 +39,7 @@ def _find_real_league() -> str | None:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_full_training_pipeline_end_to_end(tmp_path: Path, monkeypatch) -> None:
     """End-to-end: run all 8 stages, validate report contract."""
     league = _find_real_league()

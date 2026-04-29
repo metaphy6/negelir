@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from ..sdk.types import Message
-from .payloads import NormalizedRecord, ScrapeClassified
+from .payloads import NormalizedRecord, ProofFlagKind, ScrapeClassified
 from .topics import MATCH_NORMALIZED, PROOF_FLAG, SCRAPE_CLASSIFIED
 
 _log = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class ProcessorAgentBase:
             # problem. Lumping both into `empty_parse` blinds operators.
             return (
                 self._flag(
-                    msg, classified, kind="decode_failed", detail=decode_err
+                    msg, classified, kind=ProofFlagKind.DECODE_FAILED, detail=decode_err
                 ),
             )
         try:
@@ -96,7 +96,7 @@ class ProcessorAgentBase:
                 self._flag(
                     msg,
                     classified,
-                    kind="parser_exception",
+                    kind=ProofFlagKind.PARSER_EXCEPTION,
                     detail=str(exc),
                 ),
             )
@@ -106,7 +106,7 @@ class ProcessorAgentBase:
                 self._flag(
                     msg,
                     classified,
-                    kind="empty_parse",
+                    kind=ProofFlagKind.EMPTY_PARSE,
                     detail=f"label={classified.label} target={classified.raw.target}",
                 ),
             )
@@ -132,7 +132,7 @@ class ProcessorAgentBase:
             except ValueError as exc:
                 out.append(
                     self._flag(
-                        msg, classified, kind="invalid_record", detail=str(exc)
+                        msg, classified, kind=ProofFlagKind.INVALID_RECORD, detail=str(exc)
                     )
                 )
                 continue

@@ -171,3 +171,55 @@ def test_xgb_form_no_score_grid():
     agent = XgbFormPredictor()
     out = list(agent.handle(_request("1x2")))
     assert out[0].payload["distribution"]["score_grid"] is None
+
+
+# ── P4 — features_version is wired through every predictor ──────
+
+
+_ALL_PREDICTOR_CLASSES_INCL_LGBM = _PREDICTOR_CLASSES + (LgbmMarketPredictor,)
+
+
+@pytest.mark.parametrize("predictor_cls", _ALL_PREDICTOR_CLASSES_INCL_LGBM)
+def test_predictor_class_has_non_empty_features_version(predictor_cls):
+    """Audit §P4: every predictor must declare a non-empty
+    features_version so consensus / Trainer-Reactor (Phase 6) can
+    correlate votes back to the model artifact that produced them.
+    The base class enforces this in __init__; this test pins the
+    class-level contract too so a typo doesn't slip through."""
+    fv = getattr(predictor_cls, "features_version", "")
+    assert fv, f"{predictor_cls.__name__}: features_version must be non-empty"
+
+
+def test_predictor_features_versions_are_unique():
+    """Distinct predictors must declare distinct features_versions —
+    a shared identifier would make Trainer-Reactor calibrate them as
+    if they were the same model."""
+    fvs = [c.features_version for c in _ALL_PREDICTOR_CLASSES_INCL_LGBM]
+    assert len(fvs) == len(set(fvs)), f"duplicate features_versions: {fvs}"
+
+
+@pytest.mark.parametrize("predictor_cls", _PREDICTOR_CLASSES)
+def test_vote_carries_features_version(predictor_cls):
+    """The per-vote envelope must carry the same features_version the
+    class advertises (the base plumbs it through; this guards regressions)."""
+    agent = predictor_cls()
+    out = list(agent.handle(_request("1x2")))
+    assert out, f"{agent.predictor_id}: expected at least one vote"
+    vote = PredictVote.from_dict(out[0].payload)
+    assert vote.features_version == predictor_cls.features_version
+
+
+def test_base_rejects_predictor_without_features_version():
+    """Belt-and-braces: the base PredictorAgent.__init__ must refuse
+    to instantiate a subclass that forgot to set features_version."""
+    from swarm.agents.predictors._base import PredictorAgent
+
+    class _BadPredictor(PredictorAgent):
+        predictor_id = "pred.bad.v1"
+        features_version = ""  # explicit blank — should be rejected
+
+        def predict(self, ctx):  # pragma: no cover — never reached
+            return ({"market_outcomes": {"H": 1.0}}, 1.0)
+
+    with pytest.raises(ValueError, match="features_version"):
+        _BadPredictor()

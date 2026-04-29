@@ -25,3 +25,9 @@ def pytest_configure(config):  # noqa: D401
         "cpu_only: Phase 11 parity tests — predictor / model output must be "
         "identical (or within ε) on CPU vs the chosen device.",
     )
+    config.addinivalue_line(
+        "markers",
+        "slow: tests that take noticeable wall time (CPU/GPU parity sweeps, "
+        "full-pipeline runs). Excluded by `make test.fast`; included by "
+        "`make test.ai` and CI.",
+    )

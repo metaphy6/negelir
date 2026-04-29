@@ -149,6 +149,14 @@ class PredictorAgent:
             raise ValueError(
                 f"{type(self).__name__}: predictor_id class attr is required"
             )
+        if not self.features_version:
+            # Non-empty features_version is the consensus / Trainer-Reactor
+            # contract: a vote with empty features_version is unattributable
+            # to any model artifact and breaks Phase 6 calibration backfill
+            # (audit §P4). Subclasses must override the base default.
+            raise ValueError(
+                f"{type(self).__name__}: features_version class attr is required"
+            )
         # Use predictor_id as the agent name for swarmctl visibility.
         self.name = self.predictor_id
         self._clock = clock or (

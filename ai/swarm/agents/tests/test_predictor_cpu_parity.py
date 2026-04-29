@@ -94,6 +94,7 @@ def _all_predictors():
 
 
 @pytest.mark.cpu_only
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "predictor",
     _all_predictors(),
@@ -133,6 +134,7 @@ def test_predictor_is_deterministic(predictor, market: str) -> None:
 
 
 @pytest.mark.cpu_only
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "predictor",
     _all_predictors(),
@@ -168,6 +170,7 @@ def test_predictor_forced_cpu_matches_default(
 
 
 @pytest.mark.cpu_only
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "predictor",
     _all_predictors(),

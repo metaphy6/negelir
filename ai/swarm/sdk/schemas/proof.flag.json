@@ -15,7 +15,10 @@
         "empty_parse",
         "parser_exception",
         "invalid_record",
-        "low_confidence_classification"
+        "low_confidence_classification",
+        "late_vote_dropped",
+        "consensus_no_votes",
+        "consensus_overflow"
       ]
     },
     "source":      { "type": "string", "description": "Origin source (mackolik, nesine, tff, openfootball, ...)." },

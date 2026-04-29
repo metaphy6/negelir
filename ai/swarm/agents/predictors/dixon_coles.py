@@ -36,6 +36,7 @@ _CONFIDENCE_MODAL_FLOOR = 0.05
 
 class DixonColesPredictor(PredictorAgent):
     predictor_id = "pred.dixon_coles.v1"
+    features_version = "score_grid.v1"
 
     def predict(
         self, ctx: PredictorContext

@@ -275,11 +275,61 @@ __all__ = [
     "PredictFinal",
     "PredictRequest",
     "PredictVote",
+    "ProofFlagKind",
     "ScrapeClassified",
     "ScrapeRaw",
     "ScrapeRequest",
     "derive_prediction_id",
 ]
+
+
+# ── proof.flag kind registry ─────────────────────────────────────
+#
+# Closed vocabulary for the cross-cutting `proof.flag` topic. Per
+# pre-Phase-6 audit §B1/§D2: producers MUST pull `kind` from this
+# registry rather than hard-coding strings, and the JSON schema's
+# enum is generated from this set so the wire schema and code can
+# never drift in opposite directions. Adding a new kind requires:
+#   1. A new constant below.
+#   2. The matching enum entry in
+#      `ai/swarm/sdk/schemas/proof.flag.json`.
+#   3. Coverage in `test_proof_flag_kinds.py`
+#      (`test_registry_matches_schema_enum`).
+#
+# Cardinality is intentionally low — the topic stays one stream,
+# but every producer's vocabulary is closed.
+
+
+class ProofFlagKind(str):
+    """String-subclass enum-like registry of valid `proof.flag` kinds.
+
+    Plain `str` subclass (not `enum.Enum`) so call sites can keep
+    writing the literal value into JSON payloads without an
+    ``.value`` indirection while still benefitting from the
+    registry guard via :py:meth:`all_kinds`.
+    """
+
+    # — Phase 4 scrape lifecycle —
+    UPSTREAM_MISSING = "upstream_missing"
+    DECODE_FAILED = "decode_failed"
+    EMPTY_PARSE = "empty_parse"
+    PARSER_EXCEPTION = "parser_exception"
+    INVALID_RECORD = "invalid_record"
+    LOW_CONFIDENCE_CLASSIFICATION = "low_confidence_classification"
+
+    # — Phase 5 consensus —
+    LATE_VOTE_DROPPED = "late_vote_dropped"
+    CONSENSUS_NO_VOTES = "consensus_no_votes"
+    CONSENSUS_OVERFLOW = "consensus_overflow"
+
+    @classmethod
+    def all_kinds(cls) -> frozenset[str]:
+        """Every declared kind. Used by the contract test + telemetry."""
+        return frozenset(
+            v
+            for k, v in vars(cls).items()
+            if k.isupper() and isinstance(v, str)
+        )
 
 
 # ── Phase 5 — predictor swarm + consensus payloads ──────────────

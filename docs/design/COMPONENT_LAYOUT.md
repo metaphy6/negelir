@@ -111,7 +111,7 @@ Config layer already supports this (Phase 1.2).
 | Current path | New path | Notes |
 |---|---|---|
 | `ai/scraper/` | `datasource/scraper/` | Full move, preserving the selectors/field_discovery/self_healing split. |
-| `ai/swarm/source_watcher/` | `datasource/watcher/` | Single-word rename; module name becomes `datasource.watcher`. |
+| `ai/swarm/source_watcher/` | `datasource/watcher/` | Single-word rename; module name becomes `datasource.watcher`. **Owns ingestion-side schema-drift detection.** Distinct from the Phase 6 `swarm/drift/` agent (`drift.v1` topic), which detects **prediction-quality drift** and is a fully separate component on the swarm side — see [SWARM.md](SWARM.md) §Roles. The two were briefly conflated; this row pins the boundary so future work cannot drift them back together. |
 | *(new)* | `datasource/refresher/` | Home for the CONTENT_FRESHNESS agent (Phase 3). |
 | *(new)* | `datasource/patcher/` | New component; auto-patching scraper. See [SCRAPER_PATCHER.md](SCRAPER_PATCHER.md). |
 | *(new)* | `datasource/gitops/` | New component; PR driver + 7-day auto-merge policy. |

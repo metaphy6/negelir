@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Iterable
 
 from ..sdk.types import Message
+from common.config import cfg
 from .topics import (
     FRESHNESS_EVENTS,
     MATCH_NORMALIZED,
@@ -135,8 +136,6 @@ class TelemetryAgent:
         the bind hardening on the floor. Pass ``start_http=True`` to
         spin up the exposer in the same call.
         """
-        from common.config import cfg  # local import keeps cfg load lazy
-
         agent = cls()
         if start_http:
             agent.start_http(

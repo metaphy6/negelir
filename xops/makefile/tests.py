@@ -35,10 +35,24 @@ def cmd_test_ai(_argv):          _pytest("ai/tests")
 def cmd_test_integration(_argv): _pytest("ai/tests/test_full_pipeline.py", "-s")
 
 
+def cmd_test_fast(_argv):
+    """Fast loop: full suite minus `slow`-marked tests (parity sweeps,
+    full-pipeline end-to-end). Intended for the inner dev loop;
+    `make test` and CI still run everything."""
+    _pytest(
+        "ai/tests",
+        "ai/swarm",
+        "xops/mock/tests",
+        "xops/versioning/tests",
+        "-m", "not slow",
+    )
+
+
 COMMANDS = {
     "test": cmd_test,
     "test-ai": cmd_test_ai,
     "test-integration": cmd_test_integration,
+    "test-fast": cmd_test_fast,
 }
 
 

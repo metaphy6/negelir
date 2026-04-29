@@ -466,3 +466,102 @@ def test_malformed_predict_request_is_logged_and_dropped():
     out = list(c.handle(bad))
     assert out == []
 
+
+
+# ── P5 regression — calibration table immutability ──────────────
+
+
+def test_calibration_table_is_swap_not_mutate():
+    """Pre-Phase 6 audit §P5: the consensus pending-key caches the
+    CalibrationTable instance to enforce "single calibration-store hit
+    per request". A TrainerReactor that mutates the *store* while a
+    window is open must not retroactively change the cached version
+    seen by an in-flight key.
+
+    Setup:
+      1. Seed v1 in the calibration store.
+      2. Open a pending window with one predictor's vote (caches v1).
+      3. TrainerReactor upserts v2 (a *new* CalibrationTable instance).
+      4. Second vote lands → finalize must use v1 (the cached one).
+
+    This guards Phase 6 from a TrainerReactor implementation that
+    reuses table instances and silently corrupts in-flight consensus.
+    """
+    store = InMemoryCalibrationStore()
+    store.upsert(
+        CalibrationTable(
+            profile_id="default", market="1x2", version=1,
+            x=(0.0, 0.5, 1.0), y=(0.0, 0.5, 1.0),
+        )
+    )
+    c = _make_consensus(calibration_store=store)
+
+    # First vote opens the window and caches calibration v1.
+    out = list(c.handle(_vote("p.a", {"H": 0.7, "D": 0.2, "A": 0.1})))
+    assert out == []
+
+    # Mid-window: trainer publishes a new calibration version.
+    store.upsert(
+        CalibrationTable(
+            profile_id="default", market="1x2", version=2,
+            # Drastically different curve so we'd notice if it leaked.
+            x=(0.0, 0.5, 1.0), y=(0.99, 0.99, 0.99),
+        )
+    )
+
+    # Remaining votes complete the quorum.
+    out += list(c.handle(_vote("p.b", {"H": 0.6, "D": 0.3, "A": 0.1})))
+    out += list(c.handle(_vote("p.c", {"H": 0.5, "D": 0.3, "A": 0.2})))
+
+    finals = [m for m in out if m.envelope.topic == PREDICT_FINAL]
+    assert len(finals) == 1
+    final = PredictFinal.from_dict(finals[0].payload)
+    assert final.calibration_version == 1, (
+        f"in-flight key must keep the cached calibration version, got "
+        f"v{final.calibration_version}"
+    )
+    # And the prediction_id must be the v1-derived one (downstream
+    # consumers correlate by it).
+    expected_pid = derive_prediction_id(
+        match_id="m-1", market="1x2", request_id="r-1",
+        calibration_version=1,
+    )
+    assert final.prediction_id == expected_pid
+
+
+def test_new_window_after_calibration_swap_uses_new_version():
+    """Companion to immutability test: a *fresh* (match,market,request)
+    after the swap must pick up v2. Otherwise the cache would never
+    update and trainer events would be no-ops."""
+    store = InMemoryCalibrationStore()
+    store.upsert(
+        CalibrationTable(
+            profile_id="default", market="1x2", version=1,
+            x=(0.0, 1.0), y=(0.0, 1.0),
+        )
+    )
+    c = _make_consensus(calibration_store=store)
+
+    # Drain a v1 window first.
+    list(c.handle(_vote("p.a", {"H": 0.7, "D": 0.2, "A": 0.1})))
+    list(c.handle(_vote("p.b", {"H": 0.6, "D": 0.3, "A": 0.1})))
+    list(c.handle(_vote("p.c", {"H": 0.5, "D": 0.3, "A": 0.2})))
+
+    # Trainer ships v2.
+    store.upsert(
+        CalibrationTable(
+            profile_id="default", market="1x2", version=2,
+            x=(0.0, 1.0), y=(0.0, 1.0),
+        )
+    )
+
+    # Brand-new request_id ⇒ brand-new pending key ⇒ should see v2.
+    out = []
+    out += list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-2")))
+    out += list(c.handle(_vote("p.b", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-2")))
+    out += list(c.handle(_vote("p.c", {"H": 0.5, "D": 0.3, "A": 0.2}, request_id="r-2")))
+
+    finals = [m for m in out if m.envelope.topic == PREDICT_FINAL]
+    assert len(finals) == 1
+    final = PredictFinal.from_dict(finals[0].payload)
+    assert final.calibration_version == 2

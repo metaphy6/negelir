@@ -306,6 +306,10 @@ watch.sources: ## List registered source keys/hosts
 test.ai: env ## Run AI module tests only
 	@$(XOPS)/tests.py test-ai
 
+.PHONY: test.fast
+test.fast: env ## Fast loop: full suite minus @pytest.mark.slow tests (audit P6)
+	@$(XOPS)/tests.py test-fast
+
 .PHONY: test.integration
 test.integration: env ## Full-pipeline integration test (skips cleanly if real data missing)
 	@$(XOPS)/tests.py test-integration

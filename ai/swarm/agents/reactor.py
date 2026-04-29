@@ -36,6 +36,7 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable, Protocol
 
 from ..sdk.types import Message
+from common.config import cfg as _cfg
 from .cache import CacheBackend, make_record_key
 from .payloads import FreshnessEvent
 from .topics import FRESHNESS_EVENTS
@@ -235,9 +236,11 @@ class TrainerReactor(ReactorBase):
         clock: Callable[[], float] | None = None,
         version_clock: Callable[[], str] | None = None,
     ) -> None:
-        # Defer the topic + cfg import to runtime so the module-level
+        # Defer the topic import to runtime so the module-level
         # imports don't form a cycle (topics.py → predictors → cfg).
-        from common.config import cfg as _cfg  # local import
+        # The cfg import itself is module-level — it has no cycle and
+        # paying the import on every TrainerReactor() call wastes a
+        # double-digit microseconds per construction (audit §P1).
         from .topics import MODEL_TRAINED  # local import — Phase 5
         self.publishes = (MODEL_TRAINED,)
         self._model_trained_topic = MODEL_TRAINED

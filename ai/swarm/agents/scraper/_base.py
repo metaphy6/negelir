@@ -28,7 +28,7 @@ from typing import Callable, Iterable, Protocol
 from common.config import cfg
 
 from ...sdk.types import Message
-from ..payloads import ScrapeRaw, ScrapeRequest
+from ..payloads import ProofFlagKind, ScrapeRaw, ScrapeRequest
 from ..topics import PROOF_FLAG, SCRAPE_RAW, SCRAPE_REQUEST
 
 _log = logging.getLogger(__name__)
@@ -152,7 +152,7 @@ class ScraperAgentBase:
                     {
                         "source": self.source_key,
                         "target": req.target,
-                        "kind": "upstream_missing",
+                        "kind": ProofFlagKind.UPSTREAM_MISSING,
                         "http_status": 404,
                     },
                     producer=self.name,
