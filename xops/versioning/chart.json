@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 136,
+    "build": 138,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.10.8",
+      "version": "1.10.9",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-30T09:06:38+00:00"
+      "last_changed": "2026-04-30T09:48:58+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.17.1",
+      "version": "0.17.2",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-30T09:06:34+00:00"
+      "last_changed": "2026-04-30T09:48:58+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1482,6 +1482,24 @@
       "from": "1.10.7",
       "to": "1.10.8",
       "build": 136
+    },
+    {
+      "timestamp": "2026-04-30T09:48:58+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "drift O(1) outcome lookup + bootstrap wires cache.v1/telemetry.v1 (phase6 second-pass F2-1, F2-2)",
+      "from": "0.17.1",
+      "to": "0.17.2",
+      "build": 137
+    },
+    {
+      "timestamp": "2026-04-30T09:48:58+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase6 second-pass audit doc + ROADMAP §4.5/§4.7 checkbox flips (F2-3, F2-4)",
+      "from": "1.10.8",
+      "to": "1.10.9",
+      "build": 138
     }
   ]
 }

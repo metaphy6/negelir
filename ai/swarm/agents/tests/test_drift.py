@@ -272,3 +272,67 @@ def test_buckets_are_isolated_per_league() -> None:
     # Exactly one trip — for tr_super_lig only.
     leagues_tripped = {MaintEvent.from_dict(m.payload).league_id for m in maint}
     assert leagues_tripped == {"tr_super_lig"}
+
+
+# ── Phase-6 second-pass audit (F2-1): outcome lookup is O(1) ──
+
+
+def test_outcome_settle_does_not_scan_pending_map() -> None:
+    """Phase-6 second-pass audit (F2-1).
+
+    `_handle_outcome` previously walked the entire `_pending` map
+    (default cap 100k) for every settled outcome; with the
+    direct-key lookup it must touch *only* the matching key. This
+    regression test pre-loads the pending map with 1000 unrelated
+    `(match_id, "1x2")` keys, settles one specific match, and
+    asserts:
+
+        * exactly one entry was popped (the targeted match);
+        * the remaining 999 are untouched;
+        * the agent emits the right window-size on the targeted
+          bucket.
+
+    A re-introduced linear scan would still produce correct
+    behaviour but the side-effect shape (popped vs scanned)
+    differs and `_pending` length is the cheap probe.
+    """
+    a = _agent(window_size=2)
+    # Pre-load 1000 unrelated pending entries.
+    for i in range(1000):
+        list(a.handle(_approved_msg(_final(
+            prediction_id=f"noise-{i}",
+            match_id=f"noise-match-{i}",
+            league_id="tr_super_lig",
+        ))))
+    # Targeted entry — gets a distinct match_id so the lookup key
+    # `(match_id, "1x2")` is unique.
+    list(a.handle(_approved_msg(_final(
+        prediction_id="target-pid",
+        match_id="target-match",
+        league_id="tr_super_lig",
+        distribution={"market_outcomes": {"H": 0.05, "D": 0.05, "A": 0.9}},
+    ))))
+    assert len(a._pending) == 1001  # noqa: SLF001 — direct probe by design
+
+    # Settle the targeted match. Direct O(1) key lookup must pop
+    # only that entry.
+    list(a.handle(_outcome_msg(match_id="target-match", outcome_1x2="A")))
+    assert len(a._pending) == 1000  # noqa: SLF001 — only target popped
+    assert ("target-match", "1x2") not in a._pending  # noqa: SLF001
+    # All 1000 noise keys still sit in pending.
+    for i in range(1000):
+        assert (f"noise-match-{i}", "1x2") in a._pending  # noqa: SLF001
+
+
+def test_outcome_for_unknown_match_does_not_mutate_pending() -> None:
+    """Outcomes for matches we never saw must be no-ops, not LRU
+    side effects. (Companion to the F2-1 perf regression.)"""
+    a = _agent()
+    list(a.handle(_approved_msg(_final(
+        prediction_id="kept", match_id="kept-match",
+    ))))
+    before = dict(a._pending)  # noqa: SLF001
+    out = list(a.handle(_outcome_msg(match_id="ghost-match")))
+    assert out == []
+    assert a._pending == before  # noqa: SLF001
+

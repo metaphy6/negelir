@@ -38,6 +38,7 @@ from typing import Iterable
 
 from common.config import cfg as _cfg
 
+from .agents.cache import CacheAgent
 from .agents.consensus import ConsensusAgent
 from .agents.drift import DriftAgent
 from .agents.predictors import dixon_coles, elo, xgb_form, xgb_xg
@@ -49,6 +50,7 @@ from .agents.proofreader.replicas import (
     SanityProofreader,
 )
 from .agents.reactor import InMemoryLedger
+from .agents.telemetry import TelemetryAgent
 from .sdk.agent import Agent
 from .sdk.bus import Bus
 from .sdk.registry import AgentRegistry
@@ -107,8 +109,18 @@ def _build_proofreader_replicas() -> list[Agent]:
 
 
 def build_agents() -> list[Agent]:
-    """Construct the full Phase 5 + Phase 6 agent set in dependency
-    order. Useful for tests that want the agents without runners.
+    """Construct the full Phase 4 (consumer) + Phase 5 + Phase 6 agent
+    set in dependency order. Useful for tests that want the agents
+    without runners.
+
+    Phase 4 *consumers* (`cache.v1`, `telemetry.v1`) are included so a
+    swarm built via `build_swarm()` actually serves the Phase 6
+    `predict.approved.v1` topic to the Phase 9 API gateway and exposes
+    Phase 6 metrics on the telemetry HTTP page (Phase-6 second-pass
+    audit F2-2). The Phase 4 *producers* (`storage.v1`, `processor.*`,
+    `categorizer.v1`, `scraper.*`) live upstream of `scrape.classified`
+    / `match.normalized` and are wired by the (separate) datasource
+    bootstrap that lands with Phase R1.
     """
     predictors = _build_predictors()
     consensus = ConsensusAgent(
@@ -117,12 +129,21 @@ def build_agents() -> list[Agent]:
     )
     aggregator = ProofreaderAggregatorAgent(ledger=InMemoryLedger())
     drift = DriftAgent()
+    # Phase 4 consumers of the predictor pipeline. Neither is single-
+    # instance (cache replicas each own a process-local LRU; telemetry
+    # replicas each count what they see). Hot-spare deployment for
+    # both is safe; the Postgres-backed cache lift in Phase 9 will
+    # need leader election on the *invalidation* path, not here.
+    cache = CacheAgent()
+    telemetry = TelemetryAgent.from_config(start_http=False)
     return [
         *predictors,
         consensus,
         *_build_proofreader_replicas(),
         aggregator,
         drift,
+        cache,
+        telemetry,
     ]
 
 

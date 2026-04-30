@@ -299,55 +299,62 @@ class DriftAgent:
             return ()
         out: list[Message] = []
         with self._lock:
-            # Settle every market we have for this match. Currently we
-            # only score 1X2; other markets (over/under, BTTS) wait
-            # for their realized labels to land in the outcome payload
-            # (Phase 9). They sit in `_pending` until then.
-            keys_to_score = [
-                key for key in self._pending
-                if key[0] == outcome.match_id and key[1] == "1x2"
-            ]
-            for key in keys_to_score:
-                if key in self._settled:
-                    continue  # idempotent
-                pending = self._pending.pop(key)
-                self._settled[key] = None
-                # LRU-evict the oldest settled key if we're saturated.
-                # This is a memory bound, not a correctness signal —
-                # the Phase 6.3 contract is "a redelivered outcome
-                # within the recent window must not double-score";
-                # an outcome redelivered after `max_settled` newer
-                # settlements is effectively a different match for
-                # our purposes (and the bus's at-least-once window
-                # is far smaller than `max_settled`).
-                if len(self._settled) > self._max_settled:
-                    self._settled.popitem(last=False)
-                brier = _brier_score(pending.market_outcomes, outcome.outcome_1x2)
-                bucket = (pending.league_id, pending.market)
-                w = self._windows.setdefault(bucket, _Window())
-                if len(w.entries) >= self._window_size:
-                    w.popleft()
-                w.append(brier, pending.contributing_models)
+            # Settle the 1X2 prediction for this match if we have one.
+            # `_pending` is keyed on (match_id, market) and a re-emit
+            # of the same key overwrites in `_handle_approved`, so
+            # there is at most one entry per key — direct O(1) lookup
+            # replaces the previous O(|_pending|) scan (Phase-6 second-
+            # pass audit F2-1; the cap is `cfg.drift_max_pending`,
+            # default 100k, so the scan was operator-tunable cost on
+            # the hot path).
+            #
+            # Other markets (over/under, BTTS) wait for their realized
+            # labels to land in the outcome payload (Phase 9). They
+            # sit in `_pending` until then; LRU bounds them.
+            key = (outcome.match_id, "1x2")
+            pending = self._pending.pop(key, None)
+            if pending is None:
+                return ()
+            if key in self._settled:
+                return ()  # idempotent on redelivered outcome
+            self._settled[key] = None
+            # LRU-evict the oldest settled key if we're saturated.
+            # This is a memory bound, not a correctness signal —
+            # the Phase 6.3 contract is "a redelivered outcome
+            # within the recent window must not double-score";
+            # an outcome redelivered after `max_settled` newer
+            # settlements is effectively a different match for
+            # our purposes (and the bus's at-least-once window
+            # is far smaller than `max_settled`).
+            if len(self._settled) > self._max_settled:
+                self._settled.popitem(last=False)
 
-                # Trip check: only fire when the window is FULL — a
-                # half-full window's mean is too noisy. Once tripped,
-                # do not re-trip until the window has recovered
-                # below the floor (debounce — spam protection).
-                if len(w.entries) >= self._window_size:
-                    mean_b = w.mean()
-                    if mean_b > self._floor and bucket not in self._tripped:
-                        out.extend(
-                            self._emit_retrain_requests(
-                                bucket=bucket,
-                                window=w,
-                                metric_value=mean_b,
-                                trace_id=msg.envelope.trace_id,
-                            )
+            brier = _brier_score(pending.market_outcomes, outcome.outcome_1x2)
+            bucket = (pending.league_id, pending.market)
+            w = self._windows.setdefault(bucket, _Window())
+            if len(w.entries) >= self._window_size:
+                w.popleft()
+            w.append(brier, pending.contributing_models)
+
+            # Trip check: only fire when the window is FULL — a
+            # half-full window's mean is too noisy. Once tripped,
+            # do not re-trip until the window has recovered
+            # below the floor (debounce — spam protection).
+            if len(w.entries) >= self._window_size:
+                mean_b = w.mean()
+                if mean_b > self._floor and bucket not in self._tripped:
+                    out.extend(
+                        self._emit_retrain_requests(
+                            bucket=bucket,
+                            window=w,
+                            metric_value=mean_b,
+                            trace_id=msg.envelope.trace_id,
                         )
-                        self._tripped.add(bucket)
-                    elif mean_b <= self._floor and bucket in self._tripped:
-                        # Recovered — clear so future breaches re-fire.
-                        self._tripped.discard(bucket)
+                    )
+                    self._tripped.add(bucket)
+                elif mean_b <= self._floor and bucket in self._tripped:
+                    # Recovered — clear so future breaches re-fire.
+                    self._tripped.discard(bucket)
         return out
 
     # ── Emission ───────────────────────────────────────────────

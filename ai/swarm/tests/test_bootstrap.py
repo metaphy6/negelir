@@ -63,6 +63,12 @@ def test_build_agents_includes_every_phase5_and_phase6_agent() -> None:
     assert "proofreader.consistency.v1" in names
     assert "proofreader_aggregator.v1" in names
     assert "drift.v1" in names
+    # Phase-6 second-pass audit (F2-2): the Phase 4 *consumers* of the
+    # predictor pipeline must be wired so a swarm built via
+    # `build_swarm` actually serves predict.approved.v1 to the API
+    # gateway and exposes Phase 6 metrics on the telemetry HTTP page.
+    assert "cache.v1" in names
+    assert "telemetry.v1" in names
     # Single-instance invariants are satisfied (audit F-10).
     for sole in SINGLE_INSTANCE_AGENTS:
         assert sum(1 for a in build_agents() if a.name == sole) == 1, sole
@@ -97,6 +103,66 @@ def test_build_swarm_predict_request_reaches_predict_approved() -> None:
         assert len(approvals) == 1, (
             f"expected 1 predict.approved.v1, got {len(approvals)} — "
             "the bootstrap is missing a wire."
+        )
+    finally:
+        for r in runners:
+            r.deregister()
+
+
+def test_build_swarm_predict_request_lands_in_cache_backend() -> None:
+    """Phase-6 second-pass audit (F2-2).
+
+    Asserting that `predict.approved.v1` reaches the *bus* (the
+    F-1 test above) is necessary but not sufficient: a missing
+    `cache.v1` registration in the bootstrap means the API gateway
+    has nothing to serve. This test drives one prediction end-to-end
+    and confirms the `CacheAgent` backend has the approval keyed
+    by `make_prediction_key`.
+    """
+    from swarm.agents.cache import CacheAgent, make_prediction_key
+
+    bus = InMemoryBus()
+    registry = AgentRegistry()
+    runners = build_swarm(bus, registry, tick_sec=0.001, flush_interval_sec=0.0)
+    cache_runners = [r for r in runners if isinstance(r.agent, CacheAgent)]
+    assert len(cache_runners) == 1, (
+        "build_swarm() must register exactly one CacheAgent — without "
+        "it predict.approved.v1 vanishes off the bus and the API "
+        "serves stale results."
+    )
+    cache_agent: CacheAgent = cache_runners[0].agent  # type: ignore[assignment]
+
+    for r in runners:
+        r.register()
+    try:
+        req = PredictRequest(
+            request_id="cache-req-1",
+            match_id="TR1:Galatasaray-Fenerbahce",
+            market="1x2",
+            league_id="TR1",
+            features={"home_advantage": 0.55, "home_xg": 1.7, "away_xg": 1.1},
+        )
+        bus.publish(Message.new(
+            PREDICT_REQUEST, req.as_dict(),
+            producer="test.bootstrap.cache", trace_id="trace-cache",
+        ))
+        _drain(runners)
+
+        approvals = bus.drain_topic(PREDICT_APPROVED)
+        # Drain consumes the bus copy; we still need the approval id
+        # to probe the cache. drain_topic does not affect what the
+        # CacheAgent already consumed via its consumer group.
+        assert len(approvals) == 1, "expected exactly one approval"
+        approved_payload = approvals[0].payload
+        key = make_prediction_key(
+            approved_payload["match_id"],
+            approved_payload["market"],
+            approved_payload["prediction_id"],
+        )
+        cached = cache_agent.backend.get(key)
+        assert cached is not None, (
+            f"CacheAgent backend missing key {key!r} — the cache wire "
+            "is broken; the Phase 9 API gateway will see no data."
         )
     finally:
         for r in runners:

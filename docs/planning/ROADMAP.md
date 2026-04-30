@@ -637,7 +637,7 @@ Cache concerns split cleanly between two agents to keep blast radius small:
 - **`reactor.cache-invalidation.v1` (§4.7)** — *invalidates* keys when freshness events fire.
 
 - [x] Watches `match.stored`; populates the cache with TTL from `cfg.cache_record_ttl_sec`. In-memory backend behind `CacheBackend` Protocol; Redis backend lands with the Phase 9 API surface that consumes it.
-- [ ] Subscribes to **`predict.approved.v1`** (NOT `predict.final` — Phase 6 contract: only post-quorum predictions reach the cache) and warms with `cfg.cache_prediction_ttl_sec`. *(Phase 6 wired the producer; the subscription is additive, no schema change. Boundary test: `cache.v1.subscribes` must NOT contain `predict.final`.)*
+- [x] Subscribes to **`predict.approved.v1`** (NOT `predict.final` — Phase 6 contract: only post-quorum predictions reach the cache) and warms with `cfg.cache_prediction_ttl_sec`. *(Wired in Phase 6; boundary test in `test_boundary_discipline.py` enforces `cache.v1.subscribes` excludes `predict.final`. Box flipped per [`reports/phase6-second-pass.md`](../reports/phase6-second-pass.md) F2-3 — the implementation shipped, the box was simply stale.)*
 - [ ] Exposes a tiny gRPC contract to the API gateway for explicit invalidation. *(Deferred to Phase 9 — no consumer exists yet.)*
 
 ### 4.6 Telemetry agent (`telemetry.v1`)
@@ -667,10 +667,10 @@ sub-phase is the implementation hook in the roadmap.
       not a rewrite.)*
 - [x] First-cut reactors: `FeatureStoreReactor` and `CacheInvalidationReactor`
       (smallest blast radius, exercise the SDK end-to-end).
-- [ ] Trainer reactor with debounce window, qualifying-event filter,
+- [x] Trainer reactor with debounce window, qualifying-event filter,
       accuracy-floor check, and cooldown (CONTENT_FRESHNESS §15.3).
-      Publishes `model.trained` on `models.events.v1`. *(Phase 5 dep.)*
-- [ ] Live-predictor / NLP / market reactors per §15.1. *(Phase 5/10 dep.)*
+      Publishes `model.trained` on `models.events.v1`. *(Shipped in Phase 5.5; see `ai/swarm/agents/reactor.py::TrainerReactor`. Box flipped per [`reports/phase6-second-pass.md`](../reports/phase6-second-pass.md) F2-4 — duplicate of §5.5 entry.)*
+- [x] Live-predictor / NLP / market reactors per §15.1. *(Shipped in Phase 5.5; see `LivePredictorReactor` and friends in `reactor.py`. Box flipped per `phase6-second-pass.md` F2-4.)*
 - [~] Reactor failure isolation: each runs in its own consumer group
       with the SDK retry budget → DLQ. *(Explicit `reactor.degraded`
       topic — emitted after N consecutive failures — deferred to
