@@ -263,6 +263,13 @@ class Config:
     training_noise_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_TRAINING_NOISE_PCT", "0.005")))
     training_test_split: float = field(default_factory=lambda: float(os.getenv("NEGELIR_TRAINING_TEST_SPLIT", "0.2")))
     training_random_seed: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TRAINING_SEED", "42")))
+    # Pre-Phase-6 audit (gpt5-Codex #6): approximated cross-source
+    # agreement when the scrape has more than one upstream feed. The
+    # real per-(date, teams)-key scorer lands with Phase 6.3 drift wiring;
+    # this knob lets ops tune the placeholder until then.
+    training_cross_source_agreement_multi: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_TRAINING_CROSS_SOURCE_AGREEMENT_MULTI", "0.95")
+    ))
     model_max_size_mb: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MODEL_MAX_SIZE_MB", "8.0")))
     training_min_matches: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TRAINING_MIN_MATCHES", "100")))
 

@@ -166,9 +166,15 @@ class TrainingPipeline:
         kept = (len(normalised) - len(result.quarantined)) if result else 0
         quarantined = len(result.quarantined) if result else 0
         total = max(1, len(normalised))
-        # Cross-source agreement: ratio of matches whose `source` appears more than once
-        # under the same (date, teams) key. Approximated from pre-dedup `source_breakdown`.
-        agreement = 1.0 if len(scrape.source_breakdown) <= 1 else 0.95
+        # Cross-source agreement: configurable approximation. With one
+        # source we have nothing to disagree with (1.0); with multiple
+        # sources we apply the configured penalty floor. The real
+        # per-(date, teams)-key agreement scorer lands with Phase 6.3
+        # drift wiring (gpt5-Codex pre-Phase-6 audit #6).
+        agreement = (
+            1.0 if len(scrape.source_breakdown) <= 1
+            else cfg.training_cross_source_agreement_multi
+        )
         return ValidationArtifact(
             kept=kept,
             quarantined=quarantined,
@@ -224,12 +230,9 @@ class TrainingPipeline:
         importance = list(importance_raw) if importance_raw is not None else []
         top = sorted(zip(FEATURE_COLUMNS, importance),
                      key=lambda x: x[1], reverse=True)[:10]
-        # Re-fetch test_acc by re-evaluating? Instead, use model's last eval — XGBoost
-        # exposes evals_result_; safer to recompute from the same train/test internal split.
-        test_acc = float(model.evals_result_["validation_0"]["mlogloss"][-1]) if hasattr(model, "evals_result_") else 0.0
-        # The above is log-loss not acc. We don't have a clean accuracy hook back from train_model
-        # without changing its return type. Use the last logged accuracy in training_pipeline by
-        # quickly evaluating on a stratified split here instead.
+        # Recompute test accuracy on a stratified split — `train_model` does
+        # not return an accuracy hook, and `evals_result_['mlogloss']` is
+        # log-loss, not accuracy (gpt5-Codex pre-Phase-6 audit #7).
         from sklearn.model_selection import train_test_split
         from sklearn.metrics import accuracy_score, log_loss
         from model.real_features import extract_real_dataset

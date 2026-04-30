@@ -97,6 +97,7 @@ training:
   noise_pct: 0.005           # NEGELIR_TRAINING_NOISE_PCT
   test_split: 0.2            # NEGELIR_TRAINING_TEST_SPLIT
   random_seed: 42            # NEGELIR_TRAINING_SEED
+  cross_source_agreement_multi: 0.95  # NEGELIR_TRAINING_CROSS_SOURCE_AGREEMENT_MULTI
   model_max_size_mb: 8.0     # NEGELIR_MODEL_MAX_SIZE_MB
   min_matches: 100           # NEGELIR_TRAINING_MIN_MATCHES
   sample_weights: [1.0, 2.0, 1.0]  # NEGELIR_TRAINING_SAMPLE_WEIGHTS  (Home,Draw,Away)

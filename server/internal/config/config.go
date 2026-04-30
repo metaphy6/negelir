@@ -102,15 +102,6 @@ func Load() (*Config, error) {
 	return cfg, cfg.Validate()
 }
 
-// MustLoad is the panic-on-error variant; convenient for main().
-func MustLoad() *Config {
-	cfg, err := Load()
-	if err != nil {
-		panic(err)
-	}
-	return cfg
-}
-
 // Validate returns the first detected misconfiguration error, or nil.
 func (c *Config) Validate() error {
 	if err := validatePort(c.Port, "SERVER_PORT"); err != nil {

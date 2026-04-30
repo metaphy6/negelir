@@ -4,19 +4,19 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 122,
+    "build": 125,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.2.5",
+      "version": "1.2.6",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-04-29T11:37:14+00:00"
+      "last_changed": "2026-04-30T07:14:45+00:00"
     },
     "server": {
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-04-29T11:35:57+00:00"
+      "last_changed": "2026-04-30T07:14:45+00:00"
     },
     "xops": {
       "version": "3.4.0",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.14.0",
+      "version": "0.14.1",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-29T18:17:35+00:00"
+      "last_changed": "2026-04-30T07:14:45+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1356,6 +1356,33 @@
       "from": "0.13.0",
       "to": "0.14.0",
       "build": 122
+    },
+    {
+      "timestamp": "2026-04-30T07:14:45+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Wave A.2 legacy proofreader byte-identical contract test",
+      "from": "0.14.0",
+      "to": "0.14.1",
+      "build": 123
+    },
+    {
+      "timestamp": "2026-04-30T07:14:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Wave C cleanup: gpt5#7 dead test_acc removed; gpt5#6 cross-source agreement now configurable",
+      "from": "1.2.5",
+      "to": "1.2.6",
+      "build": 124
+    },
+    {
+      "timestamp": "2026-04-30T07:14:45+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Wave C cleanup: G3 unused MustLoad deleted",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 125
     }
   ]
 }
