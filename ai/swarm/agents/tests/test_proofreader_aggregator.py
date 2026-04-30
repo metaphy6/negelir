@@ -110,7 +110,7 @@ def test_aggregator_subscribes_and_publishes_correctly() -> None:
 
 def test_aggregator_quorum_default_from_config() -> None:
     """If `quorum` not passed, the agent reads `cfg.proofreader_quorum`
-    (a derived property = ⌊N/2⌋+1 from `proofreader_replicas`).
+    (a derived property = ⌊N/2⌋+1 from len(PROOFREADER_POLICY_CLASSES)).
     """
     a = ProofreaderAggregatorAgent(ledger=InMemoryLedger())
     assert a._quorum == _cfg.proofreader_quorum

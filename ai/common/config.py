@@ -344,11 +344,16 @@ class Config:
     api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CONSENSUS_OVERHEAD_MS", "250")))
 
     # ── Phase 6 — Proofreader & drift swarm ─────────────────
-    # Number of distinct proofreader replicas registered in the swarm.
-    # `proofreader_quorum` is computed as ⌊N/2⌋+1 and surfaced via the
-    # property `proofreader_quorum`. v1 default is N=3 (quorum=2) per
-    # the locked decision in `docs/reports/pre-phase6-roadmap.md` §6.2.
-    proofreader_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_PROOFREADER_REPLICAS", "3")))
+    # The proofreader replica roster is *not* a config knob — it lives
+    # in `swarm.agents.proofreader.replicas.PROOFREADER_POLICY_CLASSES`
+    # (one entry per distinct check policy: sanity, plausibility,
+    # consistency). The aggregator quorum (`cfg.proofreader_quorum`)
+    # derives from that roster so the two cannot drift. Phase-6 audit
+    # F3-1 retired the standalone `NEGELIR_PROOFREADER_REPLICAS` env
+    # knob because it was disconnected from the roster — setting it
+    # to anything other than 3 silently broke quorum without changing
+    # the actual voter count. Horizontal fan-out moves to consumer-
+    # group sharding (Phase 14).
     # How long the aggregator waits, after seeing the first verdict
     # for a (request_id, prediction_id), before declaring "no quorum"
     # and dropping the candidate. Late verdicts (arriving after the
@@ -521,13 +526,22 @@ class Config:
 
     @property
     def proofreader_quorum(self) -> int:
-        """Phase 6.1: minimum distinct accept/warn verdicts required for
-        the aggregator to publish `predict.approved.v1`. Computed as
-        ⌊N/2⌋+1 from `proofreader_replicas` so a misconfiguration in
-        the env var is reflected immediately. Always ≥1 (even with
-        replicas=1 we require the single voter to accept).
+        """Phase 6.1: minimum distinct accept/warn verdicts required
+        for the aggregator to publish `predict.approved.v1`. Computed
+        as ⌊N/2⌋+1 from the length of
+        ``swarm.agents.proofreader.replicas.PROOFREADER_POLICY_CLASSES``
+        (the single source of truth for replica count; see Phase-6
+        audit F3-1). Imported lazily to avoid a config↔swarm import
+        cycle. Always ≥1.
         """
-        n = max(int(self.proofreader_replicas), 1)
+        # Local import: ai/common must not depend on ai/swarm at
+        # module load time. The roster is a module-level constant so
+        # the import is effectively free after the first call.
+        from swarm.agents.proofreader.replicas import (
+            PROOFREADER_POLICY_CLASSES,
+        )
+
+        n = max(len(PROOFREADER_POLICY_CLASSES), 1)
         return (n // 2) + 1
 
     def validate(self, *, strict: bool = False) -> list[str]:
@@ -624,7 +638,6 @@ class Config:
             ("backtest_min_n", self.backtest_min_n),
             ("api_consensus_overhead_ms", self.api_consensus_overhead_ms),
             # Phase 6
-            ("proofreader_replicas", self.proofreader_replicas),
             ("proofreader_quorum_window_ms", self.proofreader_quorum_window_ms),
             ("proofreader_aggregator_max_pending", self.proofreader_aggregator_max_pending),
             ("swarm_flush_interval_ms", self.swarm_flush_interval_ms),

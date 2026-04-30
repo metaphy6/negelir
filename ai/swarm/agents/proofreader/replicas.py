@@ -3,9 +3,9 @@
 Each agent subscribes to ``predict.final``, runs ONE check from
 ``prediction_checks.py``, and emits a ``predict.proofreader_verdict.v1``
 that the aggregator (§6.1) tallies. Per-check, not per-replica: the
-swarm runs one of each by default (so N=3 ≥ quorum=2 with the
-default `proofreader_replicas`). Operators can spawn additional
-replicas of any one for redundancy without changing this code.
+swarm runs one of each by design (N=3 ≥ quorum=2). Adding a new
+built-in check = add a function in `prediction_checks.py` + a
+30-line subclass here + an entry in ``PROOFREADER_POLICY_CLASSES``.
 
 Why one agent per check (not one agent that runs all three)?
 
@@ -15,9 +15,15 @@ Why one agent per check (not one agent that runs all three)?
 * Diversity — the §6.1 quorum is meaningful only if the verdicts
   come from independent code paths.
 
-This module deliberately stays thin: each agent class is roughly 30
-lines because all rule logic lives in `prediction_checks.py`. Adding a
-new built-in check = add a function there + a 30-line subclass here.
+``PROOFREADER_POLICY_CLASSES`` is the *single source of truth* for
+the replica count. The bootstrap iterates it; the aggregator's
+quorum (`cfg.proofreader_quorum`) is derived from its length so the
+two cannot drift. Phase-6 audit F3-1 retired the standalone
+``cfg.proofreader_replicas`` env knob because it was disconnected
+from this list — setting it to anything other than 3 silently
+broke quorum without changing the actual voter count. Horizontal
+fan-out moves to consumer-group sharding (Phase 14), which scales
+throughput without changing vote count.
 """
 from __future__ import annotations
 
@@ -107,16 +113,27 @@ class _BaseProofreaderAgent:
                 0.0,
                 [f"{self.name}: internal check error ({type(exc).__name__})"],
             )
+            # Phase-6 audit F3-3: payload uses the canonical
+            # `agent` / `prediction_id` / `match_id` / `market` /
+            # `request_id` field set shared by every other Phase 6
+            # proof.flag kind (no_quorum, rejected, late_verdict,
+            # duplicate_approval, overflow). Operator dashboards
+            # filter on those names; the previous `source` /
+            # `target` aliases hid this kind from any
+            # `prediction_id = X` query.
             flag_msg = Message.new(
                 PROOF_FLAG,
                 {
                     "kind": ProofFlagKind.PROOFREADER_INTERNAL_ERROR,
-                    "source": self.name,
-                    "target": final.prediction_id,
+                    "agent": self.name,
+                    "prediction_id": final.prediction_id,
+                    "match_id": final.match_id,
+                    "market": final.market,
+                    "request_id": final.request_id,
+                    "exception_type": type(exc).__name__,
                     "detail": (
                         f"{self.name}: {type(exc).__name__}: {exc}"
                     )[:512],
-                    "exception_type": type(exc).__name__,
                 },
                 producer=self.name,
                 trace_id=msg.envelope.trace_id,
@@ -225,7 +242,21 @@ class ConsistencyProofreader(_BaseProofreaderAgent):
         return grid_consistency_check(final.distribution, tol=self._tol)
 
 
+# Single source of truth for the proofreader policy roster.
+# `bootstrap._build_proofreader_replicas` instantiates one of each
+# (kw-args=defaults from cfg); `cfg.proofreader_quorum` derives
+# quorum from `len(PROOFREADER_POLICY_CLASSES)` so the two cannot
+# drift. See Phase-6 audit F3-1 for why the standalone
+# `cfg.proofreader_replicas` knob was retired.
+PROOFREADER_POLICY_CLASSES: tuple[type[_BaseProofreaderAgent], ...] = (
+    SanityProofreader,
+    PlausibilityProofreader,
+    ConsistencyProofreader,
+)
+
+
 __all__ = [
+    "PROOFREADER_POLICY_CLASSES",
     "SanityProofreader",
     "PlausibilityProofreader",
     "ConsistencyProofreader",

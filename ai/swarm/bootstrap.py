@@ -44,11 +44,7 @@ from .agents.drift import DriftAgent
 from .agents.predictors import dixon_coles, elo, xgb_form, xgb_xg
 from .agents.predictors.lgbm_market import LgbmMarketPredictor
 from .agents.proofreader.aggregator import ProofreaderAggregatorAgent
-from .agents.proofreader.replicas import (
-    ConsistencyProofreader,
-    PlausibilityProofreader,
-    SanityProofreader,
-)
+from .agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
 from .agents.reactor import InMemoryLedger
 from .agents.telemetry import TelemetryAgent
 from .sdk.agent import Agent
@@ -94,18 +90,19 @@ def _build_predictors() -> list[Agent]:
 
 
 def _build_proofreader_replicas() -> list[Agent]:
-    """One sanity, one plausibility, one consistency replica.
+    """One instance of each policy class declared in
+    ``PROOFREADER_POLICY_CLASSES``.
 
-    `cfg.proofreader_replicas` (default 3) is informational: the three
-    classes are *distinct check policies*, not interchangeable copies.
-    A future scale-up would shard each policy across multiple
-    consumer-group readers (Phase 14), not duplicate the class.
+    The roster is the single source of truth for the replica count;
+    ``cfg.proofreader_quorum`` derives quorum from
+    ``len(PROOFREADER_POLICY_CLASSES)`` so an operator cannot drift
+    the two. Phase-6 audit F3-1 retired the standalone
+    ``cfg.proofreader_replicas`` env knob because it was disconnected
+    from this list. Horizontal fan-out moves to consumer-group
+    sharding (Phase 14), which scales throughput without changing
+    vote count.
     """
-    return [
-        SanityProofreader(),
-        PlausibilityProofreader(),
-        ConsistencyProofreader(),
-    ]
+    return [cls() for cls in PROOFREADER_POLICY_CLASSES]
 
 
 def build_agents() -> list[Agent]:

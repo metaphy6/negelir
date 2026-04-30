@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 138,
+    "build": 141,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.10.9",
+      "version": "1.10.11",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-30T09:48:58+00:00"
+      "last_changed": "2026-04-30T10:25:36+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.17.2",
+      "version": "0.18.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-30T09:48:58+00:00"
+      "last_changed": "2026-04-30T10:25:28+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1500,6 +1500,33 @@
       "from": "1.10.8",
       "to": "1.10.9",
       "build": 138
+    },
+    {
+      "timestamp": "2026-04-30T10:07:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 6 fresh-eyes audit: re-verified F-1..F-10 + F2-1..F2-4 all shipped; flagged F3-1 (proofreader_replicas knob/bootstrap drift, Major), F3-2 (ROADMAP §6.5 alias text wrong, Minor), F3-3 (proofreader_internal_error flag field-shape inconsistent, Minor); Wave 5 scope proposed, no code edits",
+      "from": "1.10.9",
+      "to": "1.10.10",
+      "build": 139
+    },
+    {
+      "timestamp": "2026-04-30T10:25:28+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Wave 5: F3-1 retired proofreader_replicas env knob (now derives from PROOFREADER_POLICY_CLASSES roster in replicas.py); F3-3 harmonised proofreader_internal_error flag payload to canonical agent/prediction_id/match_id/market/request_id field set",
+      "from": "0.17.2",
+      "to": "0.18.0",
+      "build": 140
+    },
+    {
+      "timestamp": "2026-04-30T10:25:36+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §6.1 + §6.3 + §6.4 + §6.5 reflect Wave 5 (F-3 separate-knob decision; F3-1 roster-in-code; F3-3 flag harmonisation)",
+      "from": "1.10.10",
+      "to": "1.10.11",
+      "build": 141
     }
   ]
 }

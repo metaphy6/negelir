@@ -223,8 +223,18 @@ def test_replica_internal_exception_emits_warn_vote_and_flag() -> None:
 
     flag = by_topic[PROOF_FLAG].payload
     assert flag["kind"] == ProofFlagKind.PROOFREADER_INTERNAL_ERROR
-    assert flag["source"] == "proofreader.plausibility.v1"
-    assert flag["target"] == "pid-1"
+    # Phase-6 audit F3-3: payload uses the canonical Phase 6 field
+    # set (`agent` / `prediction_id` / `match_id` / `market` /
+    # `request_id`) shared with every other proof.flag kind so
+    # operator dashboards filtering on `prediction_id` see this
+    # kind too. The prior `source` / `target` aliases hid it.
+    assert flag["agent"] == "proofreader.plausibility.v1"
+    assert flag["prediction_id"] == "pid-1"
+    assert flag["match_id"] == "match-abc"
+    assert flag["market"] == "1x2"
+    assert flag["request_id"] == "req-1"
+    assert "source" not in flag
+    assert "target" not in flag
     assert flag["exception_type"] == "RuntimeError"
     assert "synthetic regression" in flag["detail"]
 
@@ -267,3 +277,75 @@ def test_buggy_replica_does_not_veto_when_others_accept() -> None:
         "Buggy replica must not veto the prediction when the other two "
         "replicas accept (F-4 regression guard)."
     )
+
+
+# ── F3-1: replica roster is the single source of truth ───────
+
+
+def test_proofreader_policy_classes_lists_all_three_distinct_policies() -> None:
+    """Phase-6 audit F3-1: the replica roster lives in
+    `PROOFREADER_POLICY_CLASSES` (one entry per distinct check
+    policy: sanity, plausibility, consistency). The list is the
+    single source of truth for the swarm's voter count; the bootstrap
+    iterates it and `cfg.proofreader_quorum` derives from its length.
+    Pin the contents so a future refactor cannot drop a policy
+    without flipping this test red.
+    """
+    from swarm.agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
+
+    assert PROOFREADER_POLICY_CLASSES == (
+        SanityProofreader,
+        PlausibilityProofreader,
+        ConsistencyProofreader,
+    )
+
+
+def test_proofreader_quorum_derives_from_policy_roster_length() -> None:
+    """Phase-6 audit F3-1: `cfg.proofreader_quorum` must equal
+    ⌊len(PROOFREADER_POLICY_CLASSES)/2⌋+1 so the aggregator's quorum
+    cannot drift from the actual voter count. Pinning this invariant
+    closes the operator-footgun the audit identified (the retired
+    `NEGELIR_PROOFREADER_REPLICAS` knob silently broke quorum at any
+    value other than 3).
+    """
+    from common.config import cfg as _cfg
+    from swarm.agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
+
+    n = len(PROOFREADER_POLICY_CLASSES)
+    expected = (n // 2) + 1
+    assert _cfg.proofreader_quorum == expected
+    # And concretely at v1: 3 policies → quorum=2.
+    assert n == 3
+    assert _cfg.proofreader_quorum == 2
+
+
+def test_bootstrap_replica_count_matches_policy_roster() -> None:
+    """Phase-6 audit F3-1: the bootstrap's `_build_proofreader_replicas`
+    must spawn exactly one instance of every policy class in the
+    roster — no more, no less. Without this, the aggregator's quorum
+    derivation (above) would be a math identity disconnected from the
+    runtime voter count.
+    """
+    from swarm.agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
+    from swarm.bootstrap import _build_proofreader_replicas
+
+    built = _build_proofreader_replicas()
+    assert [type(a) for a in built] == list(PROOFREADER_POLICY_CLASSES)
+
+
+def test_no_standalone_proofreader_replicas_env_knob() -> None:
+    """Phase-6 audit F3-1: the standalone `NEGELIR_PROOFREADER_REPLICAS`
+    env knob (and its `cfg.proofreader_replicas` field) was retired
+    because it was disconnected from the actual replica roster. A
+    future maintainer reintroducing it would re-open the operator
+    footgun this audit closed.
+    """
+    from common.config import cfg as _cfg
+
+    assert not hasattr(_cfg, "proofreader_replicas"), (
+        "`cfg.proofreader_replicas` was retired by Phase-6 audit F3-1; "
+        "reintroducing it re-opens the footgun where the aggregator's "
+        "quorum and the bootstrap's voter count drift silently. The "
+        "replica roster lives in PROOFREADER_POLICY_CLASSES."
+    )
+

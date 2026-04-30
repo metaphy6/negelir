@@ -4,7 +4,7 @@ Consumes ``predict.proofreader_verdict.v1`` from each individual
 proofreader replica plus ``predict.final`` (the candidate). Inside a
 quorum window of ``cfg.proofreader_quorum_window_ms`` it counts
 ``accept`` and ``warn`` verdicts. When the count reaches
-``cfg.proofreader_quorum`` (=⌊N/2⌋+1, where N=cfg.proofreader_replicas)
+``cfg.proofreader_quorum`` (=⌊N/2⌋+1, where N=len(PROOFREADER_POLICY_CLASSES))
 it publishes ``predict.approved.v1`` exactly once. A single ``reject``
 vote is fatal — quorum is irrelevant if any replica rejected.
 

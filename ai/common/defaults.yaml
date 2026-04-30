@@ -179,7 +179,10 @@ phase5:
 
 # ── Phase 6 — Proofreader & drift swarm ─────────────────────────────────────
 phase6:
-  proofreader_replicas: 3             # NEGELIR_PROOFREADER_REPLICAS (quorum = ⌊N/2⌋+1)
+  # Replica roster lives in `swarm.agents.proofreader.replicas
+  # .PROOFREADER_POLICY_CLASSES`; quorum derives from len(roster) so
+  # there is no env knob to drift (Phase-6 audit F3-1 retired the
+  # standalone NEGELIR_PROOFREADER_REPLICAS).
   proofreader_quorum_window_ms: 200   # NEGELIR_PROOFREADER_QUORUM_WINDOW_MS
   proofreader_aggregator_max_pending: 4096  # NEGELIR_PROOFREADER_AGGREGATOR_MAX_PENDING — LRU bound on aggregator _pending (Phase-6 audit F-9)
   swarm_flush_interval_ms: 100        # NEGELIR_SWARM_FLUSH_INTERVAL_MS — runner tick for flush_expired (Phase-6 audit F-2)

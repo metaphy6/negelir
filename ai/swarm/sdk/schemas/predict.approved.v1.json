@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/predict.approved.v1",
   "title": "predict.approved.v1",
-  "description": "Phase 6 — proofreader-aggregator output. Emitted exactly once per `prediction_id` when the proofreader quorum (default ⌊N/2⌋+1, N=cfg.proofreader_replicas) accepts a `predict.final`. The `cache.v1` agent and any user-facing publisher subscribe HERE — never to `predict.final` directly — so a candidate prediction can never reach the API surface without proofreader approval (ROADMAP §736 contract). Carries the full predict.final payload verbatim under `final` so downstream consumers do not need a join. Mirrors `ai/swarm/agents/payloads.py::PredictApproved`.",
+  "description": "Phase 6 — proofreader-aggregator output. Emitted exactly once per `prediction_id` when the proofreader quorum (default ⌊N/2⌋+1, N=len(swarm.agents.proofreader.replicas.PROOFREADER_POLICY_CLASSES)) accepts a `predict.final`. The `cache.v1` agent and any user-facing publisher subscribe HERE — never to `predict.final` directly — so a candidate prediction can never reach the API surface without proofreader approval (ROADMAP §736 contract). Carries the full predict.final payload verbatim under `final` so downstream consumers do not need a join. Mirrors `ai/swarm/agents/payloads.py::PredictApproved`.",
   "type": "object",
   "required": [
     "request_id",
