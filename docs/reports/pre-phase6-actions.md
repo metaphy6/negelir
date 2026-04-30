@@ -20,7 +20,7 @@
 
 - Sole producer of `predict.approved.v1` (consensus is forbidden
   from emitting it; a guard test enforces this).
-- Quorum aggregation across `proof.verdict.v1`, with
+- Quorum aggregation across `predict.proofreader_verdict.v1`, with
   configurable quorum policy and timeout (`cfg.proofreader_quorum`,
   `cfg.proofreader_timeout_ms`).
 - Deterministic ordering of `approved_by` (sorted proofreader IDs).
@@ -35,10 +35,10 @@
 ### 1.2 Phase 6.2 — Proofreader fleet (sanity, consistency, …)
 
 - All proofreaders live under `ai/swarm/agents/proofreader/`
-  and produce `proof.verdict.v1` with deterministic field order.
+  and produce `predict.proofreader_verdict.v1` with deterministic field order.
 - Cross-source agreement check is config-driven
   (`cfg.cross_source_agreement_*`).
-- Schema-pinned via `swarm/sdk/schemas/proof.verdict.json`;
+- Schema-pinned via `swarm/sdk/schemas/predict.proofreader_verdict.v1.json`;
   `test_payloads_byte_identical_contract` locks the wire format
   across a 10-case matrix (covers approve / reject / flag with
   empty + populated `flags`, `checks_run`, and rationale strings).
@@ -46,8 +46,9 @@
 ### 1.3 Phase 6.3 — DriftAgent
 
 - Rolling Brier window per `(league_id, market)` with size from
-  `cfg.drift_window_size`; trips when window-mean exceeds
-  `cfg.drift_accuracy_floor`.
+  `cfg.drift_window_size`; trips when window-mean Brier exceeds
+  `cfg.drift_brier_ceiling` (renamed from the earlier
+  `drift_accuracy_floor` shadow — see the Phase-6 audit, F-3).
 - Trip emits one `maint.event.v1{kind=retrain_request}` per
   in-window contributing model.
 - Debounce: once a bucket trips, no re-trip until the window
@@ -76,8 +77,9 @@
 ### 1.4 Phase 5 contract guards (carried forward from prior sweep)
 
 - `test_payloads_byte_identical_contract` — 10-case round-trip
-  against pinned wire bytes for `predict.final`, `proof.verdict`,
-  `predict.approved`, `match.outcome`, `maint.event`.
+  against pinned wire bytes for `predict.final`,
+  `predict.proofreader_verdict`, `predict.approved`,
+  `match.outcome`, `maint.event`.
 - `test_topic_codes_pinned` — bus topic strings frozen.
 - `test_consensus_cannot_emit_approved` — Phase 6.1 isolation.
 - `test_chart_is_canonical` — version chart round-trips.

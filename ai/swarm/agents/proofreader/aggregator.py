@@ -166,12 +166,14 @@ class ProofreaderAggregatorAgent:
             raise ValueError(
                 f"proofreader_aggregator.v1: quorum must be >=1; got {self._quorum}"
             )
-        # Same default cap as consensus (cfg.consensus_max_pending).
-        # The proofreader load is strictly ≤ consensus load so this is
-        # never the bottleneck in practice; we still want the bound to
-        # avoid unbounded memory on a stuck producer.
+        # Phase-6 audit (F-9): bound the aggregator's `_pending` map.
+        # Defaults to the dedicated `proofreader_aggregator_max_pending`
+        # config knob (mirrors `consensus_max_pending` shape). LRU
+        # eviction matches the consensus agent's behaviour; an evicted
+        # candidate emits a `proofreader_overflow` proof.flag.
         self._max_pending = (
-            max_pending if max_pending is not None else _cfg.consensus_max_pending
+            max_pending if max_pending is not None
+            else _cfg.proofreader_aggregator_max_pending
         )
         self._lock = threading.Lock()
         # Insertion-ordered for LRU eviction.

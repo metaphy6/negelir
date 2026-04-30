@@ -82,6 +82,42 @@ def test_env_example_exists() -> None:
     assert ENV_EXAMPLE.is_file(), f".env.example missing at {ENV_EXAMPLE}"
 
 
+def test_no_duplicate_config_field_or_env_var() -> None:
+    """Phase-6 audit F-3 regression gate.
+
+    Python dataclasses silently keep the *last* declaration when two
+    fields share a name, which masked a Phase-6 typo where
+    ``drift_accuracy_floor`` was redeclared with a different default
+    and a different env var, silently overriding the legacy
+    ``ai/model/drift.py`` accuracy detector. This test walks
+    ``ai/common/config.py`` for both shapes and fails on any
+    collision so the next near-miss surfaces immediately.
+    """
+    py_text = _read(AI_CONFIG)
+
+    # Field-name collisions (lines like `name: type = field(...)`).
+    field_decl_re = re.compile(
+        r"^\s{4}([a-z_][a-z0-9_]*)\s*:\s*[A-Za-z_][\w\[\], |]*\s*=\s*field\(",
+        re.MULTILINE,
+    )
+    field_names = field_decl_re.findall(py_text)
+    dup_fields = sorted(
+        {n for n in field_names if field_names.count(n) > 1}
+    )
+    assert not dup_fields, (
+        "Duplicate dataclass field declarations in ai/common/config.py "
+        f"(silent shadow risk): {dup_fields}"
+    )
+
+    # Env-var collisions inside `os.getenv("KEY", "default")` calls.
+    env_keys = [k for k, _v in _GETENV_DEFAULT_RE.findall(py_text)]
+    dup_envs = sorted({k for k in env_keys if env_keys.count(k) > 1})
+    assert not dup_envs, (
+        "Duplicate `os.getenv(...)` keys in ai/common/config.py "
+        f"(two fields will silently fight for the same env var): {dup_envs}"
+    )
+
+
 def test_every_python_env_var_is_documented() -> None:
     """Every os.getenv("FOO") in config.py must appear in .env.example."""
     docs = _env_example_keys()

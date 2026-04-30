@@ -187,3 +187,26 @@ def test_grid_consistency_rejects_non_list_grid() -> None:
         tol=0.05,
     )
     assert v == "reject"
+
+
+# ── F-7: market key case normalisation ─────────────────────────
+
+
+def test_grid_consistency_normalises_market_outcome_key_case() -> None:
+    """Phase-6 audit (F-7): a future predictor that emits lowercase
+    market outcome keys (`h`/`d`/`a`) must still trip the consistency
+    check, not silently bypass it."""
+    # Marginals from the score_grid are {H:0.7, D:0.0, A:0.3} but
+    # market_outcomes claims {h:0.5, d:0.3, a:0.2} (lowercase keys).
+    # Without normalisation, the dict lookup misses and check accepts.
+    v, _, flags = grid_consistency_check(
+        {
+            "market_outcomes": {"h": 0.5, "d": 0.3, "a": 0.2},
+            "score_grid": [
+                {"home": 1, "away": 0, "prob": 0.7},
+                {"home": 0, "away": 1, "prob": 0.3},
+            ],
+        },
+        tol=0.05,
+    )
+    assert v == "reject", f"normalisation missed: {flags}"

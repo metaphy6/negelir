@@ -183,8 +183,12 @@ def grid_consistency_check(
 
     flags: list[str] = []
     expected = {"H": h, "D": d, "A": a}
+    # Phase-6 audit (F-7): normalise market keys to uppercase before
+    # lookup so a stray lowercase `"h"` / `"d"` / `"a"` from a future
+    # predictor does not silently skip the consistency check.
+    market_upper = {str(k).upper(): v for k, v in market.items()}
     for key, marginal in expected.items():
-        declared = market.get(key)
+        declared = market_upper.get(key)
         if declared is None:
             continue
         try:

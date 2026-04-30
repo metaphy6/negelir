@@ -51,6 +51,7 @@ class AgentRunner:
         max_supported_schema_version: int = ENVELOPE_SCHEMA_VERSION,
         instance_id: str | None = None,
         tick_sec: float = 0.1,
+        flush_interval_sec: float = 0.1,
         clock: Any = None,
     ) -> None:
         self.agent = agent
@@ -64,6 +65,7 @@ class AgentRunner:
         self.max_supported_schema_version = max_supported_schema_version
         self.instance_id = instance_id or f"{agent.name}.{uuid.uuid4().hex[:8]}"
         self.tick_sec = tick_sec
+        self.flush_interval_sec = max(0.0, float(flush_interval_sec))
         self.metrics = Metrics(agent.name)
         self._stop_event = threading.Event()
         self._last_heartbeat = 0.0
@@ -76,6 +78,15 @@ class AgentRunner:
         # the per-tick reclaim cost when the pending set is empty.
         self._reclaim_interval = max(1.0, pending_claim_sec / 2.0)
         self._last_reclaim_at: dict[str, float] = {}
+        # Phase-6 audit (F-2): aggregator-style agents (consensus,
+        # proofreader_aggregator) finalise pending windows in
+        # `flush_expired()`. Without a runner-driven tick, idle traffic
+        # leaves windows open forever and `no_quorum` candidates never
+        # surface. We drive it once per `flush_interval_sec` from
+        # `step()`. Detection is duck-typed (hasattr) so non-aggregator
+        # agents pay zero cost.
+        self._has_flush = callable(getattr(agent, "flush_expired", None))
+        self._last_flush_at = 0.0
 
     # ── Lifecycle ───────────────────────────────────────────────────────
     def register(self) -> None:
@@ -153,6 +164,21 @@ class AgentRunner:
             )
             for delivery in new_msgs:
                 self._process(delivery)
+                did_work = True
+        # Phase-6 audit (F-2): drive `flush_expired` for aggregator-
+        # style agents on a steady cadence regardless of inbound
+        # traffic, so windows actually close.
+        if self._has_flush and (now - self._last_flush_at) >= self.flush_interval_sec:
+            self._last_flush_at = now
+            try:
+                outputs = list(self.agent.flush_expired() or ())  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001 — mirror handler-failure semantics
+                self.metrics.inc("flush_failed")
+                _log.warning("agent=%s flush_expired raised: %s", self.agent.name, exc)
+                outputs = []
+            for out in outputs:
+                self.bus.publish(out)
+                self.metrics.inc("msg_published")
                 did_work = True
         return did_work
 

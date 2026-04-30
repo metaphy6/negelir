@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 131,
+    "build": 136,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.10.7",
+      "version": "1.10.8",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-30T08:03:03+00:00"
+      "last_changed": "2026-04-30T09:06:38+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.14.4",
+      "version": "0.17.1",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-30T08:03:03+00:00"
+      "last_changed": "2026-04-30T09:06:34+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1437,6 +1437,51 @@
       "from": "1.10.6",
       "to": "1.10.7",
       "build": 131
+    },
+    {
+      "timestamp": "2026-04-30T09:06:13+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase-6 audit Wave 1 — F-3 drift_brier_ceiling rename, F-5 doc, F-6 doc fix",
+      "from": "0.14.4",
+      "to": "0.15.0",
+      "build": 132
+    },
+    {
+      "timestamp": "2026-04-30T09:06:20+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase-6 audit Wave 2 — F-4 replica failure isolation",
+      "from": "0.15.0",
+      "to": "0.16.0",
+      "build": 133
+    },
+    {
+      "timestamp": "2026-04-30T09:06:27+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase-6 audit Wave 3 — F-1 bootstrap, F-2 flush tick, F-9 dedicated knob, F-10 single-instance guard",
+      "from": "0.16.0",
+      "to": "0.17.0",
+      "build": 134
+    },
+    {
+      "timestamp": "2026-04-30T09:06:34+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase-6 audit Wave 4 polish — F-7 market normalisation, F-8 docs",
+      "from": "0.17.0",
+      "to": "0.17.1",
+      "build": 135
+    },
+    {
+      "timestamp": "2026-04-30T09:06:38+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase6-implementation audit doc + pre-phase6-actions topic-name fix",
+      "from": "1.10.7",
+      "to": "1.10.8",
+      "build": 136
     }
   ]
 }

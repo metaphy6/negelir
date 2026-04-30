@@ -2,7 +2,7 @@
 
 Maintains rolling Brier / log-loss windows per
 ``(league_id, market)`` for the swarm's approved predictions. When a
-window's mean metric breaches ``cfg.drift_accuracy_floor`` it emits
+window's mean metric breaches ``cfg.drift_brier_ceiling`` it emits
 ``maint.event.v1{kind=retrain_request}`` for every model that
 contributed to the breached predictions, so the trainer can scope
 its retrain.
@@ -181,10 +181,16 @@ class DriftAgent:
             raise ValueError(
                 f"drift.v1: window_size must be >=1; got {self._window_size}"
             )
+        # `accuracy_floor` is the legacy constructor kwarg name; the
+        # underlying config knob was renamed to `drift_brier_ceiling`
+        # in the Phase-6 audit (F-3/F-5) because the drift agent trips
+        # when *Brier exceeds* this value (lower Brier = better).
+        # The kwarg name is kept for back-compat; new callers should
+        # prefer passing the value positionally or through cfg.
         self._floor = (
             accuracy_floor
             if accuracy_floor is not None
-            else _cfg.drift_accuracy_floor
+            else _cfg.drift_brier_ceiling
         )
         self._max_pending = (
             max_pending if max_pending is not None else _cfg.drift_max_pending

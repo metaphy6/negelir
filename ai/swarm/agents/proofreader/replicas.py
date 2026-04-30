@@ -30,9 +30,10 @@ from common.config import cfg as _cfg
 from ...sdk.types import Message, Topic
 from ..payloads import (
     PredictFinal,
+    ProofFlagKind,
     ProofreaderVerdict,
 )
-from ..topics import PREDICT_FINAL, PROOFREADER_VERDICT
+from ..topics import PREDICT_FINAL, PROOF_FLAG, PROOFREADER_VERDICT
 from .prediction_checks import (
     CheckResult,
     grid_consistency_check,
@@ -53,7 +54,11 @@ class _BaseProofreaderAgent:
 
     name: str = "proofreader.base"
     subscribes: tuple[Topic, ...] = (PREDICT_FINAL,)
-    publishes: tuple[Topic, ...] = (PROOFREADER_VERDICT,)
+    # Replicas publish verdicts on every well-formed candidate, plus
+    # a `proof.flag` (kind=`proofreader_internal_error`) on the rare
+    # path where `_check` raises an unexpected exception. Listing
+    # both topics keeps the boundary tests honest.
+    publishes: tuple[Topic, ...] = (PROOFREADER_VERDICT, PROOF_FLAG)
     # Names of the checks this agent ran (for the `checks_run` field
     # in the verdict — operators see which rules fired).
     checks_run: tuple[str, ...] = ()
@@ -80,12 +85,41 @@ class _BaseProofreaderAgent:
             _log.warning("%s: malformed predict.final: %s", self.name, exc)
             return ()
 
+        # Phase-6 audit F-4: an unexpected exception inside `_check`
+        # used to be swallowed and converted into `reject`. That made
+        # *one* buggy replica fatal regardless of quorum (a single
+        # reject vetoes approval), letting a code regression in
+        # plausibility silently kill predictions that sanity +
+        # consistency would have approved. The dispatch shell now
+        # emits a `proof.flag` (kind=proofreader_internal_error) so
+        # operators see the regression *and* a `warn` vote so the
+        # candidate still has a path to quorum if the other replicas
+        # accept. Warn counts toward quorum (matching today's
+        # plausibility-warn semantics) — the flag carries the actual
+        # signal so we don't lose the failure.
+        flag_msg: Message | None = None
         try:
             verdict, score, details = self._check(final)
-        except Exception:  # noqa: BLE001 — agent must never crash bus
-            _log.exception("%s: check raised; emitting reject", self.name)
+        except Exception as exc:  # noqa: BLE001 — agent must never crash bus
+            _log.exception("%s: check raised; emitting warn + flag", self.name)
             verdict, score, details = (
-                "reject", 1.0, [f"{self.name}: internal check error"],
+                "warn",
+                0.0,
+                [f"{self.name}: internal check error ({type(exc).__name__})"],
+            )
+            flag_msg = Message.new(
+                PROOF_FLAG,
+                {
+                    "kind": ProofFlagKind.PROOFREADER_INTERNAL_ERROR,
+                    "source": self.name,
+                    "target": final.prediction_id,
+                    "detail": (
+                        f"{self.name}: {type(exc).__name__}: {exc}"
+                    )[:512],
+                    "exception_type": type(exc).__name__,
+                },
+                producer=self.name,
+                trace_id=msg.envelope.trace_id,
             )
 
         # `flags` ⊆ `checks_run` (payload invariant). When a check
@@ -109,14 +143,15 @@ class _BaseProofreaderAgent:
             rationale=rationale,
             calibration_version=final.calibration_version,
         )
-        return (
-            Message.new(
-                PROOFREADER_VERDICT,
-                out.as_dict(),
-                producer=self.name,
-                trace_id=msg.envelope.trace_id,
-            ),
+        verdict_msg = Message.new(
+            PROOFREADER_VERDICT,
+            out.as_dict(),
+            producer=self.name,
+            trace_id=msg.envelope.trace_id,
         )
+        if flag_msg is not None:
+            return (verdict_msg, flag_msg)
+        return (verdict_msg,)
 
     def _check(self, final: PredictFinal) -> CheckResult:  # pragma: no cover
         raise NotImplementedError
@@ -126,7 +161,12 @@ class _BaseProofreaderAgent:
 
 
 class SanityProofreader(_BaseProofreaderAgent):
-    """Probabilities are well-formed and sum to 1±ε."""
+    """Probabilities are well-formed and sum to 1±ε.
+
+    Threshold (`cfg.proofreader_sanity_eps`) is read once at
+    construction; live config reloads require restarting the agent
+    process. (Phase-6 audit F-8.)
+    """
 
     name = "proofreader.sanity.v1"
     checks_run = ("sanity.probs_well_formed",)
@@ -140,7 +180,12 @@ class SanityProofreader(_BaseProofreaderAgent):
 
 
 class PlausibilityProofreader(_BaseProofreaderAgent):
-    """No single market outcome dominates beyond the configured cap."""
+    """No single market outcome dominates beyond the configured cap.
+
+    Threshold (`cfg.proofreader_plausibility_max_prob`) is read once
+    at construction; live config reloads require restarting the agent
+    process. (Phase-6 audit F-8.)
+    """
 
     name = "proofreader.plausibility.v1"
     checks_run = ("plausibility.max_outcome_prob",)
@@ -160,7 +205,12 @@ class PlausibilityProofreader(_BaseProofreaderAgent):
 
 
 class ConsistencyProofreader(_BaseProofreaderAgent):
-    """If a `score_grid` is attached, its marginals match `market_outcomes`."""
+    """If a `score_grid` is attached, its marginals match `market_outcomes`.
+
+    Threshold (`cfg.proofreader_grid_consistency_tol`) is read once
+    at construction; live config reloads require restarting the agent
+    process. (Phase-6 audit F-8.)
+    """
 
     name = "proofreader.consistency.v1"
     checks_run = ("consistency.score_grid_marginals",)

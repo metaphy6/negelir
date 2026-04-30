@@ -23,7 +23,8 @@
         "proofreader_no_quorum",
         "proofreader_late_verdict_dropped",
         "proofreader_rejected",
-        "proofreader_overflow"
+        "proofreader_overflow",
+        "proofreader_internal_error"
       ]
     },
     "source":      { "type": "string", "description": "Origin source (mackolik, nesine, tff, openfootball, ...)." },

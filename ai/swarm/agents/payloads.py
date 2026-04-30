@@ -454,6 +454,15 @@ class ProofFlagKind(str):
     # Pending-set saturated; oldest in-flight candidate evicted.
     # Mirrors the consensus_overflow pattern.
     PROOFREADER_OVERFLOW = "proofreader_overflow"
+    # Phase-6 audit (F-4): a replica's `_check` raised an unexpected
+    # exception. Previously the dispatch shell converted this into a
+    # `reject` vote, which (combined with the "any reject is fatal"
+    # rule) let one buggy replica DoS the whole prediction stream.
+    # The replica now emits this flag *and* a `warn` vote so the
+    # candidate still has a path to quorum if the other replicas
+    # accept; the flag carries the offending `proofreader_id` and
+    # exception class so operators can find the regression fast.
+    PROOFREADER_INTERNAL_ERROR = "proofreader_internal_error"
 
     @classmethod
     def all_kinds(cls) -> frozenset[str]:
@@ -788,6 +797,14 @@ class PredictApproved:
     calibration_version: int = 0
 
     def __post_init__(self) -> None:
+        # Phase-6 audit (F-7): normalise the market key to lowercase
+        # so a stray `"1X2"` from a future predictor does not silently
+        # bypass DriftAgent (which settles only on `market == "1x2"`)
+        # or any other downstream subscriber that compares with
+        # case-sensitive equality. Frozen dataclass requires the
+        # `object.__setattr__` shim.
+        if self.market != self.market.lower():
+            object.__setattr__(self, "market", self.market.lower())
         if not self.approved_by:
             raise ValueError("PredictApproved.approved_by must be non-empty")
         if self.verdict_count < len(self.approved_by):
@@ -838,7 +855,7 @@ _ALLOWED_MAINT_KINDS: frozenset[str] = frozenset({
 })
 
 _ALLOWED_DRIFT_REASONS: frozenset[str] = frozenset({
-    "brier_floor",   # rolling Brier breached `cfg.drift_accuracy_floor`
+    "brier_floor",   # rolling Brier breached `cfg.drift_brier_ceiling`
     "logloss_floor", # rolling log-loss breached the same floor
     "feature_ks",    # KS-test on input features rejected stationarity
 })

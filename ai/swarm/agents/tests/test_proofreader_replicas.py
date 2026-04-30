@@ -3,14 +3,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from swarm.agents.payloads import PredictFinal, ProofreaderVerdict
+from swarm.agents.payloads import PredictFinal, ProofFlagKind, ProofreaderVerdict
 from swarm.agents.proofreader.replicas import (
     ConsistencyProofreader,
     PlausibilityProofreader,
     SanityProofreader,
+    _BaseProofreaderAgent,
 )
 from swarm.agents.topics import (
     PREDICT_FINAL,
+    PROOF_FLAG,
     PROOFREADER_VERDICT,
     SCRAPE_REQUEST,
 )
@@ -45,7 +47,9 @@ def test_replicas_have_distinct_names_and_correct_topics() -> None:
     for cls in (SanityProofreader, PlausibilityProofreader, ConsistencyProofreader):
         a = cls()
         assert a.subscribes == (PREDICT_FINAL,)
-        assert a.publishes == (PROOFREADER_VERDICT,)
+        # Phase-6 audit (F-4): replicas now publish on PROOF_FLAG too,
+        # for the `proofreader_internal_error` failure-isolation path.
+        assert a.publishes == (PROOFREADER_VERDICT, PROOF_FLAG)
         assert a.name.startswith("proofreader.")
     names = {
         SanityProofreader().name,
@@ -177,3 +181,89 @@ def test_three_replicas_produce_quorum_for_aggregator() -> None:
 
     approvals = [m for m in out if m.envelope.topic == PREDICT_APPROVED]
     assert len(approvals) == 1
+
+
+# ── F-4: replica internal exception → warn + flag (not reject) ──
+
+
+def _broken_replica_factory(klass: type[_BaseProofreaderAgent]):
+    """Return an instance of `klass` whose `_check` always raises."""
+    inst = klass()
+
+    def _boom(_final):  # type: ignore[no-untyped-def]
+        raise RuntimeError("synthetic regression for F-4 audit")
+
+    inst._check = _boom  # type: ignore[assignment]
+    return inst
+
+
+def test_replica_internal_exception_emits_warn_vote_and_flag() -> None:
+    """Phase-6 audit (F-4): a `_check` exception used to become a
+    `reject` vote, which (combined with the reject-veto rule) let one
+    buggy replica DoS the whole pipeline. The shell now emits a
+    `proof.flag` AND a `warn` vote so the candidate still has a path
+    to quorum if the other replicas accept.
+    """
+    broken = _broken_replica_factory(PlausibilityProofreader)
+    out = list(broken.handle(_msg({"market_outcomes": {"H": 0.5, "D": 0.3, "A": 0.2}})))
+    # Exactly one verdict + one flag.
+    assert len(out) == 2
+    by_topic = {m.envelope.topic: m for m in out}
+    assert PROOFREADER_VERDICT in by_topic
+    assert PROOF_FLAG in by_topic
+
+    v = ProofreaderVerdict.from_dict(by_topic[PROOFREADER_VERDICT].payload)
+    assert v.verdict == "warn"
+    assert v.score == 0.0
+    assert v.proofreader_id == "proofreader.plausibility.v1"
+    assert "internal check error" in v.rationale
+    # `flags` ⊆ `checks_run` invariant — warn is non-accept so the
+    # rule id is listed.
+    assert v.flags == ["plausibility.max_outcome_prob"]
+
+    flag = by_topic[PROOF_FLAG].payload
+    assert flag["kind"] == ProofFlagKind.PROOFREADER_INTERNAL_ERROR
+    assert flag["source"] == "proofreader.plausibility.v1"
+    assert flag["target"] == "pid-1"
+    assert flag["exception_type"] == "RuntimeError"
+    assert "synthetic regression" in flag["detail"]
+
+
+def test_buggy_replica_does_not_veto_when_others_accept() -> None:
+    """Doctrine-shape test: with a broken plausibility replica, sanity
+    + consistency must still get the candidate to quorum (warn counts
+    toward quorum, matching today's plausibility-warn semantics).
+    Previously the broken replica's reject vote killed the candidate
+    regardless of the other two votes.
+    """
+    from swarm.agents.proofreader.aggregator import ProofreaderAggregatorAgent
+    from swarm.agents.reactor import InMemoryLedger
+    from swarm.agents.topics import PREDICT_APPROVED
+
+    final_msg = _msg({"market_outcomes": {"H": 0.5, "D": 0.3, "A": 0.2}})
+    replicas: list[_BaseProofreaderAgent] = [
+        SanityProofreader(),
+        _broken_replica_factory(PlausibilityProofreader),
+        ConsistencyProofreader(),
+    ]
+    verdict_msgs: list[Message] = []
+    flag_msgs: list[Message] = []
+    for r in replicas:
+        for m in r.handle(final_msg):
+            (flag_msgs if m.envelope.topic == PROOF_FLAG else verdict_msgs).append(m)
+    # 3 verdicts (1 warn from broken replica + 2 accept) + 1 flag.
+    assert len(verdict_msgs) == 3
+    assert len(flag_msgs) == 1
+
+    agg = ProofreaderAggregatorAgent(
+        ledger=InMemoryLedger(), quorum=2, window_ms=200,
+    )
+    out: list[Message] = []
+    out.extend(agg.handle(final_msg))
+    for vm in verdict_msgs:
+        out.extend(agg.handle(vm))
+    approvals = [m for m in out if m.envelope.topic == PREDICT_APPROVED]
+    assert len(approvals) == 1, (
+        "Buggy replica must not veto the prediction when the other two "
+        "replicas accept (F-4 regression guard)."
+    )

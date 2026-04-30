@@ -357,6 +357,21 @@ class Config:
     # 200 ms balances "give all 3 replicas a fair shot" against the
     # API SLA budget (api_consensus_overhead_ms accounts for it).
     proofreader_quorum_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_PROOFREADER_QUORUM_WINDOW_MS", "200")))
+    # Phase 6.1 (Phase-6 audit F-9): bound for the aggregator's
+    # `_pending` map. Without this the aggregator leaks memory when
+    # verdicts trickle in but never reach quorum (the window flush
+    # cleans them, but only if `flush_expired` actually ticks). Default
+    # mirrors `consensus_max_pending` since the per-prediction shape is
+    # comparable; LRU-eviction behaviour mirrors the consensus agent.
+    proofreader_aggregator_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_PROOFREADER_AGGREGATOR_MAX_PENDING", "4096")))
+    # Phase 6 (Phase-6 audit F-2): how often the AgentRunner ticks
+    # `flush_expired` on aggregator-style agents (consensus,
+    # proofreader_aggregator) when no new message arrived to drive
+    # `handle()`. Without this, windows never expire and `no_quorum`
+    # candidates leak. 100 ms is short enough to keep window-jitter
+    # below `proofreader_quorum_window_ms / 2` and long enough that the
+    # tick is amortised across normal traffic.
+    swarm_flush_interval_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_FLUSH_INTERVAL_MS", "100")))
 
     # ── Phase 6.2 — per-replica check thresholds ───────────────
     #
@@ -389,7 +404,18 @@ class Config:
     # (`docs/design/TESTING_STRATEGY.md` — anything worse than 0.30
     # is "dart-throwing chimp" territory).
     drift_window_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DRIFT_WINDOW_SIZE", "50")))
-    drift_accuracy_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_ACCURACY_FLOOR", "0.30")))
+    # Phase 6.3 (Phase-6 audit F-3/F-5): the swarm `drift.v1` agent
+    # trips when the rolling **mean Brier** for a (league, market)
+    # bucket *exceeds* this value (lower Brier = better prediction,
+    # so this is semantically a *ceiling*, not a floor). Earlier
+    # drafts called this `drift_accuracy_floor`, which collided
+    # with the Phase-5 accuracy-floor field of the same name and
+    # silently shadowed it; the Phase-5 field (`drift_accuracy_floor`,
+    # default 0.35, env `NEGELIR_DRIFT_FLOOR`) governs the legacy
+    # accuracy-based detector in `ai/model/drift.py` and the
+    # `TrainerReactor` debounce gate, both of which compare
+    # *accuracy < floor*. Keep the two knobs distinct.
+    drift_brier_ceiling: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_BRIER_CEILING", "0.30")))
     # Phase 6.3 — bound for the drift agent's per-(match, market)
     # `_pending` and `_settled` maps. Without this, predictions for
     # unsupported markets (anything other than 1X2 in v1) accumulate
@@ -557,6 +583,7 @@ class Config:
 
         # Probability / fraction fields
         _bounded("drift_accuracy_floor", self.drift_accuracy_floor, 0.0, 1.0)
+        _bounded("drift_brier_ceiling", self.drift_brier_ceiling, 0.0, 1.0)
         _bounded("training_noise_pct", self.training_noise_pct, 0.0, 1.0)
         _bounded("training_test_split", self.training_test_split, 0.0, 1.0, allow_eq_hi=False)
         _bounded("stale_confidence_penalty", self.stale_confidence_penalty, 0.0, 1.0)
@@ -599,6 +626,8 @@ class Config:
             # Phase 6
             ("proofreader_replicas", self.proofreader_replicas),
             ("proofreader_quorum_window_ms", self.proofreader_quorum_window_ms),
+            ("proofreader_aggregator_max_pending", self.proofreader_aggregator_max_pending),
+            ("swarm_flush_interval_ms", self.swarm_flush_interval_ms),
             ("drift_window_size", self.drift_window_size),
             ("drift_max_pending", self.drift_max_pending),
             ("drift_max_settled", self.drift_max_settled),
@@ -621,8 +650,8 @@ class Config:
         _bounded("proofreader_plausibility_max_prob", self.proofreader_plausibility_max_prob, 0.0, 1.0)
         _bounded("proofreader_grid_consistency_tol", self.proofreader_grid_consistency_tol, 0.0, 1.0)
 
-        # Phase 6.3 — drift agent
-        _bounded("drift_accuracy_floor", self.drift_accuracy_floor, 0.0, 1.0)
+        # Phase 6.3 — drift agent (Brier *ceiling* — see field docstring)
+        _bounded("drift_brier_ceiling", self.drift_brier_ceiling, 0.0, 1.0)
         _bounded("drift_pvalue", self.drift_pvalue, 0.0, 1.0)
 
         # Hour/minute ranges

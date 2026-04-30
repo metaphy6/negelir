@@ -103,8 +103,8 @@ training:
   sample_weights: [1.0, 2.0, 1.0]  # NEGELIR_TRAINING_SAMPLE_WEIGHTS  (Home,Draw,Away)
 
 drift:
-  accuracy_window: 30        # NEGELIR_DRIFT_WINDOW
-  accuracy_floor: 0.35       # NEGELIR_DRIFT_FLOOR
+  accuracy_window: 30        # NEGELIR_DRIFT_WINDOW (legacy ai/model/drift.py — accuracy floor)
+  accuracy_floor: 0.35       # NEGELIR_DRIFT_FLOOR  (legacy ai/model/drift.py — accuracy floor)
 
 # ── Bootstrap gate ───────────────────────────────────────────────────────────
 bootstrap:
@@ -181,13 +181,18 @@ phase5:
 phase6:
   proofreader_replicas: 3             # NEGELIR_PROOFREADER_REPLICAS (quorum = ⌊N/2⌋+1)
   proofreader_quorum_window_ms: 200   # NEGELIR_PROOFREADER_QUORUM_WINDOW_MS
+  proofreader_aggregator_max_pending: 4096  # NEGELIR_PROOFREADER_AGGREGATOR_MAX_PENDING — LRU bound on aggregator _pending (Phase-6 audit F-9)
+  swarm_flush_interval_ms: 100        # NEGELIR_SWARM_FLUSH_INTERVAL_MS — runner tick for flush_expired (Phase-6 audit F-2)
   # Per-replica check thresholds (§6.2)
   proofreader_sanity_eps: 0.01                 # NEGELIR_PROOFREADER_SANITY_EPS — sum-to-1 tolerance
   proofreader_plausibility_max_prob: 0.85      # NEGELIR_PROOFREADER_PLAUSIBILITY_MAX_PROB — single-outcome cap (warn)
   proofreader_grid_consistency_tol: 0.05       # NEGELIR_PROOFREADER_GRID_CONSISTENCY_TOL — score_grid vs market_outcomes
-  # Drift agent (§6.3)
+  # Drift agent (§6.3). NOTE: `drift_brier_ceiling` is a *Brier ceiling*
+  # (lower Brier = better → trip when mean > ceiling). Distinct from
+  # the legacy `drift.accuracy_floor` knob above which gates the
+  # `ai/model/drift.py` accuracy detector.
   drift_window_size: 50                # NEGELIR_DRIFT_WINDOW_SIZE — rolling Brier/log-loss window
-  drift_accuracy_floor: 0.30           # NEGELIR_DRIFT_ACCURACY_FLOOR — trip-on-breach
+  drift_brier_ceiling: 0.30            # NEGELIR_DRIFT_BRIER_CEILING — trip when mean Brier > ceiling
   drift_pvalue: 0.01                   # NEGELIR_DRIFT_PVALUE — KS-test stationarity threshold
   drift_max_pending: 100000            # NEGELIR_DRIFT_MAX_PENDING — LRU bound on unsettled predictions
   drift_max_settled: 100000            # NEGELIR_DRIFT_MAX_SETTLED — LRU bound on settled (match,market) keys
