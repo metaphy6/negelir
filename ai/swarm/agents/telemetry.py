@@ -23,7 +23,9 @@ from ..sdk.types import Message
 from common.config import cfg
 from .topics import (
     FRESHNESS_EVENTS,
+    MAINT_EVENT,
     MATCH_NORMALIZED,
+    MATCH_OUTCOME,
     MATCH_STORED,
     MODEL_TRAINED,
     PREDICT_APPROVED,
@@ -31,6 +33,7 @@ from .topics import (
     PREDICT_REQUEST,
     PREDICT_VOTE,
     PROOF_FLAG,
+    PROOFREADER_VERDICT,
     SCRAPE_CLASSIFIED,
     SCRAPE_RAW,
     SCRAPE_REQUEST,
@@ -58,6 +61,14 @@ _WATCHED_TOPICS = (
     MODEL_TRAINED,
     # Phase 6 (Wave A.1) — proofreader-approved, user-visible predictions.
     PREDICT_APPROVED,
+    # Phase 6 (Wave A.2/A.3) — close the §6.5 telemetry follow-up:
+    # individual proofreader verdicts, drift-emitted maintenance
+    # events, and the storage-emitted match outcomes that drift
+    # consumes. Without these, the proofreader gauntlet and drift
+    # window were invisible in the Prometheus page.
+    PROOFREADER_VERDICT,
+    MAINT_EVENT,
+    MATCH_OUTCOME,
 )
 
 

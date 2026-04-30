@@ -67,13 +67,24 @@ _log = logging.getLogger("swarm.agents.proofreader_aggregator")
 # ── Internal pending-state ─────────────────────────────────────
 
 
+_ACCEPT_WARN: frozenset[str] = frozenset({"accept", "warn"})
+
+
 @dataclass
 class _Pending:
     """Per-(prediction_id) bookkeeping. ``final`` may be None until
     the ``predict.final`` candidate arrives — verdicts can theoretically
     land first if the proofreader bus path is shorter than the
     aggregator's. We hold them and finalize once both sides are known
-    (or the window elapses)."""
+    (or the window elapses).
+
+    Performance note: `_accept_warn_count` and `_reject_count` are
+    running tallies maintained by ``set_verdict`` — quorum / reject
+    checks are O(1) instead of O(N) per verdict. With the default
+    N=3 replicas this is invisible, but Phase 13a (per-league
+    profiles) and Phase 14 (K8s replica scaling) raise N enough for
+    the linear scans to add up under load.
+    """
 
     prediction_id: str
     request_id: str
@@ -82,21 +93,40 @@ class _Pending:
     first_seen_ms: float
     final: PredictFinal | None = None
     verdicts: dict[str, ProofreaderVerdict] = field(default_factory=dict)
+    _accept_warn_count: int = 0
+    _reject_count: int = 0
+
+    def set_verdict(self, verdict: ProofreaderVerdict) -> None:
+        """Record a verdict, updating running counters atomically.
+
+        Re-emits by the same proofreader overwrite in place — we
+        decrement the previous classification before counting the
+        new one so the totals stay consistent."""
+        prev = self.verdicts.get(verdict.proofreader_id)
+        if prev is not None:
+            if prev.verdict in _ACCEPT_WARN:
+                self._accept_warn_count -= 1
+            elif prev.verdict == "reject":
+                self._reject_count -= 1
+        self.verdicts[verdict.proofreader_id] = verdict
+        if verdict.verdict in _ACCEPT_WARN:
+            self._accept_warn_count += 1
+        elif verdict.verdict == "reject":
+            self._reject_count += 1
 
     def accept_warn_count(self) -> int:
-        return sum(
-            1 for v in self.verdicts.values()
-            if v.verdict in ("accept", "warn")
-        )
+        return self._accept_warn_count
 
     def has_reject(self) -> bool:
-        return any(v.verdict == "reject" for v in self.verdicts.values())
+        return self._reject_count > 0
 
     def approvers(self) -> list[str]:
-        # Stable, sorted for deterministic envelope contents.
+        # Stable, sorted for deterministic envelope contents. Called
+        # at most once per finalize, so we sort lazily here rather
+        # than maintaining an insertion-ordered structure.
         return sorted(
             v.proofreader_id for v in self.verdicts.values()
-            if v.verdict in ("accept", "warn")
+            if v.verdict in _ACCEPT_WARN
         )
 
 
@@ -270,7 +300,9 @@ class ProofreaderAggregatorAgent:
                 self._pending[verdict.prediction_id] = p
             # One verdict per (proofreader_id, prediction_id). A re-emit
             # by the same replica overwrites in place — deterministic.
-            p.verdicts[verdict.proofreader_id] = verdict
+            # `set_verdict` keeps the running accept/warn/reject
+            # counters consistent across the overwrite.
+            p.set_verdict(verdict)
 
             finalize_out = self._maybe_finalize_locked(
                 p, trace_id=msg.envelope.trace_id

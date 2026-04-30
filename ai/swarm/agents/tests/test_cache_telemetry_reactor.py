@@ -193,6 +193,21 @@ def test_telemetry_watches_predict_approved() -> None:
     assert "predict.approved.v1" in subs
 
 
+def test_telemetry_watches_phase6_proofreader_drift_topics() -> None:
+    """Phase 6 (Wave A.2/A.3) — close §6.5 telemetry follow-up.
+
+    Without these the proofreader gauntlet (per-replica verdicts) and
+    the drift agent (retrain emissions and the match outcomes it
+    consumes) flowed past Prometheus silently, so any quorum stall
+    or runaway drift would only surface in agent logs.
+    """
+    agent = TelemetryAgent()
+    subs = set(str(t) for t in agent.subscribes)
+    assert "predict.proofreader_verdict.v1" in subs
+    assert "maint.event.v1" in subs
+    assert "match.outcome.v1" in subs
+
+
 # ── Reactor base ───────────────────────────────────────────────
 
 
