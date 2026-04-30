@@ -551,11 +551,15 @@ A small Go binary `server/cmd/swarmctl/` (lives next to `cmd/api` and `cmd/mocks
 | `freshness.events.v1` | storage | reactors (consume only) | per `design/CONTENT_FRESHNESS.md` §15.1 |
 | `predict.request` | API gateway | predictor swarm | `{request_id, match_id, market}` + opt `{league_id, profile_id, requested_at, features, metadata}` |
 | `predict.vote` | individual predictors | consensus agent | `{request_id, match_id, market, predictor_id, distribution, confidence}` + opt `{produced_at, features_version, league_id, profile_id, metadata}` |
-| `predict.final` | consensus | proofreader, storage, API cache | calibrated `Prediction` (typed `distribution` `{market_outcomes, score_grid?}`, `degraded`/`degraded_reason`, `prediction_id`, `produced_at`, `weights`, `contributing_models`, `calibration_version`, `swarm_confidence`) |
-| `proof.flag` | proofreader, scrapers, categorizer, processors | drift, security | `{kind, source, reason, …}` |
+| `predict.final` | consensus | proofreader replicas + aggregator (CANDIDATE; never user-visible) | calibrated `Prediction` (typed `distribution` `{market_outcomes, score_grid?}`, `degraded`/`degraded_reason`, `prediction_id`, `produced_at`, `weights`, `contributing_models`, `calibration_version`, `swarm_confidence`) |
+| `predict.proofreader_verdict.v1` | each proofreader replica (sanity / plausibility / consistency / future cross-source / historical) | `proofreader_aggregator.v1` (SOLE consumer) | `{request_id, prediction_id, match_id, market, proofreader_id, verdict ∈ {accept,warn,reject}, score, checks_run, flags, rationale}` + opt `{calibration_version, checked_at}` |
+| `predict.approved.v1` | `proofreader_aggregator.v1` (SOLE producer) | `cache.v1`, API gateway (Phase 9), `drift.v1` | `{request_id, prediction_id, match_id, market, approved_at, approved_by, verdict_count, quorum, final, calibration_version}` |
+| `match.outcome.v1` | `storage.v1` (SOLE producer) | `drift.v1`, future scoring agents | `{match_id, stable_id, source, final_home, final_away, outcome_1x2 ∈ {H,D,A}, settled_at}` + opt `{league_id, competition_id, metadata}` |
+| `models.events.v1` | `TrainerReactor` (SOLE producer) | ops dashboards, model registry | `{kind=model_trained, predictor_id, model_version, trained_at}` + opt `{league_id, profile_id, metric, metric_value, sample_size}` |
+| `maint.event.v1` | `drift.v1` (v1 SOLE producer; future maint agents reuse with new `kind`) | trainer, supervisor, ops | `{kind ∈ {retrain_request,…}, target, reason, produced_at}` + opt `{league_id, market, metric, metric_value, threshold, sample_size, action}` |
+| `proof.flag` | scrapers, categorizer, processors, consensus, `proofreader_aggregator.v1`, individual proofreader replicas | drift, security, ops dashboards | `{kind ∈ ProofFlagKind, agent, source?, reason?, …}` (kind-specific extras documented per `ProofFlagKind`) |
 | `telemetry` | (reserved — Phase 5+ producers; nothing emits today) | telemetry agent | `{kind, emitted_at}` + opt `{agent, topic, value, labels}` — sparse, hand-emitted events (deploys, manual replays); not the bulk metrics path |
-| `sec.alert` | security agents | supervisor, telemetry | `{kind, source, severity}` |
-| `maint.event` | self-maint | supervisor | `{kind, target, action}` |
+| `sec.alert` | security agents (Phase 7) | supervisor, telemetry | `{kind, source, severity}` |
 
 Topic naming is `<area>.<verb>` (lower-snake). `<topic>.dlq` is reserved for dead-letter streams. Creating a new topic requires (a) a row in this table, (b) a JSON Schema in `ai/swarm/sdk/schemas/<topic>.json`, (c) a config-driven consumer-group prefix.
 
@@ -633,7 +637,7 @@ Cache concerns split cleanly between two agents to keep blast radius small:
 - **`reactor.cache-invalidation.v1` (§4.7)** — *invalidates* keys when freshness events fire.
 
 - [x] Watches `match.stored`; populates the cache with TTL from `cfg.cache_record_ttl_sec`. In-memory backend behind `CacheBackend` Protocol; Redis backend lands with the Phase 9 API surface that consumes it.
-- [ ] Subscribes to `predict.final` and warms with `cfg.cache_prediction_ttl_sec`. *(Phase 5 dep — the producer ships there; the subscription is additive, no schema change.)*
+- [ ] Subscribes to **`predict.approved.v1`** (NOT `predict.final` — Phase 6 contract: only post-quorum predictions reach the cache) and warms with `cfg.cache_prediction_ttl_sec`. *(Phase 6 wired the producer; the subscription is additive, no schema change. Boundary test: `cache.v1.subscribes` must NOT contain `predict.final`.)*
 - [ ] Exposes a tiny gRPC contract to the API gateway for explicit invalidation. *(Deferred to Phase 9 — no consumer exists yet.)*
 
 ### 4.6 Telemetry agent (`telemetry.v1`)
@@ -818,6 +822,32 @@ The point of a swarm is to *disagree well*. Initial roster (ordered by build-eff
 
 **Goal:** Catch bad predictions, bad data, and slow model decay before they reach users.
 **Depends on:** Phase 5
+**Pivot v3 placement:** proofreader replicas + aggregator live under `swarm/proofreaders/` per [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md); the drift agent under `swarm/drift/`. Until Phase R2 lands the directory move, ship under the transitional path **`ai/swarm/agents/proofreader/`** and **`ai/swarm/agents/drift.py`**, importable as `swarm.agents.*` (matches Phase 4/5 layout — R2 is a `git mv`, not a rewrite).
+
+**Cross-phase alignment (binding):**
+
+- **Phase 3 §3.2 SDK contract.** Every proofreader replica, the aggregator, and `drift.v1` is an `Agent` (registers in `agent_registry`, heartbeats per `cfg.swarm_heartbeat_sec`, declares `subscribes`/`publishes`, deregisters on `SIGTERM`). Inherits `AgentRunner` retry/DLQ.
+- **Phase 3 §3.3 bus semantics.** All Phase 6 handlers are **idempotent**: aggregator on `prediction_id` (via the Phase 4.7 `Ledger` Protocol — same in-memory backend now, Postgres at Phase 9); drift on `(match_id, market)` settled-set; per-replica proofreaders are pure functions of `predict.final` payload (no state).
+- **Phase 3 §3.5 topic catalog (wire authority).** Phase 6 lands JSON Schemas at `ai/swarm/sdk/schemas/{predict.proofreader_verdict.v1,predict.approved.v1,match.outcome.v1,maint.event.v1}.json` plus the `MAINT_EVENT`/`MATCH_OUTCOME`/`PROOFREADER_VERDICT`/`PREDICT_APPROVED` constants in `topics.py`. Payload dataclasses live in `payloads.py`. `test_schemas_match_payloads.py` covers them.
+- **Phase 3.4 swarmctl visibility.** Every Phase 6 agent appears in `swarmctl ps`; every new topic appears in `swarmctl topics`. Read-only — Phase 6 adds no mutating commands.
+- **Phase 4.5 cache wiring.** `cache.v1` subscribes to **`predict.approved.v1`** (the post-quorum surface) — never to `predict.final`. The boundary test in `test_boundary_discipline.py` enforces this so a future regression cannot silently ship un-vetted predictions to users.
+- **Phase 4.6 telemetry watch set.** `telemetry.v1._WATCHED_TOPICS` must include `PREDICT_APPROVED`, `PROOFREADER_VERDICT`, `MAINT_EVENT`, and `MATCH_OUTCOME` so Phase 6 traffic is visible in the Prometheus page (already wired for `PREDICT_APPROVED`; `PROOFREADER_VERDICT` / `MAINT_EVENT` / `MATCH_OUTCOME` follow-up — see §6.5).
+- **Phase 4.7 reactor base.** Aggregator's `_pending` overflow eviction mirrors the Phase 5 `consensus.v1` pattern (bounded map + buffered overflow drained outside the lock); same `Ledger` Protocol; same single-replica invariant (Phase 14 `replicas: 1`).
+- **Phase 5 single-publication invariant.** Phase 5 `consensus.v1` publishes `predict.final` exactly once per `(match_id, market, request_id)`; Phase 6 aggregator publishes `predict.approved.v1` exactly once per `prediction_id`. Both rely on `replicas: 1` for the single-publication guarantee — multi-replica consensus / aggregator would need Postgres-backed leader election (Phase 14.x follow-up).
+- **Phase 5 score-grid contract.** `predict.final.distribution.score_grid` is optional (Elo emits None; Dixon-Coles + the XGBoost pair emit one). The consistency proofreader **abstains gracefully** when no grid is attached (not a `reject`), so non-grid-producing predictors do not bias quorum against themselves.
+
+**Forward-phase contracts (binding for Phase 6 design):**
+
+- **Phase 7 `sec.input.v1`** runs *upstream* of NLP, not of Phase 6. Proofreader checks are post-prediction sanity, not adversarial-input defense; the two never share a topic.
+- **Phase 8 `maint.scaler.v1`** consumes `maint.event.v1{kind=retrain_request}` (alongside the trainer). Phase 6 emits the event; Phase 8 owns the scheduling. The `kind` enum is open — Phase 8 may add `recalibration_request`, `cache_ttl_bump`, etc. without a schema migration.
+- **Phase 9 odds plane.** Cross-source proofreader (§6.2) lands once `processor.odds.v1` produces persisted odds Records the proofreader can read via the `RecordStore` Protocol. The wire format reserves `flags=["cross_source.implied_prob_disagree"]` so the v2 check slots in without a verdict-payload migration.
+- **Phase 9 API surface.** `cache.v1` subscription to `predict.approved.v1` is the only way a prediction reaches `/v1/matches/{id}/predictions`. The API never reads `predict.final` directly. Phase 9 docs must call this out explicitly.
+- **Phase 12 chaos.** `make chaos-kill-proofreader PCT=33` (≥ 1 of 3 replicas down) must not block approvals — quorum is `⌊N/2⌋+1 = 2/3`, so the swarm degrades to 2-of-2 silently. Killing 2 of 3 trips `proofreader_no_quorum` after `cfg.proofreader_quorum_window_ms` (deterministic). Phase 12 owns the assertions.
+- **Phase 13a CalibrationProfile.** Drift windows are keyed on `(profile_id, market)` once Phase 13a lands; until then `profile_id == league_id` (same default as Phase 5 `predictor_calibration`). No schema migration — `_Window` already keys on `(league_id | None, market)`; the profile resolver rebinds the field at Phase 13a.
+- **Phase 13a per-league plausibility.** `cfg.proofreader_plausibility_max_prob = 0.85` is league-agnostic today. Phase 13a per-league overrides land via `LeagueConfig.proofreader_plausibility_max_prob` resolved by the proofreader replica from the vote-carried `league_id`; no schema change.
+- **Phase 14 K8s.** `proofreader_aggregator.v1` and `drift.v1` run at `replicas: 1` (matches the Phase 5 `consensus.v1` pattern and [`design/SWARM.md`](../design/SWARM.md) roster). Per-check proofreader replicas (`proofreader.sanity.v1` etc.) scale horizontally, but the aggregator's single-publication guarantee forbids multiple aggregator replicas without leader election.
+- **Phase 16 emitter.** Approved predictions and drift events stay on the bus (control plane). Realized outcomes (`match.outcome.v1`) move to feeds when Phase 16 lands; the `MatchOutcome` dataclass is the in-memory shape that maps 1:1 to `feeds/match_outcomes.v1.parquet` so the producer swap is constructor-injected, not a rewrite.
+- **Phase 17 patcher scope.** Per [`CLAUDE.md`](../../CLAUDE.md), the patcher's allow-list is `extractor` / `schema` / `migration` / `fixture` — it never edits `swarm/`. Proofreader rejects + drift retrain requests are routed to humans via `proof.flag` and `maint.event.v1`, not to the patcher. Phase 6 needs no patcher integration.
 
 ### 6.1 Multi-proofreader voting
 
@@ -836,8 +866,37 @@ The point of a swarm is to *disagree well*. Initial roster (ordered by build-eff
 ### 6.3 Drift agent (`drift.v1`)
 
 - [x] Maintains rolling Brier / log-loss windows per league × market × predictor. **Implemented (Wave B.3)** in [`ai/swarm/agents/drift.py`](../../ai/swarm/agents/drift.py). v1 keeps a rolling Brier window per `(league_id, market)` (the swarm aggregate, since consensus has already merged the individual votes by the time we see `predict.approved.v1`); per-predictor windows wait for a durable `predict.vote` plane (Phase 9). State is in-memory; Postgres lift is a Phase 9 task — the contract here is identical, only the storage backend changes.
-- [~] Trips when (a) any window crosses `cfg.drift_accuracy_floor`, or (b) KS-test on input feature distribution rejects stationarity at `cfg.drift_pvalue`. **(a) implemented** — once a `(league, market)` window is full, mean Brier > `cfg.drift_accuracy_floor` (default 0.30) trips a `retrain_request` with `reason=brier_floor`. Re-trip is debounced until the window recovers below the floor (no spam). **(b) deferred** — KS-test needs the predictor's input feature vector on the bus (currently ephemeral inside the predictor process); the wire format reserves `reason=feature_ks` so the v2 KS-test agent slots in without a schema migration.
+- [~] Trips when (a) any window crosses `cfg.drift_accuracy_floor`, or (b) KS-test on input feature distribution rejects stationarity at `cfg.drift_pvalue`. **(a) implemented** — once a `(league, market)` window is full, mean Brier > `cfg.drift_accuracy_floor` (default 0.30) trips a `retrain_request` with `reason=brier_floor`. **Naming caveat:** `drift_accuracy_floor` is *semantically a Brier ceiling* (higher Brier = worse prediction; we trip when the metric is **above** the threshold). The legacy name is retained for backward compatibility with `ai/model/drift.py` callers; a forward-compatible alias `drift_brier_ceiling` may be added at Phase 9 alongside the Postgres lift. Re-trip is debounced until the window recovers below the floor (no spam). **(b) deferred** — KS-test needs the predictor's input feature vector on the bus (currently ephemeral inside the predictor process); the wire format reserves `reason=feature_ks` so the v2 KS-test agent slots in without a schema migration.
 - [x] On trip → `maint.event{kind:retrain_request, target:<predictor>}`. **Implemented** — emits one `MaintEvent` per contributing model (the union of predictors that contributed to predictions in the breached window); `target` carries the predictor_id so the trainer can scope its retrain. New `maint.event.v1` topic + JSON schema; producer is `drift.v1` only (boundary test enforces).
+
+### 6.4 Definition of Done
+
+- [x] Three default proofreader replicas (`proofreader.sanity.v1`, `proofreader.plausibility.v1`, `proofreader.consistency.v1`) implemented + voting against `InMemoryBus` through `AgentRunner` in [`test_proofreader_replicas.py`](../../ai/swarm/agents/tests/test_proofreader_replicas.py). Each runs ONE check from `prediction_checks.py` (failure isolation; scale symmetry per Doctrine §2 Rule 5).
+- [x] `proofreader_aggregator.v1` produces exactly one `predict.approved.v1` per `prediction_id` under at-least-once redelivery (idempotency test in [`test_proofreader_aggregator.py`](../../ai/swarm/agents/tests/test_proofreader_aggregator.py); single-publication guarded by the Phase 4.7 `Ledger` Protocol).
+- [x] Quorum threshold = `⌊N/2⌋+1` (simple majority). N=3 → quorum=2 (default); N=5 → 3; N=7 → 4. Surfaced via `cfg.proofreader_quorum` derived property; never settable directly. Pre-Phase-6 audit caught the legacy `⌈N/2⌉+1` formula (which collapsed to unanimity for odd N) before launch.
+- [x] **One `reject` is fatal regardless of quorum** (§6.1 contract). Boundary test `test_reject_vetoes_quorum` enforces.
+- [x] Quorum-empty / window-elapsed paths emit `proof.flag` with `kind=proofreader_no_quorum` and **do not** emit `predict.approved.v1` (negative test).
+- [x] Late verdict for an already-approved prediction → `proof.flag{kind=proofreader_late_verdict_dropped}`; aggregator does not double-emit (negative test).
+- [x] **Bounded pending set.** Aggregator `_pending` capped at `cfg.consensus_max_pending` (shared knob — proofreader load is strictly ≤ consensus load, so a separate knob would be over-engineering). Overflow eviction emits `proof.flag{kind=proofreader_overflow}` outside the lock (mirrors Phase 5 `consensus_overflow` pattern).
+- [x] `drift.v1` rolling window trips exactly once per breach (debounced via `_tripped` set; clears on recovery). Negative test: settling 100 outcomes after a trip without recovery emits no extra `maint.event.v1`.
+- [x] `drift.v1` settled-set + pending-map are bounded (`cfg.drift_max_settled` / `cfg.drift_max_pending`, defaults 100 000) with insertion-order LRU eviction. Long-tail markets that never settle (anything other than 1X2 in v1) are evicted silently (memory bound, not correctness signal).
+- [x] Every Phase 6 agent registers in `agent_registry`, heartbeats, and shows up in `swarmctl ps`; every Phase 6 topic shows up in `swarmctl topics` (Phase 3.4 contract preserved). Guard: `test_proofreader_visible_in_registry_and_topics`.
+- [x] Every Phase 6 message validates against its JSON Schema at the live emission point (`test_schemas_match_payloads.py` + the live-emission probes in `test_phase6_bug_fixes.py`).
+- [x] All Phase 6 config knobs (`proofreader_replicas`, `proofreader_quorum_window_ms`, `proofreader_sanity_eps`, `proofreader_plausibility_max_prob`, `proofreader_grid_consistency_tol`, `drift_window_size`, `drift_accuracy_floor`, `drift_max_pending`, `drift_max_settled`, `drift_pvalue`) surface in `xops/env/.env.example`, `ai/common/defaults.yaml`, and `ai/common/config.py` — triangle test stays green.
+- [x] **Boundary discipline** ([`test_boundary_discipline.py`](../../ai/swarm/agents/tests/test_boundary_discipline.py)): (a) `cache.v1` does NOT subscribe to `predict.final`; (b) `predict.approved.v1` has exactly one producer (`proofreader_aggregator.v1`); (c) `match.outcome.v1` has exactly one producer (`storage.v1`); (d) `maint.event.v1` has exactly one producer (`drift.v1` in v1); (e) `predict.proofreader_verdict.v1` has exactly one consumer (the aggregator).
+- [x] Versioning: `swarm` minor bump at the Phase 6 landing; subsequent Phase 6 review patches bump `swarm` patch-level.
+
+### 6.5 Pivot v3 alignment & follow-ups (added 2026-04-30 review)
+
+- [x] **`_Window.popleft` perf** — replaced O(window·models) set-rebuild with reference-counted `Counter` (O(|models per evicted entry|) per popleft). Hot path stays on a single `_Window` instance per `(league, market)` bucket; the windows themselves are bounded by config so the dict never grows.
+- [x] **Topic catalog stale rows** — Phase 3.5 table updated to include the five Phase 6 topics (`predict.proofreader_verdict.v1`, `predict.approved.v1`, `match.outcome.v1`, `maint.event.v1`, `models.events.v1`) plus the corrected `proof.flag` producer set. Wire-authority lock-step rule restored.
+- [x] **Phase 4.5 cache pointer fixed** — the stale "Subscribes to `predict.final`" bullet now correctly points to `predict.approved.v1` with the boundary-test reference.
+- [ ] **Telemetry watch set** — `_WATCHED_TOPICS` includes `PREDICT_APPROVED`; add `PROOFREADER_VERDICT`, `MAINT_EVENT`, and `MATCH_OUTCOME` so the full Phase 6 surface is visible in the Prometheus page. Tracked as a Phase 4.6 follow-up; landing it requires no schema change.
+- [ ] **Per-league plausibility cap.** Today's `cfg.proofreader_plausibility_max_prob = 0.85` is league-agnostic. Phase 13a per-league overrides via `LeagueConfig.proofreader_plausibility_max_prob` (resolved from the vote-carried `league_id`). Until then, the global cap is the right default per `docs/design/TESTING_STRATEGY.md`.
+- [ ] **Per-predictor drift windows.** §6.3 v1 scores the swarm aggregate; per-predictor Brier requires durable `predict.vote` plane (Phase 9). Wire format already reserves the trip surface (`MaintEvent.target` is per-predictor today via the contributing-models attribution).
+- [ ] **KS-test on feature distribution.** Reserved as `MaintEvent.reason=feature_ks`; depends on a feature-vector plane (deferred to Phase 9 or the Phase 16 emitter `feeds/feature_vectors.v1.parquet`, whichever lands first).
+- [ ] **Cross-source proofreader.** `flags=["cross_source.implied_prob_disagree"]` slot reserved; lands when `processor.odds.v1` produces persisted Records (Phase 9 odds plumbing).
+- [ ] **`drift_brier_ceiling` alias.** Add a forward-compatible alias for `drift_accuracy_floor` at Phase 9 alongside the Postgres lift to remove the naming-vs-semantics mismatch without breaking existing env configs.
 
 ---
 

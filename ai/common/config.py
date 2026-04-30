@@ -390,6 +390,16 @@ class Config:
     # is "dart-throwing chimp" territory).
     drift_window_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DRIFT_WINDOW_SIZE", "50")))
     drift_accuracy_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_ACCURACY_FLOOR", "0.30")))
+    # Phase 6.3 — bound for the drift agent's per-(match, market)
+    # `_pending` and `_settled` maps. Without this, predictions for
+    # unsupported markets (anything other than 1X2 in v1) accumulate
+    # forever because they never get scored, and the settled-set never
+    # forgets a match. Default 100k allows ~5 seasons of weekly fixtures
+    # for a typical league before LRU eviction kicks in; eviction is
+    # silent (no proof.flag) because it is a memory bound, not a
+    # correctness signal.
+    drift_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DRIFT_MAX_PENDING", "100000")))
+    drift_max_settled: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DRIFT_MAX_SETTLED", "100000")))
     # KS-test p-value below which the input feature distribution is
     # declared non-stationary. 0.01 is conservative (only ~1% false
     # positives at steady state); raise to 0.05 to react faster.
@@ -590,6 +600,8 @@ class Config:
             ("proofreader_replicas", self.proofreader_replicas),
             ("proofreader_quorum_window_ms", self.proofreader_quorum_window_ms),
             ("drift_window_size", self.drift_window_size),
+            ("drift_max_pending", self.drift_max_pending),
+            ("drift_max_settled", self.drift_max_settled),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")

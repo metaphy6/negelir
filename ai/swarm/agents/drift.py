@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections import deque
+from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Iterable
@@ -95,14 +95,63 @@ class _PendingPrediction:
 
 @dataclass
 class _Window:
-    """Rolling Brier window per (league_id, market)."""
+    """Rolling Brier window per (league_id, market).
 
-    brier: deque[float] = field(default_factory=deque)
-    # Track the union of predictors that contributed to the entries
-    # currently inside the window — when we trip, we emit a retrain
-    # request for every one of them (we don't know which is the
-    # culprit from the aggregate alone).
-    models_in_window: set[str] = field(default_factory=set)
+    Each entry pairs a Brier score with the **set of models that
+    contributed to that specific prediction**. We need ``models_in_window``
+    to be the union of all models named by in-window entries so a long-
+    running swarm doesn't retrain every model that has ever voted on
+    this bucket on the next breach.
+
+    Implementation: ``_model_refs`` is a reference-counted ``Counter``
+    so ``append`` and ``popleft`` are both O(|models per entry|) — not
+    O(|window|) which the previous "rebuild from scratch" approach
+    cost. ``models_in_window`` is derived lazily on read.
+    """
+
+    # `entries` is the source of truth: each item is (brier, frozenset(models)).
+    entries: deque[tuple[float, frozenset[str]]] = field(default_factory=deque)
+    # Reference counts: `_model_refs[m]` is the number of in-window
+    # entries that name model `m`. When a count hits zero the model
+    # leaves the window.
+    _model_refs: Counter[str] = field(default_factory=Counter)
+    # Running sum of Brier scores so `mean_brier` is O(1) instead of
+    # O(window). Kept in sync with `entries` by `append` / `popleft`.
+    _brier_sum: float = 0.0
+
+    @property
+    def brier(self) -> deque[float]:
+        """Back-compat view: the Brier scores alone (read-only)."""
+        return deque(b for b, _m in self.entries)
+
+    @property
+    def models_in_window(self) -> set[str]:
+        """Set view of every model named by any in-window entry. O(M)
+        in the number of distinct in-window models — the underlying
+        Counter is the source of truth."""
+        return {m for m, n in self._model_refs.items() if n > 0}
+
+    def mean(self) -> float:
+        """O(1) mean Brier over the current window. Caller must guard
+        against an empty window (returns 0.0 here for safety)."""
+        return self._brier_sum / len(self.entries) if self.entries else 0.0
+
+    def append(self, brier: float, models: Iterable[str]) -> None:
+        frozen = frozenset(str(m) for m in models)
+        self.entries.append((brier, frozen))
+        self._brier_sum += brier
+        for m in frozen:
+            self._model_refs[m] += 1
+
+    def popleft(self) -> None:
+        if not self.entries:
+            return
+        brier, evicted_models = self.entries.popleft()
+        self._brier_sum -= brier
+        for m in evicted_models:
+            self._model_refs[m] -= 1
+            if self._model_refs[m] <= 0:
+                del self._model_refs[m]
 
 
 class DriftAgent:
@@ -119,6 +168,8 @@ class DriftAgent:
         clock_iso: Callable[[], str] | None = None,
         window_size: int | None = None,
         accuracy_floor: float | None = None,
+        max_pending: int | None = None,
+        max_settled: int | None = None,
     ) -> None:
         self._clock_iso = clock_iso or (
             lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -135,18 +186,30 @@ class DriftAgent:
             if accuracy_floor is not None
             else _cfg.drift_accuracy_floor
         )
+        self._max_pending = (
+            max_pending if max_pending is not None else _cfg.drift_max_pending
+        )
+        self._max_settled = (
+            max_settled if max_settled is not None else _cfg.drift_max_settled
+        )
+        if self._max_pending < 1 or self._max_settled < 1:
+            raise ValueError(
+                f"drift.v1: max_pending/max_settled must be >=1; "
+                f"got pending={self._max_pending}, settled={self._max_settled}"
+            )
         self._lock = threading.Lock()
-        # Pending predictions waiting for outcomes. Keyed by
-        # (match_id, market) because that's how the outcome stream
-        # arrives — one outcome can settle multiple market predictions
-        # for the same match.
-        self._pending: dict[tuple[str, str], _PendingPrediction] = {}
+        # Pending predictions waiting for outcomes. Insertion-ordered
+        # for LRU eviction — non-1X2 markets sit here until Phase 9
+        # adds their realized labels, so we MUST bound the map.
+        self._pending: OrderedDict[tuple[str, str], _PendingPrediction] = OrderedDict()
         # One rolling window per (league_id, market). league_id may be
         # None for unscoped predictions; we treat that as its own
         # bucket rather than collapsing into a single global window.
         self._windows: dict[tuple[str | None, str], _Window] = {}
         # Settled outcomes — guards against redelivered MatchOutcome.
-        self._settled: set[tuple[str, str]] = set()
+        # Insertion-ordered + bounded so a long-running swarm doesn't
+        # leak one entry per ever-settled (match, market) forever.
+        self._settled: OrderedDict[tuple[str, str], None] = OrderedDict()
         # Whether the *current* window for a (league, market) bucket is
         # already in a tripped state. Once tripped, we wait for the
         # window to roll a fresh full set before re-firing — otherwise
@@ -173,9 +236,9 @@ class DriftAgent:
     def mean_brier(self, league_id: str | None, market: str) -> float | None:
         with self._lock:
             w = self._windows.get((league_id, market))
-            if not w or not w.brier:
+            if not w or not w.entries:
                 return None
-            return sum(w.brier) / len(w.brier)
+            return w.mean()
 
     # ── Handlers ───────────────────────────────────────────────
     def _handle_approved(self, msg: Message) -> Iterable[Message]:
@@ -212,6 +275,13 @@ class DriftAgent:
             contributing_models=[str(m) for m in contributing],
         )
         with self._lock:
+            # LRU-evict the oldest pending entry if we're saturated.
+            # This applies pressure to long-tail markets (e.g. non-1X2
+            # predictions that wait on Phase 9 labels) without
+            # affecting the hot path of 1X2 predictions, which clear
+            # quickly via `_handle_outcome`.
+            if len(self._pending) >= self._max_pending:
+                self._pending.popitem(last=False)
             self._pending[(approved.match_id, approved.market)] = record
         return ()
 
@@ -232,29 +302,33 @@ class DriftAgent:
                 if key[0] == outcome.match_id and key[1] == "1x2"
             ]
             for key in keys_to_score:
-                if (key[0], key[1]) in self._settled:
+                if key in self._settled:
                     continue  # idempotent
                 pending = self._pending.pop(key)
-                self._settled.add(key)
+                self._settled[key] = None
+                # LRU-evict the oldest settled key if we're saturated.
+                # This is a memory bound, not a correctness signal —
+                # the Phase 6.3 contract is "a redelivered outcome
+                # within the recent window must not double-score";
+                # an outcome redelivered after `max_settled` newer
+                # settlements is effectively a different match for
+                # our purposes (and the bus's at-least-once window
+                # is far smaller than `max_settled`).
+                if len(self._settled) > self._max_settled:
+                    self._settled.popitem(last=False)
                 brier = _brier_score(pending.market_outcomes, outcome.outcome_1x2)
                 bucket = (pending.league_id, pending.market)
                 w = self._windows.setdefault(bucket, _Window())
-                if len(w.brier) >= self._window_size:
-                    w.brier.popleft()
-                    # `models_in_window` is a coarse approximation —
-                    # we don't reverse-track which model leaves with
-                    # the popped sample. Acceptable for v1; the
-                    # retrain target list is the union of recent
-                    # contributors, which is the conservative pick.
-                w.brier.append(brier)
-                w.models_in_window.update(pending.contributing_models)
+                if len(w.entries) >= self._window_size:
+                    w.popleft()
+                w.append(brier, pending.contributing_models)
 
                 # Trip check: only fire when the window is FULL — a
                 # half-full window's mean is too noisy. Once tripped,
-                # do not re-trip until the window has rolled
-                # `window_size` fresh entries.
-                if len(w.brier) >= self._window_size:
-                    mean_b = sum(w.brier) / len(w.brier)
+                # do not re-trip until the window has recovered
+                # below the floor (debounce — spam protection).
+                if len(w.entries) >= self._window_size:
+                    mean_b = w.mean()
                     if mean_b > self._floor and bucket not in self._tripped:
                         out.extend(
                             self._emit_retrain_requests(
@@ -293,7 +367,7 @@ class DriftAgent:
                 metric="brier",
                 metric_value=metric_value,
                 threshold=self._floor,
-                sample_size=len(window.brier),
+                sample_size=len(window.entries),
                 produced_at=produced_at,
             )
             out.append(

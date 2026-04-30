@@ -146,6 +146,10 @@ class ProofreaderAggregatorAgent:
         self._lock = threading.Lock()
         # Insertion-ordered for LRU eviction.
         self._pending: dict[str, _Pending] = {}
+        # Overflow-eviction events buffered inside the lock; emitted
+        # by the caller after the lock is released so we never publish
+        # while holding `_lock`. Each entry is the evicted `_Pending`.
+        self._overflow_buffer: list[_Pending] = []
 
     # ── Bus contract ───────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -215,9 +219,11 @@ class ProofreaderAggregatorAgent:
                 p.final = final
             # See if quorum is already satisfied (verdicts may have
             # arrived before the candidate).
-            return self._maybe_finalize_locked(
+            finalize_out = self._maybe_finalize_locked(
                 p, trace_id=msg.envelope.trace_id
             )
+            overflow_out = self._drain_overflow_locked(msg.envelope.trace_id)
+        return overflow_out + finalize_out
 
     def _handle_verdict(self, msg: Message) -> Iterable[Message]:
         try:
@@ -266,9 +272,11 @@ class ProofreaderAggregatorAgent:
             # by the same replica overwrites in place — deterministic.
             p.verdicts[verdict.proofreader_id] = verdict
 
-            return self._maybe_finalize_locked(
+            finalize_out = self._maybe_finalize_locked(
                 p, trace_id=msg.envelope.trace_id
             )
+            overflow_out = self._drain_overflow_locked(msg.envelope.trace_id)
+        return overflow_out + finalize_out
 
     # ── Internals ──────────────────────────────────────────────
     def _evict_if_full_locked(self) -> None:
@@ -279,14 +287,38 @@ class ProofreaderAggregatorAgent:
                 "%s: pending overflow — evicted prediction_id=%s",
                 self.name, evict_pid,
             )
-            # We deliberately do not emit a proof.flag from inside the
-            # lock — the caller's return path already carries one if
-            # needed. Tracker note: a future enhancement could buffer
-            # the eviction event and emit it post-unlock; for v1 the
-            # log line is sufficient (proofreader load is strictly
-            # below consensus load, so overflow is essentially never
-            # observed in practice).
-            _ = evicted
+            # Buffer the eviction; the caller drains the buffer
+            # *after* releasing `_lock` so we never publish from
+            # inside it (mirrors the consensus-overflow pattern).
+            self._overflow_buffer.append(evicted)
+
+    def _drain_overflow_locked(self, trace_id: str) -> list[Message]:
+        """Caller MUST hold `_lock` (we mutate `_overflow_buffer`),
+        but the returned messages are emitted by the caller after
+        the lock is released."""
+        if not self._overflow_buffer:
+            return []
+        out: list[Message] = []
+        for evicted in self._overflow_buffer:
+            out.append(
+                Message.new(
+                    PROOF_FLAG,
+                    {
+                        "kind": ProofFlagKind.PROOFREADER_OVERFLOW,
+                        "agent": self.name,
+                        "prediction_id": evicted.prediction_id,
+                        "match_id": evicted.match_id,
+                        "market": evicted.market,
+                        "request_id": evicted.request_id,
+                        "verdict_count": len(evicted.verdicts),
+                        "final_present": evicted.final is not None,
+                    },
+                    producer=self.name,
+                    trace_id=trace_id or "",
+                )
+            )
+        self._overflow_buffer.clear()
+        return out
 
     def _maybe_finalize_locked(
         self, p: _Pending, *, trace_id: str

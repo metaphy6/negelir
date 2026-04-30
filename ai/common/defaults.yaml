@@ -189,6 +189,8 @@ phase6:
   drift_window_size: 50                # NEGELIR_DRIFT_WINDOW_SIZE — rolling Brier/log-loss window
   drift_accuracy_floor: 0.30           # NEGELIR_DRIFT_ACCURACY_FLOOR — trip-on-breach
   drift_pvalue: 0.01                   # NEGELIR_DRIFT_PVALUE — KS-test stationarity threshold
+  drift_max_pending: 100000            # NEGELIR_DRIFT_MAX_PENDING — LRU bound on unsettled predictions
+  drift_max_settled: 100000            # NEGELIR_DRIFT_MAX_SETTLED — LRU bound on settled (match,market) keys
 
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:

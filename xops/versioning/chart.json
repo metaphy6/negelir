@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.2.0",
-    "build": 125,
+    "build": 129,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.2.6",
+      "version": "1.2.7",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-04-30T07:14:45+00:00"
+      "last_changed": "2026-04-30T07:31:43+00:00"
     },
     "server": {
       "version": "1.4.1",
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.10.5",
+      "version": "1.10.6",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-29T09:33:13+00:00"
+      "last_changed": "2026-04-30T07:31:43+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.14.1",
+      "version": "0.14.3",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-30T07:14:45+00:00"
+      "last_changed": "2026-04-30T07:49:28+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1383,6 +1383,42 @@
       "from": "1.4.0",
       "to": "1.4.1",
       "build": 125
+    },
+    {
+      "timestamp": "2026-04-30T07:31:42+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 6 hardening: drift LRU bounds + models_in_window staleness fix + aggregator overflow proof.flag",
+      "from": "0.14.1",
+      "to": "0.14.2",
+      "build": 126
+    },
+    {
+      "timestamp": "2026-04-30T07:31:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 6 hardening: drift_max_pending + drift_max_settled config knobs",
+      "from": "1.2.6",
+      "to": "1.2.7",
+      "build": 127
+    },
+    {
+      "timestamp": "2026-04-30T07:31:43+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Pre-phase6 reports consolidated into single pre-phase6-actions.md",
+      "from": "1.10.5",
+      "to": "1.10.6",
+      "build": 128
+    },
+    {
+      "timestamp": "2026-04-30T07:49:28+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 6 review: O(1) drift _Window via Counter ref-counts; ROADMAP §3.5 catalog now includes 5 Phase 6 topics; cache.v1 subscription pointer corrected to predict.approved.v1; Phase 6 cross-phase alignment + DoD + follow-ups added",
+      "from": "0.14.2",
+      "to": "0.14.3",
+      "build": 129
     }
   ]
 }

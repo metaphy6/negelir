@@ -157,3 +157,7 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-04-30T07:14:45+00:00,5,,in-progress,note,Wave C: gpt5-Codex#7 deleted misleading test_acc dead line in training_pipeline,
 2026-04-30T07:14:45+00:00,5,,in-progress,note,Wave C: gpt5-Codex#6 cross_source_agreement extracted to NEGELIR_TRAINING_CROSS_SOURCE_AGREEMENT_MULTI,
 2026-04-30T07:14:45+00:00,5,,in-progress,note,Wave C: G3 deleted unused MustLoad in server/internal/config,
+2026-04-30T07:31:35+00:00,6,,in-progress,note,drift agent: LRU bound for _settled and _pending; models_in_window now shrinks correctly on popleft (regression tests added),
+2026-04-30T07:31:35+00:00,6,,in-progress,note,proofreader aggregator: overflow eviction now emits proof.flag{kind=proofreader_overflow} (buffered post-unlock),
+2026-04-30T07:31:35+00:00,6,,in-progress,note,docs/reports consolidated to pre-phase6-actions.md (5 exploratory notes deleted),
+2026-04-30T07:49:34+00:00,6,,adapted,note,Phase 6 review (2026-04-30): added Cross-phase alignment + Forward-phase contracts + §6.4 DoD + §6.5 follow-ups; fixed stale topic catalog (5 missing rows); fixed Phase 4.5 cache pointer (predict.final → predict.approved.v1); O(1) drift window via reference-counted Counter (was O(window·models) on every popleft),
