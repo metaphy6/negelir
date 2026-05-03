@@ -139,12 +139,13 @@ def grid_consistency_check(
     """If a `score_grid` is present, its marginals must agree with
     the `market_outcomes` within ``tol`` per outcome.
 
-    `score_grid` is a list of `{home: int, away: int, prob: float}`
-    entries (Phase 5 contract). The 1X2 marginals are:
+    `score_grid` is a 2D matrix ``grid[home][away] = prob`` (Phase 5
+    contract — see ``ai/swarm/agents/predictors/_grid.score_grid``).
+    The 1X2 marginals are:
 
-        H = Σ prob where home > away
-        D = Σ prob where home == away
-        A = Σ prob where home < away
+        H = Σ grid[h][a] where h > a
+        D = Σ grid[h][a] where h == a
+        A = Σ grid[h][a] where h < a
 
     Disagreement is a `reject` — the predictor produced two
     inconsistent views of the same prediction, which is a contract
@@ -163,23 +164,30 @@ def grid_consistency_check(
     # Currently only 1X2 marginals are checked; extend per market as
     # new market types arrive (over/under, BTTS).
     h = d = a = 0.0
-    for entry in grid:
-        if not isinstance(entry, Mapping):
-            return "reject", 1.0, ["consistency: score_grid entry not a dict"]
-        try:
-            home = int(entry["home"])
-            away = int(entry["away"])
-            prob = float(entry["prob"])
-        except (KeyError, TypeError, ValueError):
+    for home_idx, row in enumerate(grid):
+        if not isinstance(row, list):
             return "reject", 1.0, [
-                f"consistency: malformed score_grid entry {entry!r}"
+                "consistency: score_grid row is not a list"
             ]
-        if home > away:
-            h += prob
-        elif home < away:
-            a += prob
-        else:
-            d += prob
+        for away_idx, cell in enumerate(row):
+            try:
+                prob = float(cell)
+            except (TypeError, ValueError):
+                return "reject", 1.0, [
+                    f"consistency: malformed score_grid cell at "
+                    f"[{home_idx}][{away_idx}]={cell!r}"
+                ]
+            if math.isnan(prob) or math.isinf(prob):
+                return "reject", 1.0, [
+                    f"consistency: non-finite score_grid cell at "
+                    f"[{home_idx}][{away_idx}]={prob}"
+                ]
+            if home_idx > away_idx:
+                h += prob
+            elif home_idx < away_idx:
+                a += prob
+            else:
+                d += prob
 
     flags: list[str] = []
     expected = {"H": h, "D": d, "A": a}

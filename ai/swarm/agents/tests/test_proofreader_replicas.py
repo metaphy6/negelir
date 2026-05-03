@@ -133,9 +133,8 @@ def test_consistency_replica_rejects_diverging_marginals() -> None:
     out = list(a.handle(_msg({
         "market_outcomes": {"H": 0.7, "D": 0.2, "A": 0.1},
         "score_grid": [
-            {"home": 1, "away": 0, "prob": 0.3},
-            {"home": 0, "away": 0, "prob": 0.5},
-            {"home": 0, "away": 1, "prob": 0.2},
+            [0.5, 0.2],
+            [0.3, 0.0],
         ],
     })))
     v = ProofreaderVerdict.from_dict(out[0].payload)

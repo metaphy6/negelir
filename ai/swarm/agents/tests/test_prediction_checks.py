@@ -133,16 +133,15 @@ def test_grid_consistency_accepts_when_no_grid() -> None:
 
 
 def test_grid_consistency_accepts_matching_marginals() -> None:
+    # 3×3 score grid; marginals: H=0.50 (1,0)+(2,1), D=0.30 (0,0)+(1,1),
+    # A=0.20 (0,1)+(1,2). Matches market_outcomes exactly.
     v, _, flags = grid_consistency_check(
         {
             "market_outcomes": {"H": 0.5, "D": 0.3, "A": 0.2},
             "score_grid": [
-                {"home": 1, "away": 0, "prob": 0.3},
-                {"home": 2, "away": 1, "prob": 0.2},
-                {"home": 0, "away": 0, "prob": 0.15},
-                {"home": 1, "away": 1, "prob": 0.15},
-                {"home": 0, "away": 1, "prob": 0.1},
-                {"home": 1, "away": 2, "prob": 0.1},
+                [0.15, 0.10, 0.0],
+                [0.30, 0.15, 0.10],
+                [0.0, 0.20, 0.0],
             ],
         },
         tol=0.05,
@@ -152,13 +151,14 @@ def test_grid_consistency_accepts_matching_marginals() -> None:
 
 
 def test_grid_consistency_rejects_when_marginals_diverge() -> None:
+    # 2×2 grid: H=grid[1][0]=0.3, D=grid[0][0]=0.5, A=grid[0][1]=0.2.
+    # Market claims H=0.7, far from the 0.3 marginal.
     v, _, flags = grid_consistency_check(
         {
-            "market_outcomes": {"H": 0.7, "D": 0.2, "A": 0.1},  # claims H=0.7
+            "market_outcomes": {"H": 0.7, "D": 0.2, "A": 0.1},
             "score_grid": [
-                {"home": 1, "away": 0, "prob": 0.3},   # H marginal = 0.3
-                {"home": 0, "away": 0, "prob": 0.5},   # D marginal = 0.5
-                {"home": 0, "away": 1, "prob": 0.2},   # A marginal = 0.2
+                [0.5, 0.2],
+                [0.3, 0.0],
             ],
         },
         tol=0.05,
@@ -171,7 +171,7 @@ def test_grid_consistency_rejects_malformed_grid() -> None:
     v, _, _ = grid_consistency_check(
         {
             "market_outcomes": {"H": 0.5, "D": 0.3, "A": 0.2},
-            "score_grid": [{"home": "one", "away": 0, "prob": 0.5}],
+            "score_grid": [[0.5, "one"]],
         },
         tol=0.05,
     )
@@ -189,6 +189,17 @@ def test_grid_consistency_rejects_non_list_grid() -> None:
     assert v == "reject"
 
 
+def test_grid_consistency_rejects_non_list_row() -> None:
+    v, _, _ = grid_consistency_check(
+        {
+            "market_outcomes": {"H": 0.5, "D": 0.3, "A": 0.2},
+            "score_grid": [{"home": 1, "away": 0, "prob": 0.5}],
+        },
+        tol=0.05,
+    )
+    assert v == "reject"
+
+
 # ── F-7: market key case normalisation ─────────────────────────
 
 
@@ -196,15 +207,15 @@ def test_grid_consistency_normalises_market_outcome_key_case() -> None:
     """Phase-6 audit (F-7): a future predictor that emits lowercase
     market outcome keys (`h`/`d`/`a`) must still trip the consistency
     check, not silently bypass it."""
-    # Marginals from the score_grid are {H:0.7, D:0.0, A:0.3} but
-    # market_outcomes claims {h:0.5, d:0.3, a:0.2} (lowercase keys).
-    # Without normalisation, the dict lookup misses and check accepts.
+    # 2×2 grid: H=grid[1][0]=0.7, A=grid[0][1]=0.3, D=0.0. Market claims
+    # {h:0.5, d:0.3, a:0.2} — without case normalisation the lookup
+    # would miss and the check would falsely accept.
     v, _, flags = grid_consistency_check(
         {
             "market_outcomes": {"h": 0.5, "d": 0.3, "a": 0.2},
             "score_grid": [
-                {"home": 1, "away": 0, "prob": 0.7},
-                {"home": 0, "away": 1, "prob": 0.3},
+                [0.0, 0.3],
+                [0.7, 0.0],
             ],
         },
         tol=0.05,

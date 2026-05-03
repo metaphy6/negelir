@@ -20,7 +20,7 @@
     "prediction_id":       { "type": "string", "minLength": 1 },
     "match_id":            { "type": "string", "minLength": 1 },
     "market":              { "type": "string", "enum": ["1x2", "ah", "ou_2_5", "btts"] },
-    "distribution":        { "type": "object", "description": "{market_outcomes: dict, score_grid?: 2D list|null}." },
+    "distribution":        { "type": "object", "description": "{market_outcomes: dict[outcome -> prob], score_grid?: list[list[float]] | null}. When present, score_grid is a square 2D matrix where score_grid[home][away] = P(home goals = h, away goals = a); element-wise mean of contributing votes' grids." },
     "weights":             { "type": "object", "description": "predictor_id → weight used for fusion." },
     "contributing_models": { "type": "array", "items": { "type": "string" } },
     "calibration_version": { "type": "integer", "minimum": 0 },

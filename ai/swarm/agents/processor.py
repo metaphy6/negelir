@@ -178,7 +178,7 @@ class ProcessorAgentBase:
 
     @staticmethod
     def _stable_id(source: str, source_match_id: str) -> str:
-        # Cross-source resolution lives in Phase 6 QID. For now the
+        # Cross-source resolution lives in Phase 9 QID. For now the
         # stable_id is a deterministic hash so the storage upsert key
         # is stable and idempotent within a single source.
         h = hashlib.sha1(f"{source}:{source_match_id}".encode("utf-8"))

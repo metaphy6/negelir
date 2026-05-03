@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.2.0",
-    "build": 141,
+    "version": "1.2.1",
+    "build": 0,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.2.7",
+      "version": "1.2.8",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-04-30T07:31:43+00:00"
+      "last_changed": "2026-05-02T17:45:07+00:00"
     },
     "server": {
       "version": "1.4.1",
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.10.11",
+      "version": "1.10.12",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-04-30T10:25:36+00:00"
+      "last_changed": "2026-05-02T17:45:07+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1527,6 +1527,33 @@
       "from": "1.10.10",
       "to": "1.10.11",
       "build": 141
+    },
+    {
+      "timestamp": "2026-05-02T17:45:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 6 audit B1 fix: grid_consistency_check now reads the 2D score_grid matrix; matches predictor + consensus output shape",
+      "from": "1.2.7",
+      "to": "1.2.8",
+      "build": 142
+    },
+    {
+      "timestamp": "2026-05-02T17:45:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 4-6 audit N1+N2: stale Phase-6-QID comment fixed; ROADMAP §6.4 aggregator pending bound clarified; score_grid schema descriptions tightened",
+      "from": "1.10.11",
+      "to": "1.10.12",
+      "build": 143
+    },
+    {
+      "timestamp": "2026-05-02T17:45:07+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 6 score_grid contract reconciliation",
+      "from": "1.2.0",
+      "to": "1.2.1",
+      "build": 0
     }
   ]
 }
