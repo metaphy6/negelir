@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 4,
+    "build": 5,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.11.1",
+      "version": "1.12.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-03T12:53:13+00:00"
+      "last_changed": "2026-05-03T13:03:01+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1590,6 +1590,15 @@
       "from": "1.11.0",
       "to": "1.11.1",
       "build": 4
+    },
+    {
+      "timestamp": "2026-05-03T13:03:01+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 7 spec revision: password carve-out, classifier batching, Lua script lifecycle, weighted endpoint cost, qa.request.v1 dedup, quarantine backpressure, maint.event.v1 producer relaxation, open-enum test convention, baseline reset",
+      "from": "1.11.1",
+      "to": "1.12.0",
+      "build": 5
     }
   ]
 }
