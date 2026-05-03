@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.request",
+  "title": "qa.request",
+  "comment": "control-plane: unversioned by design (ROADMAP §3.7). Carries the *raw* user QA payload that the Go gateway escalated to `sec.input.v1` for classifier-tier review. Mutually exclusive with the gateway's direct `qa.request.v1` `pass` path.",
+  "description": "Phase 7 §7.1: raw QA payload escalated by the gateway to sec.input.v1. Mirrors `ai/swarm/agents/payloads.py::QaRequest`.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "raw_text",
+    "ip"
+  ],
+  "properties": {
+    "request_id":  { "type": "string", "minLength": 1 },
+    "raw_text":    { "type": "string", "description": "Raw, post-deterministic-rules-but-pre-classifier user text. Length already capped at `cfg.sec_input_max_len` bytes by the gateway." },
+    "ip":          { "type": "string", "description": "Subject IP / CIDR prefix per §7.3 IPv6 prefix bucketing." },
+    "locale":      { "type": "string", "description": "BCP-47 tag; defaults to 'tr'." },
+    "client_id":   { "type": ["string", "null"], "description": "Post-auth subject id, when JWT was present." },
+    "received_at": { "type": "string", "description": "ISO-8601 UTC; gateway clock." }
+  },
+  "additionalProperties": false
+}

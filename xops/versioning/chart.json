@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 5,
+    "build": 7,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.12.0",
+      "version": "1.12.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-03T13:03:01+00:00"
+      "last_changed": "2026-05-03T14:09:12+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.18.0",
+      "version": "0.19.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-04-30T10:25:28+00:00"
+      "last_changed": "2026-05-03T14:09:12+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1599,6 +1599,24 @@
       "from": "1.11.1",
       "to": "1.12.0",
       "build": 5
+    },
+    {
+      "timestamp": "2026-05-03T14:09:12+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 7 foundation: 5 defense-agent topics + payloads + JSON schemas; sec.alert.v1 open-enum envelope (26 known kinds); 46 sec_* config knobs; migrations 007/008; telemetry watch-list extension",
+      "from": "0.18.0",
+      "to": "0.19.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-05-03T14:09:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 7 catalogue stubs + ROADMAP ticks (sec.alert.v1 schema/known-kinds/open-enum, DoD config-triangle/migrations/Phase12-stubs)",
+      "from": "1.12.0",
+      "to": "1.12.1",
+      "build": 7
     }
   ]
 }

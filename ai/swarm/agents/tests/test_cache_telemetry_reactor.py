@@ -208,6 +208,22 @@ def test_telemetry_watches_phase6_proofreader_drift_topics() -> None:
     assert "match.outcome.v1" in subs
 
 
+def test_telemetry_watches_phase7_defense_topics() -> None:
+    """Phase 7 foundation — the defense-agent wire surface (qa.request,
+    qa.request.v1, sec.alert.v1, sec.quarantine.v1, sec.denylist.v1)
+    must be observable from day-1, before §7.1/§7.2/§7.3 producers turn
+    on. Missing topics here would mean a production rollout of the
+    defense agents silently bypasses the Prometheus page, defeating
+    the whole point of the §7.4 alert envelope."""
+    agent = TelemetryAgent()
+    subs = set(str(t) for t in agent.subscribes)
+    assert "qa.request" in subs
+    assert "qa.request.v1" in subs
+    assert "sec.alert.v1" in subs
+    assert "sec.quarantine.v1" in subs
+    assert "sec.denylist.v1" in subs
+
+
 # ── Reactor base ───────────────────────────────────────────────
 
 

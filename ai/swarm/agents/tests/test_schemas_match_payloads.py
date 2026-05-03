@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from swarm.agents.payloads import (
+    DenylistEvent,
     FreshnessEvent,
     MaintEvent,
     MatchStored,
@@ -22,9 +23,13 @@ from swarm.agents.payloads import (
     PredictRequest,
     PredictVote,
     ProofreaderVerdict,
+    QaRequest,
+    QaRequestV1,
+    QuarantineSample,
     ScrapeClassified,
     ScrapeRaw,
     ScrapeRequest,
+    SecAlert,
     derive_prediction_id,
 )
 
@@ -231,6 +236,74 @@ def _example_maint_event() -> dict:
     ).as_dict()
 
 
+def _example_qa_request() -> dict:
+    # Phase 7 §7.1 control-plane (raw, escalated by gateway).
+    return QaRequest(
+        request_id="qa-1",
+        raw_text="Bugün Galatasaray nasıl oynadı?",
+        ip="203.0.113.10",
+        locale="tr",
+        client_id=None,
+        received_at="2026-04-28T12:00:00+00:00",
+    ).as_dict()
+
+
+def _example_qa_request_v1() -> dict:
+    # Phase 7 §7.1 data-plane (sanitized; sec_verdict ∈ {pass, sanitized}).
+    return QaRequestV1(
+        request_id="qa-1",
+        sanitized_text="Bugün Galatasaray nasıl oynadı?",
+        locale="tr",
+        sec_verdict="pass",
+        sec_steps_run=["nfc", "strip_control"],
+        client_id=None,
+        emitted_at="2026-04-28T12:00:00+00:00",
+    ).as_dict()
+
+
+def _example_sec_alert() -> dict:
+    # Phase 7 §7.4 — known kind from KNOWN_SEC_ALERT_KINDS.
+    return SecAlert(
+        alert_id="alert-1",
+        kind="prompt_injection_block",
+        severity="warn",
+        source="sec.input.v1",
+        reason="Detected prompt-injection pattern in QA payload",
+        produced_at="2026-04-28T12:00:00+00:00",
+        subject="203.0.113.10",
+        request_id="qa-1",
+        client_id=None,
+        ip="203.0.113.10",
+        evidence_ref="0" * 64,
+    ).as_dict()
+
+
+def _example_sec_quarantine() -> dict:
+    return QuarantineSample(
+        quarantine_id="q-1",
+        source="qa",
+        raw_bytes_b64="SGVsbG8sIHdvcmxkIQ==",  # "Hello, world!"
+        verdict="quarantine",
+        reasons=["prompt_injection"],
+        detected_at="2026-04-28T12:00:00+00:00",
+        pii_redacted=False,
+        client_id=None,
+        ip="203.0.113.10",
+        bytes_sha256="a" * 64,
+    ).as_dict()
+
+
+def _example_sec_denylist() -> dict:
+    return DenylistEvent(
+        event_id="evt-1",
+        action="add",
+        subject="203.0.113.10",
+        reason="rate_burst",
+        decided_at="2026-04-28T12:00:00+00:00",
+        ttl_s=3600,
+    ).as_dict()
+
+
 _CASES: list[tuple[str, dict]] = [
     ("scrape.request", _example_scrape_request()),
     ("scrape.raw", _example_scrape_raw()),
@@ -245,6 +318,12 @@ _CASES: list[tuple[str, dict]] = [
     ("predict.proofreader_verdict.v1", _example_proofreader_verdict()),
     ("predict.approved.v1", _example_predict_approved()),
     ("maint.event.v1", _example_maint_event()),
+    # Phase 7 — Defense-agent envelopes (foundation; agents land in §7.1-7.3).
+    ("qa.request", _example_qa_request()),
+    ("qa.request.v1", _example_qa_request_v1()),
+    ("sec.alert.v1", _example_sec_alert()),
+    ("sec.quarantine.v1", _example_sec_quarantine()),
+    ("sec.denylist.v1", _example_sec_denylist()),
 ]
 
 

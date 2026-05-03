@@ -436,6 +436,94 @@ class Config:
     # positives at steady state); raise to 0.05 to react faster.
     drift_pvalue: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DRIFT_PVALUE", "0.01")))
 
+    # ── Phase 7 — Defense agents (sec.input.v1 / sec.scrape.v1 / sec.rate.v1) ──
+    #
+    # Foundation knobs landed here in lockstep with the topic catalog +
+    # JSON schemas; agent logic follows in Phase 7.1 / 7.2 / 7.3.
+    # The §7.7 test_config_sync gate is the contract: every knob below
+    # also appears in `xops/env/.env.example` and `ai/common/defaults.yaml`.
+    #
+    # Doctrine: `sec_input_max_len` is **bytes after UTF-8 encoding**
+    # (NOT codepoints) — the byte count stresses Redis + the
+    # classifier tokenizer (§7.1 length-cap binding). `sec_burst_window_ms`
+    # uses `time.monotonic()`-based math in-process; only the on-the-wire
+    # `produced_at` and Redis denylist TTL stamps stay wall-clock
+    # (§7 monotonic-clock convention from the M2/M4 audit fix).
+    #
+    # The retired knob `sec_scrape_baseline_max_per_source` is INTENTIONALLY
+    # ABSENT — the streaming-statistic baseline (Welford / P² / count-min
+    # sketches) replaces the capped-LRU; `test_no_retired_phase7_knobs`
+    # below asserts the name cannot creep back.
+
+    # sec.input.v1 (§7.1)
+    sec_input_max_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_MAX_LEN", "8192")))
+    sec_input_gateway_max_latency_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_GATEWAY_MAX_LATENCY_MS", "10")))
+    sec_input_classifier_max_latency_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_MAX_LATENCY_MS", "100")))
+    sec_input_classifier_device: str = field(default_factory=lambda: os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_DEVICE", "auto"))
+    sec_input_classifier_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_PATH", ""))
+    sec_input_classifier_batch_enabled: str = field(default_factory=lambda: os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_ENABLED", "auto"))
+    sec_input_classifier_batch_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_SIZE", "8")))
+    sec_input_classifier_batch_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_WINDOW_MS", "20")))
+    sec_input_classifier_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_MAX_PENDING", "256")))
+    sec_input_breaker_open_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_BREAKER_OPEN_S", "30")))
+    sec_input_pattern_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_PATTERN_RELOAD_S", "30")))
+
+    # sec.quarantine.v1 envelope + storage backpressure (§7.1 + §7.5)
+    sec_quarantine_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_QUARANTINE_TTL_DAYS", "30")))
+    sec_quarantine_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES", "65536")))
+    sec_quarantine_producer_queue_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_QUARANTINE_PRODUCER_QUEUE_MAX", "1000")))
+    sec_quarantine_storage_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_QUARANTINE_STORAGE_LAG_ALERT_MS", "5000")))
+
+    # sec.scrape.v1 (§7.2). Streaming-statistic baseline → no per-source
+    # raw-sample cap. SimHash distance threshold is bits-out-of-64.
+    sec_scrape_size_delta_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_SCRAPE_SIZE_DELTA_PCT", "200.0")))
+    sec_scrape_inflate_ratio_max: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_SCRAPE_INFLATE_RATIO_MAX", "50.0")))
+    sec_scrape_warmup_samples: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_WARMUP_SAMPLES", "50")))
+    sec_scrape_baseline_flush_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_BASELINE_FLUSH_S", "300")))
+    sec_scrape_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_MAX_PENDING", "4096")))
+    sec_scrape_simhash_max_distance: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_SIMHASH_MAX_DISTANCE", "12")))
+    sec_scrape_dom_fingerprint_max_nodes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_DOM_FINGERPRINT_MAX_NODES", "5000")))
+
+    # sec.rate.v1 (§7.3). Pre-auth caps protect /v1/auth/* against
+    # credential stuffing; post-auth caps are looser. IPv6 prefix
+    # default is `/64` (typical end-site allocation boundary) so a
+    # single IPv6 allocation cannot spray 2^64 unique buckets.
+    sec_rate_pre_auth_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_PRE_AUTH_CAPACITY", "30")))
+    sec_rate_pre_auth_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_RATE_PRE_AUTH_REFILL_PER_S", "0.5")))
+    sec_rate_post_auth_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_POST_AUTH_CAPACITY", "600")))
+    sec_rate_post_auth_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_RATE_POST_AUTH_REFILL_PER_S", "5.0")))
+    sec_rate_bucket_idle_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_BUCKET_IDLE_TTL_S", "3600")))
+    sec_rate_max_subjects: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_MAX_SUBJECTS", "100000")))
+    sec_rate_ipv4_prefix: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_IPV4_PREFIX", "32")))
+    sec_rate_ipv6_prefix: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_IPV6_PREFIX", "64")))
+    sec_rate_trusted_proxies: str = field(default_factory=lambda: os.getenv("NEGELIR_SEC_RATE_TRUSTED_PROXIES", ""))
+    sec_rate_redis_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_REDIS_TIMEOUT_MS", "50")))
+    sec_rate_secondary_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_SECONDARY_CAPACITY", "300")))
+    sec_rate_secondary_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_RATE_SECONDARY_REFILL_PER_S", "5.0")))
+    sec_rate_default_cost: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_DEFAULT_COST", "1")))
+    sec_rate_eviction_rate_alert_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_RATE_EVICTION_RATE_ALERT_PER_S", "50.0")))
+    sec_rate_eviction_rate_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_RATE_EVICTION_RATE_WINDOW_S", "60")))
+
+    # Sliding-window burst detector (§7.3) — `sec.rate.v1`'s anomaly
+    # path. `sec_burst_window_ms` is monotonic-clock-based.
+    sec_burst_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_BURST_THRESHOLD", "100")))
+    sec_burst_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_BURST_WINDOW_MS", "60000")))
+    sec_burst_dedup_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_BURST_DEDUP_WINDOW", "10000")))
+
+    # Denylist (Redis hash, sole writer = sec.rate.v1) — §7.3.
+    sec_denylist_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_DENYLIST_TTL_S", "3600")))
+    sec_denylist_escalation_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SEC_DENYLIST_ESCALATION_FACTOR", "2.0")))
+    sec_denylist_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_DENYLIST_MAX_ENTRIES", "250000")))
+
+    # sec.alert.v1 envelope (§7.4) — generalized debounce.
+    sec_alert_debounce_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_ALERT_DEBOUNCE_TTL_S", "60")))
+    sec_alert_critical_debounce_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SEC_ALERT_CRITICAL_DEBOUNCE_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+
+    # qa.request.v1 — NLP-side dedup window (§7.5 binding).
+    qa_request_v1_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S", "300")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -666,6 +754,69 @@ class Config:
         # Phase 6.3 — drift agent (Brier *ceiling* — see field docstring)
         _bounded("drift_brier_ceiling", self.drift_brier_ceiling, 0.0, 1.0)
         _bounded("drift_pvalue", self.drift_pvalue, 0.0, 1.0)
+
+        # ── Phase 7 — Defense-agent knob validation ───────────────
+        # Bytes (not codepoints) — see `sec_input_max_len` docstring.
+        _bounded("sec_input_max_len", self.sec_input_max_len, 1, 1_048_576)
+        _bounded("sec_input_gateway_max_latency_ms", self.sec_input_gateway_max_latency_ms, 1, 60_000)
+        _bounded("sec_input_classifier_max_latency_ms", self.sec_input_classifier_max_latency_ms, 1, 60_000)
+        _bounded("sec_input_classifier_batch_size", self.sec_input_classifier_batch_size, 1, 1024)
+        _bounded("sec_input_classifier_batch_window_ms", self.sec_input_classifier_batch_window_ms, 1, 60_000)
+        _bounded("sec_input_classifier_max_pending", self.sec_input_classifier_max_pending, 1, 1_000_000)
+        _bounded("sec_input_breaker_open_s", self.sec_input_breaker_open_s, 1, 86_400)
+        _bounded("sec_input_pattern_reload_s", self.sec_input_pattern_reload_s, 1, 86_400)
+        _SEC_DEVICES = {"auto", "cpu", "cuda", "rocm", "npu"}
+        if self.sec_input_classifier_device not in _SEC_DEVICES:
+            issues.append(
+                f"sec_input_classifier_device={self.sec_input_classifier_device!r} "
+                f"must be one of {sorted(_SEC_DEVICES)}"
+            )
+        _SEC_BATCH = {"auto", "true", "false"}
+        if self.sec_input_classifier_batch_enabled not in _SEC_BATCH:
+            issues.append(
+                f"sec_input_classifier_batch_enabled="
+                f"{self.sec_input_classifier_batch_enabled!r} must be one of "
+                f"{sorted(_SEC_BATCH)}"
+            )
+        _bounded("sec_quarantine_ttl_days", self.sec_quarantine_ttl_days, 1, 3650)
+        _bounded("sec_quarantine_payload_max_bytes", self.sec_quarantine_payload_max_bytes, 1, 16 * 1024 * 1024)
+        _bounded("sec_quarantine_producer_queue_max", self.sec_quarantine_producer_queue_max, 1, 1_000_000)
+        _bounded("sec_quarantine_storage_lag_alert_ms", self.sec_quarantine_storage_lag_alert_ms, 1, 86_400_000)
+
+        _bounded("sec_scrape_size_delta_pct", self.sec_scrape_size_delta_pct, 0.0, 100_000.0)
+        _bounded("sec_scrape_inflate_ratio_max", self.sec_scrape_inflate_ratio_max, 1.0, 10_000.0)
+        _bounded("sec_scrape_warmup_samples", self.sec_scrape_warmup_samples, 0, 100_000)
+        _bounded("sec_scrape_baseline_flush_s", self.sec_scrape_baseline_flush_s, 1, 86_400)
+        _bounded("sec_scrape_max_pending", self.sec_scrape_max_pending, 1, 10_000_000)
+        # SimHash distance is bits-out-of-64; >= 32 is essentially "always trip".
+        _bounded("sec_scrape_simhash_max_distance", self.sec_scrape_simhash_max_distance, 0, 64)
+        _bounded("sec_scrape_dom_fingerprint_max_nodes", self.sec_scrape_dom_fingerprint_max_nodes, 1, 1_000_000)
+
+        _bounded("sec_rate_pre_auth_capacity", self.sec_rate_pre_auth_capacity, 1, 1_000_000)
+        _bounded("sec_rate_pre_auth_refill_per_s", self.sec_rate_pre_auth_refill_per_s, 0.0, 1e6)
+        _bounded("sec_rate_post_auth_capacity", self.sec_rate_post_auth_capacity, 1, 10_000_000)
+        _bounded("sec_rate_post_auth_refill_per_s", self.sec_rate_post_auth_refill_per_s, 0.0, 1e6)
+        _bounded("sec_rate_bucket_idle_ttl_s", self.sec_rate_bucket_idle_ttl_s, 1, 86_400 * 30)
+        _bounded("sec_rate_max_subjects", self.sec_rate_max_subjects, 1, 100_000_000)
+        _bounded("sec_rate_ipv4_prefix", self.sec_rate_ipv4_prefix, 0, 32)
+        _bounded("sec_rate_ipv6_prefix", self.sec_rate_ipv6_prefix, 0, 128)
+        _bounded("sec_rate_redis_timeout_ms", self.sec_rate_redis_timeout_ms, 1, 60_000)
+        _bounded("sec_rate_secondary_capacity", self.sec_rate_secondary_capacity, 1, 10_000_000)
+        _bounded("sec_rate_secondary_refill_per_s", self.sec_rate_secondary_refill_per_s, 0.0, 1e6)
+        _bounded("sec_rate_default_cost", self.sec_rate_default_cost, 0, 1_000_000)
+        _bounded("sec_rate_eviction_rate_alert_per_s", self.sec_rate_eviction_rate_alert_per_s, 0.0, 1e9)
+        _bounded("sec_rate_eviction_rate_window_s", self.sec_rate_eviction_rate_window_s, 1, 86_400)
+
+        _bounded("sec_burst_threshold", self.sec_burst_threshold, 1, 100_000_000)
+        _bounded("sec_burst_window_ms", self.sec_burst_window_ms, 1, 86_400_000)
+        _bounded("sec_burst_dedup_window", self.sec_burst_dedup_window, 1, 10_000_000)
+
+        _bounded("sec_denylist_ttl_s", self.sec_denylist_ttl_s, 1, 86_400 * 30)
+        _bounded("sec_denylist_escalation_factor", self.sec_denylist_escalation_factor, 1.0, 1e6)
+        _bounded("sec_denylist_max_entries", self.sec_denylist_max_entries, 1, 100_000_000)
+
+        _bounded("sec_alert_debounce_ttl_s", self.sec_alert_debounce_ttl_s, 0, 86_400)
+        _bounded("qa_request_v1_dedup_window_s", self.qa_request_v1_dedup_window_s, 1, 86_400)
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

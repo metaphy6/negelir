@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.quarantine.v1",
+  "title": "sec.quarantine.v1",
+  "description": "Phase 7 §7.1/§7.2: forensic capture of a payload the defense pipeline rejected. `storage.v1` is the SOLE consumer (persists to `quarantine_samples`, migration 007). `raw_bytes_b64` is base64 of the raw payload bytes capped at `cfg.sec_quarantine_payload_max_bytes` BEFORE encoding. `pii_redacted=true` indicates the producer already stripped a sensitive field (e.g. the auth password buffer per §7.1). Mirrors `ai/swarm/agents/payloads.py::QuarantineSample`.",
+  "type": "object",
+  "required": [
+    "quarantine_id",
+    "source",
+    "raw_bytes_b64",
+    "verdict",
+    "reasons",
+    "detected_at"
+  ],
+  "properties": {
+    "quarantine_id": { "type": "string", "minLength": 1 },
+    "source":        { "type": "string", "enum": ["qa", "scrape"] },
+    "raw_bytes_b64": { "type": "string", "description": "Base64-encoded raw payload (post-cap, pre-encode)." },
+    "verdict":       { "type": "string", "enum": ["quarantine"] },
+    "reasons":       { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "detected_at":   { "type": "string", "description": "ISO-8601 UTC." },
+    "pii_redacted":  { "type": "boolean", "description": "Producer already stripped a known sensitive field (auth `password` etc.)." },
+    "client_id":     { "type": ["string", "null"] },
+    "ip":            { "type": ["string", "null"] },
+    "bytes_sha256":  { "type": "string", "description": "sha256 hex of the raw payload bytes (matches `sec.alert.v1.evidence_ref`)." }
+  },
+  "additionalProperties": false
+}

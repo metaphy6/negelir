@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.denylist.v1",
+  "title": "sec.denylist.v1",
+  "description": "Phase 7 §7.3: denylist mutation event. `sec.rate.v1` is the SOLE producer; API gateway cache + telemetry consume so dashboards stay in sync without polling Redis. `subject` is opaque (`client_id` post-auth, IP/CIDR pre-auth or in §7.3 cap-mode). Mirrors `ai/swarm/agents/payloads.py::DenylistEvent`.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "action",
+    "subject",
+    "reason",
+    "decided_at"
+  ],
+  "properties": {
+    "event_id":   { "type": "string", "minLength": 1 },
+    "action":     { "type": "string", "enum": ["add", "remove"] },
+    "subject":    { "type": "string", "minLength": 1 },
+    "reason":     { "type": "string", "description": "Free-form (e.g. 'rate_burst', 'manual_override', 'cap_mode_subnet')." },
+    "ttl_s":      { "type": "integer", "minimum": 0, "description": "Redis hash TTL for `add`; 0 for `remove`." },
+    "decided_at": { "type": "string", "description": "ISO-8601 UTC." }
+  },
+  "additionalProperties": false
+}

@@ -34,9 +34,14 @@ from .topics import (
     PREDICT_VOTE,
     PROOF_FLAG,
     PROOFREADER_VERDICT,
+    QA_REQUEST,
+    QA_REQUEST_V1,
     SCRAPE_CLASSIFIED,
     SCRAPE_RAW,
     SCRAPE_REQUEST,
+    SEC_ALERT,
+    SEC_DENYLIST,
+    SEC_QUARANTINE,
     TELEMETRY,
 )
 
@@ -69,6 +74,20 @@ _WATCHED_TOPICS = (
     PROOFREADER_VERDICT,
     MAINT_EVENT,
     MATCH_OUTCOME,
+    # Phase 7 — Defense-agent envelopes (foundation; agent logic lands
+    # in §7.1-7.3). Telemetry watches the wire surface from day-1 so
+    # the Prometheus page sees the topic counters even before the
+    # producers turn on. `qa.request` is the unversioned control-plane
+    # raw escalation (§7.5 binding); `qa.request.v1` is the data-plane
+    # sanitized envelope. `sec.alert.v1` carries the open-enum `kind`
+    # — telemetry counts by topic only (cardinality bound), the
+    # `kind` dimension is exposed via dedicated counters in the
+    # security dashboard, never as a metric label here.
+    QA_REQUEST,
+    QA_REQUEST_V1,
+    SEC_ALERT,
+    SEC_QUARANTINE,
+    SEC_DENYLIST,
 )
 
 

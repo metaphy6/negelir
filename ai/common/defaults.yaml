@@ -200,6 +200,67 @@ phase6:
   drift_max_pending: 100000            # NEGELIR_DRIFT_MAX_PENDING — LRU bound on unsettled predictions
   drift_max_settled: 100000            # NEGELIR_DRIFT_MAX_SETTLED — LRU bound on settled (match,market) keys
 
+# ── Phase 7 — Defense agents (sec.input.v1 / sec.scrape.v1 / sec.rate.v1) ────
+# Foundation block: topics, payloads, JSON schemas, and config knobs land
+# together. Agent logic ships in §7.1 / §7.2 / §7.3. The
+# `test_python_defaults_match_env_example` gate enforces every default below
+# matches `xops/env/.env.example` byte-for-byte.
+phase7:
+  # sec.input.v1 (§7.1) — bytes after UTF-8 encoding (NOT codepoints).
+  sec_input_max_len: 8192                          # NEGELIR_SEC_INPUT_MAX_LEN
+  sec_input_gateway_max_latency_ms: 10             # NEGELIR_SEC_INPUT_GATEWAY_MAX_LATENCY_MS
+  sec_input_classifier_max_latency_ms: 100         # NEGELIR_SEC_INPUT_CLASSIFIER_MAX_LATENCY_MS
+  sec_input_classifier_device: auto                # NEGELIR_SEC_INPUT_CLASSIFIER_DEVICE  (auto|cpu|cuda|rocm|npu)
+  sec_input_classifier_path: ""                   # NEGELIR_SEC_INPUT_CLASSIFIER_PATH    (empty = no classifier loaded yet)
+  sec_input_classifier_batch_enabled: auto         # NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_ENABLED  (auto|true|false)
+  sec_input_classifier_batch_size: 8               # NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_SIZE
+  sec_input_classifier_batch_window_ms: 20         # NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_WINDOW_MS
+  sec_input_classifier_max_pending: 256            # NEGELIR_SEC_INPUT_CLASSIFIER_MAX_PENDING
+  sec_input_breaker_open_s: 30                     # NEGELIR_SEC_INPUT_BREAKER_OPEN_S
+  sec_input_pattern_reload_s: 30                   # NEGELIR_SEC_INPUT_PATTERN_RELOAD_S
+  # sec.quarantine.v1 + storage backpressure (§7.1 + §7.5)
+  sec_quarantine_ttl_days: 30                      # NEGELIR_SEC_QUARANTINE_TTL_DAYS
+  sec_quarantine_payload_max_bytes: 65536          # NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES — pre-base64 cap
+  sec_quarantine_producer_queue_max: 1000          # NEGELIR_SEC_QUARANTINE_PRODUCER_QUEUE_MAX
+  sec_quarantine_storage_lag_alert_ms: 5000        # NEGELIR_SEC_QUARANTINE_STORAGE_LAG_ALERT_MS
+  # sec.scrape.v1 (§7.2). Streaming-statistic baseline → no per-source raw cap.
+  sec_scrape_size_delta_pct: 200.0                 # NEGELIR_SEC_SCRAPE_SIZE_DELTA_PCT
+  sec_scrape_inflate_ratio_max: 50.0               # NEGELIR_SEC_SCRAPE_INFLATE_RATIO_MAX
+  sec_scrape_warmup_samples: 50                    # NEGELIR_SEC_SCRAPE_WARMUP_SAMPLES
+  sec_scrape_baseline_flush_s: 300                 # NEGELIR_SEC_SCRAPE_BASELINE_FLUSH_S
+  sec_scrape_max_pending: 4096                     # NEGELIR_SEC_SCRAPE_MAX_PENDING
+  sec_scrape_simhash_max_distance: 12              # NEGELIR_SEC_SCRAPE_SIMHASH_MAX_DISTANCE — bits-out-of-64
+  sec_scrape_dom_fingerprint_max_nodes: 5000       # NEGELIR_SEC_SCRAPE_DOM_FINGERPRINT_MAX_NODES
+  # sec.rate.v1 (§7.3). IPv6 prefix /64 = end-site allocation boundary.
+  sec_rate_pre_auth_capacity: 30                   # NEGELIR_SEC_RATE_PRE_AUTH_CAPACITY
+  sec_rate_pre_auth_refill_per_s: 0.5              # NEGELIR_SEC_RATE_PRE_AUTH_REFILL_PER_S
+  sec_rate_post_auth_capacity: 600                 # NEGELIR_SEC_RATE_POST_AUTH_CAPACITY
+  sec_rate_post_auth_refill_per_s: 5.0             # NEGELIR_SEC_RATE_POST_AUTH_REFILL_PER_S
+  sec_rate_bucket_idle_ttl_s: 3600                 # NEGELIR_SEC_RATE_BUCKET_IDLE_TTL_S
+  sec_rate_max_subjects: 100000                    # NEGELIR_SEC_RATE_MAX_SUBJECTS
+  sec_rate_ipv4_prefix: 32                         # NEGELIR_SEC_RATE_IPV4_PREFIX
+  sec_rate_ipv6_prefix: 64                         # NEGELIR_SEC_RATE_IPV6_PREFIX
+  sec_rate_trusted_proxies: ""                    # NEGELIR_SEC_RATE_TRUSTED_PROXIES — comma-separated CIDRs
+  sec_rate_redis_timeout_ms: 50                    # NEGELIR_SEC_RATE_REDIS_TIMEOUT_MS
+  sec_rate_secondary_capacity: 300                 # NEGELIR_SEC_RATE_SECONDARY_CAPACITY
+  sec_rate_secondary_refill_per_s: 5.0             # NEGELIR_SEC_RATE_SECONDARY_REFILL_PER_S
+  sec_rate_default_cost: 1                         # NEGELIR_SEC_RATE_DEFAULT_COST
+  sec_rate_eviction_rate_alert_per_s: 50.0         # NEGELIR_SEC_RATE_EVICTION_RATE_ALERT_PER_S
+  sec_rate_eviction_rate_window_s: 60              # NEGELIR_SEC_RATE_EVICTION_RATE_WINDOW_S
+  # Sliding-window burst detector (§7.3) — monotonic-clock-based.
+  sec_burst_threshold: 100                         # NEGELIR_SEC_BURST_THRESHOLD
+  sec_burst_window_ms: 60000                       # NEGELIR_SEC_BURST_WINDOW_MS
+  sec_burst_dedup_window: 10000                    # NEGELIR_SEC_BURST_DEDUP_WINDOW
+  # Denylist (Redis hash; sole writer = sec.rate.v1) — §7.3.
+  sec_denylist_ttl_s: 3600                         # NEGELIR_SEC_DENYLIST_TTL_S
+  sec_denylist_escalation_factor: 2.0              # NEGELIR_SEC_DENYLIST_ESCALATION_FACTOR
+  sec_denylist_max_entries: 250000                 # NEGELIR_SEC_DENYLIST_MAX_ENTRIES
+  # sec.alert.v1 envelope (§7.4) — generalized debounce.
+  sec_alert_debounce_ttl_s: 60                     # NEGELIR_SEC_ALERT_DEBOUNCE_TTL_S
+  sec_alert_critical_debounce_enabled: false       # NEGELIR_SEC_ALERT_CRITICAL_DEBOUNCE_ENABLED
+  # qa.request.v1 — NLP-side dedup window (§7.5 binding).
+  qa_request_v1_dedup_window_s: 300                # NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR

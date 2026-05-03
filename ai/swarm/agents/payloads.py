@@ -952,3 +952,318 @@ class MaintEvent:
             sample_size=int(data.get("sample_size", 0)),
             produced_at=str(data.get("produced_at", "")),
         )
+
+
+# ── Phase 7 — Defense agents (sec.input.v1 / sec.scrape.v1 / sec.rate.v1) ──
+#
+# Five new wire envelopes land with Phase 7 (foundation; agent logic
+# follows in 7.1/7.2/7.3). The dataclasses below match the JSON
+# Schemas in `ai/swarm/sdk/schemas/{qa.request,qa.request.v1,
+# sec.alert.v1,sec.quarantine.v1,sec.denylist.v1}.json`. The schema
+# files are the wire contract; these classes are the in-process view.
+#
+# Three vocabularies are pinned here:
+#   * `_ALLOWED_QA_VERDICTS` — closed, by §7.1: pass/sanitized.
+#   * `_ALLOWED_SEC_SOURCES` — closed, the three sec agents.
+#   * `_ALLOWED_SEC_SEVERITIES` — closed, the §7.4 ladder.
+#
+# `SecAlert.kind` follows the **open-enum** pattern (§7.4): producers
+# emit only known kinds (a contract test enumerates emission sites);
+# consumers accept unknown kinds and route by `severity`. The
+# v1 known-kinds set lives in `KNOWN_SEC_ALERT_KINDS` for the
+# producer-side test to import.
+
+
+_ALLOWED_QA_VERDICTS: frozenset[str] = frozenset({"pass", "sanitized"})
+_ALLOWED_SEC_SOURCES: frozenset[str] = frozenset({
+    "sec.input.v1", "sec.scrape.v1", "sec.rate.v1",
+})
+_ALLOWED_SEC_SEVERITIES: frozenset[str] = frozenset({
+    "info", "warn", "error", "critical",
+})
+_ALLOWED_QUARANTINE_SOURCES: frozenset[str] = frozenset({"qa", "scrape"})
+_ALLOWED_DENYLIST_ACTIONS: frozenset[str] = frozenset({"add", "remove"})
+
+
+# Phase 7 §7.4 known-kinds set (v1). Producers MUST emit only kinds
+# from this set; consumers MUST tolerate unknown kinds per the
+# open-enum pattern (`docs/planning/ROADMAP.md` §7.4). Adding a kind
+# is a minor bump on the `swarm` component and a tracker row.
+KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
+    # sec.input.v1 (§7.1)
+    "prompt_injection",
+    "payload_oversize",
+    "charset_anomaly",
+    "language_spoof",
+    "homoglyph_attack",
+    "classifier_degraded",
+    "classifier_load_shed",
+    "pattern_reload",
+    "quarantine_overflow",          # producer-side queue overflow (§7.5 backpressure)
+    "quarantine_storage_slow",      # consumer-side lag (§7.5 backpressure)
+    # sec.scrape.v1 (§7.2)
+    "dom_size_delta",
+    "suspicious_js",
+    "encoded_redirect",
+    "content_type_mismatch",
+    "inflate_ratio_outlier",
+    "seed_drift",
+    "baseline_warmup",
+    "baseline_reset",
+    # sec.rate.v1 (§7.3)
+    "rate_burst",
+    "rate_throttled",
+    "rate_redis_degraded",
+    "rate_script_reloaded",
+    "denylist_added",
+    "denylist_removed",
+    "denylist_growth_anomaly",
+    "subject_map_churn",
+})
+
+
+@dataclass(frozen=True)
+class QaRequest:
+    """`qa.request` payload — control-plane (unversioned by design,
+    ROADMAP §3.7). Carries the *raw* user QA payload that the gateway
+    flagged for `sec.input.v1` escalation. Mutually exclusive with
+    the gateway's direct `qa.request.v1` `pass` path.
+    """
+
+    request_id: str
+    raw_text: str
+    ip: str
+    locale: str = "tr"
+    client_id: str | None = None
+    received_at: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "QaRequest":
+        return cls(
+            request_id=str(data["request_id"]),
+            raw_text=str(data["raw_text"]),
+            ip=str(data["ip"]),
+            locale=str(data.get("locale", "tr")),
+            client_id=data.get("client_id"),
+            received_at=str(data.get("received_at", "")),
+        )
+
+
+@dataclass(frozen=True)
+class QaRequestV1:
+    """`qa.request.v1` payload — data-plane (versioned). Sanitized
+    QA text the Phase 10 NLP layer subscribes to. Producer is one of
+    {gateway-pass, sec.input.v1-pass} per `request_id`; NLP must
+    dedup on `request_id` (§7.5 binding).
+    """
+
+    request_id: str
+    sanitized_text: str
+    locale: str
+    sec_verdict: str
+    sec_steps_run: list[str] = field(default_factory=list)
+    client_id: str | None = None
+    emitted_at: str = ""
+
+    def __post_init__(self) -> None:
+        if self.sec_verdict not in _ALLOWED_QA_VERDICTS:
+            raise ValueError(
+                f"QaRequestV1.sec_verdict={self.sec_verdict!r} not in "
+                f"{sorted(_ALLOWED_QA_VERDICTS)}"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "QaRequestV1":
+        return cls(
+            request_id=str(data["request_id"]),
+            sanitized_text=str(data["sanitized_text"]),
+            locale=str(data["locale"]),
+            sec_verdict=str(data["sec_verdict"]),
+            sec_steps_run=[str(s) for s in (data.get("sec_steps_run") or [])],
+            client_id=data.get("client_id"),
+            emitted_at=str(data.get("emitted_at", "")),
+        )
+
+
+@dataclass(frozen=True)
+class SecAlert:
+    """`sec.alert.v1` payload — defense-agent observability envelope.
+
+    `kind` is an **open enum** (ROADMAP §7.4): producers emit only
+    `KNOWN_SEC_ALERT_KINDS`; consumers tolerate unknown kinds and
+    route by `severity`. `evidence_ref` is a content-addressed
+    pointer (sha256) into `sec.quarantine.v1` payloads — never
+    inline the offending bytes (cardinality + log-injection guard).
+    """
+
+    alert_id: str
+    kind: str
+    severity: str
+    source: str
+    reason: str
+    produced_at: str
+    subject: str | None = None
+    request_id: str | None = None
+    client_id: str | None = None
+    ip: str | None = None
+    evidence_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.severity not in _ALLOWED_SEC_SEVERITIES:
+            raise ValueError(
+                f"SecAlert.severity={self.severity!r} not in "
+                f"{sorted(_ALLOWED_SEC_SEVERITIES)}"
+            )
+        if self.source not in _ALLOWED_SEC_SOURCES:
+            raise ValueError(
+                f"SecAlert.source={self.source!r} not in "
+                f"{sorted(_ALLOWED_SEC_SOURCES)}"
+            )
+        if not self.kind or not isinstance(self.kind, str):
+            raise ValueError("SecAlert.kind must be a non-empty string")
+        # Open-enum: do not validate against KNOWN_SEC_ALERT_KINDS at
+        # the dataclass boundary — producer-side AST scan in
+        # `test_open_enum_producers_emit_only_known_kinds` enforces
+        # the producer side; consumers accept anything matching the
+        # `^[a-z][a-z0-9_]{0,63}$` shape so future kinds round-trip.
+        if not _OPEN_ENUM_KIND_RE.match(self.kind):
+            raise ValueError(
+                f"SecAlert.kind={self.kind!r} fails open-enum shape "
+                f"(/^[a-z][a-z0-9_]{{0,63}}$/)"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SecAlert":
+        return cls(
+            alert_id=str(data["alert_id"]),
+            kind=str(data["kind"]),
+            severity=str(data["severity"]),
+            source=str(data["source"]),
+            reason=str(data["reason"]),
+            produced_at=str(data["produced_at"]),
+            subject=data.get("subject"),
+            request_id=data.get("request_id"),
+            client_id=data.get("client_id"),
+            ip=data.get("ip"),
+            evidence_ref=data.get("evidence_ref"),
+        )
+
+
+# Open-enum kind shape (ROADMAP §7.4): lowercase letter-led, ≤ 64
+# chars, [a-z0-9_] only. Reused by every open-enum field this
+# package adds (SecAlert.kind today; MaintEvent.kind in Phase 7.3).
+import re as _re  # noqa: E402  (module-level constant only; kept local)
+_OPEN_ENUM_KIND_RE = _re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+@dataclass(frozen=True)
+class QuarantineSample:
+    """`sec.quarantine.v1` payload — forensic capture of a payload
+    that the defense pipeline rejected.
+
+    `raw_bytes_b64` is base64 of the **raw** payload bytes capped at
+    `cfg.sec_quarantine_payload_max_bytes` BEFORE encoding (wire size
+    ≈ ⌈4N/3⌉). `pii_redacted=True` indicates the producer already
+    stripped a known sensitive field (e.g. the auth `password`
+    buffer per §7.1 password-bypass binding).
+    """
+
+    quarantine_id: str
+    source: str
+    raw_bytes_b64: str
+    verdict: str
+    reasons: list[str]
+    detected_at: str
+    pii_redacted: bool = False
+    client_id: str | None = None
+    ip: str | None = None
+    bytes_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if self.source not in _ALLOWED_QUARANTINE_SOURCES:
+            raise ValueError(
+                f"QuarantineSample.source={self.source!r} not in "
+                f"{sorted(_ALLOWED_QUARANTINE_SOURCES)}"
+            )
+        if self.verdict != "quarantine":
+            raise ValueError(
+                "QuarantineSample.verdict must be 'quarantine' (the only "
+                "outcome that produces this envelope)"
+            )
+        if not self.reasons:
+            raise ValueError(
+                "QuarantineSample.reasons must contain at least one entry"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "QuarantineSample":
+        return cls(
+            quarantine_id=str(data["quarantine_id"]),
+            source=str(data["source"]),
+            raw_bytes_b64=str(data["raw_bytes_b64"]),
+            verdict=str(data["verdict"]),
+            reasons=[str(r) for r in (data.get("reasons") or [])],
+            detected_at=str(data["detected_at"]),
+            pii_redacted=bool(data.get("pii_redacted", False)),
+            client_id=data.get("client_id"),
+            ip=data.get("ip"),
+            bytes_sha256=str(data.get("bytes_sha256", "")),
+        )
+
+
+@dataclass(frozen=True)
+class DenylistEvent:
+    """`sec.denylist.v1` payload — `sec.rate.v1` is the SOLE producer.
+
+    Lets dashboards / gateway caches stay in sync without polling
+    Redis. `action ∈ {add, remove}`; `ttl_s` is meaningful only for
+    `add` (Redis hash TTL). `subject` is an opaque identifier
+    (`client_id` for post-auth, `ip` or CIDR prefix for pre-auth /
+    cap-mode subnets per §7.3).
+    """
+
+    event_id: str
+    action: str
+    subject: str
+    reason: str
+    decided_at: str
+    ttl_s: int = 0
+
+    def __post_init__(self) -> None:
+        if self.action not in _ALLOWED_DENYLIST_ACTIONS:
+            raise ValueError(
+                f"DenylistEvent.action={self.action!r} not in "
+                f"{sorted(_ALLOWED_DENYLIST_ACTIONS)}"
+            )
+        if not self.subject:
+            raise ValueError("DenylistEvent.subject must be non-empty")
+        if self.action == "add" and self.ttl_s <= 0:
+            raise ValueError(
+                f"DenylistEvent(action=add).ttl_s must be > 0; got {self.ttl_s}"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DenylistEvent":
+        return cls(
+            event_id=str(data["event_id"]),
+            action=str(data["action"]),
+            subject=str(data["subject"]),
+            reason=str(data["reason"]),
+            decided_at=str(data["decided_at"]),
+            ttl_s=int(data.get("ttl_s", 0)),
+        )

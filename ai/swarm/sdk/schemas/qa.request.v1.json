@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.request.v1",
+  "title": "qa.request.v1",
+  "description": "Phase 7 §7.1: sanitized QA text consumed by the Phase 10 NLP layer. Two producers (Go gateway on `pass`; sec.input.v1 on post-classifier `pass`) are mutually exclusive per `request_id` (ROADMAP §7.5 binding); NLP must dedup on `request_id` over `cfg.qa_request_v1_dedup_window_s`. Mirrors `ai/swarm/agents/payloads.py::QaRequestV1`.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "sanitized_text",
+    "locale",
+    "sec_verdict",
+    "emitted_at"
+  ],
+  "properties": {
+    "request_id":     { "type": "string", "minLength": 1 },
+    "sanitized_text": { "type": "string", "description": "Post-NFC, post-control-strip text. Original raw bytes are NOT carried here; quarantine forensics live on `sec.quarantine.v1`." },
+    "locale":         { "type": "string" },
+    "sec_verdict":    { "type": "string", "enum": ["pass", "sanitized"], "description": "`pass` = no transform; `sanitized` = deterministic transform applied (NFC, strip control / zero-width / RTL, optional homoglyph fold)." },
+    "sec_steps_run":  { "type": "array", "items": { "type": "string" }, "description": "Ordered audit trail of which deterministic / classifier steps fired." },
+    "client_id":      { "type": ["string", "null"] },
+    "emitted_at":     { "type": "string", "description": "ISO-8601 UTC." }
+  },
+  "additionalProperties": false
+}

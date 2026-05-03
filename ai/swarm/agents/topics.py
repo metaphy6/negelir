@@ -66,11 +66,52 @@ MODEL_TRAINED = Topic("models.events.v1")
 # Phase 6.3 — maintenance event stream (drift agent → trainer / ops).
 # Carries kinds like `retrain_request` (drift tripped on a predictor's
 # Brier or input KS-test). The trainer subscribes here to schedule a
-# retrain; ops dashboards subscribe for the alert. Producer is the
-# drift agent in v1; future maintenance agents (e.g. recalibration
-# requests, fixture-cache TTL bumps) reuse the same topic with a
-# different `kind`.
+# retrain; ops dashboards subscribe for the alert. Producer was the
+# drift agent in Phase 6; Phase 7.3 expands the producer set to
+# include `ops_console` (Phase 8 maint surface) so operators can clear
+# denylists, reset upstream fingerprints, etc. via the same envelope.
+# Future maintenance agents reuse the same topic with a different
+# `kind` (open enum — see `MaintEventKind` in payloads.py).
 MAINT_EVENT = Topic("maint.event.v1")
+
+# ── Phase 7 — Defense agents ─────────────────────────────────────
+# ROADMAP §7 ships three sec.* agents: an input-sanitization escalator
+# (§7.1), an upstream-anomaly detector (§7.2), and a rate-limit /
+# burst detector (§7.3). The five topics below are the wire surface;
+# the §7.5 catalog gives one row per topic and the §7.6 boundary
+# tests pin the producer / consumer sets.
+
+# `qa.request` — control-plane (unversioned by design, ROADMAP §3.7).
+# Carries the *raw* user QA payload that the Go gateway could not
+# decide deterministically; the `sec.input.v1` agent escalates step 5
+# (small classifier) before publishing the sanitized v1 envelope.
+# Mutually exclusive with the gateway's direct `qa.request.v1` path:
+# the gateway publishes `qa.request.v1` only when its deterministic
+# rules return `pass`; on `sanitize` / `escalate` it publishes here
+# and `sec.input.v1` owns the v1 emission.
+QA_REQUEST = Topic("qa.request")
+
+# `qa.request.v1` — data-plane (versioned). The wire contract the
+# Phase 10 NLP layer subscribes to. Two producers (the Go gateway
+# and `sec.input.v1`) by construction one-or-the-other per
+# `request_id`; consumer-side dedup belongs to the NLP layer.
+QA_REQUEST_V1 = Topic("qa.request.v1")
+
+# `sec.alert.v1` — data-plane. Open producer set within `sec.*`; the
+# §7.4 envelope carries `kind` (open enum) + `severity`. Telemetry,
+# supervisor, ops dashboards consume.
+SEC_ALERT = Topic("sec.alert.v1")
+
+# `sec.quarantine.v1` — data-plane. `sec.input.v1` (QA path) and
+# `sec.scrape.v1` (scrape path) produce; `storage.v1` is the SOLE
+# consumer (persists to `quarantine_samples`). Predictors / NLP /
+# proofreader must not subscribe — boundary test enforces.
+SEC_QUARANTINE = Topic("sec.quarantine.v1")
+
+# `sec.denylist.v1` — data-plane. `sec.rate.v1` is the SOLE producer.
+# API gateway cache + telemetry subscribe so dashboards stay in sync
+# without polling Redis.
+SEC_DENYLIST = Topic("sec.denylist.v1")
 
 
 __all__ = [
@@ -86,8 +127,13 @@ __all__ = [
     "PREDICT_VOTE",
     "PROOFREADER_VERDICT",
     "PROOF_FLAG",
+    "QA_REQUEST",
+    "QA_REQUEST_V1",
     "SCRAPE_CLASSIFIED",
     "SCRAPE_RAW",
     "SCRAPE_REQUEST",
+    "SEC_ALERT",
+    "SEC_DENYLIST",
+    "SEC_QUARANTINE",
     "TELEMETRY",
 ]
