@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 3,
+    "build": 4,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.11.0",
+      "version": "1.11.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-03T12:41:28+00:00"
+      "last_changed": "2026-05-03T12:53:13+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1581,6 +1581,15 @@
       "from": "1.10.13",
       "to": "1.11.0",
       "build": 3
+    },
+    {
+      "timestamp": "2026-05-03T12:53:13+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 7 ROADMAP revision: defense-agent design hardening (IPv6, XFF, denylist DoS, streaming baseline, Lua atomicity, schema parity, alert debounce, open-enum, PII erasure)",
+      "from": "1.11.0",
+      "to": "1.11.1",
+      "build": 4
     }
   ]
 }
