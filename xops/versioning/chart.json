@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 2,
+    "build": 3,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-04-29T09:33:03+00:00"
     },
     "docs": {
-      "version": "1.10.13",
+      "version": "1.11.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-03T12:13:16+00:00"
+      "last_changed": "2026-05-03T12:41:28+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1572,6 +1572,15 @@
       "from": "1.10.12",
       "to": "1.10.13",
       "build": 2
+    },
+    {
+      "timestamp": "2026-05-03T12:41:28+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 7 ROADMAP section revised — topology split, monotonic-clock convention carried in, sec.alert.v1 envelope, boundary-discipline list, Phase 12 stub-row policy",
+      "from": "1.10.13",
+      "to": "1.11.0",
+      "build": 3
     }
   ]
 }
