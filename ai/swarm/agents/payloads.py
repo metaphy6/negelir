@@ -432,6 +432,13 @@ class ProofFlagKind(str):
     LATE_VOTE_DROPPED = "late_vote_dropped"
     CONSENSUS_NO_VOTES = "consensus_no_votes"
     CONSENSUS_OVERFLOW = "consensus_overflow"
+    # Third-pass audit (M3): a contributing predict.vote carried a
+    # `score_grid` whose shape did not match the first grid in the
+    # fusion window (or was internally ragged). Consensus drops the
+    # offending vote from the grid mean and emits this flag so the
+    # divergent predictor is observable; market_outcomes from the
+    # same vote are still fused.
+    PREDICTOR_GRID_SHAPE_MISMATCH = "predictor_grid_shape_mismatch"
 
     # — Phase 6 proofreader aggregator —
     # Quorum was reached (≥cfg.proofreader_quorum accept/warn votes) but
@@ -472,6 +479,32 @@ class ProofFlagKind(str):
             for k, v in vars(cls).items()
             if k.isupper() and isinstance(v, str)
         )
+
+
+# Third-pass audit (C3): cap the free-text `detail` field on every
+# `proof.flag` payload so a buggy producer cannot bloat bus messages
+# with multi-KB diagnostics. Schema mirrors the bound
+# (`proof.flag.json::detail.maxLength = 1024`); we truncate rather
+# than reject so the flag still flows.
+PROOF_FLAG_DETAIL_MAX_LEN: int = 1024
+
+
+def truncate_proof_detail(
+    detail: str | None, *, max_len: int = PROOF_FLAG_DETAIL_MAX_LEN
+) -> str:
+    """Truncate a `proof.flag.detail` string to the schema bound.
+
+    Returns ``""`` when given ``None``. Over-long inputs get an
+    ellipsis suffix so operators see truncation happened; the total
+    output never exceeds ``max_len`` bytes.
+    """
+    if not detail:
+        return ""
+    if len(detail) <= max_len:
+        return detail
+    suffix = "…[truncated]"
+    keep = max(0, max_len - len(suffix))
+    return detail[:keep] + suffix
 
 
 # ── Phase 5 — predictor swarm + consensus payloads ──────────────

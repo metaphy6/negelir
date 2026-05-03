@@ -1,12 +1,12 @@
 # Phase 4 → 6 — Third-Pass Audit (Pre-Phase-7 Cleanup)
 
-> **Status:** *Audit only — no code, tracker rows, or version bumps
-> have been written. Action items in §7 are proposals pending human
-> approval, exactly mirroring the discipline of the
-> [first-pass report](./phase4-to-6-implementation.md).*
+> **Status:** *All approved action items have shipped — see §1.6
+> implementation log. Tests:
+> `933 passed / 6 env-gated skips / 2 documented xfails` (was
+> `550 / 6 / 2` for the swarm subset before this pass; +4 new
+> tests cover M1, M2, M3 explicitly).*
 > **Auditor brief:** the second pass already shipped (B1, N1, N2,
-> e2e regression test for `score_grid` shape — all green at
-> `550 passed / 6 env-gated skips / 2 documented xfails`). Before
+> e2e regression test for `score_grid` shape). Before
 > Phase 7 (`sec.input.v1` / `sec.scrape.v1` / `sec.rate.v1`) starts
 > introducing **new producers and new topics**, this pass walks
 > Phase 4 – 6 a third time looking for the next layer of issues:
@@ -28,9 +28,9 @@
 
 | Phase | Implementation | Severity of newly-found drifts | Phase 7 impact |
 |---|---|---|---|
-| 4 — Core worker agents | ✅ matches design | **MAJOR ×1**, MINOR ×3 | high: Phase 7 adds two new producers wired through this layer |
+| 4 — Core worker agents | ✅ matches design | **MAJOR ×1**, MINOR ×2 | high: Phase 7 adds two new producers wired through this layer |
 | 5 — Predictor swarm + consensus | ✅ matches design | **MAJOR ×2**, MINOR ×1 | low: Phase 7 does not touch fusion |
-| 6 — Proofreader + drift | ✅ matches design | **MAJOR ×1**, MINOR ×1 | medium: Phase 7 `sec.input.v1` runs *upstream of* NLP, but `proof.flag` will receive new kinds |
+| 6 — Proofreader + drift | ✅ matches design | **MAJOR ×1** | medium: Phase 7 `sec.input.v1` runs *upstream of* NLP, but `proof.flag` will receive new kinds |
 | Cross-cutting | n/a | NIT ×3 | n/a |
 
 **Headline:** there are **no surviving BLOCKERs** — the first-pass
@@ -104,6 +104,79 @@ pass and **rejected after manual verification**:
   short-circuits. Worth a *log warning* (carried as **N1** below)
   but not a correctness bug.
 
+### 1.5 Self-review errata (post-publication)
+
+A pre-implementation re-read flushed three findings I had carried
+that do **not** survive a careful look at the current code. They
+are withdrawn here:
+
+- **(was N2) — "Bootstrap builds *N* processor instances but does
+  not assert label-set disjointness."** Withdrawn:
+  [`bootstrap.py::build_agents` L122-L148](../../ai/swarm/bootstrap.py)
+  wires only the predictor pipeline + cache + telemetry. Phase 4
+  producers (storage, processors, categorizer, scrapers) live
+  upstream and "are wired by the (separate) datasource bootstrap
+  that lands with Phase R1" (per the same docstring at L116-L119).
+  There is no `_build_processors` to assert against in the swarm
+  bootstrap today. The disjointness check belongs to the
+  Phase R1 datasource bootstrap when it lands.
+- **(was N5) — "Drift's `_handle_outcome` builds messages inside
+  `self._lock`, asymmetric with aggregator."** Withdrawn:
+  drift's `_emit_retrain_requests` *constructs* `Message` objects
+  inside the lock and returns them up to the handler caller; the
+  runner publishes after `handle()` returns. The aggregator's
+  `_drain_overflow_locked` does the same thing — builds messages
+  inside the lock, returns them, caller emits after release. The
+  two patterns are identical. No fix needed.
+- **M4 partially wrong.** Originally claimed both `drift.v1` and
+  `proofreader_aggregator.v1` use wall-clock for in-process LRU
+  windows. Drift withdrawn: it uses only `_clock_iso` for the
+  wire-format `produced_at`; its `_pending` evicts purely by
+  insertion order and its `_windows` are size-bounded. No in-
+  process clock math is exposed to NTP skew. The aggregator claim
+  stands.
+- **M1 framing partially wrong.** `storage.v1` is **not**
+  instantiated by `build_agents()` today (same R1 footnote as
+  above). Adding it to `SINGLE_INSTANCE_AGENTS` is still correct
+  as a forward-looking guard (the frozenset is the contract for
+  *any* bootstrap, including the upcoming datasource one), but
+  the regression test must instantiate `StorageAgent` explicitly
+  to exercise the path. Severity stands; framing in §3 / §7 is
+  updated below.
+
+### 1.6 Implementation log (post-approval)
+
+All approved action items in §7 have shipped in this same pass.
+Test suite delta: `550 / 6 / 2` (swarm only) →
+`933 passed / 6 skipped / 2 xfailed` (full `ai/` suite, +4 new
+tests for the changes here).
+
+| # | Item | Files touched | Status |
+|---|---|---|---|
+| 1 | M1 — `storage.v1` in `SINGLE_INSTANCE_AGENTS` | [`bootstrap.py`](../../ai/swarm/bootstrap.py), [`test_bootstrap.py`](../../ai/swarm/tests/test_bootstrap.py) | ✅ shipped + new `test_build_swarm_refuses_duplicate_storage` + existing test relaxed for the "not-yet-wired" case |
+| 2 | M2 — Consensus monotonic clock | [`consensus.py`](../../ai/swarm/agents/consensus.py), [`test_consensus.py`](../../ai/swarm/agents/tests/test_consensus.py) | ✅ shipped + new `test_consensus_window_survives_backward_clock_skew` |
+| 3 | M3 — `_fuse_score_grids` shape guard + flag | [`consensus.py`](../../ai/swarm/agents/consensus.py), [`payloads.py`](../../ai/swarm/agents/payloads.py), [`proof.flag.json`](../../ai/swarm/sdk/schemas/proof.flag.json), [`test_consensus.py`](../../ai/swarm/agents/tests/test_consensus.py) | ✅ shipped + new `test_mismatched_score_grid_emits_flag_and_excludes_bad_grid` and new `ProofFlagKind.PREDICTOR_GRID_SHAPE_MISMATCH` |
+| 4 | M4 (aggregator) — monotonic clock | [`aggregator.py`](../../ai/swarm/agents/proofreader/aggregator.py) | ✅ shipped (drift portion withdrawn — drift exposes no in-process ms clock; see §1.5) |
+| 5 | C3 — cap `proof.flag.detail` at 1 KB | [`payloads.py`](../../ai/swarm/agents/payloads.py), [`proof.flag.json`](../../ai/swarm/sdk/schemas/proof.flag.json), [`processor.py`](../../ai/swarm/agents/processor.py), [`categorizer.py`](../../ai/swarm/agents/categorizer.py), [`replicas.py`](../../ai/swarm/agents/proofreader/replicas.py) | ✅ shipped — central `truncate_proof_detail` helper + schema `maxLength: 1024` |
+| 6 | N1 — reactor warns on unparseable timestamps | [`reactor.py`](../../ai/swarm/agents/reactor.py) | ✅ shipped — `pass` replaced with `_log.warning(...)` |
+| 7 | N3 — render `last_seen` in Prometheus output | [`telemetry.py`](../../ai/swarm/agents/telemetry.py) | ✅ shipped as `negelir_bus_last_seen_epoch{topic=…}` (epoch-second gauge; ISO kept off-wire to bound label cardinality) |
+| 8 | C2 — control-plane comments on schemas | [`predict.request.json`](../../ai/swarm/sdk/schemas/predict.request.json), [`predict.vote.json`](../../ai/swarm/sdk/schemas/predict.vote.json), [`predict.final.json`](../../ai/swarm/sdk/schemas/predict.final.json) | ✅ shipped — descriptions now state "control-plane topic — unversioned by design (ROADMAP §3.7)" |
+
+**Items deferred to a follow-up pass** (out of scope for the
+"ship before Phase 7" budget, kept on the §7 action queue for
+visibility):
+
+- Item 8 N4 — multi-voter / multi-replica `test_phase6_score_grid_e2e.py`
+  (the existing 1-voter test still passes; the M3 flag emission is
+  already covered by the unit test above).
+- Item 9 C1 — addendum on `phase4-to-6-implementation.md` test count.
+- Item 10 §5.5 — end-to-end drift→trainer recovery loop test.
+- Item 11 §5.6 — every-`ProofFlagKind` emission assertion.
+
+These are all test-coverage hardening; none are blockers for
+Phase 7 wiring (`sec.input.v1` / `sec.scrape.v1` / `sec.rate.v1`
+introduce orthogonal topics that don't depend on these gaps).
+
 ---
 
 ## 2. Verdict per phase, with file:line citations
@@ -112,9 +185,8 @@ pass and **rejected after manual verification**:
 
 | ID | Severity | Issue | Cite |
 |---|---|---|---|
-| **M1** | MAJOR | `storage.v1` is a sole producer of `match.stored` / `freshness.events.v1` / `match.outcome.v1` but is **not in `SINGLE_INSTANCE_AGENTS`** | [`bootstrap.py` L62-L66](../../ai/swarm/bootstrap.py), [`storage.py` L134-L138](../../ai/swarm/agents/storage.py) |
+| **M1** | MAJOR | `storage.v1` is a sole producer of `match.stored` / `freshness.events.v1` / `match.outcome.v1` but is **not in `SINGLE_INSTANCE_AGENTS`**. (Forward-looking: storage is wired by the not-yet-landed Phase R1 datasource bootstrap; closing the gap in the contract now means the R1 bootstrap inherits the guard.) | [`bootstrap.py` L62-L66](../../ai/swarm/bootstrap.py), [`storage.py` L134-L138](../../ai/swarm/agents/storage.py) |
 | N1 | MINOR | Reactor's `fromisoformat` `ValueError` path silently disables the age window with no `_log.warning` | [`reactor.py` L143-L145](../../ai/swarm/agents/reactor.py) |
-| N2 | MINOR | Bootstrap builds *N* processor instances but does not assert label-set disjointness; misconfiguration would double-process `scrape.raw` rows | [`bootstrap.py` `_build_processors`](../../ai/swarm/bootstrap.py) |
 | N3 | MINOR | `_Counters.last_seen` is updated per observation but never rendered in the Prometheus exposition — dead state | [`telemetry.py` L82-L114](../../ai/swarm/agents/telemetry.py) |
 
 ### 2.2 Phase 5 — Predictor swarm + consensus
@@ -129,8 +201,7 @@ pass and **rejected after manual verification**:
 
 | ID | Severity | Issue | Cite |
 |---|---|---|---|
-| **M4** | MAJOR | Same wall-clock LRU foot-gun as M2 — `drift.v1` and `proofreader_aggregator.v1` both stamp `first_seen_ms` from `datetime.now(...).timestamp()`. Drift's pending entries are bounded by `_max_pending` (so the leak is bounded), but the *eviction order* becomes wrong under skew. | [`drift.py` L168-L172](../../ai/swarm/agents/drift.py), [`aggregator.py` `_clock_ms` callsites](../../ai/swarm/agents/proofreader/aggregator.py) |
-| N5 | MINOR | `drift._handle_outcome` constructs and emits `MaintEvent` messages **while holding `self._lock`**. The aggregator's overflow-buffer path is explicit about releasing first ("returned messages are emitted by the caller after the lock is released" — [`aggregator.py` `_drain_overflow_locked`](../../ai/swarm/agents/proofreader/aggregator.py)). Drift should match the pattern; serialization is cheap today but the asymmetry is a future deadlock risk. | [`drift.py` `_handle_outcome` lock scope](../../ai/swarm/agents/drift.py) |
+| **M4** | MAJOR | Same wall-clock LRU foot-gun as M2 — `proofreader_aggregator.v1` stamps `first_seen_ms` from `datetime.now(...).timestamp()` for its quorum window. (Drift was originally listed here too — retracted: drift uses only `_clock_iso` for wire-format `produced_at`; its pending eviction is pure insertion-order LRU and its windows are size-bounded, so no in-process clock math is exposed to skew.) | [`aggregator.py` `_clock_ms` callsites](../../ai/swarm/agents/proofreader/aggregator.py) |
 
 ### 2.4 Cross-cutting
 
@@ -161,26 +232,32 @@ The docstring on line 117 of the same file even acknowledges that
 storage is a Phase 4 producer, and the per-record-type comment in
 [`agents/__init__.py` L14, L23](../../ai/swarm/agents/__init__.py)
 makes clear `storage.v1` is the sole emitter of `match.stored`,
-`freshness.events.v1`, and `match.outcome.v1`. Today the
-implementation accidentally satisfies the invariant because
-[`bootstrap.py::build_agents`](../../ai/swarm/bootstrap.py)
-constructs exactly one `StorageAgent`. **The guard is missing.**
+`freshness.events.v1`, and `match.outcome.v1`. Storage is **not**
+instantiated by `build_agents()` today — the same docstring at
+L116-L119 explicitly defers Phase 4 producer wiring to the
+"separate datasource bootstrap that lands with Phase R1" — so the
+invariant is currently unenforceable, but the **frozenset is the
+cross-bootstrap contract**: whatever wires storage next must obey
+it. Today the contract is silent.
 
 **Why it matters before Phase 7.** Phase 7.2 adds `sec.scrape.v1`,
 which itself watches `scrape.raw` and may want to share the storage
-plumbing for quarantined samples. An operator wiring the new
-defense agents could plausibly add a second `StorageAgent` (e.g.,
-to write quarantine to a separate store) without realizing it
-breaks the sole-producer invariant. We should close the gap
-*before* the new agents land, when the change is one-line.
+plumbing for quarantined samples. Phase R1 will land between now
+and then. An operator wiring the new datasource bootstrap could
+plausibly add a second `StorageAgent` (e.g., to write quarantine
+to a separate store) without realizing it breaks the sole-producer
+invariant. Close the gap in the contract now, when the change is
+one-line.
 
 **Recommended fix.** Add `"storage.v1"` to `SINGLE_INSTANCE_AGENTS`
 and extend
 [`test_bootstrap.py::test_build_swarm_refuses_duplicate_single_instance_agent`](../../ai/swarm/tests/test_bootstrap.py)
-to cover storage. Update the docstring on the frozenset to enumerate
-the three Phase 4–6 sole producers (storage, consensus, aggregator)
-plus drift (single-window state). One-line code change, one new
-test row.
+to cover storage by **explicitly constructing two `StorageAgent`
+instances** and passing them to `build_swarm` via the `agents=`
+kwarg (the existing parametrized test for the other three single-
+instance agents already follows this pattern). Update the docstring
+on the frozenset to enumerate the four sole-producer / single-
+window agents (storage, consensus, aggregator, drift).
 
 ### M2 — Consensus uses wall-clock for in-process LRU windows
 
@@ -248,20 +325,21 @@ and continue fusion with the remaining grids. Add a unit test in
 `test_consensus.py` that submits two votes with mismatched grids
 and asserts the bad one is flagged + excluded.
 
-### M4 — Drift / aggregator share M2's wall-clock pattern
+### M4 — Aggregator shares M2's wall-clock pattern
 
 **Symptom.** Same `datetime.now(...).timestamp() * 1000` pattern at
-the constructor of both `drift.v1` and `proofreader_aggregator.v1`.
-Drift's bound is mitigated by `_max_pending` (a hard LRU cap), but
-the *order of eviction* becomes wrong under clock skew, so the
-"oldest" bucket the LRU evicts may not actually be the oldest. The
-aggregator has the same exposure on its `_pending` map.
+the constructor of `proofreader_aggregator.v1`. Backward NTP
+correction lets stale `_pending` entries survive past
+`proofreader_quorum_window_ms`. (Drift was originally listed in this
+finding; on a closer read drift uses only `_clock_iso` and pure
+insertion-order LRU on its `_pending` map, so it is not exposed to
+clock skew. Withdrawn from M4 — see also §1.5.)
 
 **Why it matters before Phase 7.** Same as M2 — fix the pattern
 once. A single PR should land M2 + M4 together.
 
-**Recommended fix.** Same as M2, applied to the same three call
-sites in lockstep.
+**Recommended fix.** Same as M2, applied to the aggregator's clock
+callsite in lockstep with consensus.
 
 ---
 
@@ -378,19 +456,17 @@ Ordered by *impact × cheapness*, not severity:
 | 2 | Land M1: add `"storage.v1"` to `SINGLE_INSTANCE_AGENTS`; extend `test_bootstrap.py` | `bootstrap.py`, `tests/test_bootstrap.py` | trivial |
 | 3 | Land M3: add shape-uniformity assertion in `_fuse_score_grids` with `proof.flag` for the rejected vote; add unit test | `consensus.py`, `tests/test_consensus.py`, `payloads.py` (new flag kind) | small |
 | 4 | Land C3: cap `proof.flag.detail` at 1 KB in schema + payload constructor | `proof.flag.json`, `payloads.py` | trivial |
-| 5 | Land N5: lift drift's `MaintEvent` emission outside `self._lock` to match aggregator's pattern | `drift.py` | trivial |
-| 6 | Land N1: replace silent except with `_log.warning` in reactor's age-window guard | `reactor.py` | trivial |
-| 7 | Land N3: either render `last_seen` in Prometheus output or remove the field | `telemetry.py` | trivial |
-| 8 | Land C2: add `comment` field to control-plane schemas distinguishing them from data-plane | `predict.vote.json`, `predict.request.json` | trivial |
-| 9 | Land N2: assert label-set disjointness in `_build_processors` | `bootstrap.py`, `tests/test_bootstrap.py` | small |
-| 10 | Land N4: extend the e2e regression to multi-voter + multi-replica realistic path | `tests/test_phase6_score_grid_e2e.py` | small |
-| 11 | Land C1: addendum / footnote on first-pass report TL;DR with current 550-test count | `docs/reports/phase4-to-6-implementation.md` | trivial |
-| 12 | Land §5.5: end-to-end drift → trainer recovery loop test | `tests/` (new) | medium |
-| 13 | Land §5.6: every-kind-emitted assertion test | `tests/test_proof_flag_kinds.py` | small |
+| 5 | Land N1: replace silent except with `_log.warning` in reactor's age-window guard | `reactor.py` | trivial |
+| 6 | Land N3: either render `last_seen` in Prometheus output or remove the field | `telemetry.py` | trivial |
+| 7 | Land C2: add `comment` field to control-plane schemas distinguishing them from data-plane | `predict.vote.json`, `predict.request.json` | trivial |
+| 8 | Land N4: extend the e2e regression to multi-voter + multi-replica realistic path | `tests/test_phase6_score_grid_e2e.py` | small |
+| 9 | Land C1: addendum / footnote on first-pass report TL;DR with current 550-test count | `docs/reports/phase4-to-6-implementation.md` | trivial |
+| 10 | Land §5.5: end-to-end drift → trainer recovery loop test | `tests/` (new) | medium |
+| 11 | Land §5.6: every-kind-emitted assertion test | `tests/test_proof_flag_kinds.py` | small |
 
 If approved, each action becomes its own commit with a tracker row
-and an `ai` (or `docs`) version bump per AGENTS.md §6.1. Items 1 – 5
-are the minimum viable cleanup before Phase 7 starts; items 6 – 13
+and an `ai` (or `docs`) version bump per AGENTS.md §6.1. Items 1 – 4
+are the minimum viable cleanup before Phase 7 starts; items 5 – 11
 can land in parallel with Phase 7.1 work.
 
 ---
@@ -419,13 +495,15 @@ can land in parallel with Phase 7.1 work.
 - **No surviving BLOCKERs.** First-pass B1 is fixed and tested;
   second-pass N1/N2 are fixed.
 - **Four MAJORs**, all cheap:
-  1. `storage.v1` missing from single-instance set (M1).
-  2. Consensus / drift / aggregator use wall-clock for in-process
+  1. `storage.v1` missing from single-instance set (M1) —
+     forward-looking guard for the Phase R1 datasource bootstrap.
+  2. Consensus and aggregator use wall-clock for in-process
      LRU windows; backward NTP skew breaks the timeout (M2 + M4).
   3. `_fuse_score_grids` does not assert grid-shape uniformity
      (M3).
-- **Five MINORs and three NITs** — pattern-alignment, log-warnings,
-  schema length caps, doc accuracy.
+- **Three MINORs and three NITs** — log-warning, dead state, schema
+  length cap, doc accuracy, control-plane schema marker, multi-
+  voter e2e coverage.
 - **Phase 7 readiness:** fix M2 + M4 *first* so `sec.rate.v1`
   inherits the right clock convention; fix M1 second so the new
   defense agents land into a clean single-instance frozenset; the
@@ -434,6 +512,9 @@ can land in parallel with Phase 7.1 work.
   regression, drift→trainer recovery loop, every-flag-kind
   emission) are tracked but most can wait until after the M-fix
   PRs land.
+- **Self-review (§1.5)** withdrew two MINOR findings (N2, N5) and
+  reframed M1 after a careful re-read of the current bootstrap.
+  Reflected throughout the report.
 
 The codebase is genuinely clean. This pass is the last
 nip-and-tuck before Phase 7 expands the surface.

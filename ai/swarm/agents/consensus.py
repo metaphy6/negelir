@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable
@@ -118,23 +119,54 @@ def _fuse_distributions(
     return fused
 
 
-def _fuse_score_grids(votes: list[PredictVote]) -> list[list[float]] | None:
+def _fuse_score_grids(
+    votes: list[PredictVote],
+) -> tuple[list[list[float]] | None, list[str]]:
     """Average score grids across votes that produced one.
 
-    None when no contributing vote carried a grid (Phase 6.2
+    Returns ``(fused_grid, mismatched_predictor_ids)``. Fused grid is
+    None when no contributing vote carried a usable grid (Phase 6.2
     consistency check is skipped for those markets).
+
+    Third-pass audit (M3): asserts every contributing grid shares the
+    *same* dimensions as the first one. Votes whose grid shape
+    diverges are dropped from the average and their `predictor_id` is
+    returned so the caller can emit a `predictor_grid_shape_mismatch`
+    proof.flag. Without this guard a single divergent predictor would
+    silently corrupt the cell-by-cell mean.
     """
-    grids: list[list[list[float]]] = []
+    grids: list[tuple[str, list[list[float]]]] = []
+    mismatched: list[str] = []
+    expected_rows: int | None = None
+    expected_cols: int | None = None
     for v in votes:
         g = v.distribution.get("score_grid")
-        if g and isinstance(g, list) and g and isinstance(g[0], list):
-            grids.append(g)
+        if not (g and isinstance(g, list) and g and isinstance(g[0], list)):
+            continue
+        rows = len(g)
+        cols = len(g[0])
+        # Per-row uniformity: a ragged grid is itself a contract
+        # violation; treat it as a shape mismatch.
+        ragged = any(
+            not isinstance(row, list) or len(row) != cols for row in g
+        )
+        if expected_rows is None:
+            if ragged:
+                mismatched.append(v.predictor_id)
+                continue
+            expected_rows, expected_cols = rows, cols
+            grids.append((v.predictor_id, g))
+            continue
+        if ragged or rows != expected_rows or cols != expected_cols:
+            mismatched.append(v.predictor_id)
+            continue
+        grids.append((v.predictor_id, g))
     if not grids:
-        return None
-    rows = len(grids[0])
-    cols = len(grids[0][0])
+        return None, mismatched
+    rows = expected_rows or 0
+    cols = expected_cols or 0
     out = [[0.0] * cols for _ in range(rows)]
-    for g in grids:
+    for _, g in grids:
         for i in range(rows):
             for j in range(cols):
                 out[i][j] += float(g[i][j])
@@ -148,7 +180,7 @@ def _fuse_score_grids(votes: list[PredictVote]) -> list[list[float]] | None:
         for i in range(rows):
             for j in range(cols):
                 out[i][j] /= s
-    return out
+    return out, mismatched
 
 
 class ConsensusAgent:
@@ -186,8 +218,13 @@ class ConsensusAgent:
             calibration_store or InMemoryCalibrationStore()
         )
         self._weights: dict[str, float] = dict(weights or {})
+        # Third-pass audit (M2): in-process LRU windows must use a
+        # *monotonic* clock so a backward NTP correction cannot keep
+        # stale pending entries alive past `_window_ms`. Wire-format
+        # timestamps (`produced_at`, `emitted_at`) stay wall-clock via
+        # `_clock_iso` because reactors compare them across producers.
         self._clock_ms = clock_ms or (
-            lambda: datetime.now(timezone.utc).timestamp() * 1000.0
+            lambda: time.monotonic() * 1000.0
         )
         self._clock_iso = clock_iso or (
             lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -520,7 +557,29 @@ class ConsensusAgent:
         else:
             calibrated = raw_pmf
 
-        score_grid = _fuse_score_grids(pending.votes)
+        score_grid, grid_mismatches = _fuse_score_grids(pending.votes)
+
+        # Third-pass audit (M3): emit a proof.flag for every dropped
+        # divergent grid before fusion proceeds. Order is sorted for
+        # deterministic envelope contents.
+        mismatch_flags: list[Message] = []
+        for predictor_id in sorted(set(grid_mismatches)):
+            mismatch_flags.append(
+                Message.new(
+                    PROOF_FLAG,
+                    {
+                        "kind": ProofFlagKind.PREDICTOR_GRID_SHAPE_MISMATCH,
+                        "agent": self.name,
+                        "predictor_id": predictor_id,
+                        "match_id": pending.match_id,
+                        "market": market,
+                        "request_id": pending.request_id,
+                        "prediction_id": prediction_id,
+                    },
+                    producer=self.name,
+                    trace_id=trace_id or "",
+                )
+            )
 
         swarm_confidence = float(
             sum(v.confidence for v in pending.votes) / len(pending.votes)
@@ -561,6 +620,7 @@ class ConsensusAgent:
                 producer=self.name,
                 trace_id=trace_id or "",
             ),
+            *mismatch_flags,
         ]
 
 

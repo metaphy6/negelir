@@ -59,7 +59,24 @@ _log = logging.getLogger("swarm.bootstrap")
 # would silently produce duplicate emissions because they hold per-
 # window / per-prediction state outside the bus. Hot-spare deployment
 # must wait until a leader-election layer lands (Phase 12+).
+#
+# Members today (third-pass audit, M1):
+#   * `storage.v1`              — sole producer of `match.stored`,
+#                                 `freshness.events.v1`, and
+#                                 `match.outcome.v1` (Phase 4.5).
+#                                 NOT instantiated by `build_agents()`
+#                                 today; wired by the Phase R1
+#                                 datasource bootstrap. The frozenset
+#                                 is the cross-bootstrap contract so
+#                                 R1 inherits the guard.
+#   * `consensus.v1`            — sole producer of `predict.final`.
+#   * `proofreader_aggregator.v1` — sole producer of
+#                                 `predict.approved.v1`.
+#   * `drift.v1`                — single-window state per (league,
+#                                 market); a second replica would
+#                                 split the rolling Brier window.
 SINGLE_INSTANCE_AGENTS: frozenset[str] = frozenset({
+    "storage.v1",
     "consensus.v1",
     "proofreader_aggregator.v1",
     "drift.v1",

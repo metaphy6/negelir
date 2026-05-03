@@ -27,7 +27,12 @@ from typing import Iterable, Protocol
 from common.config import cfg
 
 from ..sdk.types import Message
-from .payloads import ProofFlagKind, ScrapeClassified, ScrapeRaw
+from .payloads import (
+    ProofFlagKind,
+    ScrapeClassified,
+    ScrapeRaw,
+    truncate_proof_detail,
+)
 from .topics import PROOF_FLAG, SCRAPE_CLASSIFIED, SCRAPE_RAW
 
 _log = logging.getLogger(__name__)
@@ -129,7 +134,7 @@ class CategorizerAgent:
                         "kind": ProofFlagKind.DECODE_FAILED,
                         "source": raw.source,
                         "target": raw.target,
-                        "detail": decode_err,
+                        "detail": truncate_proof_detail(decode_err),
                         "agent": self.name,
                     },
                     producer=self.name,

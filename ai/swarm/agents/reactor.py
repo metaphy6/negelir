@@ -142,7 +142,15 @@ class ReactorBase:
                 )
                 return ()
         except ValueError:
-            pass  # age unknown — let the ledger guard repeats
+            # Third-pass audit (N1): a parse failure means a producer
+            # emitted a non-ISO-8601 timestamp — a contract violation.
+            # We still proceed (the ledger guard catches replays) but
+            # surface the bug at warning level so it doesn't hide.
+            _log.warning(
+                "%s: unparseable timestamp %r on event %s; "
+                "age guard skipped, ledger guard active",
+                self.name, ts_str, ev.event_id,
+            )
 
         # Idempotency guard. Key is the deterministic, content-derived
         # event_id from the payload — NOT envelope.message_id, which

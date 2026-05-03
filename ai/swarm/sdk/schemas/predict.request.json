@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/predict.request",
   "title": "predict.request",
-  "description": "Phase 5.1: API/reactor → predictors. The requester (Phase 9 API or LivePredictorReactor) generates `request_id`; it round-trips unchanged through `predict.vote` and `predict.final`. Mirrors `ai/swarm/agents/payloads.py::PredictRequest`.",
+  "description": "Phase 5.1: API/reactor → predictors. Control-plane topic — unversioned by design (ROADMAP §3.7) because it is internal swarm traffic, never persisted, and never consumed across release boundaries. The requester (Phase 9 API or LivePredictorReactor) generates `request_id`; it round-trips unchanged through `predict.vote` and `predict.final`. Mirrors `ai/swarm/agents/payloads.py::PredictRequest`.",
   "type": "object",
   "required": ["request_id", "match_id", "market"],
   "properties": {

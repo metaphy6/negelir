@@ -24,7 +24,12 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from ..sdk.types import Message
-from .payloads import NormalizedRecord, ProofFlagKind, ScrapeClassified
+from .payloads import (
+    NormalizedRecord,
+    ProofFlagKind,
+    ScrapeClassified,
+    truncate_proof_detail,
+)
 from .topics import MATCH_NORMALIZED, PROOF_FLAG, SCRAPE_CLASSIFIED
 
 _log = logging.getLogger(__name__)
@@ -196,7 +201,7 @@ class ProcessorAgentBase:
             PROOF_FLAG,
             {
                 "kind": kind,
-                "detail": detail,
+                "detail": truncate_proof_detail(detail),
                 "source": classified.raw.source,
                 "target": classified.raw.target,
                 "label": classified.label,

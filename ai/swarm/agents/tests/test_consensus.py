@@ -236,6 +236,76 @@ def test_score_grid_omitted_when_no_vote_carries_one():
     assert final.distribution["score_grid"] is None
 
 
+def test_mismatched_score_grid_emits_flag_and_excludes_bad_grid():
+    """Third-pass audit (M3): a predictor whose `score_grid` shape
+    diverges from the others must NOT silently corrupt the fused
+    grid. Consensus drops the offending grid from the average and
+    emits a `predictor_grid_shape_mismatch` proof.flag tagged with
+    the divergent predictor_id; the vote's market_outcomes are
+    still fused (the grid is supplemental).
+    """
+    c = _make_consensus(expected_predictors=("p.a", "p.b", "p.c"), min_voters=3)
+    good = [[0.10, 0.20], [0.30, 0.40]]
+    bad_shape = [[0.5, 0.5, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]  # 3x3 vs 2x2
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2}, score_grid=good)))
+    list(c.handle(_vote("p.b", {"H": 0.5, "D": 0.3, "A": 0.2}, score_grid=bad_shape)))
+    out = list(c.handle(_vote("p.c", {"H": 0.5, "D": 0.3, "A": 0.2}, score_grid=good)))
+
+    finals = [m for m in out if m.envelope.topic == PREDICT_FINAL]
+    flags = [m for m in out if m.envelope.topic == PROOF_FLAG]
+    assert len(finals) == 1, "exactly one predict.final per (match,market,request)"
+    mismatches = [
+        f for f in flags
+        if f.payload.get("kind") == "predictor_grid_shape_mismatch"
+    ]
+    assert len(mismatches) == 1, mismatches
+    assert mismatches[0].payload["predictor_id"] == "p.b"
+
+    final = PredictFinal.from_dict(finals[0].payload)
+    fused = final.distribution["score_grid"]
+    assert fused is not None
+    # 2x2 (matches the good grids), not 3x3 from the bad vote.
+    assert len(fused) == 2 and all(len(row) == 2 for row in fused)
+
+
+def test_consensus_window_survives_backward_clock_skew():
+    """Third-pass audit (M2): the in-process LRU clock must be
+    monotonic. A wall-clock-derived `_clock_ms` would let a backward
+    NTP step push `first_seen_ms` into the future relative to the
+    new clock, so `flush_expired` would skip the entry forever. We
+    simulate the skew with a manual clock that jumps backward, then
+    advance by `window_ms`; the entry must still expire and emit
+    `consensus_no_votes`.
+    """
+    now_ms = [1_000_000.0]
+    c = _make_consensus(
+        expected_predictors=("p.a", "p.b"),
+        min_voters=2,
+        window_ms=50,
+        clock_ms=lambda: now_ms[0],
+    )
+    # One vote opens the window at t=1_000_000.
+    list(c.handle(_vote("p.a", {"H": 0.5, "D": 0.3, "A": 0.2})))
+    # Wall clock jumps backward (e.g. NTP correction).
+    now_ms[0] = 999_000.0
+    # Then real time passes one full window from the original open.
+    now_ms[0] = 999_000.0 + 60.0
+    # With a monotonic clock, `now - first_seen` is always >= 0 and
+    # the entry must still expire once we cross the window.
+    now_ms[0] = 1_000_000.0 + 60.0
+    flushed = list(c.flush_expired())
+    # Under the buggy wall-clock pattern, `now - first_seen` would
+    # be negative after the backward jump and the entry would never
+    # be considered expired — flushed would be empty. Under the
+    # monotonic-clock fix (M2), the entry expires and emits a
+    # degraded predict.final (one voter, min_voters=2).
+    assert flushed, "flush_expired returned nothing — clock skew foot-gun back?"
+    finals = [m for m in flushed if m.envelope.topic == PREDICT_FINAL]
+    assert len(finals) == 1
+    final = PredictFinal.from_dict(finals[0].payload)
+    assert final.degraded is True
+
+
 # ── Trace / id invariants ──────────────────────────────────────
 
 

@@ -69,9 +69,20 @@ def test_build_agents_includes_every_phase5_and_phase6_agent() -> None:
     # gateway and exposes Phase 6 metrics on the telemetry HTTP page.
     assert "cache.v1" in names
     assert "telemetry.v1" in names
-    # Single-instance invariants are satisfied (audit F-10).
+    # Single-instance invariants are satisfied (audit F-10) for every
+    # member of the contract that this bootstrap actually wires today.
+    # `storage.v1` is part of the frozenset (third-pass audit M1) as
+    # a forward-looking guard for the Phase R1 datasource bootstrap,
+    # but it is not built by `build_agents()` in the current pivot —
+    # so we assert "0 or 1", never "2+", for it here. The dedicated
+    # `test_build_swarm_refuses_duplicate_storage` exercises the
+    # frozenset contract for storage explicitly.
     for sole in SINGLE_INSTANCE_AGENTS:
-        assert sum(1 for a in build_agents() if a.name == sole) == 1, sole
+        count = sum(1 for a in build_agents() if a.name == sole)
+        if sole == "storage.v1":
+            assert count == 0, "storage.v1 not yet wired by build_agents()"
+        else:
+            assert count == 1, sole
 
 
 def test_build_swarm_predict_request_reaches_predict_approved() -> None:
@@ -202,6 +213,23 @@ def test_build_swarm_refuses_duplicate_aggregator() -> None:
         ProofreaderAggregatorAgent(ledger=InMemoryLedger()),
     ]
     with pytest.raises(SingleInstanceViolation, match="proofreader_aggregator.v1"):
+        build_swarm(bus, registry, agents=agents)
+
+
+def test_build_swarm_refuses_duplicate_storage() -> None:
+    """Third-pass audit (M1): `storage.v1` is the canonical writer to
+    `match.outcome.v1` (drift's training oracle) and `freshness.event.v1`
+    (the source watcher's signal). Two replicas would double-emit
+    outcomes, splitting the drift counter and triggering false retrains.
+    The frozenset must reject duplicates even though `build_agents()`
+    does not currently wire a StorageAgent — the contract is the
+    bootstrap surface, not the default agent set."""
+    from swarm.agents.storage import StorageAgent
+
+    bus = InMemoryBus()
+    registry = AgentRegistry()
+    agents = [StorageAgent(), StorageAgent()]
+    with pytest.raises(SingleInstanceViolation, match="storage.v1"):
         build_swarm(bus, registry, agents=agents)
 
 

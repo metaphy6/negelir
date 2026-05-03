@@ -109,6 +109,23 @@ class _Counters:
                 lines.append(
                     f'negelir_bus_latency_ms_avg{{topic="{topic}"}} {total / n:.3f}'
                 )
+            # Third-pass audit (N3): expose `last_seen` so operators can
+            # tell whether a topic is silent vs the swarm being down.
+            # Value is a Unix epoch second so Prometheus can compute
+            # `time() - negelir_bus_last_seen_epoch{topic=...}` for
+            # silence-window alerts. The ISO string is kept on the
+            # in-memory counter for forensics, not exported here
+            # (label cardinality on a string field is dangerous).
+            lines.append("# HELP negelir_bus_last_seen_epoch Epoch seconds of last message per topic.")
+            lines.append("# TYPE negelir_bus_last_seen_epoch gauge")
+            for topic, iso in sorted(self.last_seen.items()):
+                try:
+                    epoch = datetime.fromisoformat(iso).timestamp()
+                except ValueError:
+                    continue
+                lines.append(
+                    f'negelir_bus_last_seen_epoch{{topic="{topic}"}} {epoch:.0f}'
+                )
             lines.append("")
             return "\n".join(lines)
 

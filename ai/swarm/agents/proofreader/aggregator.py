@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Iterable
@@ -151,8 +152,12 @@ class ProofreaderAggregatorAgent:
         max_pending: int | None = None,
     ) -> None:
         self._ledger: Ledger = ledger or InMemoryLedger()
+        # Third-pass audit (M4): in-process LRU clock is monotonic so
+        # backward NTP corrections cannot break window expiry. Wire-
+        # format `approved_at` timestamps stay wall-clock via
+        # `_clock_iso` because they are part of the bus contract.
         self._clock_ms: Callable[[], float] = clock_ms or (
-            lambda: datetime.now(timezone.utc).timestamp() * 1000.0
+            lambda: time.monotonic() * 1000.0
         )
         self._clock_iso: Callable[[], str] = clock_iso or (
             lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/predict.final",
   "title": "predict.final",
-  "description": "Phase 5.2: calibrated swarm consensus. Single-publication per `(match_id, market, request_id)`. `degraded=true` + `degraded_reason` when fewer than `cfg.consensus_min_voters` predictors voted (Phase 12 contract). `prediction_id` is sha256(match_id|market|request_id|calibration_version)[:32]. Mirrors `ai/swarm/agents/payloads.py::PredictFinal`.",
+  "description": "Phase 5.2: calibrated swarm consensus. Control-plane topic — unversioned by design (ROADMAP §3.7); the proofreader-approved data-plane mirror is `predict.approved.v1`. Single-publication per `(match_id, market, request_id)`. `degraded=true` + `degraded_reason` when fewer than `cfg.consensus_min_voters` predictors voted (Phase 12 contract). `prediction_id` is sha256(match_id|market|request_id|calibration_version)[:32]. Mirrors `ai/swarm/agents/payloads.py::PredictFinal`.",
   "type": "object",
   "required": [
     "request_id",

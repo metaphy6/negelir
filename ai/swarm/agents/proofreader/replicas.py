@@ -38,6 +38,7 @@ from ..payloads import (
     PredictFinal,
     ProofFlagKind,
     ProofreaderVerdict,
+    truncate_proof_detail,
 )
 from ..topics import PREDICT_FINAL, PROOF_FLAG, PROOFREADER_VERDICT
 from .prediction_checks import (
@@ -131,9 +132,9 @@ class _BaseProofreaderAgent:
                     "market": final.market,
                     "request_id": final.request_id,
                     "exception_type": type(exc).__name__,
-                    "detail": (
+                    "detail": truncate_proof_detail(
                         f"{self.name}: {type(exc).__name__}: {exc}"
-                    )[:512],
+                    ),
                 },
                 producer=self.name,
                 trace_id=msg.envelope.trace_id,
