@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 23,
+    "build": 25,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.12.4",
+      "version": "1.12.5",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-04T12:59:42+00:00"
+      "last_changed": "2026-05-04T13:08:50+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.21.0",
+      "version": "0.22.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-04T12:59:42+00:00"
+      "last_changed": "2026-05-04T13:08:50+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1761,6 +1761,24 @@
       "from": "1.12.3",
       "to": "1.12.4",
       "build": 23
+    },
+    {
+      "timestamp": "2026-05-04T13:08:50+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 7 final landing: streaming-statistic baseline (Welford) + denylist cardinality cap closed; 12 direct proof tests for §7.2 primitives",
+      "from": "0.21.0",
+      "to": "0.22.0",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-05-04T13:08:50+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 7 §7.2 + §7.3 ROADMAP checkboxes flipped with closing-evidence parentheticals",
+      "from": "1.12.4",
+      "to": "1.12.5",
+      "build": 25
     }
   ]
 }
