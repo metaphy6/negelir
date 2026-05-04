@@ -171,3 +171,142 @@ func (b *SecondaryBucket) Size() int {
 	defer b.mu.Unlock()
 	return len(b.buckets)
 }
+
+// ── HTTP throttle response (ROADMAP §7.3) ───────────────────────────
+//
+// BuildThrottleResponse turns a non-allow RateDecision into an
+// RFC 6585-compliant HTTP response (status code, headers, body) that
+// the gateway middleware can emit on the wire. Centralising it here
+// keeps the wire contract testable in isolation and stops every
+// caller from re-deriving the Retry-After ceiling.
+//
+//   * RateThrottle → 429 Too Many Requests
+//   * RateDenied   → 403 Forbidden            (denylisted subject)
+//   * anything else (RateAllow, RateError) → (0, nil, nil); callers
+//     are expected to short-circuit before invoking this helper.
+//
+// Headers always include `Retry-After` (seconds, ceiling per RFC) and
+// `Content-Type: application/json; charset=utf-8`. Body is a small,
+// stable JSON object that downstream clients can parse without a
+// schema lib.
+//
+// The helper does NOT touch http.ResponseWriter directly so it stays
+// cheap to unit-test (no httptest.NewRecorder needed). The middleware
+// owns the actual write.
+func BuildThrottleResponse(d RateDecision, reason string) (status int, headers map[string]string, body []byte) {
+	switch d.Status {
+	case RateThrottle:
+		status = 429
+	case RateDenied:
+		status = 403
+	default:
+		// allow / error — caller shouldn't have invoked us; refuse
+		// to fabricate a throttle response.
+		return 0, nil, nil
+	}
+
+	// Retry-After: ceiling(retry_after_ms / 1000), minimum 1s when
+	// the upstream signal is positive (RFC 6585 — clients treat 0
+	// as "no advice", which would be misleading).
+	retryAfterMs := int64(d.RetryAfter / time.Millisecond)
+	if retryAfterMs < 0 {
+		retryAfterMs = 0
+	}
+	retryAfterS := retryAfterMs / 1000
+	if retryAfterMs%1000 != 0 {
+		retryAfterS++ // ceiling
+	}
+	if retryAfterS < 1 && retryAfterMs > 0 {
+		retryAfterS = 1
+	}
+
+	headers = map[string]string{
+		"Content-Type": "application/json; charset=utf-8",
+		"Retry-After":  strconvFormatInt(retryAfterS),
+	}
+
+	if reason == "" {
+		if d.Status == RateThrottle {
+			reason = "rate_limited"
+		} else {
+			reason = "denylisted"
+		}
+	}
+	// Hand-rolled JSON: zero allocations beyond the byte slice and
+	// no risk of accidentally leaking a struct field. The shape is
+	// pinned by TestBuildThrottleResponse_BodyShape.
+	body = []byte(`{"error":"` + jsonEscape(errorCode(d.Status)) +
+		`","retry_after_ms":` + strconvFormatInt(retryAfterMs) +
+		`,"reason":"` + jsonEscape(reason) + `"}`)
+	return status, headers, body
+}
+
+func errorCode(s RateStatus) string {
+	if s == RateDenied {
+		return "denylisted"
+	}
+	return "rate_limited"
+}
+
+// jsonEscape escapes the small subset of characters that can appear
+// in operator-supplied reason strings. Keeps us off the
+// encoding/json critical path for the hot middleware response.
+func jsonEscape(s string) string {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '"' || c == '\\' || c < 0x20 {
+			return jsonEscapeSlow(s)
+		}
+	}
+	return s
+}
+
+func jsonEscapeSlow(s string) string {
+	out := make([]byte, 0, len(s)+8)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '"':
+			out = append(out, '\\', '"')
+		case c == '\\':
+			out = append(out, '\\', '\\')
+		case c == '\n':
+			out = append(out, '\\', 'n')
+		case c == '\r':
+			out = append(out, '\\', 'r')
+		case c == '\t':
+			out = append(out, '\\', 't')
+		case c < 0x20:
+			const hex = "0123456789abcdef"
+			out = append(out, '\\', 'u', '0', '0', hex[c>>4], hex[c&0xf])
+		default:
+			out = append(out, c)
+		}
+	}
+	return string(out)
+}
+
+// strconvFormatInt is a tiny stdlib-free int64 → decimal string
+// converter. Avoids pulling strconv into this file's imports just
+// for a 1-line call.
+func strconvFormatInt(n int64) string {
+	if n == 0 {
+		return "0"
+	}
+	negative := n < 0
+	if negative {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if negative {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}

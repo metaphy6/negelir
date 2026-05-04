@@ -113,6 +113,19 @@ SEC_QUARANTINE = Topic("sec.quarantine.v1")
 # without polling Redis.
 SEC_DENYLIST = Topic("sec.denylist.v1")
 
+# `sec.config.v1` — control-plane (versioned because the schema is
+# stable across the cross-pod sync). ROADMAP §7.1 binding: mtime
+# polling does NOT fire on `kubectl rollout` of a ConfigMap-mounted
+# file in every CRI runtime, so each `sec.input.v1` (and Go gateway)
+# replica subscribes here for an out-of-band wake-up. Producer set:
+# any sec.* agent that detects a local mtime delta + the Phase 8
+# `ops_console` operator surface. The FILE remains the source of
+# truth — the bus event only hints "go re-stat the path now". Both
+# the producer and consumer compute the same sha256; a consumer
+# whose current ruleset already matches the announced sha256 skips
+# the disk re-read (idempotent).
+SEC_CONFIG = Topic("sec.config.v1")
+
 
 __all__ = [
     "FRESHNESS_EVENTS",
@@ -133,6 +146,7 @@ __all__ = [
     "SCRAPE_RAW",
     "SCRAPE_REQUEST",
     "SEC_ALERT",
+    "SEC_CONFIG",
     "SEC_DENYLIST",
     "SEC_QUARANTINE",
     "TELEMETRY",

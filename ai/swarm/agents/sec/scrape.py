@@ -310,7 +310,11 @@ class SecScrapeAgent:
         clock_iso: Callable[[], str] | None = None,
         new_id: Callable[[], str] | None = None,
     ) -> None:
-        self._debouncer = debouncer or SecAlertDebouncer(
+        # NOTE: explicit ``is None`` check rather than ``debouncer or ...``
+        # because ``SecAlertDebouncer.__len__`` returns the bucket count
+        # — a freshly-injected debouncer is len()==0 and therefore
+        # falsy, which would silently drop the test/operator override.
+        self._debouncer = debouncer if debouncer is not None else SecAlertDebouncer(
             ttl_s=int(_cfg.sec_alert_debounce_ttl_s),
             critical_bypass=not bool(_cfg.sec_alert_critical_debounce_enabled),
             max_buckets=int(_cfg.sec_rate_max_subjects),

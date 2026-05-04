@@ -1287,3 +1287,66 @@ class DenylistEvent:
             decided_at=str(data["decided_at"]),
             ttl_s=int(data.get("ttl_s", 0)),
         )
+
+
+# Phase 7 §7.1 — `sec.config.v1` cross-pod fan-out for hot-reload of
+# the deterministic-pattern YAML (and any other operator-tunable
+# config file the sec agents read). The producer set is open within
+# `sec.*` (any sec agent that detects a local mtime delta) plus the
+# Phase 8 `ops_console` operator surface; consumers re-read the file
+# only when the announced sha256 disagrees with their currently-loaded
+# ruleset (idempotent — a producer firing an event for a sha the
+# consumer already has is a no-op).
+_ALLOWED_SEC_CONFIG_NAMES: frozenset[str] = frozenset({
+    "injection_patterns",       # ai/common/security/injection_patterns.yaml
+    "endpoint_costs",           # ai/common/security/endpoint_costs.yaml (Phase 9 hot-reload)
+})
+
+
+@dataclass(frozen=True)
+class SecConfigEvent:
+    """`sec.config.v1` payload — control-plane fan-out hint.
+
+    Carries the *expected* sha256 + mtime so subscribers can:
+      * skip the disk re-read when they already have that sha
+        (idempotent under at-least-once redelivery);
+      * detect a tampered file (computed sha disagrees with
+        announced sha) and fail-open per §7.7 doctrine — keep the
+        old ruleset and emit `sec.alert.v1{kind=pattern_reload,
+        severity=error}`.
+
+    `mtime_ns` is informational; the sha is the contract.
+    """
+
+    config_name: str
+    sha256: str
+    mtime_ns: int
+    emitted_at: str
+
+    def __post_init__(self) -> None:
+        if self.config_name not in _ALLOWED_SEC_CONFIG_NAMES:
+            raise ValueError(
+                f"SecConfigEvent.config_name={self.config_name!r} not in "
+                f"{sorted(_ALLOWED_SEC_CONFIG_NAMES)}"
+            )
+        if not isinstance(self.sha256, str) or len(self.sha256) != 64:
+            raise ValueError(
+                f"SecConfigEvent.sha256 must be a 64-char hex digest; "
+                f"got {self.sha256!r}"
+            )
+        if self.mtime_ns < 0:
+            raise ValueError(
+                f"SecConfigEvent.mtime_ns must be >= 0; got {self.mtime_ns}"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SecConfigEvent":
+        return cls(
+            config_name=str(data["config_name"]),
+            sha256=str(data["sha256"]),
+            mtime_ns=int(data.get("mtime_ns", 0)),
+            emitted_at=str(data["emitted_at"]),
+        )

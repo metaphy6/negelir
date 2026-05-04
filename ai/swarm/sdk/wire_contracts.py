@@ -46,4 +46,31 @@ MAINT_EVENT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
 })
 
 
-__all__ = ["MAINT_EVENT_V1_ALLOWED_PRODUCERS"]
+# `sec.config.v1` producers (ROADMAP §7.1 cross-pod fan-out).
+#
+# Members:
+#   * ``sec.input.v1`` — emits when its mtime poller detects a
+#     local change, so sibling replicas re-read the file
+#     immediately rather than waiting for their own poll tick.
+#   * ``sec.scrape.v1`` — same pattern for the (future) scrape-side
+#     allowlist; reserved so the agent can join the producer set
+#     without a separate doctrine rev.
+#   * ``ops_console`` — Phase 8 maint surface. Operators publish
+#     when they edit the YAML out-of-band (e.g. via a sealed
+#     ConfigMap rotation); the announcement triggers immediate
+#     reload across all sec.input.v1 / gateway replicas.
+#
+# Doctrine: append-only. Adding a producer is a minor bump on
+# `swarm`. Consumers tolerate unknown producers (the sha256 is the
+# contract); the allow-list is the AST-scan boundary test.
+SEC_CONFIG_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "sec.input.v1",
+    "sec.scrape.v1",
+    "ops_console",
+})
+
+
+__all__ = [
+    "MAINT_EVENT_V1_ALLOWED_PRODUCERS",
+    "SEC_CONFIG_V1_ALLOWED_PRODUCERS",
+]

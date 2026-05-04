@@ -137,7 +137,11 @@ class SecRateAgent:
         clock_mono: Callable[[], float] | None = None,
         new_id: Callable[[], str] | None = None,
     ) -> None:
-        self._debouncer = debouncer or SecAlertDebouncer(
+        # NOTE: explicit ``is None`` check rather than ``debouncer or ...``
+        # because ``SecAlertDebouncer.__len__`` returns the bucket count
+        # — a freshly-injected debouncer is len()==0 and therefore
+        # falsy, which would silently drop the test/operator override.
+        self._debouncer = debouncer if debouncer is not None else SecAlertDebouncer(
             ttl_s=int(_cfg.sec_alert_debounce_ttl_s),
             critical_bypass=not bool(_cfg.sec_alert_critical_debounce_enabled),
             max_buckets=int(_cfg.sec_rate_max_subjects),
@@ -377,6 +381,64 @@ class SecRateAgent:
         with self._lock:
             window = self._windows.get(subject)
             return bool(window and window.denylisted_at is not None)
+
+    # ── Cardinality-cap escalation (ROADMAP §7.3) ─────────────────
+    def note_denylist_capped(
+        self,
+        *,
+        subject: str,
+        current_count: int,
+    ) -> Iterable[Message]:
+        """Public hook for the Go gateway / write-path to invoke when
+        the server-side ``sec_denylist_mutate.lua`` script returns
+        ``rejected_capped`` because the denylist hash is at
+        ``cfg.sec_denylist_max_entries``.
+
+        Emits a single ``sec.alert.v1{kind=denylist_growth_anomaly,
+        severity=critical}`` message — this is a runaway-growth
+        signal (likely sustained credential-stuffing / DDoS, or a
+        widened attacker subnet) and pages on-call immediately.
+        Critical alerts bypass debounce by default
+        (``cfg.sec_alert_critical_debounce_enabled=False`` per
+        §7.4); when an operator opts in, the standard debouncer
+        TTL applies — useful when the cap has been reached for a
+        sustained outage and the on-call team wants the noise
+        damped.
+
+        ``subject`` identifies the candidate-but-rejected entry
+        (``client_id`` for post-auth, ``ip`` / CIDR for pre-auth /
+        cap-mode subnets); ``current_count`` is the post-script
+        cardinality so the alert reason carries the operator-
+        actionable metric.
+
+        Idempotent: the debouncer keys on ``(kind, subject)`` so
+        repeated reports for the same subject within the TTL
+        window collapse to one alert.
+        """
+        kind = "denylist_growth_anomaly"
+        severity = "critical"
+        reason = (
+            f"denylist cardinality cap hit "
+            f"({current_count}>={int(_cfg.sec_denylist_max_entries)}); "
+            f"runaway growth or attacker subnet expansion suspected"
+        )
+        if bool(_cfg.sec_alert_critical_debounce_enabled):
+            decision = self._debouncer.decide(
+                kind=kind, subject=subject, severity=severity, reason=reason
+            )
+            if not decision.emit:
+                return
+            reason = decision.reason
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind=kind,
+            severity=severity,
+            source=self.name,
+            reason=reason,
+            produced_at=self._clock_iso(),
+            subject=subject,
+        )
+        yield Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
 
 
 __all__ = ["SecRateAgent"]

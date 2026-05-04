@@ -109,3 +109,92 @@ func TestSecondaryBucketSubjectsIsolated(t *testing.T) {
 		t.Fatalf("bob first call must allow, got %s", d.Status)
 	}
 }
+
+// ── BuildThrottleResponse (ROADMAP §7.3) ─────────────────────────
+
+func TestBuildThrottleResponse_ThrottleReturns429(t *testing.T) {
+	d := RateDecision{Status: RateThrottle, RetryAfter: 2500 * time.Millisecond}
+	status, headers, body := BuildThrottleResponse(d, "")
+	if status != 429 {
+		t.Fatalf("expected 429, got %d", status)
+	}
+	if headers["Retry-After"] != "3" {
+		t.Fatalf("expected Retry-After=3 (ceiling of 2.5s), got %q", headers["Retry-After"])
+	}
+	if got := headers["Content-Type"]; got != "application/json; charset=utf-8" {
+		t.Fatalf("bad content-type: %q", got)
+	}
+	want := `{"error":"rate_limited","retry_after_ms":2500,"reason":"rate_limited"}`
+	if string(body) != want {
+		t.Fatalf("body mismatch:\n got %s\nwant %s", body, want)
+	}
+}
+
+func TestBuildThrottleResponse_DeniedReturns403(t *testing.T) {
+	d := RateDecision{Status: RateDenied, RetryAfter: 60 * time.Second}
+	status, headers, body := BuildThrottleResponse(d, "denylisted_ip")
+	if status != 403 {
+		t.Fatalf("expected 403, got %d", status)
+	}
+	if headers["Retry-After"] != "60" {
+		t.Fatalf("expected Retry-After=60, got %q", headers["Retry-After"])
+	}
+	want := `{"error":"denylisted","retry_after_ms":60000,"reason":"denylisted_ip"}`
+	if string(body) != want {
+		t.Fatalf("body mismatch:\n got %s\nwant %s", body, want)
+	}
+}
+
+func TestBuildThrottleResponse_AllowReturnsZero(t *testing.T) {
+	d := RateDecision{Status: RateAllow}
+	status, headers, body := BuildThrottleResponse(d, "")
+	if status != 0 || headers != nil || body != nil {
+		t.Fatalf("allow path must short-circuit; got status=%d headers=%v body=%s",
+			status, headers, body)
+	}
+}
+
+func TestBuildThrottleResponse_ErrorReturnsZero(t *testing.T) {
+	// RateError means the rate-checker itself failed; the gateway
+	// must NOT auto-throttle (that's a fail-open call) — refuse to
+	// fabricate a throttle response.
+	d := RateDecision{Status: RateError}
+	status, _, _ := BuildThrottleResponse(d, "")
+	if status != 0 {
+		t.Fatalf("error must short-circuit; got status=%d", status)
+	}
+}
+
+func TestBuildThrottleResponse_RetryAfterCeiling(t *testing.T) {
+	// 1ms must round up to 1s, not 0 (RFC 6585: clients treat 0 as
+	// "no advice", which would be misleading).
+	d := RateDecision{Status: RateThrottle, RetryAfter: 1 * time.Millisecond}
+	_, headers, _ := BuildThrottleResponse(d, "")
+	if headers["Retry-After"] != "1" {
+		t.Fatalf("expected Retry-After=1 (ceiling of 1ms), got %q",
+			headers["Retry-After"])
+	}
+}
+
+func TestBuildThrottleResponse_NegativeRetryAfterClamped(t *testing.T) {
+	d := RateDecision{Status: RateThrottle, RetryAfter: -5 * time.Second}
+	_, headers, body := BuildThrottleResponse(d, "")
+	if headers["Retry-After"] != "0" {
+		t.Fatalf("expected Retry-After=0, got %q", headers["Retry-After"])
+	}
+	if want := `{"error":"rate_limited","retry_after_ms":0,"reason":"rate_limited"}`; string(body) != want {
+		t.Fatalf("body mismatch: got %s", body)
+	}
+}
+
+func TestBuildThrottleResponse_ReasonEscaped(t *testing.T) {
+	// Adversarial: an operator-supplied reason carrying control
+	// characters / quote must be escaped so we don't break the
+	// JSON envelope.
+	d := RateDecision{Status: RateThrottle, RetryAfter: 1 * time.Second}
+	_, _, body := BuildThrottleResponse(d, `"evil\nreason`)
+	want := `{"error":"rate_limited","retry_after_ms":1000,"reason":"\"evil\\nreason"}`
+	if string(body) != want {
+		t.Fatalf("escape mismatch: got %s\nwant %s", body, want)
+	}
+}

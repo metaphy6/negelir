@@ -64,11 +64,13 @@ from ..payloads import (
     QaRequestV1,
     QuarantineSample,
     SecAlert,
+    SecConfigEvent,
 )
 from ..topics import (
     QA_REQUEST,
     QA_REQUEST_V1,
     SEC_ALERT,
+    SEC_CONFIG,
     SEC_QUARANTINE,
 )
 from ...sdk.types import Message, Topic
@@ -174,8 +176,8 @@ class SecInputAgent:
     """
 
     name = "sec.input.v1"
-    subscribes: tuple[Topic, ...] = (QA_REQUEST,)
-    publishes: tuple[Topic, ...] = (QA_REQUEST_V1, SEC_QUARANTINE, SEC_ALERT)
+    subscribes: tuple[Topic, ...] = (QA_REQUEST, SEC_CONFIG)
+    publishes: tuple[Topic, ...] = (QA_REQUEST_V1, SEC_QUARANTINE, SEC_ALERT, SEC_CONFIG)
 
     def __init__(
         self,
@@ -225,7 +227,11 @@ class SecInputAgent:
         # the same regardless of whether reload happened mid-request
         # or out-of-band via maybe_reload_patterns().
         self._pending_pattern_alerts: Deque[Message] = deque()
-        self._debouncer = debouncer or SecAlertDebouncer(
+        # NOTE: explicit ``is None`` check rather than ``debouncer or ...``
+        # because ``SecAlertDebouncer.__len__`` returns the bucket count
+        # — a freshly-injected debouncer is len()==0 and therefore
+        # falsy, which would silently drop the test/operator override.
+        self._debouncer = debouncer if debouncer is not None else SecAlertDebouncer(
             ttl_s=int(_cfg.sec_alert_debounce_ttl_s),
             critical_bypass=not bool(_cfg.sec_alert_critical_debounce_enabled),
             max_buckets=int(_cfg.sec_rate_max_subjects),
@@ -257,6 +263,8 @@ class SecInputAgent:
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
         topic = msg.envelope.topic
+        if topic == SEC_CONFIG:
+            return list(self._handle_config(msg))
         if topic != QA_REQUEST:
             _log.warning("%s: unsubscribed topic %r delivered", self.name, topic)
             return ()
@@ -272,6 +280,42 @@ class SecInputAgent:
         self._maybe_poll_patterns(out)
         out.extend(self._handle_request(req))
         return out
+
+    # ── sec.config.v1 (cross-pod fan-out) ─────────────────────────
+    def _handle_config(self, msg: Message) -> Iterable[Message]:
+        """React to a cross-pod hot-reload announcement.
+
+        Per ROADMAP §7.1: mtime polling does not fire on
+        ``kubectl rollout`` of a ConfigMap-mounted file in every
+        CRI runtime. The bus event is the secondary wake-up — the
+        FILE on disk is still the source of truth, the announced
+        sha256 is just a cheap hint.
+
+        Idempotency: if the announced sha matches our currently-
+        loaded ruleset, this is a no-op (we silently skip).
+        Otherwise we fall through to the same ``_reload_now()`` the
+        mtime poller uses; on parse failure we keep the old
+        ruleset and emit a debounced
+        ``sec.alert.v1{kind=pattern_reload, severity=error}``.
+        """
+        try:
+            event = SecConfigEvent.from_dict(msg.payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            _log.warning("%s: malformed sec.config.v1: %s", self.name, exc)
+            return
+        if event.config_name != "injection_patterns":
+            # The endpoint_costs file is owned by the Go gateway;
+            # the Python agent has no view into it. Silent skip is
+            # correct — and a test pins the contract.
+            return
+        # Quick sha pre-check under the lock so we don't redundantly
+        # hit the disk on a re-broadcast of the same announcement.
+        with self._lock:
+            current = self._ruleset
+            if current is not None and current.sha256 == event.sha256:
+                return
+        # Disk re-read; same fail-safe path as the mtime poller.
+        yield from self._reload_now()
 
     # ── Core ──────────────────────────────────────────────────────
     def _handle_request(self, req: QaRequest) -> Iterable[Message]:

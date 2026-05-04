@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.config.v1",
+  "title": "sec.config.v1",
+  "description": "Phase 7 §7.1 control-plane fan-out: announces that a sec-side config file (deterministic-pattern YAML, endpoint-cost map, ...) changed on disk. Consumers that already hold the announced sha256 skip the re-read (idempotent). Producer set is open within `sec.*` (any sec agent that detects a local mtime delta) plus the Phase 8 `ops_console` operator surface. Mirrors `ai/swarm/agents/payloads.py::SecConfigEvent`.",
+  "type": "object",
+  "required": ["config_name", "sha256", "emitted_at"],
+  "properties": {
+    "config_name": {
+      "type": "string",
+      "enum": ["injection_patterns", "endpoint_costs"],
+      "description": "Closed enum: only the two sec-side config files have a hot-reload contract today."
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Hex-encoded sha256 of the FILE BYTES the producer observed. The contract — consumers re-read the file and verify their local sha matches."
+    },
+    "mtime_ns": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Informational only; the sha256 is the contract. Defends against clock-skew across pods."
+    },
+    "emitted_at": { "type": "string", "description": "ISO-8601 UTC." }
+  },
+  "additionalProperties": false
+}
