@@ -1,0 +1,71 @@
+# Phase 7 §7.3 — weighted token cost per endpoint pattern.
+#
+# The Go gateway maps each request's path to a cost via this file
+# before charging the GCRA bucket (see infra/redis/lua/sec_rate_check.lua).
+# Costs reflect the downstream resource a request is going to consume:
+#
+#   /v1/healthz                   → 0  (free; cheap probe)
+#   /v1/leagues*                  → 1  (cached read)
+#   /v1/matches/*/predictions     → 2  (predictor fan-in)
+#   /v1/qa                        → 5  (downstream LLM batch)
+#   /v1/auth/*                    → 3  (bcrypt CPU cost)
+#   any unmapped route            → cfg.sec_rate_default_cost (default 1)
+#
+# Cost mapping is observed: the Lua script returns `cost_charged`
+# so the gateway labels its `negelir_sec_rate_charge_total{endpoint, cost}`
+# counter. Cardinality is bounded by the pattern set (NOT the URL
+# set) so this YAML is also the implicit cap on label cardinality.
+#
+# Doctrine recap (binding):
+#
+# * `pattern` is a Gin-style route pattern (literal segments, `:param`
+#   placeholders, trailing `*splat`). The Go gateway compiles them
+#   with `gin.IRouter` semantics, NOT regex — order matters; the
+#   first match wins. Listing more-specific patterns FIRST is
+#   load-bearing (e.g. `/v1/matches/:id/predictions` before
+#   `/v1/matches/:id`).
+# * `cost` is a non-negative integer. Zero means "free" (the bucket
+#   is not charged) — reserve for trivial probes only.
+# * Hot-reloadable: the gateway re-reads the file on the
+#   `sec.config.v1` control-plane fan-out (Phase 7 §7.1) or on
+#   mtime-poll, whichever fires first.
+#
+# Test contract (binding §7.6 "Endpoint cost mapping is total"):
+#
+#   * Every route registered with the gateway router has a matching
+#     entry here OR is intentionally unmapped (charged `default_cost`).
+#   * No route may be silently free — `cost: 0` is allowed only for
+#     entries explicitly listed below.
+version: 1
+default_cost: 1
+costs:
+  # Trivial / health probes — free.
+  - pattern: "/v1/healthz"
+    cost: 0
+
+  # Auth — bcrypt CPU heavy; intentionally pricier than read endpoints
+  # to slow down credential-stuffing.
+  - pattern: "/v1/auth/login"
+    cost: 3
+  - pattern: "/v1/auth/register"
+    cost: 3
+  - pattern: "/v1/auth/refresh"
+    cost: 3
+
+  # Predictor fan-in. Listed before the more-general matches route.
+  - pattern: "/v1/matches/:id/predictions"
+    cost: 2
+
+  # Q&A — triggers the downstream LLM batch.
+  - pattern: "/v1/qa"
+    cost: 5
+
+  # Cached reads — cheap.
+  - pattern: "/v1/leagues"
+    cost: 1
+  - pattern: "/v1/leagues/:id/fixtures"
+    cost: 1
+  - pattern: "/v1/matches/:id"
+    cost: 1
+  - pattern: "/v1/me"
+    cost: 1

@@ -53,6 +53,31 @@ type Config struct {
 	// compute the dead-after-3-missed-heartbeats marker. Marked `# shared`
 	// in .env.example.
 	SwarmHeartbeatSec int `env:"SWARM_HEARTBEAT_SEC" default:"5"`
+
+	// Phase 7 §7.1 / §7.3 — defense-agent knobs SHARED with the Python
+	// `sec.*` agents (ai/swarm/agents/sec/). The Go gateway runs the
+	// in-process tier (length cap, deterministic rules, GCRA bucket via
+	// EVALSHA, denylist short-circuit); the Python agents own the
+	// escalation classifier + denylist mutation + burst detection. Both
+	// sides MUST read the same env var so a single operator knob lands
+	// on both surfaces. All marked `# shared` in .env.example.
+	SecInputMaxLen               int     `env:"NEGELIR_SEC_INPUT_MAX_LEN"               default:"8192"`
+	SecInputGatewayMaxLatencyMs  int     `env:"NEGELIR_SEC_INPUT_GATEWAY_MAX_LATENCY_MS" default:"10"`
+	SecInputPatternReloadSec     int     `env:"NEGELIR_SEC_INPUT_PATTERN_RELOAD_S"      default:"30"`
+	SecQuarantinePayloadMaxBytes int     `env:"NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES" default:"65536"`
+	SecRatePreAuthCapacity       int     `env:"NEGELIR_SEC_RATE_PRE_AUTH_CAPACITY"      default:"30"`
+	SecRatePreAuthRefillPerS     float64 `env:"NEGELIR_SEC_RATE_PRE_AUTH_REFILL_PER_S"  default:"0.5"`
+	SecRatePostAuthCapacity      int     `env:"NEGELIR_SEC_RATE_POST_AUTH_CAPACITY"     default:"600"`
+	SecRatePostAuthRefillPerS    float64 `env:"NEGELIR_SEC_RATE_POST_AUTH_REFILL_PER_S" default:"5.0"`
+	SecRateBucketIdleTTLSec      int     `env:"NEGELIR_SEC_RATE_BUCKET_IDLE_TTL_S"      default:"3600"`
+	SecRateIPv4Prefix            int     `env:"NEGELIR_SEC_RATE_IPV4_PREFIX"            default:"32"`
+	SecRateIPv6Prefix            int     `env:"NEGELIR_SEC_RATE_IPV6_PREFIX"            default:"64"`
+	SecRateTrustedProxies        string  `env:"NEGELIR_SEC_RATE_TRUSTED_PROXIES"        default:""`
+	SecRateRedisTimeoutMs        int     `env:"NEGELIR_SEC_RATE_REDIS_TIMEOUT_MS"       default:"50"`
+	SecRateSecondaryCapacity     int     `env:"NEGELIR_SEC_RATE_SECONDARY_CAPACITY"     default:"300"`
+	SecRateSecondaryRefillPerS   float64 `env:"NEGELIR_SEC_RATE_SECONDARY_REFILL_PER_S" default:"5.0"`
+	SecRateDefaultCost           int     `env:"NEGELIR_SEC_RATE_DEFAULT_COST"           default:"1"`
+	SecDenylistMaxEntries        int     `env:"NEGELIR_SEC_DENYLIST_MAX_ENTRIES"        default:"250000"`
 }
 
 // Duration helpers — keep callers free of `time.Duration(x) * time.Second`.
@@ -171,6 +196,7 @@ type fieldSpec struct {
 	dflt      string // default value
 	stringDst *string
 	intDst    *int
+	floatDst  *float64
 }
 
 func (c *Config) specs() []fieldSpec {
@@ -197,6 +223,25 @@ func (c *Config) specs() []fieldSpec {
 		{name: "CACHE_MATCHES_TTL_SEC", dflt: "300", intDst: &c.CacheMatchesTTLSec},
 		{name: "CACHE_TEAMS_TTL_SEC", dflt: "600", intDst: &c.CacheTeamsTTLSec},
 		{name: "SWARM_HEARTBEAT_SEC", dflt: "5", intDst: &c.SwarmHeartbeatSec},
+
+		// Phase 7 sec.* shared knobs.
+		{name: "NEGELIR_SEC_INPUT_MAX_LEN", dflt: "8192", intDst: &c.SecInputMaxLen},
+		{name: "NEGELIR_SEC_INPUT_GATEWAY_MAX_LATENCY_MS", dflt: "10", intDst: &c.SecInputGatewayMaxLatencyMs},
+		{name: "NEGELIR_SEC_INPUT_PATTERN_RELOAD_S", dflt: "30", intDst: &c.SecInputPatternReloadSec},
+		{name: "NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES", dflt: "65536", intDst: &c.SecQuarantinePayloadMaxBytes},
+		{name: "NEGELIR_SEC_RATE_PRE_AUTH_CAPACITY", dflt: "30", intDst: &c.SecRatePreAuthCapacity},
+		{name: "NEGELIR_SEC_RATE_PRE_AUTH_REFILL_PER_S", dflt: "0.5", floatDst: &c.SecRatePreAuthRefillPerS},
+		{name: "NEGELIR_SEC_RATE_POST_AUTH_CAPACITY", dflt: "600", intDst: &c.SecRatePostAuthCapacity},
+		{name: "NEGELIR_SEC_RATE_POST_AUTH_REFILL_PER_S", dflt: "5.0", floatDst: &c.SecRatePostAuthRefillPerS},
+		{name: "NEGELIR_SEC_RATE_BUCKET_IDLE_TTL_S", dflt: "3600", intDst: &c.SecRateBucketIdleTTLSec},
+		{name: "NEGELIR_SEC_RATE_IPV4_PREFIX", dflt: "32", intDst: &c.SecRateIPv4Prefix},
+		{name: "NEGELIR_SEC_RATE_IPV6_PREFIX", dflt: "64", intDst: &c.SecRateIPv6Prefix},
+		{name: "NEGELIR_SEC_RATE_TRUSTED_PROXIES", dflt: "", stringDst: &c.SecRateTrustedProxies},
+		{name: "NEGELIR_SEC_RATE_REDIS_TIMEOUT_MS", dflt: "50", intDst: &c.SecRateRedisTimeoutMs},
+		{name: "NEGELIR_SEC_RATE_SECONDARY_CAPACITY", dflt: "300", intDst: &c.SecRateSecondaryCapacity},
+		{name: "NEGELIR_SEC_RATE_SECONDARY_REFILL_PER_S", dflt: "5.0", floatDst: &c.SecRateSecondaryRefillPerS},
+		{name: "NEGELIR_SEC_RATE_DEFAULT_COST", dflt: "1", intDst: &c.SecRateDefaultCost},
+		{name: "NEGELIR_SEC_DENYLIST_MAX_ENTRIES", dflt: "250000", intDst: &c.SecDenylistMaxEntries},
 	}
 }
 
@@ -221,6 +266,17 @@ func bindEnv(c *Config) error {
 				continue
 			}
 			*s.intDst = n
+		case s.floatDst != nil:
+			if raw == "" {
+				*s.floatDst = 0
+				continue
+			}
+			f, err := strconv.ParseFloat(raw, 64)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s=%q: %s", s.name, raw, err))
+				continue
+			}
+			*s.floatDst = f
 		}
 	}
 	if len(errs) > 0 {

@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 16,
+    "build": 18,
     "released": null
   },
   "components": {
@@ -14,9 +14,9 @@
       "last_changed": "2026-05-04T09:17:12+00:00"
     },
     "server": {
-      "version": "1.4.1",
+      "version": "1.5.0",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-04-30T07:14:45+00:00"
+      "last_changed": "2026-05-04T12:17:55+00:00"
     },
     "xops": {
       "version": "3.5.0",
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.12.1",
+      "version": "1.12.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-03T14:09:12+00:00"
+      "last_changed": "2026-05-04T12:17:55+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1698,6 +1698,24 @@
       "from": "0.20.2",
       "to": "0.20.3",
       "build": 16
+    },
+    {
+      "timestamp": "2026-05-04T12:17:55+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 7 Bucket B: server/internal/sec library tier (sanitize, patterns, xff/IPv6 bucketing, endpoint costs, lua header verifier, QAInputGate with password carve-out, secondary in-process GCRA bucket)",
+      "from": "1.4.1",
+      "to": "1.5.0",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-05-04T12:17:55+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 7 §7.6 boundary-test boxes flipped; §7.7 Go gateway middleware partially closed pending Phase 9 router wiring",
+      "from": "1.12.1",
+      "to": "1.12.2",
+      "build": 18
     }
   ]
 }
