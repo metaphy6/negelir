@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 10,
+    "build": 12,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.19.1",
+      "version": "0.19.3",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-04T09:40:29+00:00"
+      "last_changed": "2026-05-04T10:05:17+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1644,6 +1644,24 @@
       "from": "3.4.0",
       "to": "3.5.0",
       "build": 10
+    },
+    {
+      "timestamp": "2026-05-04T09:56:50+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 7 §7.1 defense-in-depth fix: SecInputAgent now re-applies NFC + control/zero-width/RTL stripping itself instead of trusting the gateway claim. Closes a defense-bypass gap where a misbehaving direct producer to qa.request could ship raw zero-widths/RTL overrides into qa.request.v1 with sec_verdict=sanitized. Sanitization runs BEFORE the classifier so attackers cannot blind it. Loud-on-mutation: charset_anomaly info alert (debounced) when bytes were actually changed (signals upstream gateway bypass). Quarantine path preserves original bytes for forensics. +4 regression tests.",
+      "from": "0.19.1",
+      "to": "0.19.2",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-05-04T10:05:17+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 7 §7.5 producer-side quarantine overflow guard in SecInputAgent: bounded inflight-deque ages out per cfg.sec_quarantine_storage_lag_alert_ms window; on saturation emits debounced quarantine_overflow SecAlert (severity=error). Drop-from-tracking, NOT drop-from-publication — fresh forensic evidence always reaches the wire (per §7.5 doctrine fresh-is-best). Constructor accepts clock_mono for monotonic-time test injection. +3 regression tests (saturation fires once with debounce; spaced emissions age out cleanly; critical_bypass=False knob path debounces critical alerts as documented escape-hatch).",
+      "from": "0.19.2",
+      "to": "0.19.3",
+      "build": 12
     }
   ]
 }

@@ -41,11 +41,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import threading
+import time
+import unicodedata
 from base64 import b64encode
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from datetime import datetime, timezone
-from typing import Callable, Iterable
+from typing import Callable, Deque, Iterable
 from uuid import uuid4
 
 from common.config import cfg as _cfg
@@ -80,6 +83,71 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# ── Defense-in-depth sanitizer ────────────────────────────────────
+#
+# Per ROADMAP §7.1, the Go gateway's middleware applies steps 1–4
+# (length cap, charset / control-char strip, NFC + Turkish-aware
+# lowercase, deterministic injection rules) BEFORE publishing
+# `qa.request`. This agent runs step 5 (classifier) and forwards.
+#
+# But §7.7 fail-open doctrine + Phase 9 cross-phase contract bind
+# the agent to **defense-in-depth**: a misbehaving internal client,
+# a dev-profile bypass, or a future regression that lets bytes reach
+# `qa.request` without the gateway's transforms must NOT be able to
+# inject zero-width chars, RTL overrides, or other charset-spoofing
+# payloads into `qa.request.v1` (which the NLP layer trusts as
+# `sec_verdict=sanitized`).
+#
+# So the agent re-applies the deterministic byte-level transforms
+# itself before publishing v1. Idempotent — gateway-already-sanitized
+# bytes survive untouched. The wire field `sec_steps_run` reports
+# what THIS agent actually ran, not what the gateway claimed.
+
+# Control chars (C0, except \t \n \r) + DEL + C1 + zero-width
+# (U+200B..U+200F, U+202A..U+202E LRE/RLE/PDF/LRO/RLO,
+#  U+2066..U+2069 LRI/RLI/FSI/PDI, U+FEFF BOM, U+00AD soft hyphen).
+# Pattern is anchored to Unicode points so it is correct after NFC
+# (where a precomposed char like ï is NOT split). Compiled once.
+_STRIP_CONTROL_RE = re.compile(
+    "["
+    "\u0000-\u0008\u000B\u000C\u000E-\u001F"  # C0 minus \t \n \r
+    "\u007F"                                    # DEL
+    "\u0080-\u009F"                             # C1
+    "\u00AD"                                    # SOFT HYPHEN
+    "\u200B-\u200F"                             # ZWSP, ZWNJ, ZWJ, LRM, RLM
+    "\u202A-\u202E"                             # LRE, RLE, PDF, LRO, RLO
+    "\u2066-\u2069"                             # LRI, RLI, FSI, PDI
+    "\uFEFF"                                    # BOM / ZWNBSP
+    "]"
+)
+
+
+def sanitize_text(raw: str) -> tuple[str, list[str], bool]:
+    """Apply defense-in-depth transforms.
+
+    Returns ``(clean, steps_run, mutated)``:
+
+    * ``clean`` — sanitized text safe to forward on `qa.request.v1`.
+    * ``steps_run`` — deterministic list of transforms that executed
+      (the agent always runs the same set; this lists them so the
+      NLP layer's forensic trace is explicit on the wire).
+    * ``mutated`` — ``True`` iff the bytes were actually changed.
+      The agent uses this to fire a debounced
+      ``sec.alert.v1{kind=charset_anomaly}`` info alert — a signal
+      that something reached `qa.request` without being sanitized
+      upstream, i.e. the gateway's middleware was bypassed or
+      buggy. Loud-on-mutation is the §7.7 doctrine.
+
+    Idempotent: ``sanitize_text(sanitize_text(s)[0])[2] is False``
+    for any ``s``.
+    """
+    # 1. NFC normalize. Defends against canonical-equivalence smuggling.
+    nfc = unicodedata.normalize("NFC", raw)
+    # 2. Strip control chars + zero-widths + RTL overrides + BOM.
+    stripped = _STRIP_CONTROL_RE.sub("", nfc)
+    return stripped, ["nfc", "strip_control"], stripped != raw
+
+
 class SecInputAgent:
     """Subscribes ``qa.request``; emits ``qa.request.v1``,
     ``sec.quarantine.v1``, and ``sec.alert.v1`` per §7.1.
@@ -109,6 +177,7 @@ class SecInputAgent:
         classifier: Callable[[str], tuple[str, str]] | None = None,
         debouncer: SecAlertDebouncer | None = None,
         clock_iso: Callable[[], str] | None = None,
+        clock_mono: Callable[[], float] | None = None,
         new_id: Callable[[], str] | None = None,
     ) -> None:
         self._classifier = classifier
@@ -118,10 +187,27 @@ class SecInputAgent:
             max_buckets=int(_cfg.sec_rate_max_subjects),
         )
         self._clock_iso = clock_iso or _utc_iso
+        self._clock_mono = clock_mono or time.monotonic
         self._new_id = new_id or _new_id
         # Idempotency: dedup by request_id with insertion-order LRU.
         self._dedup: "OrderedDict[str, None]" = OrderedDict()
         self._dedup_max = max(1, int(_cfg.sec_input_classifier_max_pending))
+        # Producer-side overflow guard (§7.5 binding). When storage.v1
+        # falls behind under a coordinated quarantine burst, this
+        # bounded deque tracks the *recent* emission timestamps; old
+        # entries (older than the storage-lag alert window) age out.
+        # When the deque saturates, a `quarantine_overflow` SecAlert
+        # fires (debounced, severity=error). We DO NOT drop the new
+        # write — the freshest forensic evidence is the most valuable
+        # (§7.5 doctrine: drop-oldest interpreted as drop-from-tracking,
+        # not drop-from-publication; on InMemoryBus there's no real
+        # storage backpressure to relieve, but the alert tells operators
+        # the consumer-side guard `quarantine_storage_slow` is imminent).
+        self._quarantine_inflight: Deque[float] = deque()
+        self._quarantine_max = max(1, int(_cfg.sec_quarantine_producer_queue_max))
+        self._quarantine_window_s = max(
+            0.001, float(_cfg.sec_quarantine_storage_lag_alert_ms) / 1000.0
+        )
         self._lock = threading.Lock()
 
     # ── Bus contract ──────────────────────────────────────────────
@@ -176,9 +262,20 @@ class SecInputAgent:
             )
             return
 
-        verdict, reason = self._classify(req.raw_text)
+        # Defense-in-depth sanitization happens BEFORE the classifier
+        # so an attacker cannot blind it with zero-widths / RTL
+        # overrides / non-NFC sequences. The classifier sees the same
+        # bytes the NLP layer will see (sec_verdict=sanitized
+        # contract: the v1 envelope and the classifier input are
+        # consistent — no slip-through between detection and forward).
+        clean_text, sanitize_steps, mutated = sanitize_text(req.raw_text)
+
+        verdict, reason = self._classify(clean_text)
 
         if verdict == "quarantine":
+            # Quarantine carries the ORIGINAL raw bytes (not the
+            # sanitized version) so forensic analysis sees what
+            # actually arrived on the wire.
             yield from self._emit_quarantine(
                 req,
                 classifier_reason=reason,
@@ -190,10 +287,15 @@ class SecInputAgent:
         # steps 1–4; the agent's job here is to record that the
         # classifier verdict (step 5) was `pass`. ``sec_verdict`` is
         # ``sanitized`` because the gateway's deterministic transforms
-        # already mutated the bytes (NFC / control-strip / RTL-strip)
-        # before we saw them — the wire field captures the contract
-        # the NLP layer reads, not the classifier verdict alone.
-        yield from self._emit_pass(req, classifier_reason=reason)
+        # plus our defense-in-depth re-sanitization (above) jointly
+        # produced the bytes the NLP layer reads.
+        yield from self._emit_pass(
+            req,
+            clean_text=clean_text,
+            sanitize_steps=sanitize_steps,
+            mutated=mutated,
+            classifier_reason=reason,
+        )
 
     def _classify(self, text: str) -> tuple[str, str]:
         """Run the escalation-tier classifier and return
@@ -224,17 +326,25 @@ class SecInputAgent:
         return verdict, reason
 
     def _emit_pass(
-        self, req: QaRequest, *, classifier_reason: str
+        self,
+        req: QaRequest,
+        *,
+        clean_text: str,
+        sanitize_steps: list[str],
+        mutated: bool,
+        classifier_reason: str,
     ) -> Iterable[Message]:
-        # Build the v1 envelope. ``sec_steps_run`` records the
-        # gateway's deterministic steps that the agent could see;
-        # the actual byte-level transform happened in Go.
-        steps = ["nfc", "strip_control", "strip_rtl"]
+        # Defense-in-depth re-sanitization happened in the caller;
+        # we receive the cleaned text + the steps that ran. If
+        # `mutated` is True the upstream gateway either skipped a
+        # step or was bypassed; we surface that as a debounced
+        # `charset_anomaly` info alert.
+        steps = list(sanitize_steps)
         if classifier_reason not in {"classifier_disabled"}:
             steps.append("classifier")
         v1 = QaRequestV1(
             request_id=req.request_id,
-            sanitized_text=req.raw_text,
+            sanitized_text=clean_text,
             locale=req.locale,
             sec_verdict="sanitized",
             sec_steps_run=steps,
@@ -242,6 +352,33 @@ class SecInputAgent:
             emitted_at=self._clock_iso(),
         )
         yield Message.new(QA_REQUEST_V1, v1.as_dict(), producer=self.name)
+
+        # Loud-on-mutation: bytes-changed signals an upstream sanitizer
+        # bypass; emit one debounced `charset_anomaly` info alert per
+        # subject so operators see the bypass rate without alarm
+        # fatigue. Severity stays `info` — the agent already neutralised
+        # the bytes; this is forensic, not actionable in the moment.
+        if mutated:
+            decision = self._debouncer.decide(
+                kind="charset_anomaly",
+                subject=req.client_id or req.ip,
+                severity="info",
+                reason="defense-in-depth sanitizer mutated bytes (upstream bypass?)",
+            )
+            if decision.emit:
+                alert = SecAlert(
+                    alert_id=self._new_id(),
+                    kind="charset_anomaly",
+                    severity="info",
+                    source=self.name,
+                    reason=decision.reason,
+                    produced_at=self._clock_iso(),
+                    subject=req.client_id or req.ip,
+                    request_id=req.request_id,
+                    client_id=req.client_id,
+                    ip=req.ip,
+                )
+                yield Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
 
         # If the classifier was a no-op (v1 fallback) or errored, surface
         # that as a debounced alert so operators see the degraded window.
@@ -297,6 +434,13 @@ class SecInputAgent:
         )
         yield Message.new(SEC_QUARANTINE, sample.as_dict(), producer=self.name)
 
+        # Producer-side overflow check (§7.5 binding). Done AFTER
+        # publishing so the freshest sample is preserved on the wire;
+        # the alert is purely a saturation signal for operators.
+        overflow = self._note_quarantine_emission_locked()
+        if overflow is not None:
+            yield overflow
+
         decision = self._debouncer.decide(
             kind=kind,
             subject=req.client_id or req.ip,
@@ -323,6 +467,56 @@ class SecInputAgent:
     def dedup_size(self) -> int:
         with self._lock:
             return len(self._dedup)
+
+    def quarantine_inflight(self) -> int:
+        """Number of recent (within storage-lag window) quarantine
+        emissions tracked by the producer-side overflow guard."""
+        with self._lock:
+            return len(self._quarantine_inflight)
+
+    # ── Internals ─────────────────────────────────────────────────
+    def _note_quarantine_emission_locked(self) -> Message | None:
+        """Append the current monotonic timestamp to the inflight
+        deque, age out entries older than the storage-lag window,
+        and return a debounced ``quarantine_overflow`` SecAlert
+        message when the deque has saturated. Returns ``None``
+        otherwise. Holds ``self._lock`` only for the bookkeeping
+        slice; the alert envelope is built post-release.
+        """
+        now = self._clock_mono()
+        cutoff = now - self._quarantine_window_s
+        with self._lock:
+            # Age out timestamps older than the lag window.
+            while self._quarantine_inflight and self._quarantine_inflight[0] < cutoff:
+                self._quarantine_inflight.popleft()
+            self._quarantine_inflight.append(now)
+            saturated = len(self._quarantine_inflight) >= self._quarantine_max
+            if not saturated:
+                return None
+        # Saturated: emit overflow alert (debounced). Subject is empty
+        # — overflow is a global producer signal, not per-subject.
+        decision = self._debouncer.decide(
+            kind="quarantine_overflow",
+            subject=None,
+            severity="error",
+            reason=(
+                f"producer queue saturated: "
+                f"{self._quarantine_max}+ quarantines within "
+                f"{self._quarantine_window_s:.1f}s "
+                f"(storage.v1 may be falling behind)"
+            ),
+        )
+        if not decision.emit:
+            return None
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind="quarantine_overflow",
+            severity="error",
+            source=self.name,
+            reason=decision.reason,
+            produced_at=self._clock_iso(),
+        )
+        return Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
 
 
 __all__ = ["SecInputAgent"]
