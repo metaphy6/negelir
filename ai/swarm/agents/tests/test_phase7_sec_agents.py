@@ -329,6 +329,52 @@ def test_sec_rate_rejects_wildcard_denylist_clear() -> None:
     assert out == []  # no audit event for a rejected wildcard
 
 
+def test_sec_rate_re_trips_after_denylist_ttl_elapses() -> None:
+    """Defense-in-depth regression (§7.3): once the in-process
+    ``denylisted_at`` flag is set on a subject, it must expire after
+    ``cfg.sec_denylist_ttl_s`` so the agent can re-add the subject to
+    the Redis denylist on a fresh burst. Without this expiry the
+    in-process flag silently outlives the Redis TTL — the gateway
+    happily allows the resumed user, then never re-denylists them
+    when they burst again. That's a real defense-in-depth
+    weakening, not a benign optimisation.
+    """
+    import common.config as _cfg_mod
+    _cfg_mod.cfg.sec_burst_threshold = 3
+    _cfg_mod.cfg.sec_burst_window_ms = 60_000
+    _cfg_mod.cfg.sec_denylist_ttl_s = 100
+    clock = _FakeClock()
+    agent = _rate_agent(clock)
+
+    # First burst trips the threshold and emits one denylist add.
+    for i in range(3):
+        list(agent.handle(_alert_msg(alert_id=f"first-{i}")))
+    assert agent.is_denylisted("ip:9.9.9.9")
+
+    # A subsequent alert WHILE still listed must NOT emit another
+    # denylist add (existing behaviour — the in-process flag suppresses
+    # noise on the bus while the Redis TTL is doing the real work).
+    out = list(agent.handle(_alert_msg(alert_id="while-listed")))
+    assert SEC_DENYLIST not in [m.envelope.topic for m in out]
+
+    # Advance past the Redis TTL. The next alert must trigger a fresh
+    # window and a fresh denylist add — the gateway's authoritative
+    # Redis entry has expired, so the agent must be willing to re-list.
+    clock.advance(150.0)
+    out_pre = list(agent.handle(_alert_msg(alert_id="post-ttl-1")))
+    out_pre += list(agent.handle(_alert_msg(alert_id="post-ttl-2")))
+    out_trip = list(agent.handle(_alert_msg(alert_id="post-ttl-3")))
+    denylists = [m for m in (out_pre + out_trip) if m.envelope.topic == SEC_DENYLIST]
+    assert len(denylists) == 1, (
+        "agent must re-emit denylist add after the Redis TTL elapses; "
+        "in-process `denylisted_at` flag would otherwise silently "
+        "weaken defense-in-depth"
+    )
+    parsed = DenylistEvent.from_dict(denylists[0].payload)
+    assert parsed.action == "add"
+    assert parsed.subject == "ip:9.9.9.9"
+
+
 # ── Audit pass (post-implementation) regression tests ─────────────
 
 

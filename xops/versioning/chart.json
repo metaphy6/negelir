@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 18,
+    "build": 20,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.12.2",
+      "version": "1.12.3",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-04T12:17:55+00:00"
+      "last_changed": "2026-05-04T12:40:22+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.20.3",
+      "version": "0.20.4",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-04T11:35:41+00:00"
+      "last_changed": "2026-05-04T12:40:22+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1716,6 +1716,24 @@
       "from": "1.12.1",
       "to": "1.12.2",
       "build": 18
+    },
+    {
+      "timestamp": "2026-05-04T12:40:22+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "sec.rate.v1: expire in-process denylisted_at flag after sec_denylist_ttl_s so a re-burst after Redis TTL re-trips (defense-in-depth fix)",
+      "from": "0.20.3",
+      "to": "0.20.4",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-05-04T12:40:22+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §7: flip 27 verified-shipped checkboxes across §7.1/§7.2/§7.3/§7.4 + §7.7 M1-M4",
+      "from": "1.12.2",
+      "to": "1.12.3",
+      "build": 20
     }
   ]
 }

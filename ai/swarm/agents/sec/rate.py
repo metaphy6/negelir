@@ -186,6 +186,15 @@ class SecRateAgent:
         now = self._clock_mono()
         window_s = max(1, int(_cfg.sec_burst_window_ms)) / 1000.0
         threshold = max(1, int(_cfg.sec_burst_threshold))
+        # In-process listing flag must expire alongside the Redis
+        # entry it represents; otherwise once a subject trips the
+        # burst threshold the agent never re-adds them on a future
+        # burst (the in-process `denylisted_at` outlives the Redis
+        # TTL and silently weakens defense-in-depth — the gateway
+        # would happily allow the resumed user, then fail to
+        # denylist them again on a fresh burst). Mirror the Redis
+        # TTL so a re-burst after `sec_denylist_ttl_s` re-trips.
+        denylist_ttl_s = max(1, int(_cfg.sec_denylist_ttl_s))
 
         with self._lock:
             # Idempotency.
@@ -203,6 +212,16 @@ class SecRateAgent:
             else:
                 # Touch for LRU.
                 self._windows.move_to_end(subject)
+            # Expire the in-process listing flag once the matching
+            # Redis TTL would have lapsed. The gateway is the
+            # authoritative enforcer (Redis is the source of truth);
+            # this just lets the agent re-trip on the next burst.
+            if (
+                window.denylisted_at is not None
+                and now - window.denylisted_at >= denylist_ttl_s
+            ):
+                window.denylisted_at = None
+                window.hits.clear()
             window.last_seen = now
             window.hits.append(now)
             # Evict stale hits outside the window.
