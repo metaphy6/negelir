@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 14,
+    "build": 15,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.20.1",
+      "version": "0.20.2",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-04T10:48:38+00:00"
+      "last_changed": "2026-05-04T11:13:43+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1680,6 +1680,15 @@
       "from": "0.20.0",
       "to": "0.20.1",
       "build": 14
+    },
+    {
+      "timestamp": "2026-05-04T11:13:43+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 7 Bucket A close: RequestIdDeduper helper + qa.request.v1 dedup tests + live-emission schema parity + fail-open Turkish corpus + sec.scrape idempotency regressions + sec.quarantine overflow drops-oldest assertion + maint.event allow-list enumerative test + Lua sole-writer Redis integration (11 tests)",
+      "from": "0.20.1",
+      "to": "0.20.2",
+      "build": 15
     }
   ]
 }
