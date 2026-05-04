@@ -15,7 +15,9 @@
     "bytes_ref":      { "type": "string", "description": "Content-addressed object-store key. Empty for inline payloads." },
     "league_id":      { "type": ["string", "null"] },
     "competition_id": { "type": ["string", "null"] },
-    "fetched_at":     { "type": "string", "description": "ISO-8601 UTC." }
+    "fetched_at":     { "type": "string", "description": "ISO-8601 UTC." },
+    "wire_bytes":     { "type": "integer", "minimum": 0, "description": "Optional: bytes on the wire (post-compression). 0 = unknown. Phase 7 §7.2 inflate-ratio detector skips when zero." },
+    "decoded_bytes":  { "type": "integer", "minimum": 0, "description": "Optional: bytes after gzip/brotli inflate. 0 = unknown. Phase 7 §7.2 inflate-ratio detector skips when zero." }
   },
   "additionalProperties": false
 }

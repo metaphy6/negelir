@@ -261,6 +261,34 @@ _REDIRECT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Phase 7 §7.2 — `suspicious_js` detector. Fixture / odds pages are
+# mostly HTML + small inline scripts; an attacker dropping `eval`,
+# `Function(...)`, dynamic `<script src>` injection from a string,
+# `atob(... ) → eval`, or `document.write(...)` of remote content
+# is a strong supply-chain-style attack signal. Patterns deliberately
+# overlap with the prompt-injection set in `injection_patterns.yaml`
+# but live here in code (no YAML hot-reload for the scrape side —
+# the scrape body is HTML, not user-controlled, so the pattern set
+# does not need operator agility).
+_SUSPICIOUS_JS_RE = re.compile(
+    rb'\beval\s*\('                              # eval(
+    rb'|\bFunction\s*\(\s*[\'"]'                  # Function("..."
+    rb'|\batob\s*\([^)]+\)\s*\)?\s*[;\.]?\s*eval' # atob(...) → eval
+    rb'|\bdocument\s*\.\s*write\s*\('             # document.write(
+    rb'|\bnew\s+Function\s*\('                    # new Function(
+    rb'|\.\s*innerHTML\s*=\s*[\'"]?\s*<\s*script' # x.innerHTML = "<script"
+    rb'|\bsetTimeout\s*\(\s*[\'"]'                # setTimeout("...")
+    rb'|\bsetInterval\s*\(\s*[\'"]',              # setInterval("...")
+    re.IGNORECASE,
+)
+
+# Match a `<script ... >...</script>` block; group(0) is the full block.
+# Non-greedy on body so multi-script pages each get inspected.
+_SCRIPT_BLOCK_RE = re.compile(
+    rb'<\s*script\b[^>]*>.*?<\s*/\s*script\s*>',
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 # ── Agent ──────────────────────────────────────────────────────────
 
@@ -426,7 +454,56 @@ class SecScrapeAgent:
                     reason=f"declared={declared!r} sniffed={sniffed!r}",
                 )
 
-        # 4. SimHash structural drift → proof.flag for the patcher.
+        # 4. Inflate-ratio outlier — gzip / brotli expansion exceeding
+        # `cfg.sec_scrape_inflate_ratio_max` is a zip-bomb / decompression
+        # DoS signal. Both byte counts must be present and positive
+        # (older producers send zeros = "unknown"; the check skips).
+        if raw.wire_bytes > 0 and raw.decoded_bytes > 0:
+            ratio = raw.decoded_bytes / raw.wire_bytes
+            limit = float(_cfg.sec_scrape_inflate_ratio_max)
+            if ratio > limit:
+                # Update the running ratio statistic for forensic
+                # context (no alert from the streaming-statistic
+                # baseline alone — the cfg cap is the operator
+                # contract).
+                baseline.inflate_ratio.update(ratio)
+                yield from self._maybe_alert(
+                    kind="inflate_ratio_outlier",
+                    severity="error",
+                    subject=raw.source,
+                    reason=(
+                        f"decoded/wire={ratio:.1f}x "
+                        f"({raw.decoded_bytes}B / {raw.wire_bytes}B) "
+                        f"exceeds threshold {limit:.1f}x"
+                    ),
+                )
+            else:
+                # Healthy sample — fold into the baseline.
+                baseline.inflate_ratio.update(ratio)
+
+        # 5. Suspicious JS — scan inline `<script>` blocks for known
+        # malicious-payload markers (eval / Function / atob→eval /
+        # document.write / innerHTML script injection). One alert per
+        # debounce window per source; the matching rule snippet lands
+        # in the alert reason for forensic review.
+        for block_m in _SCRIPT_BLOCK_RE.finditer(body[:65536]):
+            block = block_m.group(0)
+            sus = _SUSPICIOUS_JS_RE.search(block)
+            if sus is None:
+                continue
+            snippet = sus.group(0).decode("ascii", errors="replace")[:64]
+            yield from self._maybe_alert(
+                kind="suspicious_js",
+                severity="warn",
+                subject=raw.source,
+                reason=f"inline script matched suspicious-JS rule: {snippet!r}",
+            )
+            # One alert per body — debouncer collapses repeats but
+            # we also break to keep CPU bounded on adversarial
+            # script-stuffed bodies (10⁴+ blocks).
+            break
+
+        # 6. SimHash structural drift → proof.flag for the patcher.
         if prev_simhash is not None:
             distance = _hamming(prev_simhash, new_simhash)
             if distance > int(_cfg.sec_scrape_simhash_max_distance):

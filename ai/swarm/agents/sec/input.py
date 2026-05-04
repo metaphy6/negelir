@@ -52,6 +52,12 @@ from typing import Callable, Deque, Iterable
 from uuid import uuid4
 
 from common.config import cfg as _cfg
+from common.security import (
+    PatternFileError,
+    RuleSet,
+    load_ruleset,
+    resolve_path as _resolve_pattern_path,
+)
 
 from ..payloads import (
     QaRequest,
@@ -179,8 +185,46 @@ class SecInputAgent:
         clock_iso: Callable[[], str] | None = None,
         clock_mono: Callable[[], float] | None = None,
         new_id: Callable[[], str] | None = None,
+        pattern_path: str | None = None,
+        ruleset: RuleSet | None = None,
     ) -> None:
         self._classifier = classifier
+        # ── Deterministic injection-pattern engine (§7.1, binding) ─
+        # Loaded eagerly so a startup with a malformed YAML fails
+        # loud, not silently. The agent then polls the file's mtime
+        # at most once every `cfg.sec_input_pattern_reload_s` seconds
+        # and atomically swaps in a new ruleset on change. Reload
+        # failures keep the previous ruleset in place and emit a
+        # `pattern_reload` SecAlert with severity=error.
+        #
+        # Tests inject a pre-built `ruleset` to bypass disk I/O.
+        self._pattern_path = pattern_path
+        # Polling is enabled only when the agent owns its ruleset
+        # (loaded from disk). When a caller injects a ruleset, the
+        # caller controls reloads via maybe_reload_patterns().
+        self._pattern_polling_enabled = ruleset is None
+        if ruleset is not None:
+            self._ruleset: RuleSet | None = ruleset
+        else:
+            try:
+                self._ruleset = load_ruleset(pattern_path)
+            except PatternFileError as exc:
+                # Fail-open per §7.7 doctrine — agent stays alive,
+                # patterns are just absent until operator fixes the
+                # file. Polling will retry; a startup-time alert is
+                # logged but not emitted on the bus (no bus yet).
+                _log.error(
+                    "%s: pattern load failed at startup (%s); "
+                    "deterministic rules disabled until reload succeeds",
+                    self.__class__.__name__, exc,
+                )
+                self._ruleset = None
+        self._last_pattern_check_mono = 0.0
+        # Pending alerts produced by reload bookkeeping; drained at
+        # the top of the next handle() call so the bus surface is
+        # the same regardless of whether reload happened mid-request
+        # or out-of-band via maybe_reload_patterns().
+        self._pending_pattern_alerts: Deque[Message] = deque()
         self._debouncer = debouncer or SecAlertDebouncer(
             ttl_s=int(_cfg.sec_alert_debounce_ttl_s),
             critical_bypass=not bool(_cfg.sec_alert_critical_debounce_enabled),
@@ -221,7 +265,13 @@ class SecInputAgent:
         except (KeyError, TypeError, ValueError) as exc:
             _log.warning("%s: malformed qa.request: %s", self.name, exc)
             return ()
-        return list(self._handle_request(req))
+        # Drain pattern-reload alerts produced by the periodic poller
+        # so they ride on the same handle() invocation as the request
+        # that triggered the check (keeps test ordering deterministic).
+        out: list[Message] = []
+        self._maybe_poll_patterns(out)
+        out.extend(self._handle_request(req))
+        return out
 
     # ── Core ──────────────────────────────────────────────────────
     def _handle_request(self, req: QaRequest) -> Iterable[Message]:
@@ -269,6 +319,23 @@ class SecInputAgent:
         # contract: the v1 envelope and the classifier input are
         # consistent — no slip-through between detection and forward).
         clean_text, sanitize_steps, mutated = sanitize_text(req.raw_text)
+
+        # Deterministic injection-rule sweep BEFORE the (possibly
+        # absent / load-shed) classifier. Quarantines the request
+        # immediately on a hit; no bytes reach the classifier or the
+        # NLP layer. The matching rule's id + reason land in the
+        # quarantine envelope's `reasons` list for forensic review.
+        if self._ruleset is not None:
+            hit = self._ruleset.match(clean_text)
+            if hit is not None:
+                yield from self._emit_quarantine(
+                    req,
+                    classifier_reason=f"rule:{hit.rule_id}",
+                    kind=hit.kind,
+                    severity=hit.severity if hit.severity != "info" else "warn",
+                    extra_reasons=(hit.reason,),
+                )
+                return
 
         verdict, reason = self._classify(clean_text)
 
@@ -414,18 +481,23 @@ class SecInputAgent:
         classifier_reason: str,
         kind: str,
         severity: str,
+        extra_reasons: tuple[str, ...] = (),
     ) -> Iterable[Message]:
         # Cap raw bytes per §7.1 BEFORE base64 encoding.
         raw = req.raw_text.encode("utf-8", errors="replace")
         cap = max(1, int(_cfg.sec_quarantine_payload_max_bytes))
         if len(raw) > cap:
             raw = raw[:cap]
+        reasons: list[str] = [kind]
+        if classifier_reason:
+            reasons.append(classifier_reason)
+        reasons.extend(extra_reasons)
         sample = QuarantineSample(
             quarantine_id=self._new_id(),
             source="qa",
             raw_bytes_b64=b64encode(raw).decode("ascii"),
             verdict="quarantine",
-            reasons=[kind, classifier_reason] if classifier_reason else [kind],
+            reasons=reasons,
             detected_at=self._clock_iso(),
             pii_redacted=False,
             client_id=req.client_id,
@@ -473,6 +545,114 @@ class SecInputAgent:
         emissions tracked by the producer-side overflow guard."""
         with self._lock:
             return len(self._quarantine_inflight)
+
+    # ── Pattern hot-reload (§7.1 binding) ─────────────────────────
+    def maybe_reload_patterns(self, *, force: bool = False) -> list[Message]:
+        """Public reload hook used by tests and (future) operators.
+
+        Re-reads the YAML file (if mtime changed, or unconditionally
+        when ``force=True``), atomically swaps the ruleset on
+        success, and returns any SecAlert messages the swap should
+        emit on the bus. Never raises — a parse failure produces a
+        single `pattern_reload`/severity=`error` alert and leaves
+        the previous ruleset in place.
+        """
+        return list(self._reload_now())
+
+    def _maybe_poll_patterns(self, out: list[Message]) -> None:
+        """Throttled mtime-watch hook called at the top of handle().
+
+        Cost is one stat() per poll interval. The interval is the
+        operator-tunable ``cfg.sec_input_pattern_reload_s`` knob;
+        bounded by `_bounded` validation in config.py.
+        """
+        # Drain any previously-buffered alerts (e.g. produced by an
+        # explicit force-reload between handle() calls).
+        if self._pending_pattern_alerts:
+            out.extend(self._pending_pattern_alerts)
+            self._pending_pattern_alerts.clear()
+
+        if not self._pattern_polling_enabled:
+            return
+
+        interval = max(1, int(_cfg.sec_input_pattern_reload_s))
+        now = self._clock_mono()
+        if now - self._last_pattern_check_mono < interval:
+            return
+        self._last_pattern_check_mono = now
+        # Local mtime check against the agent's own ruleset (NOT the
+        # module-level singleton — tests may inject a hand-built
+        # ruleset that has nothing to do with the YAML on disk).
+        rs = self._ruleset
+        if rs is None:
+            # No ruleset loaded yet — poll only if a path was
+            # configured (otherwise the agent is in "rules disabled"
+            # mode and should stay there).
+            if self._pattern_path is None and rs is not None:
+                return
+        else:
+            try:
+                p = _resolve_pattern_path(self._pattern_path)
+                if p.stat().st_mtime_ns <= rs.mtime_ns:
+                    return
+            except OSError:
+                return
+        out.extend(self._reload_now())
+
+    def _reload_now(self) -> Iterable[Message]:
+        """Attempt a reload; yield any SecAlert messages it produced."""
+        try:
+            new_rs = load_ruleset(self._pattern_path)
+        except PatternFileError as exc:
+            decision = self._debouncer.decide(
+                kind="pattern_reload",
+                subject=None,
+                severity="error",
+                reason=f"pattern_reload_failed: {exc}",
+            )
+            if decision.emit:
+                alert = SecAlert(
+                    alert_id=self._new_id(),
+                    kind="pattern_reload",
+                    severity="error",
+                    source=self.name,
+                    reason=decision.reason,
+                    produced_at=self._clock_iso(),
+                )
+                yield Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
+            return
+
+        with self._lock:
+            prev = self._ruleset
+            if prev is not None and prev.sha256 == new_rs.sha256:
+                # No-op reload (file touched but bytes unchanged).
+                return
+            self._ruleset = new_rs
+
+        decision = self._debouncer.decide(
+            kind="pattern_reload",
+            subject=None,
+            severity="info",
+            reason=(
+                f"pattern_reload_ok: {len(new_rs.rules)} rules, "
+                f"sha256={new_rs.sha256[:12]}, version={new_rs.version}"
+            ),
+        )
+        if decision.emit:
+            alert = SecAlert(
+                alert_id=self._new_id(),
+                kind="pattern_reload",
+                severity="info",
+                source=self.name,
+                reason=decision.reason,
+                produced_at=self._clock_iso(),
+            )
+            yield Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
+
+    def current_ruleset_sha(self) -> str | None:
+        """Return the sha256 of the currently-loaded ruleset, or None."""
+        rs = self._ruleset
+        return rs.sha256 if rs is not None else None
 
     # ── Internals ─────────────────────────────────────────────────
     def _note_quarantine_emission_locked(self) -> Message | None:

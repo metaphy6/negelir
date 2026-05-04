@@ -1,0 +1,153 @@
+# Phase 7 §7.1 — deterministic prompt-injection / payload-anomaly
+# patterns.
+#
+# The Go gateway (Phase 9) will load this same file via `go:embed`
+# and apply the same regexes in-process before publishing
+# `qa.request`. The Python `sec.input.v1` agent re-applies them as
+# defense-in-depth — see `ai/swarm/agents/sec/input.py`.
+#
+# The file is **hot-reloadable**: operators may edit it on disk and
+# the agent will pick up the change within
+# `cfg.sec_input_pattern_reload_s` (default 30 s) without a restart.
+# A schema-shape mismatch leaves the previous ruleset in place and
+# emits a `pattern_reload` SecAlert with severity=`error`.
+#
+# Doctrine recap (binding):
+#
+# * Patterns are **case-insensitive Python regex** (re.IGNORECASE).
+#   No PCRE-only constructs (no backreferences, no lookbehinds) so
+#   the same patterns are portable to Go's RE2-based regexp engine.
+# * Patterns run AFTER NFC normalize + control-char strip (see
+#   `sanitize_text` in input.py). Designing patterns against
+#   pre-sanitized text avoids zero-width / RTL-override blind spots.
+# * `id` must be unique, snake_case (`^[a-z][a-z0-9_]*$`), and is
+#   recorded on the wire (in the `reasons` list of the resulting
+#   `sec.quarantine.v1` envelope) so a forensic reviewer can
+#   identify which rule fired.
+# * `severity` ∈ {info, warn, error, critical}. Mapped to the
+#   outbound SecAlert severity.
+# * `kind` is the SecAlert kind that fires on match. Must be a
+#   KNOWN_SEC_ALERT_KINDS member. Defaults to `prompt_injection`
+#   if omitted.
+# * Each rule SHOULD carry a `reason` field — short human-readable
+#   diagnostic that lands in the quarantine envelope.
+version: 1
+patterns:
+  # ── Prompt-injection (binding §7.1: "ignore previous instructions",
+  # system-prompt smuggling, role-play jailbreaks, tool-call smuggling).
+  - id: ignore_previous_instructions
+    pattern: '\bignore\s+(?:all\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|prompts?|directives?|messages?|rules?)\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: ignore-previous instructions"
+
+  - id: forget_instructions
+    pattern: '\b(?:forget|disregard|discard)\s+(?:all\s+)?(?:your\s+)?(?:previous\s+|prior\s+|earlier\s+)?(?:instructions?|prompts?|directives?|rules?|training)\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: forget-instructions"
+
+  - id: system_prompt_smuggling
+    pattern: '<\|(?:im_start|im_end|system|user|assistant)\|>'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: chat-template marker smuggling"
+
+  - id: instruction_marker_smuggling
+    pattern: '\[/?(?:INST|SYS|SYSTEM|USER|ASSISTANT)\]'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: instruction-marker smuggling"
+
+  - id: role_header_smuggling
+    pattern: '###\s*(?:System|User|Assistant|Instruction|Prompt)\s*:'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: role-header smuggling"
+
+  - id: jailbreak_role_play
+    pattern: '\b(?:you\s+are\s+now|act\s+as|pretend\s+to\s+be|roleplay\s+as|simulate\s+being)\s+(?:a\s+|an\s+)?(?:dan|developer|jailbroken|unrestricted|uncensored|evil|malicious|hacker|admin|root|sudo)\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: role-play jailbreak"
+
+  - id: system_prompt_disclosure
+    pattern: '\b(?:reveal|show|print|expose|leak|disclose|repeat)\s+(?:your\s+|the\s+)?(?:system\s+prompt|hidden\s+prompt|original\s+prompt|initial\s+prompt|secret\s+prompt|developer\s+prompt|configuration|instructions?\s+verbatim)\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: system-prompt disclosure attempt"
+
+  - id: tool_call_smuggling
+    pattern: '<(?:tool_call|function_call|invoke|action)>|"function"\s*:\s*\{'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: tool-call smuggling"
+
+  # ── Code-execution markers (the agent itself does not execute
+  # anything, but these inside a Q&A body are a strong signal of
+  # an attacker probing the model for a code-execution sandbox).
+  - id: python_eval_exec
+    pattern: '\b(?:eval|exec|compile|__import__)\s*\('
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: python eval/exec marker"
+
+  - id: shell_command_substitution
+    pattern: '\$\([^)]+\)|`[^`]+`'
+    severity: info
+    kind: prompt_injection
+    reason: "prompt-injection: shell command substitution syntax"
+
+  - id: os_system_marker
+    pattern: '\b(?:os\.system|subprocess\.|popen|shell_exec|passthru)\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: os.system / subprocess marker"
+
+  # ── Script / HTML payload markers (XSS-style; Q&A is plain
+  # Turkish text, no HTML allowed).
+  - id: script_tag
+    pattern: '<\s*/?\s*script\b|<\s*/?\s*iframe\b|<\s*/?\s*object\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: HTML script/iframe/object tag"
+
+  - id: javascript_uri
+    pattern: '\bjavascript\s*:|\bdata\s*:\s*text/html|\bvbscript\s*:'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: javascript:/data:text/html: URI"
+
+  - id: event_handler_attribute
+    pattern: '\bon(?:click|load|error|mouseover|focus|blur|submit|change|keyup|keydown)\s*='
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: HTML event-handler attribute"
+
+  # ── SQL-injection markers (Phase 9 API + Phase 10 NLP both stay
+  # parameterized; a UNION/DROP in a Turkish QA query is a probe).
+  - id: sql_union_select
+    pattern: '\bunion\s+(?:all\s+)?select\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: SQL UNION SELECT"
+
+  - id: sql_drop_table
+    pattern: '\bdrop\s+(?:table|database|schema|index)\b'
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: SQL DROP statement"
+
+  - id: sql_or_one_eq_one
+    pattern: "'\\s*or\\s+'?1'?\\s*=\\s*'?1"
+    severity: warn
+    kind: prompt_injection
+    reason: "prompt-injection: SQL ' OR 1=1 boolean-bypass"
+
+  # ── Encoded payload markers — plausible bypass vector for a
+  # naive base64-decode-and-execute consumer downstream.
+  - id: base64_executable_marker
+    pattern: '\bbase64[,:]?\s*[A-Za-z0-9+/]{40,}={0,2}'
+    severity: info
+    kind: prompt_injection
+    reason: "prompt-injection: long base64 payload"

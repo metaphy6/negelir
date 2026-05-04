@@ -69,6 +69,12 @@ class ScrapeRaw:
     league_id: str | None = None
     competition_id: str | None = None
     fetched_at: str = ""
+    # Phase 7 §7.2 — optional byte counts for `inflate_ratio_outlier`
+    # detection. Both default to 0 ("unknown") so older producers do
+    # not need a coordinated upgrade. The detector skips the inflate
+    # check unless both fields are > 0.
+    wire_bytes: int = 0       # bytes on the wire (post-compression)
+    decoded_bytes: int = 0    # bytes after gzip / brotli inflate
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -86,6 +92,8 @@ class ScrapeRaw:
             league_id=data.get("league_id"),
             competition_id=data.get("competition_id"),
             fetched_at=str(data.get("fetched_at", "")),
+            wire_bytes=int(data.get("wire_bytes", 0)),
+            decoded_bytes=int(data.get("decoded_bytes", 0)),
         )
 
 
