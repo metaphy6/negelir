@@ -885,6 +885,18 @@ class PredictApproved:
 _ALLOWED_MAINT_KINDS: frozenset[str] = frozenset({
     "retrain_request",      # drift agent: predictor's Brier / KS-test tripped
     "recalibration_request",  # reserved for Phase 9 (calibration drift)
+    # Phase 7 §7.3 / §7.2 — operator-published maint commands. Producer
+    # is `ops_console` (Phase 8 maint CLI); consumers are the sec.* agents
+    # that own the resource being cleared. The kind list is a closed
+    # whitelist here even though the wire contract calls `kind` an open
+    # enum (ROADMAP §7.4) — the closed enum at the dataclass boundary
+    # is stricter than the wire and catches typos at producer sites; it
+    # does NOT prevent unknown kinds from round-tripping at the JSON
+    # Schema level (consumer-tolerance is a wire property, not a Python
+    # one). Adding a kind is a minor bump on the `swarm` component.
+    "denylist_clear",       # sec.rate.v1 consumer (§7.3 operator override)
+    "baseline_reset",       # sec.scrape.v1 consumer (§7.2 redesign reset)
+    "quarantine_erase",     # storage.v1 consumer (§7.1 right-to-erasure; Phase 8 publisher)
 })
 
 _ALLOWED_DRIFT_REASONS: frozenset[str] = frozenset({

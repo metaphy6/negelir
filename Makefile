@@ -82,6 +82,14 @@ test: env ## Run the full test suite
 lint: ## Run hardcode/no-magic lint over ai/
 	@$(XOPS)/lint.py lint
 
+.PHONY: verify.lua
+verify.lua: ## Phase 7 §7.3 — verify infra/redis/lua/*.lua SHA headers
+	@$(XOPS)/lua.py verify
+
+.PHONY: fix.lua
+fix.lua: ## Phase 7 §7.3 — rewrite Lua SHA headers after intended edits
+	@$(XOPS)/lua.py fix
+
 # ── AI workflows (daily) ────────────────────────────────────
 
 .PHONY: scrape

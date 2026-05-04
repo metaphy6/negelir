@@ -46,6 +46,7 @@ from .agents.predictors.lgbm_market import LgbmMarketPredictor
 from .agents.proofreader.aggregator import ProofreaderAggregatorAgent
 from .agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
 from .agents.reactor import InMemoryLedger
+from .agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from .agents.telemetry import TelemetryAgent
 from .sdk.agent import Agent
 from .sdk.bus import Bus
@@ -75,11 +76,19 @@ _log = logging.getLogger("swarm.bootstrap")
 #   * `drift.v1`                — single-window state per (league,
 #                                 market); a second replica would
 #                                 split the rolling Brier window.
+#   * `sec.rate.v1`             — sole writer of `sec.denylist.v1`.
+#                                 Two replicas would race on the
+#                                 sliding burst window per subject
+#                                 and emit duplicate denylist
+#                                 add/remove events. The Lua script
+#                                 keeps Redis state consistent, but
+#                                 the bus would double-count.
 SINGLE_INSTANCE_AGENTS: frozenset[str] = frozenset({
     "storage.v1",
     "consensus.v1",
     "proofreader_aggregator.v1",
     "drift.v1",
+    "sec.rate.v1",
 })
 
 
@@ -150,6 +159,15 @@ def build_agents() -> list[Agent]:
     # need leader election on the *invalidation* path, not here.
     cache = CacheAgent()
     telemetry = TelemetryAgent.from_config(start_http=False)
+    # Phase 7 defense agents (escalation tier — the gateway middleware
+    # in `server/internal/sec/*` carries the deterministic hot-path
+    # checks). All three are bus-driven: input subscribes the
+    # gateway's escalation topic `qa.request`, scrape subscribes
+    # `scrape.raw`, rate is the sole writer of `sec.denylist.v1` and
+    # joins SINGLE_INSTANCE_AGENTS above.
+    sec_input = SecInputAgent()
+    sec_scrape = SecScrapeAgent()
+    sec_rate = SecRateAgent()
     return [
         *predictors,
         consensus,
@@ -158,6 +176,9 @@ def build_agents() -> list[Agent]:
         drift,
         cache,
         telemetry,
+        sec_input,
+        sec_scrape,
+        sec_rate,
     ]
 
 

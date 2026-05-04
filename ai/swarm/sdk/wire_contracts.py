@@ -1,0 +1,49 @@
+"""Cross-component wire-contract allow-lists.
+
+The Phase 6 §6.4 boundary test originally asserted that
+``maint.event.v1`` had ``producers == {drift.v1}``. Phase 7 §7.3
+expands the producer set to include ``ops_console`` (the Phase 8
+maint surface) so operators can clear denylists, reset upstream
+baselines, etc. via the same envelope. The contract change belongs
+to whichever phase first needs the second producer — that's Phase 7
+via the §7.3 consumer hook on ``sec.rate.v1``.
+
+This module is the single source of truth for that allow-list (and
+any future cross-component allow-list of the same shape). The
+boundary tests import the constant; the producers do NOT — producer
+identity is enforced by AST scan over Python source + the agent
+``publishes`` declaration, not at runtime (matches the open-enum
+producer-side discipline pattern).
+
+Doctrine: append-only. Adding a producer is a minor bump on the
+``swarm`` component; never silently widen the set. Removing a
+producer requires a migration plan because some consumer is almost
+certainly depending on the producer's emissions.
+"""
+from __future__ import annotations
+
+from typing import FrozenSet
+
+
+# `maint.event.v1` producers (ROADMAP §7.3 cross-phase note).
+#
+# Members:
+#   * ``drift.v1`` — Phase 6.3, kind=retrain_request when a rolling
+#     Brier / log-loss / KS-test trips.
+#   * ``ops_console`` — Phase 8 maint surface. Operators send
+#     ``kind=denylist_clear`` (Phase 7.3 consumer: ``sec.rate.v1``)
+#     and ``kind=baseline_reset`` (Phase 7.2 consumer:
+#     ``sec.scrape.v1``). The ``ops_console`` name is the
+#     `producer` field on the envelope; there is no Python agent
+#     class with this name (humans publish via a CLI).
+#
+# Future additions land here with a tracker row + minor bump. The
+# boundary test in ``test_boundary_discipline.py`` asserts producers
+# in production code are a subset of this set.
+MAINT_EVENT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "drift.v1",
+    "ops_console",
+})
+
+
+__all__ = ["MAINT_EVENT_V1_ALLOWED_PRODUCERS"]

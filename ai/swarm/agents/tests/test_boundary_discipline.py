@@ -37,14 +37,22 @@ from swarm.agents.proofreader.replicas import (
     PlausibilityProofreader,
     SanityProofreader,
 )
+from swarm.agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from swarm.agents.storage import StorageAgent
 from swarm.agents.topics import (
     MAINT_EVENT,
     MATCH_OUTCOME,
     PREDICT_APPROVED,
     PREDICT_FINAL,
+    PROOF_FLAG,
     PROOFREADER_VERDICT,
+    QA_REQUEST,
+    QA_REQUEST_V1,
+    SEC_ALERT,
+    SEC_DENYLIST,
+    SEC_QUARANTINE,
 )
+from swarm.sdk.wire_contracts import MAINT_EVENT_V1_ALLOWED_PRODUCERS
 
 
 # Predictor agent classes that exist today (Phase 5).
@@ -150,16 +158,31 @@ def test_drift_agent_publishes_maint_event() -> None:
         StorageAgent, CacheAgent, ConsensusAgent,
         ProofreaderAggregatorAgent,
         SanityProofreader, PlausibilityProofreader, ConsistencyProofreader,
+        SecInputAgent, SecScrapeAgent, SecRateAgent,
         *_PREDICTOR_CLASSES,
     ),
     ids=lambda c: c.__name__,
 )
 def test_only_drift_agent_publishes_maint_event(agent_cls: type) -> None:
+    """`maint.event.v1` is the operator/control-plane channel.
+    Only producers in :data:`MAINT_EVENT_V1_ALLOWED_PRODUCERS` may
+    publish; everyone else may consume (sec.scrape.v1 + sec.rate.v1
+    consume `baseline_reset` / `denylist_clear`).
+
+    The allow-list lives in `swarm/sdk/wire_contracts.py` so the
+    Phase 17 patcher and the operator console (the only two
+    legitimate producers today) cannot drift from this guard.
+    """
     publishes = tuple(getattr(agent_cls, "publishes", ()))
-    assert MAINT_EVENT not in publishes, (
-        f"{agent_cls.__name__} must not publish maint.event.v1 — only "
-        "the drift agent (Phase 6.3) emits retrain_requests."
-    )
+    name = getattr(agent_cls, "name", agent_cls.__name__)
+    if MAINT_EVENT in publishes:
+        assert name in MAINT_EVENT_V1_ALLOWED_PRODUCERS, (
+            f"{agent_cls.__name__} ({name!r}) publishes maint.event.v1 "
+            f"but is not in MAINT_EVENT_V1_ALLOWED_PRODUCERS="
+            f"{sorted(MAINT_EVENT_V1_ALLOWED_PRODUCERS)}. Add it to "
+            "the wire-contracts allow-list with a tracker row "
+            "explaining why."
+        )
 
 
 # ── Rule 5: predict.proofreader_verdict.v1 is per-replica only ──
@@ -203,3 +226,101 @@ def test_only_aggregator_subscribes_to_proofreader_verdict() -> None:
             f"{agent_cls.__name__} must not subscribe to "
             "predict.proofreader_verdict.v1; only the aggregator may."
         )
+
+
+# ── Rule 6 (Phase 7 §7.6): defense-agent boundaries ─────────────
+
+
+# All non-sec agents that exist today. Used to assert "nobody else
+# touches the sec.* topology".
+_NON_SEC_AGENTS = (
+    StorageAgent, CacheAgent, ConsensusAgent,
+    ProofreaderAggregatorAgent, DriftAgent,
+    SanityProofreader, PlausibilityProofreader, ConsistencyProofreader,
+    *_PREDICTOR_CLASSES,
+)
+
+
+def test_sec_input_publishes_qa_request_v1_and_sec_topics() -> None:
+    pub = tuple(SecInputAgent.publishes)
+    assert QA_REQUEST_V1 in pub
+    assert SEC_QUARANTINE in pub
+    assert SEC_ALERT in pub
+
+
+def test_sec_input_does_not_publish_proof_flag() -> None:
+    """7.6: defense agents do NOT cross into the predictor-side
+    proof.flag stream. The narrow exception is sec.scrape.v1
+    publishing parse-failure flags so the Phase 17 patcher can
+    pick up DOM-shape drift."""
+    assert PROOF_FLAG not in tuple(SecInputAgent.publishes)
+
+
+def test_sec_rate_does_not_publish_proof_flag() -> None:
+    assert PROOF_FLAG not in tuple(SecRateAgent.publishes)
+
+
+def test_sec_rate_is_sole_producer_of_denylist() -> None:
+    """7.3 SOLE-writer contract."""
+    assert SEC_DENYLIST in tuple(SecRateAgent.publishes)
+    for cls in (*_NON_SEC_AGENTS, SecInputAgent, SecScrapeAgent):
+        assert SEC_DENYLIST not in tuple(getattr(cls, "publishes", ())), (
+            f"{cls.__name__} must not publish sec.denylist.v1 - "
+            "only sec.rate.v1 may (single-writer denylist)."
+        )
+
+
+def test_qa_request_v1_producers_bounded() -> None:
+    """7.5: qa.request.v1 has at most two producers (the gateway
+    pass path - not an in-process agent - and sec.input.v1's
+    sanitized path). Inside the swarm, only sec.input.v1 may emit."""
+    for cls in _NON_SEC_AGENTS + (SecScrapeAgent, SecRateAgent):
+        assert QA_REQUEST_V1 not in tuple(getattr(cls, "publishes", ())), (
+            f"{cls.__name__} must not publish qa.request.v1 - only "
+            "sec.input.v1 (or the Go gateway pass path) may."
+        )
+
+
+def test_qa_request_consumer_is_only_sec_input() -> None:
+    """7.5: qa.request is the gateway escalation channel; only
+    sec.input.v1 consumes it."""
+    for cls in _NON_SEC_AGENTS + (SecScrapeAgent, SecRateAgent):
+        assert QA_REQUEST not in tuple(getattr(cls, "subscribes", ())), (
+            f"{cls.__name__} must not subscribe to qa.request - "
+            "only sec.input.v1 (the escalation tier) may."
+        )
+
+
+def test_sec_quarantine_is_sec_only_publish() -> None:
+    """7.5: sec.quarantine.v1 is published by sec.input.v1 only
+    today (sec.scrape.v1 may add evidence in a future revision; the
+    contract permits it). The predictor side never publishes."""
+    for cls in _NON_SEC_AGENTS + (SecRateAgent,):
+        assert SEC_QUARANTINE not in tuple(getattr(cls, "publishes", ())), (
+            f"{cls.__name__} must not publish sec.quarantine.v1."
+        )
+
+
+def test_sec_scrape_does_not_consume_proof_flag() -> None:
+    """7.6: scrape detector does NOT loop on its own proof.flag
+    output - that is the patcher lane (Phase 17)."""
+    assert PROOF_FLAG not in tuple(SecScrapeAgent.subscribes)
+
+
+def test_sec_rate_consumes_sec_alert_for_burst() -> None:
+    """7.3: rate agent burst counter is fed by sec.alert.v1."""
+    assert SEC_ALERT in tuple(SecRateAgent.subscribes)
+
+
+def test_sec_agents_consume_maint_event_for_overrides() -> None:
+    """7.2 (baseline_reset) + 7.3 (denylist_clear)."""
+    assert MAINT_EVENT in tuple(SecScrapeAgent.subscribes)
+    assert MAINT_EVENT in tuple(SecRateAgent.subscribes)
+
+
+def test_sec_input_does_not_consume_maint_event() -> None:
+    """sec.input.v1 has no operator override surface in v1; reload
+    of classifier patterns happens via mtime watch, not a maint
+    event."""
+    assert MAINT_EVENT not in tuple(SecInputAgent.subscribes)
+
