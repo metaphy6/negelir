@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 13,
+    "build": 14,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.20.0",
+      "version": "0.20.1",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-04T10:31:48+00:00"
+      "last_changed": "2026-05-04T10:48:38+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1671,6 +1671,15 @@
       "from": "0.19.3",
       "to": "0.20.0",
       "build": 13
+    },
+    {
+      "timestamp": "2026-05-04T10:48:38+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 7.6 enumerative boundary tests (qa.request consumer set, sec.quarantine storage-only, qa.request.v1 mutual exclusion, sec.denylist registry sweep, sec.alert producer set, telemetry Phase 7 watch-set assertion)",
+      "from": "0.20.0",
+      "to": "0.20.1",
+      "build": 14
     }
   ]
 }

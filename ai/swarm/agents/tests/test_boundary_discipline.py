@@ -324,3 +324,210 @@ def test_sec_input_does_not_consume_maint_event() -> None:
     event."""
     assert MAINT_EVENT not in tuple(SecInputAgent.subscribes)
 
+
+# ── Rule 7 (Phase 7 §7.6 — enumerative coverage) ────────────────
+#
+# The tests above lock the contract for the agents that exist
+# *today*. The tests below use the canonical agent registry
+# (``build_agents()``) so adding a new agent in a later phase
+# automatically participates in the boundary check — a future
+# Phase 10 NLP agent that subscribes to ``qa.request`` (raw)
+# instead of ``qa.request.v1`` (sanitized) will fail this suite
+# at landing time, not in production.
+#
+# These tests deliberately exclude the Go gateway path (a Phase 7
+# follow-up; not yet built under ``server/internal/sec/``). Go-side
+# §7.6 items (XFF derivation, IPv6 prefix bucketing, password
+# bypass, endpoint cost mapping) live in their own ``*_test.go``
+# files when that surface lands.
+
+
+def _registry_agents() -> tuple[object, ...]:
+    """The canonical agent set used by ``bootstrap.build_swarm``.
+
+    Importing here (function-local) keeps the import light and
+    avoids a circular ``swarm.bootstrap`` dependency at module
+    load. ``build_agents()`` is the single source of truth — any
+    new agent class wired into a real swarm flows through here
+    and inherits these checks for free.
+    """
+    from swarm.bootstrap import build_agents  # noqa: PLC0415
+
+    return tuple(build_agents())
+
+
+def _agent_label(agent: object) -> str:
+    return getattr(agent, "name", agent.__class__.__name__)
+
+
+# ``telemetry.v1`` is a counter-only meta-consumer (subscribes to
+# the union of `_WATCHED_TOPICS` to emit Prometheus metrics; per
+# the §4.6 cardinality contract it never inspects payload bytes).
+# It is allow-listed in every consumer-set check below — telemetry
+# subscribing is the *expected* state, not a contract violation.
+# The positive `test_telemetry_watches_phase7_topics` assertion at
+# the bottom of this section enforces it.
+_TELEMETRY_LABEL = "telemetry.v1"
+
+
+def test_qa_request_v1_consumer_set_is_bounded() -> None:
+    """§7.6: ``qa.request.v1`` has exactly one data consumer (NLP,
+    Phase 10 placeholder). ``telemetry.v1`` legitimately watches
+    for counter purposes (§4.6) and is excluded from the offender
+    set. Until Phase 10 lands, the data-consumer set inside the
+    swarm is empty — the gateway/agent emit, no in-process agent
+    reads. Locking this at zero now means a future phase cannot
+    accidentally route a defense agent or predictor onto the
+    sanitized QA stream.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if label == _TELEMETRY_LABEL:
+            continue
+        if QA_REQUEST_V1 in tuple(getattr(agent, "subscribes", ())):
+            offenders.append(label)
+    assert offenders == [], (
+        "qa.request.v1 must have at most one data consumer (the "
+        "Phase 10 NLP agent, not yet built). Today the in-swarm "
+        f"data-consumer set must be empty; got: {offenders}. If "
+        "you are landing the Phase 10 NLP layer, update this test "
+        "to allow exactly that agent and add the dedup-window "
+        "assertion (§7.5)."
+    )
+
+
+def test_sec_quarantine_v1_consumer_set_is_storage_only() -> None:
+    """§7.6: ``sec.quarantine.v1`` consumer set is ``{storage.v1}``
+    only (no predictor / NLP / proofreader subscriber). Today
+    ``StorageAgent`` does NOT yet subscribe (the parquet/Postgres
+    persistence path is a separate Phase 7 deliverable that lands
+    with migration ``007_quarantine.sql`` wiring); the contract we
+    lock here is the negative — *no* non-storage agent may ever
+    subscribe. When storage wires the consumer, this test still
+    passes because the allow-list permits it.
+    """
+    allowed = {"storage.v1", _TELEMETRY_LABEL}
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if label in allowed:
+            continue
+        subs = tuple(getattr(agent, "subscribes", ()))
+        if SEC_QUARANTINE in subs:
+            offenders.append(label)
+    assert offenders == [], (
+        "sec.quarantine.v1 may only be consumed by storage.v1 "
+        "(quarantine_samples persistence) or telemetry.v1 "
+        "(counter-only). Other subscribers leak forensic payloads "
+        "to predictors / NLP / proofreaders. "
+        f"Offenders: {offenders}."
+    )
+
+
+def test_qa_request_consumer_set_is_sec_input_only() -> None:
+    """§7.6 / §7.5: the raw ``qa.request`` (control-plane) is the
+    gateway's escalation channel. Only ``sec.input.v1`` may
+    consume; everything else (NLP, predictors, future operator
+    consoles) must subscribe to the sanitized ``qa.request.v1``
+    stream so they never see un-validated bytes.
+    """
+    allowed = {"sec.input.v1", _TELEMETRY_LABEL}
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if label in allowed:
+            continue
+        if QA_REQUEST in tuple(getattr(agent, "subscribes", ())):
+            offenders.append(label)
+    assert offenders == [], (
+        "qa.request (raw) must only be consumed by sec.input.v1. "
+        "(telemetry.v1 is allow-listed for counter-only watch.) "
+        "Anyone else processing un-sanitized QA bytes bypasses the "
+        f"defense pipeline. Offenders: {offenders}."
+    )
+
+
+def test_no_agent_publishes_both_qa_request_and_qa_request_v1() -> None:
+    """§7.5: the gateway-pass path and the agent-pass path are
+    *mutually exclusive* per ``request_id`` by construction. Inside
+    the swarm, no single agent may emit on both topics — that would
+    re-introduce the double-publish surface that the §7.5 dedup
+    contract is designed to eliminate.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        pub = tuple(getattr(agent, "publishes", ()))
+        if QA_REQUEST in pub and QA_REQUEST_V1 in pub:
+            offenders.append(_agent_label(agent))
+    assert offenders == [], (
+        "No agent may publish both qa.request and qa.request.v1 — "
+        "the two are exclusive halves of the gateway↔agent "
+        f"contract (§7.5). Offenders: {offenders}."
+    )
+
+
+def test_sec_denylist_v1_no_unauthorised_writer_in_registry() -> None:
+    """§7.6: ``sec.rate.v1`` is the SOLE writer of the denylist
+    (bus side; the Lua-script side is locked by
+    ``test_phase7_lua_scripts.py``). The class-level test above
+    covers the known agent classes; this enumerative variant scans
+    the registry so a future agent wired into ``build_agents()``
+    cannot quietly become a second producer.
+    """
+    allowed = {"sec.rate.v1"}
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if label in allowed:
+            continue
+        if SEC_DENYLIST in tuple(getattr(agent, "publishes", ())):
+            offenders.append(label)
+    assert offenders == [], (
+        "sec.denylist.v1 may only be published by sec.rate.v1; "
+        f"second-producer offenders: {offenders}. Multi-replica "
+        "denylist writers require Postgres-backed leader election "
+        "(Phase 14.x) — not landing in v1."
+    )
+
+
+def test_sec_alert_v1_producer_set_is_sec_only() -> None:
+    """§7.5 catalog row: ``sec.alert.v1`` has an open producer set
+    bounded to ``sec.*`` agents. A predictor / proofreader / cache
+    agent emitting a sec alert would smuggle non-defense events
+    onto the operator pager channel.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if label.startswith("sec."):
+            continue
+        if SEC_ALERT in tuple(getattr(agent, "publishes", ())):
+            offenders.append(label)
+    assert offenders == [], (
+        "sec.alert.v1 producer set is bounded to sec.* agents "
+        f"(§7.5). Non-defense offenders: {offenders}."
+    )
+
+def test_telemetry_watches_phase7_topics() -> None:
+    """§7.7 cross-phase: the telemetry watch-set must include every
+    Phase 7 wire topic so the Prometheus page sees the security
+    counters from day-1. The negative tests above allow-list
+    ``telemetry.v1``; this positive test ensures that allowance is
+    *earned* — telemetry actually subscribes to all four Phase 7
+    surfaces (raw + sanitized QA, alert, quarantine, denylist).
+
+    Cardinality bound: telemetry counts by topic only, never by
+    payload field (the open-enum ``kind`` value is exposed via the
+    dedicated dashboard counter, not as a metric label here — see
+    ``_WATCHED_TOPICS`` docstring).
+    """
+    from swarm.agents.telemetry import WATCHED_TOPICS  # noqa: PLC0415
+
+    required = {QA_REQUEST, QA_REQUEST_V1, SEC_ALERT, SEC_QUARANTINE, SEC_DENYLIST}
+    missing = required - set(WATCHED_TOPICS)
+    assert not missing, (
+        "telemetry._WATCHED_TOPICS is missing Phase 7 topic(s): "
+        f"{sorted(missing)}. The §7.7 cross-phase alignment requires "
+        "all five sec topics on the Prometheus page."
+    )
