@@ -583,14 +583,15 @@ class SecInputAgent:
         # Local mtime check against the agent's own ruleset (NOT the
         # module-level singleton — tests may inject a hand-built
         # ruleset that has nothing to do with the YAML on disk).
+        #
+        # When `rs is None` the previous load failed (startup or a
+        # later reload that hit `PatternFileError`); fall through to
+        # `_reload_now()` so the agent can recover once the operator
+        # fixes the file. `_reload_now()` is itself fail-safe — a
+        # repeated failure produces a single debounced
+        # `pattern_reload`/severity=`error` alert, not a storm.
         rs = self._ruleset
-        if rs is None:
-            # No ruleset loaded yet — poll only if a path was
-            # configured (otherwise the agent is in "rules disabled"
-            # mode and should stay there).
-            if self._pattern_path is None and rs is not None:
-                return
-        else:
+        if rs is not None:
             try:
                 p = _resolve_pattern_path(self._pattern_path)
                 if p.stat().st_mtime_ns <= rs.mtime_ns:
