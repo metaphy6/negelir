@@ -220,6 +220,38 @@ def test_sec_scrape_dom_drift_emits_proof_flag() -> None:
     assert PROOF_FLAG in topics
 
 
+def test_sec_scrape_simhash_ring_tolerates_legit_ab_test() -> None:
+    """F7.4 (P4): a site that legitimately A/B-tests two distinct
+    DOM layouts must NOT spam ``proof.flag`` on every flip after
+    both layouts are in the ring.
+
+    Pre-F7.4 the SimHash drift check compared each sample to the
+    most-recent fingerprint only — so an A,B,A,B,A,B sequence with
+    Hamming(A,B) > threshold would emit a flag on every transition.
+
+    Post-fix: the per-source ring (default size 8) holds recent
+    fingerprints. With warmup=2, samples 1+2 (A, B) seed the ring;
+    samples 3-8 land at min Hamming distance 0 to a ring member
+    → zero flags during steady-state oscillation.
+    """
+    clock = _FakeClock()
+    agent = _scrape_agent(clock, warmup=2)
+    a_layout = b"<html><body>" + b"<div class='a'></div>" * 30 + b"</body></html>"
+    b_layout = b"<html><body>" + b"<span id='x'></span><a href='/y'></a><p></p>" * 30 + b"</body></html>"
+    # Sanity: the two layouts are far apart, so naive adjacent-pair
+    # would have tripped on every flip.
+    sequence = [a_layout, b_layout, a_layout, b_layout, a_layout, b_layout, a_layout, b_layout]
+    flag_count = 0
+    for body in sequence:
+        out = list(agent.handle(_scrape_msg(body)))
+        flag_count += sum(1 for m in out if m.envelope.topic == PROOF_FLAG)
+    assert flag_count == 0, (
+        f"Got {flag_count} proof.flag emissions during legitimate A/B "
+        "oscillation; expected 0 with the F7.4 SimHash ring. Did "
+        "the drift check regress to adjacent-pair-only?"
+    )
+
+
 # ── SecRateAgent ──────────────────────────────────────────────────
 
 
@@ -449,7 +481,145 @@ def test_sec_scrape_dedup_still_drops_intra_source_replay() -> None:
     assert agent.baseline_size("mackolik") == 1
 
 
-# ── Defense-in-depth sanitization (audit fix) ─────────────────────
+def test_sec_scrape_baseline_consistency_under_concurrent_inspection() -> None:
+    """F7.1 (P1): the writer (``_handle_scrape``) and the inspector
+    helpers (``baseline_snapshot`` / ``baseline_size`` /
+    ``baseline_simhash``) must serialize on the same lock so an
+    out-of-band reader (telemetry tail, ``swarmctl``, the future
+    Phase-14 multi-replica fan-out) can never observe a torn Welford
+    state.
+
+    The contract checked here:
+      ``snapshot.samples_seen == snapshot.body_size_n`` for every
+      atomic snapshot, regardless of how many writers / readers
+      interleave. This invariant is established by the writer
+      incrementing ``samples_seen`` *inside* the same locked region
+      that calls ``body_size.update()`` (which sets ``n``); the
+      snapshot helper takes the same lock. Without F7.1, the writer
+      runs lock-free and a reader can catch the writer between
+      ``body_size.update()`` (which sets ``n=k+1``) and
+      ``samples_seen += 1`` (still at ``k``) — the assertion would
+      fail. With F7.1, it cannot.
+    """
+    import threading
+
+    clock = _FakeClock()
+    agent = _scrape_agent(clock, warmup=1)
+
+    n_writes = 500
+    stop = threading.Event()
+    inspector_violations: list[tuple[int, int]] = []
+    inspector_iterations = [0]
+
+    def inspect() -> None:
+        while not stop.is_set():
+            snap = agent.baseline_snapshot("mackolik")
+            inspector_iterations[0] += 1
+            if snap is None:
+                continue
+            samples_seen, body_n, _mean = snap
+            if samples_seen != body_n:
+                inspector_violations.append((samples_seen, body_n))
+
+    t = threading.Thread(target=inspect, daemon=True)
+    t.start()
+    try:
+        for i in range(n_writes):
+            body = b"<html><body>" + (f"<div>{i}</div>".encode() * 10) + b"</body></html>"
+            list(agent.handle(_scrape_msg(body, source="mackolik")))
+    finally:
+        stop.set()
+        t.join(timeout=5.0)
+
+    # The inspector must have run at least once (otherwise the test
+    # is silently skipping its own probe).
+    assert inspector_iterations[0] > 0, "inspector thread never ran"
+    # Atomic snapshots must always satisfy samples_seen == body_size.n.
+    assert inspector_violations == [], (
+        f"observed {len(inspector_violations)} torn Welford snapshots "
+        f"(first 3: {inspector_violations[:3]}); F7.1 lock discipline "
+        "regressed"
+    )
+    # Final state sanity check.
+    final = agent.baseline_snapshot("mackolik")
+    assert final is not None
+    assert final[0] == n_writes
+    assert final[1] == n_writes
+
+
+def test_sec_alert_debouncer_uses_dedicated_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F7.2 (P2): the per-agent ``SecAlertDebouncer`` LRU cap must
+    be sized by ``cfg.sec_alert_debouncer_max_buckets`` \u2014 NOT by
+    ``cfg.sec_rate_max_subjects``. Sharing the rate-agent's knob
+    used to mean an operator lowering ``sec_rate_max_subjects``
+    during incident response would simultaneously truncate the
+    debouncer cap on the input + scrape agents, causing
+    debounce-bucket churn and an alert storm at the worst possible
+    moment.
+
+    This test pins the wiring: monkeypatch the rate-subject knob
+    to 1 and confirm every agent's debouncer is still sized by the
+    dedicated knob (default 4096).
+    """
+    import common.config as _cfg_mod
+    monkeypatch.setattr(_cfg_mod.cfg, "sec_rate_max_subjects", 1, raising=True)
+    monkeypatch.setattr(_cfg_mod.cfg, "sec_alert_debouncer_max_buckets", 4096, raising=True)
+
+    clock = _FakeClock()
+    input_agent = SecInputAgent(clock_iso=clock.iso, new_id=_next_id_factory())
+    scrape_agent = SecScrapeAgent(clock_iso=clock.iso, new_id=_next_id_factory())
+    rate_agent = SecRateAgent(clock_iso=clock.iso, new_id=_next_id_factory(), clock_mono=clock.mono)
+
+    for name, agent in (("input", input_agent), ("scrape", scrape_agent), ("rate", rate_agent)):
+        cap = agent._debouncer._max_buckets  # type: ignore[attr-defined]
+        assert cap == 4096, (
+            f"{name} agent debouncer max_buckets={cap}; expected 4096 "
+            "(the dedicated sec_alert_debouncer_max_buckets knob). "
+            "Did F7.2 wiring regress to sec_rate_max_subjects?"
+        )
+
+
+def test_sec_scrape_dedup_and_pending_use_distinct_caps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F7.3 (P3): the SecScrapeAgent's content-addressed dedup map
+    and its (future-async) pending-classification queue must be
+    sized by *independent* config knobs.
+
+    Pre-F7.3 both used ``cfg.sec_scrape_max_pending``, so an
+    operator scaling backpressure capacity would silently shrink
+    the dedup window (and vice versa). Post-fix:
+    ``sec_scrape_dedup_window`` (the new knob) sizes ``_dedup_max``;
+    ``sec_scrape_max_pending`` continues to size ``_max_pending``.
+    """
+    import common.config as _cfg_mod
+    monkeypatch.setattr(_cfg_mod.cfg, "sec_scrape_max_pending", 7, raising=True)
+    monkeypatch.setattr(_cfg_mod.cfg, "sec_scrape_dedup_window", 13, raising=True)
+
+    clock = _FakeClock()
+    agent = _scrape_agent(clock, warmup=1)
+
+    # Re-construct so the test isn't sensitive to import-time defaults
+    # bleeding through `_scrape_agent`'s implicit cfg.read.
+    fresh = SecScrapeAgent(
+        debouncer=SecAlertDebouncer(ttl_s=60, clock=clock.mono),
+        clock_iso=clock.iso,
+        new_id=_next_id_factory(),
+    )
+    assert fresh._max_pending == 7, (
+        f"_max_pending={fresh._max_pending}; expected 7 from sec_scrape_max_pending"
+    )
+    assert fresh._dedup_max == 13, (
+        f"_dedup_max={fresh._dedup_max}; expected 13 from sec_scrape_dedup_window. "
+        "F7.3 wiring regressed if these still share a knob."
+    )
+    # The two knobs must be independently tunable: changing one MUST
+    # NOT change the other on a fresh construction.
+    assert fresh._max_pending != fresh._dedup_max
+    # Reference the warmup-bound `agent` to keep the helper used and
+    # to silence the unused-local lint when this file is run standalone.
+    del agent
+
+
+# \u2500\u2500 Defense-in-depth sanitization (audit fix) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 
 def test_sec_input_sanitizer_strips_rtl_override_and_zero_width() -> None:

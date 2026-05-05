@@ -242,3 +242,42 @@ def test_v110_capped_flag_carries_safety_ttl(
     assert s == "rejected_capped"
     ttl = redis_client.ttl(f"{keyspace}:denylist:capped")
     assert 0 < ttl <= 300, f"capped flag must carry a bounded TTL; got {ttl}"
+
+
+def test_v110_mutate_clock_rewind_safety(
+    redis_client, mutate_sha, keyspace,
+):
+    """F7.6 (P6): if ``now_ms`` rewinds (NTP step-back, mocksrv
+    fixture replay), a re-add of the same subject MUST overwrite
+    the ZSET score with the new (smaller) ``now_ms + ttl_ms``.
+
+    Pre-fix risk: a smuggled ``ZADD GT`` (or a Lua ``max(old, new)``)
+    would silently keep the older, larger score, extending the
+    effective TTL beyond what the caller requested. That breaks
+    the cap-cardinality guarantee (lazy ZREMRANGEBYSCORE would
+    not evict the entry until the stale score elapsed) and hides
+    config errors from operators.
+
+    Contract: unconditional overwrite — newest call wins,
+    monotonicity of ``now_ms`` is the caller's responsibility.
+    """
+    sha = mutate_sha
+    forward_ms = 1_000_000_000
+    rewound_ms = forward_ms - 500_000  # 500s rewind
+    s1, _ = _add(
+        redis_client, sha, keyspace, "subj",
+        ttl=600, max_entries=0, now_ms=forward_ms,
+    )
+    s2, _ = _add(
+        redis_client, sha, keyspace, "subj",
+        ttl=600, max_entries=0, now_ms=rewound_ms,
+    )
+    assert s1 == "added" and s2 == "added"
+    score = redis_client.zscore("sec:denylist:_zset", f"{keyspace}:denylist:subj")
+    expected = rewound_ms + 600_000
+    assert score == pytest.approx(expected, abs=1_000), (
+        f"ZSET score after clock-rewind re-add = {score}; expected ~{expected} "
+        "(unconditional overwrite). Got the older/larger score → suggests "
+        "ZADD GT or max(old,new) smuggled in; cap-cardinality contract "
+        "broken."
+    )

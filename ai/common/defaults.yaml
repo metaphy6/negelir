@@ -229,8 +229,10 @@ phase7:
   sec_scrape_warmup_samples: 50                    # NEGELIR_SEC_SCRAPE_WARMUP_SAMPLES
   sec_scrape_baseline_flush_s: 300                 # NEGELIR_SEC_SCRAPE_BASELINE_FLUSH_S
   sec_scrape_max_pending: 4096                     # NEGELIR_SEC_SCRAPE_MAX_PENDING
+  sec_scrape_dedup_window: 4096                    # NEGELIR_SEC_SCRAPE_DEDUP_WINDOW
   sec_scrape_simhash_max_distance: 12              # NEGELIR_SEC_SCRAPE_SIMHASH_MAX_DISTANCE — bits-out-of-64
   sec_scrape_dom_fingerprint_max_nodes: 5000       # NEGELIR_SEC_SCRAPE_DOM_FINGERPRINT_MAX_NODES
+  sec_scrape_simhash_ring_size: 8                  # NEGELIR_SEC_SCRAPE_SIMHASH_RING_SIZE
   # sec.rate.v1 (§7.3). IPv6 prefix /64 = end-site allocation boundary.
   sec_rate_pre_auth_capacity: 30                   # NEGELIR_SEC_RATE_PRE_AUTH_CAPACITY
   sec_rate_pre_auth_refill_per_s: 0.5              # NEGELIR_SEC_RATE_PRE_AUTH_REFILL_PER_S
@@ -258,6 +260,7 @@ phase7:
   # sec.alert.v1 envelope (§7.4) — generalized debounce.
   sec_alert_debounce_ttl_s: 60                     # NEGELIR_SEC_ALERT_DEBOUNCE_TTL_S
   sec_alert_critical_debounce_enabled: false       # NEGELIR_SEC_ALERT_CRITICAL_DEBOUNCE_ENABLED
+  sec_alert_debouncer_max_buckets: 4096            # NEGELIR_SEC_ALERT_DEBOUNCER_MAX_BUCKETS
   # qa.request.v1 — NLP-side dedup window (§7.5 binding).
   qa_request_v1_dedup_window_s: 300                # NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S
 

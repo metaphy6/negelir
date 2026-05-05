@@ -144,7 +144,7 @@ class SecRateAgent:
         self._debouncer = debouncer if debouncer is not None else SecAlertDebouncer(
             ttl_s=int(_cfg.sec_alert_debounce_ttl_s),
             critical_bypass=not bool(_cfg.sec_alert_critical_debounce_enabled),
-            max_buckets=int(_cfg.sec_rate_max_subjects),
+            max_buckets=int(_cfg.sec_alert_debouncer_max_buckets),
         )
         self._clock_iso = clock_iso or _utc_iso
         self._clock_mono = clock_mono or time.monotonic

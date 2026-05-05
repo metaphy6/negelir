@@ -289,3 +289,61 @@ def test_lua_sha_matches_pinned_header(loaded_scripts):
             f"loaded {name} SHA1 differs from local file's SHA1 — "
             "Redis is running a stale script; reload required"
         )
+
+
+# ── SCRIPT FLUSH recovery (F7.5 / P5) ─────────────────────────────
+
+
+def test_lua_eval_sha_recovers_after_script_flush(redis_client, keyspace):
+    """F7.5 (P5): if an operator runs ``SCRIPT FLUSH`` (or Redis
+    fails over and the new primary lacks the cache), the agent's
+    cached EVALSHA must fail loudly with NOSCRIPT, reloading the
+    canonical body must yield a byte-identical SHA1, and EVALSHA
+    against that re-loaded SHA must succeed.
+
+    Pre-fix the recovery story was only documented; this test
+    pins it as executable doctrine so any future change to the
+    Lua body (which would change the SHA1) cannot silently break
+    the reload contract.
+    """
+    repo_root = Path(__file__).resolve().parents[4]
+    rate_src = (repo_root / "infra/redis/lua/sec_rate_check.lua").read_text()
+    expected_sha1 = hashlib.sha1(rate_src.encode()).hexdigest()
+
+    sha_first = redis_client.script_load(rate_src)
+    assert sha_first == expected_sha1, (
+        f"Initial SCRIPT LOAD returned {sha_first}; expected {expected_sha1} "
+        "(SHA1 over the canonical file bytes)."
+    )
+
+    # Operator wipes the script cache.
+    redis_client.script_flush()
+
+    # Cached SHA must now fail with NOSCRIPT — no silent fall-through.
+    redis = pytest.importorskip("redis")
+    with pytest.raises(redis.exceptions.NoScriptError):
+        redis_client.evalsha(
+            sha_first, 2,
+            f"{keyspace}:bucket", f"{keyspace}:deny",
+            10, 1, 1, 1_000, 60,
+        )
+
+    # Re-load the canonical body — SHA1 MUST be byte-identical.
+    sha_reloaded = redis_client.script_load(rate_src)
+    assert sha_reloaded == expected_sha1, (
+        f"Reloaded SHA1 ({sha_reloaded}) differs from the canonical SHA1 "
+        f"({expected_sha1}). Lua source bytes must be stable across "
+        "SCRIPT FLUSH cycles or the reload contract is broken."
+    )
+    assert sha_reloaded == sha_first
+
+    # EVALSHA against the (re-loaded) SHA succeeds.
+    out = redis_client.evalsha(
+        sha_reloaded, 2,
+        f"{keyspace}:bucket", f"{keyspace}:deny",
+        10, 1, 1, 1_000, 60,
+    )
+    # sec_rate_check returns a list/array; we only assert the call
+    # round-trips without raising — exact tuple shape is asserted by
+    # the bucket-math tests above.
+    assert out is not None

@@ -204,18 +204,23 @@ def _hamming(a: int, b: int) -> int:
 class _SourceBaseline:
     """Per-source streaming-statistic state. Memory ~constant.
 
-    ``simhash`` is the most-recent SimHash fingerprint; we compare
-    each incoming sample against it. (A true baseline would weight
-    multiple historical fingerprints; v1's "last good fingerprint"
-    is the doctrine's minimum — Phase 8 streaming-fingerprint
-    work could lift this to a centroid SimHash without changing
-    the wire contract.)
+    ``simhash`` is the most-recent SimHash fingerprint, kept for the
+    ``baseline_simhash`` inspector's backward-compat contract.
+
+    F7.4: drift detection now uses ``simhash_ring`` — a bounded ring
+    of recent fingerprints (size = ``cfg.sec_scrape_simhash_ring_size``,
+    default 8). Drift trips on the MIN Hamming distance across the
+    whole ring, NOT the adjacent-pair distance against ``simhash``.
+    This tolerates legitimate A/B-test layout oscillation post-warmup
+    (a site that ping-pongs between two layouts will populate both
+    into the ring during warmup; subsequent flips never trip).
     """
 
     body_size: _Welford = field(default_factory=_Welford)
     inflate_ratio: _Welford = field(default_factory=_Welford)
     content_types: dict[str, int] = field(default_factory=dict)
     simhash: int | None = None
+    simhash_ring: list[int] = field(default_factory=list)
     samples_seen: int = 0
 
     def warmed(self, threshold: int) -> bool:
@@ -317,7 +322,7 @@ class SecScrapeAgent:
         self._debouncer = debouncer if debouncer is not None else SecAlertDebouncer(
             ttl_s=int(_cfg.sec_alert_debounce_ttl_s),
             critical_bypass=not bool(_cfg.sec_alert_critical_debounce_enabled),
-            max_buckets=int(_cfg.sec_rate_max_subjects),
+            max_buckets=int(_cfg.sec_alert_debouncer_max_buckets),
         )
         self._clock_iso = clock_iso or _utc_iso
         self._new_id = new_id or _new_id
@@ -332,8 +337,13 @@ class SecScrapeAgent:
         self._max_pending = max(1, int(_cfg.sec_scrape_max_pending))
         # Idempotency: dedup on bytes_sha256 — a redelivered raw is
         # the same payload by content. Insertion-order LRU.
+        # F7.3: sized by its OWN dedicated knob now
+        # (cfg.sec_scrape_dedup_window). Default matches max_pending
+        # so behaviour is unchanged at defaults; operators can tune
+        # the dedup window independently of the (future) async-scoring
+        # backpressure cap.
         self._dedup: "OrderedDict[str, None]" = OrderedDict()
-        self._dedup_max = max(1, int(_cfg.sec_scrape_max_pending))
+        self._dedup_max = max(1, int(_cfg.sec_scrape_dedup_window))
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -396,25 +406,45 @@ class SecScrapeAgent:
         if not body:
             return  # empty body — Phase 4.1 path
 
-        baseline = self._baselines.setdefault(raw.source, _SourceBaseline())
-        warming = not baseline.warmed(int(_cfg.sec_scrape_warmup_samples))
-
-        # Always update streaming statistics (warmup or not).
-        prev_simhash = baseline.simhash
+        # F7.1 fix: hold ``self._lock`` across the entire read/mutate
+        # sequence on the baseline. The runner is single-threaded today,
+        # so contention is zero — but the public inspectors
+        # (``baseline_size`` / ``baseline_simhash``) AND the operator
+        # ``maint.event.v1{baseline_reset}`` handler already lock; the
+        # writer must too, otherwise an out-of-band reader (telemetry
+        # tail, swarmctl) will observe torn Welford state
+        # (``samples_seen`` incremented before ``body_size.mean`` is
+        # updated). Yields stay OUTSIDE the lock — generators must not
+        # hold a lock across ``yield``. We snapshot every value the
+        # post-lock code reads from the baseline.
         new_simhash = _simhash64(_tag_triples(body, int(_cfg.sec_scrape_dom_fingerprint_max_nodes)))
-        prev_mean = baseline.body_size.mean
-        prev_n = baseline.body_size.n
-        baseline.body_size.update(float(len(body)))
-        baseline.samples_seen += 1
         sniffed = _sniff_content_type(body)
-        if sniffed is not None:
-            baseline.content_types[sniffed] = baseline.content_types.get(sniffed, 0) + 1
-        baseline.simhash = new_simhash
+        with self._lock:
+            baseline = self._baselines.setdefault(raw.source, _SourceBaseline())
+            warming = not baseline.warmed(int(_cfg.sec_scrape_warmup_samples))
+            # F7.4: snapshot the ring under the lock; drift comparison
+            # uses min-distance over the ring, not adjacent-pair vs
+            # ``simhash``. The ring is sized by
+            # ``cfg.sec_scrape_simhash_ring_size``; we trim before
+            # appending so the bound is enforced strictly.
+            prev_ring = tuple(baseline.simhash_ring)
+            prev_mean = baseline.body_size.mean
+            prev_n = baseline.body_size.n
+            baseline.body_size.update(float(len(body)))
+            baseline.samples_seen += 1
+            if sniffed is not None:
+                baseline.content_types[sniffed] = baseline.content_types.get(sniffed, 0) + 1
+            baseline.simhash = new_simhash
+            ring_size = max(1, int(_cfg.sec_scrape_simhash_ring_size))
+            baseline.simhash_ring.append(new_simhash)
+            while len(baseline.simhash_ring) > ring_size:
+                baseline.simhash_ring.pop(0)
+            samples_seen_after = baseline.samples_seen
 
         if warming:
-            # Emit a single "warmup" info alert on the very first
-            # sample for a brand-new source. Debounced.
-            if baseline.samples_seen == 1:
+            # First-sample warmup alert key on the snapshot taken under
+            # the lock — never re-read ``baseline.samples_seen`` here.
+            if samples_seen_after == 1:
                 yield from self._maybe_alert(
                     kind="baseline_warmup",
                     severity="info",
@@ -465,12 +495,13 @@ class SecScrapeAgent:
         if raw.wire_bytes > 0 and raw.decoded_bytes > 0:
             ratio = raw.decoded_bytes / raw.wire_bytes
             limit = float(_cfg.sec_scrape_inflate_ratio_max)
-            if ratio > limit:
-                # Update the running ratio statistic for forensic
-                # context (no alert from the streaming-statistic
-                # baseline alone — the cfg cap is the operator
-                # contract).
+            # F7.1 fix: Welford update on a baseline field — must be
+            # serialized against inspectors. Lock is fine to take twice
+            # in the same handler (single-threaded runner; not
+            # reentrant-required since we don't recurse).
+            with self._lock:
                 baseline.inflate_ratio.update(ratio)
+            if ratio > limit:
                 yield from self._maybe_alert(
                     kind="inflate_ratio_outlier",
                     severity="error",
@@ -481,9 +512,6 @@ class SecScrapeAgent:
                         f"exceeds threshold {limit:.1f}x"
                     ),
                 )
-            else:
-                # Healthy sample — fold into the baseline.
-                baseline.inflate_ratio.update(ratio)
 
         # 5. Suspicious JS — scan inline `<script>` blocks for known
         # malicious-payload markers (eval / Function / atob→eval /
@@ -508,8 +536,9 @@ class SecScrapeAgent:
             break
 
         # 6. SimHash structural drift → proof.flag for the patcher.
-        if prev_simhash is not None:
-            distance = _hamming(prev_simhash, new_simhash)
+        # F7.4: trip on MIN distance over the ring, not adjacent-pair.
+        if prev_ring:
+            distance = min(_hamming(h, new_simhash) for h in prev_ring)
             if distance > int(_cfg.sec_scrape_simhash_max_distance):
                 # Per §7.2 verdict routing: post-parse-shape anomalies
                 # use proof.flag{parse_failed} so the Phase 17 patcher
@@ -588,6 +617,23 @@ class SecScrapeAgent:
         with self._lock:
             b = self._baselines.get(source)
             return b.simhash if b else None
+
+    def baseline_snapshot(self, source: str) -> tuple[int, int, float] | None:
+        """Atomic snapshot of ``(samples_seen, body_size.n, body_size.mean)``
+        under ``self._lock`` (F7.1 invariant probe).
+
+        Used by ``test_sec_scrape_baseline_consistency_under_concurrent_inspection``
+        to prove that an external thread can never observe a torn
+        Welford state (counter incremented while ``mean`` lags). Both
+        the writer (``_handle_scrape``) and this reader take the same
+        lock, so a successful snapshot satisfies
+        ``samples_seen == body_size.n`` by construction.
+        """
+        with self._lock:
+            b = self._baselines.get(source)
+            if b is None:
+                return None
+            return (b.samples_seen, b.body_size.n, b.body_size.mean)
 
 
 __all__ = ["SecScrapeAgent"]

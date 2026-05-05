@@ -17,13 +17,13 @@ Implementation notes (binding):
 * **Monotonic clock.** Pre-Phase-7 audit M2/M4 — TTLs use
   ``time.monotonic()`` for in-process math; only the on-the-wire
   ``produced_at`` field stays wall-clock.
-* **Bounded state.** ``cfg.sec_rate_max_subjects`` caps the number
-  of (kind, subject) pairs we track; insertion-order LRU evicts the
-  oldest. Eviction does NOT signal correctness — the evicted pair
-  just loses its suppression context, so the *next* fire emits as
-  if it were the first occurrence (worst case: one extra alert on
-  bucket evict). Overflow does not itself emit an alert (would
-  recurse into this same helper).
+* **Bounded state.** ``cfg.sec_alert_debouncer_max_buckets`` (F7.2)
+  caps the number of (kind, subject) pairs we track; insertion-order
+  LRU evicts the oldest. Eviction does NOT signal correctness — the
+  evicted pair just loses its suppression context, so the *next*
+  fire emits as if it were the first occurrence (worst case: one
+  extra alert on bucket evict). Overflow does not itself emit an
+  alert (would recurse into this same helper).
 * **Thread-safety.** A single ``threading.Lock`` serializes the
   bookkeeping. Holds nanoseconds per call; the agents never call
   in tight loops (one alert per inbound event at most).
@@ -68,9 +68,13 @@ class SecAlertDebouncer:
       ``critical`` skips the gate entirely. Mirror the negation of
       ``cfg.sec_alert_critical_debounce_enabled`` (``False`` →
       bypass; ``True`` → debounce critical too).
-    * ``max_buckets`` — LRU cap. Use ``cfg.sec_rate_max_subjects``
-      so the helper inherits the rate agent's bound (anti-spray
-      contract). Below 1 raises ``ValueError`` at construction.
+    * ``max_buckets`` — LRU cap. Use
+      ``cfg.sec_alert_debouncer_max_buckets`` (F7.2 — a dedicated
+      knob, distinct from the rate agent's per-subject bound, so
+      operators can tune the rate-agent's anti-spray cap during
+      incident response without simultaneously truncating the
+      debouncer in unrelated agents). Below 1 raises ``ValueError``
+      at construction.
     * ``clock`` — monotonic-seconds source; defaults to
       ``time.monotonic``. Tests inject a fake.
     """

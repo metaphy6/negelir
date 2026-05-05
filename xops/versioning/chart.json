@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 30,
+    "build": 39,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.12.8",
+      "version": "1.12.9",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T07:55:51+00:00"
+      "last_changed": "2026-05-05T08:13:50+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.22.1",
+      "version": "0.22.9",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T07:36:48+00:00"
+      "last_changed": "2026-05-05T08:12:32+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1824,6 +1824,87 @@
       "from": "1.12.7",
       "to": "1.12.8",
       "build": 30
+    },
+    {
+      "timestamp": "2026-05-05T08:01:57+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.1 SecScrapeAgent baseline lock discipline: writer now takes self._lock around Welford+simhash mutations; +baseline_snapshot() atomic helper; +P1 concurrent-inspector torn-write probe",
+      "from": "0.22.1",
+      "to": "0.22.2",
+      "build": 31
+    },
+    {
+      "timestamp": "2026-05-05T08:04:02+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.2 dedicated debouncer LRU knob (sec_alert_debouncer_max_buckets); decouples incident-response tuning of rate-agent subject cap from debouncer churn in input/scrape agents",
+      "from": "0.22.2",
+      "to": "0.22.3",
+      "build": 32
+    },
+    {
+      "timestamp": "2026-05-05T08:05:28+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.3 dedicated sec_scrape_dedup_window knob (independent of sec_scrape_max_pending)",
+      "from": "0.22.3",
+      "to": "0.22.4",
+      "build": 33
+    },
+    {
+      "timestamp": "2026-05-05T08:08:22+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.4 SimHash ring (sec_scrape_simhash_ring_size); drift check uses min over ring, fixes A/B-test false-positive flag spam",
+      "from": "0.22.4",
+      "to": "0.22.5",
+      "build": 34
+    },
+    {
+      "timestamp": "2026-05-05T08:09:19+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.5 SCRIPT FLUSH recovery test (executable doctrine for Lua reload contract)",
+      "from": "0.22.5",
+      "to": "0.22.6",
+      "build": 35
+    },
+    {
+      "timestamp": "2026-05-05T08:10:02+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.6 clock-rewind safety test for sec_denylist_mutate.lua",
+      "from": "0.22.6",
+      "to": "0.22.7",
+      "build": 36
+    },
+    {
+      "timestamp": "2026-05-05T08:11:17+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.8 match.stored payload boundary test",
+      "from": "0.22.7",
+      "to": "0.22.8",
+      "build": 37
+    },
+    {
+      "timestamp": "2026-05-05T08:12:32+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "F7.9 OPEN_ENUM_REGISTRY exhaustiveness test",
+      "from": "0.22.8",
+      "to": "0.22.9",
+      "build": 38
+    },
+    {
+      "timestamp": "2026-05-05T08:13:50+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "A2 SWARM.md doctrine-lock block for MAINT_EVENT_V1_ALLOWED_PRODUCERS",
+      "from": "1.12.8",
+      "to": "1.12.9",
+      "build": 39
     }
   ]
 }

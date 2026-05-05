@@ -140,3 +140,70 @@ def test_retired_phase7_knobs_do_not_creep_back() -> None:
         "streaming-statistic baseline supersedes it (ROADMAP §7.2). "
         f"Offending lines: {offenders}"
     )
+
+
+# ── F7.9 / P8 — registry exhaustiveness ───────────────────────────
+
+
+def test_open_enum_registry_is_exhaustive_over_schema_directory() -> None:
+    """F7.9 (P8): every JSON Schema field tagged ``x-enum-open: true``
+    must have a matching entry in ``OPEN_ENUM_REGISTRY``.
+
+    This catches the failure mode where a schema author flips a new
+    field to open-enum (lifting the wire constraint) but forgets to
+    register the producer-side closed set. Without registration, the
+    parametrized contract tests in this file silently exclude the new
+    field, and a typoed producer literal would round-trip uncaught.
+
+    The scan walks ``ai/swarm/sdk/schemas/*.json`` and recursively
+    inspects every property for the ``x-enum-open`` marker. Schema
+    file basename (without ``.json``) is the topic id.
+    """
+    import json
+    from swarm.sdk.schemas.open_enum import OPEN_ENUM_REGISTRY
+
+    schema_dir = Path(__file__).resolve().parents[3] / "swarm" / "sdk" / "schemas"
+    registered: set[tuple[str, str]] = {(e.topic, e.field) for e in OPEN_ENUM_REGISTRY}
+
+    declared: set[tuple[str, str]] = set()
+
+    def _walk(node, *, topic: str, path: tuple[str, ...]) -> None:
+        if isinstance(node, dict):
+            if node.get("x-enum-open") is True and path:
+                declared.add((topic, ".".join(path)))
+            props = node.get("properties")
+            if isinstance(props, dict):
+                for name, sub in props.items():
+                    _walk(sub, topic=topic, path=path + (name,))
+            # Also descend into items (arrays of objects).
+            items = node.get("items")
+            if isinstance(items, dict):
+                _walk(items, topic=topic, path=path)
+        elif isinstance(node, list):
+            for sub in node:
+                _walk(sub, topic=topic, path=path)
+
+    for schema_file in schema_dir.glob("*.json"):
+        topic = schema_file.stem  # e.g. "sec.alert.v1"
+        try:
+            doc = json.loads(schema_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        _walk(doc, topic=topic, path=())
+
+    missing = declared - registered
+    assert not missing, (
+        f"Schemas declare x-enum-open at {sorted(missing)} but "
+        "OPEN_ENUM_REGISTRY does not list them. Either register the "
+        "producer-side closed set in ai/swarm/sdk/schemas/open_enum.py "
+        "or remove the x-enum-open marker from the schema."
+    )
+    # Also: every registered entry should still correspond to a real
+    # x-enum-open declaration — guards against stale registry rows
+    # outliving a schema renaming.
+    stale = registered - declared
+    assert not stale, (
+        f"OPEN_ENUM_REGISTRY entries {sorted(stale)} have no matching "
+        "x-enum-open: true field in the schemas directory. Update or "
+        "remove the registry row."
+    )

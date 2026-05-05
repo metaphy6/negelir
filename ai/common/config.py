@@ -481,8 +481,22 @@ class Config:
     sec_scrape_warmup_samples: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_WARMUP_SAMPLES", "50")))
     sec_scrape_baseline_flush_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_BASELINE_FLUSH_S", "300")))
     sec_scrape_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_MAX_PENDING", "4096")))
+    # F7.3: dedicated cap for the per-source content-addressed dedup map
+    # ((source, bytes_sha256) → None LRU). Distinct from _max_pending
+    # which (today reserved, future async-scoring) controls memory under
+    # classifier backpressure. Default matches _max_pending so behaviour
+    # is unchanged at default settings; operators can now scale them
+    # independently.
+    sec_scrape_dedup_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_DEDUP_WINDOW", "4096")))
     sec_scrape_simhash_max_distance: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_SIMHASH_MAX_DISTANCE", "12")))
     sec_scrape_dom_fingerprint_max_nodes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_DOM_FINGERPRINT_MAX_NODES", "5000")))
+    # F7.4: bounded ring of recent SimHash fingerprints per source.
+    # Drift trips when the MIN Hamming distance to any ring member
+    # exceeds sec_scrape_simhash_max_distance — not the adjacent-pair
+    # distance. Tolerates legitimate A/B-test layout oscillation
+    # (post-warmup) at the cost of one transient false trip when a
+    # genuinely-new layout first lands.
+    sec_scrape_simhash_ring_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_SCRAPE_SIMHASH_RING_SIZE", "8")))
 
     # sec.rate.v1 (§7.3). Pre-auth caps protect /v1/auth/* against
     # credential stuffing; post-auth caps are looser. IPv6 prefix
@@ -520,6 +534,11 @@ class Config:
     sec_alert_critical_debounce_enabled: bool = field(default_factory=lambda: os.getenv(
         "NEGELIR_SEC_ALERT_CRITICAL_DEBOUNCE_ENABLED", "false"
     ).lower() in ("true", "1", "yes"))
+    # F7.2: dedicated LRU cap for SecAlertDebouncer per-agent buckets.
+    # Distinct from sec_rate_max_subjects (which sizes the rate agent's
+    # per-subject burst-window LRU). Default 4096 — kinds × subjects in
+    # the debouncer is much smaller than the rate-agent's subject space.
+    sec_alert_debouncer_max_buckets: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_ALERT_DEBOUNCER_MAX_BUCKETS", "4096")))
 
     # qa.request.v1 — NLP-side dedup window (§7.5 binding).
     qa_request_v1_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S", "300")))
@@ -788,9 +807,11 @@ class Config:
         _bounded("sec_scrape_warmup_samples", self.sec_scrape_warmup_samples, 0, 100_000)
         _bounded("sec_scrape_baseline_flush_s", self.sec_scrape_baseline_flush_s, 1, 86_400)
         _bounded("sec_scrape_max_pending", self.sec_scrape_max_pending, 1, 10_000_000)
+        _bounded("sec_scrape_dedup_window", self.sec_scrape_dedup_window, 1, 10_000_000)
         # SimHash distance is bits-out-of-64; >= 32 is essentially "always trip".
         _bounded("sec_scrape_simhash_max_distance", self.sec_scrape_simhash_max_distance, 0, 64)
         _bounded("sec_scrape_dom_fingerprint_max_nodes", self.sec_scrape_dom_fingerprint_max_nodes, 1, 1_000_000)
+        _bounded("sec_scrape_simhash_ring_size", self.sec_scrape_simhash_ring_size, 1, 1024)
 
         _bounded("sec_rate_pre_auth_capacity", self.sec_rate_pre_auth_capacity, 1, 1_000_000)
         _bounded("sec_rate_pre_auth_refill_per_s", self.sec_rate_pre_auth_refill_per_s, 0.0, 1e6)
@@ -816,6 +837,7 @@ class Config:
         _bounded("sec_denylist_max_entries", self.sec_denylist_max_entries, 1, 100_000_000)
 
         _bounded("sec_alert_debounce_ttl_s", self.sec_alert_debounce_ttl_s, 0, 86_400)
+        _bounded("sec_alert_debouncer_max_buckets", self.sec_alert_debouncer_max_buckets, 1, 10_000_000)
         _bounded("qa_request_v1_dedup_window_s", self.qa_request_v1_dedup_window_s, 1, 86_400)
 
         # Hour/minute ranges

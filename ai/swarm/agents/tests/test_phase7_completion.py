@@ -654,3 +654,42 @@ def test_request_id_deduper_zero_window_rejected() -> None:
     interval → every call is a miss. Reject loud."""
     with pytest.raises(ValueError):
         RequestIdDeduper(window_s=0.0, max_keys=1)
+
+
+# ── PR9 / A2 — SWARM.md doctrine lock ─────────────────────────────
+
+
+def test_swarm_md_locks_maint_event_producer_set() -> None:
+    """A2 (PR9): the canonical producer set for ``maint.event.v1``
+    lives in ``ai/swarm/sdk/wire_contracts.py``; the design doc
+    ``docs/design/SWARM.md`` quotes the same list inside a marked
+    block. This test asserts the two stay byte-equal.
+
+    Updating one without the other fails the gate — that's the
+    point. A new producer is a doctrine change (minor bump on
+    ``swarm`` + design-doc edit), not a silent code change.
+    """
+    import re as _re
+    from pathlib import Path
+    repo_root = Path(__file__).resolve().parents[4]
+    swarm_md = (repo_root / "docs" / "design" / "SWARM.md").read_text(encoding="utf-8")
+    block = _re.search(
+        r"<!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:begin -->(.+?)<!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:end -->",
+        swarm_md,
+        flags=_re.DOTALL,
+    )
+    assert block is not None, (
+        "SWARM.md is missing the MAINT_EVENT_V1_ALLOWED_PRODUCERS "
+        "doctrine-lock block (between the begin/end HTML comment "
+        "markers). Restore the block or update this test."
+    )
+    documented = frozenset(
+        m.group(1)
+        for m in _re.finditer(r"^- `([^`]+)`", block.group(1), flags=_re.MULTILINE)
+    )
+    assert documented == MAINT_EVENT_V1_ALLOWED_PRODUCERS, (
+        "SWARM.md doctrine block lists "
+        f"{sorted(documented)} but the code constant is "
+        f"{sorted(MAINT_EVENT_V1_ALLOWED_PRODUCERS)}. Bump both in the "
+        "same commit (design-doc edit + minor `swarm` bump)."
+    )

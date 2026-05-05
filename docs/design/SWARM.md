@@ -58,6 +58,27 @@ shape because:
 | `maint.coder.v1` | 8 | **absorbed into `datasource/patcher/`** | yes | n/a | yes |
 | `maint.backup.v1` | 8 | `swarm/` shared infra | yes | 1 | no |
 
+### Doctrine lock — `maint.event.v1` allowed producers
+
+The `maint.event.v1` topic is the only swarm-wide control-plane
+channel that crosses agent boundaries (drift trips, denylist clears,
+baseline resets, quarantine erasures). Its producer set is
+**closed** — adding a new producer is a doctrine change, not a code
+change. The single source of truth is
+`MAINT_EVENT_V1_ALLOWED_PRODUCERS` in `ai/swarm/sdk/wire_contracts.py`.
+
+The producer set, locked here for cross-agent review:
+
+<!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:begin -->
+- `drift.v1`
+- `ops_console`
+<!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:end -->
+
+`test_swarm_md_locks_maint_event_producer_set` (in
+`ai/swarm/agents/tests/test_phase7_completion.py`) asserts that this
+list matches the code constant exactly. Updating one without the
+other will fail the gate; that is the point.
+
 ## 🤝 Consensus algorithm (Phase 5)
 
 For each `(match_id, market, request_id)`:
