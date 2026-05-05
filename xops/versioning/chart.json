@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 42,
+    "build": 43,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.15.0",
+      "version": "1.16.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T08:56:42+00:00"
+      "last_changed": "2026-05-05T09:08:58+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1932,6 +1932,15 @@
       "from": "1.14.0",
       "to": "1.15.0",
       "build": 42
+    },
+    {
+      "timestamp": "2026-05-05T09:08:58+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 second-pass deep-revision: §8.12 off-host DR; per-kind maint.event shape discipline; encryption two-class recipient (DR vs verify) fixes restore-verify contradiction; wall-clock skew + PG conn-limit + restore runbook + weekly cold-verify in §8.3; destructive-cmd confirmation + ack payload cap + maint-pause symmetry in §8.1/§8.10; DLQ allow-list mid-replay + pattern_allowlist partial index; audit-log INSERT-only with 7y pii_erased retention; +14 maint.event kinds, +2 sec.alert kinds, +14 cfg knobs, +13 proof tests, +4 chaos stubs.",
+      "from": "1.15.0",
+      "to": "1.16.0",
+      "build": 43
     }
   ]
 }
