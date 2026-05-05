@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 44,
+    "build": 47,
     "released": null
   },
   "components": {
@@ -19,14 +19,14 @@
       "last_changed": "2026-05-05T07:36:48+00:00"
     },
     "xops": {
-      "version": "3.5.0",
+      "version": "3.5.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-04T09:40:29+00:00"
+      "last_changed": "2026-05-05T09:33:49+00:00"
     },
     "docs": {
-      "version": "1.17.0",
+      "version": "1.18.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T09:20:23+00:00"
+      "last_changed": "2026-05-05T09:33:43+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.22.9",
+      "version": "0.22.10",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T08:12:32+00:00"
+      "last_changed": "2026-05-05T09:33:49+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1950,6 +1950,33 @@
       "from": "1.16.0",
       "to": "1.17.0",
       "build": 44
+    },
+    {
+      "timestamp": "2026-05-05T09:33:43+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 fifth-pass deep-revision: §8.14 (audit-log range partitioning, per-file dump checksum manifest, age binary supply-chain pin, opsctl Redis ACL + signed envelopes + per-subcommand authz, DLQ recursion guard, maint.ack.v1 trace_id propagation, schema-sentinel rps cap, trainer scale-target sole-writer, pg_dump nice + verify-PG version invariant, spool-flush dir-level lock + newest-first ordering).",
+      "from": "1.17.0",
+      "to": "1.18.0",
+      "build": 45
+    },
+    {
+      "timestamp": "2026-05-05T09:33:49+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 8 fifth-pass design addendum (no code yet); 13 new event/alert kinds + new cfg knobs declared in §8.14",
+      "from": "0.22.9",
+      "to": "0.22.10",
+      "build": 46
+    },
+    {
+      "timestamp": "2026-05-05T09:33:49+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 8 fifth-pass: opsctl Redis ACL + signed-envelope surface, make verify.age-pin gate, ops.bootstrap-key + ops.backup-bump-age flags, exit code 8 (spool_flush_already_running) reserved",
+      "from": "3.5.0",
+      "to": "3.5.1",
+      "build": 47
     }
   ]
 }
