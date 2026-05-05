@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 39,
+    "build": 40,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.12.9",
+      "version": "1.13.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T08:13:50+00:00"
+      "last_changed": "2026-05-05T08:25:16+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1905,6 +1905,15 @@
       "from": "1.12.8",
       "to": "1.12.9",
       "build": 39
+    },
+    {
+      "timestamp": "2026-05-05T08:25:16+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 design rewrite (ops console + scaler + backup + DLQ supervisor + watcher graduation + schema-drift sentinel + FP feedback + denylist sweeper); cross-phase contracts, DoD with idempotency/bounded-state/boundary/chaos/triangle gates.",
+      "from": "1.12.9",
+      "to": "1.13.0",
+      "build": 40
     }
   ]
 }

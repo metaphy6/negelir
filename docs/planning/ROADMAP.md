@@ -84,7 +84,7 @@ The replacement is a **Swarm-AI Agents architecture**:
 - [Phase 5 — Predictor Swarm & Consensus](#-phase-5--predictor-swarm--consensus)
 - [Phase 6 — Proofreader & Drift Agents](#-phase-6--proofreader--drift-agents)
 - [Phase 7 — Defense Agents (Malicious-Input, Anomaly, Rate Limit)](#-phase-7--defense-agents-malicious-input-anomaly-rate-limit)
-- [Phase 8 — Self-Maintenance Agents (Schema Healer, Auto-Scaler, Coder)](#-phase-8--self-maintenance-agents-schema-healer-auto-scaler-coder)
+- [Phase 8 — Self-Maintenance Agents (Ops Console, Auto-Scaler, Backup, DLQ Supervisor, Watcher Graduation)](#-phase-8--self-maintenance-agents-ops-console-auto-scaler-backup-dlq-supervisor-watcher-graduation)
 - [Phase 9 — Go REST API & Identity (Public Surface)](#-phase-9--go-rest-api--identity-public-surface)
 - [Phase 10 — Turkish-First NLP Layer](#-phase-10--turkish-first-nlp-layer)
 - [Phase 11 — GPU/CPU/NPU Compute Strategy](#-phase-11--gpucpunpu-compute-strategy)
@@ -1059,35 +1059,240 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 
 ---
 
-## 🔧 Phase 8 — Self-Maintenance Agents (Schema Healer, Auto-Scaler, Coder)
+## 🔧 Phase 8 — Self-Maintenance Agents (Ops Console, Auto-Scaler, Backup, DLQ Supervisor, Watcher Graduation)
 
-**Goal:** Keep the system running without human intervention for the boring stuff.
-**Depends on:** Phase 4, Phase 6
+**Goal:** Close the operational loop. Every Phase 6/7 maint hook (denylist clear, baseline reset, quarantine erase, retrain request, DLQ depth, replica scaling) gains a *publisher* and a *consumer* so the system runs unattended for the boring stuff — without ever touching scraper code (that is Phase 17 patcher's exclusive remit) and without ever auto-mutating predictors (humans gate that via `maint.event.v1{kind=retrain_approve}` in v1).
 
-### 8.1 Schema-healer agent (`maint.schema.v1`)
+**Depends on:** Phase 4 (storage + reactor base), Phase 6 (drift events + ledger), Phase 7 (sec.alert + Lua denylist + quarantine plane).
 
-- [ ] Listens to `proof.flag` reasons of kind `parse_failed` / `selector_missing`.
-- [ ] Re-derives selectors from the seed corpus (or a rolling cache of recent raw scrapes) using **structural similarity**, not LLMs.
-- [ ] Proposes a patch to `scraper/selectors.json`; opens a PR via the local git server in dev, or auto-applies if the change touches only declared "self-healable" fields (configured allow-list).
+**Pivot v3 placement:** maintenance agents live under `swarm/reactors/maint/` per [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) (write-side reactors, not predictors and not data-plane). Until Phase R2 lands the directory move, ship under the transitional path **`ai/swarm/agents/maint/`**, importable as `swarm.agents.maint.*` (matches Phase 4/5/6/7 layout — R2 is a `git mv`, not a rewrite). The **ops console** publisher (§8.1) lives at `xops/opsctl/` (a stdlib-only CLI, no swarm runtime — it publishes to the bus and exits) so an operator can use it on a host with no Python venv beyond what `xops/` already requires.
+
+**Scope discipline (binding):**
+
+- **Phase 8 agents are reactors, not data sources and not predictors.** They consume events emitted by Phase 6/7/4 and either (a) re-publish a control message on `maint.event.v1`, (b) call out to the runtime control plane (`docker compose --scale` / Kubernetes `Scale` subresource), or (c) touch Postgres in narrowly scoped, pre-approved ways (TTL prune, PII erase, dump + restore-verify, snapshot vacuum).
+- **Phase 8 never edits scraper code or selectors.** The original §8.1 "schema-healer" auto-derived `scraper/selectors.json` from seed corpora — that responsibility moved to **`datasource/patcher/`** under Phase 17 ([`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md)) when the Anthropic-Agent-SDK harness was locked (Decision A15). Phase 8 §8.6 keeps the *internal* schema-drift sentinel (Postgres column drift vs migrations, JSON Schema vs payload drift) — that is a different surface and stays here.
+- **Phase 8 never auto-merges code.** Even the source-watcher LLM summarizer graduation (§8.4) only ever *narrates* what the deterministic differ already decided. The summarizer cannot override classifications; the §2.8 boundary test stays green.
+- **Phase 8 never trains models.** Trainer is the consumer of `maint.event.v1{kind=retrain_request}` (Phase 6 emits, Phase 5/9 trainer consumes). Auto-scaler may *schedule* a trainer pod / cron run but never pulls the trigger on weights.
+
+**Cross-phase alignment (binding):**
+
+- **Phase 3 §3.2 SDK contract.** Every Phase 8 agent is an `Agent` (registers in `agent_registry`, heartbeats per `cfg.swarm_heartbeat_sec`, declares `subscribes`/`publishes`, deregisters on `SIGTERM`). Inherits `AgentRunner` retry/DLQ. Visible in `swarmctl ps` and `swarmctl topics` (Phase 3.4 contract preserved).
+- **Phase 3 §3.3 bus semantics.** All Phase 8 handlers are **idempotent**:
+  - Scaler keys on `(target_agent, desired_replicas, decision_window_id)` — replays of the same window do not re-issue scale calls.
+  - Backup keys on `(job_id, backup_date_utc)` — re-running today's nightly dump is a no-op unless `--force`.
+  - DLQ supervisor keys on `(topic, dlq_entry_id)` — replaying a DLQ entry that the original consumer already accepted is dropped via the Phase 4.7 `Ledger` Protocol.
+  - Schema-drift sentinel keys on `(table, column_set_fingerprint)`.
+- **Phase 3 §3.5 topic catalog (wire authority).** Phase 8 lands no new topics — `maint.event.v1` and `maint.dlq.v1` already exist. New `maint.event.v1.kind` values join the open-enum allow-list (§7.4 pattern):
+  `retrain_approve`, `scale_decision`, `scale_throttled`, `backup_started`, `backup_completed`, `backup_verify_failed`, `quarantine_pruned`, `dlq_replayed`, `dlq_escalated`, `schema_drift_detected`, `pattern_allowlist_added`, `pattern_allowlist_expired`, `denylist_decimate`, `pii_erased`. The §7.4 producer-set allow-list is widened from `{drift.v1, ops_console}` to `{drift.v1, ops_console, maint.scaler.v1, maint.backup.v1, maint.dlq.v1, maint.schema.v1, maint.sec.v1, source_watcher}` — boundary test in `test_boundary_discipline.py` is loosened in the same PR as §8.0 lands, exactly as Phase 7 loosened it for `ops_console`.
+- **Phase 4.5 / 4.7 storage + reactor base.** Backup (§8.3) reads from the same Postgres that `storage.v1` writes to; it never goes through the bus for table reads. Reactor base supplies retry/backoff and the `Ledger` Protocol used by the DLQ supervisor (§8.5).
+- **Phase 6 `drift.v1`.** Already emits `maint.event.v1{kind=retrain_request}`. Phase 8 §8.2 scaler consumes the same kind to *prepare capacity* (warm a trainer pod, raise predictor replicas before retrain bursts) but does **not** start training — the trainer is the action-of-record. A Phase 8 manual override `kind=retrain_approve` carries `target=<predictor_id>` and `request_id=<drift_event_request_id>` so the trainer can correlate.
+- **Phase 7 §7.4 SecAlertDebouncer + open-enum.** All Phase 8 alerts (`backup_verify_failed`, `dlq_escalated`, `schema_drift_detected`, `scale_throttled`) emit on `sec.alert.v1` with severities `info|warn|error|critical` and are **debounced per subject** through the existing `SecAlertDebouncer`. The §7.4 known-kinds set is extended in lock-step. Critical alerts (e.g. `backup_verify_failed`) bypass debounce per the §7.4 default.
+- **Phase 7 §7.6 sec.rate.v1 sole-writer.** §8.1 ops console publishes `maint.event.v1{kind=denylist_clear}` — it does **not** publish `sec.denylist.v1` directly. The boundary test that pins `sec.rate.v1` as the sole `sec.denylist.v1` producer stays green; ops console only ever talks through the existing operator-override hook.
+- **Phase 7 §7.3 denylist cardinality cap.** §8.8 sweeper consumes `sec.alert.v1{kind=denylist_growth_anomaly}` and runs the deferred "halve TTL of oldest decile" via a new Lua script `sec_denylist_decimate.lua` (versioned + SHA-pinned exactly like the existing two scripts; CI gate `make verify.lua` covers it). Decimation publishes `maint.event.v1{kind=denylist_decimate, target=<source>, decile_size, evicted_count}` for audit.
+- **Phase 7 §7.5 quarantine TTL.** §8.3 backup agent owns the `quarantine_samples` TTL prune (`cfg.sec_quarantine_ttl_days`, default 30) and the `kind=quarantine_erase` PII path. Both go through the same nightly job — single audit trail, single failure mode.
+- **Phase 2.8 source-watcher.** Migrates from cron-driven standalone to the SDK in §8.4. The `summarizer.py` stub flips `enabled=True` only when `cfg.source_watcher_summarizer_enabled=true` AND a valid model pin is configured (no `*-latest` IDs per CLAUDE.md doctrine). The deterministic differ + classifier remain authoritative; the summarizer may not change a classification (boundary test in `ai/swarm/source_watcher/tests/` already enforces; extended in §8.4).
+
+**Forward-phase contracts (binding):**
+
+- **Phase 9 API surface.** No Phase 8 agent exposes an HTTP endpoint. The ops console publishes to the bus; the operator authenticates against the Go API in Phase 9 (when admin endpoints land at `/v1/admin/maint/*` proxied to the same `maint.event.v1` topic). Until Phase 9, ops console runs locally and authenticates via filesystem (Unix-socket Postgres + bus auth from the Phase 2 internal CA). The `maint.event.v1` envelope already carries `client_id` so the Phase 9 admin handler attributes events.
+- **Phase 11 compute.** Auto-scaler honors `cfg.predictor_max_vram_mb` and the device-probe priority (CUDA→ROCm→NPU→CPU). Scaling a predictor to `replicas: N+1` when GPU memory accounting projects an OOM is rejected with `kind=scale_throttled, reason=vram_budget_exceeded` and a debounced `sec.alert.v1{kind=scale_throttled, severity=warn}`.
+- **Phase 12 chaos.** `make chaos-fill-dlq TOPIC=predict.vote N=5000` must be drained by §8.5 within `cfg.maint_dlq_drain_window_ms` or trip `sec.alert.v1{kind=dlq_escalated, severity=error}`. `make chaos-flap-replicas AGENT=consensus.v1` must be damped by the §8.2 hysteresis (the scaler does **not** issue back-to-back `scale_decision` events within `cfg.maint_scaler_min_decision_interval_s`). Phase 12 owns the assertions; Phase 8 owns the surfaces. Cross-phase circular-dep policy mirrors Phase 7: until Phase 12 lands, the §8.9 DoD bullet that requires Phase-12-catalogue entries is satisfied by **stub rows** in `docs/testing/phase12_catalogue.md`.
+- **Phase 13a CalibrationProfile.** Auto-scaler reads `(profile_id, market)` cardinality from `predictor_calibration` to size the predictor pool — high-fan-out leagues get more replicas. Until 13a, `profile_id == league_id` (matches Phase 5 default); no schema migration.
+- **Phase 14 K8s.** Each Phase 8 agent runs at `replicas: 1` (single-publication for `scale_decision`, `backup_completed`, `dlq_replayed` requires it). Compose mode invokes `docker compose --scale <svc>=N`; K8s mode patches `apps/v1.Deployment.spec.replicas` via the in-cluster client. The runtime adapter is a `RuntimeController` Protocol (in-process compose runner today, K8s client at Phase 14) — the scaler code never changes across the two backends.
+- **Phase 16 emitter.** Backup verifications and scale decisions stay on the bus (control plane); they do **not** move to feeds. The audit trail of nightly dumps is a CSV append at `data/backups/audit.csv` (operator-facing, not customer-facing). PII erase events emit a `maint.event.v1{kind=pii_erased, target=<client_id>, table, row_count, erased_at}` audit row that **does** persist in the `maint_audit_log` table (migration `009_maint_audit.sql`) — required for right-to-erasure traceability.
+- **Phase 17 patcher.** Patcher's allow-list (`extractor`/`schema`/`migration`/`fixture`) and Phase 8's allow-list are **disjoint**. The §8.6 schema-drift sentinel detects drift and emits `maint.event.v1{kind=schema_drift_detected, target=<table>}`; humans then either edit the schema themselves or escalate to the patcher's `migration` scope. Phase 8 itself never invokes the patcher harness.
+- **Phase 20 monetization.** None of the maint surfaces are tier-gated — backup, scaler, DLQ supervisor, and ops console are operator infrastructure, not user features. Per [`design/MONETIZATION.md`](../design/MONETIZATION.md) the gate is at the Go edge for `/v1/predictions/*`, never at maint.
+
+### 8.1 Ops console (`ops_console` publisher of `maint.event.v1`)
+
+> The single human-facing publisher for every Phase 6/7/8 maint hook. Lives at `xops/opsctl/` as a stdlib-only CLI; in Phase 9 the same payloads are exposed at `/v1/admin/maint/*`.
+
+- [ ] CLI entry point `xops/opsctl/__main__.py` invoked via `make ops.<cmd>` shortcuts (`ops.denylist-clear`, `ops.baseline-reset`, `ops.quarantine-erase`, `ops.quarantine-clear`, `ops.retrain-approve`, `ops.scale`, `ops.backup-now`, `ops.dlq-replay`).
+- [ ] Each subcommand:
+  - Validates inputs locally (`target` is a known subject; `kind` is in the open-enum allow-list; `client_id` defaults to the OS username).
+  - Constructs an `Envelope` with `request_id = uuid4()`, `produced_at = now_utc()`, `schema_version = 1`.
+  - Publishes to `maint.event.v1` via the same `Bus` Protocol used by the runtime (Redis Streams in prod, `InMemoryBus` in tests).
+  - Waits ≤ `cfg.opsctl_ack_timeout_ms` (default 5000) for an `ack` envelope on `maint.ack.v1` carrying the same `request_id`. Times out → exit code 2 + a stderr line.
+- [ ] **Audit row.** Every successful publish appends to `data/maint/opsctl_audit.csv` (append-only, fsync per write, schema = `ts_utc, user, host, kind, target, request_id, ack_received_ms`). The same row is mirrored to `maint_audit_log` (Postgres) once Phase 9 lands.
+- [ ] **No bypass channels.** The CLI must NOT write directly to Postgres or Redis state — it only publishes envelopes. Boundary test: AST scan of `xops/opsctl/**.py` rejects `psycopg`, `redis.client.Redis.set/del/hset/zadd`, anything that opens a connection outside the published `Bus` Protocol.
+- [ ] **`maint.ack.v1` schema.** New JSON schema at `ai/swarm/sdk/schemas/maint.ack.v1.json` carrying `{request_id, accepted: bool, accepted_by: <agent_id>, reason?: str, processed_at: iso}`. Each consumer of `maint.event.v1` MUST publish exactly one `maint.ack.v1` per consumed `request_id` (boundary test).
+- [ ] **Idempotency guard.** Re-running `ops.denylist-clear --target <ip>` for an already-cleared subject is a no-op at the consumer side and surfaces `ack.accepted=true, reason="already_cleared"` — never a hard error (operators muscle-memory re-run; the system tolerates it).
 
 ### 8.2 Auto-scaler agent (`maint.scaler.v1`)
 
-- [ ] Reads telemetry: stream lag per topic, agent CPU, predictor latency.
-- [ ] Decides desired replica counts; writes them to `agent_desired_state`.
-- [ ] In compose: invokes `docker compose up -d --scale <svc>=N`. In K8s: patches Deployment replicas via the in-cluster API.
-- [ ] **Hard caps** from config to prevent runaway in cloud (`cfg.max_replicas_per_agent`).
+> Continuous control loop: read telemetry, decide desired replica counts per agent, call the runtime controller, audit. Hysteresis everywhere.
 
-### 8.3 Auto-coder agent — *moved to Phase 17*
+- [ ] **Inputs:** the agent maintains a rolling `cfg.maint_scaler_window_s` (default 60s) sketch over telemetry counters Phase 4.6 already publishes — stream lag per topic, agent CPU%, predictor latency p95, DLQ depth, plus the Phase 7 `sec.alert.v1{kind=rate_burst, severity≥warn}` signal for API-frontend scale-up.
+- [ ] **Decision function:** `desired_replicas = clamp(min_replicas, ceil(observed_load / cfg.maint_scaler_target_load_per_replica), cfg.maint_scaler_max_replicas[<agent>])`. Per-agent caps live in `cfg.maint_scaler_max_replicas` (dict, validated at boot — refuses to start if any registered agent is missing an entry, mirrors the Phase 7 §7.6 endpoint-cost totality test). **Hard global cap** `cfg.maint_scaler_global_max_replicas` (default 64) prevents runaway in cloud (Phase 14).
+- [ ] **Hysteresis & flap damping.**
+  - Min interval between decisions per `(agent, runtime)` = `cfg.maint_scaler_min_decision_interval_s` (default 90s). Decisions inside the window are coalesced (latest desired wins, no scale call issued).
+  - Scale-down requires the proposed lower replica count to hold for ≥ `cfg.maint_scaler_scale_down_grace_s` (default 300s) of consecutive samples. Scale-up has no grace (capacity emergencies are not damped).
+  - On every emitted decision, publish `maint.event.v1{kind=scale_decision, target=<agent>, prev=N, next=M, reason, observed: {...}, decision_window_id}` for audit. Reason is one of `{lag_high, lag_low, cpu_high, cpu_low, p95_high, dlq_depth_high, sec_rate_burst, vram_budget_exceeded}`.
+  - Throttled decisions (cap hit, vram refused, runtime returned non-zero) emit `kind=scale_throttled` + `sec.alert.v1{kind=scale_throttled, severity=warn}` (debounced).
+- [ ] **Single-publication of `scale_decision`.** Exactly one event per `decision_window_id` even under at-least-once redelivery from telemetry. Guarded by the Phase 4.7 `Ledger` Protocol (in-memory now, Postgres at Phase 9). `replicas: 1` enforced at Phase 14.
+- [ ] **Runtime adapters.** `RuntimeController` Protocol with two implementations:
+  - `ComposeController` — invokes `docker compose -f <compose_file> up -d --scale <svc>=N --no-recreate`. The compose file path comes from `cfg.maint_scaler_compose_file`. Subprocess run with `check=True`, captured stderr, 30s timeout.
+  - `K8sController` (Phase 14) — uses `kubernetes.client.AppsV1Api.patch_namespaced_deployment_scale`. RBAC: a dedicated `maint-scaler` ServiceAccount with `patch` on `deployments/scale` only (least-privilege; the Phase 14 manifest pins this).
+  - Both implementations enforce the §8.2 hard caps **after** the runtime call returns success (defense-in-depth — if a human bypassed the agent and over-scaled in compose, the next decision tick scales it back down, with a `kind=scale_throttled, reason=manual_override_detected` audit event).
+- [ ] **VRAM accounting** for predictors. Before issuing a scale-up that crosses the VRAM budget (`cfg.predictor_max_vram_mb` × replica count vs probed device memory), refuse + emit `scale_throttled, reason=vram_budget_exceeded`. CPU-only fallback path is honored (Phase 11).
+- [ ] **Drift-driven warm-up (consumer of `maint.event.v1{kind=retrain_request}`).** When drift fires, the scaler may pre-warm a trainer pod via a `kind=scale_decision, target=trainer.v1, prev=0, next=1, reason=retrain_request_warmup`. The trainer remains a separate workload — the scaler never publishes weights and never publishes `kind=retrain_approve`.
+- [ ] **Observability.** Exposes counters `maint_scaler_decisions_total{agent,reason,outcome}` and a gauge `maint_scaler_desired_replicas{agent}` via the existing telemetry agent.
 
-> **Pivot v3 (2026-04-20).** Auto-coding is owned by `datasource/patcher/` and
-> scoped to scraper failures only. Spec: [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md).
-> Roadmap milestone: **Phase 17 — Auto-Patching Scraper**. The
-> standalone `maint.coder.v1` agent is dropped.
+### 8.3 Backup / retention agent (`maint.backup.v1`)
 
-### 8.4 Backup / retention agent (`maint.backup.v1`)
+> Nightly Postgres dumps + restore-verify + TTL prune for everything that has a TTL: quarantine samples, schema snapshots, drift windows on disk (Phase 9), DLQ entries, opsctl audit. PII erase is a sibling operation on the same trust path.
 
-- [ ] Postgres logical dumps to local volume; pruned by config TTL.
-- [ ] Verifies dumps by restoring into a throwaway DB nightly.
+- [ ] **Nightly dump.**
+  - Job runs at `cfg.maint_backup_cron` (default `0 3 * * *` UTC; cron parsed by `croniter`). Skips if a successful run for today (UTC) already exists (idempotency).
+  - `pg_dump -Fc -Z 9 --no-owner --no-privileges --jobs=cfg.maint_backup_pg_jobs` to `cfg.maint_backup_dir/YYYY-MM-DD/negelir.dump`.
+  - Optional encryption-at-rest: if `cfg.maint_backup_encryption_key_path` is set, the dump is post-processed with `age` (passphrase from Docker secret / K8s SealedSecret — never from env). If unset, dump is left unencrypted with a stderr warning + `sec.alert.v1{kind=backup_unencrypted, severity=warn}` (debounced daily).
+  - `kind=backup_started` published before dump; `kind=backup_completed{size_bytes, duration_ms, checksum_sha256, encrypted: bool}` after.
+- [ ] **Restore-verify (mandatory daily).**
+  - Spin up a throwaway Postgres in the same network (`postgres:16-alpine` named `negelir-restore-verify`, ephemeral volume).
+  - `pg_restore --jobs=...` the new dump.
+  - Run a fixed verification suite (`xops/backup/verify.sql`): `SELECT count(*) FROM <each table>`, all migrations applied (`SELECT max(version) FROM schema_migrations`), one round-trip read on the most recent `match_normalized` and `quarantine_samples` row.
+  - On failure: emit `sec.alert.v1{kind=backup_verify_failed, severity=critical}` (bypasses debounce), keep the dump file (do **not** prune), exit non-zero. Operator must investigate.
+  - On success: emit `kind=backup_completed{verified: true}` and prune dumps older than `cfg.maint_backup_retention_days` (default 14) and `cfg.maint_backup_retention_weeks` (default 4 weekly Sunday dumps kept — GFS-light).
+- [ ] **TTL prune jobs (scheduled at the same cron tick, after the dump).**
+  - `quarantine_samples` rows older than `cfg.sec_quarantine_ttl_days` (default 30) → DELETE. Emits `kind=quarantine_pruned{table, row_count, oldest_kept_at}`.
+  - `schema_snapshots` rows older than `cfg.maint_schema_snapshot_retention_days` (default 90) → DELETE. Phase 4 snapshots fed by `storage.v1` accumulate.
+  - `dlq_entries` (Phase 9 Postgres backend) older than `cfg.swarm_dlq_pg_retention_days` (default 14) → DELETE.
+  - `opsctl_audit` and `maint_audit_log` rows older than `cfg.maint_audit_retention_days` (default 365) → DELETE. Note the longer retention — audit trail value is highest.
+- [ ] **PII erase (consumer of `maint.event.v1{kind=quarantine_erase, target=<client_id>}`).**
+  - Loads matching `quarantine_samples` rows by `client_id`, sets `raw_bytes_b64 = NULL`, sets `erased_at = now()`, leaves `quarantine_id` row in place for audit.
+  - Emits `maint.event.v1{kind=pii_erased, target=<client_id>, table=quarantine_samples, row_count, erased_at}` and a corresponding `maint_audit_log` insert (right-to-erasure traceability per [`design/SECURITY.md`](../design/SECURITY.md)).
+  - Acks via `maint.ack.v1` with `accepted=true, reason="erased <N> rows"` or `accepted=false, reason="no rows matched"`.
+- [ ] **Disk-usage guard.** Before each dump, refuses to start if free space on `cfg.maint_backup_dir` < `2× last_dump_size + cfg.maint_backup_min_free_gb` (default 5 GB headroom). Emits `sec.alert.v1{kind=backup_disk_pressure, severity=error}`.
+- [ ] **Safety floor.** TTL prunes are gated by `cfg.maint_backup_dry_run` (default `false` in prod, **`true` in mock profile**) — first run on a fresh dev stack must not delete data the operator hasn't seen yet.
+
+### 8.4 Source-watcher SDK + LLM-summarizer graduation
+
+> Phase 2.8 source-watcher migrates from `scheduler.py` cron loop to the swarm SDK. The deterministic differ + classifier stay authoritative; the LLM summarizer flips from `enabled=False` stub to a real client behind a model-pin gate.
+
+- [ ] **SDK migration.** Subclass `Agent`; `subscribes=()` (still time-driven), `publishes=(SOURCE_WATCH_REPORT_V1,)` plus the existing `maint.event.v1{kind=baseline_reset}` and `proof.flag` surfaces. The internal scheduler stays — it now ticks via `AgentRunner` heartbeats instead of a standalone subprocess. Existing tests under `ai/swarm/source_watcher/tests/` retarget to the SDK harness; **classification rule outputs must be byte-identical pre/post migration** (golden-file regression test).
+- [ ] **Summarizer graduation.** `cfg.source_watcher_summarizer_enabled` flips to `true` only when ALL of:
+  - A non-`*-latest` model ID is configured at `cfg.source_watcher_summarizer_model_id` (CLAUDE.md doctrine — `*-latest` rejected at config validation).
+  - The configured model is reachable from the agent's network namespace (probed at startup; failure → `enabled=False` runtime override + `sec.alert.v1{kind=summarizer_unreachable, severity=warn}`).
+  - The deterministic differ has produced at least one non-empty `UpdatePlan` (the summarizer never narrates an empty diff).
+- [ ] **Boundary test (binding).** AST-and-runtime scan asserting `summarizer.summarize(plan)` cannot mutate `plan.classification`, `plan.severity`, or `plan.fields_changed`. Returns Turkish narration string only. Existing test extended; failure on a future attempt to widen the summarizer's authority.
+- [ ] **Cost cap.** Summarizer call wrapped in `cfg.source_watcher_summarizer_max_tokens_per_day` (default 50 000) ledger. Overflow → fall back to deterministic plan-derived string + `sec.alert.v1{kind=summarizer_cost_capped, severity=warn}` (debounced daily).
+- [ ] **Versioning.** `source_watcher` chart key bumps `1.x → 2.0.0` on this graduation (per ROADMAP §2.8 note). The `swarm` chart key bumps minor for the §8.x landings.
+
+### 8.5 DLQ supervisor (`maint.dlq.v1`)
+
+> Drains, replays, escalates DLQ entries. The DLQ wires were laid in Phase 3.5 (`<topic>.dlq` Redis stream, `swarm_dlq_max_len`); Phase 8 ships the consumer that actually reads them.
+
+- [ ] **Read loop.** Subscribes to all `<topic>.dlq` streams discovered via `swarmctl topics` at startup (and on every heartbeat — new topics are picked up live). Per-topic concurrency bounded by `cfg.maint_dlq_concurrency` (default 4).
+- [ ] **Replay policy** (per entry, per topic):
+  - First DLQ visit → wait `cfg.maint_dlq_replay_backoff_s` (default 60s), republish to the original topic with the same `request_id` + a `dlq_replay_count: 1` envelope header.
+  - Second DLQ visit → wait `cfg.maint_dlq_replay_backoff_s × cfg.maint_dlq_backoff_factor` (default 60s × 4 = 240s), republish with `dlq_replay_count: 2`.
+  - Third DLQ visit → escalate: emit `sec.alert.v1{kind=dlq_escalated, severity=error, subject=<topic>}` + `maint.event.v1{kind=dlq_escalated, target=<topic>, dlq_entry_id, original_envelope}`. Stop replaying. Operator decides via `ops.dlq-replay --topic <t> --id <id>` (forced replay, or `--drop` to acknowledge and remove).
+- [ ] **Per-topic rate limit.** No more than `cfg.maint_dlq_replay_rps` (default 10) replays per topic per second — keeps a poisoned message from being thrashed against a still-broken consumer.
+- [ ] **Idempotency.** Replays carry the original `request_id` so the consumer's existing idempotency guard (Phase 6 ledger, Phase 7 dedup, Phase 5 consensus single-publication) collapses dupes naturally. Boundary test: replaying an already-accepted `predict.vote` does not produce a second `predict.final`.
+- [ ] **Audit.** Every replay emits `maint.event.v1{kind=dlq_replayed, target=<topic>, dlq_entry_id, replay_count}`.
+- [ ] **Bounded state.** In-memory map of `(topic, dlq_entry_id) → (last_replay_at, replay_count)` capped at `cfg.maint_dlq_state_max` (default 100 000) with insertion-order LRU (mirrors the Phase 6 drift bounded-state pattern). Eviction is silent — escalation already covered the long-lived poison cases.
+
+### 8.6 Internal schema-drift sentinel (`maint.schema.v1`)
+
+> **Re-scoped from the original §8.1.** Scraper-selector healing moved to Phase 17 patcher (`extractor`/`schema` scopes). What stays here: detect drift between (a) JSON Schemas in `ai/swarm/sdk/schemas/` and live payloads on the bus, (b) Postgres column sets vs the migration-derived expected set, (c) `payloads.py` dataclass shape vs the matching JSON Schema. Phase 8 detects + reports; humans (or Phase 17 patcher under `migration` scope) fix.
+
+- [ ] **Detector A — payload vs schema.** Tap `telemetry.v1`'s sample stream (Phase 4.6 already mirrors a configurable %); for each sampled envelope, run `swarm.sdk.schemas.validate(topic, payload)`. On mismatch → `maint.event.v1{kind=schema_drift_detected, target=<topic>, errors[], sample_envelope_id}` (debounced per `(topic, error_signature)` for `cfg.maint_schema_debounce_s`, default 3600).
+- [ ] **Detector B — Postgres column drift.** Once per `cfg.maint_schema_pg_check_interval_s` (default 1h), run `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='public'`, compare to the expected set derived from `migrations/*.sql` parsing. Drift → same `kind=schema_drift_detected, target=<table>`.
+- [ ] **Detector C — dataclass vs schema.** AST scan at startup asserts every `@dataclass` in `payloads.py` has a matching JSON Schema with the same field set + types. Drift at startup → fail to start (loud failure, not an alert — code/schema drift is a release-time bug, not a runtime one).
+- [ ] **Out of scope (binding).**
+  - **Auto-derive selectors / extractors** — Phase 17 patcher only.
+  - **Auto-apply migrations** — humans only. The sentinel emits the event; nothing in v1 runs `psql -f migrations/NNN_*.sql` unattended. (`cfg.maint_schema_auto_apply_enabled` exists in config for forward compatibility; defaults to `false` and is checked at startup with a warning if `true`.)
+
+### 8.7 Pattern false-positive feedback loop (`maint.sec.v1` slice)
+
+> Promotes the §7.x deferred FP loop. Operator clears a quarantined sample → the rule that triggered it auto-adds to a per-source allowlist with TTL.
+
+- [ ] Subscribes to `maint.event.v1{kind=quarantine_clear, target=<quarantine_id>}` (Phase 7 publisher hook stub).
+- [ ] Resolves `quarantine_id → (source, rule_id, hit_substring)` from `quarantine_samples`. Adds a row to `pattern_allowlist` table (migration `010_pattern_allowlist.sql`): `(source, rule_id, hit_fingerprint, expires_at = now() + cfg.maint_sec_allowlist_ttl_days, added_by_request_id)`.
+- [ ] `sec.input.v1` reads the allowlist on each pattern hit — if `(source, rule_id, hit_fingerprint)` matches a non-expired row, the hit is suppressed (counted in `sec_input_allowlist_hits_total` for visibility, never silently lost).
+- [ ] **Hard gate.** `cfg.sec_input_pattern_autolearn_enabled` defaults `false`. When `false`, the allowlist row is created with `expires_at = now()` (immediately expired — operator can `ops.allowlist-extend` to activate). When `true`, normal TTL applies. The default-off posture defers the auto-learn loop until Phase 13 lexicon work provides a labelled-negative corpus to validate suppressions against (per the §7.x deferral).
+- [ ] Emits `maint.event.v1{kind=pattern_allowlist_added, target=<source>, rule_id, expires_at}` and `kind=pattern_allowlist_expired` on TTL expiry (a daily sweep at the §8.3 cron tick).
+
+### 8.8 Sec-denylist sweeper (`maint.sec.v1` slice)
+
+> Promotes the §7.3 deferred "halve TTL of oldest decile" sweeper. Activates only under cap-mode pressure.
+
+- [ ] Subscribes to `sec.alert.v1{kind=denylist_growth_anomaly, severity=critical}` (Phase 7 §7.3 publisher).
+- [ ] On consume, runs new Lua script `infra/redis/lua/sec_denylist_decimate.lua` (versioned + SHA256 header + `make verify.lua` CI gate, exactly like the existing two scripts):
+  - Identifies the oldest decile of `sec:denylist:_zset` members by score (= `expires_at_ms`).
+  - Halves their remaining TTL via `EXPIRE` on the matching `sec:denylist:<subject>` keys (and updates the zset score).
+  - Returns `{evicted_count, decile_size, new_zcard}` for audit.
+- [ ] Emits `maint.event.v1{kind=denylist_decimate, target=<source>, evicted_count, decile_size, new_zcard}`.
+- [ ] **Hysteresis.** No more than one decimate per `cfg.maint_sec_decimate_min_interval_s` (default 300s) per subject — prevents a single anomaly burst from cascading evictions.
+- [ ] **Cap-mode exit.** When `ZCARD sec:denylist:_zset < cfg.sec_denylist_cap × cfg.sec_denylist_cap_exit_ratio` (default 0.7), the sweeper publishes `kind=denylist_cap_cleared` and the gateway exits subnet-mode (Phase 7 §7.3 cap flag clears naturally on the 300s TTL, this is a fast-path).
+
+### 8.9 Definition of Done
+
+**Surface coverage:**
+
+- [ ] All 6 §8.x agents implemented under `ai/swarm/agents/maint/` (transitional path; R2 `git mv` to `swarm/reactors/maint/`): `maint.scaler.v1`, `maint.backup.v1`, `maint.dlq.v1`, `maint.schema.v1`, `maint.sec.v1` (covers §8.7+§8.8), source-watcher SDK migration in place. Ops console at `xops/opsctl/`.
+- [ ] All 14 new `maint.event.v1.kind` values (`retrain_approve`, `scale_decision`, `scale_throttled`, `backup_started`, `backup_completed`, `backup_verify_failed`, `quarantine_pruned`, `dlq_replayed`, `dlq_escalated`, `schema_drift_detected`, `pattern_allowlist_added`, `pattern_allowlist_expired`, `denylist_decimate`, `pii_erased`) join the §7.4 known-kinds set; producer-set allow-list updated; boundary test green.
+- [ ] `maint.ack.v1` topic + JSON schema landed; every Phase 6/7/8 consumer of `maint.event.v1` publishes exactly one ack per `request_id` (boundary test).
+- [ ] New Lua script `sec_denylist_decimate.lua` carries VERSION + SHA256 header; `make verify.lua` CI gate covers it; embedded copy in `server/internal/sec/embedded/` synced; embedded-parity test green.
+
+**Idempotency / single-publication:**
+
+- [ ] `maint.scaler.v1`: exactly one `scale_decision` per `decision_window_id` under at-least-once redelivery (idempotency test).
+- [ ] `maint.backup.v1`: re-running the daily cron tick after a successful run is a no-op (`backup_started` not emitted; idempotency test on `(job_id, backup_date_utc)`).
+- [ ] `maint.dlq.v1`: replaying an already-accepted entry does not produce a second downstream emission (negative test against `predict.vote → predict.final` path with redelivery).
+
+**Bounded state:**
+
+- [ ] Scaler decision history capped at `cfg.maint_scaler_history_max` (default 1024) with insertion-order LRU.
+- [ ] DLQ supervisor in-memory map capped at `cfg.maint_dlq_state_max` (default 100 000) with insertion-order LRU.
+- [ ] Pattern allowlist daily sweep removes expired rows; table size bounded by TTL × emission rate (no unbounded growth proof test).
+
+**Safety / hard caps:**
+
+- [ ] Scaler refuses to exceed `cfg.maint_scaler_max_replicas[<agent>]` (per-agent) and `cfg.maint_scaler_global_max_replicas` (global). Triangle test covers the cfg keys; chaos test `make chaos-flap-replicas AGENT=consensus.v1` proves hysteresis (no back-to-back decisions inside `min_decision_interval_s`).
+- [ ] Backup refuses to start when free disk < `2× last_dump + cfg.maint_backup_min_free_gb`. Mock-profile dry-run defaults to `true`. Restore-verify failure keeps the dump and pages a critical alert.
+- [ ] DLQ replay rate per topic ≤ `cfg.maint_dlq_replay_rps`. Third visit escalates; no autonomous fourth replay.
+- [ ] Auto-coder `maint.coder.v1` is **not** present (it is Phase 17 patcher's job). AST scan in CI rejects any `from swarm.agents.maint.coder` import.
+
+**Boundary discipline (`test_boundary_discipline.py` extensions):**
+
+- [ ] `maint.event.v1` producer set ⊆ `{drift.v1, ops_console, maint.scaler.v1, maint.backup.v1, maint.dlq.v1, maint.schema.v1, maint.sec.v1, source_watcher}` (loosened from the §7 set by exactly the Phase 8 reactors).
+- [ ] `sec.denylist.v1` sole producer is still `sec.rate.v1` (§8.8 sweeper publishes via Lua under the existing key prefix; no new direct producer of the topic).
+- [ ] Ops console publishes only on `maint.event.v1` (and reads `maint.ack.v1`); never on `sec.*`, `predict.*`, `freshness.*`, `match.*`.
+- [ ] `xops/opsctl/**.py` AST-clean of `psycopg`/direct `redis.Redis.*` mutators.
+- [ ] Source-watcher summarizer cannot mutate classifier output (existing boundary test extended to cover the SDK-migrated path).
+
+**Observability + visibility:**
+
+- [ ] Every Phase 8 agent appears in `swarmctl ps`; `maint.event.v1` and `maint.ack.v1` in `swarmctl topics`.
+- [ ] Telemetry watch set extended to include `MAINT_ACK` (counters surface per-consumer ack latency + accepted/rejected ratios). Phase 4.6 watch-set test asserts.
+- [ ] Live-emission JSON-Schema validation covers every Phase 8 emit (`test_phase8_swarm_demo_end_to_end`, mirroring the Phase 4 / Phase 6 live-emission probe pattern).
+- [ ] `make swarm.demo` (extended) walks one `ops.denylist-clear` round-trip through the bus and asserts the ack latency budget (`< cfg.opsctl_ack_timeout_ms`).
+
+**Phase 12 chaos catalogue stubs:**
+
+- [ ] Stub rows in `docs/testing/phase12_catalogue.md` for `chaos-fill-dlq`, `chaos-flap-replicas`, `chaos-corrupt-dump`, `chaos-disk-pressure-backup` (one row per check, body = "TBD — implementation pending Phase 12"). Mirrors the Phase 7.4 catalogue-stub pattern; flips fully green when Phase 12 fills the bodies in.
+
+**Versioning:**
+
+- [ ] `swarm` chart key bumps **minor** at the Phase 8 landing (new agents + new topic). `source_watcher` bumps **major** (`1.x → 2.0.0`) at the SDK + summarizer graduation per §2.8 promise. `xops` bumps **minor** for the `opsctl` CLI. Subsequent Phase 8 review patches bump the affected key patch-level.
+
+**Triangle test (config sync):**
+
+- [ ] All Phase 8 cfg knobs (`maint_scaler_*` ×8, `maint_backup_*` ×9, `maint_dlq_*` ×6, `maint_schema_*` ×3, `maint_sec_*` ×2, `maint_audit_retention_days`, `opsctl_ack_timeout_ms`, `source_watcher_summarizer_*` ×2) appear in `xops/env/.env.example`, `ai/common/defaults.yaml`, and `ai/common/config.py`. `test_config_sync.py` stays green.
+
+**Migrations:**
+
+- [ ] `migrations/009_maint_audit.sql` lands the `maint_audit_log` table (additive — no DROP, per CLAUDE.md doctrine).
+- [ ] `migrations/010_pattern_allowlist.sql` lands the `pattern_allowlist` table (additive).
+- [ ] Both migrations apply cleanly on a fresh DB and as upgrades from migration 008.
+
+**Doctrine / docs:**
+
+- [ ] [`design/SWARM.md`](../design/SWARM.md) roster updated with the 6 maint agents + ownership notes.
+- [ ] [`design/SECURITY.md`](../design/SECURITY.md) updated with the right-to-erasure flow (`quarantine_erase` → `pii_erased` audit row).
+- [ ] [`design/CONFIGURATION.md`](../design/CONFIGURATION.md) gains a "Maintenance" section enumerating every Phase 8 cfg knob with default + range + safety note.
+- [ ] CLAUDE.md scope table updated: ops console publishes maint events; patcher remains the only auto-mutator of scraper code (no overlap with Phase 8).
 
 ---
 
