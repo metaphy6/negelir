@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 43,
+    "build": 44,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.16.0",
+      "version": "1.17.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T09:08:58+00:00"
+      "last_changed": "2026-05-05T09:20:23+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1941,6 +1941,15 @@
       "from": "1.15.0",
       "to": "1.16.0",
       "build": 43
+    },
+    {
+      "timestamp": "2026-05-05T09:20:23+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 fourth-pass deep revision: §8.13 added (model-artifact DR doctrine + reproducibility floor + cold mirror, data/maint global storage cap with 80/100% hysteresis, spool entry max-age + retired-kind .retired/ quarantine + force-flush, restore version-invariant via manifest migration metadata + forward-migrate-then-verify, pause/resume/dlq-resume/self-isolation idempotency matrix with self-isolation precedence over pause, encryption-key compromise runbook for verify/single-DR/full-DR scenarios + server-enforced PG password aging hard cap). Fixed migration-numbering conflict: §7.7 reservation revised - Phase 8 claims 009-011 (audit/allowlist/backup-role), Phase 9 slides to 012, Phase 9.x to 013, Phase 10 NLP to 014. §8.10 leader-election set widened to include maint.dlq.v1 + maint.sec.v1 (was only scaler/backup/schema; double-replay + double-decimate-audit gap closed). +10 maint.event.v1 kinds, +6 sec.alert.v1 kinds, +4 chaos stubs, +6 cfg knobs, ~12 new proof tests.",
+      "from": "1.16.0",
+      "to": "1.17.0",
+      "build": 44
     }
   ]
 }
