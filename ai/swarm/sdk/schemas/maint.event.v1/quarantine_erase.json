@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/quarantine_erase",
+  "title": "maint.event.v1{kind=quarantine_erase}",
+  "description": "Phase 7 §7.1 / Phase 8 §8.3 — right-to-erasure (DSAR / GDPR). `target` is the client_id whose quarantine_samples rows must be tombstoned. Storage agent is the SOLE consumer; on consume it sets raw_bytes=tombstone(0x00) + erased_at=now() and emits a sibling kind=pii_erased audit event (NOT in this schema — that's a separate kind sub-schema).",
+  "type": "object",
+  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "properties": {
+    "kind":        { "const": "quarantine_erase" },
+    "target":      { "type": "string", "minLength": 1, "description": "client_id whose rows are to be erased." },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "client_id":   { "type": "string", "minLength": 1, "description": "OPERATOR's <user>@<host> — NOT to be confused with `target` (the data-subject's id)." },
+    "produced_at": { "type": "string" },
+    "reason":      { "type": "string", "description": "Operator-recorded justification (DSAR ticket id, regulator request, etc.)." }
+  },
+  "additionalProperties": false
+}

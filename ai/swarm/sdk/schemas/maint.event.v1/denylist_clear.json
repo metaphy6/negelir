@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/denylist_clear",
+  "title": "maint.event.v1{kind=denylist_clear}",
+  "description": "Phase 7 §7.3 / Phase 8 §8.1 — operator override clearing a sec.rate.v1 denylist entry. `target` is the masked subject string (`<network>/<prefix>` per server/internal/sec/xff.go SubjectKey contract; bare hex IPs accepted for legacy operator muscle memory).",
+  "type": "object",
+  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "properties": {
+    "kind":        { "const": "denylist_clear" },
+    "target":      { "type": "string", "minLength": 1, "description": "Masked subject (e.g. '203.0.113.0/24', '2001:db8::/64'). Validated by sec.rate.v1." },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "client_id":   { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" }
+  },
+  "additionalProperties": false
+}

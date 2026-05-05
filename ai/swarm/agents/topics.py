@@ -74,6 +74,16 @@ MODEL_TRAINED = Topic("models.events.v1")
 # `kind` (open enum — see `MaintEventKind` in payloads.py).
 MAINT_EVENT = Topic("maint.event.v1")
 
+# Phase 8 §8.0 — per-consumer ack of `maint.event.v1` envelopes.
+# Producer set: any registered consumer of `maint.event.v1` (boundary
+# test enforces). Consumer set: `ops_console` only — agents do not
+# read each others' acks. Per ROADMAP §8 §0 ack semantics: every
+# consumer that processes a `maint.event.v1{request_id}` publishes
+# EXACTLY ONE `maint.ack.v1` carrying its own `accepted_by`. The
+# §8.1 ops console waits for the expected ack set computed via
+# `swarm.agents.maint.expected_ack_set(kind)`.
+MAINT_ACK = Topic("maint.ack.v1")
+
 # ── Phase 7 — Defense agents ─────────────────────────────────────
 # ROADMAP §7 ships three sec.* agents: an input-sanitization escalator
 # (§7.1), an upstream-anomaly detector (§7.2), and a rate-limit /
@@ -129,6 +139,7 @@ SEC_CONFIG = Topic("sec.config.v1")
 
 __all__ = [
     "FRESHNESS_EVENTS",
+    "MAINT_ACK",
     "MAINT_EVENT",
     "MATCH_NORMALIZED",
     "MATCH_OUTCOME",

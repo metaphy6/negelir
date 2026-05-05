@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 53,
+    "build": 55,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-05T10:03:12+00:00"
     },
     "docs": {
-      "version": "1.20.0",
+      "version": "1.20.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T10:03:12+00:00"
+      "last_changed": "2026-05-05T10:18:29+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.22.12",
+      "version": "0.23.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T10:03:12+00:00"
+      "last_changed": "2026-05-05T10:18:29+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2031,6 +2031,24 @@
       "from": "3.5.2",
       "to": "3.5.3",
       "build": 53
+    },
+    {
+      "timestamp": "2026-05-05T10:18:29+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8.0 wire scaffolding: maint.event.v1 oneOf-on-kind sub-schemas + maint.ack.v1 topic + MaintAck",
+      "from": "0.22.12",
+      "to": "0.23.0",
+      "build": 54
+    },
+    {
+      "timestamp": "2026-05-05T10:18:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.0 schemas + routing scaffolding",
+      "from": "1.20.0",
+      "to": "1.20.1",
+      "build": 55
     }
   ]
 }

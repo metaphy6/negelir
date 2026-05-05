@@ -974,6 +974,89 @@ class MaintEvent:
         )
 
 
+# ── Phase 8 §8.0 — `maint.ack.v1` per-consumer acknowledgement ─────────
+#
+# Per-consumer ack semantics: every consumer that processes a
+# `maint.event.v1{request_id}` publishes EXACTLY ONE `maint.ack.v1`
+# carrying its own `accepted_by`. Bus-level redeliveries do NOT
+# produce additional acks (consumer's idempotency ledger collapses
+# dupes; `attempt > 1` is reserved for explicit consumer-driven
+# retries). The §8.1 ops console publisher waits for the expected
+# ack set computed via `swarm.agents.maint.expected_ack_set(kind)`.
+#
+# Hard size cap at `cfg.maint_ack_payload_max_bytes` (default 4096)
+# is enforced at emit time by the producer-side helper (lands with
+# §8.1); over-cap acks are truncated with `reason="truncated:<N>"`
+# and a debounced `sec.alert.v1{kind=maint_ack_oversize}`. The
+# dataclass itself does not size-cap (it is the in-process view;
+# the wire-level enforcement lives at the emitter).
+
+
+@dataclass(frozen=True)
+class MaintAck:
+    """`maint.ack.v1` payload — per-consumer ack of a maint.event.v1.
+
+    Mirrors `ai/swarm/sdk/schemas/maint.ack.v1.json` 1-for-1. The
+    publisher (any registered consumer of `maint.event.v1`) constructs
+    one of these per processed envelope and emits it on
+    `maint.ack.v1`. Sole consumer is `ops_console`; agents do not
+    read each others' acks (§8.9 boundary discipline).
+    """
+
+    request_id: str
+    accepted: bool
+    accepted_by: str
+    processed_at: str
+    attempt: int = 1
+    reason: str = ""
+    details: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.request_id:
+            raise ValueError("MaintAck.request_id must be a non-empty string")
+        if not self.accepted_by:
+            raise ValueError("MaintAck.accepted_by must be a non-empty string")
+        if not self.processed_at:
+            raise ValueError("MaintAck.processed_at must be a non-empty string")
+        if self.attempt < 1:
+            raise ValueError(
+                f"MaintAck.attempt={self.attempt!r} must be >= 1 "
+                "(bus-level redeliveries do NOT publish a new ack — "
+                "the consumer's idempotency ledger collapses dupes; "
+                "attempt > 1 is reserved for explicit consumer-driven "
+                "retries)"
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "request_id": self.request_id,
+            "accepted": self.accepted,
+            "accepted_by": self.accepted_by,
+            "processed_at": self.processed_at,
+            "attempt": self.attempt,
+        }
+        # Optional fields only emitted when set, to keep wire payload
+        # tight against the cfg.maint_ack_payload_max_bytes cap.
+        if self.reason:
+            out["reason"] = self.reason
+        if self.details is not None:
+            out["details"] = dict(self.details)
+        return out
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MaintAck":
+        details = data.get("details")
+        return cls(
+            request_id=str(data["request_id"]),
+            accepted=bool(data["accepted"]),
+            accepted_by=str(data["accepted_by"]),
+            processed_at=str(data["processed_at"]),
+            attempt=int(data.get("attempt", 1)),
+            reason=str(data.get("reason", "")),
+            details=dict(details) if isinstance(details, dict) else None,
+        )
+
+
 # ── Phase 7 — Defense agents (sec.input.v1 / sec.scrape.v1 / sec.rate.v1) ──
 #
 # Five new wire envelopes land with Phase 7 (foundation; agent logic

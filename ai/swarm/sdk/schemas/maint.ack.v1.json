@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.ack.v1",
+  "title": "maint.ack.v1",
+  "description": "Phase 8 §8.1 — Per-consumer acknowledgement of a maint.event.v1 envelope. Producer set: any registered consumer of maint.event.v1 (boundary test enforces). Consumer set: ops_console only — agents do not read each others' acks. Schema-version 1; field additions are minor bumps. Per-consumer semantics: every consumer that processes a maint.event.v1{request_id} publishes EXACTLY ONE maint.ack.v1 carrying its own accepted_by. Re-deliveries published by the bus do not produce additional acks (consumer idempotency ledger collapses dupes; ack.attempt > 1 is reserved for explicit consumer-driven retries).",
+  "type": "object",
+  "required": [
+    "request_id",
+    "accepted",
+    "accepted_by",
+    "processed_at",
+    "attempt"
+  ],
+  "properties": {
+    "request_id":   { "type": "string", "minLength": 1, "description": "Echoed from the maint.event.v1 payload (NOT the envelope) — the operator's correlator." },
+    "accepted":     { "type": "boolean", "description": "True when the consumer reached a terminal state (success OR no-op idempotent skip). False only on hard rejection (e.g. unknown subject, invalid arguments)." },
+    "accepted_by":  { "type": "string", "minLength": 1, "description": "Consumer agent id (e.g. 'sec.rate.v1', 'storage.v1'). The publisher's wait-for-acks loop matches this against the expected ack set computed from the kind→consumer routing map at publish-time." },
+    "reason":       { "type": "string", "description": "Operator-facing one-liner. ≤ cfg.maint_ack_reason_max_bytes (default 512). Truncation prefixes 'truncated:<original_len>'." },
+    "details":      { "type": "object", "description": "Optional flat key/value bag, ≤ cfg.maint_ack_details_max_bytes (default 2048). No nested arrays of objects (cardinality control). Consumer-defined contents." },
+    "processed_at": { "type": "string", "description": "ISO-8601 UTC timestamp of consumer's terminal-state decision." },
+    "attempt":      { "type": "integer", "minimum": 1, "description": "Per-consumer attempt counter. 1 is the steady state. >1 indicates an explicit consumer-driven retry (NOT a bus-level redelivery — those are absorbed by the consumer's idempotency ledger and do NOT publish a new ack)." }
+  },
+  "additionalProperties": false
+}
