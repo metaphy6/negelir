@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 40,
+    "build": 41,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.13.0",
+      "version": "1.14.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T08:25:16+00:00"
+      "last_changed": "2026-05-05T08:46:39+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1914,6 +1914,15 @@
       "from": "1.12.9",
       "to": "1.13.0",
       "build": 40
+    },
+    {
+      "timestamp": "2026-05-05T08:46:39+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 deep revision: ack semantics fix (per-consumer not per-event), maint.ack.v1 declared as new topic (was contradiction), pg_dump -Fd/jobs invariant fix, restore-verify pluggable (LocalSubprocess vs SidecarVerifier), backup PII-aware dump excluding raw quarantine bytes, encryption key versioning + rotation, missed-cron catch-up policy with max_skew alert, decision_window_id on monotonic clock, operator scale-pin override, VRAM accounting source bound to telemetry device_probe with stale-probe guard, ComposeController forbidden in prod, runtime selector cfg.maint_runtime, DLQ topic allow-list excluding sec.quarantine/sec.alert/qa.request, DLQ async-cooperative loop budget + backlog-pressure damping, schema-sentinel Detector C scope-of-failure containment, schema parser unknown_constructs uncertainty marker, pattern allowlist 2-mode (active vs pending) with explicit operator-approval flow + SQL-injection AST guard, decimate Lua atomic single-script + cap-flag fast-clear + mandatory now_ms/cap args, opsctl bus-down spool + reentrancy lock + dry-run + json output + audit fsync, new section 8.10 Liveness/Leader-election/Dead-mans-switch/Self-isolation, expanded DoD with ~20 new proof tests (catch-up, kill-9 mid-dump checksum, file-mode 0600, parser FP, leader-election, self-isolation, silence-alert, etc.), 20 maint.event.v1.kind values (was 14), 7 chaos catalogue stubs (was 4)",
+      "from": "1.13.0",
+      "to": "1.14.0",
+      "build": 41
     }
   ]
 }
