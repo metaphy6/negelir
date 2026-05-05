@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 28,
+    "build": 30,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.12.6",
+      "version": "1.12.8",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T07:36:49+00:00"
+      "last_changed": "2026-05-05T07:55:51+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1806,6 +1806,24 @@
       "from": "1.12.5",
       "to": "1.12.6",
       "build": 28
+    },
+    {
+      "timestamp": "2026-05-05T07:48:50+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase 4-7 alignment + hardening roadmap report",
+      "from": "1.12.6",
+      "to": "1.12.7",
+      "build": 29
+    },
+    {
+      "timestamp": "2026-05-05T07:55:51+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase 4-7 hardening report self-review revision (F7.9 reframe + TL;DR corrections)",
+      "from": "1.12.7",
+      "to": "1.12.8",
+      "build": 30
     }
   ]
 }
