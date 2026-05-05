@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 41,
+    "build": 42,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-04T09:40:29+00:00"
     },
     "docs": {
-      "version": "1.14.0",
+      "version": "1.15.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T08:46:39+00:00"
+      "last_changed": "2026-05-05T08:56:42+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -1923,6 +1923,15 @@
       "from": "1.13.0",
       "to": "1.14.0",
       "build": 41
+    },
+    {
+      "timestamp": "2026-05-05T08:56:42+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 second-pass deep revision: fixed envelope-vs-payload (request_id/client_id/dlq_replay_count are payload, not envelope), decision_window_id pod_instance_id collision-after-restart fix, K8s SidecarVerifier dump-PVC mount + crash-cleanup orphan sweep, PII sanitized-CSV restore semantics + restore-empty proof, backup PG least-priv role (negelir_backup, migration 011), -Fd encryption pipeline (tar+age) + multi-recipient default + min_recipients prod gate + unencrypted refused in prod, failed-dump quarantine to keep age gauge truthful, DLQ topic round-robin fairness, DLQ poison-pattern (consumer_likely_broken) detection + freeze, DLQ payload-vs-schema additionalProperties discipline (out-of-band Stream headers), pattern_allowlist state CHAR(1) -> long-form codec mapping, allowlist promote-while-eval REPEATABLE READ race-safety, decimate boundary cases (ZCARD 0 / <10 / exactly cap*exit_ratio), telemetry.v1 as new sec.alert producer (kind allow-list pinned to maint_silence_alert only), summarizer per-call cap (4096 tok), leader split-brain proof, K8s PVC requirements declared, new sec.alert kinds (consumer_likely_broken, maint_plane_lag_high), 4 new maint.event kinds (backup_verify_orphan_swept, backup_key_rotated, maint_plane_throttled, maint_plane_recovered), NEW Section 8.11 maint plane backpressure (3-tier shedding, no self-amplification, per-agent self-throttle on own DLQ growth, bus circuit-breaker + per-agent spool), DoD now ~45 proof tests (was ~25), 11 chaos-stub catalogue rows (was 7), triangle test cfg knob inventory expanded to ~40 keys.",
+      "from": "1.14.0",
+      "to": "1.15.0",
+      "build": 42
     }
   ]
 }
