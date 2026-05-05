@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/dlq_replayed",
+  "title": "maint.event.v1{kind=dlq_replayed}",
+  "description": "Phase 8 §8.5 — notification emitted by maint.dlq.v1 after a replay run completes for a single (topic, request_id). `replayed_count` may be 0 (gating succeeded but bus drain primitive not yet wired in v1).",
+  "type": "object",
+  "required": ["kind", "target", "produced_at", "replayed_count", "max_msgs", "request_id"],
+  "properties": {
+    "kind":           { "const": "dlq_replayed" },
+    "target":         { "type": "string", "minLength": 1, "description": "DLQ topic that was replayed." },
+    "produced_at":    { "type": "string" },
+    "replayed_count": { "type": "integer", "minimum": 0 },
+    "max_msgs":       { "type": "integer", "minimum": 1 },
+    "request_id":     { "type": "string", "minLength": 1 },
+    "visit_count":    { "type": "integer", "minimum": 1, "description": "Which visit this replay was (1 = first, etc.)." }
+  },
+  "additionalProperties": false
+}

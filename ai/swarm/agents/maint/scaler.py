@@ -30,6 +30,7 @@ Decision discipline (binding):
 from __future__ import annotations
 
 import logging
+import secrets
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -53,6 +54,29 @@ def _utc_iso() -> str:
 
 def _new_id() -> str:
     return uuid4().hex
+
+
+def _parse_overrides_csv(raw: str) -> dict[str, int]:
+    """Parse ``"agent=N,agent2=M"`` into ``{agent: N, agent2: M}``.
+
+    The cfg layer (``_bounded`` validator) already rejects malformed
+    entries at boot; this helper is robust to whitespace and skips
+    silently-bad tokens as a defence-in-depth.
+    """
+    out: dict[str, int] = {}
+    for raw_tok in raw.split(","):
+        tok = raw_tok.strip()
+        if not tok or "=" not in tok:
+            continue
+        name, _, value = tok.partition("=")
+        name = name.strip()
+        try:
+            n = int(value.strip())
+        except ValueError:
+            continue
+        if name and n > 0:
+            out[name] = n
+    return out
 
 
 # ── Runtime controller protocol ─────────────────────────────────────────
@@ -125,6 +149,22 @@ class MaintScaler:
         self._targets: "OrderedDict[str, _TargetState]" = OrderedDict()
         self._max_targets = max(16, int(_cfg.maint_scaler_max_targets))
         self._paused: bool = False
+        # Per-agent ``max_replicas`` overrides parsed once at boot.
+        # Empty dict means every target uses the global cap. Kept on
+        # the instance so reload semantics later (Phase 8.16) only
+        # need to re-read cfg.
+        self._max_replicas_overrides: dict[str, int] = _parse_overrides_csv(
+            str(_cfg.maint_scaler_max_replicas_overrides_csv)
+        )
+        # Pod instance id — random 8-hex prefix so a leader flip after
+        # a process restart cannot collide with the pre-restart leader's
+        # decision_window_id values in the audit ledger. ROADMAP §8.2
+        # binding (decision_window_id discipline).
+        self._pod_instance_id: str = secrets.token_hex(4)
+        # LRU dedup for retrain_request warm-ups so duplicate drift
+        # envelopes do not double-emit warm-up scale_decisions.
+        self._warmup_seen: "OrderedDict[str, None]" = OrderedDict()
+        self._warmup_seen_max: int = 1024
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -138,6 +178,8 @@ class MaintScaler:
             return list(self._handle_pause(msg, payload, paused=True))
         if kind == "maint_resume":
             return list(self._handle_pause(msg, payload, paused=False))
+        if kind == "retrain_request":
+            return list(self._handle_retrain_request(msg, payload))
         return ()
 
     # ── manual_scale_pin ──────────────────────────────────────────
@@ -194,6 +236,57 @@ class MaintScaler:
         yield self._ack(msg, request_id, accepted=True,
                         reason="paused" if paused else "resumed")
 
+    # ── retrain_request warm-up ──────────────────────────────────
+    def _handle_retrain_request(self, msg: Message, payload: dict) -> Iterable[Message]:
+        """When the drift agent (Phase 6.3) emits a `retrain_request`,
+        the scaler warms the trainer up by emitting a single
+        `scale_decision{source=retrain_request_warmup}` for the target.
+
+        retrain_request carries no `request_id` per its sub-schema (it
+        is a producer-driven envelope, not operator-driven), so we
+        derive a stable dedup key from envelope.message_id × target.
+        Empty consumer set → no ack is emitted (pending Phase 5.x
+        trainer-as-agent landing).
+        """
+        target = str(payload.get("target") or "")
+        if not target:
+            return
+        if not self._leader.is_leader():
+            return
+        # Scaler warms ONLY the trainer surface, not arbitrary targets.
+        # Predictor targets retain their existing replica counts; the
+        # trainer pod is what actually runs the retrain job.
+        warmup_target = "trainer.v1"
+        dedup_key = f"{msg.envelope.message_id}:{warmup_target}"
+        if dedup_key in self._warmup_seen:
+            return
+        self._warmup_seen[dedup_key] = None
+        while len(self._warmup_seen) > self._warmup_seen_max:
+            self._warmup_seen.popitem(last=False)
+
+        warmup_replicas = max(1, int(_cfg.maint_scaler_warmup_replicas))
+        st = self._evict_and_get(warmup_target)
+        # Don't downscale: if a higher count is already in effect, the
+        # warm-up is a no-op. Honest semantics over surprise shrinkage.
+        if st.last_replicas >= warmup_replicas:
+            return
+        accepted = self._controller.apply(warmup_target, warmup_replicas)
+        st.last_replicas = warmup_replicas
+        st.history.append(warmup_replicas)
+        st.last_window_ns = self._window_anchor()
+        yield self._notify(
+            "scale_decision",
+            target=warmup_target,
+            extra={
+                "replicas": warmup_replicas,
+                "source": "retrain_request_warmup",
+                "controller": self._controller.name,
+                "controller_accepted": accepted,
+                "decision_window_id": self._window_id(),
+                "request_id": str(payload.get("request_id") or msg.envelope.message_id),
+            },
+        )
+
     # ── Periodic decision tick (not bus-driven) ──────────────────
     def tick(self, signals: dict[str, dict[str, float]]) -> list[Message]:
         """Evaluate signals and emit at most
@@ -209,22 +302,53 @@ class MaintScaler:
         out.extend(self._expire_pins())
         max_changes = max(1, int(_cfg.maint_scaler_max_changes_per_window))
         emitted = 0
+        window_anchor = self._window_anchor()
         window_id = self._window_id()
         for target, sig in signals.items():
             st = self._evict_and_get(target)
-            if st.last_window_ns >= window_id:
+            if st.last_window_ns >= window_anchor:
                 continue  # already decided in this window
             if st.pin_replicas is not None:
-                continue  # pinned; automatic decisions suppressed
-            decision = self._decide(st, sig)
+                # Pinned targets do not get automatic decisions but ARE
+                # observable as a throttled event so dashboards can see
+                # the suppression instead of a silent no-op.
+                out.append(self._notify(
+                    "scale_throttled",
+                    target=target,
+                    extra={
+                        "would_be": st.pin_replicas,
+                        "reason": "manual_pin_active",
+                        "decision_window_id": window_id,
+                    },
+                ))
+                continue
+            decision, throttle_reason = self._decide(target, st, sig)
             if decision is None:
+                if throttle_reason is not None:
+                    extra: dict = {
+                        "would_be": st.last_replicas,
+                        "reason": throttle_reason,
+                        "decision_window_id": window_id,
+                    }
+                    if throttle_reason == "max_replicas_cap":
+                        extra["max_replicas"] = self._max_replicas_for(target)
+                    out.append(self._notify(
+                        "scale_throttled",
+                        target=target,
+                        extra=extra,
+                    ))
                 continue
             if emitted >= max_changes:
-                out.append(self._notify("scale_throttled",
-                                        target=target,
-                                        extra={"would_be": decision,
-                                               "max_changes": max_changes,
-                                               "decision_window_id": window_id}))
+                out.append(self._notify(
+                    "scale_throttled",
+                    target=target,
+                    extra={
+                        "would_be": decision,
+                        "reason": "max_changes_per_window",
+                        "max_changes": max_changes,
+                        "decision_window_id": window_id,
+                    },
+                ))
                 continue
             accepted = self._controller.apply(target, decision)
             out.append(self._notify("scale_decision",
@@ -237,35 +361,45 @@ class MaintScaler:
                                            "signals": dict(sig)}))
             st.last_replicas = decision
             st.history.append(decision)
-            st.last_window_ns = window_id
+            st.last_window_ns = window_anchor
             emitted += 1
         return out
 
     # ── Decision logic ───────────────────────────────────────────
-    def _decide(self, st: _TargetState, sig: dict[str, float]) -> int | None:
-        """Return new replica count or None for no-change."""
+    def _decide(self, target: str, st: _TargetState,
+                sig: dict[str, float]) -> tuple[int | None, str | None]:
+        """Return (new replica count, throttle_reason) where exactly
+        one is non-None (or both None for a quiet no-op)."""
         depth = float(sig.get("queue_depth", 0))
         in_flight = float(sig.get("in_flight", 0))
         head_age_s = float(sig.get("head_age_s", 0))
         scale_up_depth = float(_cfg.maint_scaler_scale_up_queue_depth)
         scale_down_depth = float(_cfg.maint_scaler_scale_down_queue_depth)
-        max_replicas = max(1, int(_cfg.maint_scaler_max_replicas))
+        max_replicas = self._max_replicas_for(target)
         min_replicas = max(0, int(_cfg.maint_scaler_min_replicas))
         current = st.last_replicas
         # Scale up if depth high or head too old.
         if depth >= scale_up_depth or head_age_s >= float(_cfg.maint_scaler_scale_up_head_age_s):
             if current >= max_replicas:
-                return None
+                return (None, "max_replicas_cap")
             new = min(max_replicas, current + 1)
         elif depth <= scale_down_depth and in_flight <= scale_down_depth:
             if current <= min_replicas:
-                return None
+                return (None, "min_replicas_floor")
             new = max(min_replicas, current - 1)
         else:
-            return None
+            return (None, None)
         if not self._hysteresis_ok(st, new, current):
-            return None
-        return new
+            return (None, "hysteresis_block")
+        return (new, None)
+
+    def _max_replicas_for(self, target: str) -> int:
+        """Return the per-target replica ceiling. Per-agent overrides
+        from cfg trump the global ``maint_scaler_max_replicas`` cap."""
+        override = self._max_replicas_overrides.get(target)
+        if override is not None:
+            return max(1, int(override))
+        return max(1, int(_cfg.maint_scaler_max_replicas))
 
     def _hysteresis_ok(self, st: _TargetState, new: int, current: int) -> bool:
         """Refuse two same-direction moves inside hysteresis_windows
@@ -313,7 +447,13 @@ class MaintScaler:
         import time as _t
         return _t.monotonic_ns()
 
-    def _window_id(self) -> int:
+    def _window_id(self) -> str:
+        """String form ``<pod_instance_id>:<window_anchor_ns>``. The
+        prefix prevents post-restart collisions of decision_window_id
+        in the audit ledger (binding per ROADMAP §8.2)."""
+        return f"{self._pod_instance_id}:{self._window_anchor()}"
+
+    def _window_anchor(self) -> int:
         window_ms = max(1, int(_cfg.maint_scaler_decision_window_ms))
         return window_anchor_ns(window_ms,
                                 now_ns=self._clock_ns() if self._clock_ns else None,

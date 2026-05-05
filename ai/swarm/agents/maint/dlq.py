@@ -54,6 +54,12 @@ RECURSION_DENY_SET: frozenset[str] = frozenset({
     # Sec alert DLQ — rate.v1 is the sole denylist writer; a replay
     # storm here could bypass the burst window.
     "sec.alert.v1.dlq",
+    # Sec quarantine DLQ — quarantine_samples are forensic records;
+    # replaying them would re-trigger detector loops.
+    "sec.quarantine.v1.dlq",
+    # QA request DLQ — the proofreader response surface; replays
+    # would double-bill / double-page on already-handled requests.
+    "qa.request.v1.dlq",
 })
 
 
@@ -65,6 +71,17 @@ def _new_id() -> str:
     return uuid4().hex
 
 
+def _parse_csv_set(raw: str) -> set[str]:
+    """Parse ``"a,b,c"`` → ``{a, b, c}`` (whitespace-trimmed, empties
+    dropped). Used by the dlq allow-list parser."""
+    out: set[str] = set()
+    for tok in raw.split(","):
+        s = tok.strip()
+        if s:
+            out.add(s)
+    return out
+
+
 @dataclass
 class _RunState:
     """Per-topic accounting: count replayed in current run, deque of
@@ -73,6 +90,16 @@ class _RunState:
     replayed: int = 0
     last_run_at: float = 0.0
     seen: "OrderedDict[str, float]" = field(default_factory=OrderedDict)
+
+
+@dataclass
+class _RateBucket:
+    """Per-topic token bucket over a rolling 60-second window. The
+    actual token math is plain count + epoch-second floor — accurate
+    enough for a 1-minute granularity rate cap and dependency-free."""
+
+    minute_epoch: int = 0
+    count: int = 0
 
 
 class MaintDlqSupervisor:
@@ -93,14 +120,74 @@ class MaintDlqSupervisor:
         *,
         leader: Leader | None = None,
         clock_iso: Callable[[], str] | None = None,
+        clock_s: Callable[[], float] | None = None,
         new_id: Callable[[], str] | None = None,
     ) -> None:
         self._leader = leader if leader is not None else SingleProcessLeader(name=self.name)
         self._clock_iso = clock_iso or _utc_iso
+        self._clock_s = clock_s
         self._new_id = new_id or _new_id
         self._state: dict[str, _RunState] = {}
         # LRU of recently-seen request_ids for backoff dedup.
         self._req_lru: "OrderedDict[str, None]" = OrderedDict()
+        # Allow-list parsed once at construction. Empty set ⇒ allow
+        # every topic not in :data:`RECURSION_DENY_SET`. Operators
+        # opt in to a topic by adding it to the cfg knob.
+        self._allow_list: frozenset[str] = frozenset(
+            _parse_csv_set(str(_cfg.maint_dlq_replay_topics_allow_csv))
+        )
+        # Per-(topic, request_id) visit-count map for escalation.
+        # Bounded by ``cfg.maint_dlq_visit_lru`` per §8.9 DoD bullet
+        # ("bounded state in every reactor").
+        self._visit_lru: "OrderedDict[tuple[str, str], int]" = OrderedDict()
+        # Per-topic rate bucket for ops.dlq-replay attempts/min.
+        self._rate_buckets: dict[str, _RateBucket] = {}
+
+    def _now_s(self) -> float:
+        if self._clock_s is not None:
+            return self._clock_s()
+        import time as _t
+        return _t.time()
+
+    def _is_allowed_topic(self, target_dlq: str) -> bool:
+        """A topic passes the allow-list gate if (a) it is NOT in the
+        recursion deny set AND (b) either the configured allow-list
+        is empty (open default) or the topic is explicitly listed."""
+        if target_dlq in RECURSION_DENY_SET:
+            return False
+        if not self._allow_list:
+            return True
+        return target_dlq in self._allow_list
+
+    def _bump_visit(self, target_dlq: str, request_id: str) -> int:
+        """Increment and return the visit-count for ``(topic, req)``.
+        Bounded LRU eviction at cfg.maint_dlq_visit_lru."""
+        key = (target_dlq, request_id)
+        if key in self._visit_lru:
+            self._visit_lru[key] += 1
+            self._visit_lru.move_to_end(key)
+        else:
+            self._visit_lru[key] = 1
+            cap = max(1, int(_cfg.maint_dlq_visit_lru))
+            while len(self._visit_lru) > cap:
+                self._visit_lru.popitem(last=False)
+        return self._visit_lru[key]
+
+    def _rate_limited(self, target_dlq: str) -> bool:
+        """Return True if ``target_dlq`` has exceeded
+        ``cfg.maint_dlq_per_topic_max_per_min`` replay attempts in
+        the current 60-second epoch window."""
+        cap = max(1, int(_cfg.maint_dlq_per_topic_max_per_min))
+        now_s = self._now_s()
+        minute_epoch = int(now_s) // 60
+        bucket = self._rate_buckets.get(target_dlq)
+        if bucket is None or bucket.minute_epoch != minute_epoch:
+            bucket = _RateBucket(minute_epoch=minute_epoch, count=0)
+            self._rate_buckets[target_dlq] = bucket
+        if bucket.count >= cap:
+            return True
+        bucket.count += 1
+        return False
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -133,18 +220,63 @@ class MaintDlqSupervisor:
                             reason="recursion_deny")
             yield self._notify("dlq_topic_disabled_drained",
                                target=target_dlq,
-                               extra={"deny_reason": "recursion_deny"})
+                               extra={"deny_reason": "recursion_deny",
+                                      "request_id": request_id})
             return
 
-        # Backoff dedup.
-        backoff_lru = max(1, int(_cfg.maint_dlq_backoff_lru))
-        if request_id in self._req_lru:
+        # Allow-list gate (when configured). Sec/PII DLQs default to
+        # the recursion deny set above; this gate is for everything
+        # else where the operator opts in explicitly.
+        if not self._is_allowed_topic(target_dlq):
             yield self._ack(msg, request_id, accepted=False,
-                            reason="backoff_dedup")
+                            reason="allow_list_excluded")
+            yield self._notify("dlq_topic_disabled_drained",
+                               target=target_dlq,
+                               extra={"deny_reason": "allow_list_excluded",
+                                      "request_id": request_id})
             return
-        self._req_lru[request_id] = None
-        while len(self._req_lru) > backoff_lru:
-            self._req_lru.popitem(last=False)
+
+        # Backoff dedup — same request_id within the LRU window.
+        # cfg.maint_dlq_backoff_lru = 0 disables backoff dedup (used
+        # by tests that want to exercise the visit-count escalator).
+        backoff_lru = int(_cfg.maint_dlq_backoff_lru)
+        if backoff_lru > 0:
+            if request_id in self._req_lru:
+                yield self._ack(msg, request_id, accepted=False,
+                                reason="backoff_dedup")
+                yield self._notify("dlq_dropped",
+                                   target=target_dlq,
+                                   extra={"reason": "backoff_dedup",
+                                          "request_id": request_id})
+                return
+            self._req_lru[request_id] = None
+            while len(self._req_lru) > backoff_lru:
+                self._req_lru.popitem(last=False)
+
+        # Per-topic rate limit (cfg.maint_dlq_per_topic_max_per_min).
+        if self._rate_limited(target_dlq):
+            yield self._ack(msg, request_id, accepted=False,
+                            reason="rate_limited")
+            yield self._notify("dlq_dropped",
+                               target=target_dlq,
+                               extra={"reason": "rate_limited",
+                                      "request_id": request_id})
+            return
+
+        # Visit count + escalation. The first ``cfg.maint_dlq_visit_max``
+        # visits replay; the visit AFTER that triggers escalation and
+        # refuses further replays for this (topic, request_id).
+        visit_count = self._bump_visit(target_dlq, request_id)
+        visit_max = max(1, int(_cfg.maint_dlq_visit_max))
+        if visit_count > visit_max:
+            yield self._ack(msg, request_id, accepted=False,
+                            reason="dlq_escalated")
+            yield self._notify("dlq_escalated",
+                               target=target_dlq,
+                               extra={"request_id": request_id,
+                                      "visit_count": visit_count,
+                                      "reason": "visit_max_exceeded"})
+            return
 
         # Per-topic quota cap.
         max_msgs_default = max(1, int(_cfg.maint_dlq_per_topic_quota))
@@ -165,10 +297,12 @@ class MaintDlqSupervisor:
                            target=target_dlq,
                            extra={"replayed_count": replayed,
                                   "max_msgs": max_msgs,
-                                  "request_id": request_id})
+                                  "request_id": request_id,
+                                  "visit_count": visit_count})
         yield self._ack(msg, request_id, accepted=True,
                         reason="replayed",
-                        details={"replayed_count": replayed})
+                        details={"replayed_count": replayed,
+                                 "visit_count": visit_count})
 
     # ── Helpers ───────────────────────────────────────────────────
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,

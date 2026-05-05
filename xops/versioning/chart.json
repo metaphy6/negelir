@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 62,
+    "build": 63,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.4.1",
+      "version": "1.5.0",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-05T10:45:32+00:00"
+      "last_changed": "2026-05-05T13:41:32+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -2112,6 +2112,15 @@
       "from": "1.20.1",
       "to": "1.20.2",
       "build": 62
+    },
+    {
+      "timestamp": "2026-05-05T13:41:32+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 8.2 scaler + 8.5 dlq supervisor gap-fill: per-agent caps, retrain warm-up, throttle reason taxonomy, dlq allow-list + visit escalation + per-topic rate limit",
+      "from": "1.4.1",
+      "to": "1.5.0",
+      "build": 63
     }
   ]
 }

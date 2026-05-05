@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/dlq_dropped",
+  "title": "maint.event.v1{kind=dlq_dropped}",
+  "description": "Phase 8 §8.5 — notification emitted by maint.dlq.v1 when a replay request is refused for a non-deny / non-escalation reason (rate-limited, malformed, etc.). Operator surface for diagnostic visibility distinct from `dlq_escalated` (which is request-level) and `dlq_topic_disabled_drained` (which is topic-level).",
+  "type": "object",
+  "required": ["kind", "target", "produced_at", "reason"],
+  "properties": {
+    "kind":        { "const": "dlq_dropped" },
+    "target":      { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "reason":      { "type": "string", "enum": ["rate_limited", "backoff_dedup", "malformed_payload"] },
+    "request_id":  { "type": "string", "description": "Originating operator request_id (if any)." }
+  },
+  "additionalProperties": false
+}

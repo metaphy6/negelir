@@ -24,9 +24,11 @@ from __future__ import annotations
 import pytest
 
 from ai.swarm.agents.maint import (
+    KINDS_NOTIFICATION_ONLY,
     KINDS_PENDING_CONSUMER_LANDING,
     KNOWN_MAINT_EVENT_KINDS,
     expected_ack_set,
+    is_notification_only,
     is_pending_consumer_landing,
 )
 from ai.swarm.agents.payloads import MaintAck
@@ -57,23 +59,29 @@ def test_maint_event_is_kind_discriminated() -> None:
 
 
 def test_empty_consumer_sets_are_listed_pending() -> None:
-    """Empty consumer-set kinds MUST be listed in
-    KINDS_PENDING_CONSUMER_LANDING with a citation. This catches the
-    "forgot to wire the consumer" footgun: the only legitimate way to
-    have an empty set is to declare the consumer is not yet built."""
+    """Empty consumer-set kinds MUST be listed in either
+    KINDS_PENDING_CONSUMER_LANDING (with a Phase citation) or
+    KINDS_NOTIFICATION_ONLY (notification-only — no consumer ever
+    expected). The two sets are disjoint by construction."""
+    overlap = set(KINDS_PENDING_CONSUMER_LANDING) & set(KINDS_NOTIFICATION_ONLY)
+    assert not overlap, (
+        f"kinds in BOTH pending-consumer-landing and notification-only: "
+        f"{sorted(overlap)} — pick one"
+    )
     for kind in KNOWN_MAINT_EVENT_KINDS:
         if not expected_ack_set(kind):
-            assert is_pending_consumer_landing(kind), (
+            assert is_pending_consumer_landing(kind) or is_notification_only(kind), (
                 f"kind={kind!r} routes to empty consumer set but is NOT "
-                "listed in KINDS_PENDING_CONSUMER_LANDING — either wire "
-                "a consumer or add a citation explaining why it is "
-                "intentionally empty"
+                "listed in KINDS_PENDING_CONSUMER_LANDING or "
+                "KINDS_NOTIFICATION_ONLY — either wire a consumer, "
+                "add a pending citation, or declare notification-only"
             )
-            citation = KINDS_PENDING_CONSUMER_LANDING[kind]
-            assert "Phase" in citation, (
-                f"kind={kind!r} pending citation must reference a Phase "
-                f"(got {citation!r})"
-            )
+            if is_pending_consumer_landing(kind):
+                citation = KINDS_PENDING_CONSUMER_LANDING[kind]
+                assert "Phase" in citation, (
+                    f"kind={kind!r} pending citation must reference a Phase "
+                    f"(got {citation!r})"
+                )
 
 
 def test_pending_kinds_are_known() -> None:
@@ -181,6 +189,59 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "request_id": "req-011",
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
+    },
+    # Notification-only kinds (Phase 8.2 + 8.5).
+    "scale_decision": {
+        "kind": "scale_decision",
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "replicas": 3,
+        "source": "auto",
+        "controller": "noop",
+        "controller_accepted": True,
+        "decision_window_id": "ab12cd34:1735689600000",
+    },
+    "scale_throttled": {
+        "kind": "scale_throttled",
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "would_be": 4,
+        "reason": "max_changes_per_window",
+        "decision_window_id": "ab12cd34:1735689600000",
+    },
+    "manual_scale_pin_expired": {
+        "kind": "manual_scale_pin_expired",
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "reason": "ttl",
+    },
+    "dlq_replayed": {
+        "kind": "dlq_replayed",
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "replayed_count": 0,
+        "max_msgs": 100,
+        "request_id": "req-100",
+    },
+    "dlq_escalated": {
+        "kind": "dlq_escalated",
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "request_id": "req-100",
+        "visit_count": 3,
+        "reason": "visit_max_exceeded",
+    },
+    "dlq_topic_disabled_drained": {
+        "kind": "dlq_topic_disabled_drained",
+        "target": "maint.event.v1.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "deny_reason": "recursion_deny",
+    },
+    "dlq_dropped": {
+        "kind": "dlq_dropped",
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "reason": "rate_limited",
     },
 }
 

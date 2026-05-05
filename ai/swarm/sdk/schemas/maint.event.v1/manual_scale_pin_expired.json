@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/manual_scale_pin_expired",
+  "title": "maint.event.v1{kind=manual_scale_pin_expired}",
+  "description": "Phase 8 §8.2 — notification emitted by maint.scaler.v1 when a manual_scale_pin TTL elapses or an operator explicitly cancels the pin (replicas=-1).",
+  "type": "object",
+  "required": ["kind", "target", "produced_at", "reason"],
+  "properties": {
+    "kind":        { "const": "manual_scale_pin_expired" },
+    "target":      { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "reason":      { "type": "string", "enum": ["ttl", "operator_cancel"] }
+  },
+  "additionalProperties": false
+}

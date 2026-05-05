@@ -600,11 +600,39 @@ class Config:
     maint_scaler_hysteresis_grace: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_HYSTERESIS_GRACE", "1")))
     maint_scaler_max_changes_per_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_CHANGES_PER_WINDOW", "4")))
     maint_scaler_manual_pin_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MANUAL_PIN_TTL_S", "1800")))
+    # Per-agent ``max_replicas`` overrides as ``"agent=N,agent2=M"``.
+    # An entry trumps :attr:`maint_scaler_max_replicas` for that
+    # specific target; closes the spec gap that registered agents may
+    # legitimately need different ceilings (a single trainer.v1 vs a
+    # fan-out predictor.elo.v1).
+    maint_scaler_max_replicas_overrides_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_MAX_REPLICAS_OVERRIDES_CSV", ""))
+    # Replica count published when the scaler reacts to a
+    # ``retrain_request`` warm-up. Kept tiny by default — the trainer
+    # is the action-of-record; the scaler only ensures one warm pod.
+    maint_scaler_warmup_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_WARMUP_REPLICAS", "1")))
 
     # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
     maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
     maint_dlq_replay_backoff_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S", "60")))
     maint_dlq_backoff_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_BACKOFF_LRU", "1024")))
+    # CSV allow-list of replayable DLQ topics (e.g.
+    # ``"predict.vote.dlq,predict.final.dlq"``). Empty = allow every
+    # topic *not* in :data:`RECURSION_DENY_SET`. Sec/PII DLQs are
+    # never automatically replayable; this is the operator surface
+    # for the rest.
+    maint_dlq_replay_topics_allow_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_DLQ_REPLAY_TOPICS_ALLOW_CSV", ""))
+    # Operator-driven replays a single ``(topic, request_id)`` may
+    # incur before escalation. Default 2 → 1st + 2nd visit replay,
+    # 3rd visit emits ``dlq_escalated`` and refuses further replays
+    # for that request.
+    maint_dlq_visit_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_VISIT_MAX", "2")))
+    # Per-topic token-bucket cap on replay attempts per minute. Caps
+    # a poisoned-message storm from being thrashed against a still-
+    # broken consumer (§8.5 binding).
+    maint_dlq_per_topic_max_per_min: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_MAX_PER_MIN", "60")))
+    # LRU cap on the ``(topic, request_id) → visit_count`` map.
+    # Bounded state per the §8.9 DoD.
+    maint_dlq_visit_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_VISIT_LRU", "4096")))
 
     # ── Phase 8 §8.6 — `maint.schema.v1` sentinel ────────────────────
     maint_schema_sample_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S", "5")))
@@ -1006,16 +1034,63 @@ class Config:
         _bounded("maint_scaler_hysteresis_grace", self.maint_scaler_hysteresis_grace, 0, 1_000)
         _bounded("maint_scaler_max_changes_per_window", self.maint_scaler_max_changes_per_window, 1, 1_000)
         _bounded("maint_scaler_manual_pin_ttl_s", self.maint_scaler_manual_pin_ttl_s, 1, 604_800)
+        _bounded("maint_scaler_warmup_replicas", self.maint_scaler_warmup_replicas, 1, 10_000)
         if self.maint_scaler_clock_source not in ("auto", "boottime", "monotonic"):
             issues.append(
                 f"maint_scaler_clock_source={self.maint_scaler_clock_source!r} "
                 "must be one of: auto, boottime, monotonic"
             )
+        # Per-agent overrides parse-validation: each non-empty entry
+        # MUST be ``name=int`` with int in [min, max-replicas-cap].
+        if self.maint_scaler_max_replicas_overrides_csv.strip():
+            for raw in self.maint_scaler_max_replicas_overrides_csv.split(","):
+                tok = raw.strip()
+                if not tok:
+                    continue
+                if "=" not in tok:
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv entry "
+                        f"{tok!r} is not 'agent=N'"
+                    )
+                    continue
+                name, _, value = tok.partition("=")
+                name = name.strip()
+                if not name:
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv entry "
+                        f"{tok!r} has empty agent name"
+                    )
+                    continue
+                try:
+                    n = int(value.strip())
+                except ValueError:
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv[{name}]"
+                        f"={value!r} is not an integer"
+                    )
+                    continue
+                if not (1 <= n <= 10_000):
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv[{name}]"
+                        f"={n} out of [1, 10000]"
+                    )
 
         # Phase 8 §8.5 — DLQ supervisor.
         _bounded("maint_dlq_per_topic_quota", self.maint_dlq_per_topic_quota, 1, 10_000_000)
         _bounded("maint_dlq_replay_backoff_s", self.maint_dlq_replay_backoff_s, 1, 86_400)
         _bounded("maint_dlq_backoff_lru", self.maint_dlq_backoff_lru, 1, 1_000_000)
+        _bounded("maint_dlq_visit_max", self.maint_dlq_visit_max, 1, 1_000)
+        _bounded("maint_dlq_per_topic_max_per_min", self.maint_dlq_per_topic_max_per_min, 1, 1_000_000)
+        _bounded("maint_dlq_visit_lru", self.maint_dlq_visit_lru, 1, 1_000_000)
+        # Allow-list parse: every non-empty entry MUST end in ``.dlq``.
+        if self.maint_dlq_replay_topics_allow_csv.strip():
+            for raw in self.maint_dlq_replay_topics_allow_csv.split(","):
+                tok = raw.strip()
+                if tok and not tok.endswith(".dlq"):
+                    issues.append(
+                        f"maint_dlq_replay_topics_allow_csv entry "
+                        f"{tok!r} must end in '.dlq'"
+                    )
 
         # Phase 8 §8.6 — schema sentinel.
         _bounded("maint_schema_sample_rate_per_s", self.maint_schema_sample_rate_per_s, 0.0, 10_000.0)

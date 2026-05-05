@@ -294,10 +294,16 @@ phase8:
   maint_scaler_hysteresis_grace: 1                 # NEGELIR_MAINT_SCALER_HYSTERESIS_GRACE
   maint_scaler_max_changes_per_window: 4           # NEGELIR_MAINT_SCALER_MAX_CHANGES_PER_WINDOW
   maint_scaler_manual_pin_ttl_s: 1800              # NEGELIR_MAINT_SCALER_MANUAL_PIN_TTL_S
+  maint_scaler_max_replicas_overrides_csv: ""     # NEGELIR_MAINT_SCALER_MAX_REPLICAS_OVERRIDES_CSV
+  maint_scaler_warmup_replicas: 1                  # NEGELIR_MAINT_SCALER_WARMUP_REPLICAS
   # ── §8.5 maint.dlq.v1 ──
   maint_dlq_per_topic_quota: 100                   # NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA
   maint_dlq_replay_backoff_s: 60                   # NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S
   maint_dlq_backoff_lru: 1024                      # NEGELIR_MAINT_DLQ_BACKOFF_LRU
+  maint_dlq_replay_topics_allow_csv: ""           # NEGELIR_MAINT_DLQ_REPLAY_TOPICS_ALLOW_CSV
+  maint_dlq_visit_max: 2                           # NEGELIR_MAINT_DLQ_VISIT_MAX
+  maint_dlq_per_topic_max_per_min: 60              # NEGELIR_MAINT_DLQ_PER_TOPIC_MAX_PER_MIN
+  maint_dlq_visit_lru: 4096                        # NEGELIR_MAINT_DLQ_VISIT_LRU
   # ── §8.6 maint.schema.v1 ──
   maint_schema_sample_rate_per_s: 5                # NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S
   maint_schema_burst: 10                           # NEGELIR_MAINT_SCHEMA_BURST

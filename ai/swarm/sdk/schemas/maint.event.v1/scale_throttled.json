@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/scale_throttled",
+  "title": "maint.event.v1{kind=scale_throttled}",
+  "description": "Phase 8 §8.2 — notification emitted by maint.scaler.v1 when an automatic scale decision is suppressed. `reason` is a closed taxonomy so dashboards can filter without parsing free-form text.",
+  "type": "object",
+  "required": ["kind", "target", "produced_at", "would_be", "reason", "decision_window_id"],
+  "properties": {
+    "kind":               { "const": "scale_throttled" },
+    "target":             { "type": "string", "minLength": 1 },
+    "produced_at":        { "type": "string" },
+    "would_be":           { "type": "integer", "minimum": 0, "maximum": 10000, "description": "Replica count the scaler WOULD have applied if not throttled." },
+    "reason":             {
+      "type": "string",
+      "enum": [
+        "max_changes_per_window",
+        "manual_pin_active",
+        "max_replicas_cap",
+        "min_replicas_floor",
+        "hysteresis_block",
+        "vram_budget_exceeded"
+      ]
+    },
+    "decision_window_id": { "type": "string", "minLength": 1 },
+    "max_changes":        { "type": "integer", "minimum": 1, "description": "Cap from cfg.maint_scaler_max_changes_per_window when reason=max_changes_per_window." },
+    "max_replicas":       { "type": "integer", "minimum": 1, "description": "Cap from cfg.maint_scaler_max_replicas (or per-agent override) when reason=max_replicas_cap." }
+  },
+  "additionalProperties": false
+}

@@ -77,6 +77,19 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # agent id), the consumer set is just that agent.
     "maint_pause":       frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
     "maint_resume":      frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
+    # ── Notification-only kinds (Phase 8.2 + 8.5) ────────────────────
+    # These are emitted BY maint reactors as side-effect telemetry.
+    # They carry NO ``request_id`` (or carry one but expect no acks)
+    # and are addressed to operators / dashboards over the bus, not
+    # to a peer agent. Empty consumer set is intentional — see
+    # ``KINDS_NOTIFICATION_ONLY`` below.
+    "scale_decision":              frozenset(),
+    "scale_throttled":             frozenset(),
+    "manual_scale_pin_expired":    frozenset(),
+    "dlq_replayed":                frozenset(),
+    "dlq_escalated":               frozenset(),
+    "dlq_topic_disabled_drained":  frozenset(),
+    "dlq_dropped":                 frozenset(),
 }
 
 # Kinds whose consumer set is empty BY DESIGN at this point in the
@@ -86,6 +99,20 @@ KINDS_PENDING_CONSUMER_LANDING: Final[Mapping[str, str]] = {
     "retrain_request":  "Phase 5.x (trainer-as-agent) + Phase 8.2 (scaler warm-up)",
     "retrain_approve":  "Phase 5.x (trainer-as-agent)",
 }
+
+# Kinds that are intentionally consumer-less because they are
+# notification-only (emitted by §8.x reactors for operators /
+# dashboards to observe). Distinct from KINDS_PENDING_CONSUMER_LANDING
+# — these will NEVER grow a consumer; the empty set is the contract.
+KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
+    "scale_decision",
+    "scale_throttled",
+    "manual_scale_pin_expired",
+    "dlq_replayed",
+    "dlq_escalated",
+    "dlq_topic_disabled_drained",
+    "dlq_dropped",
+})
 
 # Stable, alphabetised view of all known kinds (test imports this).
 KNOWN_MAINT_EVENT_KINDS: Final[frozenset[str]] = frozenset(_ACK_ROUTING_TABLE)
@@ -108,9 +135,18 @@ def is_pending_consumer_landing(kind: str) -> bool:
     return kind in KINDS_PENDING_CONSUMER_LANDING
 
 
+def is_notification_only(kind: str) -> bool:
+    """Return True iff the kind is a notification-only event (no
+    consumer set will ever be wired). Distinct from
+    :func:`is_pending_consumer_landing`."""
+    return kind in KINDS_NOTIFICATION_ONLY
+
+
 __all__ = [
     "KNOWN_MAINT_EVENT_KINDS",
     "KINDS_PENDING_CONSUMER_LANDING",
+    "KINDS_NOTIFICATION_ONLY",
     "expected_ack_set",
     "is_pending_consumer_landing",
+    "is_notification_only",
 ]

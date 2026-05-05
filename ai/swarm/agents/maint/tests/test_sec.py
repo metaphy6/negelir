@@ -8,7 +8,7 @@ from swarm.agents.maint.sec import (
     InMemoryPatternStore,
     MaintSecAgent,
 )
-from swarm.agents.maint.topics import MAINT_ACK, MAINT_EVENT
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT
 from swarm.sdk.types import Envelope, Message
 
 

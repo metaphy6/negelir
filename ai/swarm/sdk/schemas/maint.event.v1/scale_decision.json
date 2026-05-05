@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/scale_decision",
+  "title": "maint.event.v1{kind=scale_decision}",
+  "description": "Phase 8 §8.2 — notification emitted by maint.scaler.v1 each time a target's replica count is decided. NOT operator-driven; carries no request_id and expects no acks. `decision_window_id` is `<pod_instance_id>:<window_anchor_ns>` so a leadership flip after restart cannot collide window ids in the audit ledger.",
+  "type": "object",
+  "required": ["kind", "target", "produced_at", "replicas", "source", "controller", "controller_accepted", "decision_window_id"],
+  "properties": {
+    "kind":                 { "const": "scale_decision" },
+    "target":               { "type": "string", "minLength": 1, "description": "Agent id whose replica count was set." },
+    "produced_at":          { "type": "string" },
+    "replicas":             { "type": "integer", "minimum": 0, "maximum": 10000 },
+    "source":               { "type": "string", "enum": ["auto", "manual_pin", "retrain_request_warmup"] },
+    "controller":           { "type": "string", "minLength": 1, "description": "Runtime controller name (e.g. 'noop', 'compose', 'k8s')." },
+    "controller_accepted":  { "type": "boolean" },
+    "decision_window_id":   { "type": "string", "minLength": 1 },
+    "signals":              { "type": "object", "description": "Original input signals (queue_depth, in_flight, head_age_s, etc.)." },
+    "request_id":           { "type": "string", "description": "Set when source=manual_pin or retrain_request_warmup; correlates back to the originating operator/drift request." }
+  },
+  "additionalProperties": false
+}

@@ -16,15 +16,19 @@ Subsequent §8.x slices add one reactor each.
 from __future__ import annotations
 
 from ._ack_routing import (
+    KINDS_NOTIFICATION_ONLY,
     KINDS_PENDING_CONSUMER_LANDING,
     KNOWN_MAINT_EVENT_KINDS,
     expected_ack_set,
+    is_notification_only,
     is_pending_consumer_landing,
 )
 
 __all__ = [
     "KNOWN_MAINT_EVENT_KINDS",
     "KINDS_PENDING_CONSUMER_LANDING",
+    "KINDS_NOTIFICATION_ONLY",
     "expected_ack_set",
     "is_pending_consumer_landing",
+    "is_notification_only",
 ]

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from swarm.agents.maint.schema import MaintSchemaSentinel
-from swarm.agents.maint.topics import MAINT_EVENT
+from swarm.agents.topics import MAINT_EVENT
 from swarm.sdk.types import Envelope, Message
 
 
