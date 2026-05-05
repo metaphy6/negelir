@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 57,
+    "build": 58,
     "released": null
   },
   "components": {
@@ -19,9 +19,9 @@
       "last_changed": "2026-05-05T07:36:48+00:00"
     },
     "xops": {
-      "version": "3.6.0",
+      "version": "3.7.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-05T10:45:32+00:00"
+      "last_changed": "2026-05-05T11:09:14+00:00"
     },
     "docs": {
       "version": "1.20.1",
@@ -2067,6 +2067,15 @@
       "from": "1.4.0",
       "to": "1.4.1",
       "build": 57
+    },
+    {
+      "timestamp": "2026-05-05T11:09:14+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "opsctl §8.1 completion: flock + dry-run + sha256 token + baseline-reset/quarantine-clear/spool-flush + make shortcuts",
+      "from": "3.6.0",
+      "to": "3.7.0",
+      "build": 58
     }
   ]
 }

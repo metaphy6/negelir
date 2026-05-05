@@ -15,9 +15,31 @@ The ``bus`` kwarg is injected by tests; production
 """
 from __future__ import annotations
 
-from . import denylist_clear, liveness, quarantine_erase
+from . import (
+    baseline_reset,
+    denylist_clear,
+    liveness,
+    quarantine_clear,
+    quarantine_erase,
+    spool_flush,
+)
 
 # Iteration order is the order subcommands appear in `opsctl --help`.
-SUBCOMMANDS = (liveness, denylist_clear, quarantine_erase)
+SUBCOMMANDS = (
+    liveness,
+    denylist_clear,
+    baseline_reset,
+    quarantine_clear,
+    quarantine_erase,
+    spool_flush,
+)
 
-__all__ = ["SUBCOMMANDS", "denylist_clear", "liveness", "quarantine_erase"]
+__all__ = [
+    "SUBCOMMANDS",
+    "baseline_reset",
+    "denylist_clear",
+    "liveness",
+    "quarantine_clear",
+    "quarantine_erase",
+    "spool_flush",
+]

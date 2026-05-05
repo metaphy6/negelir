@@ -276,6 +276,8 @@ phase8:
   opsctl_critical_agents: "consensus.v1,sec.rate.v1,maint.backup.v1"  # NEGELIR_OPSCTL_CRITICAL_AGENTS
   opsctl_audit_path: ""                           # NEGELIR_OPSCTL_AUDIT_PATH
   opsctl_spool_dir: ""                            # NEGELIR_OPSCTL_SPOOL_DIR
+  opsctl_lock_dir: ""                             # NEGELIR_OPSCTL_LOCK_DIR
+  opsctl_lock_stale_factor: 2                      # NEGELIR_OPSCTL_LOCK_STALE_FACTOR
   maint_ack_payload_max_bytes: 4096                # NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES
   maint_ack_reason_max_bytes: 512                  # NEGELIR_MAINT_ACK_REASON_MAX_BYTES
   maint_ack_details_max_bytes: 2048                # NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES

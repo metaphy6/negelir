@@ -355,6 +355,18 @@ ops.denylist-clear: ## §8.1 — clear sec.rate.v1 denylist (TARGET=<subject>)
 ops.quarantine-erase: ## §8.1 — erase quarantine sample (TARGET=<id> CONFIRM=<token>) DESTRUCTIVE
 	@$(XOPS)/opsctl.py quarantine-erase
 
+.PHONY: ops.baseline-reset
+ops.baseline-reset: ## §8.1 — reset sec.scrape.v1 source baseline (TARGET=<source_id>)
+	@$(XOPS)/opsctl.py baseline-reset
+
+.PHONY: ops.quarantine-clear
+ops.quarantine-clear: ## §8.1 — clear quarantine FP (TARGET=<sample_id>) [§8.7 consumer pending]
+	@$(XOPS)/opsctl.py quarantine-clear
+
+.PHONY: ops.spool-flush
+ops.spool-flush: ## §8.1 — drain bus-down spool (MAX_ENTRIES=<n>)
+	@$(XOPS)/opsctl.py spool-flush
+
 # ══════════════════════════════════════════════════════════════
 #                       PHASE TRACKING
 # ══════════════════════════════════════════════════════════════

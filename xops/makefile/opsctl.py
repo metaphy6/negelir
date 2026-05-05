@@ -57,6 +57,8 @@ def cmd_denylist_clear(_argv: List[str]) -> int:
     cid = _env("CLIENT_ID")
     if cid:
         args.extend(["--client-id", cid])
+    if _env("DRY_RUN", "0") == "1":
+        args.append("--dry-run")
     if _env("JSON", "0") == "1":
         args.append("--json")
     return _run_opsctl(args)
@@ -75,6 +77,55 @@ def cmd_quarantine_erase(_argv: List[str]) -> int:
     cid = _env("CLIENT_ID")
     if cid:
         args.extend(["--client-id", cid])
+    if _env("DRY_RUN", "0") == "1":
+        args.append("--dry-run")
+    if _env("JSON", "0") == "1":
+        args.append("--json")
+    return _run_opsctl(args)
+
+
+def cmd_baseline_reset(_argv: List[str]) -> int:
+    """`make ops.baseline-reset TARGET=<source_id>`."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.baseline-reset: TARGET=<source_id> is required")
+        return 64
+    args = ["baseline-reset", "--target", target]
+    cid = _env("CLIENT_ID")
+    if cid:
+        args.extend(["--client-id", cid])
+    if _env("DRY_RUN", "0") == "1":
+        args.append("--dry-run")
+    if _env("JSON", "0") == "1":
+        args.append("--json")
+    return _run_opsctl(args)
+
+
+def cmd_quarantine_clear(_argv: List[str]) -> int:
+    """`make ops.quarantine-clear TARGET=<sample_id>` (§8.7 consumer pending)."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.quarantine-clear: TARGET=<sample_id> is required")
+        return 64
+    args = ["quarantine-clear", "--target", target]
+    cid = _env("CLIENT_ID")
+    if cid:
+        args.extend(["--client-id", cid])
+    if _env("DRY_RUN", "0") == "1":
+        args.append("--dry-run")
+    if _env("JSON", "0") == "1":
+        args.append("--json")
+    return _run_opsctl(args)
+
+
+def cmd_spool_flush(_argv: List[str]) -> int:
+    """`make ops.spool-flush [MAX_ENTRIES=<n>]` — drain the bus-down spool."""
+    args = ["spool-flush"]
+    n = _env("MAX_ENTRIES")
+    if n:
+        args.extend(["--max-entries", n])
+    if _env("DRY_RUN", "0") == "1":
+        args.append("--dry-run")
     if _env("JSON", "0") == "1":
         args.append("--json")
     return _run_opsctl(args)
@@ -83,7 +134,10 @@ def cmd_quarantine_erase(_argv: List[str]) -> int:
 COMMANDS = {
     "liveness": cmd_liveness,
     "denylist-clear": cmd_denylist_clear,
+    "baseline-reset": cmd_baseline_reset,
+    "quarantine-clear": cmd_quarantine_clear,
     "quarantine-erase": cmd_quarantine_erase,
+    "spool-flush": cmd_spool_flush,
 }
 
 

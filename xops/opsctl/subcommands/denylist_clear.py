@@ -5,24 +5,18 @@ Publishes ``maint.event.v1{kind=denylist_clear, target, ...}`` and
 waits for the ack from ``sec.rate.v1`` (the only consumer per
 :mod:`ai.swarm.agents.maint._ack_routing`).
 
-This subcommand is **not** in
-:data:`xops.opsctl._classify.ALWAYS_DESTRUCTIVE`: clearing a denylist
-entry is reversible (the rate limiter will re-deny the subject on
-the next abuse signal). It is, however, audited.
+Reversible (the rate limiter will re-deny on the next abuse signal),
+so this subcommand is **not** in
+:data:`xops.opsctl._classify.ALWAYS_DESTRUCTIVE`. It is, however,
+audited and protected by the per-(host, kind, target) re-entrancy
+lock from :mod:`xops.opsctl._lock`.
 """
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import sys
 from typing import Any, Optional
 
-from ai.common.config import Config
-
-from .._audit import append_audit_row, make_row
-from .._exit_codes import ExitCode
-from .._publish import build_envelope, publish_event
+from .._runner import SubcommandSpec, add_common_publish_args, run_publish
 
 NAME = "denylist-clear"
 KIND = "denylist_clear"
@@ -38,67 +32,26 @@ def add_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]"
             "(e.g. '203.0.113.0/24', '2001:db8::/64'). Reversible."
         ),
     )
-    parser.add_argument(
-        "--target",
-        required=True,
-        help="Masked subject string per server/internal/sec/xff.go SubjectKey.",
-    )
-    parser.add_argument(
-        "--client-id",
-        default="opsctl",
-        help="Operator identity tag carried in the envelope payload (default: opsctl).",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit a single JSON object on stdout (deterministic).",
+    add_common_publish_args(
+        parser,
+        target_help="Masked subject string per server/internal/sec/xff.go SubjectKey.",
     )
     parser.set_defaults(func=run)
     return parser
 
 
 def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
-    cfg = Config()
-    target = args.target
-    client_id = args.client_id
-    message = build_envelope(kind=KIND, target=target, client_id=client_id)
-    result = publish_event(bus, message)
-
-    summary: dict[str, Any] = {
-        "op": NAME,
-        "kind": KIND,
-        "target": target,
-        "request_id": result.request_id,
-        "exit_code": int(result.exit_code),
-        "expected_acks": sorted(result.expected_acks),
-        "received_acks": sorted(result.received_acks),
-        "note": result.note,
-    }
-    if getattr(args, "json", False):
-        sys.stdout.write(json.dumps(summary, sort_keys=True, ensure_ascii=False))
-        sys.stdout.write("\n")
-    else:
-        sys.stdout.write(
-            f"opsctl {NAME} target={target} request_id={result.request_id} "
-            f"exit={int(result.exit_code)}({result.exit_code.name}) "
-            f"acks={sorted(result.received_acks)}/{sorted(result.expected_acks)} "
-            f"note={result.note}\n"
-        )
-
-    append_audit_row(
-        cfg.opsctl_audit_path_resolved,
-        make_row(
-            op=NAME,
-            target=target,
-            request_id=result.request_id,
-            exit_code=int(result.exit_code),
-            expected_acks=len(result.expected_acks),
-            received_acks=len(result.received_acks),
-            note=result.note,
-            host=os.uname().nodename,
-        ),
+    spec = SubcommandSpec(
+        name=NAME,
+        kind=KIND,
+        target=args.target,
+        client_id=args.client_id,
+        salient_args={},
+        json_output=bool(getattr(args, "json", False)),
+        dry_run=bool(getattr(args, "dry_run", False)),
+        confirm=str(getattr(args, "confirm", "") or ""),
     )
-    return int(result.exit_code)
+    return run_publish(spec, bus=bus)
 
 
 __all__ = ["KIND", "NAME", "add_parser", "run"]

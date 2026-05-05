@@ -573,6 +573,12 @@ class Config:
     ))
     opsctl_audit_path: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_AUDIT_PATH", ""))
     opsctl_spool_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_SPOOL_DIR", ""))
+    opsctl_lock_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_LOCK_DIR", ""))
+    # Re-entrancy lock: a stale lockfile (no live ``flock`` holder)
+    # older than ``opsctl_ack_timeout_ms × opsctl_lock_stale_factor``
+    # is reaped on the next acquire. Keeps a crashed CLI from
+    # permanently blocking the same ``(kind, target)`` tuple.
+    opsctl_lock_stale_factor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_LOCK_STALE_FACTOR", "2")))
     maint_ack_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES", "4096")))
     maint_ack_reason_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_REASON_MAX_BYTES", "512")))
     maint_ack_details_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES", "2048")))
@@ -709,6 +715,20 @@ class Config:
         if self.opsctl_spool_dir:
             return self.opsctl_spool_dir
         return os.path.join(self.data_dir, "maint", "opsctl_spool")
+
+    @property
+    def opsctl_lock_dir_resolved(self) -> str:
+        """Empty ``opsctl_lock_dir`` → ``<data_dir>/maint/opsctl_locks``.
+
+        Per ROADMAP §8.1 binding, the ops console takes a per-(host,
+        kind, target) advisory lockfile here via :func:`fcntl.flock`
+        non-blocking. Stale locks (no live holder, mtime older than
+        ``opsctl_ack_timeout_ms × opsctl_lock_stale_factor``) are
+        reaped on the next acquire.
+        """
+        if self.opsctl_lock_dir:
+            return self.opsctl_lock_dir
+        return os.path.join(self.data_dir, "maint", "opsctl_locks")
 
     def validate(self, *, strict: bool = False) -> list[str]:
         """
