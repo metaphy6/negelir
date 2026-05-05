@@ -85,8 +85,11 @@ def keyspace(redis_client, request):
             redis_client.delete(*keys)
         if cursor == 0:
             break
-    # Also clean the global counter that mutate touches.
+    # Also clean the global cardinality tracker that mutate touches.
+    # v1.0.0 used `sec:denylist:_count`; v1.1.0+ uses `sec:denylist:_zset`.
+    # Drop both so a downgrade doesn't poison the next run.
     redis_client.delete("sec:denylist:_count")
+    redis_client.delete("sec:denylist:_zset")
 
 
 # ── sec_rate_check.lua ────────────────────────────────────────────
@@ -170,12 +173,20 @@ def test_rate_invalid_capacity_returns_error_not_silent_allow(
 # ── sec_denylist_mutate.lua ───────────────────────────────────────
 
 
-def _eval_mutate(redis_client, sha, prefix, *, action, ttl=60, max_entries=0, reason="t"):
+def _eval_mutate(
+    redis_client, sha, prefix, *,
+    action, ttl=60, max_entries=0, reason="t", now_ms=None,
+):
+    # v1.1.0 of sec_denylist_mutate.lua takes an additional ARGV[5]
+    # = now_ms used for lazy ZSET eviction. The default is
+    # `time.time()*1000` so tests don't have to thread it through.
+    if now_ms is None:
+        now_ms = int(time.time() * 1000)
     return redis_client.evalsha(
         sha, 2,
         f"{prefix}:denylist:subj",
         f"{prefix}:denylist:capped",
-        action, ttl, max_entries, reason,
+        action, ttl, max_entries, reason, now_ms,
     )
 
 
@@ -220,13 +231,14 @@ def test_mutate_cap_rejects_new_entries_above_max(
     counter hits ``max_entries``; in the same instant the
     ``capped`` flag is set so the gateway can flip to subnet-mode."""
     sha = loaded_scripts["mutate"]
+    now_ms = int(time.time() * 1000)
     # Add 2 distinct subjects with cap=2.
     for i in range(2):
         s, _ = redis_client.evalsha(
             sha, 2,
             f"{keyspace}:denylist:s{i}",
             f"{keyspace}:denylist:capped",
-            "add", 60, 2, f"r{i}",
+            "add", 60, 2, f"r{i}", now_ms,
         )
         assert s == "added"
     # 3rd new subject is rejected.
@@ -234,7 +246,7 @@ def test_mutate_cap_rejects_new_entries_above_max(
         sha, 2,
         f"{keyspace}:denylist:s2",
         f"{keyspace}:denylist:capped",
-        "add", 60, 2, "r2",
+        "add", 60, 2, "r2", now_ms,
     )
     assert status == "rejected_capped"
     assert redis_client.exists(f"{keyspace}:denylist:capped") == 1

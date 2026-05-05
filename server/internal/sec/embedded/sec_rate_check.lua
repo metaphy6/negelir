@@ -1,7 +1,7 @@
 -- Phase 7 §7.3 — sec.rate.v1 atomic bucket-check + denylist-lookup.
 --
--- VERSION: 1.0.0
--- SHA256: ad2fabdca56c380f07465d1028a31ad5cf1363a0de04384b6de7b9bcb276bdfa
+-- VERSION: 1.0.1
+-- SHA256: 2f66553ed84c6ed674905bd088186a0c106c36a17a0c1ec6f2b6b719af090cc5
 --
 -- The Go gateway calls this script via `EVALSHA` on every request
 -- entering `/v1/*`. One round-trip, atomic by Redis's single-threaded
@@ -53,6 +53,12 @@ if cost == nil or cost < 0 then
     return {"error", 0, 0, 0}
 end
 if now_ms == nil or now_ms < 0 then
+    return {"error", 0, 0, 0}
+end
+if idle_ttl_s == nil or idle_ttl_s <= 0 then
+    -- Defense-in-depth: zero/negative TTL on SET would create an
+    -- immortal bucket key (Redis errors on SET ... EX 0); reject
+    -- loud rather than persisting a poisoned bucket.
     return {"error", 0, 0, 0}
 end
 

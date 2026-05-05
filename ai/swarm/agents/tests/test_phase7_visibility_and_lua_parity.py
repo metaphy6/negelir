@@ -199,6 +199,9 @@ def _python_reference_rate_check(
         return ("error", 0, 0, 0, None)
     if now_ms is None or now_ms < 0:
         return ("error", 0, 0, 0, None)
+    if idle_ttl_s is None or idle_ttl_s <= 0:
+        # v1.0.1 Lua addition — mirror exactly.
+        return ("error", 0, 0, 0, None)
 
     # 1. Denylist short-circuit.
     if denylisted:
@@ -397,6 +400,28 @@ def test_python_reference_zero_capacity_is_an_error_not_infinite_traffic() -> No
         assert status == "error", (
             f"capacity={bad_capacity} resolved to {status!r}; "
             f"defensive guard MUST return error (security floor)"
+        )
+
+
+def test_python_reference_zero_idle_ttl_is_an_error_not_immortal_bucket() -> None:
+    """v1.0.1 Lua addition: zero/negative ``idle_ttl_s`` would have
+    Redis error on ``SET ... EX 0`` (or persist an immortal bucket
+    if rounding hid it). Loud error rather than silent persistence
+    — mirrors Lua exactly."""
+    for bad_ttl in (0, -1, -3600):
+        status, *_rest = _python_reference_rate_check(
+            capacity=10,
+            refill_per_s=1.0,
+            cost=1,
+            now_ms=1_000,
+            idle_ttl_s=bad_ttl,
+            tat_state=None,
+            denylisted=False,
+            denylist_pttl_ms=0,
+        )
+        assert status == "error", (
+            f"idle_ttl_s={bad_ttl} resolved to {status!r}; "
+            f"defensive guard MUST return error (no immortal buckets)"
         )
 
 
