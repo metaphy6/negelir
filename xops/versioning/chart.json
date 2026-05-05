@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 47,
+    "build": 50,
     "released": null
   },
   "components": {
@@ -19,14 +19,14 @@
       "last_changed": "2026-05-05T07:36:48+00:00"
     },
     "xops": {
-      "version": "3.5.1",
+      "version": "3.5.2",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-05T09:33:49+00:00"
+      "last_changed": "2026-05-05T09:48:38+00:00"
     },
     "docs": {
-      "version": "1.18.0",
+      "version": "1.19.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T09:33:43+00:00"
+      "last_changed": "2026-05-05T09:48:34+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.22.10",
+      "version": "0.22.11",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T09:33:49+00:00"
+      "last_changed": "2026-05-05T09:48:38+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -1977,6 +1977,33 @@
       "from": "3.5.0",
       "to": "3.5.1",
       "build": 47
+    },
+    {
+      "timestamp": "2026-05-05T09:48:34+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8 sixth-pass deep-revision §8.15",
+      "from": "1.18.0",
+      "to": "1.19.0",
+      "build": 48
+    },
+    {
+      "timestamp": "2026-05-05T09:48:38+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 8 §8.15 design only",
+      "from": "0.22.10",
+      "to": "0.22.11",
+      "build": 49
+    },
+    {
+      "timestamp": "2026-05-05T09:48:38+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 8 §8.15 advisory_lock + clock helpers + ops key lifecycle CLI",
+      "from": "3.5.1",
+      "to": "3.5.2",
+      "build": 50
     }
   ]
 }
