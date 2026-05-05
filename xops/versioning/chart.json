@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 55,
+    "build": 57,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-04T09:17:12+00:00"
+      "last_changed": "2026-05-05T10:45:32+00:00"
     },
     "server": {
       "version": "1.6.1",
@@ -19,9 +19,9 @@
       "last_changed": "2026-05-05T07:36:48+00:00"
     },
     "xops": {
-      "version": "3.5.3",
+      "version": "3.6.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-05T10:03:12+00:00"
+      "last_changed": "2026-05-05T10:45:32+00:00"
     },
     "docs": {
       "version": "1.20.1",
@@ -2049,6 +2049,24 @@
       "from": "1.20.0",
       "to": "1.20.1",
       "build": 55
+    },
+    {
+      "timestamp": "2026-05-05T10:45:32+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8.1 baseline: opsctl package (exit codes, classifier, audit, publish/ack-wait, bus-down spool) + 3 subcommands (liveness, denylist-clear, quarantine-erase) + make ops.* targets",
+      "from": "3.5.3",
+      "to": "3.6.0",
+      "build": 56
+    },
+    {
+      "timestamp": "2026-05-05T10:45:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.1 cfg knobs: opsctl_* + maint_ack_* with resolved-path properties and bounded validations",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 57
     }
   ]
 }

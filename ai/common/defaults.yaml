@@ -264,6 +264,22 @@ phase7:
   # qa.request.v1 — NLP-side dedup window (§7.5 binding).
   qa_request_v1_dedup_window_s: 300                # NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S
 
+# ── Phase 8 — Self-maintenance plane (ops console + maint.event/ack) ────────
+# §8.1 ops console baseline. CLI publishes maint.event.v1 and waits for
+# maint.ack.v1 per expected consumer (kind→consumer-set map at
+# ai/swarm/agents/maint/_ack_routing.py). Bus-down envelopes land in
+# opsctl_spool_dir; replay via `make ops.spool-flush`. Empty
+# audit/spool paths resolve to <data_dir>/maint/opsctl_*.
+phase8:
+  opsctl_ack_timeout_ms: 5000                      # NEGELIR_OPSCTL_ACK_TIMEOUT_MS
+  opsctl_spool_max_entries: 1024                   # NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES
+  opsctl_critical_agents: "consensus.v1,sec.rate.v1,maint.backup.v1"  # NEGELIR_OPSCTL_CRITICAL_AGENTS
+  opsctl_audit_path: ""                           # NEGELIR_OPSCTL_AUDIT_PATH
+  opsctl_spool_dir: ""                            # NEGELIR_OPSCTL_SPOOL_DIR
+  maint_ack_payload_max_bytes: 4096                # NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES
+  maint_ack_reason_max_bytes: 512                  # NEGELIR_MAINT_ACK_REASON_MAX_BYTES
+  maint_ack_details_max_bytes: 2048                # NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR

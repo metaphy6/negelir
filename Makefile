@@ -335,6 +335,27 @@ reactor.replay: ## Replay freshness events for one reactor (REACTOR=name SINCE=t
 	@$(XOPS)/reactor.py replay --reactor $(REACTOR) --since $(SINCE)
 
 # ══════════════════════════════════════════════════════════════
+#                  PHASE 8 — OPS CONSOLE (§8.1)
+# ══════════════════════════════════════════════════════════════
+#  Operator CLI for the maint plane. Publishes maint.event.v1 and
+#  waits for maint.ack.v1 from the registered consumer set (kind→
+#  consumer map at ai/swarm/agents/maint/_ack_routing.py). Exit
+#  codes are pinned in xops/opsctl/_exit_codes.py and consumed by
+#  runbooks + the dead-mans-switch alerter.
+
+.PHONY: ops.liveness
+ops.liveness: ## §8.1 — read-only smoke check (no bus publish)
+	@$(XOPS)/opsctl.py liveness
+
+.PHONY: ops.denylist-clear
+ops.denylist-clear: ## §8.1 — clear sec.rate.v1 denylist (TARGET=<subject>)
+	@$(XOPS)/opsctl.py denylist-clear
+
+.PHONY: ops.quarantine-erase
+ops.quarantine-erase: ## §8.1 — erase quarantine sample (TARGET=<id> CONFIRM=<token>) DESTRUCTIVE
+	@$(XOPS)/opsctl.py quarantine-erase
+
+# ══════════════════════════════════════════════════════════════
 #                       PHASE TRACKING
 # ══════════════════════════════════════════════════════════════
 

@@ -543,6 +543,40 @@ class Config:
     # qa.request.v1 — NLP-side dedup window (§7.5 binding).
     qa_request_v1_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S", "300")))
 
+    # ── Phase 8 — Self-maintenance plane (ops console + maint.event/ack) ──
+    #
+    # §8.1 ops console baseline knobs. The ops console is a stateless CLI
+    # under ``xops/opsctl/``; it publishes ``maint.event.v1`` envelopes
+    # and waits for ``maint.ack.v1`` replies up to the per-publish budget.
+    # Bus-down replays land in ``opsctl_spool_dir`` and are drained by
+    # ``make ops.spool-flush``. Critical-agent destructive operations
+    # (scale=0 / restart of consensus / sec.rate / maint.backup) require
+    # an explicit typed-token confirmation, sourced from the agent set
+    # below (csv-parsed; whitespace-tolerant).
+    #
+    # Doctrine reminders (binding):
+    #   * ``opsctl_ack_timeout_ms`` is wall-clock per the Phase 7
+    #     monotonic-clock convention only inside agent code; the CLI
+    #     uses wall-clock for operator-facing budgets so it matches the
+    #     human's stopwatch on a stuck publish.
+    #   * The ack payload caps below cap PRODUCER side (consumers
+    #     publishing ``maint.ack.v1``); they do NOT cap the operator's
+    #     own envelope payload.
+    #   * Empty ``opsctl_audit_path`` / ``opsctl_spool_dir`` resolve to
+    #     ``<data_dir>/maint/opsctl_audit.csv`` and
+    #     ``<data_dir>/maint/opsctl_spool/`` respectively (see the
+    #     properties of the same name).
+    opsctl_ack_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_ACK_TIMEOUT_MS", "5000")))
+    opsctl_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES", "1024")))
+    opsctl_critical_agents: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_OPSCTL_CRITICAL_AGENTS", "consensus.v1,sec.rate.v1,maint.backup.v1"
+    ))
+    opsctl_audit_path: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_AUDIT_PATH", ""))
+    opsctl_spool_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_SPOOL_DIR", ""))
+    maint_ack_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES", "4096")))
+    maint_ack_reason_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_REASON_MAX_BYTES", "512")))
+    maint_ack_details_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES", "2048")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -650,6 +684,31 @@ class Config:
 
         n = max(len(PROOFREADER_POLICY_CLASSES), 1)
         return (n // 2) + 1
+
+    # ── Phase 8 §8.1 resolved paths + parsed critical-agent set ────────
+    @property
+    def opsctl_critical_agents_set(self) -> frozenset[str]:
+        """Comma-separated agent ids (whitespace-tolerant) that require
+        typed-token confirmation for destructive ops console commands."""
+        return frozenset(
+            tok.strip()
+            for tok in self.opsctl_critical_agents.split(",")
+            if tok.strip()
+        )
+
+    @property
+    def opsctl_audit_path_resolved(self) -> str:
+        """Empty ``opsctl_audit_path`` → ``<data_dir>/maint/opsctl_audit.csv``."""
+        if self.opsctl_audit_path:
+            return self.opsctl_audit_path
+        return os.path.join(self.data_dir, "maint", "opsctl_audit.csv")
+
+    @property
+    def opsctl_spool_dir_resolved(self) -> str:
+        """Empty ``opsctl_spool_dir`` → ``<data_dir>/maint/opsctl_spool``."""
+        if self.opsctl_spool_dir:
+            return self.opsctl_spool_dir
+        return os.path.join(self.data_dir, "maint", "opsctl_spool")
 
     def validate(self, *, strict: bool = False) -> list[str]:
         """
@@ -839,6 +898,28 @@ class Config:
         _bounded("sec_alert_debounce_ttl_s", self.sec_alert_debounce_ttl_s, 0, 86_400)
         _bounded("sec_alert_debouncer_max_buckets", self.sec_alert_debouncer_max_buckets, 1, 10_000_000)
         _bounded("qa_request_v1_dedup_window_s", self.qa_request_v1_dedup_window_s, 1, 86_400)
+
+        # Phase 8 §8.1 — ops console budgets + ack payload caps.
+        _bounded("opsctl_ack_timeout_ms", self.opsctl_ack_timeout_ms, 1, 600_000)
+        _bounded("opsctl_spool_max_entries", self.opsctl_spool_max_entries, 1, 1_000_000)
+        _bounded("maint_ack_payload_max_bytes", self.maint_ack_payload_max_bytes, 64, 1_048_576)
+        _bounded("maint_ack_reason_max_bytes", self.maint_ack_reason_max_bytes, 16, 65_536)
+        _bounded("maint_ack_details_max_bytes", self.maint_ack_details_max_bytes, 64, 1_048_576)
+        # Reason + details together must fit inside the total payload cap
+        # with room for the fixed-shape JSON wrapper (~256 bytes for the
+        # request_id/accepted/accepted_by/processed_at/attempt fields).
+        _ACK_FIXED_OVERHEAD = 256
+        if (
+            self.maint_ack_reason_max_bytes
+            + self.maint_ack_details_max_bytes
+            + _ACK_FIXED_OVERHEAD
+            > self.maint_ack_payload_max_bytes
+        ):
+            issues.append(
+                "maint_ack_payload_max_bytes is too small for "
+                "maint_ack_reason_max_bytes + maint_ack_details_max_bytes "
+                f"(+ {_ACK_FIXED_OVERHEAD}B fixed overhead)"
+            )
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)
