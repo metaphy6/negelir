@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 58,
+    "build": 62,
     "released": null
   },
   "components": {
@@ -14,19 +14,19 @@
       "last_changed": "2026-05-05T10:45:32+00:00"
     },
     "server": {
-      "version": "1.6.1",
+      "version": "1.6.2",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-05-05T07:36:48+00:00"
+      "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.7.0",
+      "version": "3.8.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-05T11:09:14+00:00"
+      "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "docs": {
-      "version": "1.20.1",
+      "version": "1.20.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T10:18:29+00:00"
+      "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.23.0",
+      "version": "0.24.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T10:18:29+00:00"
+      "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2076,6 +2076,42 @@
       "from": "3.6.0",
       "to": "3.7.0",
       "build": 58
+    },
+    {
+      "timestamp": "2026-05-05T12:57:44+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 maint reactors: scaler, dlq, schema sentinel, sec; clock + leader + backpressure + source-watcher SDK shim; Lua sec_denylist_decimate v1.0.0",
+      "from": "0.23.0",
+      "to": "0.24.0",
+      "build": 59
+    },
+    {
+      "timestamp": "2026-05-05T12:57:44+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8 advisory-lock registry + BoundLock ctx mgr + tests",
+      "from": "3.7.0",
+      "to": "3.8.0",
+      "build": 60
+    },
+    {
+      "timestamp": "2026-05-05T12:57:44+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 8 embedded sec_denylist_decimate.lua copy",
+      "from": "1.6.1",
+      "to": "1.6.2",
+      "build": 61
+    },
+    {
+      "timestamp": "2026-05-05T12:57:44+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8 SWARM.md MAINT_EVENT_V1_ALLOWED_PRODUCERS sync",
+      "from": "1.20.1",
+      "to": "1.20.2",
+      "build": 62
     }
   ]
 }

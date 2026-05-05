@@ -98,12 +98,12 @@ class TestDryRunNoSideEffects(unittest.TestCase):
             cfg = Config()
             self.assertFalse(Path(cfg.opsctl_audit_path_resolved).exists())
 
-    def test_quarantine_clear_dry_run_empty_expected_acks(self) -> None:
+    def test_quarantine_clear_dry_run_routes_to_maint_sec(self) -> None:
         with TemporaryDirectory() as tmp, _Env(tmp):
             out = self._run_dry(quarantine_clear, "sample-2")
             self.assertEqual(out["op"], "quarantine-clear")
-            # §8.7 consumer pending — empty expected ack set.
-            self.assertEqual(out["expected_acks"], [])
+            # §8.7 consumer landed: maint.sec.v1 owns the FP loop.
+            self.assertEqual(out["expected_acks"], ["maint.sec.v1"])
 
     def test_spool_flush_dry_run_lists_entries(self) -> None:
         with TemporaryDirectory() as tmp, _Env(tmp):

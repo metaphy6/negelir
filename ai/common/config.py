@@ -583,6 +583,59 @@ class Config:
     maint_ack_reason_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_REASON_MAX_BYTES", "512")))
     maint_ack_details_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES", "2048")))
 
+    # ── Phase 8 §8.2 — `maint.scaler.v1` agent ────────────────────────
+    # Decision window in ms: one scale_decision per target per window.
+    # Anchored on a monotonic clock (CLOCK_BOOTTIME on Linux when
+    # `maint_scaler_clock_source=auto`); a wall-clock NTP step cannot
+    # collapse two windows into one.
+    maint_scaler_decision_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_DECISION_WINDOW_MS", "30000")))
+    maint_scaler_clock_source: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_CLOCK_SOURCE", "auto"))
+    maint_scaler_max_targets: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_TARGETS", "256")))
+    maint_scaler_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_REPLICAS", "16")))
+    maint_scaler_min_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MIN_REPLICAS", "1")))
+    maint_scaler_scale_up_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_SCALE_UP_QUEUE_DEPTH", "50")))
+    maint_scaler_scale_down_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_SCALE_DOWN_QUEUE_DEPTH", "5")))
+    maint_scaler_scale_up_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCALER_SCALE_UP_HEAD_AGE_S", "30")))
+    maint_scaler_hysteresis_windows: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_HYSTERESIS_WINDOWS", "3")))
+    maint_scaler_hysteresis_grace: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_HYSTERESIS_GRACE", "1")))
+    maint_scaler_max_changes_per_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_CHANGES_PER_WINDOW", "4")))
+    maint_scaler_manual_pin_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MANUAL_PIN_TTL_S", "1800")))
+
+    # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
+    maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
+    maint_dlq_replay_backoff_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S", "60")))
+    maint_dlq_backoff_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_BACKOFF_LRU", "1024")))
+
+    # ── Phase 8 §8.6 — `maint.schema.v1` sentinel ────────────────────
+    maint_schema_sample_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S", "5")))
+    maint_schema_burst: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_BURST", "10")))
+    maint_schema_drift_debounce_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_DRIFT_DEBOUNCE_S", "60")))
+    maint_schema_drift_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_DRIFT_LRU", "512")))
+
+    # ── Phase 8 §8.7 + §8.8 — `maint.sec.v1` agent ───────────────────
+    maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_TTL_S", "604800")))
+    maint_sec_pattern_promote_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD", "1")))
+    maint_sec_request_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_REQUEST_LRU", "2048")))
+
+    # ── Phase 8 §8.10 — broadcast pause ──────────────────────────────
+    maint_pause_default_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S", "600")))
+    maint_silence_dedup_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SILENCE_DEDUP_S", "300")))
+
+    # ── Phase 8 §8.11 — three-tier backpressure ──────────────────────
+    maint_backpressure_yellow_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_FACTOR", "4.0")))
+    maint_backpressure_yellow_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_QUEUE_DEPTH", "200")))
+    maint_backpressure_yellow_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_HEAD_AGE_S", "60")))
+    maint_backpressure_yellow_storage_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_STORAGE_PCT", "75")))
+    maint_backpressure_yellow_error_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_ERROR_RATE_PER_S", "1")))
+    maint_backpressure_red_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_QUEUE_DEPTH", "1000")))
+    maint_backpressure_red_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_HEAD_AGE_S", "300")))
+    maint_backpressure_red_storage_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_STORAGE_PCT", "92")))
+    maint_backpressure_red_error_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S", "10")))
+
+    # ── Phase 8 §8.14 — audit log ────────────────────────────────────
+    maint_audit_hmac_key_b64: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AUDIT_HMAC_KEY_B64", ""))
+    maint_audit_partition_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS", "365")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -940,6 +993,64 @@ class Config:
                 "maint_ack_reason_max_bytes + maint_ack_details_max_bytes "
                 f"(+ {_ACK_FIXED_OVERHEAD}B fixed overhead)"
             )
+
+        # Phase 8 §8.2 — scaler.
+        _bounded("maint_scaler_decision_window_ms", self.maint_scaler_decision_window_ms, 100, 86_400_000)
+        _bounded("maint_scaler_max_targets", self.maint_scaler_max_targets, 1, 1_000_000)
+        _bounded("maint_scaler_max_replicas", self.maint_scaler_max_replicas, 1, 10_000)
+        _bounded("maint_scaler_min_replicas", self.maint_scaler_min_replicas, 0, 10_000)
+        _bounded("maint_scaler_scale_up_queue_depth", self.maint_scaler_scale_up_queue_depth, 1, 10_000_000)
+        _bounded("maint_scaler_scale_down_queue_depth", self.maint_scaler_scale_down_queue_depth, 0, 10_000_000)
+        _bounded("maint_scaler_scale_up_head_age_s", self.maint_scaler_scale_up_head_age_s, 0.0, 86_400.0)
+        _bounded("maint_scaler_hysteresis_windows", self.maint_scaler_hysteresis_windows, 1, 1_000)
+        _bounded("maint_scaler_hysteresis_grace", self.maint_scaler_hysteresis_grace, 0, 1_000)
+        _bounded("maint_scaler_max_changes_per_window", self.maint_scaler_max_changes_per_window, 1, 1_000)
+        _bounded("maint_scaler_manual_pin_ttl_s", self.maint_scaler_manual_pin_ttl_s, 1, 604_800)
+        if self.maint_scaler_clock_source not in ("auto", "boottime", "monotonic"):
+            issues.append(
+                f"maint_scaler_clock_source={self.maint_scaler_clock_source!r} "
+                "must be one of: auto, boottime, monotonic"
+            )
+
+        # Phase 8 §8.5 — DLQ supervisor.
+        _bounded("maint_dlq_per_topic_quota", self.maint_dlq_per_topic_quota, 1, 10_000_000)
+        _bounded("maint_dlq_replay_backoff_s", self.maint_dlq_replay_backoff_s, 1, 86_400)
+        _bounded("maint_dlq_backoff_lru", self.maint_dlq_backoff_lru, 1, 1_000_000)
+
+        # Phase 8 §8.6 — schema sentinel.
+        _bounded("maint_schema_sample_rate_per_s", self.maint_schema_sample_rate_per_s, 0.0, 10_000.0)
+        _bounded("maint_schema_burst", self.maint_schema_burst, 1, 10_000)
+        _bounded("maint_schema_drift_debounce_s", self.maint_schema_drift_debounce_s, 1, 86_400)
+        _bounded("maint_schema_drift_lru", self.maint_schema_drift_lru, 1, 1_000_000)
+
+        # Phase 8 §8.7 + §8.8 — sec maint.
+        _bounded("maint_sec_pattern_ttl_s", self.maint_sec_pattern_ttl_s, 1, 31_536_000)
+        _bounded("maint_sec_pattern_promote_threshold", self.maint_sec_pattern_promote_threshold, 1, 1_000_000)
+        _bounded("maint_sec_request_lru", self.maint_sec_request_lru, 1, 1_000_000)
+
+        # Phase 8 §8.10 — pause/resume.
+        _bounded("maint_pause_default_ttl_s", self.maint_pause_default_ttl_s, 1, 604_800)
+        _bounded("maint_silence_dedup_s", self.maint_silence_dedup_s, 1, 86_400)
+
+        # Phase 8 §8.11 — backpressure.
+        _bounded("maint_backpressure_yellow_factor", self.maint_backpressure_yellow_factor, 1.0, 1_000.0)
+        _bounded("maint_backpressure_yellow_queue_depth", self.maint_backpressure_yellow_queue_depth, 1, 100_000_000)
+        _bounded("maint_backpressure_yellow_head_age_s", self.maint_backpressure_yellow_head_age_s, 0.0, 86_400.0)
+        _bounded("maint_backpressure_yellow_storage_pct", self.maint_backpressure_yellow_storage_pct, 0.0, 100.0)
+        _bounded("maint_backpressure_yellow_error_rate_per_s", self.maint_backpressure_yellow_error_rate_per_s, 0.0, 1_000_000.0)
+        _bounded("maint_backpressure_red_queue_depth", self.maint_backpressure_red_queue_depth, 1, 100_000_000)
+        _bounded("maint_backpressure_red_head_age_s", self.maint_backpressure_red_head_age_s, 0.0, 86_400.0)
+        _bounded("maint_backpressure_red_storage_pct", self.maint_backpressure_red_storage_pct, 0.0, 100.0)
+        _bounded("maint_backpressure_red_error_rate_per_s", self.maint_backpressure_red_error_rate_per_s, 0.0, 1_000_000.0)
+        if self.maint_backpressure_yellow_queue_depth >= self.maint_backpressure_red_queue_depth:
+            issues.append("maint_backpressure_yellow_queue_depth must be < maint_backpressure_red_queue_depth")
+        if self.maint_backpressure_yellow_head_age_s >= self.maint_backpressure_red_head_age_s:
+            issues.append("maint_backpressure_yellow_head_age_s must be < maint_backpressure_red_head_age_s")
+        if self.maint_backpressure_yellow_storage_pct >= self.maint_backpressure_red_storage_pct:
+            issues.append("maint_backpressure_yellow_storage_pct must be < maint_backpressure_red_storage_pct")
+
+        # Phase 8 §8.14 — audit retention.
+        _bounded("maint_audit_partition_retention_days", self.maint_audit_partition_retention_days, 1, 36_500)
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

@@ -64,10 +64,19 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "baseline_reset":    frozenset({"sec.scrape.v1"}),
     # Phase 7 §7.1 / Phase 8 §8.3 — storage.v1 owns quarantine_samples.
     "quarantine_erase":  frozenset({"storage.v1"}),
-    # Phase 8 §8.7 — FP feedback loop. The maint.sec.v1 reactor lands
-    # in §8.7; until then it routes to empty (boundary test asserts
-    # intent via KINDS_PENDING_CONSUMER_LANDING).
-    "quarantine_clear":  frozenset(),
+    # Phase 8 §8.7 — FP feedback loop. Consumed by maint.sec.v1.
+    "quarantine_clear":  frozenset({"maint.sec.v1"}),
+    # Phase 8 §8.2 — operator pins replica count on a scalable agent.
+    "manual_scale_pin":  frozenset({"maint.scaler.v1"}),
+    # Phase 8 §8.5 — operator-driven DLQ replay request.
+    "dlq_replay":        frozenset({"maint.dlq.v1"}),
+    # Phase 8 §8.8 — operator forces decimation sweep now.
+    "denylist_decimate_now": frozenset({"maint.sec.v1"}),
+    # Phase 8 §8.10 — broadcast pause/resume for the maintenance plane.
+    # Expanded dynamically when target='all'; for fixed targets (single
+    # agent id), the consumer set is just that agent.
+    "maint_pause":       frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
+    "maint_resume":      frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
 }
 
 # Kinds whose consumer set is empty BY DESIGN at this point in the
@@ -76,7 +85,6 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
 KINDS_PENDING_CONSUMER_LANDING: Final[Mapping[str, str]] = {
     "retrain_request":  "Phase 5.x (trainer-as-agent) + Phase 8.2 (scaler warm-up)",
     "retrain_approve":  "Phase 5.x (trainer-as-agent)",
-    "quarantine_clear": "Phase 8.7 (maint.sec.v1 FP feedback loop)",
 }
 
 # Stable, alphabetised view of all known kinds (test imports this).

@@ -43,6 +43,22 @@ from typing import FrozenSet
 MAINT_EVENT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
     "drift.v1",
     "ops_console",
+    # Phase 8 self-maintenance reactors. Each emits notifications on
+    # `maint.event.v1` (the bus's "maintenance happened" channel):
+    #   * ``maint.scaler.v1``  — scale_decision / scale_throttled /
+    #                            manual_scale_pin_expired
+    #   * ``maint.dlq.v1``      — dlq_replayed (and dlq_replay_throttled)
+    #   * ``maint.schema.v1``   — schema_drift_detected
+    #   * ``maint.sec.v1``      — pattern_allowlist_pending /
+    #                             pattern_allowlist_added /
+    #                             pattern_allowlist_expired /
+    #                             denylist_decimate / denylist_cap_cleared
+    #   * ``source.watcher.v1`` — schema_drift_detected (source-side)
+    "maint.scaler.v1",
+    "maint.dlq.v1",
+    "maint.schema.v1",
+    "maint.sec.v1",
+    "source.watcher.v1",
 })
 
 

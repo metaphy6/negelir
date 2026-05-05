@@ -118,13 +118,15 @@ class TestPublishUnknownAndNoConsumer(unittest.TestCase):
             self.assertEqual(result.exit_code, ExitCode.UNKNOWN_KIND)
 
     def test_no_consumer_for_kind(self) -> None:
-        # quarantine_clear is registered but has empty consumer set.
+        # retrain_request is registered but has empty consumer set
+        # (KINDS_PENDING_CONSUMER_LANDING — Phase 5.x trainer agent).
         with TemporaryDirectory() as tmp, _OpsctlEnvOverrides(tmp, ack_timeout_ms=100):
             bus = InMemoryBus()
             msg = build_envelope(
-                kind="quarantine_clear",
-                target="sample-1",
+                kind="retrain_request",
+                target="model-x",
                 client_id="opsctl-test",
+                extra_payload={"reason": "brier_floor"},
             )
             result = publish_event(bus, msg)
             self.assertEqual(result.exit_code, ExitCode.NO_CONSUMER_FOR_KIND)

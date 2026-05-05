@@ -145,6 +145,43 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
     },
+    "manual_scale_pin": {
+        "kind": "manual_scale_pin",
+        "target": "pred.elo.v1",
+        "replicas": 3,
+        "request_id": "req-007",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "dlq_replay": {
+        "kind": "dlq_replay",
+        "target": "predict.vote.dlq",
+        "request_id": "req-008",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "denylist_decimate_now": {
+        "kind": "denylist_decimate_now",
+        "target": "all",
+        "request_id": "req-009",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "maint_pause": {
+        "kind": "maint_pause",
+        "target": "all",
+        "ttl_s": 300,
+        "request_id": "req-010",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "maint_resume": {
+        "kind": "maint_resume",
+        "target": "all",
+        "request_id": "req-011",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
 }
 
 

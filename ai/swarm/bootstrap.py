@@ -46,6 +46,10 @@ from .agents.predictors.lgbm_market import LgbmMarketPredictor
 from .agents.proofreader.aggregator import ProofreaderAggregatorAgent
 from .agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
 from .agents.reactor import InMemoryLedger
+from .agents.maint.dlq import MaintDlqSupervisor
+from .agents.maint.scaler import MaintScaler
+from .agents.maint.schema import MaintSchemaSentinel
+from .agents.maint.sec import MaintSecAgent
 from .agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from .agents.telemetry import TelemetryAgent
 from .sdk.agent import Agent
@@ -89,6 +93,13 @@ SINGLE_INSTANCE_AGENTS: frozenset[str] = frozenset({
     "proofreader_aggregator.v1",
     "drift.v1",
     "sec.rate.v1",
+    # Phase 8 maint plane — all four hold per-target / per-pattern
+    # state that is NOT shared via the bus. Hot-spare runs behind
+    # the §8.10 leader-election Protocol; v1 ships single-leader.
+    "maint.scaler.v1",
+    "maint.dlq.v1",
+    "maint.schema.v1",
+    "maint.sec.v1",
 })
 
 
@@ -168,6 +179,13 @@ def build_agents() -> list[Agent]:
     sec_input = SecInputAgent()
     sec_scrape = SecScrapeAgent()
     sec_rate = SecRateAgent()
+    # Phase 8 self-maintenance reactors. Each is leader-gated and
+    # joins SINGLE_INSTANCE_AGENTS above. The §8.3 backup agent is
+    # NOT yet wired (deferred — see ROADMAP §8.3 checklist).
+    maint_scaler = MaintScaler()
+    maint_dlq = MaintDlqSupervisor()
+    maint_schema = MaintSchemaSentinel()
+    maint_sec = MaintSecAgent()
     return [
         *predictors,
         consensus,
@@ -179,6 +197,10 @@ def build_agents() -> list[Agent]:
         sec_input,
         sec_scrape,
         sec_rate,
+        maint_scaler,
+        maint_dlq,
+        maint_schema,
+        maint_sec,
     ]
 
 

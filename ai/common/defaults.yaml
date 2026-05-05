@@ -281,6 +281,48 @@ phase8:
   maint_ack_payload_max_bytes: 4096                # NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES
   maint_ack_reason_max_bytes: 512                  # NEGELIR_MAINT_ACK_REASON_MAX_BYTES
   maint_ack_details_max_bytes: 2048                # NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES
+  # ── §8.2 maint.scaler.v1 ──
+  maint_scaler_decision_window_ms: 30000           # NEGELIR_MAINT_SCALER_DECISION_WINDOW_MS
+  maint_scaler_clock_source: auto                  # NEGELIR_MAINT_SCALER_CLOCK_SOURCE
+  maint_scaler_max_targets: 256                    # NEGELIR_MAINT_SCALER_MAX_TARGETS
+  maint_scaler_max_replicas: 16                    # NEGELIR_MAINT_SCALER_MAX_REPLICAS
+  maint_scaler_min_replicas: 1                     # NEGELIR_MAINT_SCALER_MIN_REPLICAS
+  maint_scaler_scale_up_queue_depth: 50            # NEGELIR_MAINT_SCALER_SCALE_UP_QUEUE_DEPTH
+  maint_scaler_scale_down_queue_depth: 5           # NEGELIR_MAINT_SCALER_SCALE_DOWN_QUEUE_DEPTH
+  maint_scaler_scale_up_head_age_s: 30             # NEGELIR_MAINT_SCALER_SCALE_UP_HEAD_AGE_S
+  maint_scaler_hysteresis_windows: 3               # NEGELIR_MAINT_SCALER_HYSTERESIS_WINDOWS
+  maint_scaler_hysteresis_grace: 1                 # NEGELIR_MAINT_SCALER_HYSTERESIS_GRACE
+  maint_scaler_max_changes_per_window: 4           # NEGELIR_MAINT_SCALER_MAX_CHANGES_PER_WINDOW
+  maint_scaler_manual_pin_ttl_s: 1800              # NEGELIR_MAINT_SCALER_MANUAL_PIN_TTL_S
+  # ── §8.5 maint.dlq.v1 ──
+  maint_dlq_per_topic_quota: 100                   # NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA
+  maint_dlq_replay_backoff_s: 60                   # NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S
+  maint_dlq_backoff_lru: 1024                      # NEGELIR_MAINT_DLQ_BACKOFF_LRU
+  # ── §8.6 maint.schema.v1 ──
+  maint_schema_sample_rate_per_s: 5                # NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S
+  maint_schema_burst: 10                           # NEGELIR_MAINT_SCHEMA_BURST
+  maint_schema_drift_debounce_s: 60                # NEGELIR_MAINT_SCHEMA_DRIFT_DEBOUNCE_S
+  maint_schema_drift_lru: 512                      # NEGELIR_MAINT_SCHEMA_DRIFT_LRU
+  # ── §8.7 + §8.8 maint.sec.v1 ──
+  maint_sec_pattern_ttl_s: 604800                  # NEGELIR_MAINT_SEC_PATTERN_TTL_S
+  maint_sec_pattern_promote_threshold: 1           # NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD
+  maint_sec_request_lru: 2048                      # NEGELIR_MAINT_SEC_REQUEST_LRU
+  # ── §8.10 broadcast pause/resume ──
+  maint_pause_default_ttl_s: 600                   # NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S
+  maint_silence_dedup_s: 300                       # NEGELIR_MAINT_SILENCE_DEDUP_S
+  # ── §8.11 three-tier backpressure ──
+  maint_backpressure_yellow_factor: 4.0            # NEGELIR_MAINT_BACKPRESSURE_YELLOW_FACTOR
+  maint_backpressure_yellow_queue_depth: 200       # NEGELIR_MAINT_BACKPRESSURE_YELLOW_QUEUE_DEPTH
+  maint_backpressure_yellow_head_age_s: 60         # NEGELIR_MAINT_BACKPRESSURE_YELLOW_HEAD_AGE_S
+  maint_backpressure_yellow_storage_pct: 75        # NEGELIR_MAINT_BACKPRESSURE_YELLOW_STORAGE_PCT
+  maint_backpressure_yellow_error_rate_per_s: 1    # NEGELIR_MAINT_BACKPRESSURE_YELLOW_ERROR_RATE_PER_S
+  maint_backpressure_red_queue_depth: 1000         # NEGELIR_MAINT_BACKPRESSURE_RED_QUEUE_DEPTH
+  maint_backpressure_red_head_age_s: 300           # NEGELIR_MAINT_BACKPRESSURE_RED_HEAD_AGE_S
+  maint_backpressure_red_storage_pct: 92           # NEGELIR_MAINT_BACKPRESSURE_RED_STORAGE_PCT
+  maint_backpressure_red_error_rate_per_s: 10      # NEGELIR_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S
+  # ── §8.14 audit log ──
+  maint_audit_hmac_key_b64: ""                     # NEGELIR_MAINT_AUDIT_HMAC_KEY_B64
+  maint_audit_partition_retention_days: 365        # NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS
 
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
