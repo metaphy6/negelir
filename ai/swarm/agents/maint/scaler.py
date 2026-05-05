@@ -34,7 +34,7 @@ import secrets
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Iterable, Protocol
+from typing import Callable, Iterable
 from uuid import uuid4
 
 from common.config import cfg as _cfg
@@ -44,6 +44,7 @@ from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT
+from .runtime import NoopController, RuntimeController  # re-exported
 
 _log = logging.getLogger("swarm.agents.maint.scaler")
 
@@ -79,31 +80,34 @@ def _parse_overrides_csv(raw: str) -> dict[str, int]:
     return out
 
 
-# ── Runtime controller protocol ─────────────────────────────────────────
-class RuntimeController(Protocol):
-    """Pluggable shim that turns a (target, replicas) decision into
-    real platform action. v1 ships :class:`NoopController`; the
-    docker-compose driver lands in §8.16."""
+# ── Decision reason taxonomy ─────────────────────────────────────────
+# Reason codes attached to ``scale_decision.reason`` (binding per
+# ROADMAP §8.2). The set is closed for now — extending it requires a
+# minor bump on the ``swarm`` component (so consumers can roll a
+# discriminator without surprise).
+DECISION_REASONS: frozenset[str] = frozenset({
+    "queue_depth_high",
+    "head_age_high",
+    "queue_depth_low",
+    "manual_pin",
+    "retrain_request_warmup",
+})
 
-    name: str
-
-    def apply(self, target: str, replicas: int) -> bool:
-        """Return True iff the controller accepted the action."""
-        ...
-
-
-class NoopController:
-    """Default — records actions, never touches the platform.
-    Useful for tests and for a leader that has no driver wired."""
-
-    name = "noop"
-
-    def __init__(self) -> None:
-        self.applied: list[tuple[str, int]] = []
-
-    def apply(self, target: str, replicas: int) -> bool:
-        self.applied.append((target, replicas))
-        return True
+# Throttle reason taxonomy attached to ``scale_throttled.reason``.
+# Open within shape; consumers route by severity. Adding a code
+# requires a minor bump (so dashboards can colour the new bucket).
+THROTTLE_REASONS: frozenset[str] = frozenset({
+    "max_replicas_cap",
+    "min_replicas_floor",
+    "hysteresis_block",
+    "manual_pin_active",
+    "max_changes_per_window",
+    "min_decision_interval",
+    "global_max_replicas",
+    "vram_budget_exceeded",
+    "vram_telemetry_stale",
+    "runtime_failed",
+})
 
 
 # ── Decision dataclass ──────────────────────────────────────────────────
@@ -112,6 +116,7 @@ class _TargetState:
     """Per-target rolling window: last decisions + manual pin."""
 
     last_window_ns: int = 0
+    last_decision_at_ns: int = 0
     last_replicas: int = 1
     history: deque[int] = field(default_factory=lambda: deque(maxlen=8))
     pin_replicas: int | None = None
@@ -165,6 +170,19 @@ class MaintScaler:
         # envelopes do not double-emit warm-up scale_decisions.
         self._warmup_seen: "OrderedDict[str, None]" = OrderedDict()
         self._warmup_seen_max: int = 1024
+        # §8.2 VRAM accounting — a tiny in-memory probe map
+        # ``{target: {vram_total_mb, vram_used_mb, vram_per_replica_mb,
+        # observed_at_ns}}``. Populated externally via
+        # :meth:`update_device_probe`. Stale probes (older than 5
+        # decision windows) are treated as ``vram_telemetry_stale``
+        # and the scaler refuses to scale up that target until fresh
+        # data arrives — fail-safe over fail-amnesia.
+        self._device_probes: dict[str, dict[str, float]] = {}
+        # §8.2 telemetry counters keyed on (agent, kind, reason). Used
+        # by ``metrics_snapshot()`` and the Phase 8.9 surface coverage
+        # test that proves every reason in DECISION_REASONS ∪
+        # THROTTLE_REASONS gets exercised by the agent.
+        self._counters: dict[tuple[str, str, str], int] = {}
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -212,14 +230,21 @@ class MaintScaler:
         st.pin_replicas = replicas
         st.pin_expires_at_ns = self._now_ns() + ttl_s * 1_000_000_000
         accepted = self._controller.apply(target, replicas)
+        prev = st.last_replicas
         yield self._notify("scale_decision",
                            target=target,
                            extra={"replicas": replicas,
+                                  "prev": prev,
+                                  "next": replicas,
+                                  "reason": "manual_pin",
+                                  "observed": {"ttl_s": ttl_s},
                                   "source": "manual_pin",
                                   "controller": self._controller.name,
                                   "controller_accepted": accepted,
                                   "decision_window_id": self._window_id()})
+        self._bump_counter("scale_decision", "manual_pin")
         st.last_replicas = replicas
+        st.last_decision_at_ns = self._now_ns()
         yield self._ack(msg, request_id, accepted=True, reason="pin_set",
                         details={"ttl_s": ttl_s})
 
@@ -271,14 +296,21 @@ class MaintScaler:
         if st.last_replicas >= warmup_replicas:
             return
         accepted = self._controller.apply(warmup_target, warmup_replicas)
+        prev = st.last_replicas
         st.last_replicas = warmup_replicas
         st.history.append(warmup_replicas)
         st.last_window_ns = self._window_anchor()
+        st.last_decision_at_ns = self._now_ns()
+        self._bump_counter("scale_decision", "retrain_request_warmup")
         yield self._notify(
             "scale_decision",
             target=warmup_target,
             extra={
                 "replicas": warmup_replicas,
+                "prev": prev,
+                "next": warmup_replicas,
+                "reason": "retrain_request_warmup",
+                "observed": {},
                 "source": "retrain_request_warmup",
                 "controller": self._controller.name,
                 "controller_accepted": accepted,
@@ -304,14 +336,19 @@ class MaintScaler:
         emitted = 0
         window_anchor = self._window_anchor()
         window_id = self._window_id()
+        min_interval_ns = int(
+            float(_cfg.maint_scaler_min_decision_interval_s) * 1_000_000_000
+        )
+        global_cap = max(1, int(_cfg.maint_scaler_global_max_replicas))
+        roster_total = sum(
+            (st.last_replicas or 0) for st in self._targets.values()
+        )
         for target, sig in signals.items():
             st = self._evict_and_get(target)
             if st.last_window_ns >= window_anchor:
                 continue  # already decided in this window
             if st.pin_replicas is not None:
-                # Pinned targets do not get automatic decisions but ARE
-                # observable as a throttled event so dashboards can see
-                # the suppression instead of a silent no-op.
+                self._bump_counter("scale_throttled", "manual_pin_active")
                 out.append(self._notify(
                     "scale_throttled",
                     target=target,
@@ -332,13 +369,68 @@ class MaintScaler:
                     }
                     if throttle_reason == "max_replicas_cap":
                         extra["max_replicas"] = self._max_replicas_for(target)
+                    self._bump_counter("scale_throttled", throttle_reason)
                     out.append(self._notify(
                         "scale_throttled",
                         target=target,
                         extra=extra,
                     ))
                 continue
+            # Time-based hysteresis (separate from per-window gate):
+            # refuse two decisions inside ``min_decision_interval_s``
+            # for the SAME target across distinct windows.
+            now_ns = self._now_ns()
+            if (
+                min_interval_ns > 0
+                and st.last_decision_at_ns > 0
+                and (now_ns - st.last_decision_at_ns) < min_interval_ns
+            ):
+                self._bump_counter("scale_throttled", "min_decision_interval")
+                out.append(self._notify(
+                    "scale_throttled",
+                    target=target,
+                    extra={
+                        "would_be": decision,
+                        "reason": "min_decision_interval",
+                        "min_decision_interval_s":
+                            float(_cfg.maint_scaler_min_decision_interval_s),
+                        "decision_window_id": window_id,
+                    },
+                ))
+                continue
+            # Global-roster cap — defends against a self-amplifying lag
+            # storm where every target wants +1 in the same tick.
+            projected = roster_total - (st.last_replicas or 0) + decision
+            if decision > st.last_replicas and projected > global_cap:
+                self._bump_counter("scale_throttled", "global_max_replicas")
+                out.append(self._notify(
+                    "scale_throttled",
+                    target=target,
+                    extra={
+                        "would_be": decision,
+                        "reason": "global_max_replicas",
+                        "global_max_replicas": global_cap,
+                        "decision_window_id": window_id,
+                    },
+                ))
+                continue
+            # VRAM budget guard — only on scale-up.
+            if decision > st.last_replicas:
+                vram_throttle = self._check_vram_budget(target, decision)
+                if vram_throttle is not None:
+                    self._bump_counter("scale_throttled", vram_throttle)
+                    out.append(self._notify(
+                        "scale_throttled",
+                        target=target,
+                        extra={
+                            "would_be": decision,
+                            "reason": vram_throttle,
+                            "decision_window_id": window_id,
+                        },
+                    ))
+                    continue
             if emitted >= max_changes:
+                self._bump_counter("scale_throttled", "max_changes_per_window")
                 out.append(self._notify(
                     "scale_throttled",
                     target=target,
@@ -351,19 +443,43 @@ class MaintScaler:
                 ))
                 continue
             accepted = self._controller.apply(target, decision)
+            decision_reason = self._classify_decision_reason(
+                st.last_replicas, decision, sig
+            )
+            self._bump_counter("scale_decision", decision_reason)
             out.append(self._notify("scale_decision",
                                     target=target,
                                     extra={"replicas": decision,
+                                           "prev": st.last_replicas,
+                                           "next": decision,
+                                           "reason": decision_reason,
+                                           "observed": dict(sig),
                                            "source": "auto",
                                            "controller": self._controller.name,
                                            "controller_accepted": accepted,
                                            "decision_window_id": window_id,
                                            "signals": dict(sig)}))
+            roster_total = roster_total - (st.last_replicas or 0) + decision
             st.last_replicas = decision
             st.history.append(decision)
             st.last_window_ns = window_anchor
+            st.last_decision_at_ns = now_ns
             emitted += 1
         return out
+
+    # ── Decision-reason classifier ─────────────────────────────────
+    def _classify_decision_reason(self, prev: int, new: int,
+                                  sig: dict[str, float]) -> str:
+        """Map a (prev, new, signals) tuple to a reason in
+        :data:`DECISION_REASONS`. Defensive: unknown shapes fall back
+        to ``queue_depth_high`` / ``queue_depth_low`` based on direction.
+        """
+        if new > prev:
+            head_age = float(sig.get("head_age_s", 0))
+            if head_age >= float(_cfg.maint_scaler_scale_up_head_age_s):
+                return "head_age_high"
+            return "queue_depth_high"
+        return "queue_depth_low"
 
     # ── Decision logic ───────────────────────────────────────────
     def _decide(self, target: str, st: _TargetState,
@@ -458,6 +574,72 @@ class MaintScaler:
         return window_anchor_ns(window_ms,
                                 now_ns=self._clock_ns() if self._clock_ns else None,
                                 source=str(_cfg.maint_scaler_clock_source))
+
+    # ── Counters / VRAM probe ────────────────────────────────────
+    def _bump_counter(self, kind: str, reason: str) -> None:
+        """Increment ``maint_scaler_decisions_total{agent,kind,reason}``."""
+        key = (self.name, kind, reason)
+        self._counters[key] = self._counters.get(key, 0) + 1
+
+    def metrics_snapshot(self) -> dict[str, int]:
+        """Return a flat dict for Prometheus-style export. Keys are
+        ``"maint_scaler_<kind>_total{agent=..,reason=..}"`` so a
+        downstream exporter can split them on ``{`` for label parsing."""
+        out: dict[str, int] = {}
+        for (agent, kind, reason), count in self._counters.items():
+            out[f"maint_scaler_{kind}_total{{agent={agent},reason={reason}}}"] = count
+        return out
+
+    def update_device_probe(self, target: str, *,
+                            vram_total_mb: float,
+                            vram_used_mb: float,
+                            vram_per_replica_mb: float,
+                            observed_at_ns: int | None = None) -> None:
+        """Push a fresh device probe for ``target``. Called by the
+        Phase 6.x device telemetry collector (or by tests directly).
+
+        The probe is treated as stale (and the scaler refuses to
+        scale up) once it is older than 5 decision windows.
+        """
+        self._device_probes[target] = {
+            "vram_total_mb": float(vram_total_mb),
+            "vram_used_mb": float(vram_used_mb),
+            "vram_per_replica_mb": float(vram_per_replica_mb),
+            "observed_at_ns": int(
+                observed_at_ns if observed_at_ns is not None else self._now_ns()
+            ),
+        }
+
+    def _check_vram_budget(self, target: str, projected_replicas: int) -> str | None:
+        """Return throttle reason if the projected replica count would
+        breach the per-host VRAM budget; else ``None``.
+
+        Two failure modes:
+        * ``"vram_telemetry_stale"`` — probe older than 5 decision
+          windows (or never observed). Fail-safe over fail-amnesia:
+          the scaler will not commit a scale-up it cannot account
+          for. The min/min_replicas floor is unaffected.
+        * ``"vram_budget_exceeded"`` — projected utilisation would
+          cross ``vram_total_mb - vram_headroom_mb``.
+        """
+        probe = self._device_probes.get(target)
+        if probe is None:
+            return None  # no probe yet → opt-in, no enforcement
+        window_ms = max(1, int(_cfg.maint_scaler_decision_window_ms))
+        max_age_ns = 5 * window_ms * 1_000_000
+        if (self._now_ns() - int(probe["observed_at_ns"])) > max_age_ns:
+            return "vram_telemetry_stale"
+        headroom = float(_cfg.maint_scaler_vram_headroom_mb)
+        budget = max(0.0, float(probe["vram_total_mb"]) - headroom)
+        per_replica = float(probe["vram_per_replica_mb"])
+        # Baseline: keep currently-used VRAM minus what the existing
+        # replicas account for, then add the projected count's draw.
+        current_replicas = max(1, self._targets.get(target, _TargetState()).last_replicas)
+        baseline = max(0.0, float(probe["vram_used_mb"]) - per_replica * current_replicas)
+        projected_used = baseline + per_replica * projected_replicas
+        if projected_used > budget:
+            return "vram_budget_exceeded"
+        return None
 
     # ── Emission helpers ─────────────────────────────────────────
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,

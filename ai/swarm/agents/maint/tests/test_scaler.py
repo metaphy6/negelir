@@ -191,3 +191,173 @@ def test_retrain_request_dedup_skips_duplicate(monkeypatch) -> None:
     second = list(agent.handle(msg))
     assert any(m.payload.get("kind") == "scale_decision" for m in first)
     assert not any(m.payload.get("kind") == "scale_decision" for m in second)
+
+
+# ── §8.2 final gap-fill: payload shape, runtime, hysteresis, VRAM, counters ──
+
+def test_scale_decision_payload_includes_prev_next_reason_observed(monkeypatch) -> None:
+    """ROADMAP §8.2 binding contract: every ``scale_decision`` carries
+    ``prev``, ``next``, ``reason``, ``observed`` alongside the legacy
+    ``replicas/source/signals`` keys (additive — back-compat preserved)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    agent = MaintScaler()
+    out = agent.tick({"predictor.elo": {"queue_depth": 100, "in_flight": 0, "head_age_s": 0}})
+    decisions = [m.payload for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions
+    p = decisions[0]
+    for k in ("prev", "next", "reason", "observed", "decision_window_id"):
+        assert k in p, f"missing {k!r} in {p!r}"
+    assert p["next"] == p["replicas"]  # additive, not replacement
+    assert p["reason"] in {"queue_depth_high", "head_age_high", "queue_depth_low",
+                           "manual_pin", "retrain_request_warmup"}
+
+
+def test_min_decision_interval_throttles_back_to_back(monkeypatch) -> None:
+    """A second decision for the same target inside
+    ``min_decision_interval_s`` must emit ``scale_throttled``."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_min_decision_interval_s", 60, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    agent = MaintScaler()
+    out1 = agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    assert any(m.payload.get("kind") == "scale_decision" for m in out1)
+    # Force a fresh decision-window — but min_decision_interval_s
+    # must still gate the second emission.
+    agent._targets["predictor.elo"].last_window_ns = 0
+    out2 = agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    throttled = [m.payload for m in out2 if m.payload.get("kind") == "scale_throttled"]
+    assert any(p.get("reason") == "min_decision_interval" for p in throttled)
+
+
+def test_global_max_replicas_throttles_aggregate(monkeypatch) -> None:
+    """Sum of desired replicas across the roster cannot exceed the
+    global cap. The over-cap target emits ``scale_throttled``."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_changes_per_window", 10, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_global_max_replicas", 2, raising=False)
+    agent = MaintScaler()
+    # Pre-populate one target at replicas=2 so the next scale-up
+    # would push the projected roster total to 3 > 2.
+    agent._evict_and_get("trainer.v1").last_replicas = 2
+    out = agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    throttled = [m.payload for m in out if m.payload.get("kind") == "scale_throttled"]
+    assert any(p.get("reason") == "global_max_replicas" for p in throttled)
+
+
+def test_vram_budget_exceeded_blocks_scale_up(monkeypatch) -> None:
+    """A device probe that reports near-full VRAM must throttle the
+    scale-up with ``vram_budget_exceeded``."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 512, raising=False)
+    agent = MaintScaler()
+    agent.update_device_probe(
+        "predictor.elo",
+        vram_total_mb=8192,
+        vram_used_mb=7000,
+        vram_per_replica_mb=2000,
+    )
+    out = agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    throttled = [m.payload for m in out if m.payload.get("kind") == "scale_throttled"]
+    assert any(p.get("reason") == "vram_budget_exceeded" for p in throttled)
+
+
+def test_vram_telemetry_stale_fail_safe(monkeypatch) -> None:
+    """A probe older than 5 decision windows must throttle as
+    ``vram_telemetry_stale`` rather than silently allowing the
+    scale-up."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_decision_window_ms", 1000, raising=False)
+    agent = MaintScaler()
+    # Inject a probe with observed_at_ns far in the past.
+    agent.update_device_probe(
+        "predictor.elo",
+        vram_total_mb=16384,
+        vram_used_mb=1000,
+        vram_per_replica_mb=1000,
+        observed_at_ns=1,  # ancient
+    )
+    out = agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    throttled = [m.payload for m in out if m.payload.get("kind") == "scale_throttled"]
+    assert any(p.get("reason") == "vram_telemetry_stale" for p in throttled)
+
+
+def test_metrics_snapshot_increments_on_decision(monkeypatch) -> None:
+    """Every emitted scale_decision must increment a labelled counter."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    agent = MaintScaler()
+    assert agent.metrics_snapshot() == {}
+    agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    snap = agent.metrics_snapshot()
+    assert snap, "expected at least one counter after a decision"
+    assert any(k.startswith("maint_scaler_scale_decision_total") for k in snap)
+
+
+def test_compose_controller_invokes_subprocess(tmp_path) -> None:
+    """ComposeController must shell out to ``docker compose --scale``
+    and surface the exit code."""
+    from swarm.agents.maint.runtime import ComposeController
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text("services: {}\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    class _Result:
+        returncode = 0
+        stderr = ""
+
+    def fake_runner(cmd, **kw):  # noqa: ANN001
+        calls.append(list(cmd))
+        return _Result()
+
+    ctl = ComposeController(compose_file=str(compose), timeout_s=5.0)
+    ctl._runner = fake_runner  # type: ignore[assignment]
+    assert ctl.apply("predictor.elo", 3) is True
+    assert calls and calls[0][0] == "docker"
+    assert "--scale" in calls[0]
+    assert "predictor.elo=3" in calls[0]
+
+
+def test_compose_controller_refuses_missing_file() -> None:
+    """Boot validation: the controller must refuse to construct when
+    the compose file does not exist on disk."""
+    import pytest
+    from swarm.agents.maint.runtime import ComposeController
+    with pytest.raises(FileNotFoundError):
+        ComposeController(compose_file="/nonexistent/docker-compose.yml")
+
+
+def test_runtime_factory_selects_noop_by_default(monkeypatch) -> None:
+    """``cfg.maint_runtime=none`` (default) must yield NoopController."""
+    from common.config import cfg
+    from swarm.agents.maint.runtime import NoopController, make_runtime_controller
+    monkeypatch.setattr(cfg, "maint_runtime", "none", raising=False)
+    assert isinstance(make_runtime_controller(), NoopController)
+
+
+def test_runtime_factory_refuses_k8s_until_phase_14(monkeypatch) -> None:
+    """``cfg.maint_runtime=k8s`` must refuse loud (no silent fall-back)."""
+    import pytest
+    from common.config import cfg
+    from swarm.agents.maint.runtime import make_runtime_controller
+    monkeypatch.setattr(cfg, "maint_runtime", "k8s", raising=False)
+    with pytest.raises(NotImplementedError):
+        make_runtime_controller()
+
+
+def test_cfg_rejects_unknown_maint_runtime() -> None:
+    """Boot validation: unknown ``maint_runtime`` value must raise.
+
+    We construct a fresh AppConfig on the side and exercise its
+    validator directly so we do NOT mutate the process-wide ``cfg``
+    singleton (which would leak into every later test in the suite).
+    """
+    from common.config import Config
+    side = Config()
+    side.maint_runtime = "kubernetes_v2"  # type: ignore[assignment]
+    issues = side.validate()
+    assert any("maint_runtime" in x for x in issues), \
+        f"expected validator to flag maint_runtime, got: {issues!r}"

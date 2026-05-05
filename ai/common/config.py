@@ -610,6 +610,35 @@ class Config:
     # ``retrain_request`` warm-up. Kept tiny by default — the trainer
     # is the action-of-record; the scaler only ensures one warm pod.
     maint_scaler_warmup_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_WARMUP_REPLICAS", "1")))
+    # Runtime selector for the scaler's ``RuntimeController``. ``none``
+    # makes the scaler a pure observer (decisions emit; runtime calls
+    # are skipped). ``compose`` invokes ``docker compose --scale`` via
+    # subprocess. ``k8s`` is reserved for Phase 14 — boot raises until
+    # the K8s controller lands.
+    maint_runtime: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_RUNTIME", "none"))
+    # Compose file used by ``ComposeController`` when
+    # ``maint_runtime=compose``. Boot validation refuses to start if
+    # the file does not exist on disk.
+    maint_scaler_compose_file: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_COMPOSE_FILE", "docker-compose.yml"))
+    # Subprocess timeout for any runtime call (compose / k8s patch).
+    maint_scaler_runtime_timeout_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCALER_RUNTIME_TIMEOUT_S", "30")))
+    # Hard global cap across every target — defends against runaway
+    # auto-scale during a self-amplifying lag storm. The per-target
+    # cap (``maint_scaler_max_replicas`` + overrides) is applied
+    # first; this cap is enforced on the *sum* of desired replicas
+    # before issuing the runtime call.
+    maint_scaler_global_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_GLOBAL_MAX_REPLICAS", "64")))
+    # Minimum interval between two scale_decision events for the SAME
+    # target across distinct decision windows. Lower than this and
+    # the candidate decision is coalesced (latest-wins, no runtime
+    # call) and emits ``scale_throttled{reason=min_decision_interval}``.
+    # Wall-clock-of-monotonic, set in seconds — defaults to 90s per
+    # ROADMAP §8.2 binding.
+    maint_scaler_min_decision_interval_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCALER_MIN_DECISION_INTERVAL_S", "90")))
+    # Headroom (MB) subtracted from total per-host VRAM before the
+    # scaler computes its budget. Stops the scaler from packing pods
+    # so densely that any one pod's transient spike OOMs the host.
+    maint_scaler_vram_headroom_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB", "1024")))
 
     # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
     maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
@@ -1035,6 +1064,15 @@ class Config:
         _bounded("maint_scaler_max_changes_per_window", self.maint_scaler_max_changes_per_window, 1, 1_000)
         _bounded("maint_scaler_manual_pin_ttl_s", self.maint_scaler_manual_pin_ttl_s, 1, 604_800)
         _bounded("maint_scaler_warmup_replicas", self.maint_scaler_warmup_replicas, 1, 10_000)
+        _bounded("maint_scaler_global_max_replicas", self.maint_scaler_global_max_replicas, 1, 100_000)
+        _bounded("maint_scaler_min_decision_interval_s", self.maint_scaler_min_decision_interval_s, 0.0, 86_400.0)
+        _bounded("maint_scaler_runtime_timeout_s", self.maint_scaler_runtime_timeout_s, 1.0, 3_600.0)
+        _bounded("maint_scaler_vram_headroom_mb", self.maint_scaler_vram_headroom_mb, 0, 1_048_576)
+        if self.maint_runtime not in ("none", "compose", "k8s"):
+            issues.append(
+                f"maint_runtime={self.maint_runtime!r} must be one of: "
+                "none, compose, k8s"
+            )
         if self.maint_scaler_clock_source not in ("auto", "boottime", "monotonic"):
             issues.append(
                 f"maint_scaler_clock_source={self.maint_scaler_clock_source!r} "

@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 63,
+    "build": 64,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.24.0",
+      "version": "0.25.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T12:57:44+00:00"
+      "last_changed": "2026-05-05T14:07:47+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2121,6 +2121,15 @@
       "from": "1.4.1",
       "to": "1.5.0",
       "build": 63
+    },
+    {
+      "timestamp": "2026-05-05T14:07:47+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.2 auto-scaler gap-fill: runtime selector (NoopController + ComposeController + factory), min_decision_interval throttle, global_max_replicas roster cap, VRAM budget accounting with stale-telemetry fail-safe, scale_decision payload prev/next/reason/observed, metrics_snapshot counters; 11 new tests",
+      "from": "0.24.0",
+      "to": "0.25.0",
+      "build": 64
     }
   ]
 }
