@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.2.1",
-    "build": 64,
+    "build": 67,
     "released": null
   },
   "components": {
@@ -19,14 +19,14 @@
       "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.8.0",
+      "version": "3.8.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-05T12:57:44+00:00"
+      "last_changed": "2026-05-06T07:39:59+00:00"
     },
     "docs": {
-      "version": "1.20.2",
+      "version": "1.20.3",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-05T12:57:44+00:00"
+      "last_changed": "2026-05-06T07:39:59+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.25.0",
+      "version": "0.26.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-05T14:07:47+00:00"
+      "last_changed": "2026-05-06T07:39:59+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2130,6 +2130,33 @@
       "from": "0.24.0",
       "to": "0.25.0",
       "build": 64
+    },
+    {
+      "timestamp": "2026-05-06T07:39:59+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8.3 backup agent vertical slice: cron evaluator, prune-order doctrine, state machine, PII-erase consumer, 8 notification kinds",
+      "from": "0.25.0",
+      "to": "0.26.0",
+      "build": 65
+    },
+    {
+      "timestamp": "2026-05-06T07:39:59+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "xops/backup/cron + xops/maint/prune_order + xops/backup/verify.sql",
+      "from": "3.8.0",
+      "to": "3.8.1",
+      "build": 66
+    },
+    {
+      "timestamp": "2026-05-06T07:39:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ROADMAP §8.3 ticks (PII erase + safety floor); SWARM.md producer-set adds maint.backup.v1",
+      "from": "1.20.2",
+      "to": "1.20.3",
+      "build": 67
     }
   ]
 }

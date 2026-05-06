@@ -243,6 +243,72 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "produced_at": "2025-01-01T00:00:00Z",
         "reason": "rate_limited",
     },
+    # Phase 8.3 backup agent — notification-only kinds.
+    "backup_started": {
+        "kind": "backup_started",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "wall_clock_utc": "2025-01-01T03:00:00Z",
+        "monotonic_ns_at_fire": 1234567890,
+    },
+    "backup_completed": {
+        "kind": "backup_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:05:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "outcome": "ok",
+        "duration_ms": 300000,
+    },
+    "backup_verify_orphan_swept": {
+        "kind": "backup_verify_orphan_swept",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:01Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "swept_dbs": ["verify_2024_12_31_03_00"],
+    },
+    "prune_started": {
+        "kind": "prune_started",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "prune_order": [
+            "opsctl_audit", "schema_snapshots", "pattern_allowlist",
+            "dlq_entries", "quarantine_samples", "maint_audit_log",
+        ],
+    },
+    "prune_completed": {
+        "kind": "prune_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:05:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "deleted_per_table": {"opsctl_audit": 12, "maint_audit_log": 0},
+    },
+    "prune_skipped": {
+        "kind": "prune_skipped",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "reason": "verify_failed",
+    },
+    "quarantine_pruned": {
+        "kind": "quarantine_pruned",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:30Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "row_count": 7,
+        "ttl_days": 30,
+    },
+    "pii_erased": {
+        "kind": "pii_erased",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T12:00:00Z",
+        "request_id": "req-005",
+        "client_id": "user-42",
+        "table": "quarantine_samples",
+        "row_count": 3,
+        "erased_at": "2025-01-01T12:00:00Z",
+    },
 }
 
 

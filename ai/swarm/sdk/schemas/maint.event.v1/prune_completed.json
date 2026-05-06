@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/prune_completed",
+  "title": "maint.event.v1{kind=prune_completed}",
+  "description": "Phase 8 §8.3 / §8.16.3 — emitted by maint.backup.v1 when the destructive-prune phase finishes. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "deleted_per_table", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "prune_completed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "deleted_per_table":   { "type": "object", "description": "{table: row_count_deleted}; would-be counts when dry_run=true." },
+    "would_delete_count":  { "type": "integer", "minimum": 0, "description": "Total when dry_run=true; absent otherwise." },
+    "dry_run":             { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

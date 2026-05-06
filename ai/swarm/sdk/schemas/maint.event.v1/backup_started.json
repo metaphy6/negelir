@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_started",
+  "title": "maint.event.v1{kind=backup_started}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 at the start of a cron-fired backup run. Notification only; carries no request_id and expects no acks. `fire_window_id` is `<pod_instance_id>:<wall_clock_minute_iso>` so a leader flip after restart cannot collide window ids in the audit ledger.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "wall_clock_utc", "monotonic_ns_at_fire", "kind_schema_version"],
+  "properties": {
+    "kind":                  { "const": "backup_started" },
+    "kind_schema_version":   { "const": 1 },
+    "produced_at":           { "type": "string" },
+    "fire_window_id":        { "type": "string", "minLength": 1 },
+    "wall_clock_utc":        { "type": "string", "description": "ISO-8601 UTC at fire moment." },
+    "monotonic_ns_at_fire":  { "type": "integer", "minimum": 0, "description": "CLOCK_BOOTTIME ns at fire — paired with wall_clock_utc for skew detection." },
+    "dry_run":               { "type": "boolean" },
+    "catch_up":              { "type": "boolean", "description": "True when this fire is the single make-up run after a missed window." }
+  },
+  "additionalProperties": false
+}

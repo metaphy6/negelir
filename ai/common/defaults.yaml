@@ -335,6 +335,18 @@ phase8:
   # ── §8.14 audit log ──
   maint_audit_hmac_key_b64: ""                     # NEGELIR_MAINT_AUDIT_HMAC_KEY_B64
   maint_audit_partition_retention_days: 365        # NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS
+  # ── §8.3 backup agent ──
+  maint_backup_cron: "0 3 * * *"                   # NEGELIR_MAINT_BACKUP_CRON
+  maint_backup_dir: "./data/backups"               # NEGELIR_MAINT_BACKUP_DIR
+  maint_backup_retention_days: 14                  # NEGELIR_MAINT_BACKUP_RETENTION_DAYS
+  maint_backup_retention_weeks: 4                  # NEGELIR_MAINT_BACKUP_RETENTION_WEEKS
+  maint_backup_dry_run: false                      # NEGELIR_MAINT_BACKUP_DRY_RUN
+  maint_backup_min_free_gb: 5                      # NEGELIR_MAINT_BACKUP_MIN_FREE_GB
+  maint_backup_max_skew_h: 36                      # NEGELIR_MAINT_BACKUP_MAX_SKEW_H
+  maint_backup_age_alert_h: 30                     # NEGELIR_MAINT_BACKUP_AGE_ALERT_H
+  maint_backup_clock_step_back_alert_s: 300        # NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S
+  maint_backup_pg_jobs: 2                          # NEGELIR_MAINT_BACKUP_PG_JOBS
+  maint_backup_prune_batch: 10000                  # NEGELIR_MAINT_BACKUP_PRUNE_BATCH
 
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:

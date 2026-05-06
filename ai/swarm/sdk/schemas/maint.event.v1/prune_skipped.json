@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/prune_skipped",
+  "title": "maint.event.v1{kind=prune_skipped}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 when the prune phase is intentionally skipped (verify failed, disk pressure, dry_run, --prune-only refused).",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "reason", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "prune_skipped" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "reason":              { "type": "string", "enum": ["verify_failed", "disk_pressure", "skew_skipped", "prune_only_refused", "leader_lost"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/pii_erased",
+  "title": "maint.event.v1{kind=pii_erased}",
+  "description": "Phase 8 §8.3 / Phase 7 §7.1 — emitted by maint.backup.v1 after handling a `quarantine_erase` operator request. The `request_id` correlates back to the originating `quarantine_erase` envelope so the audit trail is end-to-end.",
+  "type": "object",
+  "required": ["kind", "produced_at", "request_id", "client_id", "table", "row_count", "erased_at", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "pii_erased" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "request_id":          { "type": "string", "minLength": 1 },
+    "client_id":           { "type": "string", "minLength": 1, "description": "Data-subject id (the `target` of the originating quarantine_erase)." },
+    "table":               { "type": "string", "minLength": 1, "description": "Table name whose rows were tombstoned (e.g. `quarantine_samples`)." },
+    "row_count":           { "type": "integer", "minimum": 0 },
+    "erased_at":           { "type": "string" }
+  },
+  "additionalProperties": false
+}

@@ -693,6 +693,39 @@ class Config:
     maint_audit_hmac_key_b64: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AUDIT_HMAC_KEY_B64", ""))
     maint_audit_partition_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS", "365")))
 
+    # ── Phase 8 §8.3 — backup agent ──────────────────────────────────
+    # Cron expression (5-field, UTC) that fires the nightly backup
+    # state machine. Operator typos are caught by parse_cron at boot.
+    maint_backup_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_CRON", "0 3 * * *"))
+    # Where dump artefacts + audit.csv live. Created on demand.
+    maint_backup_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_DIR", "./data/backups"))
+    # Daily-grain retention. Older daily dumps are pruned; weekly
+    # dumps (Sunday) are kept for `retention_weeks` instead.
+    maint_backup_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_RETENTION_DAYS", "14")))
+    maint_backup_retention_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_RETENTION_WEEKS", "4")))
+    # Safety floor — when true, every emit carries dry_run=true and
+    # NO destructive prune is executed (would_delete_count instead).
+    maint_backup_dry_run: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_DRY_RUN", "false").lower() in ("1", "true", "yes"))
+    # Disk-pressure guard — refuse to start a dump if free space <
+    # max(2*last_dump_size, min_free_gb*1GB).
+    maint_backup_min_free_gb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MIN_FREE_GB", "5")))
+    # Catch-up: at most one make-up run if monotonic delta vs last fire
+    # exceeds this many hours; otherwise we wait for the next cron tick.
+    maint_backup_max_skew_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MAX_SKEW_H", "36")))
+    # `pii_erased` / `quarantine_pruned` are DML, no Postgres dump
+    # required — but we still gate on having a recent successful dump
+    # (within this many hours) before the destructive prune phase.
+    maint_backup_age_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_AGE_ALERT_H", "30")))
+    # Backwards wall-clock step bigger than this (seconds) → emit
+    # sec.alert.v1{kind=backup_clock_skew, severity=error} and skip
+    # this fire (refuse-to-start safety floor).
+    maint_backup_clock_step_back_alert_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S", "300")))
+    # pg_dump parallelism (-j flag); 1 disables parallel mode.
+    maint_backup_pg_jobs: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_JOBS", "2")))
+    # DELETE batch size for the destructive prune phase. Bounded so a
+    # single cron run cannot hold a long-lived row-lock cascade.
+    maint_backup_prune_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PRUNE_BATCH", "10000")))
+
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
         "BOOTSTRAP_MIN_MATCHES", "100"
@@ -1164,6 +1197,32 @@ class Config:
 
         # Phase 8 §8.14 — audit retention.
         _bounded("maint_audit_partition_retention_days", self.maint_audit_partition_retention_days, 1, 36_500)
+
+        # Phase 8 §8.3 — backup agent.
+        try:
+            from xops.backup.cron import CronSyntaxError, parse_cron
+            _parsed = parse_cron(str(self.maint_backup_cron))
+            if _parsed.fires_every_minute:
+                issues.append(
+                    "maint_backup_cron resolves to every-minute firing "
+                    f"({self.maint_backup_cron!r}); refusing — set a"
+                    " specific hour/minute"
+                )
+        except CronSyntaxError as exc:
+            issues.append(f"maint_backup_cron: {exc}")
+        except ImportError:
+            # xops package not on sys.path during very-early bootstrap
+            # (e.g. some pickled-cfg unit tests). Defer to the agent's
+            # own parse at construction time.
+            pass
+        _bounded("maint_backup_retention_days", self.maint_backup_retention_days, 1, 3650)
+        _bounded("maint_backup_retention_weeks", self.maint_backup_retention_weeks, 1, 520)
+        _bounded("maint_backup_min_free_gb", self.maint_backup_min_free_gb, 1, 100_000)
+        _bounded("maint_backup_max_skew_h", self.maint_backup_max_skew_h, 1, 8760)
+        _bounded("maint_backup_age_alert_h", self.maint_backup_age_alert_h, 1, 8760)
+        _bounded("maint_backup_clock_step_back_alert_s", self.maint_backup_clock_step_back_alert_s, 1, 86_400)
+        _bounded("maint_backup_pg_jobs", self.maint_backup_pg_jobs, 1, 64)
+        _bounded("maint_backup_prune_batch", self.maint_backup_prune_batch, 1, 1_000_000)
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_completed",
+  "title": "maint.event.v1{kind=backup_completed}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 once the dump → restore-verify → prune state machine finishes (or aborts). Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "outcome", "duration_ms", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "backup_completed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "outcome":             { "type": "string", "enum": ["ok", "verify_failed", "dump_failed", "encrypt_failed", "disk_pressure_skipped", "skew_skipped", "dry_run"] },
+    "duration_ms":         { "type": "integer", "minimum": 0 },
+    "dump_bytes":          { "type": "integer", "minimum": 0 },
+    "encrypted_bytes":     { "type": "integer", "minimum": 0 },
+    "verify_summary":      { "type": "object", "description": "Per-table row counts + schema_migrations max version when outcome=ok." },
+    "dry_run":             { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

@@ -1182,13 +1182,13 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
   - `dlq_entries` (Phase 9 Postgres backend) older than `cfg.swarm_dlq_pg_retention_days` (default 14) → DELETE.
   - `pattern_allowlist` rows with `expires_at < now()` → DELETE (one event `kind=pattern_allowlist_expired{count}`).
   - `opsctl_audit` and `maint_audit_log` rows older than `cfg.maint_audit_retention_days` (default 365) → DELETE. Note the longer retention — audit trail value is highest.
-- [ ] **PII erase (consumer of `maint.event.v1{kind=quarantine_erase, target=<client_id>}`).**
+- [x] **PII erase (consumer of `maint.event.v1{kind=quarantine_erase, target=<client_id>}`).**
   - Loads matching `quarantine_samples` rows by `client_id`, sets `raw_bytes_b64 = NULL`, sets `erased_at = now()`, leaves `quarantine_id` row in place for audit.
   - Emits `maint.event.v1{kind=pii_erased, target=<client_id>, table=quarantine_samples, row_count, erased_at}` and a corresponding `maint_audit_log` insert (right-to-erasure traceability per [`design/SECURITY.md`](../design/SECURITY.md)).
   - Acks via `maint.ack.v1` with `accepted=true, reason="erased <N> rows"` or `accepted=true, reason="no rows matched"` (the absence of rows is a successful no-op, not an error — a client_id that was never seen is the desired state).
 - [ ] **Disk-usage guard.** Before each dump, refuses to start if free space on `cfg.maint_backup_dir` < `max(2× last_dump_size, cfg.maint_backup_min_free_gb)` (default 5 GB headroom). Emits `sec.alert.v1{kind=backup_disk_pressure, severity=error}`. Refusal counts toward the catch-up debt — next tick retries.
 - [ ] **Backup-age gauge.** Telemetry exposes `maint_backup_age_hours{verified=true|false}` (now − last successful verified backup); a separate watchdog rule fires `sec.alert.v1{kind=backup_age_alert, severity=error}` if the gauge exceeds `cfg.maint_backup_age_alert_h` (default 30h). Catches the silent-failure mode where the agent is alive but every dump is failing verify.
-- [ ] **Safety floor.** TTL prunes are gated by `cfg.maint_backup_dry_run` (default `false` in prod, **`true` in mock profile**) — first run on a fresh dev stack must not delete data the operator hasn't seen yet. `dry_run=true` still emits the same events with `dry_run: true, would_delete_count: N` so test assertions stay symmetric.
+- [x] **Safety floor.** TTL prunes are gated by `cfg.maint_backup_dry_run` (default `false` in prod, **`true` in mock profile**) — first run on a fresh dev stack must not delete data the operator hasn't seen yet. `dry_run=true` still emits the same events with `dry_run: true, would_delete_count: N` so test assertions stay symmetric.
 - [ ] **Permissions.** All files in `cfg.maint_backup_dir` are written with mode 0600 (umask 0077 in the agent process); the parent dir is mode 0700. Verified at startup; refuses to start on looser perms.
 
 ### 8.4 Source-watcher SDK + LLM-summarizer graduation

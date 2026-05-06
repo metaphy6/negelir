@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/quarantine_pruned",
+  "title": "maint.event.v1{kind=quarantine_pruned}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 after age-based pruning of quarantine_samples (TTL = cfg.sec_quarantine_ttl_days). Notification only; distinct from `pii_erased` which is operator-driven right-to-erasure.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "row_count", "ttl_days", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "quarantine_pruned" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "row_count":           { "type": "integer", "minimum": 0 },
+    "ttl_days":            { "type": "integer", "minimum": 1 },
+    "dry_run":             { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

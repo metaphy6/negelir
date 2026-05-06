@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_verify_orphan_swept",
+  "title": "maint.event.v1{kind=backup_verify_orphan_swept}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 when stale restore-verify scratch databases (left over by a previous failed run) are dropped at the start of a fresh fire. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "swept_dbs", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "backup_verify_orphan_swept" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "swept_dbs":           { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "additionalProperties": false
+}

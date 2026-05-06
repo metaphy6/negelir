@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/prune_started",
+  "title": "maint.event.v1{kind=prune_started}",
+  "description": "Phase 8 §8.3 / §8.16.3 — emitted by maint.backup.v1 when entering the destructive-prune phase, AFTER a successful restore-verify. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "prune_order", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "prune_started" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "prune_order":         { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "description": "Verbatim PRUNE_ORDER tuple as a list — pinned in the audit ledger so a future change is observable." },
+    "dry_run":             { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

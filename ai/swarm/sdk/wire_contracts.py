@@ -58,6 +58,7 @@ MAINT_EVENT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
     "maint.dlq.v1",
     "maint.schema.v1",
     "maint.sec.v1",
+    "maint.backup.v1",
     "source.watcher.v1",
 })
 

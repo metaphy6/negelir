@@ -46,6 +46,7 @@ from .agents.predictors.lgbm_market import LgbmMarketPredictor
 from .agents.proofreader.aggregator import ProofreaderAggregatorAgent
 from .agents.proofreader.replicas import PROOFREADER_POLICY_CLASSES
 from .agents.reactor import InMemoryLedger
+from .agents.maint.backup import MaintBackupAgent
 from .agents.maint.dlq import MaintDlqSupervisor
 from .agents.maint.scaler import MaintScaler
 from .agents.maint.schema import MaintSchemaSentinel
@@ -100,6 +101,7 @@ SINGLE_INSTANCE_AGENTS: frozenset[str] = frozenset({
     "maint.dlq.v1",
     "maint.schema.v1",
     "maint.sec.v1",
+    "maint.backup.v1",
 })
 
 
@@ -180,12 +182,15 @@ def build_agents() -> list[Agent]:
     sec_scrape = SecScrapeAgent()
     sec_rate = SecRateAgent()
     # Phase 8 self-maintenance reactors. Each is leader-gated and
-    # joins SINGLE_INSTANCE_AGENTS above. The §8.3 backup agent is
-    # NOT yet wired (deferred — see ROADMAP §8.3 checklist).
+    # joins SINGLE_INSTANCE_AGENTS above. The §8.3 backup agent
+    # ships with no-op Protocol shims for dump / verify / prune /
+    # quarantine; the Phase R1 datasource bootstrap will inject the
+    # live drivers.
     maint_scaler = MaintScaler()
     maint_dlq = MaintDlqSupervisor()
     maint_schema = MaintSchemaSentinel()
     maint_sec = MaintSecAgent()
+    maint_backup = MaintBackupAgent()
     return [
         *predictors,
         consensus,
@@ -201,6 +206,7 @@ def build_agents() -> list[Agent]:
         maint_dlq,
         maint_schema,
         maint_sec,
+        maint_backup,
     ]
 
 

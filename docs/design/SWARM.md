@@ -71,6 +71,7 @@ The producer set, locked here for cross-agent review:
 
 <!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:begin -->
 - `drift.v1`
+- `maint.backup.v1`
 - `maint.dlq.v1`
 - `maint.scaler.v1`
 - `maint.schema.v1`

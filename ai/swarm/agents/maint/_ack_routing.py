@@ -62,8 +62,12 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "denylist_clear":    frozenset({"sec.rate.v1"}),
     # Phase 7 §7.2 — sec.scrape.v1 owns source fingerprints.
     "baseline_reset":    frozenset({"sec.scrape.v1"}),
-    # Phase 7 §7.1 / Phase 8 §8.3 — storage.v1 owns quarantine_samples.
-    "quarantine_erase":  frozenset({"storage.v1"}),
+    # Phase 7 §7.1 / Phase 8 §8.3 — maint.backup.v1 is the consumer of
+    # right-to-erasure requests in v1 (the storage.v1 surface lives in
+    # the Phase R1 datasource bootstrap and is NOT yet wired). The
+    # backup agent owns quarantine_samples lifecycle (TTL pruning AND
+    # operator-driven erasure) so it is the natural single consumer.
+    "quarantine_erase":  frozenset({"maint.backup.v1"}),
     # Phase 8 §8.7 — FP feedback loop. Consumed by maint.sec.v1.
     "quarantine_clear":  frozenset({"maint.sec.v1"}),
     # Phase 8 §8.2 — operator pins replica count on a scalable agent.
@@ -90,6 +94,19 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "dlq_escalated":               frozenset(),
     "dlq_topic_disabled_drained":  frozenset(),
     "dlq_dropped":                 frozenset(),
+    # ── Notification-only kinds (Phase 8.3 backup agent) ─────────────
+    # Emitted by maint.backup.v1; carry a fire_window_id, expect no
+    # acks. `pii_erased` carries the originating quarantine_erase
+    # request_id but is itself notification-only — the operator who
+    # waited for the quarantine_erase ack already got their answer.
+    "backup_started":              frozenset(),
+    "backup_completed":            frozenset(),
+    "backup_verify_orphan_swept":  frozenset(),
+    "prune_started":               frozenset(),
+    "prune_completed":             frozenset(),
+    "prune_skipped":               frozenset(),
+    "quarantine_pruned":           frozenset(),
+    "pii_erased":                  frozenset(),
 }
 
 # Kinds whose consumer set is empty BY DESIGN at this point in the
@@ -112,6 +129,15 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "dlq_escalated",
     "dlq_topic_disabled_drained",
     "dlq_dropped",
+    # Phase 8.3 backup agent.
+    "backup_started",
+    "backup_completed",
+    "backup_verify_orphan_swept",
+    "prune_started",
+    "prune_completed",
+    "prune_skipped",
+    "quarantine_pruned",
+    "pii_erased",
 })
 
 # Stable, alphabetised view of all known kinds (test imports this).

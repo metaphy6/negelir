@@ -904,7 +904,7 @@ _ALLOWED_MAINT_KINDS: frozenset[str] = frozenset({
     # one). Adding a kind is a minor bump on the `swarm` component.
     "denylist_clear",       # sec.rate.v1 consumer (§7.3 operator override)
     "baseline_reset",       # sec.scrape.v1 consumer (§7.2 redesign reset)
-    "quarantine_erase",     # storage.v1 consumer (§7.1 right-to-erasure; Phase 8 publisher)
+    "quarantine_erase",     # maint.backup.v1 consumer (§8.3 right-to-erasure; ops_console publisher)
 })
 
 _ALLOWED_DRIFT_REASONS: frozenset[str] = frozenset({

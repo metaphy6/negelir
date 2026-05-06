@@ -99,12 +99,12 @@ class TestQuarantineEraseTokenGate(unittest.TestCase):
                         ack = Message(
                             envelope=Envelope(
                                 topic=Topic(str(MAINT_ACK_TOPIC)),
-                                producer="storage.v1",
+                                producer="maint.backup.v1",
                             ),
                             payload={
                                 "request_id": rid,
                                 "accepted": True,
-                                "accepted_by": "storage.v1",
+                                "accepted_by": "maint.backup.v1",
                                 "processed_at": "2025-01-01T00:00:00+00:00",
                                 "attempt": 0,
                             },

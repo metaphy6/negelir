@@ -94,7 +94,7 @@ class TestDryRunNoSideEffects(unittest.TestCase):
         with TemporaryDirectory() as tmp, _Env(tmp):
             out = self._run_dry(quarantine_erase, "sample-1")
             self.assertEqual(out["op"], "quarantine-erase")
-            self.assertEqual(out["expected_acks"], ["storage.v1"])
+            self.assertEqual(out["expected_acks"], ["maint.backup.v1"])
             cfg = Config()
             self.assertFalse(Path(cfg.opsctl_audit_path_resolved).exists())
 
