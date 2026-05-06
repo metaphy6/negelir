@@ -286,6 +286,7 @@ phase8:
   maint_scaler_clock_source: auto                  # NEGELIR_MAINT_SCALER_CLOCK_SOURCE
   maint_scaler_max_targets: 256                    # NEGELIR_MAINT_SCALER_MAX_TARGETS
   maint_scaler_max_replicas: 16                    # NEGELIR_MAINT_SCALER_MAX_REPLICAS
+  maint_scaler_default_max_replicas: 0             # NEGELIR_MAINT_SCALER_DEFAULT_MAX_REPLICAS
   maint_scaler_min_replicas: 1                     # NEGELIR_MAINT_SCALER_MIN_REPLICAS
   maint_scaler_scale_up_queue_depth: 50            # NEGELIR_MAINT_SCALER_SCALE_UP_QUEUE_DEPTH
   maint_scaler_scale_down_queue_depth: 5           # NEGELIR_MAINT_SCALER_SCALE_DOWN_QUEUE_DEPTH
@@ -325,6 +326,7 @@ phase8:
   maint_schema_burst: 10                           # NEGELIR_MAINT_SCHEMA_BURST
   maint_schema_drift_debounce_s: 60                # NEGELIR_MAINT_SCHEMA_DRIFT_DEBOUNCE_S
   maint_schema_drift_lru: 512                      # NEGELIR_MAINT_SCHEMA_DRIFT_LRU
+  maint_schema_pg_check_interval_s: 3600           # NEGELIR_MAINT_SCHEMA_PG_CHECK_INTERVAL_S
   # ── §8.7 + §8.8 maint.sec.v1 ──
   maint_sec_pattern_ttl_s: 604800                  # NEGELIR_MAINT_SEC_PATTERN_TTL_S
   maint_sec_pattern_promote_threshold: 1           # NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD
@@ -346,6 +348,8 @@ phase8:
   maint_backpressure_red_head_age_s: 300           # NEGELIR_MAINT_BACKPRESSURE_RED_HEAD_AGE_S
   maint_backpressure_red_storage_pct: 92           # NEGELIR_MAINT_BACKPRESSURE_RED_STORAGE_PCT
   maint_backpressure_red_error_rate_per_s: 10      # NEGELIR_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S
+  # ── §8.13.2 cumulative `data/maint/` storage cap ──
+  maint_storage_total_max_mb: 512                  # NEGELIR_MAINT_STORAGE_TOTAL_MAX_MB
   # ── §8.14 audit log ──
   maint_audit_hmac_key_b64: ""                     # NEGELIR_MAINT_AUDIT_HMAC_KEY_B64
   maint_audit_partition_retention_days: 365        # NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS
@@ -361,6 +365,10 @@ phase8:
   maint_backup_clock_step_back_alert_s: 300        # NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S
   maint_backup_pg_jobs: 2                          # NEGELIR_MAINT_BACKUP_PG_JOBS
   maint_backup_prune_batch: 10000                  # NEGELIR_MAINT_BACKUP_PRUNE_BATCH
+  maint_backup_pg_dsn: ""                          # NEGELIR_MAINT_BACKUP_PG_DSN
+  maint_backup_age_recipients_file: ""             # NEGELIR_MAINT_BACKUP_AGE_RECIPIENTS_FILE
+  maint_backup_age_identity_file: ""               # NEGELIR_MAINT_BACKUP_AGE_IDENTITY_FILE
+  maint_backup_verify_pg_image: "postgres:16-alpine"  # NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE
 
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:

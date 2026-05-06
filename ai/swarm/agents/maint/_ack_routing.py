@@ -92,6 +92,13 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "scale_decision":              frozenset(),
     "scale_throttled":             frozenset(),
     "manual_scale_pin_expired":    frozenset(),
+    # Phase 8 §8.16.1 — emitted once per process lifetime per
+    # unconfigured target by maint.scaler.v1 when default-policy
+    # fallback applies (operator forgot to widen
+    # maint_scaler_max_replicas_overrides_csv after registering a
+    # new agent). Notification-only — the operator-visible signal
+    # is the paired sec.alert.v1{kind=maint_scaler_unconfigured_agent}.
+    "maint_scaler_default_applied": frozenset(),
     "dlq_replayed":                frozenset(),
     "dlq_escalated":               frozenset(),
     "dlq_topic_disabled_drained":  frozenset(),
@@ -130,6 +137,7 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "scale_decision",
     "scale_throttled",
     "manual_scale_pin_expired",
+    "maint_scaler_default_applied",
     "dlq_replayed",
     "dlq_escalated",
     "dlq_topic_disabled_drained",

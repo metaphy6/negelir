@@ -30,6 +30,7 @@ from ...sdk import schemas as _schemas
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT
+from . import _schema_drift as _drift
 from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.schema")
@@ -83,6 +84,10 @@ class MaintSchemaSentinel:
         self._buckets: dict[str, _TopicBucket] = defaultdict(_TopicBucket)
         # Bounded LRU of (topic, sha256) → last_drift_at to debounce.
         self._drift_lru: "OrderedDict[tuple[str, str], float]" = OrderedDict()
+        # §8.6 Detector B — throttle to ``cfg.maint_schema_pg_check_interval_s``.
+        # ``-inf`` means the first call always fires; subsequent calls
+        # honor the cadence.
+        self._last_pg_check_at: float = float("-inf")
         # §8.13.5 pause/isolation matrix.
         self._pause = PauseState()
 
@@ -215,17 +220,145 @@ class MaintSchemaSentinel:
         # Strip variable trailing values; first 80 chars is enough.
         return first[:80]
 
-    # ── Detectors B + C (stubbed for follow-up) ─────────────────
-    def _detect_b_pending(self) -> None:
-        """Stub for §8.6 Detector B (PG column drift). Lands with
-        the next §8.6b slice — needs an `information_schema.columns`
-        crawl plus a `migrations/*.sql` parser."""
+    # ── Detector B (PG column drift) ──────────────────────────
+    def detect_b(
+        self,
+        *,
+        fetch_columns: Callable[[], dict[str, set[str]]],
+        migrations_dir: "Path | None" = None,
+        force: bool = False,
+    ) -> list[Message]:
+        """Compare live PG columns to migration-derived expected set.
 
-    def _detect_c_pending(self) -> None:
-        """Stub for §8.6 Detector C (dataclass vs schema). Lands
-        with the next §8.6b slice — needs an AST walk over
-        `swarm/agents/payloads.py` cross-referenced with the
-        per-topic schemas."""
+        Caller-supplied ``fetch_columns`` returns
+        ``{table_name: {col1, col2, ...}}`` — kept as a callable so
+        the agent has zero psycopg dependency at the unit-test
+        boundary (the production wiring lives in the runner).
+
+        Throttled to ``cfg.maint_schema_pg_check_interval_s`` between
+        runs unless ``force=True``. Drift is emitted as
+        ``maint.event.v1{kind=schema_drift_detected, detector="B",
+        target=<table>, drift_kind, columns}`` events. When the
+        migration parser flagged a table in ``unknown_constructs``,
+        events for that table carry ``severity="info"`` and a
+        ``parser_uncertain: true`` field; otherwise ``severity="warn"``.
+        """
+        from pathlib import Path as _Path
+        now = self._clock_mono()
+        interval = max(60, int(_cfg.maint_schema_pg_check_interval_s))
+        if not force and (now - self._last_pg_check_at) < interval:
+            return []
+        self._last_pg_check_at = now
+        mig_path = migrations_dir or _Path("migrations")
+        digest = _drift.parse_migrations_dir(mig_path)
+        try:
+            observed = fetch_columns() or {}
+        except Exception as exc:  # noqa: BLE001 — sentinel never crashes
+            _log.warning("detector B fetch_columns failed: %s", exc)
+            return []
+        # Lower-case observed names so set diffs are case-insensitive
+        # (PG is case-insensitive for unquoted identifiers).
+        observed_norm = {
+            k.lower(): {c.lower() for c in v}
+            for k, v in observed.items()
+        }
+        diffs = _drift.diff_columns(digest.tables, observed_norm)
+        out: list[Message] = []
+        for table, drift_kind, details in diffs:
+            uncertain = table in digest.unknown_constructs
+            severity = "info" if uncertain else "warn"
+            out.append(self._notify_drift_b(
+                table=table,
+                drift_kind=drift_kind,
+                details=details,
+                severity=severity,
+                parser_uncertain=uncertain,
+            ))
+        return out
+
+    def _notify_drift_b(self, *, table: str, drift_kind: str,
+                        details: list[str], severity: str,
+                        parser_uncertain: bool) -> Message:
+        payload: dict = {
+            "kind": "schema_drift_detected",
+            "target": table,
+            "produced_at": self._clock_iso(),
+            "detector": "B",
+            "drift_kind": drift_kind,
+            "details": list(details)[:64],
+            "severity": severity,
+            "parser_uncertain": bool(parser_uncertain),
+        }
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=MAINT_EVENT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=payload)
+
+    # ── Detector C (dataclass vs schema) ──────────────────────
+    def detect_c(
+        self,
+        *,
+        payloads_path: "Path | None" = None,
+        dataclass_schema_map: "dict[str, tuple[set[str], set[str]]] | None" = None,
+    ) -> list[Message]:
+        """Run a one-shot AST parity check between dataclasses in
+        ``payloads_path`` and a caller-supplied
+        ``{class_name: (schema_properties, schema_required)}`` map.
+
+        Classes absent from the map are skipped (forward-compatible —
+        the curator grows the map over time). Drift events fire one
+        per offending class with ``detector="C"``. Severity is always
+        ``critical`` per §8.6 (dataclass-vs-schema mismatch is a
+        release bug, not a runtime drift).
+        """
+        from pathlib import Path as _Path
+        path = payloads_path or _Path(__file__).resolve().parents[2] / "agents" / "payloads.py"
+        digest = _drift.parse_payloads_dataclasses(path)
+        out: list[Message] = []
+        if not dataclass_schema_map:
+            return out
+        for cls_name, (props, required) in dataclass_schema_map.items():
+            if cls_name not in digest.classes:
+                out.append(self._notify_drift_c(
+                    target=cls_name,
+                    errors=["dataclass not found in payloads module"],
+                ))
+                continue
+            errors = _drift.diff_dataclass_vs_schema(
+                dataclass_fields=digest.classes[cls_name],
+                schema_properties=set(props),
+                schema_required=set(required),
+            )
+            if errors:
+                out.append(self._notify_drift_c(target=cls_name,
+                                                 errors=errors))
+        return out
+
+    def _notify_drift_c(self, *, target: str, errors: list[str]) -> Message:
+        payload: dict = {
+            "kind": "schema_drift_detected",
+            "target": target,
+            "produced_at": self._clock_iso(),
+            "detector": "C",
+            "severity": "critical",
+            "errors": list(errors)[:16],
+        }
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=MAINT_EVENT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=payload)
 
     # ── Emission helper ─────────────────────────────────────────
     def _notify_drift(self, topic: str, errors: list[str]) -> Message:

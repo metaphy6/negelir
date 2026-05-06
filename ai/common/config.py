@@ -592,6 +592,21 @@ class Config:
     maint_scaler_clock_source: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_CLOCK_SOURCE", "auto"))
     maint_scaler_max_targets: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_TARGETS", "256")))
     maint_scaler_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_REPLICAS", "16")))
+    # Phase 8 §8.16.1 — default-policy fallback applied to any
+    # registered agent that has NO explicit entry in
+    # ``maint_scaler_max_replicas_overrides_csv``. Conservative-by-
+    # default ceiling for unconfigured agents. Set to ``0`` (the
+    # bootstrap default) to preserve legacy behavior — unconfigured
+    # agents fall back to ``maint_scaler_max_replicas`` and no alert
+    # is emitted. Set to >=2 to OPT IN: each first-sighting of an
+    # unconfigured agent then emits a one-shot
+    # ``sec.alert.v1{kind=maint_scaler_unconfigured_agent}`` plus an
+    # audit ``maint.event.v1{kind=maint_scaler_default_applied}``
+    # AND the per-target ceiling drops to this value (capped by
+    # ``maint_scaler_max_replicas`` and ``..._global_max_replicas``).
+    # Floor when enabled is 2 (1 is indistinguishable from "do not
+    # scale me" and would silently freeze unconfigured agents).
+    maint_scaler_default_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_DEFAULT_MAX_REPLICAS", "0")))
     maint_scaler_min_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MIN_REPLICAS", "1")))
     maint_scaler_scale_up_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_SCALE_UP_QUEUE_DEPTH", "50")))
     maint_scaler_scale_down_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_SCALE_DOWN_QUEUE_DEPTH", "5")))
@@ -707,6 +722,11 @@ class Config:
     maint_schema_burst: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_BURST", "10")))
     maint_schema_drift_debounce_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_DRIFT_DEBOUNCE_S", "60")))
     maint_schema_drift_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_DRIFT_LRU", "512")))
+    # Phase 8 §8.6 Detector B — cadence for the PG-column-vs-migration
+    # comparison. Default 1h; lower bound 60s (ROADMAP §8.6 binding
+    # — the crawl runs information_schema.columns once per tick and
+    # is cheap, but cadence below 60s adds noise without recall gain).
+    maint_schema_pg_check_interval_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_PG_CHECK_INTERVAL_S", "3600")))
 
     # ── Phase 8 §8.7 + §8.8 — `maint.sec.v1` agent ───────────────────
     maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_TTL_S", "604800")))
@@ -739,6 +759,17 @@ class Config:
     maint_backpressure_red_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_HEAD_AGE_S", "300")))
     maint_backpressure_red_storage_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_STORAGE_PCT", "92")))
     maint_backpressure_red_error_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S", "10")))
+
+    # ── Phase 8 §8.13.2 — cumulative `data/maint/` storage cap ────────
+    # Total budget across every per-subdir spool / audit / ledger
+    # under ``data/maint/``. The per-subdir caps that already exist
+    # (e.g. ``opsctl_spool_max_entries``) are individual; this is the
+    # single rollup that prevents one runaway producer from
+    # filling the disk regardless of which subdir it touches.
+    # 80% → warn alert (debounced 1h); 100% → error alert + spool
+    # writes refuse; usage must drop below 70% before writes resume
+    # (single hysteresis band, prevents thrash). 0 = disabled.
+    maint_storage_total_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_STORAGE_TOTAL_MAX_MB", "512")))
 
     # ── Phase 8 §8.14 — audit log ────────────────────────────────────
     maint_audit_hmac_key_b64: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AUDIT_HMAC_KEY_B64", ""))
@@ -776,6 +807,19 @@ class Config:
     # DELETE batch size for the destructive prune phase. Bounded so a
     # single cron run cannot hold a long-lived row-lock cascade.
     maint_backup_prune_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PRUNE_BATCH", "10000")))
+    # Live `pg_dump` DSN — empty string means "no live driver wired"
+    # (the in-memory shim is used; refused at agent boot in production
+    # profile by the swarm bootstrap).
+    maint_backup_pg_dsn: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_PG_DSN", ""))
+    # Path to the `age` recipients file (one DR-class public key per
+    # line). Required when the live `LocalPgDumpExecutor` is wired.
+    maint_backup_age_recipients_file: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_AGE_RECIPIENTS_FILE", ""))
+    # Path to the `age` identity file used by the restore-verifier to
+    # decrypt dumps in the ephemeral scratch container.
+    maint_backup_age_identity_file: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_AGE_IDENTITY_FILE", ""))
+    # Pinned Postgres image for the restore-verifier scratch container.
+    # Must NOT be `*-latest` (CLAUDE.md doctrine: pin specific tags).
+    maint_backup_verify_pg_image: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE", "postgres:16-alpine"))
 
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
@@ -1139,6 +1183,13 @@ class Config:
         _bounded("maint_scaler_decision_window_ms", self.maint_scaler_decision_window_ms, 100, 86_400_000)
         _bounded("maint_scaler_max_targets", self.maint_scaler_max_targets, 1, 1_000_000)
         _bounded("maint_scaler_max_replicas", self.maint_scaler_max_replicas, 1, 10_000)
+        # Phase 8 §8.16.1 — default-policy fallback. 0 = disabled
+        # (legacy behavior: unconfigured agents inherit
+        # maint_scaler_max_replicas with no alert). When enabled,
+        # floor is 2 (1 would be indistinguishable from "do not
+        # scale me" and would silently freeze unconfigured agents).
+        if self.maint_scaler_default_max_replicas != 0:
+            _bounded("maint_scaler_default_max_replicas", self.maint_scaler_default_max_replicas, 2, 10_000)
         _bounded("maint_scaler_min_replicas", self.maint_scaler_min_replicas, 0, 10_000)
         _bounded("maint_scaler_scale_up_queue_depth", self.maint_scaler_scale_up_queue_depth, 1, 10_000_000)
         _bounded("maint_scaler_scale_down_queue_depth", self.maint_scaler_scale_down_queue_depth, 0, 10_000_000)
@@ -1226,6 +1277,7 @@ class Config:
         _bounded("maint_schema_burst", self.maint_schema_burst, 1, 10_000)
         _bounded("maint_schema_drift_debounce_s", self.maint_schema_drift_debounce_s, 1, 86_400)
         _bounded("maint_schema_drift_lru", self.maint_schema_drift_lru, 1, 1_000_000)
+        _bounded("maint_schema_pg_check_interval_s", self.maint_schema_pg_check_interval_s, 60, 86_400)
 
         # Phase 8 §8.7 + §8.8 — sec maint.
         _bounded("maint_sec_pattern_ttl_s", self.maint_sec_pattern_ttl_s, 1, 31_536_000)
@@ -1249,6 +1301,9 @@ class Config:
         _bounded("maint_backpressure_red_head_age_s", self.maint_backpressure_red_head_age_s, 0.0, 86_400.0)
         _bounded("maint_backpressure_red_storage_pct", self.maint_backpressure_red_storage_pct, 0.0, 100.0)
         _bounded("maint_backpressure_red_error_rate_per_s", self.maint_backpressure_red_error_rate_per_s, 0.0, 1_000_000.0)
+        # Phase 8 §8.13.2 — cumulative storage cap (0 = disabled).
+        if self.maint_storage_total_max_mb != 0:
+            _bounded("maint_storage_total_max_mb", self.maint_storage_total_max_mb, 1, 1_048_576)
         if self.maint_backpressure_yellow_queue_depth >= self.maint_backpressure_red_queue_depth:
             issues.append("maint_backpressure_yellow_queue_depth must be < maint_backpressure_red_queue_depth")
         if self.maint_backpressure_yellow_head_age_s >= self.maint_backpressure_red_head_age_s:
@@ -1284,6 +1339,12 @@ class Config:
         _bounded("maint_backup_clock_step_back_alert_s", self.maint_backup_clock_step_back_alert_s, 1, 86_400)
         _bounded("maint_backup_pg_jobs", self.maint_backup_pg_jobs, 1, 64)
         _bounded("maint_backup_prune_batch", self.maint_backup_prune_batch, 1, 1_000_000)
+        # Refuse `*-latest` style verify-image tags — CLAUDE.md doctrine.
+        if str(self.maint_backup_verify_pg_image).endswith(":latest") or self.maint_backup_verify_pg_image.endswith("-latest"):
+            issues.append(
+                f"maint_backup_verify_pg_image={self.maint_backup_verify_pg_image!r} "
+                f"must pin a specific tag (no *-latest)"
+            )
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)

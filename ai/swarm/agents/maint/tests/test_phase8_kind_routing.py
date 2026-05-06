@@ -222,6 +222,13 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "produced_at": "2025-01-01T00:00:00Z",
         "reason": "ttl",
     },
+    "maint_scaler_default_applied": {
+        "kind": "maint_scaler_default_applied",
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "applied": 2,
+        "default_max_replicas": 2,
+    },
     "dlq_replayed": {
         "kind": "dlq_replayed",
         "target": "predict.vote.dlq",

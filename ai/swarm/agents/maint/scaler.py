@@ -43,7 +43,7 @@ from ...sdk.clock import window_anchor_ns
 from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
-from ..topics import MAINT_ACK, MAINT_EVENT
+from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from .runtime import NoopController, RuntimeController  # re-exported
 
 _log = logging.getLogger("swarm.agents.maint.scaler")
@@ -237,6 +237,20 @@ class MaintScaler:
         # test that proves every reason in DECISION_REASONS ∪
         # THROTTLE_REASONS gets exercised by the agent.
         self._counters: dict[tuple[str, str, str], int] = {}
+        # Phase 8 §8.16.1 — one-shot tracking for unconfigured-agent
+        # alerts. Once a target's name lands here, no further
+        # ``maint_scaler_unconfigured_agent`` alert / ``maint_scaler_default_applied``
+        # event is emitted for that target during this process'
+        # lifetime. Survives leader flips within a process; a pod
+        # restart re-emits (intentional — the operator should re-
+        # observe the warning if the pod has been re-rolled).
+        self._unconfigured_alerted: set[str] = set()
+        # Phase 8 §8.16.1 — symmetric one-shot tracking for orphan-cfg
+        # alerts (cfg override pointing at an agent name that is not
+        # in the live registry). Same lifetime semantics as above:
+        # one alert per orphan per process. Populated by
+        # :meth:`report_registered_agents`.
+        self._orphan_cfg_alerted: set[str] = set()
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -412,6 +426,11 @@ class MaintScaler:
             (st.last_replicas or 0) for st in self._targets.values()
         )
         for target, sig in signals.items():
+            # Phase 8 §8.16.1 — first sighting of an unconfigured
+            # agent emits a one-shot warn alert + audit event before
+            # any decision is computed. No-op when default-policy is
+            # disabled OR when this target was already alerted.
+            out.extend(self._emit_unconfigured_alerts(target))
             st = self._evict_and_get(target)
             if st.last_window_ns >= window_anchor:
                 continue  # already decided in this window
@@ -661,11 +680,132 @@ class MaintScaler:
 
     def _max_replicas_for(self, target: str) -> int:
         """Return the per-target replica ceiling. Per-agent overrides
-        from cfg trump the global ``maint_scaler_max_replicas`` cap."""
+        from cfg trump the global ``maint_scaler_max_replicas`` cap.
+
+        Phase 8 §8.16.1 default-policy fallback: when no override
+        is set AND ``cfg.maint_scaler_default_max_replicas > 0``,
+        the per-target ceiling is the conservative default (still
+        capped by the global ceiling). When the cfg key is 0 the
+        legacy fallback (``maint_scaler_max_replicas``) applies —
+        operators opt in by raising the cfg value.
+        """
         override = self._max_replicas_overrides.get(target)
         if override is not None:
             return max(1, int(override))
+        default_policy = int(_cfg.maint_scaler_default_max_replicas)
+        if default_policy > 0:
+            return min(
+                max(2, default_policy),
+                max(1, int(_cfg.maint_scaler_max_replicas)),
+            )
         return max(1, int(_cfg.maint_scaler_max_replicas))
+
+    def _emit_unconfigured_alerts(self, target: str) -> list[Message]:
+        """Phase 8 §8.16.1 — emit one-shot alert + audit on first
+        sighting of a registered agent that has no explicit
+        max_replicas override. No-op when the cfg key is disabled
+        (=0), when the target HAS an override, or when this target
+        has already been alerted in this process' lifetime.
+        """
+        if int(_cfg.maint_scaler_default_max_replicas) <= 0:
+            return []
+        if target in self._max_replicas_overrides:
+            return []
+        if target in self._unconfigured_alerted:
+            return []
+        self._unconfigured_alerted.add(target)
+        applied = self._max_replicas_for(target)
+        return [
+            self._sec_alert(
+                kind="maint_scaler_unconfigured_agent",
+                severity="warn",
+                subject=target,
+                reason=(
+                    f"agent {target!r} has no entry in "
+                    f"maint_scaler_max_replicas_overrides_csv; "
+                    f"applied default ceiling={applied}"
+                ),
+            ),
+            self._notify(
+                "maint_scaler_default_applied",
+                target=target,
+                extra={
+                    "applied": applied,
+                    "default_max_replicas": int(
+                        _cfg.maint_scaler_default_max_replicas
+                    ),
+                },
+            ),
+        ]
+
+    def report_registered_agents(self, names: Iterable[str]) -> list[Message]:
+        """Phase 8 §8.16.1 forward-compat — emit one-shot info alert
+        per cfg override key that does NOT match a registered agent
+        name (operator forgot to clean cfg after agent removal).
+
+        Symmetric to :meth:`_emit_unconfigured_alerts`: one alert per
+        orphan per process lifetime, never a hard failure. The
+        orphan entry is otherwise ignored — :meth:`_max_replicas_for`
+        only looks up by target name (which is dynamically observed
+        from signals), so an unmatched override key is simply dead
+        data in the cfg map.
+
+        Intended call site: orchestrator boot, once the agent
+        registry has reached steady state (e.g. immediately after
+        the §3.2 initial registration sweep). Safe to call
+        repeatedly — second invocations are no-ops for orphans
+        already alerted in this process.
+        """
+        registered = {str(n) for n in names if n}
+        out: list[Message] = []
+        for cfg_key in sorted(self._max_replicas_overrides.keys()):
+            if cfg_key in registered:
+                continue
+            if cfg_key in self._orphan_cfg_alerted:
+                continue
+            self._orphan_cfg_alerted.add(cfg_key)
+            out.append(self._sec_alert(
+                kind="maint_scaler_orphan_cfg",
+                severity="info",
+                subject=cfg_key,
+                reason=(
+                    f"cfg.maint_scaler_max_replicas_overrides_csv has "
+                    f"entry for {cfg_key!r} but no live agent of that "
+                    f"name is registered; entry is ignored. Remove the "
+                    f"cfg entry after the agent has been retired."
+                ),
+            ))
+        return out
+
+    def _sec_alert(self, *, kind: str, severity: str, subject: str,
+                   reason: str) -> Message:
+        """Build a ``sec.alert.v1`` message. Kept tiny so the only
+        coupling with the sec-plane payload shape lives in one
+        place — mirrors the shape used by ``maint.deadmans.v1``.
+        """
+        payload = {
+            "alert_id": secrets.token_hex(8),
+            "kind": kind,
+            "severity": severity,
+            "source": self.name,
+            "reason": reason[:1024],
+            "subject": subject,
+            "request_id": None,
+            "client_id": None,
+            "ip": None,
+            "evidence_ref": None,
+            "produced_at": self._clock_iso(),
+        }
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=payload)
 
     def _hysteresis_ok(self, st: _TargetState, new: int, current: int) -> bool:
         """Refuse two same-direction moves inside hysteresis_windows

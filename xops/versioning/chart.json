@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.3.1",
-    "build": 0,
+    "build": 11,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.6.0",
+      "version": "1.6.3",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-06T08:20:00+00:00"
+      "last_changed": "2026-05-06T09:38:57+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -19,9 +19,9 @@
       "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.9.0",
+      "version": "3.12.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-06T08:38:45+00:00"
+      "last_changed": "2026-05-06T09:12:00+00:00"
     },
     "docs": {
       "version": "1.20.3",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.33.0",
+      "version": "0.37.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-06T08:38:45+00:00"
+      "last_changed": "2026-05-06T09:38:57+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2337,6 +2337,105 @@
       "from": "1.3.0",
       "to": "1.3.1",
       "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T09:04:24+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8 §8.3 live backup drivers (executors+verifier)",
+      "from": "3.9.0",
+      "to": "3.10.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T09:08:15+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8 §8.3 — backup wiring factory + role probe + PII-aware exclude",
+      "from": "3.10.0",
+      "to": "3.11.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-06T09:08:16+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 8 §8.3 — bootstrap auto-wires live backup drivers when cfg present",
+      "from": "0.33.0",
+      "to": "0.33.1",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-05-06T09:12:00+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8 §8.3 — pg_role connlimit probe + backup-age gauge",
+      "from": "3.11.0",
+      "to": "3.12.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-05-06T09:19:39+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 §8.16.1 — scaler default-policy fallback + sec.alert + audit event + new schema",
+      "from": "0.33.1",
+      "to": "0.34.0",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-05-06T09:19:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8 §8.16.1 — new cfg key maint_scaler_default_max_replicas",
+      "from": "1.6.0",
+      "to": "1.6.1",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-05-06T09:28:32+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 §8.16.1 — orphan-cfg detection + KNOWN_SEC_ALERT_KINDS additions",
+      "from": "0.34.0",
+      "to": "0.35.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-05-06T09:33:36+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 §8.13.2 MaintStorageWarden + new sec.alert kind maint_storage_pressure",
+      "from": "0.35.0",
+      "to": "0.36.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-05-06T09:33:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "cfg knob maint_storage_total_max_mb (Phase 8 §8.13.2)",
+      "from": "1.6.1",
+      "to": "1.6.2",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-05-06T09:38:57+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 §8.6 Detectors B + C wired into MaintSchemaSentinel",
+      "from": "0.36.0",
+      "to": "0.37.0",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-05-06T09:38:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "cfg knob maint_schema_pg_check_interval_s (Phase 8 §8.6 Detector B)",
+      "from": "1.6.2",
+      "to": "1.6.3",
+      "build": 11
     }
   ]
 }

@@ -183,14 +183,19 @@ def build_agents() -> list[Agent]:
     sec_rate = SecRateAgent()
     # Phase 8 self-maintenance reactors. Each is leader-gated and
     # joins SINGLE_INSTANCE_AGENTS above. The §8.3 backup agent
-    # ships with no-op Protocol shims for dump / verify / prune /
-    # quarantine; the Phase R1 datasource bootstrap will inject the
-    # live drivers.
+    # picks live `pg_dump` / `age` / restore-verify drivers when
+    # `cfg.maint_backup_pg_dsn` is set; otherwise the in-memory
+    # shims are used (dev / CI profile).
     maint_scaler = MaintScaler()
     maint_dlq = MaintDlqSupervisor()
     maint_schema = MaintSchemaSentinel()
     maint_sec = MaintSecAgent()
-    maint_backup = MaintBackupAgent()
+    from xops.backup.wiring import build_backup_drivers
+    _backup_drivers = build_backup_drivers(_cfg)
+    maint_backup = MaintBackupAgent(
+        dump=_backup_drivers.dump,
+        verifier=_backup_drivers.verifier,
+    )
     return [
         *predictors,
         consensus,

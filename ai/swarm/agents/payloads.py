@@ -1126,6 +1126,11 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     # maint.deadmans.v1 (§8.16 D2)
     "maint_silence_alert",
     "maint_self_dlq_alert",
+    # maint.scaler.v1 (§8.16.1 default-policy fallback + orphan-cfg)
+    "maint_scaler_unconfigured_agent",
+    "maint_scaler_orphan_cfg",
+    # maint.storage.v1 (§8.13.2 cumulative storage cap)
+    "maint_storage_pressure",
 })
 
 
