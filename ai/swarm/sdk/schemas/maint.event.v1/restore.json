@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/restore",
+  "title": "maint.event.v1{kind=restore}",
+  "description": "Phase 8 §8.1 / §8.3 — operator-driven restore from a stored backup. ALWAYS_DESTRUCTIVE: replaces live data. `target` is the dump date (YYYY-MM-DD); `from_offsite` selects the off-host replica when true (per §8.12). Consumer: maint.backup.v1 (lands in §8.3).",
+  "type": "object",
+  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "properties": {
+    "kind":        { "const": "restore" },
+    "target":      { "type": "string", "minLength": 1, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "Dump date in YYYY-MM-DD form." },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "client_id":   { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "from_offsite": { "type": "boolean", "description": "When true, pull the dump from the off-host replica (§8.12) instead of the on-host PVC. Default false." },
+    "destination_conn": { "type": "string", "description": "Optional override DSN (used by DR drills targeting a fresh PG instance per §8.12). When unset, restores into the live primary — destructive." },
+    "reason":      { "type": "string", "description": "Operator narration for the audit trail." }
+  },
+  "additionalProperties": false
+}

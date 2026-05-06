@@ -279,6 +279,114 @@ def cmd_spool_reconcile(_argv: List[str]) -> int:
     return subprocess.call(cmd)
 
 
+def cmd_retrain_approve(_argv: List[str]) -> int:
+    """`make ops.retrain-approve TARGET=<predictor> [DRIFT_REQUEST_ID=<uuid>] [NOTE=<text>]`."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.retrain-approve: TARGET=<predictor> is required")
+        return 64
+    args = ["retrain-approve", "--target", target]
+    drift = _env("DRIFT_REQUEST_ID")
+    if drift:
+        args.extend(["--drift-request-id", drift])
+    note = _env("NOTE")
+    if note:
+        args.extend(["--note", note])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_backup_now(_argv: List[str]) -> int:
+    """`make ops.backup-now TARGET=pg [SKIP_PRUNE=1] [REASON=<text>]`."""
+    target = _env("TARGET", "pg")
+    args = ["backup-now", "--target", target]
+    if _env("SKIP_PRUNE", "0") == "1":
+        args.append("--skip-prune")
+    reason = _env("REASON")
+    if reason:
+        args.extend(["--reason", reason])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_backup_rotate_key(_argv: List[str]) -> int:
+    """`make ops.backup-rotate-key TARGET=<label> SCOPE=verify|dr [ADD_RECIPIENT=<age>] CONFIRM=<token>`."""
+    target = _env("TARGET")
+    scope = _env("SCOPE")
+    if not target or not scope:
+        err("ops.backup-rotate-key: TARGET=<label> and SCOPE=verify|dr are required")
+        return 64
+    args = ["backup-rotate-key", "--target", target, "--scope", scope]
+    add_recipient = _env("ADD_RECIPIENT")
+    if add_recipient:
+        args.extend(["--add-recipient", add_recipient])
+    reason = _env("REASON")
+    if reason:
+        args.extend(["--reason", reason])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_restore(_argv: List[str]) -> int:
+    """`make ops.restore TARGET=YYYY-MM-DD [FROM_OFFSITE=1] [DESTINATION_CONN=<dsn>] CONFIRM=<token>`."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.restore: TARGET=YYYY-MM-DD is required")
+        return 64
+    args = ["restore", "--target", target]
+    if _env("FROM_OFFSITE", "0") == "1":
+        args.append("--from-offsite")
+    dest = _env("DESTINATION_CONN")
+    if dest:
+        args.extend(["--destination-conn", dest])
+    reason = _env("REASON")
+    if reason:
+        args.extend(["--reason", reason])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_allowlist_extend(_argv: List[str]) -> int:
+    """`make ops.allowlist-extend TARGET=<source>:<rule> [TTL_S=<s>] [REASON=<text>]`."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.allowlist-extend: TARGET=<source>:<rule_id> is required")
+        return 64
+    args = ["allowlist-extend", "--target", target]
+    ttl = _env("TTL_S")
+    if ttl:
+        args.extend(["--ttl-s", ttl])
+    reason = _env("REASON")
+    if reason:
+        args.extend(["--reason", reason])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_allowlist_approve(_argv: List[str]) -> int:
+    """`make ops.allowlist-approve TARGET=<source>:<rule> [REASON=<text>]`."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.allowlist-approve: TARGET=<source>:<rule_id> is required")
+        return 64
+    args = ["allowlist-approve", "--target", target]
+    reason = _env("REASON")
+    if reason:
+        args.extend(["--reason", reason])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_allowlist_show(_argv: List[str]) -> int:
+    """`make ops.allowlist-show TARGET=all|<source>|<source>:<rule> [INCLUDE_EXPIRED=1]`."""
+    target = _env("TARGET", "all")
+    args = ["allowlist-show", "--target", target]
+    if _env("INCLUDE_EXPIRED", "0") == "1":
+        args.append("--include-expired")
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
 COMMANDS = {
     "liveness": cmd_liveness,
     "denylist-clear": cmd_denylist_clear,
@@ -296,6 +404,13 @@ COMMANDS = {
     "dlq-replay": cmd_dlq_replay,
     "dlq-unfreeze": cmd_dlq_unfreeze,
     "denylist-decimate-now": cmd_denylist_decimate_now,
+    "retrain-approve": cmd_retrain_approve,
+    "backup-now": cmd_backup_now,
+    "backup-rotate-key": cmd_backup_rotate_key,
+    "restore": cmd_restore,
+    "allowlist-extend": cmd_allowlist_extend,
+    "allowlist-approve": cmd_allowlist_approve,
+    "allowlist-show": cmd_allowlist_show,
 }
 
 

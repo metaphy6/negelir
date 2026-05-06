@@ -83,6 +83,19 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # agent id), the consumer set is just that agent.
     "maint_pause":       frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
     "maint_resume":      frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
+    # Phase 8 §8.3 — operator-driven backup lifecycle. Consumer is
+    # maint.backup.v1, which lands in §8.3; until then the consumer
+    # set is empty and KINDS_PENDING_CONSUMER_LANDING below cites
+    # the upcoming phase.
+    "backup_now":        frozenset(),
+    "backup_rotate_key": frozenset(),
+    "restore":           frozenset(),
+    # Phase 8 §8.7 — operator-driven pattern_allowlist lifecycle.
+    # Consumer is maint.sec.v1 (FP feedback loop), which lands in
+    # §8.7; until then the consumer set is empty.
+    "allowlist_extend":  frozenset(),
+    "allowlist_approve": frozenset(),
+    "allowlist_show":    frozenset(),
     # ── Notification-only kinds (Phase 8.2 + 8.5) ────────────────────
     # These are emitted BY maint reactors as side-effect telemetry.
     # They carry NO ``request_id`` (or carry one but expect no acks)
@@ -127,6 +140,12 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
 KINDS_PENDING_CONSUMER_LANDING: Final[Mapping[str, str]] = {
     "retrain_request":  "Phase 5.x (trainer-as-agent) + Phase 8.2 (scaler warm-up)",
     "retrain_approve":  "Phase 5.x (trainer-as-agent)",
+    "backup_now":        "Phase 8.3 (maint.backup.v1)",
+    "backup_rotate_key": "Phase 8.3 (maint.backup.v1)",
+    "restore":           "Phase 8.3 (maint.backup.v1)",
+    "allowlist_extend":  "Phase 8.7 (maint.sec.v1 allowlist surface)",
+    "allowlist_approve": "Phase 8.7 (maint.sec.v1 allowlist surface)",
+    "allowlist_show":    "Phase 8.7 (maint.sec.v1 allowlist surface)",
 }
 
 # Kinds that are intentionally consumer-less because they are

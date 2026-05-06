@@ -338,6 +338,54 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "row_count": 3,
         "erased_at": "2025-01-01T12:00:00Z",
     },
+    # Phase 8 §8.1 — operator-driven backup lifecycle (consumer
+    # maint.backup.v1 lands in §8.3).
+    "backup_now": {
+        "kind": "backup_now",
+        "target": "pg",
+        "request_id": "req-bk1",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "backup_rotate_key": {
+        "kind": "backup_rotate_key",
+        "target": "verify-2026-Q3",
+        "scope": "verify",
+        "request_id": "req-bk2",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "restore": {
+        "kind": "restore",
+        "target": "2025-01-01",
+        "request_id": "req-bk3",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    # Phase 8 §8.1 — operator-driven pattern_allowlist lifecycle
+    # (consumer maint.sec.v1 lands in §8.7).
+    "allowlist_extend": {
+        "kind": "allowlist_extend",
+        "target": "mackolik:rule_42",
+        "ttl_s": 86400,
+        "request_id": "req-al1",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "allowlist_approve": {
+        "kind": "allowlist_approve",
+        "target": "mackolik:rule_42",
+        "request_id": "req-al2",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "allowlist_show": {
+        "kind": "allowlist_show",
+        "target": "all",
+        "request_id": "req-al3",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
 }
 
 

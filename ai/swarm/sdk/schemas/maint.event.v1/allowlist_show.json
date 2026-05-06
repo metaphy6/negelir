@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/allowlist_show",
+  "title": "maint.event.v1{kind=allowlist_show}",
+  "description": "Phase 8 §8.1 / §8.7 — operator queries the active pattern_allowlist surface. The CLI does NOT read PG directly (§8.1 'no bypass channels'); instead the consumer (maint.sec.v1, lands in §8.7) responds with the matching rows in `maint.ack.v1.details.rows[]` (capped per §8.15.5 details budget; oversize → operator narrows the filter or queries the audit table out-of-band). `target` is a filter expression: 'all' (everything; bounded by the consumer's max-row cap), '<source>' (single source), or '<source>:<rule_id>' (single row).",
+  "type": "object",
+  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "properties": {
+    "kind":        { "const": "allowlist_show" },
+    "target":      { "type": "string", "minLength": 1, "description": "'all', a source id, or '<source>:<rule_id>'." },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "client_id":   { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "include_expired": { "type": "boolean", "description": "When true, include rows in state='e' (expired). Default false (active only)." }
+  },
+  "additionalProperties": false
+}

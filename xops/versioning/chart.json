@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 0,
+    "build": 2,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.6.4",
+      "version": "1.6.5",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-06T10:19:59+00:00"
+      "last_changed": "2026-05-06T13:10:38+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -19,9 +19,9 @@
       "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.14.1",
+      "version": "3.15.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-06T12:47:08+00:00"
+      "last_changed": "2026-05-06T13:10:32+00:00"
     },
     "docs": {
       "version": "1.20.3",
@@ -2481,6 +2481,24 @@
       "from": "1.3.1",
       "to": "1.3.2",
       "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T13:10:32+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8 §8.1 ops console close-out: 7 new subcommands + dlq-resume alias (23-subcommand surface); destructive-set boundary test; emit-cap helper consumer in tests",
+      "from": "3.14.1",
+      "to": "3.15.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T13:10:38+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8 §8.1: 6 new maint.event.v1 sub-schemas (backup_now, backup_rotate_key, restore, allowlist_{extend,approve,show}) with consumer-pending routing; maint.ack.v1 emit-time cap helper build_capped_maint_ack; maint_ack_oversize SecAlert kind",
+      "from": "1.6.4",
+      "to": "1.6.5",
+      "build": 2
     }
   ]
 }

@@ -1126,6 +1126,12 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     # maint.deadmans.v1 (§8.16 D2)
     "maint_silence_alert",
     "maint_self_dlq_alert",
+    # maint.* ack producers (§8.1 wire-level cap; emitted by
+    # ai.swarm.sdk.maint_ack.build_capped_maint_ack when an
+    # outgoing maint.ack.v1 payload would exceed
+    # cfg.maint_ack_payload_max_bytes and the consumer truncates
+    # `details` to keep the bus envelope inside the cap).
+    "maint_ack_oversize",
     # maint.scaler.v1 (§8.16.1 default-policy fallback + orphan-cfg)
     "maint_scaler_unconfigured_agent",
     "maint_scaler_orphan_cfg",

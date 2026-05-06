@@ -407,6 +407,34 @@ ops.spool-show: ## §8.1 — read-only spool listing ([LIMIT=<n>])
 ops.spool-reconcile: ## §8.16.2 — alert on stale incomplete spool-flush ack rows ([HORIZON_H=<h>])
 	@$(XOPS)/opsctl.py spool-reconcile
 
+.PHONY: ops.retrain-approve
+ops.retrain-approve: ## §8.1 — authorize a trainer run (TARGET=<predictor> [DRIFT_REQUEST_ID=<uuid>] [NOTE=<text>])
+	@$(XOPS)/opsctl.py retrain-approve
+
+.PHONY: ops.backup-now
+ops.backup-now: ## §8.1/§8.3 — force PG dump+verify (TARGET=pg [SKIP_PRUNE=1] [REASON=<text>])
+	@$(XOPS)/opsctl.py backup-now
+
+.PHONY: ops.backup-rotate-key
+ops.backup-rotate-key: ## §8.1/§8.13.6 — rotate backup keys (TARGET=<label> SCOPE=verify|dr [ADD_RECIPIENT=<age>] CONFIRM=<token>) DESTRUCTIVE
+	@$(XOPS)/opsctl.py backup-rotate-key
+
+.PHONY: ops.restore
+ops.restore: ## §8.1/§8.3 — restore PG (TARGET=YYYY-MM-DD [FROM_OFFSITE=1] [DESTINATION_CONN=<dsn>] CONFIRM=<token>) DESTRUCTIVE
+	@$(XOPS)/opsctl.py restore
+
+.PHONY: ops.allowlist-extend
+ops.allowlist-extend: ## §8.1/§8.7 — extend allowlist row TTL (TARGET=<source>:<rule> [TTL_S=<s>])
+	@$(XOPS)/opsctl.py allowlist-extend
+
+.PHONY: ops.allowlist-approve
+ops.allowlist-approve: ## §8.1/§8.7 — promote allowlist row pending→active (TARGET=<source>:<rule>)
+	@$(XOPS)/opsctl.py allowlist-approve
+
+.PHONY: ops.allowlist-show
+ops.allowlist-show: ## §8.1/§8.7 — read-only allowlist query (TARGET=all|<source>|<source>:<rule> [INCLUDE_EXPIRED=1])
+	@$(XOPS)/opsctl.py allowlist-show
+
 # ══════════════════════════════════════════════════════════════
 #                       PHASE TRACKING
 # ══════════════════════════════════════════════════════════════

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_now",
+  "title": "maint.event.v1{kind=backup_now}",
+  "description": "Phase 8 §8.1 / §8.3 — operator forces an immediate nightly-shape pg_dump + restore-verify cycle outside the cron window. Consumer: maint.backup.v1 (lands in §8.3). `target` is 'pg' for the standard PG dump, or a specific db name when multiple DBs exist (v1: 'pg' only is recognised; other values rejected at consumer side).",
+  "type": "object",
+  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "properties": {
+    "kind":        { "const": "backup_now" },
+    "target":      { "type": "string", "minLength": 1, "description": "v1: 'pg' (the only recognised value). Future DBs widen the consumer-side allow-list, not the schema." },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "client_id":   { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "reason":      { "type": "string", "description": "Free-text justification (e.g. 'pre-deploy snapshot before migration 0XX')." },
+    "skip_prune":  { "type": "boolean", "description": "When true, the consumer runs dump + verify but skips the §8.3 TTL prune phase. Useful for emergency snapshots; default false." }
+  },
+  "additionalProperties": false
+}

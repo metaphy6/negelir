@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_rotate_key",
+  "title": "maint.event.v1{kind=backup_rotate_key}",
+  "description": "Phase 8 §8.1 / §8.3 / §8.13.6 — operator triggers backup encryption-key rotation. `target` is the key scope: 'verify' (per-dump verify keypair) or 'dr' (long-term DR-class recipients). The operator runbook at docs/guides/backup_key_compromise_runbook.md (Phase 8.13.6) documents the three rotation scenarios. Consumer: maint.backup.v1 (lands in §8.3).",
+  "type": "object",
+  "required": ["kind", "target", "request_id", "client_id", "produced_at", "scope"],
+  "properties": {
+    "kind":        { "const": "backup_rotate_key" },
+    "target":      { "type": "string", "minLength": 1, "description": "Free-form audit label (e.g. 'verify-2026-Q3', 'dr-key-rev-7')." },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "client_id":   { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "scope":       { "type": "string", "enum": ["verify", "dr"], "description": "'verify' rotates the per-dump verify keypair (low blast radius); 'dr' rotates the long-term DR-class recipients per §8.13.6 doctrine." },
+    "add_recipient": { "type": "string", "description": "Optional public key (age recipient) to add when scope='dr'." },
+    "reason":      { "type": "string", "description": "Free-text justification (compromise scenario, scheduled rotation, etc.)." }
+  },
+  "additionalProperties": false
+}
