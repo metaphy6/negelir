@@ -168,6 +168,13 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
     },
+    "dlq_unfreeze": {
+        "kind": "dlq_unfreeze",
+        "target": "predict.vote.dlq",
+        "request_id": "req-008b",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
     "denylist_decimate_now": {
         "kind": "denylist_decimate_now",
         "target": "all",
@@ -242,6 +249,21 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "target": "predict.vote.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "reason": "rate_limited",
+    },
+    "dlq_consumer_broken": {
+        "kind": "dlq_consumer_broken",
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "reason": "poison_pattern",
+        "distinct_request_ids": 5,
+        "window_s": 600,
+    },
+    "dlq_topic_unfrozen": {
+        "kind": "dlq_topic_unfrozen",
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "request_id": "req-008b",
+        "was_frozen": True,
     },
     # Phase 8.3 backup agent — notification-only kinds.
     "backup_started": {

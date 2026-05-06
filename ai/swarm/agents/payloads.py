@@ -1080,6 +1080,7 @@ class MaintAck:
 _ALLOWED_QA_VERDICTS: frozenset[str] = frozenset({"pass", "sanitized"})
 _ALLOWED_SEC_SOURCES: frozenset[str] = frozenset({
     "sec.input.v1", "sec.scrape.v1", "sec.rate.v1",
+    "maint.deadmans.v1",
 })
 _ALLOWED_SEC_SEVERITIES: frozenset[str] = frozenset({
     "info", "warn", "error", "critical",
@@ -1122,6 +1123,9 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "denylist_removed",
     "denylist_growth_anomaly",
     "subject_map_churn",
+    # maint.deadmans.v1 (§8.16 D2)
+    "maint_silence_alert",
+    "maint_self_dlq_alert",
 })
 
 

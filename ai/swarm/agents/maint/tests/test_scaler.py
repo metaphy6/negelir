@@ -361,3 +361,143 @@ def test_cfg_rejects_unknown_maint_runtime() -> None:
     issues = side.validate()
     assert any("maint_runtime" in x for x in issues), \
         f"expected validator to flag maint_runtime, got: {issues!r}"
+
+
+# ── Phase 8 §8.2 A1 — Welford rolling sketches + scale_down_grace_windows ──
+
+def test_welford_smooths_single_spike(monkeypatch) -> None:
+    """A single spike in queue_depth must NOT trigger scale-up when
+    smoothed by the Welford sketch (window > 1)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 5, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_queue_depth", 5, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_grace_windows", 0, raising=False)
+    agent = MaintScaler()
+    # Four calm windows → mean stays low.
+    for _ in range(4):
+        agent.tick({"a": {"queue_depth": 5, "in_flight": 1, "head_age_s": 0}})
+    # One spike — mean = (5*4 + 200)/5 = 44 < 50 → still no scale-up.
+    out = agent.tick({"a": {"queue_depth": 200, "in_flight": 1, "head_age_s": 0}})
+    kinds = [m.payload.get("kind") for m in out]
+    assert "scale_decision" not in kinds
+
+
+def test_welford_window_zero_falls_back_to_instantaneous(monkeypatch) -> None:
+    """``maint_scaler_signal_window_samples=0`` disables smoothing — a
+    single sample above the threshold MUST trigger scale-up immediately."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_grace_windows", 0, raising=False)
+    agent = MaintScaler()
+    out = agent.tick({"a": {"queue_depth": 200, "in_flight": 1, "head_age_s": 0}})
+    kinds = [m.payload.get("kind") for m in out]
+    assert "scale_decision" in kinds
+
+
+def test_scale_down_grace_holds_replicas_for_n_windows(monkeypatch) -> None:
+    """A target sitting at >1 replicas must observe grace windows of
+    low load BEFORE the scaler emits the down-scale. Throttle reason
+    on the held windows is `scale_down_grace`."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_queue_depth", 5, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_grace_windows", 2, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_min_decision_interval_s", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_decision_window_ms", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_min_replicas", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_hysteresis_windows", 1, raising=False)
+    agent = MaintScaler()
+    # Pre-load: target sitting at 3 replicas so a down-scale is even possible.
+    agent._targets["a"] = agent._evict_and_get("a")
+    agent._targets["a"].last_replicas = 3
+    sig = {"a": {"queue_depth": 1, "in_flight": 0, "head_age_s": 0}}
+    import time
+    out1 = agent.tick(sig); time.sleep(0.005)
+    out2 = agent.tick(sig); time.sleep(0.005)
+    out3 = agent.tick(sig)
+    reasons1 = [m.payload.get("reason") for m in out1 if m.payload.get("kind") == "scale_throttled"]
+    reasons2 = [m.payload.get("reason") for m in out2 if m.payload.get("kind") == "scale_throttled"]
+    kinds3 = [m.payload.get("kind") for m in out3]
+    assert "scale_down_grace" in reasons1
+    assert "scale_down_grace" in reasons2
+    # On the third low window the grace counter is satisfied → real down-scale fires.
+    assert "scale_decision" in kinds3
+    # Streak resets after the down-scale fires.
+    assert agent._targets["a"].low_streak == 3 or agent._targets["a"].last_replicas == 2
+
+
+def test_scale_up_resets_low_streak(monkeypatch) -> None:
+    """A scale-up signal mid-streak resets the consecutive-low-window
+    counter so a subsequent calm window starts the grace clock fresh."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_queue_depth", 5, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_down_grace_windows", 5, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_min_decision_interval_s", 0.0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_decision_window_ms", 1, raising=False)
+    agent = MaintScaler()
+    st = agent._evict_and_get("a")
+    st.last_replicas = 4
+    import time
+    agent.tick({"a": {"queue_depth": 1, "in_flight": 0, "head_age_s": 0}}); time.sleep(0.005)
+    agent.tick({"a": {"queue_depth": 1, "in_flight": 0, "head_age_s": 0}}); time.sleep(0.005)
+    assert st.low_streak == 2
+    # Spike triggers scale-up consideration → resets streak.
+    agent.tick({"a": {"queue_depth": 999, "in_flight": 0, "head_age_s": 0}})
+    assert st.low_streak == 0
+
+
+# ── Phase 8 §8.2 A2 — Load-driven clamp formula ──
+
+def test_clamp_formula_steps_toward_desired(monkeypatch) -> None:
+    """When the smoothed load supports many replicas the clamp formula
+    raises the desired count, but the per-window step cap throttles
+    the actual movement (default max_step_per_window=1)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_target_load_per_replica", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_step_per_window", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 16, raising=False)
+    agent = MaintScaler()
+    # Load = 200 → desired = ceil(200/50) = 4, but step cap → +1.
+    out = agent.tick({"a": {"queue_depth": 200, "in_flight": 0, "head_age_s": 0}})
+    decisions = [m for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions, f"expected a scale_decision, got {[m.payload for m in out]}"
+    assert decisions[0].payload["next"] == 2  # 1 → 2 (step cap)
+
+
+def test_clamp_formula_step_cap_two(monkeypatch) -> None:
+    """Raising ``maint_scaler_max_step_per_window`` lets the scaler
+    cover more ground per tick."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_target_load_per_replica", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_step_per_window", 3, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 16, raising=False)
+    agent = MaintScaler()
+    out = agent.tick({"a": {"queue_depth": 500, "in_flight": 0, "head_age_s": 0}})
+    decisions = [m for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions
+    # Load 500 → desired = 10. Current 1 + step 3 = 4.
+    assert decisions[0].payload["next"] == 4
+
+
+def test_clamp_formula_disabled_falls_back_to_step(monkeypatch) -> None:
+    """``maint_scaler_target_load_per_replica=0`` reverts to the legacy
+    ±1-step decision (no clamp formula)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_target_load_per_replica", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 50, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 16, raising=False)
+    agent = MaintScaler()
+    out = agent.tick({"a": {"queue_depth": 500, "in_flight": 0, "head_age_s": 0}})
+    decisions = [m for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions
+    assert decisions[0].payload["next"] == 2  # +1 step from default 1

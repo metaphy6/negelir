@@ -194,3 +194,210 @@ def test_per_topic_rate_limit_emits_dlq_dropped(monkeypatch) -> None:
     acks = [m.payload for m in out2 if m.envelope.topic == MAINT_ACK]
     assert dropped and dropped[0]["reason"] == "rate_limited"
     assert acks and acks[0]["accepted"] is False and acks[0]["reason"] == "rate_limited"
+
+
+# ── Phase 8 §8.5 C1 — Round-robin topic fairness + per-tick budget ──
+
+def test_tick_round_robin_emits_one_per_eligible_topic(monkeypatch) -> None:
+    """``tick(active_topics)`` must emit one ``dlq_replayed`` per
+    eligible topic with budget = max(1, total // n_topics)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_dlq_max_replays_per_tick", 30, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    agent = MaintDlqSupervisor()
+    out = agent.tick(["predict.final.dlq", "predict.vote.dlq", "qa.feedback.dlq"])
+    replayed = [m for m in out if m.payload.get("kind") == "dlq_replayed"]
+    assert len(replayed) == 3
+    for m in replayed:
+        assert m.payload["scheduler"] == "round_robin"
+        assert m.payload["budget_per_topic"] == 10  # 30 // 3
+        assert m.payload["active_topic_count"] == 3
+
+
+def test_tick_skips_recursion_deny_topics() -> None:
+    """Topics in RECURSION_DENY_SET must be filtered out and surfaced
+    via ``dlq_topic_disabled_drained`` notifications."""
+    agent = MaintDlqSupervisor()
+    out = agent.tick(list(RECURSION_DENY_SET)[:2] + ["predict.final.dlq"])
+    drained = [m for m in out if m.payload.get("kind") == "dlq_topic_disabled_drained"]
+    replayed = [m for m in out if m.payload.get("kind") == "dlq_replayed"]
+    assert len(drained) == 2
+    assert len(replayed) == 1
+    assert replayed[0].payload["target"] == "predict.final.dlq"
+
+
+def test_tick_empty_active_topics_returns_empty() -> None:
+    agent = MaintDlqSupervisor()
+    assert agent.tick([]) == []
+
+
+def test_tick_non_leader_returns_empty() -> None:
+    leader = SingleProcessLeader(name="maint.dlq.v1")
+    leader.shed()
+    agent = MaintDlqSupervisor(leader=leader)
+    assert agent.tick(["predict.final.dlq"]) == []
+
+
+def test_tick_per_topic_budget_floor_one(monkeypatch) -> None:
+    """When more topics than total budget, every eligible topic still
+    gets a budget of at least 1 (the max(1, …) floor)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_dlq_max_replays_per_tick", 2, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    agent = MaintDlqSupervisor()
+    out = agent.tick([f"t{i}.dlq" for i in range(5)])
+    replayed = [m for m in out if m.payload.get("kind") == "dlq_replayed"]
+    assert len(replayed) == 5
+    for m in replayed:
+        assert m.payload["budget_per_topic"] >= 1
+
+
+# ── Phase 8 §8.5 C2 — Poison-pattern detection + freeze ─────────────
+
+def _make_replay_msg(target: str, request_id: str, client_id: str = "ops") -> Message:
+    """Build a dlq_replay Message with a unique client_id so backoff
+    dedup does not fire across requests in a single test."""
+    payload = {
+        "kind": "dlq_replay",
+        "target": target,
+        "request_id": request_id,
+        "client_id": client_id,
+        "produced_at": "2025-01-01T00:00:00Z",
+    }
+    env = Envelope(
+        message_id=request_id,
+        trace_id=request_id,
+        topic=MAINT_EVENT,
+        producer="ops",
+        created_at="2025-01-01T00:00:00Z",
+        schema_version=1,
+        attempt=1,
+    )
+    return Message(envelope=env, payload=payload)
+
+
+def test_poison_pattern_freezes_topic_after_threshold(monkeypatch) -> None:
+    """≥ N distinct request_ids escalating on the same topic within the
+    window must freeze the topic and emit dlq_consumer_broken once.
+    Drives the escalation path by sending each request twice (visit
+    count exceeds visit_max=1 floor on the 2nd visit)."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_lru", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_per_topic_max_per_min", 1000, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_visit_max", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_poison_distinct_threshold", 3, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_poison_window_s", 600, raising=False)
+    agent = MaintDlqSupervisor()
+    broken = []
+    for i in range(3):
+        # 1st visit replays, 2nd visit escalates → poison log entry
+        list(agent.handle(_make_replay_msg("predict.vote.dlq", f"req-{i}")))
+        out = list(agent.handle(_make_replay_msg("predict.vote.dlq", f"req-{i}")))
+        broken.extend([m for m in out if m.payload.get("kind") == "dlq_consumer_broken"])
+    assert len(broken) == 1, f"expected exactly one freeze event, got {len(broken)}"
+    assert broken[0].payload["distinct_request_ids"] == 3
+    assert "predict.vote.dlq" in agent._frozen_topics
+
+
+def test_frozen_topic_refuses_further_replays(monkeypatch) -> None:
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_lru", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_per_topic_max_per_min", 1000, raising=False)
+    agent = MaintDlqSupervisor()
+    agent._frozen_topics["predict.vote.dlq"] = "poison_pattern"
+    out = list(agent.handle(_make_replay_msg("predict.vote.dlq", "req-X")))
+    drops = [m for m in out if m.payload.get("kind") == "dlq_dropped"]
+    assert len(drops) == 1
+    assert drops[0].payload["reason"] == "topic_frozen"
+
+
+def test_dlq_unfreeze_lifts_freeze_and_is_idempotent() -> None:
+    agent = MaintDlqSupervisor()
+    agent._frozen_topics["predict.vote.dlq"] = "poison_pattern"
+    payload1 = {"kind": "dlq_unfreeze", "target": "predict.vote.dlq",
+                "request_id": "u1", "client_id": "ops",
+                "produced_at": "2025-01-01T00:00:00Z"}
+    env = Envelope(message_id="u1", trace_id="u1", topic=MAINT_EVENT,
+                   producer="ops", created_at="2025-01-01T00:00:00Z",
+                   schema_version=1, attempt=1)
+    out1 = list(agent.handle(Message(envelope=env, payload=payload1)))
+    notif1 = [m for m in out1 if m.payload.get("kind") == "dlq_topic_unfrozen"]
+    assert notif1 and notif1[0].payload["was_frozen"] is True
+    assert "predict.vote.dlq" not in agent._frozen_topics
+    # Idempotent second call.
+    payload2 = dict(payload1, request_id="u2")
+    env2 = Envelope(message_id="u2", trace_id="u2", topic=MAINT_EVENT,
+                    producer="ops", created_at="2025-01-01T00:00:00Z",
+                    schema_version=1, attempt=1)
+    out2 = list(agent.handle(Message(envelope=env2, payload=payload2)))
+    notif2 = [m for m in out2 if m.payload.get("kind") == "dlq_topic_unfrozen"]
+    assert notif2 and notif2[0].payload["was_frozen"] is False
+
+
+def test_poison_window_expiry_resets_count(monkeypatch) -> None:
+    """Escalations older than the window must be pruned so a slow
+    burst below threshold does not eventually freeze the topic."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_dlq_poison_distinct_threshold", 3, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_poison_window_s", 10, raising=False)
+    now = [1000.0]
+    agent = MaintDlqSupervisor(clock_s=lambda: now[0])
+    # First 2 escalations at t=0..1
+    assert agent._record_escalation("t.dlq", "r1") is False
+    now[0] += 1
+    assert agent._record_escalation("t.dlq", "r2") is False
+    # Advance past window before 3rd
+    now[0] += 100
+    assert agent._record_escalation("t.dlq", "r3") is False
+    # Only r3 remains in window; threshold not crossed.
+    assert "t.dlq" not in agent._frozen_topics
+
+
+# ── Phase 8 §8.13.5 D1 — DLQ pause/resume idempotency integration ──
+
+def _pause_msg(target: str, request_id: str, *, kind: str = "maint_pause",
+               ttl_s: int | None = None) -> Message:
+    payload: dict = {"kind": kind, "target": target, "request_id": request_id,
+                     "client_id": "ops", "produced_at": "2025-01-01T00:00:00Z"}
+    if ttl_s is not None:
+        payload["ttl_s"] = ttl_s
+    env = Envelope(message_id=request_id, trace_id=request_id,
+                   topic=MAINT_EVENT, producer="ops",
+                   created_at="2025-01-01T00:00:00Z",
+                   schema_version=1, attempt=1)
+    return Message(envelope=env, payload=payload)
+
+
+def test_dlq_maint_pause_acks_paused_then_already_paused() -> None:
+    agent = MaintDlqSupervisor()
+    out1 = list(agent.handle(_pause_msg("maint.dlq.v1", "p1")))
+    out2 = list(agent.handle(_pause_msg("maint.dlq.v1", "p2")))
+    acks1 = [m for m in out1 if m.envelope.topic == MAINT_ACK]
+    acks2 = [m for m in out2 if m.envelope.topic == MAINT_ACK]
+    assert acks1 and acks1[0].payload["reason"] == "paused"
+    assert acks2 and acks2[0].payload["reason"] == "already_paused"
+
+
+def test_dlq_paused_blocks_tick() -> None:
+    agent = MaintDlqSupervisor()
+    list(agent.handle(_pause_msg("all", "p1")))
+    out = agent.tick(["predict.vote.dlq"])
+    assert out == []
+
+
+def test_dlq_self_isolated_rejects_pause_with_requires_resume_first() -> None:
+    agent = MaintDlqSupervisor()
+    agent._pause.self_isolated = True
+    out = list(agent.handle(_pause_msg("maint.dlq.v1", "p1")))
+    acks = [m for m in out if m.envelope.topic == MAINT_ACK]
+    assert acks and acks[0].payload["accepted"] is False
+    assert acks[0].payload["reason"] == "requires_resume_first"
+
+
+def test_dlq_resume_from_isolation_clears_self_isolation() -> None:
+    agent = MaintDlqSupervisor()
+    agent._pause.self_isolated = True
+    out = list(agent.handle(_pause_msg("maint.dlq.v1", "r1", kind="maint_resume")))
+    acks = [m for m in out if m.envelope.topic == MAINT_ACK]
+    assert acks and acks[0].payload["reason"] == "resumed_from_isolation"
+    assert agent._pause.self_isolated is False

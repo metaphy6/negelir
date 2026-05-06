@@ -9,8 +9,9 @@
     "kind":        { "const": "dlq_dropped" },
     "target":      { "type": "string", "minLength": 1 },
     "produced_at": { "type": "string" },
-    "reason":      { "type": "string", "enum": ["rate_limited", "backoff_dedup", "malformed_payload"] },
-    "request_id":  { "type": "string", "description": "Originating operator request_id (if any)." }
+    "reason":      { "type": "string", "enum": ["rate_limited", "backoff_dedup", "malformed_payload", "topic_frozen"] },
+    "request_id":  { "type": "string", "description": "Originating operator request_id (if any)." },
+    "scheduler":   { "type": "string", "enum": ["operator", "round_robin"], "description": "Phase 8 §8.5 C1: emitter context." }
   },
   "additionalProperties": false
 }

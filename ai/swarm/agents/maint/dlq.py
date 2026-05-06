@@ -142,6 +142,19 @@ class MaintDlqSupervisor:
         self._visit_lru: "OrderedDict[tuple[str, str], int]" = OrderedDict()
         # Per-topic rate bucket for ops.dlq-replay attempts/min.
         self._rate_buckets: dict[str, _RateBucket] = {}
+        # Phase 8 §8.5 C2 — poison-pattern detection.
+        # Per-topic deque of (escalation_ts_s, request_id). Trimmed
+        # on insert by ``cfg.maint_dlq_poison_window_s``. When the
+        # number of *distinct* request_ids in the window crosses
+        # ``cfg.maint_dlq_poison_distinct_threshold`` the topic is
+        # added to ``self._frozen_topics`` and refuses further
+        # dlq_replay until an operator sends ``dlq_unfreeze``.
+        from collections import deque as _deque
+        self._poison_log: dict[str, "_deque[tuple[float, str]]"] = {}
+        self._frozen_topics: dict[str, str] = {}  # topic → reason
+        # Phase 8 §8.13.5 — pause/resume idempotency state.
+        from ._pause_state import PauseState
+        self._pause = PauseState()
 
     def _now_s(self) -> float:
         if self._clock_s is not None:
@@ -196,9 +209,15 @@ class MaintDlqSupervisor:
             return ()
         payload = msg.payload or {}
         kind = payload.get("kind")
-        if kind != "dlq_replay":
-            return ()  # ignore other kinds (we don't subscribe to them)
-        return list(self._handle_replay(msg, payload))
+        if kind == "dlq_replay":
+            return list(self._handle_replay(msg, payload))
+        if kind == "dlq_unfreeze":
+            return list(self._handle_unfreeze(msg, payload))
+        if kind == "maint_pause":
+            return list(self._handle_pause(msg, payload, paused=True))
+        if kind == "maint_resume":
+            return list(self._handle_pause(msg, payload, paused=False))
+        return ()  # ignore other kinds
 
     def _handle_replay(self, msg: Message, payload: dict) -> Iterable[Message]:
         request_id = str(payload.get("request_id") or "")
@@ -263,6 +282,18 @@ class MaintDlqSupervisor:
                                       "request_id": request_id})
             return
 
+        # Phase 8 §8.5 C2 — refuse if topic is currently frozen by
+        # the poison-pattern detector. Operator must send
+        # ``dlq_unfreeze`` to lift.
+        if target_dlq in self._frozen_topics:
+            yield self._ack(msg, request_id, accepted=False,
+                            reason="topic_frozen")
+            yield self._notify("dlq_dropped",
+                               target=target_dlq,
+                               extra={"reason": "topic_frozen",
+                                      "request_id": request_id})
+            return
+
         # Visit count + escalation. The first ``cfg.maint_dlq_visit_max``
         # visits replay; the visit AFTER that triggers escalation and
         # refuses further replays for this (topic, request_id).
@@ -276,6 +307,18 @@ class MaintDlqSupervisor:
                                extra={"request_id": request_id,
                                       "visit_count": visit_count,
                                       "reason": "visit_max_exceeded"})
+            # Phase 8 §8.5 C2 — record this escalation in the
+            # poison-pattern window. If we just crossed the distinct-
+            # request_id threshold, freeze the topic and emit
+            # ``dlq_consumer_broken``.
+            if self._record_escalation(target_dlq, request_id):
+                self._frozen_topics[target_dlq] = "poison_pattern"
+                yield self._notify("dlq_consumer_broken",
+                                   target=target_dlq,
+                                   extra={"reason": "poison_pattern",
+                                          "distinct_request_ids":
+                                              len({r for _, r in self._poison_log[target_dlq]}),
+                                          "window_s": int(_cfg.maint_dlq_poison_window_s)})
             return
 
         # Per-topic quota cap.
@@ -304,7 +347,149 @@ class MaintDlqSupervisor:
                         details={"replayed_count": replayed,
                                  "visit_count": visit_count})
 
+    # ── Periodic round-robin tick (Phase 8 §8.5 C1) ──────────────
+    def tick(self, active_topics: list[str]) -> list[Message]:
+        """Run a fair-share periodic replay across ``active_topics``.
+
+        Per-topic budget = ``max(1, cfg.maint_dlq_max_replays_per_tick
+        // len(eligible))`` where ``eligible`` is ``active_topics``
+        minus :data:`RECURSION_DENY_SET` minus topics currently rate-
+        limited by the per-minute token bucket. The supervisor then
+        emits one ``dlq_replayed`` notification per eligible topic
+        with ``replayed_count=0`` (the actual bus-side replay
+        primitive lands in §8.5b — the fairness scheduler is
+        independent of that).
+
+        Returns the emitted messages so the caller (the bootstrap
+        loop) can publish them. Honours leader gate + pause flag.
+        """
+        if not active_topics:
+            return []
+        if not self._leader.is_leader():
+            return []
+        # Honour pause/self-isolation (§8.13.5 idempotency matrix).
+        self._pause.expire_if_due(int(self._now_s() * 1_000_000_000))
+        if self._pause.paused or self._pause.self_isolated:
+            return []
+        eligible: list[str] = []
+        skipped_recursion: list[tuple[str, str]] = []
+        skipped_rate: list[str] = []
+        for t in active_topics:
+            if t in RECURSION_DENY_SET:
+                skipped_recursion.append((t, "recursion_deny"))
+                continue
+            if not self._is_allowed_topic(t):
+                skipped_recursion.append((t, "allow_list_excluded"))
+                continue
+            # Probe the rate bucket WITHOUT consuming a token; the
+            # actual replay loop in §8.5b consumes from the bus side.
+            cap = max(1, int(_cfg.maint_dlq_per_topic_max_per_min))
+            now_s = self._now_s()
+            minute_epoch = int(now_s) // 60
+            bucket = self._rate_buckets.get(t)
+            if bucket is not None and bucket.minute_epoch == minute_epoch and bucket.count >= cap:
+                skipped_rate.append(t)
+                continue
+            eligible.append(t)
+        out: list[Message] = []
+        for t, reason in skipped_recursion:
+            out.append(self._notify("dlq_topic_disabled_drained",
+                                    target=t,
+                                    extra={"deny_reason": reason}))
+        for t in skipped_rate:
+            out.append(self._notify("dlq_dropped",
+                                    target=t,
+                                    extra={"reason": "rate_limited",
+                                           "scheduler": "round_robin"}))
+        if not eligible:
+            return out
+        total_budget = max(1, int(_cfg.maint_dlq_max_replays_per_tick))
+        per_topic = max(1, total_budget // len(eligible))
+        for t in eligible:
+            st = self._state.setdefault(t, _RunState())
+            st.replayed = 0  # v1 stub: §8.5b plumbs Bus.replay_dlq()
+            out.append(self._notify("dlq_replayed",
+                                    target=t,
+                                    extra={"replayed_count": 0,
+                                           "max_msgs": per_topic,
+                                           "request_id": f"tick:{t}",
+                                           "budget_per_topic": per_topic,
+                                           "active_topic_count": len(eligible),
+                                           "scheduler": "round_robin"}))
+        return out
+
     # ── Helpers ───────────────────────────────────────────────────
+    def _record_escalation(self, topic: str, request_id: str) -> bool:
+        """Append an escalation event to the topic's poison window
+        and return True iff the freeze threshold was just crossed.
+
+        Trims expired entries on insert (window =
+        ``cfg.maint_dlq_poison_window_s`` seconds). The detector is
+        edge-triggered: it returns True only on the transition,
+        never re-fires while the topic stays above threshold.
+        """
+        from collections import deque
+        now_s = self._now_s()
+        window_s = max(1, int(_cfg.maint_dlq_poison_window_s))
+        threshold = max(2, int(_cfg.maint_dlq_poison_distinct_threshold))
+        log = self._poison_log.setdefault(topic, deque())
+        # Prune expired
+        cutoff = now_s - window_s
+        while log and log[0][0] < cutoff:
+            log.popleft()
+        # Track distinct count BEFORE insert to detect the edge.
+        distinct_before = len({r for _, r in log})
+        log.append((now_s, request_id))
+        distinct_after = len({r for _, r in log})
+        already_frozen = topic in self._frozen_topics
+        crossed = (distinct_before < threshold <= distinct_after) and not already_frozen
+        return crossed
+
+    def _handle_unfreeze(self, msg: Message, payload: dict) -> Iterable[Message]:
+        """Operator command: lift a poison-pattern freeze on a topic.
+
+        Phase 8 §8.5 C2. Acks ``accepted=true`` even if the topic
+        was not frozen (idempotent surface, mirrors the §8.13.5
+        pause/resume idempotency posture for D1).
+        """
+        request_id = str(payload.get("request_id") or "")
+        target_dlq = str(payload.get("target") or "")
+        if not request_id or not target_dlq:
+            return
+        if not self._leader.is_leader():
+            yield self._ack(msg, request_id, accepted=True, reason="non_leader_noop")
+            return
+        was_frozen = self._frozen_topics.pop(target_dlq, None) is not None
+        # Drop the poison log so the next burst starts fresh.
+        self._poison_log.pop(target_dlq, None)
+        yield self._ack(msg, request_id, accepted=True,
+                        reason="unfrozen" if was_frozen else "already_unfrozen")
+        yield self._notify("dlq_topic_unfrozen",
+                           target=target_dlq,
+                           extra={"request_id": request_id,
+                                  "was_frozen": was_frozen})
+
+    # ── maint_pause / maint_resume (§8.13.5 idempotency matrix) ──
+    def _handle_pause(self, msg: Message, payload: dict, *, paused: bool) -> Iterable[Message]:
+        request_id = str(payload.get("request_id") or "")
+        target = str(payload.get("target") or "")
+        if not request_id:
+            return
+        if target not in ("all", self.name):
+            return
+        now_ns = int(self._now_s() * 1_000_000_000)
+        self._pause.expire_if_due(now_ns)
+        if paused:
+            ttl_s = int(payload.get("ttl_s") or 0) or int(_cfg.maint_pause_default_ttl_s)
+            res = self._pause.apply_pause(ttl_s=ttl_s, now_ns=now_ns)
+        else:
+            res = self._pause.apply_resume()
+        details = None
+        if res.deadline_ns is not None:
+            details = {"ttl_s": (res.deadline_ns - now_ns) // 1_000_000_000}
+        yield self._ack(msg, request_id, accepted=res.accepted,
+                        reason=res.reason, details=details)
+
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,
              reason: str, details: dict | None = None) -> Message:
         ack = MaintAck(

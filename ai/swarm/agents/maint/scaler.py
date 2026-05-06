@@ -107,7 +107,52 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     "vram_budget_exceeded",
     "vram_telemetry_stale",
     "runtime_failed",
+    # Phase 8 §8.2 A1 — down-scale grace gate (smoothed signals are
+    # below the down-scale threshold but the consecutive-low-windows
+    # streak has not yet reached cfg.maint_scaler_scale_down_grace_windows).
+    "scale_down_grace",
 })
+
+
+# ── Welford rolling sketch (Phase 8 §8.2 A1) ───────────────────────────
+class _Welford:
+    """Bounded-window mean tracker.
+
+    Holds at most ``window`` samples in a deque and recomputes the
+    mean from the deque. The cap is what makes the sketch *rolling*
+    — once full, the oldest sample falls off as a new one is
+    appended, so the sketch tracks recent regime rather than
+    lifetime mean.
+    """
+
+    __slots__ = ("_window", "_samples")
+
+    def __init__(self, window: int) -> None:
+        self._window = max(0, int(window))
+        # ``maxlen`` of 0 is illegal for deque; degenerate path keeps
+        # only the latest sample (window=0 disables smoothing).
+        self._samples: deque[float] = deque(
+            maxlen=self._window if self._window > 0 else 1
+        )
+
+    def add(self, value: float) -> None:
+        if self._window <= 0:
+            self._samples.clear()
+        self._samples.append(float(value))
+
+    @property
+    def n(self) -> int:
+        return len(self._samples)
+
+    def mean(self) -> float:
+        if not self._samples:
+            return 0.0
+        return sum(self._samples) / len(self._samples)
+
+    def latest(self) -> float:
+        if not self._samples:
+            return 0.0
+        return self._samples[-1]
 
 
 # ── Decision dataclass ──────────────────────────────────────────────────
@@ -121,6 +166,14 @@ class _TargetState:
     history: deque[int] = field(default_factory=lambda: deque(maxlen=8))
     pin_replicas: int | None = None
     pin_expires_at_ns: int | None = None
+    # Phase 8 §8.2 A1 — per-signal Welford sketches keyed on signal
+    # name. Created lazily on first observation; adding a new signal
+    # is a non-event for existing state.
+    signals: dict[str, "_Welford"] = field(default_factory=dict)
+    # Phase 8 §8.2 A1 — consecutive low-load windows toward the
+    # scale-down grace requirement. Reset to 0 the moment a non-low
+    # signal is observed.
+    low_streak: int = 0
 
 
 # ── Agent ───────────────────────────────────────────────────────────────
@@ -153,7 +206,8 @@ class MaintScaler:
         self._new_id = new_id or _new_id
         self._targets: "OrderedDict[str, _TargetState]" = OrderedDict()
         self._max_targets = max(16, int(_cfg.maint_scaler_max_targets))
-        self._paused: bool = False
+        from ._pause_state import PauseState
+        self._pause = PauseState()
         # Per-agent ``max_replicas`` overrides parsed once at boot.
         # Empty dict means every target uses the global cap. Kept on
         # the instance so reload semantics later (Phase 8.16) only
@@ -248,7 +302,7 @@ class MaintScaler:
         yield self._ack(msg, request_id, accepted=True, reason="pin_set",
                         details={"ttl_s": ttl_s})
 
-    # ── maint_pause / maint_resume ────────────────────────────────
+    # ── maint_pause / maint_resume (§8.13.5 idempotency matrix) ──
     def _handle_pause(self, msg: Message, payload: dict, *, paused: bool) -> Iterable[Message]:
         request_id = str(payload.get("request_id") or "")
         target = str(payload.get("target") or "")
@@ -257,9 +311,17 @@ class MaintScaler:
         # Only react if target is 'all' or our own name.
         if target not in ("all", self.name):
             return
-        self._paused = paused
-        yield self._ack(msg, request_id, accepted=True,
-                        reason="paused" if paused else "resumed")
+        # Auto-resume any expired pause first so the matrix sees a
+        # truthful current state.
+        self._pause.expire_if_due(self._now_ns())
+        if paused:
+            ttl_s = int(payload.get("ttl_s") or 0) or int(_cfg.maint_pause_default_ttl_s)
+            res = self._pause.apply_pause(ttl_s=ttl_s, now_ns=self._now_ns())
+        else:
+            res = self._pause.apply_resume()
+        details = {"ttl_s": (res.deadline_ns - self._now_ns()) // 1_000_000_000} if res.deadline_ns else None
+        yield self._ack(msg, request_id, accepted=res.accepted,
+                        reason=res.reason, details=details)
 
     # ── retrain_request warm-up ──────────────────────────────────
     def _handle_retrain_request(self, msg: Message, payload: dict) -> Iterable[Message]:
@@ -327,8 +389,11 @@ class MaintScaler:
         ``signals`` is ``{target: {queue_depth, in_flight, head_age_s}}``.
         Returns the list of messages to publish.
         """
-        if self._paused or not self._leader.is_leader():
-            return []
+        if self._pause.paused or self._pause.self_isolated or not self._leader.is_leader():
+            # Honour TTL — re-check post-expiry once per tick.
+            self._pause.expire_if_due(self._now_ns())
+            if self._pause.paused or self._pause.self_isolated or not self._leader.is_leader():
+                return []
         out: list[Message] = []
         # Expire stale pins first.
         out.extend(self._expire_pins())
@@ -482,28 +547,110 @@ class MaintScaler:
         return "queue_depth_low"
 
     # ── Decision logic ───────────────────────────────────────────
+    def _smooth_signals(self, st: _TargetState,
+                        sig: dict[str, float]) -> dict[str, float]:
+        """Update per-signal Welford sketches and return the smoothed
+        view used by :meth:`_decide`. Window=0 → instantaneous values
+        (sketches still cleared so the latest sample is what's read).
+        """
+        window = max(0, int(_cfg.maint_scaler_signal_window_samples))
+        out: dict[str, float] = {}
+        for name, value in sig.items():
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
+            sketch = st.signals.get(name)
+            if sketch is None or sketch._window != window:  # noqa: SLF001
+                sketch = _Welford(window)
+                st.signals[name] = sketch
+            sketch.add(v)
+            out[name] = sketch.mean() if window > 0 else v
+        return out
+
     def _decide(self, target: str, st: _TargetState,
                 sig: dict[str, float]) -> tuple[int | None, str | None]:
         """Return (new replica count, throttle_reason) where exactly
-        one is non-None (or both None for a quiet no-op)."""
-        depth = float(sig.get("queue_depth", 0))
-        in_flight = float(sig.get("in_flight", 0))
-        head_age_s = float(sig.get("head_age_s", 0))
+        one is non-None (or both None for a quiet no-op).
+
+        Reads from the smoothed per-signal Welford view so a single
+        spike or single calm sample cannot toggle replicas. Down-
+        scales additionally require ``cfg.maint_scaler_scale_down_grace_windows``
+        consecutive low-load windows to elapse before firing
+        (``low_streak`` counter).
+
+        When ``cfg.maint_scaler_target_load_per_replica > 0`` the
+        decision uses the load-driven clamp formula
+        ``desired = clamp(min, ceil(load / target_per_replica), max)``
+        and steps toward ``desired`` by at most
+        ``cfg.maint_scaler_max_step_per_window`` replicas. When 0 the
+        legacy ±1-step decision is used (forward compatibility for
+        operators who haven't tuned the per-replica target).
+        """
+        from math import ceil
+        smoothed = self._smooth_signals(st, sig)
+        depth = float(smoothed.get("queue_depth", 0))
+        in_flight = float(smoothed.get("in_flight", 0))
+        head_age_s = float(smoothed.get("head_age_s", 0))
         scale_up_depth = float(_cfg.maint_scaler_scale_up_queue_depth)
         scale_down_depth = float(_cfg.maint_scaler_scale_down_queue_depth)
         max_replicas = self._max_replicas_for(target)
         min_replicas = max(0, int(_cfg.maint_scaler_min_replicas))
+        max_step = max(1, int(_cfg.maint_scaler_max_step_per_window))
+        target_per_replica = max(0, int(_cfg.maint_scaler_target_load_per_replica))
         current = st.last_replicas
-        # Scale up if depth high or head too old.
-        if depth >= scale_up_depth or head_age_s >= float(_cfg.maint_scaler_scale_up_head_age_s):
+        # Compute desired (clamp formula) when enabled. ``observed_load``
+        # combines depth + in_flight so an idle queue with mid-flight
+        # work still counts toward the headcount budget.
+        if target_per_replica > 0:
+            observed_load = max(depth, in_flight)
+            desired = max(
+                min_replicas,
+                min(max_replicas, max(1, ceil(observed_load / target_per_replica))),
+            )
+        else:
+            desired = current  # legacy mode: step decision only
+        # Scale up if depth high or head too old (or clamp says we
+        # want more headcount than we have).
+        wants_up = (
+            depth >= scale_up_depth
+            or head_age_s >= float(_cfg.maint_scaler_scale_up_head_age_s)
+            or (target_per_replica > 0 and desired > current)
+        )
+        wants_down = (
+            depth <= scale_down_depth
+            and in_flight <= scale_down_depth
+            and (target_per_replica == 0 or desired < current)
+        )
+        if wants_up:
+            st.low_streak = 0
             if current >= max_replicas:
                 return (None, "max_replicas_cap")
-            new = min(max_replicas, current + 1)
-        elif depth <= scale_down_depth and in_flight <= scale_down_depth:
+            if target_per_replica > 0:
+                step = min(max_step, max(1, desired - current))
+                new = min(max_replicas, current + step)
+            else:
+                new = min(max_replicas, current + 1)
+        elif wants_down:
+            # Bump the consecutive-low-window streak; only fire the
+            # actual down-scale once the grace count is met. Until
+            # then, surface a `scale_down_grace` throttle so dashboards
+            # can show "we'd shrink in N more windows".
+            st.low_streak += 1
+            grace = max(0, int(_cfg.maint_scaler_scale_down_grace_windows))
+            if st.low_streak <= grace:
+                return (None, "scale_down_grace")
             if current <= min_replicas:
                 return (None, "min_replicas_floor")
-            new = max(min_replicas, current - 1)
+            if target_per_replica > 0:
+                step = min(max_step, max(1, current - desired))
+                new = max(min_replicas, current - step)
+            else:
+                new = max(min_replicas, current - 1)
         else:
+            # Mixed signal — neither up nor down. Reset the streak
+            # so a partial calm cannot piggy-back on earlier ones.
+            st.low_streak = 0
             return (None, None)
         if not self._hysteresis_ok(st, new, current):
             return (None, "hysteresis_block")

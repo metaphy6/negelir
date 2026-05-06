@@ -74,6 +74,8 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "manual_scale_pin":  frozenset({"maint.scaler.v1"}),
     # Phase 8 §8.5 — operator-driven DLQ replay request.
     "dlq_replay":        frozenset({"maint.dlq.v1"}),
+    # Phase 8 §8.5 C2 — operator lifts a poison-pattern freeze.
+    "dlq_unfreeze":      frozenset({"maint.dlq.v1"}),
     # Phase 8 §8.8 — operator forces decimation sweep now.
     "denylist_decimate_now": frozenset({"maint.sec.v1"}),
     # Phase 8 §8.10 — broadcast pause/resume for the maintenance plane.
@@ -94,6 +96,9 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "dlq_escalated":               frozenset(),
     "dlq_topic_disabled_drained":  frozenset(),
     "dlq_dropped":                 frozenset(),
+    # Phase 8 §8.5 C2 — poison-pattern detection notifications.
+    "dlq_consumer_broken":         frozenset(),
+    "dlq_topic_unfrozen":          frozenset(),
     # ── Notification-only kinds (Phase 8.3 backup agent) ─────────────
     # Emitted by maint.backup.v1; carry a fire_window_id, expect no
     # acks. `pii_erased` carries the originating quarantine_erase
@@ -129,6 +134,8 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "dlq_escalated",
     "dlq_topic_disabled_drained",
     "dlq_dropped",
+    "dlq_consumer_broken",
+    "dlq_topic_unfrozen",
     # Phase 8.3 backup agent.
     "backup_started",
     "backup_completed",

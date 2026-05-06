@@ -639,6 +639,31 @@ class Config:
     # scaler computes its budget. Stops the scaler from packing pods
     # so densely that any one pod's transient spike OOMs the host.
     maint_scaler_vram_headroom_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB", "1024")))
+    # Phase 8 §8.2 A1 — scale-down grace: number of consecutive
+    # decision windows whose smoothed signals must remain below the
+    # scale-down threshold before the supervisor emits a scale-down.
+    # Stops a single quiet window from yanking replicas away while a
+    # bursty workload is mid-spike. Set to 0 to disable the grace
+    # gate (legacy behaviour).
+    maint_scaler_scale_down_grace_windows: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_SCALE_DOWN_GRACE_WINDOWS", "2")))
+    # Phase 8 §8.2 A1 — Welford rolling-sketch retention: number of
+    # most-recent samples per signal whose mean+variance is used in
+    # the decision function. ``maint_scaler_signal_window_samples=0``
+    # falls back to instantaneous (last sample) values.
+    maint_scaler_signal_window_samples: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_SIGNAL_WINDOW_SAMPLES", "5")))
+    # Phase 8 §8.2 A2 — load-driven clamp formula: desired_replicas =
+    # clamp(min, ceil(observed_load / target_load_per_replica), max).
+    # ``observed_load`` is the smoothed queue_depth (see Welford).
+    # 0 disables the clamp formula and reverts to the legacy ±1-step
+    # decision (kept for forward compatibility with operators who
+    # haven't tuned the per-replica target yet).
+    maint_scaler_target_load_per_replica: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_TARGET_LOAD_PER_REPLICA", "50")))
+    # Phase 8 §8.2 A2 — cap on how many replicas the clamp formula
+    # may add or remove in a single decision window. Defends against
+    # a Welford-window cold-start where ``observed_load`` jumps from
+    # 0 to a large value and would otherwise scale from 1 → N in one
+    # tick. Default 1 preserves the legacy step magnitude.
+    maint_scaler_max_step_per_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_STEP_PER_WINDOW", "1")))
 
     # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
     maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
@@ -662,6 +687,20 @@ class Config:
     # LRU cap on the ``(topic, request_id) → visit_count`` map.
     # Bounded state per the §8.9 DoD.
     maint_dlq_visit_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_VISIT_LRU", "4096")))
+    # Phase 8 §8.5 C1 — periodic-tick budget across all active DLQ
+    # topics (round-robin fairness). Per-tick total replays is
+    # ``max(1, maint_dlq_max_replays_per_tick // len(active_topics))``
+    # per topic, so a single hot topic cannot starve the others.
+    maint_dlq_max_replays_per_tick: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_MAX_REPLAYS_PER_TICK", "50")))
+    # Phase 8 §8.5 C2 — poison-pattern detection. If ≥
+    # ``maint_dlq_poison_distinct_threshold`` distinct request_ids
+    # escalate on the same DLQ topic within
+    # ``maint_dlq_poison_window_s`` seconds, the supervisor freezes
+    # that topic (refusing further dlq_replay requests) and emits a
+    # ``dlq_consumer_broken`` event. Operator lifts the freeze with
+    # a ``dlq_unfreeze`` command.
+    maint_dlq_poison_distinct_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_POISON_DISTINCT_THRESHOLD", "5")))
+    maint_dlq_poison_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_POISON_WINDOW_S", "600")))
 
     # ── Phase 8 §8.6 — `maint.schema.v1` sentinel ────────────────────
     maint_schema_sample_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S", "5")))
@@ -677,6 +716,18 @@ class Config:
     # ── Phase 8 §8.10 — broadcast pause ──────────────────────────────
     maint_pause_default_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S", "600")))
     maint_silence_dedup_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SILENCE_DEDUP_S", "300")))
+    # Phase 8 §8.16 D2 — dead-mans-switch.
+    # If no maint.event.v1 message has been observed for this many
+    # hours AND swarm uptime exceeds ``maint_silence_warmup_s``,
+    # emit ``sec.alert.v1{kind=maint_silence_alert, severity=critical}``.
+    maint_silence_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SILENCE_ALERT_H", "24")))
+    maint_silence_warmup_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SILENCE_WARMUP_S", "3600")))
+    # Self-DLQ depth threshold per maint.* agent. When an agent's
+    # own ``<id>.dlq`` depth exceeds this, the dead-mans-switch
+    # flips that agent's PauseState.self_isolated to True (§8.13.5
+    # idempotency matrix; agent then refuses pause until an
+    # operator explicitly resumes it).
+    maint_self_dlq_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SELF_DLQ_ALERT", "100")))
 
     # ── Phase 8 §8.11 — three-tier backpressure ──────────────────────
     maint_backpressure_yellow_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_FACTOR", "4.0")))
@@ -1101,6 +1152,10 @@ class Config:
         _bounded("maint_scaler_min_decision_interval_s", self.maint_scaler_min_decision_interval_s, 0.0, 86_400.0)
         _bounded("maint_scaler_runtime_timeout_s", self.maint_scaler_runtime_timeout_s, 1.0, 3_600.0)
         _bounded("maint_scaler_vram_headroom_mb", self.maint_scaler_vram_headroom_mb, 0, 1_048_576)
+        _bounded("maint_scaler_scale_down_grace_windows", self.maint_scaler_scale_down_grace_windows, 0, 1_000)
+        _bounded("maint_scaler_signal_window_samples", self.maint_scaler_signal_window_samples, 0, 10_000)
+        _bounded("maint_scaler_target_load_per_replica", self.maint_scaler_target_load_per_replica, 0, 10_000_000)
+        _bounded("maint_scaler_max_step_per_window", self.maint_scaler_max_step_per_window, 1, 10_000)
         if self.maint_runtime not in ("none", "compose", "k8s"):
             issues.append(
                 f"maint_runtime={self.maint_runtime!r} must be one of: "
@@ -1153,6 +1208,9 @@ class Config:
         _bounded("maint_dlq_visit_max", self.maint_dlq_visit_max, 1, 1_000)
         _bounded("maint_dlq_per_topic_max_per_min", self.maint_dlq_per_topic_max_per_min, 1, 1_000_000)
         _bounded("maint_dlq_visit_lru", self.maint_dlq_visit_lru, 1, 1_000_000)
+        _bounded("maint_dlq_max_replays_per_tick", self.maint_dlq_max_replays_per_tick, 1, 1_000_000)
+        _bounded("maint_dlq_poison_distinct_threshold", self.maint_dlq_poison_distinct_threshold, 2, 1000)
+        _bounded("maint_dlq_poison_window_s", self.maint_dlq_poison_window_s, 1, 86_400)
         # Allow-list parse: every non-empty entry MUST end in ``.dlq``.
         if self.maint_dlq_replay_topics_allow_csv.strip():
             for raw in self.maint_dlq_replay_topics_allow_csv.split(","):
@@ -1177,6 +1235,9 @@ class Config:
         # Phase 8 §8.10 — pause/resume.
         _bounded("maint_pause_default_ttl_s", self.maint_pause_default_ttl_s, 1, 604_800)
         _bounded("maint_silence_dedup_s", self.maint_silence_dedup_s, 1, 86_400)
+        _bounded("maint_silence_alert_h", self.maint_silence_alert_h, 1, 720)
+        _bounded("maint_silence_warmup_s", self.maint_silence_warmup_s, 60, 86_400)
+        _bounded("maint_self_dlq_alert", self.maint_self_dlq_alert, 1, 1_000_000)
 
         # Phase 8 §8.11 — backpressure.
         _bounded("maint_backpressure_yellow_factor", self.maint_backpressure_yellow_factor, 1.0, 1_000.0)

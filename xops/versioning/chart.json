@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.2.1",
-    "build": 67,
+    "version": "1.3.0",
+    "build": 0,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.5.0",
+      "version": "1.6.0",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-05T13:41:32+00:00"
+      "last_changed": "2026-05-06T08:20:00+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.26.0",
+      "version": "0.32.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-06T07:39:59+00:00"
+      "last_changed": "2026-05-06T08:20:00+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2157,6 +2157,159 @@
       "from": "1.20.2",
       "to": "1.20.3",
       "build": 67
+    },
+    {
+      "timestamp": "2026-05-06T08:01:54+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.2 A1: Welford rolling sketches per-(target,signal) + scale_down_grace_windows gate (new throttle reason scale_down_grace, new cfg knobs maint_scaler_signal_window_samples + maint_scaler_scale_down_grace_windows)",
+      "from": "0.26.0",
+      "to": "0.27.0",
+      "build": 68
+    },
+    {
+      "timestamp": "2026-05-06T08:01:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "cfg: scaler signal_window_samples + scale_down_grace_windows knobs with bounded validators",
+      "from": "1.5.0",
+      "to": "1.5.1",
+      "build": 69
+    },
+    {
+      "timestamp": "2026-05-06T08:01:54+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 8.2 A1 — scaler smoothing + grace gate",
+      "from": "1.2.1",
+      "to": "1.2.2",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T08:03:41+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.2 A2: load-driven clamp-formula decision desired=clamp(min,ceil(load/target_per_replica),max) with per-window step cap; cfg knobs maint_scaler_target_load_per_replica + maint_scaler_max_step_per_window. Default target=50/replica, step=1; target=0 reverts to legacy ±1-step.",
+      "from": "0.27.0",
+      "to": "0.28.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T08:03:41+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "cfg: scaler clamp-formula knobs target_load_per_replica + max_step_per_window with bounded validators",
+      "from": "1.5.1",
+      "to": "1.5.2",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-06T08:03:41+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 8.2 A2 — load-driven scaler clamp formula",
+      "from": "1.2.2",
+      "to": "1.2.3",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T08:05:26+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.5 C1: MaintDlqSupervisor.tick(active_topics) — round-robin fairness across DLQ topics with per-tick budget = max(1, total // n_topics). Filters RECURSION_DENY_SET + allow-list + per-minute rate cap; emits dlq_topic_disabled_drained / dlq_dropped for skipped topics. Honours leader gate.",
+      "from": "0.28.0",
+      "to": "0.29.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T08:05:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "cfg: maint_dlq_max_replays_per_tick (default 50) with bounded validator",
+      "from": "1.5.2",
+      "to": "1.5.3",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-06T08:05:26+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 8.5 C1 — DLQ round-robin fairness scheduler",
+      "from": "1.2.3",
+      "to": "1.2.4",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T08:11:09+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.5 C2: poison-pattern detection — ≥cfg.maint_dlq_poison_distinct_threshold distinct request_ids escalating on a topic within cfg.maint_dlq_poison_window_s freezes the topic + emits dlq_consumer_broken (edge-triggered). Operator dlq_unfreeze command lifts freeze (idempotent). New routed kind dlq_unfreeze; new notification kinds dlq_consumer_broken, dlq_topic_unfrozen. dlq_dropped reason enum extended with topic_frozen.",
+      "from": "0.29.0",
+      "to": "0.30.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T08:11:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "cfg: maint_dlq_poison_distinct_threshold (5) + maint_dlq_poison_window_s (600s)",
+      "from": "1.5.3",
+      "to": "1.5.4",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-06T08:11:09+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 8.5 C2 — DLQ poison-pattern freeze",
+      "from": "1.2.4",
+      "to": "1.2.5",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T08:14:49+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.13.5 D1: shared PauseState helper (paused, self_isolated, deadline_ns) implementing the pause/resume idempotency matrix — already_paused / already_resumed for re-issued commands; requires_resume_first refusal while self-isolated; resumed_from_isolation on operator re-arm; TTL refresh widens only. Wired into MaintScaler and MaintDlqSupervisor; both honour pause + self-isolation in periodic ticks. Auto-resume on TTL expiry.",
+      "from": "0.30.0",
+      "to": "0.31.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T08:14:49+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 8 §8.13.5 D1 — pause/resume idempotency matrix",
+      "from": "1.2.5",
+      "to": "1.2.6",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-06T08:20:00+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "§8.16 D2: dead-mans-switch (MaintDeadmansSwitch). Tracks maint.event.v1 silence (>= cfg.maint_silence_alert_h after warmup) and per-agent self-DLQ depth (>= cfg.maint_self_dlq_alert). Emits sec.alert.v1{kind=maint_silence_alert | maint_self_dlq_alert, severity=critical, source=maint.deadmans.v1}, deduped per (kind, subject) by cfg.maint_silence_dedup_s. Self-DLQ trip flips the affected agent's PauseState.self_isolated, locking out maint_pause until operator resume per §8.13.5 D1 matrix. Extended _ALLOWED_SEC_SOURCES + sec.alert.v1 schema source enum to admit maint.deadmans.v1; added maint_silence_alert + maint_self_dlq_alert to KNOWN_SEC_ALERT_KINDS.",
+      "from": "0.31.0",
+      "to": "0.32.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-06T08:20:00+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "cfg: maint_silence_alert_h, maint_silence_warmup_s, maint_self_dlq_alert (Phase 8 §8.16 D2)",
+      "from": "1.5.4",
+      "to": "1.6.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-06T08:20:00+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 8 §8.16 D2 — dead-mans-switch landed; closes the §8.13.5 + §8.16 sub-slice batch (A1, A2, C1, C2, D1, D2)",
+      "from": "1.2.6",
+      "to": "1.3.0",
+      "build": 0
     }
   ]
 }

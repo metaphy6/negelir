@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/dlq_topic_unfrozen",
+  "title": "maint.event.v1{kind=dlq_topic_unfrozen}",
+  "description": "Phase 8 §8.5 C2 — notification emitted by maint.dlq.v1 after a `dlq_unfreeze` operator command runs. `was_frozen=false` indicates an idempotent no-op (the topic was not in the frozen set when the command arrived).",
+  "type": "object",
+  "required": ["kind", "target", "produced_at", "request_id", "was_frozen"],
+  "properties": {
+    "kind":        { "const": "dlq_topic_unfrozen" },
+    "target":      { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "request_id":  { "type": "string", "minLength": 1 },
+    "was_frozen":  { "type": "boolean" }
+  },
+  "additionalProperties": false
+}
