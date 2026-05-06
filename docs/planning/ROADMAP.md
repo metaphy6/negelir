@@ -1592,8 +1592,8 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 
 #### 8.15.3 PG advisory-lock key registry
 
-- [ ] **Real bug.** §8.7's allowlist promote-while-eval race uses `pg_advisory_lock(<key>)`. PG advisory locks share a single global key namespace per database (`bigint` keyspace). Phase 9 trainer reactor will use them, the §8.14.1 audit-log retention pruner will use them (DETACH PARTITION + DROP), and the §8.13.4 forward-migrate-then-verify will use them. Two callers on the same key collide: one blocks, the other proceeds — silent deadlock or double-execution depending on lock variant (shared/exclusive).
-- [ ] **Registry (binding).** Single source of truth at `xops/maint/advisory_lock_keys.py`:
+- [x] **Real bug.** §8.7's allowlist promote-while-eval race uses `pg_advisory_lock(<key>)`. PG advisory locks share a single global key namespace per database (`bigint` keyspace). Phase 9 trainer reactor will use them, the §8.14.1 audit-log retention pruner will use them (DETACH PARTITION + DROP), and the §8.13.4 forward-migrate-then-verify will use them. Two callers on the same key collide: one blocks, the other proceeds — silent deadlock or double-execution depending on lock variant (shared/exclusive).
+- [x] **Registry (binding).** Single source of truth at `xops/maint/advisory_lock_keys.py`:
   ```python
   # All Postgres advisory-lock keys used by Negelir live here. Append-only.
   ADVISORY_LOCK_KEYS: dict[str, int] = {

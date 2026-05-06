@@ -56,6 +56,28 @@ ALL_LOCK_KEYS: dict[str, int] = {
 }
 
 
+def ensure_unique(registry: dict[str, int] | None = None) -> bool:
+    """Validate that every registered advisory-lock key value is unique.
+
+    Per ROADMAP §8.15.3 binding: callers (boot validation in any
+    agent that uses advisory locks) invoke this once at startup to
+    refuse a duplicate-key configuration loud rather than ship a
+    silent collision into prod. Returns ``True`` on success; raises
+    ``ValueError`` listing the offending entries on collision.
+    """
+    src = registry if registry is not None else ALL_LOCK_KEYS
+    seen: dict[int, list[str]] = {}
+    for name, value in src.items():
+        seen.setdefault(int(value), []).append(name)
+    dupes = {v: names for v, names in seen.items() if len(names) > 1}
+    if dupes:
+        raise ValueError(
+            "duplicate advisory-lock key value(s): "
+            + ", ".join(f"{v} → {names}" for v, names in sorted(dupes.items()))
+        )
+    return True
+
+
 __all__ = [
     "ALL_LOCK_KEYS",
     "LOCK_MAINT_AUDIT_PRUNE",
@@ -64,4 +86,5 @@ __all__ = [
     "LOCK_MAINT_SCHEMA_SCAN",
     "LOCK_MAINT_SEC_ALLOWLIST",
     "LOCK_MAINT_SEC_DECIMATE",
+    "ensure_unique",
 ]
