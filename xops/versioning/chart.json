@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 3,
+    "build": 4,
     "released": null
   },
   "components": {
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.37.0",
+      "version": "0.38.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-06T09:38:57+00:00"
+      "last_changed": "2026-05-06T13:42:02+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2508,6 +2508,15 @@
       "from": "1.20.3",
       "to": "1.20.4",
       "build": 3
+    },
+    {
+      "timestamp": "2026-05-06T13:42:02+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 §8.5 DLQ backlog damping + §8.8 sec hysteresis & alert subscription + §8.7 SQL-injection AST guard",
+      "from": "0.37.0",
+      "to": "0.38.0",
+      "build": 4
     }
   ]
 }

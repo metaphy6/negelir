@@ -40,7 +40,7 @@ from common.config import cfg as _cfg
 
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
-from ..topics import MAINT_ACK, MAINT_EVENT
+from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.sec")
@@ -151,7 +151,7 @@ class MaintSecAgent:
     """`maint.sec.v1` reactor — combines §8.7 FP loop + §8.8 decimator."""
 
     name = "maint.sec.v1"
-    subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
+    subscribes: tuple[Topic, ...] = (MAINT_EVENT, SEC_ALERT)
     publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
 
     def __init__(
@@ -172,10 +172,22 @@ class MaintSecAgent:
         self._req_lru: "OrderedDict[str, None]" = OrderedDict()
         # §8.13.5 pause/isolation matrix.
         self._pause = PauseState()
+        # §8.8 hysteresis: epoch-ms of the last *successful* decimate.
+        # Drives the global ``cfg.maint_sec_decimate_min_interval_s``
+        # window; the denylist zset is one shared resource so the
+        # signal is global, not per-subject.
+        self._last_decimate_ms: int = 0
+        # §8.8 alert-trigger dedup: bound the LRU of recently-seen
+        # SecAlert ``alert_id`` values so the sweeper does not double-
+        # fire on bus redeliveries.
+        self._alert_lru: "OrderedDict[str, None]" = OrderedDict()
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
-        if msg.envelope.topic != MAINT_EVENT:
+        topic = msg.envelope.topic
+        if topic == SEC_ALERT:
+            return list(self._handle_sec_alert(msg))
+        if topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
         kind = payload.get("kind")
@@ -271,9 +283,42 @@ class MaintSecAgent:
         if self._seen(request_id):
             yield self._ack(msg, request_id, accepted=True, reason="dedup")
             return
-        cap = max(1, int(_cfg.sec_denylist_max_entries))
-        result = self._decimator.decimate(now_ms=self._now_ms(), cap=cap)
         target = str(payload.get("target") or "all")
+        # §8.8 hysteresis gate — one decimate per
+        # ``cfg.maint_sec_decimate_min_interval_s`` globally. The
+        # zset is a single shared resource so per-subject hysteresis
+        # is meaningless. Throttled calls ack accepted=true with a
+        # diagnostic reason and emit ``denylist_decimate_throttled``
+        # so operators see the suppression in the audit trail.
+        now_ms = self._now_ms()
+        window_ms = max(1, int(_cfg.maint_sec_decimate_min_interval_s)) * 1000
+        elapsed_ms = now_ms - self._last_decimate_ms
+        if self._last_decimate_ms > 0 and elapsed_ms < window_ms:
+            cooldown_ms = window_ms - elapsed_ms
+            yield self._notify(
+                "denylist_decimate_throttled",
+                target=target,
+                extra={
+                    "reason": "hysteresis",
+                    "cooldown_ms": int(cooldown_ms),
+                    "min_interval_s": int(_cfg.maint_sec_decimate_min_interval_s),
+                    "trigger": "operator",
+                },
+            )
+            yield self._ack(
+                msg, request_id, accepted=True,
+                reason="hysteresis_throttled",
+                details={"cooldown_ms": int(cooldown_ms)},
+            )
+            return
+        cap = max(1, int(_cfg.sec_denylist_max_entries))
+        result = self._decimator.decimate(now_ms=now_ms, cap=cap)
+        # Stamp the hysteresis epoch only when the decimator did
+        # real work. A no-op call (ZCARD <= cap) leaves the gate
+        # open so the *next* alert during real pressure is not
+        # silently swallowed.
+        if int(result.get("evicted_count") or 0) > 0:
+            self._last_decimate_ms = now_ms
         yield self._notify("denylist_decimate",
                            target=target,
                            extra=dict(result))
@@ -284,6 +329,64 @@ class MaintSecAgent:
         yield self._ack(msg, request_id, accepted=True,
                         reason="decimated",
                         details=dict(result))
+
+    # ── §8.8 alert-triggered automatic decimate ───────────────────
+    def _handle_sec_alert(self, msg: Message) -> Iterable[Message]:
+        """Subscribe path for ``sec.alert.v1{kind=denylist_growth_anomaly,
+        severity=critical}`` per ROADMAP §8.8. The alert fires when
+        ``sec_denylist_mutate.lua`` returns ``rejected_capped``; the
+        sweeper responds by running a single Lua decimate, gated by
+        the same global hysteresis window as the operator path.
+
+        Alert-triggered runs do not produce a ``maint.ack.v1`` — no
+        ``request_id`` to correlate against (the producer is
+        ``sec.rate.v1``, not the ops console). The audit trail is
+        the ``denylist_decimate`` / ``denylist_decimate_throttled``
+        notification on ``maint.event.v1``.
+        """
+        payload = msg.payload or {}
+        if payload.get("kind") != "denylist_growth_anomaly":
+            return
+        if str(payload.get("severity") or "") != "critical":
+            return
+        alert_id = str(payload.get("alert_id") or "")
+        if alert_id:
+            if alert_id in self._alert_lru:
+                return
+            self._alert_lru[alert_id] = None
+            cap_lru = max(64, int(_cfg.maint_sec_request_lru))
+            while len(self._alert_lru) > cap_lru:
+                self._alert_lru.popitem(last=False)
+        target = str(payload.get("subject") or "all")
+        now_ms = self._now_ms()
+        window_ms = max(1, int(_cfg.maint_sec_decimate_min_interval_s)) * 1000
+        elapsed_ms = now_ms - self._last_decimate_ms
+        if self._last_decimate_ms > 0 and elapsed_ms < window_ms:
+            yield self._notify(
+                "denylist_decimate_throttled",
+                target=target,
+                extra={
+                    "reason": "hysteresis",
+                    "cooldown_ms": int(window_ms - elapsed_ms),
+                    "min_interval_s": int(_cfg.maint_sec_decimate_min_interval_s),
+                    "trigger": "alert",
+                    "alert_id": alert_id,
+                },
+            )
+            return
+        cap = max(1, int(_cfg.sec_denylist_max_entries))
+        result = self._decimator.decimate(now_ms=now_ms, cap=cap)
+        if int(result.get("evicted_count") or 0) > 0:
+            self._last_decimate_ms = now_ms
+        extra = dict(result)
+        extra["trigger"] = "alert"
+        if alert_id:
+            extra["alert_id"] = alert_id
+        yield self._notify("denylist_decimate", target=target, extra=extra)
+        if result.get("cap_cleared"):
+            yield self._notify("denylist_cap_cleared",
+                               target=target,
+                               extra={"new_zcard": result.get("new_zcard")})
 
     # ── Periodic expiry tick ────────────────────────────────────
     def expire_tick(self) -> list[Message]:

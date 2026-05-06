@@ -1081,6 +1081,9 @@ _ALLOWED_QA_VERDICTS: frozenset[str] = frozenset({"pass", "sanitized"})
 _ALLOWED_SEC_SOURCES: frozenset[str] = frozenset({
     "sec.input.v1", "sec.scrape.v1", "sec.rate.v1",
     "maint.deadmans.v1",
+    # Phase 8 §8.5 — DLQ supervisor publishes
+    # ``dlq_backlog_high`` warnings on per-topic queue pressure.
+    "maint.dlq.v1",
 })
 _ALLOWED_SEC_SEVERITIES: frozenset[str] = frozenset({
     "info", "warn", "error", "critical",
@@ -1137,6 +1140,8 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "maint_scaler_orphan_cfg",
     # maint.storage.v1 (§8.13.2 cumulative storage cap)
     "maint_storage_pressure",
+    # maint.dlq.v1 (§8.5 backlog-pressure damping)
+    "dlq_backlog_high",
 })
 
 

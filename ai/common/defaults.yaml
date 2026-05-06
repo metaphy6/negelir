@@ -322,6 +322,7 @@ phase8:
   maint_dlq_max_replays_per_tick: 50               # NEGELIR_MAINT_DLQ_MAX_REPLAYS_PER_TICK
   maint_dlq_poison_distinct_threshold: 5           # NEGELIR_MAINT_DLQ_POISON_DISTINCT_THRESHOLD
   maint_dlq_poison_window_s: 600                   # NEGELIR_MAINT_DLQ_POISON_WINDOW_S
+  maint_dlq_backlog_alert: 1000                    # NEGELIR_MAINT_DLQ_BACKLOG_ALERT
   # ── §8.6 maint.schema.v1 ──
   maint_schema_sample_rate_per_s: 5                # NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S
   maint_schema_burst: 10                           # NEGELIR_MAINT_SCHEMA_BURST
@@ -332,6 +333,7 @@ phase8:
   maint_sec_pattern_ttl_s: 604800                  # NEGELIR_MAINT_SEC_PATTERN_TTL_S
   maint_sec_pattern_promote_threshold: 1           # NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD
   maint_sec_request_lru: 2048                      # NEGELIR_MAINT_SEC_REQUEST_LRU
+  maint_sec_decimate_min_interval_s: 300           # NEGELIR_MAINT_SEC_DECIMATE_MIN_INTERVAL_S
   # ── §8.10 broadcast pause/resume ──
   maint_pause_default_ttl_s: 600                   # NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S
   maint_silence_dedup_s: 300                       # NEGELIR_MAINT_SILENCE_DEDUP_S

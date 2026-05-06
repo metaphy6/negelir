@@ -39,8 +39,8 @@ from common.config import cfg as _cfg
 
 from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
-from ..payloads import MaintAck
-from ..topics import MAINT_ACK, MAINT_EVENT
+from ..payloads import MaintAck, SecAlert
+from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 
 _log = logging.getLogger("swarm.agents.maint.dlq")
 
@@ -113,7 +113,7 @@ class MaintDlqSupervisor:
 
     name = "maint.dlq.v1"
     subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
-    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
+    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
         self,
@@ -155,6 +155,13 @@ class MaintDlqSupervisor:
         # Phase 8 §8.13.5 — pause/resume idempotency state.
         from ._pause_state import PauseState
         self._pause = PauseState()
+        # Phase 8 §8.5 backlog-pressure damping. Per-topic state:
+        #   ``trip_depth``: depth observed when the alert first fired
+        #   ``alerted_at_s``: epoch s of last sec.alert.v1 emission
+        # Topic stays in damped mode until depth ≤ trip_depth // 2;
+        # once cleared, the entry is dropped from the dict and the
+        # topic resumes its normal per-tick replay budget.
+        self._backlog_damped: dict[str, dict[str, float]] = {}
 
     def _now_s(self) -> float:
         if self._clock_s is not None:
@@ -348,7 +355,8 @@ class MaintDlqSupervisor:
                                  "visit_count": visit_count})
 
     # ── Periodic round-robin tick (Phase 8 §8.5 C1) ──────────────
-    def tick(self, active_topics: list[str]) -> list[Message]:
+    def tick(self, active_topics: list[str],
+             *, depths: dict[str, int] | None = None) -> list[Message]:
         """Run a fair-share periodic replay across ``active_topics``.
 
         Per-topic budget = ``max(1, cfg.maint_dlq_max_replays_per_tick
@@ -359,6 +367,15 @@ class MaintDlqSupervisor:
         with ``replayed_count=0`` (the actual bus-side replay
         primitive lands in §8.5b — the fairness scheduler is
         independent of that).
+
+        ``depths`` (optional) maps each DLQ topic to its current
+        observed depth (e.g. ``XLEN``). When provided, Phase 8 §8.5
+        backlog-pressure damping fires: any topic whose depth
+        exceeds ``cfg.maint_dlq_backlog_alert`` enters damped mode
+        (per-tick budget quartered, debounced ``dlq_backlog_high``
+        ``sec.alert.v1`` emitted) until its depth falls below half
+        the trip depth. Caller may omit ``depths`` to retain v1
+        behaviour (no damping).
 
         Returns the emitted messages so the caller (the bootstrap
         loop) can publish them. Honours leader gate + pause flag.
@@ -403,20 +420,131 @@ class MaintDlqSupervisor:
                                            "scheduler": "round_robin"}))
         if not eligible:
             return out
+        # Phase 8 §8.5 — backlog-pressure damping per topic.
+        damped_topics: set[str] = set()
+        if depths:
+            damped_topics = self._update_backlog_damping(depths, out)
         total_budget = max(1, int(_cfg.maint_dlq_max_replays_per_tick))
         per_topic = max(1, total_budget // len(eligible))
+        # Damped topics receive 1/4 of the per-topic budget (floor 1)
+        # so a broken consumer is not flooded harder. ROADMAP §8.5:
+        # "drops the per-topic replay rate to replay_rps / 4 until
+        # depth halves".
         for t in eligible:
             st = self._state.setdefault(t, _RunState())
             st.replayed = 0  # v1 stub: §8.5b plumbs Bus.replay_dlq()
+            topic_budget = max(1, per_topic // 4) if t in damped_topics else per_topic
+            extra = {
+                "replayed_count": 0,
+                "max_msgs": topic_budget,
+                "request_id": f"tick:{t}",
+                "budget_per_topic": topic_budget,
+                "active_topic_count": len(eligible),
+                "scheduler": "round_robin",
+            }
+            if t in damped_topics:
+                extra["backlog_damped"] = True
             out.append(self._notify("dlq_replayed",
                                     target=t,
-                                    extra={"replayed_count": 0,
-                                           "max_msgs": per_topic,
-                                           "request_id": f"tick:{t}",
-                                           "budget_per_topic": per_topic,
-                                           "active_topic_count": len(eligible),
-                                           "scheduler": "round_robin"}))
+                                    extra=extra))
         return out
+
+    # ── §8.5 backlog-pressure damping ────────────────────────────
+    def _update_backlog_damping(
+        self,
+        depths: dict[str, int],
+        out: list[Message],
+    ) -> set[str]:
+        """Update damped-topic state from a fresh ``{topic: depth}``
+        snapshot. Appends ``dlq_backlog_high`` ``sec.alert.v1`` and a
+        ``dlq_backlog_high`` ``maint.event.v1`` notification to
+        ``out`` per ROADMAP §8.5 binding (debounced re-emission on
+        the alert path; the maint.event.v1 mirror is always emitted
+        for the audit trail). Returns the set of topics currently
+        in damped mode (so the caller can quarter their per-tick
+        budget).
+        """
+        threshold = max(1, int(_cfg.maint_dlq_backlog_alert))
+        # Re-alert at most once per ``cfg.maint_dlq_replay_backoff_s``
+        # so a sustained backlog does not page the on-call team
+        # repeatedly. Mirrors the §7.3 debouncer cadence.
+        debounce_s = max(1, int(_cfg.maint_dlq_replay_backoff_s))
+        now_s = self._now_s()
+        damped: set[str] = set()
+        for topic, depth in depths.items():
+            if topic in RECURSION_DENY_SET:
+                continue
+            depth_int = int(depth)
+            state = self._backlog_damped.get(topic)
+            # Recovery check first: damping clears as soon as depth
+            # falls to half of the trip depth, even if depth is
+            # still above the alert threshold (ROADMAP §8.5: "until
+            # depth halves" — recovery is half of trip, not half
+            # of threshold).
+            if state is not None:
+                half_trip = float(state.get("trip_depth", 0.0)) / 2.0
+                if depth_int <= half_trip:
+                    del self._backlog_damped[topic]
+                    state = None
+            if depth_int > threshold:
+                if state is None:
+                    # First trip (or re-trip after recovery): record
+                    # trip depth and emit the alert.
+                    state = {
+                        "trip_depth": float(depth_int),
+                        "alerted_at_s": float(now_s),
+                    }
+                    self._backlog_damped[topic] = state
+                    out.extend(self._emit_backlog_alert(topic, depth_int))
+                else:
+                    # Sustained: re-alert if outside debounce window.
+                    if now_s - float(state.get("alerted_at_s", 0.0)) >= debounce_s:
+                        state["alerted_at_s"] = float(now_s)
+                        out.extend(self._emit_backlog_alert(topic, depth_int))
+                damped.add(topic)
+            elif state is not None:
+                # depth ≤ threshold but still above trip_depth // 2
+                # ⇒ stay damped, no new alert.
+                damped.add(topic)
+        return damped
+
+    def _emit_backlog_alert(self, topic: str, depth: int) -> list[Message]:
+        """Emit the paired ``sec.alert.v1{kind=dlq_backlog_high}`` and
+        ``maint.event.v1{kind=dlq_backlog_high}`` envelopes for a
+        single observed trip. Severity is ``warn`` per ROADMAP §8.5
+        (an ``error`` severity here would re-page on every tick a
+        broken consumer is down — defeats the damping purpose)."""
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind="dlq_backlog_high",
+            severity="warn",
+            source=self.name,
+            reason=(
+                f"depth={depth} > cfg.maint_dlq_backlog_alert="
+                f"{int(_cfg.maint_dlq_backlog_alert)}"
+            ),
+            produced_at=self._clock_iso(),
+            subject=topic,
+        )
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        notif = self._notify(
+            "dlq_backlog_high",
+            target=topic,
+            extra={
+                "depth": int(depth),
+                "threshold": int(_cfg.maint_dlq_backlog_alert),
+                "damped_budget_factor": 4,
+            },
+        )
+        return [Message(envelope=env, payload=alert.as_dict()), notif]
 
     # ── Helpers ───────────────────────────────────────────────────
     def _record_escalation(self, topic: str, request_id: str) -> bool:

@@ -351,3 +351,113 @@ def test_poison_window_expiry_resets_count(monkeypatch) -> None:
     assert agent._record_escalation("t.dlq", "r3") is False
     # Only r3 remains in window; threshold not crossed.
     assert "t.dlq" not in agent._frozen_topics
+
+
+# ── Phase 8 §8.5 — Backlog-pressure damping ─────────────────────────
+
+def test_backlog_damping_emits_alert_and_quarters_budget(monkeypatch) -> None:
+    """Per ROADMAP §8.5: depth > cfg.maint_dlq_backlog_alert ⇒
+    debounced sec.alert.v1{kind=dlq_backlog_high, severity=warn} +
+    per-topic replay budget quartered until depth halves."""
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+    monkeypatch.setattr(cfg, "maint_dlq_max_replays_per_tick", 40, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_backlog_alert", 100, raising=False)
+    agent = MaintDlqSupervisor()
+    out = agent.tick(
+        ["predict.final.dlq", "predict.vote.dlq"],
+        depths={"predict.final.dlq": 500, "predict.vote.dlq": 50},
+    )
+    # One sec.alert.v1 for the over-threshold topic.
+    alerts = [m for m in out if m.envelope.topic == SEC_ALERT]
+    assert len(alerts) == 1
+    assert alerts[0].payload["kind"] == "dlq_backlog_high"
+    assert alerts[0].payload["severity"] == "warn"
+    assert alerts[0].payload["subject"] == "predict.final.dlq"
+    # Mirror notification on maint.event.v1.
+    backlog_notifs = [m for m in out
+                      if m.envelope.topic == MAINT_EVENT
+                      and m.payload.get("kind") == "dlq_backlog_high"]
+    assert len(backlog_notifs) == 1
+    # Budgets: damped topic gets per_topic // 4, healthy gets per_topic.
+    replayed = {m.payload["target"]: m.payload
+                for m in out if m.payload.get("kind") == "dlq_replayed"}
+    # per_topic = 40 // 2 = 20
+    assert replayed["predict.vote.dlq"]["budget_per_topic"] == 20
+    assert replayed["predict.vote.dlq"].get("backlog_damped") is not True
+    assert replayed["predict.final.dlq"]["budget_per_topic"] == 5  # 20 // 4
+    assert replayed["predict.final.dlq"]["backlog_damped"] is True
+
+
+def test_backlog_damping_debounces_repeat_alerts(monkeypatch) -> None:
+    """Sustained backlog must not re-page on every tick — repeat
+    alerts respect cfg.maint_dlq_replay_backoff_s."""
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+    monkeypatch.setattr(cfg, "maint_dlq_backlog_alert", 100, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_backoff_s", 60, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    clock = {"s": 1_700_000_000.0}
+    agent = MaintDlqSupervisor(clock_s=lambda: clock["s"])
+    # First tick: alert fires.
+    out1 = agent.tick(["t.dlq"], depths={"t.dlq": 500})
+    assert sum(1 for m in out1 if m.envelope.topic == SEC_ALERT) == 1
+    # Second tick 10s later: still over threshold, no re-alert.
+    clock["s"] += 10
+    out2 = agent.tick(["t.dlq"], depths={"t.dlq": 600})
+    assert sum(1 for m in out2 if m.envelope.topic == SEC_ALERT) == 0
+    # Third tick after debounce window: re-alert fires.
+    clock["s"] += 60
+    out3 = agent.tick(["t.dlq"], depths={"t.dlq": 700})
+    assert sum(1 for m in out3 if m.envelope.topic == SEC_ALERT) == 1
+
+
+def test_backlog_damping_clears_when_depth_halves(monkeypatch) -> None:
+    """Once depth ≤ trip_depth // 2 AND back below the alert
+    threshold, damping clears and the topic resumes its normal
+    per-tick budget. ROADMAP §8.5: 'until depth halves' is the
+    recovery floor; if depth is still above the alert threshold
+    after halving, the topic re-trips with a fresh trip_depth."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_dlq_max_replays_per_tick", 40, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_backlog_alert", 100, raising=False)
+    agent = MaintDlqSupervisor()
+    # Trip damping at depth=500.
+    agent.tick(["t.dlq"], depths={"t.dlq": 500})
+    assert "t.dlq" in agent._backlog_damped  # noqa: SLF001
+    # Depth above half (500//2 = 250) AND above threshold: stays damped.
+    agent.tick(["t.dlq"], depths={"t.dlq": 300})
+    assert "t.dlq" in agent._backlog_damped
+    # Depth drops below the alert threshold AND below half-trip:
+    # damping clears, no fresh alert.
+    out = agent.tick(["t.dlq"], depths={"t.dlq": 50})
+    assert "t.dlq" not in agent._backlog_damped
+    replayed = [m for m in out if m.payload.get("kind") == "dlq_replayed"]
+    assert replayed[0].payload["budget_per_topic"] == 40
+    assert replayed[0].payload.get("backlog_damped") is not True
+
+
+def test_backlog_damping_skips_recursion_deny() -> None:
+    """Topics in RECURSION_DENY_SET must never be considered for
+    backlog damping (they are never replayed at all)."""
+    agent = MaintDlqSupervisor()
+    out = agent.tick(
+        ["predict.final.dlq"],
+        depths={"maint.event.v1.dlq": 99999, "predict.final.dlq": 5},
+    )
+    assert "maint.event.v1.dlq" not in agent._backlog_damped  # noqa: SLF001
+
+
+def test_tick_omitting_depths_preserves_v1_behaviour(monkeypatch) -> None:
+    """Backwards-compat: callers that do not pass ``depths=`` keep
+    the v1 fairness scheduler unchanged (no alerts, no damping)."""
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+    monkeypatch.setattr(cfg, "maint_dlq_max_replays_per_tick", 30, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    agent = MaintDlqSupervisor()
+    out = agent.tick(["a.dlq", "b.dlq"])
+    assert all(m.envelope.topic != SEC_ALERT for m in out)
+    assert agent._backlog_damped == {}  # noqa: SLF001

@@ -721,6 +721,12 @@ class Config:
     # a ``dlq_unfreeze`` command.
     maint_dlq_poison_distinct_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_POISON_DISTINCT_THRESHOLD", "5")))
     maint_dlq_poison_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_POISON_WINDOW_S", "600")))
+    # Phase 8 §8.5 backlog-pressure damping: per-topic DLQ depth
+    # threshold above which the supervisor emits a debounced
+    # ``sec.alert.v1{kind=dlq_backlog_high}`` and quarters that
+    # topic's per-tick replay budget until depth falls below half
+    # the original observed depth.
+    maint_dlq_backlog_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_BACKLOG_ALERT", "1000")))
 
     # ── Phase 8 §8.6 — `maint.schema.v1` sentinel ────────────────────
     maint_schema_sample_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S", "5")))
@@ -737,6 +743,12 @@ class Config:
     maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_TTL_S", "604800")))
     maint_sec_pattern_promote_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD", "1")))
     maint_sec_request_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_REQUEST_LRU", "2048")))
+    # Phase 8 §8.8 hysteresis: minimum seconds between two
+    # ``denylist_decimate_now`` runs (global; the denylist zset is
+    # one shared resource). A second decimate inside the window is
+    # acked ``accepted=true, reason="hysteresis_throttled"`` and
+    # emits ``denylist_decimate_throttled``.
+    maint_sec_decimate_min_interval_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_DECIMATE_MIN_INTERVAL_S", "300")))
 
     # ── Phase 8 §8.10 — broadcast pause ──────────────────────────────
     maint_pause_default_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S", "600")))
@@ -1288,6 +1300,8 @@ class Config:
         _bounded("maint_sec_pattern_ttl_s", self.maint_sec_pattern_ttl_s, 1, 31_536_000)
         _bounded("maint_sec_pattern_promote_threshold", self.maint_sec_pattern_promote_threshold, 1, 1_000_000)
         _bounded("maint_sec_request_lru", self.maint_sec_request_lru, 1, 1_000_000)
+        _bounded("maint_sec_decimate_min_interval_s", self.maint_sec_decimate_min_interval_s, 1, 86_400)
+        _bounded("maint_dlq_backlog_alert", self.maint_dlq_backlog_alert, 1, 100_000_000)
 
         # Phase 8 §8.10 — pause/resume.
         _bounded("maint_pause_default_ttl_s", self.maint_pause_default_ttl_s, 1, 604_800)
