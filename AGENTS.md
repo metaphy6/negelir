@@ -319,9 +319,6 @@ source_watcher  — Source-watcher AI agent (Phase 2.8)
 - ❌ Never edit `chart.json` by hand for routine bumps. The
   `test_chart_is_canonical` round-trip test will fail and CI will
   block the merge.
-- ❌ Never "batch" multiple component bumps into a single commit
-  unless they're genuinely a single logical change. One commit, one
-  meaningful concern.
 - ✅ The `build` counter is the project's monotonic heartbeat — every
   component bump nudges it. Use it in release artifacts.
 - ✅ Bumping `project` resets `build` to `0` automatically.
