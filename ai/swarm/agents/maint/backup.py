@@ -50,6 +50,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Iterable, Mapping, Protocol
 from uuid import uuid4
 
@@ -302,6 +303,12 @@ class MaintBackupAgent:
         self._last_fire_wall: datetime | None = None
         self._last_fire_mono_ns: int | None = None
         self._catch_up_used: bool = False
+        # ROADMAP §8.3 backup-age gauge / watchdog: only successful
+        # *verified* dumps satisfy the gauge. Skewed / disk-pressured /
+        # verify-failed runs do NOT advance these — that is the
+        # explicit binding contract (silent-failure mode is the threat).
+        self._last_completed_wall: datetime | None = None  # any-outcome ok
+        self._last_verified_wall: datetime | None = None    # outcome=ok only
 
     # ── Bus contract: handle quarantine_erase ───────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -565,6 +572,107 @@ class MaintBackupAgent:
         )
         self._last_fire_wall = now_wall
         self._last_fire_mono_ns = mono_ns
+        # Advance the gauge — `ok` is a verified completion (the
+        # verify_summary above is the proof); `dry_run` is also
+        # valid forward progress (it would have verified). Anything
+        # earlier in the state machine returned before this line.
+        self._last_completed_wall = now_wall
+        if outcome == "ok":
+            self._last_verified_wall = now_wall
+
+    # ── Public observability surface ────────────────────────────────────
+    def backup_age_hours(self, *, verified: bool = True) -> float | None:
+        """Return age of the most recent backup in hours, or ``None``
+        when no qualifying backup has been recorded yet.
+
+        ROADMAP §8.3 binding contract — exposed as the
+        ``maint_backup_age_hours{verified}`` telemetry gauge:
+
+        * ``verified=True``  → only ``outcome=ok`` runs satisfy the
+          gauge (the silent-failure mode where every nightly fails
+          verify is then visible).
+        * ``verified=False`` → any completed run (including
+          ``dry_run``) satisfies the gauge — useful in the mock
+          profile where ``maint_backup_dry_run=true`` is the
+          default.
+
+        Returns ``None`` (not 0.0, not infinity) before the first
+        qualifying run — callers must treat ``None`` as "unknown,
+        do not fire the watchdog yet" to honour the boot-warm
+        guard from §8.10's dead-mans-switch.
+        """
+
+        anchor = self._last_verified_wall if verified else self._last_completed_wall
+        if anchor is None:
+            return None
+        delta = self._clock_wall() - anchor
+        return delta.total_seconds() / 3600.0
+
+    def backup_age_alert_due(self) -> bool:
+        """``True`` when ``backup_age_hours(verified=True)`` exceeds
+        ``cfg.maint_backup_age_alert_h``. ``None`` age (no backup
+        yet) returns ``False`` — the watchdog refuses to fire on
+        cold start (Phase 8.10 dead-mans-switch handles that case
+        independently)."""
+
+        age = self.backup_age_hours(verified=True)
+        if age is None:
+            return False
+        return age > float(_cfg.maint_backup_age_alert_h)
+
+    def check_permissions(self) -> list[str]:
+        """Audit ``cfg.maint_backup_dir`` for ROADMAP §8.3 binding
+        permission contract. Returns a list of human-readable
+        violations; an empty list means OK.
+
+        Contract:
+        * Backup directory itself: mode 0700.
+        * Files inside (top level only — recursion is bounded by
+          one directory level to avoid scanning a large tree on
+          every startup): mode 0600.
+
+        Non-POSIX filesystems are skipped (returns ``[]``) — the
+        check is best-effort and never blocks startup on
+        Windows/CIFS where mode bits are meaningless.
+        """
+
+        backup_dir = Path(_cfg.maint_backup_dir)
+        if not backup_dir.exists():
+            # Nothing to audit yet — first run will create it.
+            return []
+        violations: list[str] = []
+        try:
+            dir_mode = backup_dir.stat().st_mode & 0o777
+        except OSError as exc:
+            return [f"cannot stat {backup_dir}: {exc!r}"]
+        if dir_mode == 0:
+            # Filesystem with no mode bits (e.g. some Windows mounts).
+            return []
+        if dir_mode & 0o077:
+            # Any group/other permission bit is a violation.
+            violations.append(
+                f"{backup_dir} mode {oct(dir_mode)} is looser than 0o700"
+            )
+        try:
+            children = list(backup_dir.iterdir())
+        except OSError as exc:
+            violations.append(f"cannot list {backup_dir}: {exc!r}")
+            return violations
+        for child in children:
+            try:
+                cmode = child.stat().st_mode & 0o777
+            except OSError:
+                continue
+            if cmode == 0:
+                continue
+            # Sub-directories permitted up to 0o700 (per-day dump
+            # dirs); regular files must be ≤ 0o600.
+            limit = 0o700 if child.is_dir() else 0o600
+            if cmode & ~limit:
+                violations.append(
+                    f"{child} mode {oct(cmode)} is looser than {oct(limit)}"
+                )
+        return violations
 
     # ── Emission helpers ────────────────────────────────────────────────
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,

@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 4,
+    "build": 6,
     "released": null
   },
   "components": {
@@ -34,9 +34,9 @@
       "last_changed": "2026-04-28T08:41:52+00:00"
     },
     "source_watcher": {
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
-      "last_changed": "2026-04-20T09:43:24+00:00"
+      "last_changed": "2026-05-06T13:56:20+00:00"
     },
     "datasource_scraper": {
       "version": "0.1.0",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.38.0",
+      "version": "0.38.1",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-06T13:42:02+00:00"
+      "last_changed": "2026-05-06T13:56:20+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2517,6 +2517,24 @@
       "from": "0.37.0",
       "to": "0.38.0",
       "build": 4
+    },
+    {
+      "timestamp": "2026-05-06T13:56:20+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 8.3/8.4/8.10 first-cut helpers: summarizer cost-cap ledger, backup-age gauge methods, KubernetesLeader stub",
+      "from": "0.38.0",
+      "to": "0.38.1",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-05-06T13:56:20+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "Phase 8.4 partial: two-tier cost-cap ledger (FileSummarizerLedger)",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 6
     }
   ]
 }

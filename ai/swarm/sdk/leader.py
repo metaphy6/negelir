@@ -66,4 +66,51 @@ class SingleProcessLeader:
             self._shed = False
 
 
-__all__ = ["Leader", "SingleProcessLeader"]
+class KubernetesLeader:
+    """Placeholder lease-driver for the Phase 14 Kubernetes deploy.
+
+    The real driver will use ``coordination.k8s.io/v1.Lease`` with
+    the parameters pinned in ROADMAP §8.10 (15s lease duration,
+    10s renew deadline, 5s retry period). Until Phase 14 lands the
+    Kubernetes client + ServiceAccount + RBAC, instantiating this
+    class **refuses loud** rather than silently noop-ing — a
+    misconfigured ``cfg.maint_runtime=k8s`` environment that bypassed
+    the bootstrap selector should not produce a "leader" that is
+    actually no one (mirrors the ``ComposeController`` /
+    ``K8sController`` selector discipline in §8.2).
+
+    Test harnesses must use :class:`SingleProcessLeader`. The Phase
+    14 patch will replace the body of ``__init__`` with the real
+    lease loop and remove this docstring's "stub" wording.
+    """
+
+    name: str
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        namespace: str = "negelir",
+        lease_duration_s: int = 15,
+        renew_deadline_s: int = 10,
+        retry_period_s: int = 5,
+    ) -> None:
+        self.name = name
+        self._namespace = namespace
+        self._lease_duration_s = lease_duration_s
+        self._renew_deadline_s = renew_deadline_s
+        self._retry_period_s = retry_period_s
+        raise NotImplementedError(
+            "KubernetesLeader is a Phase 14 stub. "
+            "Use SingleProcessLeader in compose / tests; the K8s "
+            "lease driver lands with the Phase 14 deploy package."
+        )
+
+    def is_leader(self) -> bool:  # pragma: no cover - unreachable
+        raise NotImplementedError
+
+    def shed(self) -> None:  # pragma: no cover - unreachable
+        raise NotImplementedError
+
+
+__all__ = ["Leader", "SingleProcessLeader", "KubernetesLeader"]
