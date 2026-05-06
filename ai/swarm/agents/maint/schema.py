@@ -28,7 +28,9 @@ from common.config import cfg as _cfg
 
 from ...sdk import schemas as _schemas
 from ...sdk.types import Envelope, Message, Topic
-from ..topics import MAINT_EVENT
+from ..payloads import MaintAck
+from ..topics import MAINT_ACK, MAINT_EVENT
+from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.schema")
 
@@ -62,11 +64,11 @@ class MaintSchemaSentinel:
     """
 
     name = "maint.schema.v1"
-    # Subscribes are decided by the bootstrap (bus tap surface) so
-    # the agent itself declares an empty subscribe list and is
-    # called via :meth:`observe` from a tap shim.
-    subscribes: tuple[Topic, ...] = ()
-    publishes: tuple[Topic, ...] = (MAINT_EVENT,)
+    # Subscribes MAINT_EVENT for operator-driven maint_pause /
+    # maint_resume per §8.10/§8.13.5; sample taps for Detector A
+    # are still wired by the bootstrap via :meth:`observe`.
+    subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
+    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
 
     def __init__(
         self,
@@ -81,12 +83,67 @@ class MaintSchemaSentinel:
         self._buckets: dict[str, _TopicBucket] = defaultdict(_TopicBucket)
         # Bounded LRU of (topic, sha256) → last_drift_at to debounce.
         self._drift_lru: "OrderedDict[tuple[str, str], float]" = OrderedDict()
+        # §8.13.5 pause/isolation matrix.
+        self._pause = PauseState()
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
-        # Sentinel does not consume from a topic by default; tap shim
-        # forwards via :meth:`observe`.
+        # Operator-driven maint_pause / maint_resume on MAINT_EVENT.
+        if msg.envelope.topic == MAINT_EVENT:
+            payload = msg.payload or {}
+            kind = payload.get("kind")
+            if kind == "maint_pause":
+                return list(self._handle_pause(msg, payload, paused=True))
+            if kind == "maint_resume":
+                return list(self._handle_pause(msg, payload, paused=False))
+            # Other maint kinds: still subject to Detector A sampling.
+            return self.observe(msg)
+        # Sample taps forward through :meth:`observe`.
         return self.observe(msg)
+
+    # ── maint_pause / maint_resume (§8.13.5 idempotency matrix) ──
+    def _handle_pause(self, msg: Message, payload: dict, *, paused: bool) -> Iterable[Message]:
+        request_id = str(payload.get("request_id") or "")
+        target = str(payload.get("target") or "")
+        if not request_id:
+            return
+        if target not in ("all", self.name):
+            yield self._ack(msg, request_id, accepted=True, reason="not_targeted")
+            return
+        now_ns = int(self._clock_mono() * 1_000_000_000)
+        self._pause.expire_if_due(now_ns)
+        if paused:
+            ttl_s = int(payload.get("ttl_s") or 0) or int(_cfg.maint_pause_default_ttl_s)
+            res = self._pause.apply_pause(ttl_s=ttl_s, now_ns=now_ns)
+        else:
+            res = self._pause.apply_resume()
+        details = None
+        if res.deadline_ns is not None:
+            details = {"ttl_s": (res.deadline_ns - now_ns) // 1_000_000_000}
+        yield self._ack(msg, request_id, accepted=res.accepted,
+                        reason=res.reason, details=details)
+
+    def _ack(self, msg: Message, request_id: str, *, accepted: bool,
+             reason: str, details: dict | None = None) -> Message:
+        ack = MaintAck(
+            request_id=request_id,
+            accepted=accepted,
+            accepted_by=self.name,
+            processed_at=self._clock_iso(),
+            attempt=int(msg.envelope.attempt or 1),
+            reason=reason,
+            details=details,
+        )
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=msg.envelope.trace_id,
+            topic=MAINT_ACK,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=ack.as_dict())
 
     def observe(self, msg: Message) -> Iterable[Message]:
         """Sample the message; emit a drift notification if the

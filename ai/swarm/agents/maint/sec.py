@@ -41,6 +41,7 @@ from common.config import cfg as _cfg
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT
+from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.sec")
 
@@ -169,6 +170,8 @@ class MaintSecAgent:
         self._new_id = new_id or _new_id
         # Bounded LRU dedup of (request_id) for at-least-once safety.
         self._req_lru: "OrderedDict[str, None]" = OrderedDict()
+        # §8.13.5 pause/isolation matrix.
+        self._pause = PauseState()
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -180,7 +183,34 @@ class MaintSecAgent:
             return list(self._handle_quarantine_clear(msg, payload))
         if kind == "denylist_decimate_now":
             return list(self._handle_decimate(msg, payload))
+        if kind == "maint_pause":
+            return list(self._handle_pause(msg, payload, paused=True))
+        if kind == "maint_resume":
+            return list(self._handle_pause(msg, payload, paused=False))
         return ()
+
+    # ── maint_pause / maint_resume (§8.13.5 idempotency matrix) ──
+    def _handle_pause(self, msg: Message, payload: dict,
+                      *, paused: bool) -> Iterable[Message]:
+        request_id = str(payload.get("request_id") or "")
+        target = str(payload.get("target") or "")
+        if not request_id:
+            return
+        if target not in ("all", self.name):
+            yield self._ack(msg, request_id, accepted=True, reason="not_targeted")
+            return
+        now_ns = self._now_ms() * 1_000_000
+        self._pause.expire_if_due(now_ns)
+        if paused:
+            ttl_s = int(payload.get("ttl_s") or 0) or int(_cfg.maint_pause_default_ttl_s)
+            res = self._pause.apply_pause(ttl_s=ttl_s, now_ns=now_ns)
+        else:
+            res = self._pause.apply_resume()
+        details = None
+        if res.deadline_ns is not None:
+            details = {"ttl_s": (res.deadline_ns - now_ns) // 1_000_000_000}
+        yield self._ack(msg, request_id, accepted=res.accepted,
+                        reason=res.reason, details=details)
 
     def _seen(self, request_id: str) -> bool:
         if request_id in self._req_lru:

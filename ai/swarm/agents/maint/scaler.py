@@ -308,8 +308,11 @@ class MaintScaler:
         target = str(payload.get("target") or "")
         if not request_id:
             return
-        # Only react if target is 'all' or our own name.
+        # Only react if target is 'all' or our own name. Other agents
+        # ack 'not_targeted' (still accepted=True) so the ops console
+        # receives a complete ack set on single-target pauses.
         if target not in ("all", self.name):
+            yield self._ack(msg, request_id, accepted=True, reason="not_targeted")
             return
         # Auto-resume any expired pause first so the matrix sees a
         # truthful current state.

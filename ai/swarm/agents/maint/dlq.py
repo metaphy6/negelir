@@ -476,6 +476,7 @@ class MaintDlqSupervisor:
         if not request_id:
             return
         if target not in ("all", self.name):
+            yield self._ack(msg, request_id, accepted=True, reason="not_targeted")
             return
         now_ns = int(self._now_s() * 1_000_000_000)
         self._pause.expire_if_due(now_ns)

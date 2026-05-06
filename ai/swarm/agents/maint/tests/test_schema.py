@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from swarm.agents.maint.schema import MaintSchemaSentinel
-from swarm.agents.topics import MAINT_EVENT
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT
 from swarm.sdk.types import Envelope, Message
 
 
@@ -21,11 +21,15 @@ def _wrap(topic: str, payload: dict) -> Message:
     return Message(envelope=env, payload=payload)
 
 
-def test_subscribes_empty_publishes_maint_event() -> None:
+def test_subscribes_maint_event_publishes_event_and_ack() -> None:
+    """Per Phase 8 §8.10, the schema sentinel subscribes MAINT_EVENT
+    so it can react to operator-driven maint_pause / maint_resume.
+    Sample taps for Detector A still flow through :meth:`observe`."""
     a = MaintSchemaSentinel()
     assert a.name == "maint.schema.v1"
-    assert a.subscribes == ()
+    assert MAINT_EVENT in a.subscribes
     assert MAINT_EVENT in a.publishes
+    assert MAINT_ACK in a.publishes
 
 
 def test_observe_drops_messages_with_blank_topic() -> None:

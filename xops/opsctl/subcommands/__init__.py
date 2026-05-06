@@ -19,6 +19,8 @@ from . import (
     baseline_reset,
     denylist_clear,
     liveness,
+    maint_pause,
+    maint_resume,
     quarantine_clear,
     quarantine_erase,
     spool_flush,
@@ -32,6 +34,8 @@ SUBCOMMANDS = (
     quarantine_clear,
     quarantine_erase,
     spool_flush,
+    maint_pause,
+    maint_resume,
 )
 
 __all__ = [
@@ -39,6 +43,8 @@ __all__ = [
     "baseline_reset",
     "denylist_clear",
     "liveness",
+    "maint_pause",
+    "maint_resume",
     "quarantine_clear",
     "quarantine_erase",
     "spool_flush",
