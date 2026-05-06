@@ -278,6 +278,7 @@ phase8:
   opsctl_spool_dir: ""                            # NEGELIR_OPSCTL_SPOOL_DIR
   opsctl_lock_dir: ""                             # NEGELIR_OPSCTL_LOCK_DIR
   opsctl_lock_stale_factor: 2                      # NEGELIR_OPSCTL_LOCK_STALE_FACTOR
+  opsctl_spool_ack_max_wait_h: 24                  # NEGELIR_OPSCTL_SPOOL_ACK_MAX_WAIT_H
   maint_ack_payload_max_bytes: 4096                # NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES
   maint_ack_reason_max_bytes: 512                  # NEGELIR_MAINT_ACK_REASON_MAX_BYTES
   maint_ack_details_max_bytes: 2048                # NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES

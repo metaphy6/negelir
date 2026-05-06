@@ -131,6 +131,154 @@ def cmd_spool_flush(_argv: List[str]) -> int:
     return _run_opsctl(args)
 
 
+def _append_common_flags(args: List[str]) -> None:
+    cid = _env("CLIENT_ID")
+    if cid:
+        args.extend(["--client-id", cid])
+    confirm = _env("CONFIRM")
+    if confirm:
+        args.extend(["--confirm", confirm])
+    reason = _env("REASON")
+    if reason:
+        args.extend(["--reason", reason])
+    if _env("DRY_RUN", "0") == "1":
+        args.append("--dry-run")
+    if _env("JSON", "0") == "1":
+        args.append("--json")
+
+
+def cmd_maint_pause(_argv: List[str]) -> int:
+    """`make ops.maint-pause TARGET=<agent|all> [TTL_S=<s>]` — §8.10."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.maint-pause: TARGET=<agent|all> is required")
+        return 64
+    args = ["maint-pause", "--target", target]
+    ttl = _env("TTL_S")
+    if ttl:
+        args.extend(["--ttl-s", ttl])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_maint_resume(_argv: List[str]) -> int:
+    """`make ops.maint-resume TARGET=<agent|all>` — §8.10."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.maint-resume: TARGET=<agent|all> is required")
+        return 64
+    args = ["maint-resume", "--target", target]
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_scale(_argv: List[str]) -> int:
+    """`make ops.scale TARGET=<agent> REPLICAS=<n> [TTL_S=<s>] [CURRENT=<n>]`."""
+    target = _env("TARGET")
+    replicas = _env("REPLICAS")
+    if not target or not replicas:
+        err("ops.scale: TARGET=<agent> and REPLICAS=<n> are required")
+        return 64
+    args = ["scale", "--target", target, "--replicas", replicas]
+    ttl = _env("TTL_S")
+    if ttl:
+        args.extend(["--ttl-s", ttl])
+    current = _env("CURRENT")
+    if current:
+        args.extend(["--current", current])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_dlq_replay(_argv: List[str]) -> int:
+    """`make ops.dlq-replay TARGET=<topic.dlq> [MAX_MSGS=<n>] [DROP=1] [CONFIRM_PII=1]`."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.dlq-replay: TARGET=<topic.dlq> is required")
+        return 64
+    args = ["dlq-replay", "--target", target]
+    n = _env("MAX_MSGS")
+    if n:
+        args.extend(["--max-msgs", n])
+    if _env("DROP", "0") == "1":
+        args.append("--drop")
+    if _env("CONFIRM_PII", "0") == "1":
+        args.append("--confirm-pii")
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_dlq_unfreeze(_argv: List[str]) -> int:
+    """`make ops.dlq-unfreeze TARGET=<topic.dlq>` — §8.5 C2."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.dlq-unfreeze: TARGET=<topic.dlq> is required")
+        return 64
+    args = ["dlq-unfreeze", "--target", target]
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_denylist_decimate_now(_argv: List[str]) -> int:
+    """`make ops.denylist-decimate-now [TARGET=all]` — §8.8."""
+    target = _env("TARGET", "all")
+    args = ["denylist-decimate-now", "--target", target]
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_scale_pin(_argv: List[str]) -> int:
+    """`make ops.scale-pin TARGET=<agent> REPLICAS=<n> [TTL_S=<s>]`."""
+    target = _env("TARGET")
+    replicas = _env("REPLICAS")
+    if not target or not replicas:
+        err("ops.scale-pin: TARGET=<agent> and REPLICAS=<n> are required")
+        return 64
+    args = ["scale-pin", "--target", target, "--replicas", replicas]
+    ttl = _env("TTL_S")
+    if ttl:
+        args.extend(["--ttl-s", ttl])
+    current = _env("CURRENT")
+    if current:
+        args.extend(["--current", current])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_scale_unpin(_argv: List[str]) -> int:
+    """`make ops.scale-unpin TARGET=<agent>` — cancel pin, resume autonomous."""
+    target = _env("TARGET")
+    if not target:
+        err("ops.scale-unpin: TARGET=<agent> is required")
+        return 64
+    args = ["scale-unpin", "--target", target]
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_spool_show(_argv: List[str]) -> int:
+    """`make ops.spool-show [LIMIT=<n>] [JSON=1]` — read-only spool listing."""
+    args = ["spool-show"]
+    limit = _env("LIMIT")
+    if limit:
+        args.extend(["--limit", limit])
+    if _env("JSON", "0") == "1":
+        args.append("--json")
+    return _run_opsctl(args)
+
+
+def cmd_spool_reconcile(_argv: List[str]) -> int:
+    """`make ops.spool-reconcile [HORIZON_H=<h>] [JSON=1]` — §8.16.2."""
+    import subprocess
+    cmd = [sys.executable, "-m", "xops.opsctl.spool_reconciler"]
+    h = _env("HORIZON_H")
+    if h:
+        cmd.extend(["--horizon-h", h])
+    if _env("JSON", "0") == "1":
+        cmd.append("--json")
+    return subprocess.call(cmd)
+
+
 COMMANDS = {
     "liveness": cmd_liveness,
     "denylist-clear": cmd_denylist_clear,
@@ -138,6 +286,16 @@ COMMANDS = {
     "quarantine-clear": cmd_quarantine_clear,
     "quarantine-erase": cmd_quarantine_erase,
     "spool-flush": cmd_spool_flush,
+    "spool-show": cmd_spool_show,
+    "spool-reconcile": cmd_spool_reconcile,
+    "maint-pause": cmd_maint_pause,
+    "maint-resume": cmd_maint_resume,
+    "scale": cmd_scale,
+    "scale-pin": cmd_scale_pin,
+    "scale-unpin": cmd_scale_unpin,
+    "dlq-replay": cmd_dlq_replay,
+    "dlq-unfreeze": cmd_dlq_unfreeze,
+    "denylist-decimate-now": cmd_denylist_decimate_now,
 }
 
 

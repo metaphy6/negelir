@@ -579,6 +579,11 @@ class Config:
     # is reaped on the next acquire. Keeps a crashed CLI from
     # permanently blocking the same ``(kind, target)`` tuple.
     opsctl_lock_stale_factor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_LOCK_STALE_FACTOR", "2")))
+    # Phase 8 §8.16.2 — spool-flush ack reconciler. The reconciler
+    # walks the audit CSV and, for every ``op=spool-flush`` row whose
+    # ``received_acks < expected_acks``, alerts when the row's age
+    # exceeds this threshold. Default: 24h (one operator-day).
+    opsctl_spool_ack_max_wait_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_SPOOL_ACK_MAX_WAIT_H", "24")))
     maint_ack_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES", "4096")))
     maint_ack_reason_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_REASON_MAX_BYTES", "512")))
     maint_ack_details_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES", "2048")))

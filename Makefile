@@ -367,6 +367,46 @@ ops.quarantine-clear: ## §8.1 — clear quarantine FP (TARGET=<sample_id>) [§8
 ops.spool-flush: ## §8.1 — drain bus-down spool (MAX_ENTRIES=<n>)
 	@$(XOPS)/opsctl.py spool-flush
 
+.PHONY: ops.maint-pause
+ops.maint-pause: ## §8.10 — pause maint agent(s) (TARGET=<agent|all> [TTL_S=<s>])
+	@$(XOPS)/opsctl.py maint-pause
+
+.PHONY: ops.maint-resume
+ops.maint-resume: ## §8.10 — resume maint agent(s) (TARGET=<agent|all>)
+	@$(XOPS)/opsctl.py maint-resume
+
+.PHONY: ops.scale
+ops.scale: ## §8.2 — pin replicas (TARGET=<agent> REPLICAS=<n> [TTL_S=<s>])
+	@$(XOPS)/opsctl.py scale
+
+.PHONY: ops.dlq-replay
+ops.dlq-replay: ## §8.5 — replay DLQ (TARGET=<topic.dlq> [MAX_MSGS=<n>] [DROP=1] [CONFIRM_PII=1])
+	@$(XOPS)/opsctl.py dlq-replay
+
+.PHONY: ops.dlq-unfreeze
+ops.dlq-unfreeze: ## §8.5 — lift poison-pattern freeze (TARGET=<topic.dlq>)
+	@$(XOPS)/opsctl.py dlq-unfreeze
+
+.PHONY: ops.denylist-decimate-now
+ops.denylist-decimate-now: ## §8.8 — force denylist decimation sweep ([TARGET=all])
+	@$(XOPS)/opsctl.py denylist-decimate-now
+
+.PHONY: ops.scale-pin
+ops.scale-pin: ## §8.1 — sugar over ops.scale (TARGET=<agent> REPLICAS=<n> [TTL_S=<s>])
+	@$(XOPS)/opsctl.py scale-pin
+
+.PHONY: ops.scale-unpin
+ops.scale-unpin: ## §8.1 — cancel an active scale pin (TARGET=<agent>)
+	@$(XOPS)/opsctl.py scale-unpin
+
+.PHONY: ops.spool-show
+ops.spool-show: ## §8.1 — read-only spool listing ([LIMIT=<n>])
+	@$(XOPS)/opsctl.py spool-show
+
+.PHONY: ops.spool-reconcile
+ops.spool-reconcile: ## §8.16.2 — alert on stale incomplete spool-flush ack rows ([HORIZON_H=<h>])
+	@$(XOPS)/opsctl.py spool-reconcile
+
 # ══════════════════════════════════════════════════════════════
 #                       PHASE TRACKING
 # ══════════════════════════════════════════════════════════════

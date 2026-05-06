@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.3.1",
-    "build": 11,
+    "build": 14,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.6.3",
+      "version": "1.6.4",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-06T09:38:57+00:00"
+      "last_changed": "2026-05-06T10:19:59+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -19,9 +19,9 @@
       "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.12.0",
+      "version": "3.14.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-06T09:12:00+00:00"
+      "last_changed": "2026-05-06T10:19:54+00:00"
     },
     "docs": {
       "version": "1.20.3",
@@ -2436,6 +2436,33 @@
       "from": "1.6.2",
       "to": "1.6.3",
       "build": 11
+    },
+    {
+      "timestamp": "2026-05-06T10:02:04+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8.1 batch A1: ops.{scale,dlq-replay,dlq-unfreeze,denylist-decimate-now} subcommands + Make targets + 14 tests",
+      "from": "3.12.0",
+      "to": "3.13.0",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-05-06T10:19:54+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "§8.1 batch A2 (scale-pin/scale-unpin/spool-show) + §8.16.2 spool-flush ack reconciler",
+      "from": "3.13.0",
+      "to": "3.14.0",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-05-06T10:19:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.16.2 — opsctl_spool_ack_max_wait_h knob (config triangle)",
+      "from": "1.6.3",
+      "to": "1.6.4",
+      "build": 14
     }
   ]
 }

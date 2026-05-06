@@ -44,6 +44,7 @@ ALWAYS_SAFE: FrozenSet[str] = frozenset({
     "liveness",
     "spool-show",
     "allowlist-show",
+    "scale-unpin",
 })
 
 
