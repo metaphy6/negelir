@@ -348,6 +348,51 @@ def test_sec_rate_denylist_clear_emits_remove() -> None:
     assert removes[0].ttl_s == 0
 
 
+def test_sec_rate_denylist_clear_idempotent_already_cleared_reason() -> None:
+    """Phase 8 §8.1 idempotency guard. Re-running ``denylist_clear``
+    on a subject that was never denylisted (or already cleared)
+    surfaces ``reason=already_cleared`` in the info-severity
+    ``denylist_removed`` alert; running it on an actively denylisted
+    subject surfaces ``reason=removed``. Both paths still emit the
+    SEC_DENYLIST remove (Redis SREM is idempotent and the audit
+    stream benefits from one-event-per-decision).
+    """
+    clock = _FakeClock()
+
+    # (a) never-seen subject -> already_cleared
+    agent_a = _rate_agent(clock)
+    event = MaintEvent(
+        kind="denylist_clear",
+        target="ip:8.8.8.8",
+        reason="manual_override",
+        produced_at=clock.iso(),
+    )
+    out = list(agent_a.handle(_msg(MAINT_EVENT, event.as_dict())))
+    removes = [m for m in out if m.envelope.topic == SEC_DENYLIST]
+    alerts = [SecAlert.from_dict(m.payload) for m in out if m.envelope.topic == SEC_ALERT]
+    assert len(removes) == 1, "audit-stream remove must always fire"
+    assert len(alerts) == 1
+    assert alerts[0].kind == "denylist_removed"
+    assert "already_cleared" in alerts[0].reason
+
+    # (b) actively denylisted subject -> removed
+    agent_b = _rate_agent(clock)
+    for i in range(3):
+        list(agent_b.handle(_alert_msg(alert_id=f"b-{i}")))
+    assert agent_b.is_denylisted("ip:9.9.9.9")
+    event_b = MaintEvent(
+        kind="denylist_clear",
+        target="ip:9.9.9.9",
+        reason="manual_override",
+        produced_at=clock.iso(),
+    )
+    out_b = list(agent_b.handle(_msg(MAINT_EVENT, event_b.as_dict())))
+    alerts_b = [SecAlert.from_dict(m.payload) for m in out_b if m.envelope.topic == SEC_ALERT]
+    assert len(alerts_b) == 1
+    assert "; removed" in alerts_b[0].reason
+    assert "already_cleared" not in alerts_b[0].reason
+
+
 def test_sec_rate_rejects_wildcard_denylist_clear() -> None:
     clock = _FakeClock()
     agent = _rate_agent(clock)

@@ -323,6 +323,19 @@ class SecRateAgent:
             return
         with self._lock:
             window = self._windows.pop(subject, None)
+        # §8.1 idempotency guard. The Redis SREM is idempotent and
+        # ``ops.denylist-clear`` is operator muscle-memory, so a
+        # repeated clear MUST surface as a benign no-op rather than
+        # a hard error. We distinguish three observable states:
+        #   * was actively denylisted    -> reason="removed"
+        #   * tracked but not denylisted -> reason="already_cleared"
+        #   * never seen at all          -> reason="already_cleared"
+        # All three still publish the SEC_DENYLIST remove (Redis is
+        # the source of truth and the audit trail benefits from
+        # one-event-per-decision per §7.3) and emit a single info
+        # ``denylist_removed`` alert with the distinguishing reason.
+        was_active = window is not None and window.denylisted_at is not None
+        ack_reason = "removed" if was_active else "already_cleared"
         # Always announce the remove — the Redis script is idempotent
         # and the audit trail benefits from one-event-per-decision.
         remove_event = DenylistEvent(
@@ -338,11 +351,7 @@ class SecRateAgent:
             kind="denylist_removed",
             severity="info",
             subject=subject,
-            reason=(
-                "manual_override; window_reset"
-                if window is not None
-                else "manual_override; subject not active"
-            ),
+            reason=f"manual_override; {ack_reason}",
         )
 
     # ── Alert helper ──────────────────────────────────────────────

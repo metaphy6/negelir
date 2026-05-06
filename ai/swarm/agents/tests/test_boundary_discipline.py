@@ -492,21 +492,24 @@ def test_sec_denylist_v1_no_unauthorised_writer_in_registry() -> None:
 
 
 def test_sec_alert_v1_producer_set_is_sec_only() -> None:
-    """§7.5 catalog row: ``sec.alert.v1`` has an open producer set
-    bounded to ``sec.*`` agents. A predictor / proofreader / cache
-    agent emitting a sec alert would smuggle non-defense events
-    onto the operator pager channel.
+    """§7.5 catalog row + §8.x extension: ``sec.alert.v1`` has an
+    open producer set bounded to ``sec.*`` agents AND ``maint.*``
+    reactors that surface defense-class operational alerts
+    (e.g. ``dlq_backlog_high``, ``maint_storage_pressure``,
+    ``maint_advisory_lock_held_long``). A predictor / proofreader /
+    cache agent emitting a sec alert would smuggle non-defense
+    events onto the operator pager channel.
     """
     offenders: list[str] = []
     for agent in _registry_agents():
         label = _agent_label(agent)
-        if label.startswith("sec."):
+        if label.startswith("sec.") or label.startswith("maint."):
             continue
         if SEC_ALERT in tuple(getattr(agent, "publishes", ())):
             offenders.append(label)
     assert offenders == [], (
-        "sec.alert.v1 producer set is bounded to sec.* agents "
-        f"(§7.5). Non-defense offenders: {offenders}."
+        "sec.alert.v1 producer set is bounded to sec.* + maint.* "
+        f"agents (§7.5 / §8.x). Non-defense offenders: {offenders}."
     )
 
 def test_telemetry_watches_phase7_topics() -> None:

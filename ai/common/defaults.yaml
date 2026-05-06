@@ -353,6 +353,8 @@ phase8:
   maint_backpressure_red_error_rate_per_s: 10      # NEGELIR_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S
   # ── §8.13.2 cumulative `data/maint/` storage cap ──
   maint_storage_total_max_mb: 512                  # NEGELIR_MAINT_STORAGE_TOTAL_MAX_MB
+  # ── §8.15.3 advisory-lock hold-time guard ──
+  maint_advisory_lock_max_hold_ms: 5000            # NEGELIR_MAINT_ADVISORY_LOCK_MAX_HOLD_MS
   # ── §8.14 audit log ──
   maint_audit_hmac_key_b64: ""                     # NEGELIR_MAINT_AUDIT_HMAC_KEY_B64
   maint_audit_partition_retention_days: 365        # NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS

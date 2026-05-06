@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 6,
+    "build": 10,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.6.5",
+      "version": "1.6.6",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-06T13:10:38+00:00"
+      "last_changed": "2026-05-06T14:37:39+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -19,9 +19,9 @@
       "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.15.0",
+      "version": "3.15.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-06T13:10:32+00:00"
+      "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
       "version": "1.20.4",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.38.1",
+      "version": "0.38.3",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-06T13:56:20+00:00"
+      "last_changed": "2026-05-06T14:36:29+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -2535,6 +2535,42 @@
       "from": "1.4.0",
       "to": "1.4.1",
       "build": 6
+    },
+    {
+      "timestamp": "2026-05-06T14:30:28+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§8.15.3 BoundLock hold-time guard",
+      "from": "3.15.0",
+      "to": "3.15.1",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-05-06T14:33:58+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "§8.1 denylist_clear idempotency reason",
+      "from": "0.38.1",
+      "to": "0.38.2",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-05-06T14:36:29+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "boundary test allows maint.* on sec.alert.v1",
+      "from": "0.38.2",
+      "to": "0.38.3",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-05-06T14:37:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.15.3 _bounded check for new advisory-lock knob",
+      "from": "1.6.5",
+      "to": "1.6.6",
+      "build": 10
     }
   ]
 }

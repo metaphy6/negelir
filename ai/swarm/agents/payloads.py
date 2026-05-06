@@ -1142,6 +1142,8 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "maint_storage_pressure",
     # maint.dlq.v1 (§8.5 backlog-pressure damping)
     "dlq_backlog_high",
+    # xops.maint.advisory_lock (§8.15.3 hold-time guard)
+    "maint_advisory_lock_held_long",
 })
 
 

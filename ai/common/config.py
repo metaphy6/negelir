@@ -788,6 +788,15 @@ class Config:
     # (single hysteresis band, prevents thrash). 0 = disabled.
     maint_storage_total_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_STORAGE_TOTAL_MAX_MB", "512")))
 
+    # ── Phase 8 §8.15.3 — advisory-lock hold-time guard ──────────────
+    # Wall-clock cap on how long a Postgres advisory lock taken via
+    # ``xops.maint.advisory_lock.BoundLock`` may stay acquired before
+    # the context manager fires a debounced
+    # ``sec.alert.v1{kind=maint_advisory_lock_held_long, severity=warn}``
+    # on release. Detects accidental long transactions inside the
+    # critical section. Generous default (5s); 0 disables.
+    maint_advisory_lock_max_hold_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ADVISORY_LOCK_MAX_HOLD_MS", "5000")))
+
     # ── Phase 8 §8.14 — audit log ────────────────────────────────────
     maint_audit_hmac_key_b64: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AUDIT_HMAC_KEY_B64", ""))
     maint_audit_partition_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS", "365")))
@@ -1323,6 +1332,9 @@ class Config:
         # Phase 8 §8.13.2 — cumulative storage cap (0 = disabled).
         if self.maint_storage_total_max_mb != 0:
             _bounded("maint_storage_total_max_mb", self.maint_storage_total_max_mb, 1, 1_048_576)
+        # Phase 8 §8.15.3 advisory-lock hold-time guard. 0 disables.
+        if self.maint_advisory_lock_max_hold_ms != 0:
+            _bounded("maint_advisory_lock_max_hold_ms", self.maint_advisory_lock_max_hold_ms, 1, 3_600_000)
         if self.maint_backpressure_yellow_queue_depth >= self.maint_backpressure_red_queue_depth:
             issues.append("maint_backpressure_yellow_queue_depth must be < maint_backpressure_red_queue_depth")
         if self.maint_backpressure_yellow_head_age_s >= self.maint_backpressure_red_head_age_s:
