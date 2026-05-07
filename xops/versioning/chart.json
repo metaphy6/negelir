@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 24,
+    "build": 25,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.34.0",
+      "version": "1.35.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-07T10:39:28+00:00"
+      "last_changed": "2026-05-07T10:53:48+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2697,6 +2697,15 @@
       "from": "1.33.0",
       "to": "1.34.0",
       "build": 24
+    },
+    {
+      "timestamp": "2026-05-07T10:53:48+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.32 13th-pass addendum: discourse-pragmatic / dialectal / operational-resilience floor (quotative firewall, aspectual stacks, postposition disambig, dialect normalize, apostrophe robustness, focus-particle, numeric-apostrophe, productive-suffix peeler, system-meta routing, self-correction, system-uttered anaphora, cross-pod gossip, synthetic prober, eval-corpus curation, flame capture, partial-bus matrix, breaking-schema + DR runbooks)",
+      "from": "1.34.0",
+      "to": "1.35.0",
+      "build": 25
     }
   ]
 }
