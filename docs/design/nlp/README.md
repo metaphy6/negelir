@@ -34,6 +34,16 @@
 > 5. Forbidden edits without explicit human request that names the
 >    file: any rename of these files (URL stability), any deletion of a
 >    binding `[ ]` item, any weakening of an integrity gate.
+> 6. **Anti-literalism contract is binding on every implementer.**
+>    The closed YAML tables, single illustrative inputs, and tuned
+>    numeric defaults in §10.21..§10.34 are **witnesses of a class**,
+>    not the class itself. Any agent implementing a §10.x section must
+>    follow the rules in
+>    [`.github/instructions/nlp-anti-literalism.instructions.md`](../../../.github/instructions/nlp-anti-literalism.instructions.md):
+>    implement the rule (not the rows), derive the constants (don't
+>    inline them), ship a family generator (not just per-row tests),
+>    and test composition. A literalist implementation that satisfies
+>    every named test in the spec is still a Phase 10 failure.
 
 ## Layout
 
