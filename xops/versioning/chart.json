@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 12,
+    "build": 15,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.22.0",
+      "version": "1.25.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-07T08:05:20+00:00"
+      "last_changed": "2026-05-07T08:45:47+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2589,6 +2589,33 @@
       "from": "1.21.0",
       "to": "1.22.0",
       "build": 12
+    },
+    {
+      "timestamp": "2026-05-07T08:18:56+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 NLP deep-revision: 4 thin sub-sections → §10.0–§10.20 binding contract (wire schemas qa.intent.v1/qa.answer.v1/nlp.event.v1/nlp.alert.v1, deterministic normalize pipeline, lexicon hot-reload, Symspell-bounded typo, calibrated abstaining intent, hybrid entity+CRF, slot resolver+dispatch, template-first answer with TR morphology, fenced humanizer LLM, proofreader agent, degradation matrix, idempotency+spool, observability, Phase 7/9/11/12/13a/16/20 cross-phase contracts, ~36 cfg knobs, 18-item DoD)",
+      "from": "1.22.0",
+      "to": "1.23.0",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-05-07T08:32:28+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 NLP §10.21 hardening addendum (13 sub-sections, ~53 new proof tests)",
+      "from": "1.23.0",
+      "to": "1.24.0",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-05-07T08:45:47+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.22 Turkish-language correctness addendum — 14 sub-sections, ~65 proof tests, ~22 new cfg knobs",
+      "from": "1.24.0",
+      "to": "1.25.0",
+      "build": 15
     }
   ]
 }
