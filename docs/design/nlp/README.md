@@ -1,6 +1,6 @@
 # `docs/design/nlp/` — Phase 10 (Turkish-First NLP Layer) detail
 
-> **Why this folder exists.** Phase 10 grew to ~7,900 lines across 33
+> **Why this folder exists.** Phase 10 grew to ~8,500 lines across 34
 > sub-sections after thirteen design passes and could no longer be
 > reviewed in-place inside `docs/planning/ROADMAP.md`. The contract was
 > carved out into per-addendum files so each can be reviewed,
@@ -16,7 +16,7 @@
 > 1. Every checkbox flip lives in **this** folder (the per-section file
 >    that owns the item). The ROADMAP §10 stub only carries the
 >    phase-rollup checkbox, ticked once §10.20 DoD plus every addendum
->    DoD addition (§10.21..§10.32, §10.33) are green.
+>    DoD addition (§10.21..§10.34) are green.
 > 2. Any non-trivial edit triggers `make version.bump COMPONENT=docs
 >    LEVEL=minor NOTE="..."` in the same commit (per AGENTS.md §6.1).
 > 3. Cross-phase references (Phase 5 / 7 / 8 / 9 / 11 / 12 / 13a / 14 /
@@ -52,7 +52,8 @@
 | [`sections/30-conversational-completeness-intent-enum-classifier-bias.md`](sections/30-conversational-completeness-intent-enum-classifier-bias.md) | §10.30 | Conversational completeness, intent-enum closure, classifier-bias floor | 11th |
 | [`sections/31-pragmatics-semantic-frame-final-mile.md`](sections/31-pragmatics-semantic-frame-final-mile.md) | §10.31 | Pragmatics, semantic-frame integrity, final-mile reliability | 12th |
 | [`sections/32-discourse-pragmatic-dialectal-operational-resilience.md`](sections/32-discourse-pragmatic-dialectal-operational-resilience.md) | §10.32 | Discourse-pragmatic, dialectal, operational-resilience floor | 13th |
-| [`sections/33-input-flawlessness-and-proof-tests.md`](sections/33-input-flawlessness-and-proof-tests.md) | §10.33 | **Turkish input flawlessness — wrong-assumption sweep, missing proof tests, generic-and-broken-Turkish floor** | **14th** |
+| [`sections/33-input-flawlessness-and-proof-tests.md`](sections/33-input-flawlessness-and-proof-tests.md) | §10.33 | Turkish input flawlessness — wrong-assumption sweep, missing proof tests, generic-and-broken-Turkish floor | 14th |
+| [`sections/34-input-correctness-resilience-and-integrity.md`](sections/34-input-correctness-resilience-and-integrity.md) | §10.34 | **Input correctness + resilience + integrity — generic-broken-Turkish shapes (predictive-text overshoot, OCR/PDF paste, mid-word URL, half-typed-then-sent, mega-input, suffixed-emoji, comma-as-apostrophe, random-case, ambiguous date, client TZ, systematic-diacritic-loss), normalize-chain perf budget + DFA fast-path + zero-copy guarantee, in-flight stage timeouts, inbound checksum chain (gateway↔NLP integrity pair)** | **15th** |
 
 ## Reading order for a new contributor
 
@@ -67,24 +68,45 @@
    ([`sections/33-input-flawlessness-and-proof-tests.md`](sections/33-input-flawlessness-and-proof-tests.md))
    when working on input correctness, normalize chains, lexicon edits,
    or any test corpus that touches "wrong" Turkish.
+5. The 15th-pass file
+   ([`sections/34-input-correctness-resilience-and-integrity.md`](sections/34-input-correctness-resilience-and-integrity.md))
+   when working on generic-broken-Turkish shapes the prior passes did
+   not enumerate, normalize-chain performance, in-flight degradation,
+   or the inbound (gateway → NLP) integrity chain.
 
 ## Per-pass contract surface (cumulative)
 
-After all 14 passes the binding surface includes (non-exhaustive):
+After all 15 passes the binding surface includes (non-exhaustive):
 
 - **Wire topics:** `qa.intent.v1`, `qa.answer.v1`, `nlp.event.v1`,
   `nlp.alert.v1`, `nlp.gossip.v1`, `nlp.prober.v1`,
   `qa.context_extension.v1`, `qa.intent.v1.attributed_claim` and the
-  `meta.*` enum closure (≥ 19 reason codes, see §10.31 + §10.33).
+  `meta.*` enum closure (≥ 19 reason codes, see §10.31 + §10.33;
+  extended in §10.34 with `meta.empty_input`, `meta.control_only_input`,
+  `meta.malformed_input`, `meta.url_only_input`, `meta.likely_partial_input`,
+  `meta.multi_input_clarification_required`, `meta.date_disambiguation_required`,
+  `meta.normalize_timeout`, `meta.classifier_timeout`).
+- **Inbound integrity:** `qa.request.v1.inbound_checksum` field +
+  per-pod `inbound_secret` rotation (§10.34.4) — symmetric pair with
+  the §10.31.11 `qa.answer.v1.outbound_checksum`.
 - **Cross-language byte-parity gates:** `tr_normalize_spec.json`,
   `proper_noun_apostrophe_spec.json`, `confusables_spec.json`,
   `pii_redaction_spec.json`, `intent_slo_classes.yaml`,
-  `tr_keyboard_layouts.yaml` (added §10.33).
+  `tr_keyboard_layouts.yaml` (added §10.33),
+  `length_cap_spec.json`, `ocr_confusables_spec.json`,
+  `paste_layout_spec.json`, `single_emoji_intent_spec.json`,
+  `emoji_to_concept_spec.json`, `time_of_day_shorthand_spec.json`
+  (all added §10.34, 1500-row parity floor).
 - **Integrity gates:** intent.bin SHA pin (§10.21), citation HMAC
   (§10.21.8), envelope HMAC (§10.26.8), prediction-id determinism
   (§10.29.12), outbound checksum (§10.31.11), pipeline-version
   monotonicity (§10.29.13), per-pod salt + 128-bit cache prefix
   (§10.30.12), gossip divergence detection (§10.32.12), end-to-end
   charity-canonicalisation parity (§10.33).
+- **Performance contract:** normalize-chain per-pass + total-p99 budgets
+  in `normalize_perf_budgets.yaml` (§10.34.2, total p99 ≤ 12ms);
+  single-pass DFA fast-path for clean input (zero-copy guarantee on
+  no-op passes); per-stage timeout matrix (§10.34.3) producing
+  `degraded_reason=stage_timeout:<stage>` instead of 5xx.
 - **DoD aggregator:** §10.20 plus per-addendum DoD additions in §10.21
-  through §10.33; rollup checkbox in ROADMAP §10 stub.
+  through §10.34; rollup checkbox in ROADMAP §10 stub.

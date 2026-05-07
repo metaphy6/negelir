@@ -2320,10 +2320,10 @@ client →[mTLS termination handled by service mesh in K8s; gin in compose]→
 **Anchor doc:** [`design/TURKISH_NLP.md`](../design/TURKISH_NLP.md) (architectural narrative).
 **Detail folder:** [`design/nlp/`](../design/nlp/README.md) — **binding** per-addendum checkboxes live there.
 
-> **Why this is a stub.** Phase 10 grew to ~7,900 lines across 33
-> sub-sections (§10.0–§10.32) over thirteen design passes and a 14th
-> pass (§10.33) was needed for Turkish-input flawlessness. To keep the
-> ROADMAP navigable, the binding contract was carved out into
+> **Why this is a stub.** Phase 10 grew to ~8,500 lines across 34
+> sub-sections (§10.0–§10.34) over fifteen design passes — the latest
+> (§10.34) covering input correctness + resilience + integrity. To
+> keep the ROADMAP navigable, the binding contract was carved out into
 > [`docs/design/nlp/sections/`](../design/nlp/sections/). Every `[ ]`
 > checkbox state lives in those files; this stub carries only the
 > phase-rollup checkbox (last bullet below).
@@ -2345,15 +2345,16 @@ client →[mTLS termination handled by service mesh in K8s; gin in compose]→
 | 11 | [`30-conversational-completeness-intent-enum-classifier-bias.md`](../design/nlp/sections/30-conversational-completeness-intent-enum-classifier-bias.md) | §10.30 conversational completeness, intent-enum closure, classifier bias |
 | 12 | [`31-pragmatics-semantic-frame-final-mile.md`](../design/nlp/sections/31-pragmatics-semantic-frame-final-mile.md) | §10.31 pragmatics, semantic-frame integrity, final-mile reliability |
 | 13 | [`32-discourse-pragmatic-dialectal-operational-resilience.md`](../design/nlp/sections/32-discourse-pragmatic-dialectal-operational-resilience.md) | §10.32 discourse-pragmatic, dialectal, operational-resilience |
-| **14** | [`33-input-flawlessness-and-proof-tests.md`](../design/nlp/sections/33-input-flawlessness-and-proof-tests.md) | **§10.33 — Turkish input flawlessness: wrong-assumption sweep, missing proof tests, generic-and-broken-Turkish floor** |
+| **14** | [`33-input-flawlessness-and-proof-tests.md`](../design/nlp/sections/33-input-flawlessness-and-proof-tests.md) | §10.33 — Turkish input flawlessness: wrong-assumption sweep, missing proof tests, generic-and-broken-Turkish floor |
+| **15** | [`34-input-correctness-resilience-and-integrity.md`](../design/nlp/sections/34-input-correctness-resilience-and-integrity.md) | **§10.34 — Input correctness + resilience + integrity: generic-broken-Turkish shapes (predictive-text overshoot, OCR/PDF paste, mid-word URL, mega-input, suffixed-emoji, comma-as-apostrophe, random-case, ambiguous date, client TZ, systematic-diacritic-loss); normalize-chain perf budget + DFA fast-path + zero-copy guarantee; in-flight per-stage timeout matrix (no 5xx); inbound checksum chain (gateway↔NLP integrity pair)** |
 
 ### 10.DoD Phase rollup
 
-- [ ] Every binding `[ ]` in §10.0–§10.33 (across all 14 per-section
+- [ ] Every binding `[ ]` in §10.0–§10.34 (across all 15 per-section
       files in [`docs/design/nlp/sections/`](../design/nlp/sections/))
       is `[x]`. The §10.20 DoD aggregator (now in
       [`00-baseline.md`](../design/nlp/sections/00-baseline.md)) plus
-      every per-addendum DoD addition (§10.21..§10.33) are green.
+      every per-addendum DoD addition (§10.21..§10.34) are green.
       Tracker row + `make version.bump COMPONENT=docs` recorded for
       every meaningful per-section edit (per AGENTS.md §3 + §6.1).
 
