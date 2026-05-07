@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 23,
+    "build": 24,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.33.0",
+      "version": "1.34.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-07T10:26:21+00:00"
+      "last_changed": "2026-05-07T10:39:28+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2688,6 +2688,15 @@
       "from": "1.32.0",
       "to": "1.33.0",
       "build": 23
+    },
+    {
+      "timestamp": "2026-05-07T10:39:28+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 NLP §10.31 twelfth design pass: pragmatics, semantic-frame integrity, and final-mile reliability (sarcasm/ironic-praise refusal, question-tag pragmatic_class, pro-drop null-subject resolver, multi-genitive possessive-chain semantic_frame, comparative-degree closed table, score-notation order disambiguation, negation-scope rhetorical-vs-genuine, output-side TR grammar-check proofreader, refusal pool + refusal_reason_code taxonomy, lexicon-vs-LeagueCatalog conflict resolution, outbound_checksum end-to-end wire integrity, per-intent SLO classes, healthz realism, multi-subquery shared budget, lexicon canary shadow-comparison) + DoD item 29",
+      "from": "1.33.0",
+      "to": "1.34.0",
+      "build": 24
     }
   ]
 }
