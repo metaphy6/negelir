@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 25,
+    "build": 26,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.35.0",
+      "version": "1.36.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-07T10:53:48+00:00"
+      "last_changed": "2026-05-07T11:08:16+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2706,6 +2706,15 @@
       "from": "1.34.0",
       "to": "1.35.0",
       "build": 25
+    },
+    {
+      "timestamp": "2026-05-07T11:08:16+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 modularized + §10.33 14th-pass binding addendum",
+      "from": "1.35.0",
+      "to": "1.36.0",
+      "build": 26
     }
   ]
 }
