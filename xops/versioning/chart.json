@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 32,
+    "build": 33,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.41.0",
+      "version": "1.42.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-11T09:33:27+00:00"
+      "last_changed": "2026-05-11T09:46:49+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2769,6 +2769,15 @@
       "from": "1.40.0",
       "to": "1.41.0",
       "build": 32
+    },
+    {
+      "timestamp": "2026-05-11T09:46:49+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11 deepened: 9 new sub-phases (11.32-11.40), 6 new wrong-assumption ledger entries, ~25 new proof tests, CUDA-context VRAM accounting, host-PSU envelope, monotonic-clock SLO timing, host_class replay invariance, request-deadline propagation contract",
+      "from": "1.41.0",
+      "to": "1.42.0",
+      "build": 33
     }
   ]
 }
