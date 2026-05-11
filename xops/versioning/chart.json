@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 31,
+    "build": 32,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.40.0",
+      "version": "1.41.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-11T09:08:20+00:00"
+      "last_changed": "2026-05-11T09:33:27+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2760,6 +2760,15 @@
       "from": "1.39.0",
       "to": "1.40.0",
       "build": 31
+    },
+    {
+      "timestamp": "2026-05-11T09:33:27+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11 (compute) review: +10 sub-phases (engines, continuous batching, spot/cost/carbon, ARM, fabric, shadow, idle-power, OTel, hot-reload, backpressure semantics) + 6 new failure-mode rows + 23 new proof tests + extended DoD",
+      "from": "1.40.0",
+      "to": "1.41.0",
+      "build": 32
     }
   ]
 }

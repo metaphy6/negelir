@@ -2504,8 +2504,10 @@ inherit the same routing matrix).
 - [ ] **Mixed-precision policy.** Predictors run in **fp32** always (numerical parity). LLM-class agents may run in **bf16** on Ampere+ (`compute_capability ≥ 8.0`) or Apple Silicon, **fp16** on Turing/Volta, **int8/int4 GGUF** on CPU. Quantization choice is recorded in the model bundle manifest (Phase 5 contract) and validated against the runtime device — a bundle declaring `dtype=bf16` refuses to load on a Volta GPU.
 - [ ] **NaN / Inf / overflow guard.** Every device backend wraps inference output in a finite-check. A predictor producing `NaN` / `Inf` / out-of-`[0,1]` PMF entries is **rejected** (counted in `negelir_inference_invalid_total{kind}`), the offending input is captured to the quarantine bucket (Phase 7), and the request is retried on the CPU baseline. This catches both adversarial-input numerical pathology and silent kernel bugs after a driver upgrade. LLM-class agents apply the same finite-check to logits before sampling.
 - [ ] **NPU INT8 calibration carries its own contract.** OpenVINO INT8 IRs ship with a `calibration_dataset_sha256` and a measured **post-quantization accuracy delta** (`acc_drop_pct`) that must be ≤ `cfg.npu_max_acc_drop_pct` (default 1.0 %). Above that, the IR is rejected at image build, not at runtime. The calibration dataset itself is version-pinned in `xops/compute/calibration_datasets/<bundle>/manifest.json` so re-quantizing in 6 months reproduces the same IR bytes.
-- [ ] **Seed propagation.** A single `cfg.global_seed` is propagated into NumPy, PyTorch (CPU + each CUDA device), Python `random`, and any vendor RNG (cuRAND). Tested.
-- [ ] **Compute-provenance stamp.** Every emitted prediction (`prediction.v1`) carries a compact `compute_provenance` block: `{device, gpu_uuid?, dtype, backend, runtime_version, driver_version, host_compute_fingerprint, bundle_sha256, seed, deterministic_flags, allow_tf32}`. Combined with the input hash this is the **inference-replay contract** of §11.15: anyone given a prior `prediction.v1` can reproduce its bytes on a host whose `host_compute_fingerprint` matches.
+- [ ] **Seed propagation (per-device).** A single `cfg.global_seed` is propagated into NumPy, PyTorch (CPU + **each** CUDA device — `torch.cuda.manual_seed_all` is not enough when devices are leased independently), Python `random`, and any vendor RNG (cuRAND, oneDNN). Per-worker seeds use `global_seed + worker_id` so dataloaders / batchers don't collide. Tested per-device.
+- [ ] **Allocator hygiene (CUDA).** `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb=256,garbage_collection_threshold:0.85` is the documented default; deviations require a tracker note. The choice interacts with §11.2 fragmentation accounting (expandable segments shift the largest-contiguous-block math) and is recorded in the §11.4 `compute_provenance.allocator_conf` field. The §11.20 `proof_vram_fragmentation_refused` is run with both the default and a worst-case `max_split_size_mb=64` so the arbiter's refusal logic is verified across allocator regimes.
+- [ ] **fp64 absence on MPS.** Apple MPS does not implement fp64; predictors that touch fp64 anywhere in the graph must declare it in their bundle manifest (`requires_fp64=true`) and the router (§11.13) refuses MPS placement at admission, not at first NaN. Tested.
+- [ ] **Compute-provenance stamp.** Every emitted prediction (`prediction.v1`) carries a compact `compute_provenance` block: `{device, gpu_uuid?, dtype, backend, backend_version, runtime_version, driver_version, allocator_conf, host_compute_fingerprint, bundle_sha256, seed, deterministic_flags, allow_tf32, engine_sha?}`. Combined with the input hash this is the **inference-replay contract** of §11.15: anyone given a prior `prediction.v1` can reproduce its bytes on a host whose `host_compute_fingerprint` matches.
 
 ### 11.5 NPU support (Intel OpenVINO + AMD XDNA + Apple MPS)
 
@@ -2535,7 +2537,7 @@ inherit the same routing matrix).
 ### 11.7 Image strategy (cpu / gpu / npu flavors) + compiled-artifact cache
 
 - [ ] **Three image flavors** built from a common `ai-base` per `COMPUTE_DEVICES.md` §Image-strategy: `ai-cpu:<digest>` (default in prod, target ≤ 800 MB compressed), `ai-gpu:<digest>` (CUDA 12.4 + cuDNN 9, target ≤ 4 GB), `ai-npu:<digest>` (OpenVINO 2025 + Intel GPU/NPU drivers, target ≤ 2 GB). Selection: `AI_IMAGE_FLAVOR=cpu|gpu|npu` (compose substitutes the tag). ROCm uses the `ai-gpu` tag with `--build-arg ACCEL=rocm` for now (separate flavor lands when there's a real ROCm host in CI). Image size budgets are enforced by a CI gate.
-- [ ] **Reproducible builds.** Every image is `docker buildx build --provenance=true --sbom=true`; the wheels are pinned (CUDA wheel index URL is pinned, OpenVINO wheel version is pinned). The image SHA, wheel digests, and chosen device pin are recorded in the build manifest under `xops/versioning/build-manifest.json`. Images are **signed with cosign** and verified at deploy time (Phase 14 binding).
+- [ ] **Reproducible builds.** Every image is `docker buildx build --provenance=true --sbom=true`; the wheels are pinned (CUDA wheel index URL is pinned, OpenVINO wheel version is pinned). The image SHA, wheel digests, and chosen device pin are recorded in the build manifest under `xops/versioning/build-manifest.json`. Images are **signed with cosign** and verified at deploy time (Phase 14 binding). The SBOM is **re-verified at container start** (`xops/compute/verify_sbom.py`): the running image's layer digests must match the build-manifest SBOM, otherwise the container exits with `sec.alert.v1{kind=sbom_mismatch, severity=critical}` rather than serving with an undocumented runtime.
 - [ ] **Compiled-artifact cache.** `torch.compile` inductor cache, OpenVINO compiled blobs (§11.5), and TensorRT engines (when enabled) all live under `cfg.compute_artifact_cache_dir` keyed by `host_compute_fingerprint`. Cache survives container restarts via a named volume. Eviction is LRU with `cfg.compute_artifact_cache_max_mb` cap. Cache hit/miss metrics published.
 - [ ] **No host installs.** Per Rule 2 — no `pip install` on the dev host; no host CUDA install in CI. The CI matrix runs CPU on every PR and GPU/NPU on a nightly self-hosted runner only.
 - [ ] **Compose runtime.** `docker-compose.yml` uses `runtime: nvidia` + `deploy.resources.reservations.devices` for CUDA hosts; the same compose file works on a CPU-only host because the GPU resources block is gated behind `${NEGELIR_GPU_ENABLED:-false}` via a profile. A compose **healthcheck** runs the device probe and refuses the container as unhealthy if `device != requested && requested != auto`.
@@ -2603,6 +2605,12 @@ inherit the same routing matrix).
 | 18 | Clock-skew across multi-GPU host | NVML `sm_clock` variance > threshold | Lock clocks for parity workloads if allowed; otherwise quarantine the slow GPU from latency-critical routing | Tail latency stays bounded |
 | 19 | Hot-swap removal of a device | §11.1 hot-plug | Drain that device, re-emit topology, remove from routing | No surfaced error |
 | 20 | Inference-replay drift (re-run of a prior `prediction.v1` differs beyond tolerance) | §11.15 replay smoke | Page on-call; freeze affected bundle; trigger root-cause runbook | Detected within one nightly cycle |
+| 21 | Spot / preemptible cloud GPU eviction notice | Cloud metadata-service signal (§11.23) | Set host `drain`, migrate or restart agents on peers, ack within `cfg.spot_eviction_ack_max_s` (default 25 s on AWS, 30 s on GCP) | Zero in-flight loss within the cloud's grace window |
+| 22 | PCIe link degradation (Gen4 → Gen1 silent re-train) | NVML `pci.link.gen.current` < `pci.link.gen.max` | Mark device `degraded`, prefer alternates in routing, alert non-critical | Tail latency stays bounded |
+| 23 | Out-of-disk on bundle / artifact cache volume | LRU eviction fails | Refuse new bundle pulls; alert; emergency LRU widens to `cfg.compute_artifact_cache_emergency_purge_pct` | No silent serving of stale bundle |
+| 24 | Tokenizer / pre-processor crash mid-batch (LLM) | Sub-batch exception | Drop the offending request, continue the batch, quarantine input; never tear down the batched-decode loop | Other in-flight requests untouched |
+| 25 | NCCL collective hang (multi-GPU bundle, future) | Watchdog timeout `cfg.nccl_watchdog_s` | Abort collective, drain bundle, mark device pair `degraded`, alert critical | Detected ≤ watchdog; no zombie process |
+| 26 | Cloud control-plane throttling on bundle pull | S3 / GCS 503/429 burst | Exponential backoff with jitter; cap at `cfg.compute_bundle_pull_max_retries`; refuse load with `service_unavailable` instead of partial bundle | No partial / corrupt bundle ever served |
 
 - [ ] Every row above has a chaos test landing with Phase 12. Make targets: `make chaos.gpu.pull` (driver removal), `make chaos.gpu.thermal` (NVML stub), `make chaos.gpu.oom` (synthetic), `make chaos.gpu.xid` (faked Xid), `make chaos.cpu.oversubscribe` (spawn N>budget threads), `make chaos.cache.purge`, `make chaos.compute.panic` (kill-switch), `make chaos.gpu.frag` (allocate-then-free pattern that fragments VRAM), `make chaos.gpu.ecc.retire` (NVML stub injecting retired-page deltas), `make chaos.compute.driver_upgrade` (orchestrate §11.18 drain on a synthetic host), `make chaos.compute.power_cap` (NVML `power.limit` reduction), `make chaos.compute.hotremove` (udev event simulation), `make chaos.inference.nan` (adversarial input → NaN logit).
 - [ ] **Per-failure runbooks** live under `docs/reports/runbooks/compute/<failure-id>.md`; each row references its runbook.
@@ -2793,7 +2801,137 @@ inherit the same routing matrix).
 - [ ] `proof_compute_isolation_runtime_and_static` — Phase 9 / 16 / 17 binaries cannot import any GPU/NPU SDK at runtime **and** their image manifests show no GPU runtime layers.
 - [ ] `proof_warmup_corpus_pinned` — the warm-up corpus `ai/tests/fixtures/warmup/` is content-addressed; its SHA appears in the bundle audit; a tampered corpus refuses to warm.
 
-### 11.21 Definition of Done (Phase 11)
+**Engine, batching, cloud, ARM, fabric, shadow, idle, OTel, hot-reload, backpressure (§11.21–§11.30):**
+- [ ] `proof_engine_determinism_lint` — a predictor declared with an engine whose `deterministic_when` does not cover its parity tolerance is refused at PR time by `xops/lint/predictor_engine_determinism.py`.
+- [ ] `proof_engine_cache_invalidates_on_allocator_conf` — flipping `PYTORCH_CUDA_ALLOC_CONF` changes the cache key; engine recompiles; old artifact remains in cache LRU.
+- [ ] `proof_continuous_batch_admits_midstream` — under sustained LLM load, a request arriving mid-decode joins the in-flight batch within `cfg.llm_batch_admit_p95_ms`; static-batch baseline is reported alongside for delta visibility.
+- [ ] `proof_prefix_cache_hit_rate` — synthetic shared-prompt corpus drives prefix-cache hit-rate above `cfg.llm_prefix_cache_warm_threshold`; the tightened cold-start budget is met.
+- [ ] `proof_chunked_prefill_tail_bounded` — bursty 8 k-token prompts arriving alongside small-batch traffic do not push small-batch p99 above SLO.
+- [ ] `proof_continuous_batch_cancel_no_peer_flush` — cancelling one in-flight request inside a continuous batch does not invalidate peers' KV-cache.
+- [ ] `proof_spot_eviction_drain_within_grace` — synthetic spot-eviction signal triggers §11.18 drain; ack lands within `cfg.spot_eviction_ack_max_s`; zero in-flight loss.
+- [ ] `proof_cost_table_tiebreaks_router` — two equally-suitable devices, distinct cost: router prefers cheaper at equal latency-headroom; the decision rationale is in the audit.
+- [ ] `proof_carbon_window_defers_training_only` — a training job inside a high-carbon window is deferred; a realtime request in the same window is served immediately.
+- [ ] `proof_arm64_predictor_parity` — predictor PMF parity (§11.4 tolerance) holds between an x86_64 and an aarch64 host on every must-status predictor.
+- [ ] `proof_arm_simd_baseline_alert` — a Neoverse-N1 host (no SVE) emits the documented `arm_simd_baseline` alert and selects the NEON wheel — never the SVE wheel.
+- [ ] `proof_nccl_set_lease_atomic` — synthetic two-GPU bundle: the arbiter either grants both GPUs or refuses entirely; partial acquisition is impossible.
+- [ ] `proof_shadow_diff_blocks_bad_promotion` — a deliberately-perturbed shadow bundle fails the §11.26 promotion gate; promotion is refused; on-call alert fires.
+- [ ] `proof_shadow_traffic_bounded` — shadow traffic never exceeds `cfg.shadow_traffic_pct` of live, even under burst.
+- [ ] `proof_idle_power_cap_applied_and_restored` — an idle GPU drops to `gpu_idle_power_limit_w`; first lease restores the default cap before serving; wake-cost is included in the first request's latency budget.
+- [ ] `proof_warm_pool_membership_reacts_to_demand` — synthetic shifting demand reshuffles the warm-pool; membership transitions respect `min_hold_ms` (no flapping).
+- [ ] `proof_coldstart_storm_jittered` — a synthetic 100-pod restart does not exceed `cfg.compute_bundle_concurrent_pulls_max` against the bundle store.
+- [ ] `proof_otel_inference_span_complete` — every served inference produces an `compute.inference` span with the documented attributes; missing attribute fails the test.
+- [ ] `proof_tail_capture_token_bucketed` — sustained tail-latency events emit ≤ `cfg.compute_tail_capture_per_min` captures; never a thundering herd.
+- [ ] `proof_router_matrix_hot_reload_atomic` — corrupt `workload_matrix.json` is refused; prior matrix continues to serve; alert fires.
+- [ ] `proof_backpressure_status_matrix` — each row of the §11.30 status matrix is exercised end-to-end and the exact `(status, Retry-After, X-Compute-Reason)` triple is asserted; lint refuses an ad-hoc `X-Compute-Reason`.
+- [ ] `proof_sbom_runtime_verify` — a container started from an image whose layer digests don't match its build-manifest SBOM exits with `sec.alert.v1{kind=sbom_mismatch}` before serving.
+- [ ] `proof_pcie_link_degradation_demoted` — NVML stub reports `pci.link.gen.current=1` on a Gen4-capable GPU; routing demotes that device, alert fires, no request fails closed.
+- [ ] `proof_disk_full_on_artifact_cache_refuses_load` — synthetic ENOSPC on the artifact-cache volume refuses new bundle loads with a structured error; never serves stale.
+- [ ] `proof_tokenizer_crash_does_not_tear_batch` — a malformed input that crashes the tokenizer is dropped + quarantined; peers in the same continuous batch finish normally.
+
+### 11.21 Inference engine matrix & per-engine tuning
+
+> **Why this exists.** "Run the model on CUDA" is not a backend choice
+> — it's a family. PyTorch eager, `torch.compile`/Inductor, ONNX
+> Runtime, TensorRT (and TensorRT-LLM), vLLM, SGLang, llama.cpp,
+> ExecuTorch, OpenVINO all coexist and have **wildly** different
+> determinism, cold-start, throughput, and bug profiles. Without an
+> explicit per-engine contract, the project will silently drift to
+> "whatever the agent author imported last".
+
+- [ ] **Engine registry.** `xops/compute/engines.json` enumerates every supported engine: `{name, vendor, runtime_min, runtime_max, supports_dtypes, supports_dynamic_shape, supports_cuda_graphs, supports_paged_attention, deterministic_when, default_for: [workload_class…], known_quirks_ref}`. The router (§11.13) selects an engine alongside the device; selection is a pair `(device, engine)` and is logged on `route.decision.v1`.
+- [ ] **Engine cache.** TensorRT engines, ONNX-Runtime session caches, and `torch.compile` Inductor artifacts share the §11.7 `compute_artifact_cache_dir` keyed by `(bundle_sha256, engine_name, engine_version, host_compute_fingerprint, dtype, allocator_conf, deterministic_flags)`. Any change to *any* key component recompiles; the engine SHA is recorded in `compute_provenance.engine_sha`.
+- [ ] **Engine refresh.** Engine upgrades are choreographed exactly like driver upgrades (§11.18 — drain → upgrade → re-bench → undrain). The cache is **not** invalidated wholesale on engine upgrade; entries are validated lazily on first use and recompiled on key mismatch (avoids cold-start storms after a routine upgrade).
+- [ ] **Per-engine determinism contract.** Each engine declares `deterministic_when={fp32+seed+no_tf32, …}` in the registry. Predictors may only use engines whose `deterministic_when` covers their parity tolerance (§11.4); the lint rule `xops/lint/predictor_engine_determinism.py` enforces it at PR time.
+- [ ] **Quirk binding.** Every engine entry carries a `known_quirks_ref` pointer into `xops/compute/quirks.json` (§11.16); the lint refuses an engine entry without at least an empty quirks bucket so drift is visible.
+
+### 11.22 Continuous batching, prefix caching & disaggregated prefill/decode (LLM-class)
+
+> **Why this exists.** Static batching (§11.9) is fine for predictors and
+> sec.input. LLM-class agents (humanizer, coder, sec.input fallback)
+> waste 60–80 % of GPU time under static batching when prefill lengths
+> vary. Continuous batching + prefix caching is the difference between
+> "1 humanizer per dGPU" and "8 humanizers per dGPU" without changing
+> the model.
+
+- [ ] **Continuous-batching scheduler.** LLM agents use a vLLM-class scheduler (own implementation behind a `Backend` interface, or pinned vLLM/SGLang version per the §11.21 registry). New requests join an in-flight batch at any decode step; bounded by `cfg.llm_continuous_batch_max_seqs` and `cfg.llm_continuous_batch_max_tokens`.
+- [ ] **Prefix-cache (radix tree).** Common prompt prefixes (system prompt, persona, RAG header) hit a shared KV-cache; metric `negelir_llm_prefix_cache_hit_pct{agent}` is exported and the §11.9 cold-start budget is **tightened** when prefix-cache hit-rate is sustained ≥ `cfg.llm_prefix_cache_warm_threshold` (default 60 %). Prefix-cache invalidation is keyed by `bundle_sha256` so a hot-swap (§11.15) cannot serve mixed-prefix output.
+- [ ] **Chunked prefill.** Long prompts are chunked at `cfg.llm_chunked_prefill_size` so a single 8 k-token prefill cannot block decoding of small-batch peers; tail latency p99 stays bounded under bursty long-prompt arrival.
+- [ ] **Disaggregated prefill/decode (deferred contract).** The router exposes a `(prefill_device, decode_device)` decision shape so a future deployment can run prefill on dGPU and decode on iGPU/NPU. Off by default (`cfg.llm_disagg_enabled=false`); the **interface** lands here so Phase 14 can wire it without re-architecture.
+- [ ] **Fairness inside the LLM batch.** Per-tenant / per-agent weights from §11.17 propagate into the continuous-batch scheduler so one chatty caller cannot monopolise decode slots.
+- [ ] **Cancellation under continuous batching.** A cancelled request (Phase 9 client disconnect, §11.14) is removed from the in-flight batch within `cfg.llm_cancel_grace_ms` **without** flushing peers' KV-cache; tested.
+
+### 11.23 Cloud spot/preemptible, cost-aware & carbon-aware scheduling
+
+- [ ] **Spot / preemptible signal handling.** A small `xops/compute/spot_watcher.py` daemon polls the cloud metadata service for eviction notices (AWS `/latest/meta-data/spot/instance-action`, GCP `/computeMetadata/v1/instance/preempted`, Azure scheduled events) and triggers a §11.18 host drain on receipt. Eviction-to-drain-ack p99 ≤ `cfg.spot_eviction_ack_max_s`. Failure-mode row 21 binds.
+- [ ] **Cost table (per device, per region).** `cfg.compute_cost_table_<device>` maps `(provider, instance_family, region, accel_class) → usd_per_hour` and is consulted by the router (§11.13) as a tie-breaker between equally-suitable devices: prefer cheaper at equal latency-headroom. Counters in §11.9 (`negelir_compute_cost_usd_per_million_inferences`) make the trade-off auditable; never fabricated when the table is unset.
+- [ ] **Carbon-aware batch scheduling.** Training (§11.12) and overnight bench (§11.9) consult `cfg.carbon_intensity_feed_url` (e.g. WattTime / ElectricityMaps); jobs whose deadline allows it are deferred to lower-carbon windows. Realtime / interactive workloads are **never** delayed for carbon. Decisions emitted as `train.schedule.v1{deferred_until, carbon_intensity_now, carbon_intensity_then, kg_co2_saved_estimated}`.
+- [ ] **Off-peak training window.** A configurable cron-style window `cfg.training_offpeak_window` (default empty = always-on) lets ops bias training to off-peak grid hours without touching code.
+- [ ] **Cost guardrail.** A per-day spend cap `cfg.compute_daily_usd_cap` (computed from §11.9 counters); breach refuses new `batch`/`training` leases with `cost_cap_exceeded`, never `realtime`. Audited.
+
+### 11.24 ARM / Graviton / Ampere Altra / Apple Silicon CPU baseline
+
+- [ ] **aarch64 CI lane.** A second CI lane builds and tests `ai-cpu:<digest>` for `linux/arm64` (Graviton 3/4, Ampere Altra, Apple Silicon under Rosetta-free Docker). The §11.4 parity matrix runs on aarch64 and the published tolerances must hold; a wider tolerance is **not** acceptable as a workaround.
+- [ ] **NEON / SVE / SVE2 / BF16 gating.** §11.1 CPU fingerprint enumerates `neon, sve, sve2, bf16` (Neoverse V1+); §11.3 governor selects the matching wheel. Falling through to a baseline wheel emits `device.alert.v1{kind=arm_simd_baseline}` so ops sees why latency is off.
+- [ ] **llama.cpp ARM backend.** CPU LLM path on aarch64 uses the ARM-optimised quantization kernels (`q4_0_4_4`, `q4_0_4_8`, `q4_0_8_8`); choice is recorded in the bundle audit so a parity mismatch with x86_64 is traceable to the kernel, not the model.
+- [ ] **Cross-arch bundle determinism.** Predictor `cpu↔cpu` parity tests (§11.4) run with one host x86_64 and one host aarch64; the published tolerance applies across both.
+
+### 11.25 Multi-host fabric (NCCL / RDMA / GPUDirect — Phase 14 contract)
+
+> **Why this exists.** Phase 11 does not ship multi-host inference, but
+> the routing/probe contracts must not paint Phase 14 into a corner.
+> The bare minimum is: enumerate the fabric, refuse to lie about it,
+> and reserve the failure rows.
+
+- [ ] **Fabric probe.** §11.1 enumerates `{ib_devices: […], rdma_capable: bool, gpudirect_storage: bool, nccl_socket_ifname, fabric_topology_path}`. Absent fabric → reported, not synthesised.
+- [ ] **NCCL discipline (when used).** `NCCL_ASYNC_ERROR_HANDLING=1`, `NCCL_DEBUG=INFO`, `TORCH_NCCL_BLOCKING_WAIT=1`, watchdog `cfg.nccl_watchdog_s` (failure-mode row 25). All NCCL leases coordinated via the §11.2 arbiter using a multi-GPU **set lease** (atomic acquire of N GPUs or refuse — partial acquisition is a known deadlock vector and must be impossible).
+- [ ] **GPUDirect Storage (GDS).** When available and `cfg.compute_bundle_use_gds=true`, bundle pulls bypass the page cache; otherwise standard. Selection logged in `bundle.swap.v1`.
+- [ ] **Tensor / pipeline parallelism (deferred).** Bundle manifest reserves `tp_size`, `pp_size` fields with default 1 so future bundles can declare topology without a schema bump.
+
+### 11.26 Shadow inference & dark-launch (binding for Phase 6 retrain promotion)
+
+- [ ] **Shadow router mode.** A bundle promoted to `shadow` is loaded alongside the live bundle (subject to §11.2 VRAM accounting) and serves a sampled mirror of live traffic; results are diffed against the live bundle's outputs without touching the user response. Diffs land in `bundle.shadow.diff.v1{old_sha, new_sha, input_hash, kl_divergence?, prediction_delta?}`.
+- [ ] **Promotion gate.** A shadow bundle is eligible for promotion (hot-swap, §11.15) only when shadow diff metrics over the trailing `cfg.shadow_window_min` minutes meet the per-workload thresholds in `xops/compute/shadow_promotion.json` (e.g. predictor: KL ≤ 5e-3, 99th-percentile per-outcome delta ≤ 5e-3; LLM: pass-rate of an automatic style/safety probe ≥ 99 %). Below threshold → promotion refused, page on-call.
+- [ ] **Cost cap.** Shadow traffic is bounded by `cfg.shadow_traffic_pct` (default 5 %) and `cfg.shadow_max_concurrent_bundles` (default 1) so dark-launch can never starve the live path.
+- [ ] **Replay coupling.** Shadow diffs are tagged with the §11.4 `compute_provenance` of *both* sides so a surprise can be replayed via §11.15.
+
+### 11.27 Idle power management & elastic warm-pool
+
+- [ ] **Idle detector.** A device with no lease activity for `cfg.gpu_idle_threshold_s` (default 600 s) is marked `idle`; the arbiter (§11.2) requests a low power cap (`cfg.gpu_idle_power_limit_w`, e.g. 50 W on a 350 W GPU) via `nvidia-smi -pl` when allowed. First lease request restores `power_default_limit_w` before granting.
+- [ ] **Wake-cost accounting.** Restoring power limit + warming KV-cache adds latency; the wake-cost estimate is exported (`negelir_gpu_wake_cost_seconds_recent`) and the §11.9 cold-start budget is satisfied **including** wake cost (no hidden carve-out).
+- [ ] **Warm-pool.** A bounded set of bundles is kept resident on each device based on trailing demand (`cfg.warm_pool_top_n_per_device`, default 2); membership is recomputed every `cfg.warm_pool_recompute_s`. Eviction respects §11.2 anti-flap (`min_hold_ms`).
+- [ ] **Coldstart-storm protection.** On a fleet restart, bundle pre-warming is jittered (`cfg.warm_pool_jitter_s`) and rate-limited per object-store endpoint (`cfg.compute_bundle_concurrent_pulls_max`) so a redeploy does not 503 the bundle store.
+
+### 11.28 OpenTelemetry tracing, on-demand profiling & flamegraph hook
+
+- [ ] **OTel spans.** Every inference path emits a span `compute.inference` with attributes `{agent, workload_class, device, gpu_uuid, engine, bundle_sha256, batch_size, queue_wait_ms, prefill_ms, decode_ms?, kv_cache_pages?, route.decision_id}`; child spans for `arbiter.lease`, `bundle.load`, `engine.compile`, `tokenize`, `forward`, `sample` (LLMs). Trace exporter is the Phase 12 collector.
+- [ ] **Tail-latency root-cause hook.** When a request's latency exceeds `cfg.compute_tail_capture_threshold_p`, a token-bucketed (`cfg.compute_tail_capture_per_min`) capture fires: NVML snapshot, arbiter audit slice, and an opt-in `nsys`/`pyspy` capture (`cfg.compute_profiling_enabled`). Captures are scrubbed of inputs/outputs (security §11.11) and uploaded to `cfg.compute_profiling_sink`.
+- [ ] **Per-agent profile bundles.** Each agent ships a default OTel resource block (`service.name, service.version, ai.bundle.sha`) so a tail-latency search across the cluster collapses to a few queries.
+- [ ] **No tracing in CPU-only critical paths' hot loop.** The Phase 9 API and Phase 16 emitter still emit their own spans (their own contracts), but compute-side tracing is gated `cfg.compute_otel_enabled` to avoid leaking compute SDK symbols into CPU-only images.
+
+### 11.29 Hot-reload of routing & workload matrices
+
+- [ ] **`workload_matrix.json` hot-reload.** mtime poll every `cfg.compute_router_reload_s` (default 30 s); atomic swap (parse → validate → swap pointer); failed parse keeps prior matrix and emits `route.alert.v1{kind=matrix_reload_failed, severity=error}`.
+- [ ] **Sticky in-flight respect.** A reload never breaks an in-flight session's stickiness mid-decode; new sessions and post-eviction re-routes pick up the new matrix.
+- [ ] **K8s parity.** Same K8s mtime gotcha as the §7 `sec.input` pattern hot-reload — `kubectl rollout restart` is the prod path; the in-pod mtime poll is the dev path. Documented.
+- [ ] **Audit.** Each reload emits `route.matrix.v1{sha256, by, source}`; tested.
+
+### 11.30 Backpressure HTTP semantics (binding for Phase 9 API)
+
+> **Why this is binding.** "Service busy" with no headers is a debugging
+> nightmare; "Service busy" with predictable, bounded `Retry-After` is
+> a contract upstream consumers can build on.
+
+- [ ] **Status-code matrix.**
+  - Saturated routing (§11.13 admission) → **HTTP 503** + `Retry-After: <seconds, integer>` + `X-Compute-Reason: router_admission_full`.
+  - Per-tenant quota exceeded (§11.17) → **HTTP 429** + `Retry-After` + `X-Compute-Reason: tenant_quota_exceeded`.
+  - VRAM budget refused at scale-up (Phase 8 / §11.10 row 13) → **HTTP 503** + `Retry-After` + `X-Compute-Reason: vram_budget_exceeded`.
+  - Spot-eviction in progress (§11.23) → **HTTP 503** + `Retry-After` + `X-Compute-Reason: spot_draining`.
+  - All devices `degraded` for the workload class → **HTTP 503** + `Retry-After: <unbounded ⇒ value bounded by cfg.api_retry_after_max_s>` + `X-Compute-Reason: no_eligible_device`.
+- [ ] **`Retry-After` bounds.** Computed from the arbiter's queue model (`expected_wait = qd × p95_recent`) clamped to `[cfg.api_retry_after_min_s, cfg.api_retry_after_max_s]`. Never `0`, never unbounded.
+- [ ] **`X-Compute-Reason` enum.** Closed enum, documented in `docs/design/COMPUTE_DEVICES.md`; lint refuses ad-hoc strings.
+- [ ] **Tested end-to-end.** A Phase 12 chaos scenario forces each row above and asserts the exact triple `(status, Retry-After, X-Compute-Reason)`.
+
+### 11.31 Definition of Done (Phase 11)
 
 In addition to Appendix B common DoD:
 
@@ -2813,7 +2951,19 @@ In addition to Appendix B common DoD:
 - [ ] `xops/env/.env.example` documents every new key (`NEGELIR_DEVICE`, `NEGELIR_DISABLE_GPU`, `NEGELIR_DISABLE_DEVICE`, `NEGELIR_NPU_VENDOR`, `NEGELIR_GPU_ARBITER_LEASE_TTL_S`, `NEGELIR_GPU_ARBITER_PREEMPT_GRACE_MS`, `NEGELIR_GPU_ARBITER_WINBACK_COOLDOWN_S`, `NEGELIR_GPU_ARBITER_MIN_HOLD_MS`, `NEGELIR_GPU_ARBITER_HEDGE_ENABLED`, `NEGELIR_GPU_ARBITER_HEDGE_MAX_CONCURRENT`, `NEGELIR_GPU_ALLOC_FRAGMENTATION_HEADROOM`, `NEGELIR_GPU_ALLOC_DEFRAG_THRESHOLD`, `NEGELIR_GPU_DEFRAG_MAX_WINDOW_S`, `NEGELIR_GPU_THERMAL_MAX_C`, `NEGELIR_GPU_REQUEST_POWER_LIMIT_W`, `NEGELIR_BENCH_REGRESSION_PCT`, `NEGELIR_COMPUTE_COLD_START_MAX_MS`, `NEGELIR_COMPUTE_PANIC_DRAIN_S`, `NEGELIR_COMPUTE_LEAK_TOLERANCE_MB`, `NEGELIR_COMPUTE_ARTIFACT_CACHE_DIR`, `NEGELIR_COMPUTE_ARTIFACT_CACHE_MAX_MB`, `NEGELIR_COMPUTE_ARTIFACT_CACHE_SECRET`, `NEGELIR_COMPUTE_BUNDLE_INLINE_MAX_MB`, `NEGELIR_COMPUTE_BUNDLE_CACHE_DIR`, `NEGELIR_COMPUTE_BUNDLE_CACHE_MAX_MB`, `NEGELIR_COMPUTE_BUNDLE_CONCURRENT_PULLS_MAX`, `NEGELIR_BUNDLE_DRAIN_MAX_S`, `NEGELIR_BUNDLE_ROLLBACK_WINDOW_S`, `NEGELIR_DEVICE_PROBE_PATH`, `NEGELIR_DEVICE_PROBE_TIMEOUT_S`, `NEGELIR_DEVICE_PROBE_HOTPLUG_DEBOUNCE_S`, `NEGELIR_NVML_POLL_S`, `NEGELIR_NVML_POLL_S_MIN`, `NEGELIR_NVML_POLL_S_MAX`, `NEGELIR_OOM_COOLDOWN_S`, `NEGELIR_OPENVINO_BLOB_CACHE_DIR`, `NEGELIR_OPENVINO_ASYNC_QUEUE_DEPTH`, `NEGELIR_NPU_MAX_ACC_DROP_PCT`, `NEGELIR_GPU_LOCK_CLOCKS`, `NEGELIR_CUDA_MPS_ENABLED`, `NEGELIR_CUDA_MPS_MAX_CLIENTS`, `NEGELIR_CUDA_GRAPH_BUCKET_MAX`, `NEGELIR_KV_CACHE_PAGES_PER_SEQ_MAX`, `NEGELIR_KV_CACHE_TOTAL_MB`, `NEGELIR_LLM_CANCEL_GRACE_MS`, `NEGELIR_GLOBAL_SEED`, `NEGELIR_COMPUTE_EGRESS`, `NEGELIR_COMPUTE_COST_TABLE_*`, `NEGELIR_COMPUTE_INVALID_ALERT_RATE`, `NEGELIR_COMPUTE_ROUTER_STICKY_WINDOW_S`, `NEGELIR_COMPUTE_ROUTER_ADMIT_MAX_QD`, `NEGELIR_COMPUTE_ROUTER_AUDIT_SAMPLE_RATE`, `NEGELIR_TENANT_QUOTA_ENABLED`, `NEGELIR_UPGRADE_MAX_DRAIN_WAIT_S`, `NEGELIR_UPGRADE_CANARY_OBSERVE_S`, `NEGELIR_COMPUTE_LIVE_MIGRATION_ENABLED`, `NEGELIR_SOAK_THROUGHPUT_DRIFT_PCT`, `NEGELIR_SOAK_CLOCK_OSCILLATION_MAX_PER_MIN`, `NEGELIR_CPU_GOVERNOR_USE_SMT`, `NEGELIR_TRAINING_AMP_SKIP_PCT`, `NEGELIR_TRAINING_GRAD_CHECKPOINT`) with defaults that match `ai/common/config.py`.
 - [ ] `COMPUTE_DEVICES.md` updated with the new sections: heterogeneous routing, LLM serving primitives, bundle storage + hot-swap + replay, vendor-bug registry, per-tenant accounting, driver-upgrade choreography, heat-soak harness, runbook index, MPS gotchas, and the §11.0 wrong-assumption ledger. The legacy `AI_DEVICE` deprecation is noted with the planned removal version (recorded in `xops/versioning/chart.json`).
 - [ ] No agent imports `torch` / `xgboost` / `openvino` at module top-level in CPU-only build-tagged paths (Phase 9 API, Phase 16 emitter, Phase 17 patcher) — verified by `test_compute_isolation` **and** by image-size budget gate.
-- [ ] Image-signing (cosign) is wired; a pod with an unsigned image is refused in the prod profile (proof: `proof_image_signing_admission`).
+- [ ] Image-signing (cosign) is wired; a pod with an unsigned image is refused in the prod profile (proof: `proof_image_signing_admission`); SBOM runtime re-verification (§11.7) wired (proof: `proof_sbom_runtime_verify`).
+- [ ] **Inference engine matrix (§11.21)** shipped: `xops/compute/engines.json` enumerates every supported `(engine, version)` pair with declared `deterministic_when`; the predictor-engine determinism lint is wired and green; engine cache is keyed on the full provenance tuple including `allocator_conf`.
+- [ ] **Continuous batching (§11.22)** live for at least the humanizer; prefix-cache hit-rate metric exported; chunked-prefill tail bound demonstrated under bursty long-prompt load; cancellation does not flush peers.
+- [ ] **Cloud spot + cost + carbon (§11.23)** wired: `spot_watcher` triggers a clean §11.18 drain on synthetic eviction; cost-table tie-break demonstrated in the router audit; carbon-window deferral demonstrated for training without affecting realtime.
+- [ ] **aarch64 CI lane (§11.24)** runs the full §11.4 parity matrix; published tolerances hold on Graviton-class hardware (or qemu-emulated stand-in marked `skipped` with a documented owner — never `xfail`).
+- [ ] **Multi-host fabric contract (§11.25)** in place: probe enumerates fabric, NCCL set-lease atomicity proven, GDS opt-in plumbed; bundle manifest carries `tp_size`/`pp_size` defaults.
+- [ ] **Shadow inference (§11.26)** wired: a deliberately-bad shadow bundle is refused promotion; shadow traffic stays within `cfg.shadow_traffic_pct`; diffs carry `compute_provenance` for both sides.
+- [ ] **Idle-power & warm-pool (§11.27)** demonstrated on a CI host: idle GPU drops to `gpu_idle_power_limit_w`, restores cap before serving the first wake request, wake cost is included in the SLO budget; warm-pool membership reacts to demand without flapping.
+- [ ] **OpenTelemetry tracing (§11.28)** wired: every served inference produces a `compute.inference` span with the documented attributes; tail-latency capture is token-bucketed; all profiling is gated behind `cfg.compute_otel_enabled` and excluded from CPU-only build-tagged images.
+- [ ] **Routing-matrix hot-reload (§11.29)** live: corrupt matrix is refused with the prior matrix continuing to serve; sticky in-flight sessions never break mid-decode on reload.
+- [ ] **Backpressure HTTP semantics (§11.30)** locked-in with Phase 9 API: every status-matrix row is exercised end-to-end; `X-Compute-Reason` is a closed enum and lint refuses ad-hoc strings; `Retry-After` is bounded by `[cfg.api_retry_after_min_s, cfg.api_retry_after_max_s]`.
+- [ ] `xops/env/.env.example` extended with the new keys introduced by §11.21–§11.30 (`NEGELIR_LLM_CONTINUOUS_BATCH_MAX_SEQS`, `NEGELIR_LLM_CONTINUOUS_BATCH_MAX_TOKENS`, `NEGELIR_LLM_PREFIX_CACHE_WARM_THRESHOLD`, `NEGELIR_LLM_CHUNKED_PREFILL_SIZE`, `NEGELIR_LLM_DISAGG_ENABLED`, `NEGELIR_LLM_BATCH_ADMIT_P95_MS`, `NEGELIR_SPOT_EVICTION_ACK_MAX_S`, `NEGELIR_CARBON_INTENSITY_FEED_URL`, `NEGELIR_TRAINING_OFFPEAK_WINDOW`, `NEGELIR_COMPUTE_DAILY_USD_CAP`, `NEGELIR_NCCL_WATCHDOG_S`, `NEGELIR_COMPUTE_BUNDLE_USE_GDS`, `NEGELIR_SHADOW_TRAFFIC_PCT`, `NEGELIR_SHADOW_WINDOW_MIN`, `NEGELIR_SHADOW_MAX_CONCURRENT_BUNDLES`, `NEGELIR_GPU_IDLE_THRESHOLD_S`, `NEGELIR_GPU_IDLE_POWER_LIMIT_W`, `NEGELIR_WARM_POOL_TOP_N_PER_DEVICE`, `NEGELIR_WARM_POOL_RECOMPUTE_S`, `NEGELIR_WARM_POOL_JITTER_S`, `NEGELIR_COMPUTE_BUNDLE_PULL_MAX_RETRIES`, `NEGELIR_COMPUTE_OTEL_ENABLED`, `NEGELIR_COMPUTE_TAIL_CAPTURE_THRESHOLD_P`, `NEGELIR_COMPUTE_TAIL_CAPTURE_PER_MIN`, `NEGELIR_COMPUTE_PROFILING_ENABLED`, `NEGELIR_COMPUTE_PROFILING_SINK`, `NEGELIR_COMPUTE_ROUTER_RELOAD_S`, `NEGELIR_API_RETRY_AFTER_MIN_S`, `NEGELIR_API_RETRY_AFTER_MAX_S`, `NEGELIR_COMPUTE_ARTIFACT_CACHE_EMERGENCY_PURGE_PCT`) with defaults matching `ai/common/config.py`.
+- [ ] **Wrong-assumption ledger** at the top of Phase 11 is satisfied: every retired assumption has at least one passing proof test in §11.20 covering both directions (the bug demonstrated, then the fix demonstrated).
 
 ---
 
