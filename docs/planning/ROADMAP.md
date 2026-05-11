@@ -2476,6 +2476,71 @@ inherit the same routing matrix).
 >    `compute_provenance` block) carries `schema_version`; loaders
 >    refuse unknown major versions; a migration ledger lives at
 >    `xops/compute/schema_migrations/` (§11.36).
+> 15. ❌ "Container start ⇒ device is ready." → ✅ NVIDIA / AMD drivers
+>    can take 5–60 s to settle after a host warm-boot; the kernel
+>    module reports `present` but `nvidia-smi` returns
+>    `Initialization` for several seconds. Phase 11's compute-side
+>    `/healthz` (§11.44) stays `not-ready` until the probe lands a
+>    successful end-to-end inference on every claimed device, not
+>    just on `nvidia-smi -L` parsing. Without this gate, K8s sends
+>    real traffic to a half-initialised pod.
+> 16. ❌ "vGPU exposes the same NVML fields as bare-metal." → ✅ vGPU
+>    profiles silently zero out `power.draw`, `temperature.gpu`,
+>    `ecc.errors.*`, and `pci.link.gen.current`; the §11.9 metrics
+>    must distinguish "0 W under vGPU" from "0 W from a dead PSU"
+>    via the `virt_mode` label. Treating absent vGPU telemetry as
+>    "everything fine" hid a runaway thermal in a real prior
+>    incident.
+> 17. ❌ "Tokenizer version is part of the model bundle." → ✅ Many
+>    HF tokenizers ship as separate `tokenizer.json` and the
+>    `tokenizers` library version itself bumps normalisation rules
+>    between releases. The bundle manifest carries
+>    `tokenizer_sha256` **and** `tokenizers_lib_version`; cross-run
+>    determinism (§11.4) refuses a mismatch. A "same input, same
+>    seed, different bytes" outage in the wild was a silent minor
+>    bump of the tokenizers wheel.
+> 18. ❌ "Engine cache key = (bundle_sha, engine_version)." → ✅
+>    Cache key must include `cudnn_version`, `cublas_version`,
+>    `nccl_version`, `allocator_conf`, `deterministic_flags`, and
+>    the `host_class` (§11.1). A minor cuDNN bump can change kernel
+>    selection — re-using the prior cached engine produces a silent
+>    parity miss. §11.21 binds the full key.
+> 19. ❌ "TensorRT / inductor engines are safe because the bundle is
+>    signed." → ✅ The compiled engine is *derived* from the bundle
+>    plus the host toolchain; it is not itself in the bundle's
+>    signature scope. Phase 11 HMAC-tags every cached engine
+>    (§11.11) and a tampered cache is treated as a §11.10 row 9
+>    failure. Without this, a malicious mount can swap engines on
+>    a signed bundle and the loader cannot tell.
+> 20. ❌ "When an engine bug fires, fail closed." → ✅ Failing closed
+>    on a known kernel bug while a valid alternate engine is
+>    sitting one config flip away is wasted availability. §11.31
+>    defines an explicit per-workload fallback chain
+>    `(preferred_engine → alternates → CPU baseline)`; the chain
+>    walk is bounded, audited, and incident-traceable.
+> 21. ❌ "K8s liveness == compute readiness." → ✅ A pod that passes
+>    `livenessProbe` may still be mid-bundle-pull, mid-engine-compile,
+>    or holding a drained arbiter lease. §11.44 separates
+>    `liveness`, `readiness`, and `startup` probes with explicit
+>    contracts so K8s never sends traffic to a not-yet-warm pod.
+> 22. ❌ "Model weights are not sensitive — they're just floats." →
+>    ✅ Fine-tuned bundles encode tenant-specific behaviour and
+>    contractual IP; a bundle leaving the host unencrypted is a
+>    real exfiltration surface. §11.45 binds the at-rest encryption
+>    + tmpfs-only unseal contract for any bundle marked
+>    `confidentiality=restricted` in its manifest.
+> 23. ❌ "Embedding inference is `predictor_micro`." → ✅ Embedding
+>    workloads have very different shape (large-batch, dense, GEMM-
+>    bound, KV-cache-irrelevant) and very different SLOs (offline
+>    rebuild vs. online query). §11.43 promotes them to a first-
+>    class workload class so the router does not mis-batch them
+>    with predictor PMF calls.
+> 24. ❌ "One arbiter per host is enough." → ✅ Cross-host policies
+>    (a global tenant cap, a fleet-wide brownout, a region-level
+>    spot-eviction storm) need a thin coordinator that the per-host
+>    arbiters consult. §11.42 defines the cluster-arbiter contract;
+>    the per-host arbiter remains the ground-truth authority,
+>    cluster decisions are **advisory** and degrade gracefully.
 
 ### 11.1 Device probe & registry (`ai/model/device.py` + `ai/common/devices/`)
 
@@ -2890,6 +2955,52 @@ inherit the same routing matrix).
 - [ ] `proof_host_class_replay_invariance` — same `prediction.v1` replays byte-equal across two distinct hosts that share the same `host_class` (different `host_compute_fingerprint`).
 - [ ] `proof_emitter_patcher_thread_budget` — Phase 16 emitter and Phase 17 patcher each respect their `cfg.<component>_thread_budget`; over-spawn is refused by the §11.3 governor.
 
+**Backend fallback chain (§11.31):**
+- [ ] `proof_fallback_chain_walks_to_cpu_baseline` — synthetic `engine.error.v1` from the preferred engine routes the request to the next engine, then to CPU baseline if the second also fails; the request **succeeds** and `compute_provenance.fallback_path` records every step.
+- [ ] `proof_fallback_chain_bounded_by_deadline` — chain walk is cut off when `compute_fallback_max_wall_ms` is reached; request returns the documented `(503, X-Compute-Reason: fallback_exhausted)` triple.
+- [ ] `proof_engine_quarantine_after_threshold` — N synthetic `engine.error.v1` events on the same `(engine, device)` pair within the window quarantine that pair; the next request skips it without trying.
+- [ ] `proof_engine_quarantine_per_host` — quarantine on host A does not pre-emptively quarantine host B with the same `host_class` until the §11.42 cluster signal fires.
+- [ ] `proof_engine_quarantine_re_quarantine_backoff` — re-quarantine within the grace doubles the cooldown; tested up to the 24 h cap.
+- [ ] `proof_fallback_predictor_parity_preserved` — every engine in a predictor's chain meets the §11.4 published tolerance vs. CPU; lint blocks a PR that violates this.
+- [ ] `proof_fallback_no_silent_output_shape_change` — an engine missing a required output head is refused at admission, not at runtime.
+- [ ] `proof_fallback_audit_complete` — every walk emits `compute.fallback.v1` with the full `chain` and `terminal_step`; missing field fails the test.
+- [ ] `proof_engine_cache_invalidates_on_cudnn_minor_bump` — a cuDNN minor version bump produces a different engine cache key; the prior cached engine remains in LRU but is not re-used; recompile happens.
+- [ ] `proof_engine_cache_hmac_includes_host_class` — same engine bytes on a different `host_class` are refused; the HMAC tag binds the host envelope.
+
+**Cluster arbiter (§11.42):**
+- [ ] `proof_cluster_brownout_fans_out` — operator engages brownout once on the cluster arbiter; every per-host arbiter applies §11.35 within `compute_cluster_brownout_propagation_s`; histogram populated.
+- [ ] `proof_cluster_arbiter_unreachable_local_authority` — partitioned cluster service: hosts continue serving under last-cached state; alert fires; data path never blocks on the cluster service.
+- [ ] `proof_cluster_bundle_pull_lease_caps_concurrency` — synthetic 100-pod redeploy: cluster lease caps fleet-wide concurrent pulls of the same SHA at `compute_bundle_cluster_pull_max_concurrent`; no extra 503s from the bundle store.
+- [ ] `proof_cluster_engine_quarantine_skips_matching_hosts` — `cluster.engine_quarantine` for a `host_class` causes every matching host to skip that engine; non-matching hosts unaffected.
+- [ ] `proof_cluster_region_drain_no_dropped_requests` — synthetic region drain: in-flight requests migrate to peers; zero failed requests within the cloud's grace window.
+- [ ] `proof_cluster_arbiter_split_brain_refuses_writes` — induced split-brain: minority partition refuses writes with `cluster_split_brain` alert; per-host arbiters fall back gracefully.
+- [ ] `proof_cluster_decision_idempotent_under_fencing_token` — replayed cluster command with stale fencing token is refused; with current token is a no-op (idempotent).
+
+**Embedding & vector inference (§11.43):**
+- [ ] `proof_embedding_no_kv_alloc` — embedding agent's bundle declares `kv_cache_required=false`; loader allocates zero KV-cache bytes.
+- [ ] `proof_embedding_online_batches_to_max` — synthetic 32-rps stream coalesces into batches up to `embedding_online_batch_max` within `embedding_online_batch_max_wait_ms`; smaller bypasses the wait.
+- [ ] `proof_embedding_offline_yields_to_realtime` — `embedding_offline` job in flight: arriving `realtime` request preempts within §11.2 grace; offline resumes after.
+- [ ] `proof_embedding_replay_cosine_within_threshold` — replay of a stored embedding emits a vector with cosine ≥ `embedding_replay_cos_min` to the original.
+- [ ] `proof_embedding_router_does_not_mis_batch_with_pmf` — concurrent `predictor_micro` PMF stream + `embedding_online` stream: the batcher keeps them in distinct batches; PMF p99 is unchanged vs. PMF-only baseline.
+
+**Compute `/healthz` (§11.44):**
+- [ ] `proof_readyz_false_until_warmup_inference` — pod started with bundle pulled but warmup inference not yet executed: `/readyz` returns `false` with `kind=warmup_pending`; flips to `true` after the warmup completes.
+- [ ] `proof_readyz_false_during_drain` — agent in §11.18 drain returns `/readyz=false` with `kind=drain` *before* refusing requests; K8s removes from endpoints; in-flight requests finish.
+- [ ] `proof_readyz_no_secrets_in_response` — probe response JSON contains no inputs / outputs / tokens / tenant IDs; lint refuses an extension that adds a sensitive field.
+- [ ] `proof_startupz_distinct_from_livez` — long bundle pull keeps `/startupz=false` for `> liveness_initial_delay`; `/livez` stays `true` so K8s does not restart the pod.
+- [ ] `proof_readyz_respects_cluster_drain` — `cluster.region_drain` fired: every agent in the region returns `/readyz=false` within `compute_cluster_brownout_propagation_s`.
+- [ ] `proof_readyz_chaos_simulator_covers_all_kinds` — `make compute.probe.simulate KIND=*` exercises every documented `not_ready` reason and asserts JSON shape.
+
+**Weight encryption-at-rest (§11.45):**
+- [ ] `proof_no_plaintext_bundle_on_disk` — restricted bundle: cache directory snapshot during steady-state serving contains zero plaintext weight bytes; `tmpfs` unseal file is `unlink`'d before first inference.
+- [ ] `proof_swap_enabled_refuses_restricted_load` — host swap on + `compute_bundle_unseal_require_no_swap=true`: agent refuses to start; `/readyz` reason `kind=swap_violates_restricted_unseal`.
+- [ ] `proof_kek_rotation_no_rebuild` — `make compute.kek.rotate`: every restricted bundle is re-wrapped under the new KEK without a bundle rebuild; old caches re-fetch on next load; serving uninterrupted.
+- [ ] `proof_autopsy_redacts_restricted_weights` — synthetic Xid on a restricted-bundle agent: autopsy contains metadata only; no `mmap`'d weight pages dumped.
+- [ ] `proof_unseal_audit_emitted` — every `bundle_unseal` event emits `sec.audit.v1` with documented fields; missing field fails the test.
+
+**Cross-phase regression (§11.46):**
+- [ ] `proof_phase11_coupling_table_complete` — lint reads `xops/lint/phase11_couplings.py` and refuses a PR that touches a referenced sub-section without updating the §11.46 table.
+
 ### 11.21 Inference engine matrix & per-engine tuning
 
 > **Why this exists.** "Run the model on CUDA" is not a backend choice
@@ -2993,6 +3104,23 @@ inherit the same routing matrix).
 - [ ] **`X-Compute-Reason` enum.** Closed enum, documented in `docs/design/COMPUTE_DEVICES.md`; lint refuses ad-hoc strings.
 - [ ] **Tested end-to-end.** A Phase 12 chaos scenario forces each row above and asserts the exact triple `(status, Retry-After, X-Compute-Reason)`.
 
+### 11.31 Backend fallback chain & engine retirement
+
+> **Why this exists.** When a TensorRT engine hits a known cuDNN bug
+> mid-decode, the right answer is "fall through to torch eager on the
+> same GPU, then to CPU baseline" — not "503 the request". The original
+> Phase 11 had no explicit chain, so each agent improvised. This
+> sub-phase makes the chain a first-class, audited contract.
+
+- [ ] **Per-workload-class chain.** `xops/compute/workload_matrix.json` declares an ordered `fallback_chain` per workload class, e.g. `predictor_deep: [tensorrt_fp32, torch_inductor_fp32, torch_eager_fp32, cpu_xgboost]`. The router (§11.13) walks the chain on `engine.error.v1` events; each step counts in `negelir_compute_fallback_step_total{workload_class, from_engine, to_engine, reason}`. CPU baseline is **always** the terminal step — the chain never ends in `503` while the CPU path can serve the workload at SLO.
+- [ ] **Bounded walk.** The chain walk is bounded by `cfg.compute_fallback_max_steps` (default 3) per request and by `cfg.compute_fallback_max_wall_ms` (default = 30 % of `remaining_deadline_ms`); over either bound the request returns `503 X-Compute-Reason: fallback_exhausted` rather than burning the budget. The bound is per-request, not per-process; bursts cannot collectively exhaust shared engine state.
+- [ ] **Engine quarantine.** When an engine emits `engine.error.v1` more than `cfg.compute_engine_error_quarantine_threshold` times within `cfg.compute_engine_error_quarantine_window_s` on a given device, that `(engine, device)` pair is **quarantined**: the router stops selecting it as the preferred engine for `cfg.compute_engine_quarantine_cooldown_s` (default 600 s). Quarantine is per-`(engine, device, host_compute_fingerprint)`; a cuDNN bug that fires on one host does not pre-emptively quarantine peers — each host learns independently. Quarantine state is shared via the §11.42 cluster arbiter so a fleet-wide bad engine is detected fast.
+- [ ] **Quarantine release.** A quarantined pair returns to rotation either (a) after the cooldown plus a successful canary inference (§11.18 canary mechanism reused), or (b) explicitly via the ops console `compute.unquarantine` command (audited). Re-quarantine within `cfg.compute_engine_re_quarantine_grace_s` doubles the cooldown (exponential up to a 24 h cap) so a flapping engine cannot soak up retries forever.
+- [ ] **Provenance under fallback.** The emitted `prediction.v1.compute_provenance` records the **engine that actually produced the answer**, plus a compact `fallback_path` array of `(engine, error_class)` tuples for every step that was tried and failed. Replay (§11.15) follows the same path — a stored prediction made on the second engine in the chain is replayed on that engine, not on the preferred one.
+- [ ] **Determinism preserved.** Predictor parity (§11.4) holds across every engine in the chain: each step is itself parity-bound to the CPU baseline within the published tolerance. An engine that cannot meet that tolerance must not appear in a predictor's chain — `xops/lint/predictor_engine_determinism.py` (§11.21) enforces this on PR.
+- [ ] **No silent data fall-through.** A fallback step that would return a different *kind* of answer (e.g. an engine that lacks a required output head) is refused at admission, not at runtime — the chain only contains engines that satisfy the workload's full output schema. Tested.
+- [ ] **Audit.** Every chain walk emits `compute.fallback.v1{request_id, workload_class, chain, terminal_step, reason}`; sampled at `cfg.compute_fallback_audit_sample_rate` for non-error walks (engine retired during a routine drain) and always for error walks.
+
 ### 11.32 Request-deadline & cancellation propagation (binding for Phase 9 API)
 
 > **Why this exists.** §11.13 routes on *recent* p95; §11.14 cancels on
@@ -3094,6 +3222,94 @@ inherit the same routing matrix).
 - [ ] **Patcher under §11.3 governor.** Same for the Phase 17 patcher harness (default `cfg.patcher_thread_budget=4`); plus the patcher container is built with the §11.11 `cpu_only` build tag and cannot import GPU SDKs even by accident.
 - [ ] **Tested.** `test_emitter_thread_budget_respected`, `test_patcher_thread_budget_respected`.
 
+### 11.42 Cluster arbiter & cross-host coordination (Phase 14 hook)
+
+> **Why this exists.** §11.2 is the per-host authority; without a thin
+> cluster overlay, a global tenant cap, a fleet-wide brownout, a
+> region-wide spot-eviction storm, or a cluster-shared bundle-pull
+> rate-limit each devolves into N uncoordinated host-local decisions.
+> This sub-phase ships the contract; the production K8s wiring lands
+> in Phase 14.
+
+- [ ] **Cluster-arbiter contract.** A small stateless service `xops/compute/cluster_arbiter.py` (Redis-backed; later promotable to NATS KV / etcd) exposes: `cluster.brownout(mode, reason)`, `cluster.tenant_cap(tenant_id, gpu_seconds_per_min)`, `cluster.bundle_pull_lease(bundle_sha)`, `cluster.engine_quarantine(engine, host_class, reason)`, `cluster.region_drain(region, reason)`. Each call is **idempotent** with a fencing token; conflicting calls resolve by latest-wins with audit.
+- [ ] **Per-host arbiter remains authoritative.** Cluster decisions are **advisory, not mandatory**: the per-host arbiter (§11.2) consults the cluster signal at lease time and merges it with local state (a host already over-temperature does not need a cluster brownout to start refusing). When the cluster service is unreachable, hosts continue under their last-cached cluster state for `cfg.compute_cluster_cache_ttl_s` (default 300 s) then **fall back to local-only authority** with a `device.alert.v1{kind=cluster_arbiter_unreachable, severity=warn}`. The data path never blocks on the cluster service.
+- [ ] **Cluster-bundle-pull coordination.** §11.27's coldstart-storm jitter is per-host; the cluster arbiter additionally rate-limits *fleet-wide* concurrent pulls of the **same** bundle SHA via `cluster.bundle_pull_lease`, capped at `cfg.compute_bundle_cluster_pull_max_concurrent`. A 100-pod redeploy never N-fanout-503s the bundle store.
+- [ ] **Cluster brownout fan-out.** Operator engages brownout once on the cluster arbiter; per-host arbiters pick it up within `cfg.compute_cluster_brownout_propagation_s` (default 5 s) and apply §11.35 locally. Fan-out completion is observable via `negelir_cluster_brownout_propagation_seconds` histogram.
+- [ ] **Cluster engine quarantine.** When `cluster.engine_quarantine` fires (e.g. operator confirms a cuDNN bug across the fleet), every host of matching `host_class` (§11.1) refuses that engine without each having to learn it the hard way. Local quarantines (§11.31) still operate per-host for engines the cluster has not yet judged.
+- [ ] **Region drain.** A cloud zone outage marks every host in the region as `drain` (§11.2) via one cluster call; the per-host arbiters drain in parallel, in-flight requests migrate to peer regions, no request fails closed within the cloud's grace window.
+- [ ] **Liveness.** The cluster arbiter is **not** in any inference critical path; its outage degrades policy precision, not request serving. SLO: cluster operations p95 ≤ 50 ms; outage detection ≤ `cfg.compute_cluster_health_s`. Deployed N=3 with leader election (Redlock); split-brain refuses writes (`cluster_split_brain` alert) and per-host arbiters fall back to last-cached state.
+- [ ] **Audit.** Every cluster decision appends to `negelir:cluster_arbiter:audit` (Redis stream, capped); shipped to the ops console. Per-host arbiters append `cluster.applied.v1{decision_id, fencing_token, applied_at}` so the cluster observer can verify fan-out.
+
+### 11.43 Embedding & vector-inference workload class (Phase 21 enrichment hook)
+
+> **Why this exists.** Phase 21 enrichment (player markets, transfer
+> graph, weather context) needs embedding inference at scale —
+> different shape (large dense batches, GEMM-bound, no KV-cache),
+> different SLO (offline rebuild vs. online query), different cost
+> profile. Treating embeddings as `predictor_micro` mis-batches them
+> with PMF calls and torpedoes both latencies. The contract lands now
+> so Phase 21 plugs in without re-architecting the router.
+
+- [ ] **Two new workload classes.** `embedding_online` (per-query, ≤ 50 ms p95, batch ≤ `cfg.embedding_online_batch_max`, default 32) and `embedding_offline` (rebuild jobs, throughput-optimised, batch up to `cfg.embedding_offline_batch_max`, default 1024). Both declared in `xops/compute/workload_matrix.json` with their own preferred-device list (typically `[gpu, npu, cpu]` for online; `[gpu, cpu]` for offline) and their own `fallback_chain` (§11.31).
+- [ ] **Dedicated batcher.** The §11.9 batcher is parameterised per workload class (it already is); embedding classes get aggressive batch-wait (`cfg.embedding_online_batch_max_wait_ms` default 8 ms; `cfg.embedding_offline_batch_max_wait_ms` default 200 ms) since coalescing dwarfs first-token latency for dense matmul.
+- [ ] **No KV-cache.** Embedding agents never touch the §11.14 / §11.22 paged KV cache; their bundle manifest declares `kv_cache_required=false` and the loader refuses to allocate any. This frees significant VRAM headroom on shared GPUs and is asserted by `proof_embedding_no_kv_alloc`.
+- [ ] **Provenance for vector outputs.** A vector embedding emitted by the system carries the same `compute_provenance` block (§11.4) plus `output_dim` and `normalisation` (`l2 | none`); replay (§11.15) for embeddings asserts cosine similarity within `cfg.embedding_replay_cos_min` (default 0.9999) — bit-equality is not required since downstream cosine search is the contract, not bit-equality.
+- [ ] **Offline-rebuild scheduling.** `embedding_offline` jobs are `priority=batch` to the §11.2 arbiter and consult §11.23 carbon / cost windows; they never preempt `realtime` and are the first to be `shed_batch`-brownout'd.
+- [ ] **Vector-store handoff.** The emitted embedding's payload schema is the Phase 16 emitter's responsibility; this sub-phase only commits the compute-side workload class + provenance. The Phase 21 design doc binds the downstream vector index format.
+
+### 11.44 Compute-side `/healthz` & K8s probe contract (binding for Phase 9 + Phase 14)
+
+> **Why this exists.** Phase 9's API does its own `/healthz`; the
+> compute side needs a separate, structured readiness contract so
+> K8s does not send live traffic to a pod that parses `nvidia-smi`
+> but has not yet warmed an inference. Wrong-assumption #15 retired.
+
+- [ ] **Three-probe contract.** Every agent that owns a model exposes:
+  - `/livez` — process is alive and the GIL is unstuck (≤ 10 ms response, never blocked on the model). Failure → K8s restart.
+  - `/readyz` — every device the agent claimed in `device.json` has executed at least one successful **end-to-end** inference on a frozen warmup input from `ai/tests/fixtures/warmup/`, **and** every bundle declared in the manifest has been verified + loaded + cached + warmed. Failure → K8s removes from Service endpoints; existing connections drain.
+  - `/startupz` — distinct from `/readyz` so K8s `startupProbe` can use a longer threshold for cold bundle pull / engine compile (`cfg.compute_startup_probe_max_s` default 600 s) without falsely failing `/livez`.
+- [ ] **Structured response.** All three return JSON with `{status, devices: [{uuid, claimed, ready, last_warmup_ts, last_warmup_latency_ms}], bundles: [{sha256, loaded, warmed}], reasons_not_ready: [{kind, detail}]}`. Status is the single ground truth; the body lets ops debug without `kubectl exec`.
+- [ ] **Probe is the truth source for traffic.** §11.18 driver upgrade, §11.27 idle wake, §11.31 fallback exhaustion, §11.42 cluster drain all flip `/readyz` to `false` *before* refusing requests so K8s drains the endpoint cleanly. Conversely, no agent self-promotes to `ready` while the §11.42 cluster arbiter has it in `region_drain`.
+- [ ] **No secrets / no inputs.** Probe responses include device UUIDs and bundle SHAs but **no inputs / outputs / tokens / tenant IDs** — the probe is unauthenticated by K8s convention and must remain leak-free. Lint refuses an extension that adds a sensitive field.
+- [ ] **Test hooks.** `make compute.probe.simulate KIND=<bundle_pull_in_progress|engine_compile|drain|cluster_drain|warmup_fail>` injects each not-ready reason and asserts the JSON shape; chaos-tested in Phase 12.
+
+### 11.45 Model weight encryption-at-rest & secure unseal
+
+> **Why this exists.** Fine-tuned bundles encode commercial IP and
+> tenant-specific behaviour. A bundle leaving the host unencrypted
+> (cache volume snapshot, debug dump, accidental log) is exfiltration.
+> Wrong-assumption #22 retired. Applies only to bundles whose manifest
+> declares `confidentiality=restricted`; public model bundles stay
+> plaintext for cold-start speed.
+
+- [ ] **At-rest encryption.** Restricted bundles are AES-256-GCM encrypted in the §11.15 object store and on the §11.15 local cache disk; key wrapping uses an envelope-encrypted KEK fetched from `cfg.compute_bundle_kms_url` (e.g. AWS KMS / GCP KMS / HashiCorp Vault — selection per CSP profile, never embedded). The cache file format is `{nonce, aad: bundle_sha256 + host_class, ciphertext, tag}`.
+- [ ] **Tmpfs-only unseal.** Decryption happens once at load time into a tmpfs mount (`cfg.compute_bundle_unseal_tmpfs`, `noexec`, `nodev`, `nosuid`); the plaintext is `mmap`'d into the inference process and the tmpfs file is `unlink`'d immediately so a snapshot never captures plaintext. Tested via `proof_no_plaintext_bundle_on_disk`.
+- [ ] **No swap.** The supervisor refuses to start with `confidentiality=restricted` agents when host swap is enabled and not explicitly disabled-for-this-mount (`cfg.compute_bundle_unseal_require_no_swap=true`); plaintext weight pages must not hit a swap partition. Visible in the §11.44 not-ready reasons if violated.
+- [ ] **Telemetry redaction.** §11.9 autopsy / §11.28 tail-capture refuse to dump the address range of an `mmap`'d restricted bundle even on Xid crash; only metadata (sha256, dtype, dim) is captured. Lint refuses a capture sink without this rule.
+- [ ] **Key rotation drill.** `make compute.kek.rotate` rewraps every restricted bundle in the object store under a new KEK without rebuilding the bundles; existing local caches re-fetch on next load. Tested.
+- [ ] **Audit.** Every unseal emits `sec.audit.v1{kind=bundle_unseal, sha256, host, kms_key_id, tenant_id?}` (Phase 11.39 `data_class=tenant_internal` minimum); every refusal emits `sec.alert.v1{kind=bundle_unseal_refused, reason}`.
+
+### 11.46 Phase 11 cross-phase coupling matrix (closing audit)
+
+> Reverse-index of every cross-phase commitment in this file so the
+> next agent doesn't have to grep. Anything new touching Phase 11
+> updates this table in the same diff.
+
+| Other phase | What Phase 11 owes | Where |
+|---|---|---|
+| Phase 5 | Predictor parity tolerances, deterministic flags, compute_provenance schema, bundle hot-swap zero-drop | §11.4, §11.15, proofs |
+| Phase 6 | Training compute path, GradScaler, dataloader determinism, shadow-promotion gate | §11.12, §11.26 |
+| Phase 7 | sec.input device contract, NaN/Inf finite-check + quarantine handshake | §11.4, §11.10 row 14 |
+| Phase 8 | Telemetry consumer (`device_probe`), VRAM accounting, drain choreography, ops-console endpoints, scaler preflight | §11.1, §11.2, §11.18, §11.34 |
+| Phase 9 | `/healthz` contract, backpressure status matrix, deadline propagation, `X-Compute-Reason` enum | §11.30, §11.32, §11.44 |
+| Phase 10 | Humanizer GPU residency, LLM serving primitives, sampler-determinism replay | §11.14, §11.22 |
+| Phase 12 | Every §11.10 row → chaos test; every proof in §11.20 has its `make chaos.*` analogue or smoke variant | §11.10, §11.20 |
+| Phase 14 | K8s device plugins, manifest-list dispatch, MIG, CRIU live migration, image-signing admission, region-drain | §11.7, §11.8, §11.18, §11.37, §11.42, §11.44 |
+| Phase 16 | Emitter CPU-only build tag + governor binding + data_class capture inheritance | §11.11, §11.39, §11.40 |
+| Phase 17 | Patcher CPU-only build tag + governor binding + scoped artifact-cache isolation | §11.11, §11.39, §11.40 |
+| Phase 20 | Per-tenant counters + quotas + adapter eligibility (built dormant) | §11.17, §11.33 |
+| Phase 21 | Embedding workload classes + vector-inference provenance | §11.43 |
+
 ### 11.41 Definition of Done (Phase 11)
 
 In addition to Appendix B common DoD:
@@ -3137,6 +3353,13 @@ In addition to Appendix B common DoD:
 - [ ] **Privacy data-class capture (§11.39)** live: every capture sink declares its class matrix; `pii` captures route to the encrypted-at-rest sink; misroute is refused and alerted.
 - [ ] **Phase 16/17 governor binding (§11.40)** demonstrated: Emitter and patcher respect their thread budgets and never starve predictor agents on the same host.
 - [ ] `xops/env/.env.example` extended with the §11.32–§11.40 keys (`NEGELIR_COMPUTE_DEADLINE_SAFETY_MS`, `NEGELIR_COMPUTE_ADAPTER_CACHE_DIR`, `NEGELIR_COMPUTE_ADAPTER_CACHE_MAX_COUNT`, `NEGELIR_COMPUTE_ADAPTER_SWAP_P99_MS`, `NEGELIR_COMPUTE_CONCURRENT_ADAPTERS_MAX`, `NEGELIR_COMPUTE_PREFLIGHT_RESERVATION_TTL_S`, `NEGELIR_COMPUTE_RESERVATIONS_*`, `NEGELIR_COMPUTE_RESERVATIONS_UNRESERVED`, `NEGELIR_HOST_PSU_CAPACITY_W`, `NEGELIR_HOST_PSU_SAFETY_FACTOR`, `NEGELIR_GPU_SYSTEM_RESERVE_MB`, `NEGELIR_CLOCK_STEP_ALERT_MS`, `NEGELIR_COMPUTE_ROUTER_P99_OVERHEAD_US`, `NEGELIR_COMPUTE_CAPTURE_SINK_PII`, `NEGELIR_EMITTER_THREAD_BUDGET`, `NEGELIR_PATCHER_THREAD_BUDGET`, `NEGELIR_EXPECTED_ARCH`) with defaults matching `ai/common/config.py`.
+- [ ] **Backend fallback chain (§11.31)** wired: every workload class declares an ordered `fallback_chain` ending in CPU baseline; `compute.fallback.v1` audit emitted; engine quarantine + cooldown + exponential-re-quarantine all green; predictor parity preserved across the entire chain; lint blocks a chain whose engines violate the §11.4 tolerance.
+- [ ] **Cluster arbiter contract (§11.42)** shipped: `xops/compute/cluster_arbiter.py` deployed N=3 with leader election; per-host arbiters consult cluster signals advisorily and degrade to last-cached state on partition; brownout fan-out, bundle-pull lease, engine quarantine, region drain, split-brain refusal — every proof in §11.20 green.
+- [ ] **Embedding workload classes (§11.43)** declared in `workload_matrix.json`; dedicated batcher tunables shipped; bundles refuse KV-cache allocation; replay uses cosine threshold; concurrent PMF + embedding load shows no PMF p99 regression.
+- [ ] **Compute `/livez` `/readyz` `/startupz` (§11.44)** shipped on every model-owning agent; `/readyz` blocks on warmup inference + cluster drain + restricted-bundle unseal; probe response is JSON-schema-locked and PII-free; `make compute.probe.simulate` covers every documented `not_ready` reason.
+- [ ] **Weight encryption-at-rest (§11.45)** wired for any bundle declaring `confidentiality=restricted`: AES-256-GCM at rest, KMS-wrapped KEK, tmpfs-only unseal with immediate `unlink`, swap refused, autopsy / tail-capture / shadow-diff redact restricted weights, key-rotation drill green.
+- [ ] **Cross-phase coupling matrix (§11.46)** complete; lint refuses any PR touching a referenced sub-section without updating the table.
+- [ ] `xops/env/.env.example` extended with the §11.31–§11.45 keys (`NEGELIR_COMPUTE_FALLBACK_MAX_STEPS`, `NEGELIR_COMPUTE_FALLBACK_MAX_WALL_MS_PCT`, `NEGELIR_COMPUTE_ENGINE_ERROR_QUARANTINE_THRESHOLD`, `NEGELIR_COMPUTE_ENGINE_ERROR_QUARANTINE_WINDOW_S`, `NEGELIR_COMPUTE_ENGINE_QUARANTINE_COOLDOWN_S`, `NEGELIR_COMPUTE_ENGINE_RE_QUARANTINE_GRACE_S`, `NEGELIR_COMPUTE_FALLBACK_AUDIT_SAMPLE_RATE`, `NEGELIR_COMPUTE_CLUSTER_CACHE_TTL_S`, `NEGELIR_COMPUTE_CLUSTER_BROWNOUT_PROPAGATION_S`, `NEGELIR_COMPUTE_CLUSTER_HEALTH_S`, `NEGELIR_COMPUTE_BUNDLE_CLUSTER_PULL_MAX_CONCURRENT`, `NEGELIR_EMBEDDING_ONLINE_BATCH_MAX`, `NEGELIR_EMBEDDING_OFFLINE_BATCH_MAX`, `NEGELIR_EMBEDDING_ONLINE_BATCH_MAX_WAIT_MS`, `NEGELIR_EMBEDDING_OFFLINE_BATCH_MAX_WAIT_MS`, `NEGELIR_EMBEDDING_REPLAY_COS_MIN`, `NEGELIR_COMPUTE_STARTUP_PROBE_MAX_S`, `NEGELIR_COMPUTE_BUNDLE_KMS_URL`, `NEGELIR_COMPUTE_BUNDLE_UNSEAL_TMPFS`, `NEGELIR_COMPUTE_BUNDLE_UNSEAL_REQUIRE_NO_SWAP`) with defaults matching `ai/common/config.py`.
 
 ---
 
