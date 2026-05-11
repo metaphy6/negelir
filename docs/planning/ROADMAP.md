@@ -3459,6 +3459,31 @@ In addition to Appendix B common DoD:
 | 33 | "Catalog-only edits don't need tracker rows." | Catalog-edit hook §13.21 forces a tracker row + chart bump on every YAML mutation that touches a tier-bearing field; lint refuses a YAML diff without a matching `phases.csv` append in the same commit. |
 | 34 | "Cross-league joins (UCL participants from 5 leagues) work because identity resolves." | Cross-competition join contract §13.4.5 — UCL/UEL/UECL group draws fan in from 5+ league anchor sets; `test_ucl_group_join_complete.py` asserts every drawn club resolves. |
 | 35 | "Beta SLO can be looser indefinitely." | T2 SLO has a hard wall-clock ceiling §13.10.5 — a league sitting at T2 > `cfg.league_t2_max_dwell_days` (default 180) gets auto-demoted to T3 with a tracker row; prevents permanent-beta drift. |
+| 36 | "Match officials are interchangeable; one referee row per fixture is enough." | Officials registry §13.29 — `(referee, ARs, 4th, VAR, AVAR)` tuple per fixture with appointment audit, rotation tracking, and per-official residual feeding §13.23 bias detection. |
+| 37 | "Player transfers within a season can be modeled at the next snapshot." | Transfer & loan plane §13.30 — `Transfer(player_id, from_club, to_club, window, fee?, loan?, recall_clause?)` with effective dates; `eligible_at(date, competition_id)` is the only lineup-availability oracle. |
+| 38 | "Weather is a Phase 21-only concern and never influences predictions before then." | Weather plane §13.31 — kickoff weather (temp, precip, wind, pitch condition, humidity) seeded with the league when an authoritative source is available; missing weather is non-blocking but logged and capped at T2 readiness if coverage < `cfg.league_weather_coverage_min`. |
+| 39 | "Suspensions and yellow-card accumulation aren't predictor inputs." | Suspension tracker §13.32 — per-competition card-accumulation rules differ (UCL resets at QF, Süper Lig resets at season, FIFA WC clears at semi-final); availability feature is derived deterministically from the rule + the player's ledger. |
+| 40 | "Behind-closed-doors / partial-capacity fixtures can be inferred from venue." | Crowd-state plane §13.33 — `Fixture.crowd_state ∈ {full, partial, behind_closed_doors, neutral, away_fans_banned, sanctioned_capacity_cap}`; predictor home-advantage feature consumes the explicit state, never inferred. |
+| 41 | "Predictor warm-up only matters for new replicas, not for new leagues." | Per-league predictor warm-up §13.34 — newly activated league enters a `warming` state for `cfg.league_warmup_min_h` (default 24) before publishing live predictions; warm-up replays the last `N` historical fixtures and asserts within-tolerance reproducibility. |
+| 42 | "Catalog drift = federation changes structure; we'll just notice." | Federation-catalog drift watcher §13.35 — per-league `federation_canonical_url` + scheduled crawl + structural diff vs our catalog row; mismatch raises `proof.flag.v1{kind=catalog_drift}` and blocks T1 promotion until reconciled. |
+| 43 | "Per-fixture provenance is a Phase 16 emitter problem only." | Source-attribution plane §13.36 — every Fixture / Live record carries `field_provenance: {field_name → source_id + observed_at}`; identity-resolver, proofreader, and §13.40 cascade reactor consume it for conflict resolution and accountability. |
+| 44 | "Currency, tax, and SKU pricing trivially follow data residency." | Currency & SKU localisation §13.37 — per-league `currency`, `tax_jurisdiction`, `sku_price_band`, `vat_rate_pct`; Phase 20 entitlement reads these — never hardcodes by `country_iso`. |
+| 45 | "Esports football, charity matches, and friendly tournaments belong to the same predictor surface as competitive fixtures." | Competition-purity filter §13.38 — `Competition.purity_class ∈ {competitive, exhibition, charity, testimonial, esports, youth_invitational}`; only `competitive` (and `youth_invitational` only when scoped to age-cohort competitions) feeds predictor training and serving. |
+| 46 | "Match-fixing / integrity flags from public sources can be ignored." | Match-integrity plane §13.39 — federation / UEFA Integrity / FIFA Integrity / national-FA bulletins flag suspect fixtures; predictor refuses to publish a prediction for a flagged fixture, and the flag is replicated across both legs of a tie. |
+| 47 | "Withdrawal of one team affects only its own remaining fixtures." | Cascade-postponement reactor §13.40 — withdrawal cascades through every dependent qualifier path, group standings, knockout bracket, and tie-leg; emits a coherent invalidation set + standings re-derivation in one transaction. |
+| 48 | "League IDs and league legal names never change." | League-rebrand handover §13.41 — federation rebrand (sponsor rename, governance change, country split — e.g. Yugoslavian leagues) preserves `league_id`; legal-name + display-name mutations logged; alias becomes searchable; client-facing `display_name` decoupled from the join key. |
+| 49 | "Catalog snapshots aren't time-travel queryable." | Catalog time-travel §13.42 — `/v1/catalog?asof=<utc>` returns the catalog as it was at that UTC moment; backed by audit-ledger replay; lets Phase 8 / Phase 15 reproduce a historical decision. |
+| 50 | "There's no need for a sandbox league inside production." | Sandbox-league lane §13.43 — `__sandbox__` reserved `league_id` always present; predictor / proofreader / patcher run smoke E2E against it without polluting tier metrics, monetization counters, or the public catalog endpoint. |
+| 51 | "UEFA / FIFA coefficients are external; we just consume them." | Coefficient-derivation plane §13.44 — UEFA / FIFA / continental coefficients computed from our own historical results with deterministic seed; lineage proof + reproducibility test + drift alert vs federation-published number. |
+| 52 | "Each league's market roster is identical." | Per-league market roster §13.45 — `LeagueRow.markets_supported` is a frozenset subset of all betting markets; emitter refuses to publish a market not declared; proofreader vetoes a prediction whose market is not in the roster. |
+| 53 | "The match clock semantics are universal across competitions." | Match-clock semantics §13.46 — explicit per-competition `match_clock` payload (90+ min stoppage, extra-time + ET-stoppage, futsal-style halves, golden-goal / silver-goal eras, "running clock vs Olympic clock" experiments); features that read minutes always normalise via the payload, never assume 90'. |
+| 54 | "GDPR data-portability isn't applicable to football data." | Data-portability export §13.47 — per-actor `make export.actor ACTOR=<token_sha8>` produces a portable JSON of every PII record + signed receipt; honoured per Phase 9 + Phase 11 §11.39 within `cfg.gdpr_export_max_days` (default 30). |
+| 55 | "Adversarial-corpus growth is unbounded." | Corpus rotation policy §13.48 — per-family LRU cap at `cfg.adversarial_corpus_max_per_family` (default 500); cases tagged `pinned=true` (root cause for a real demotion / patcher artifact) are exempt from rotation. |
+| 56 | "Two leagues / cups never schedule a fixture-clash that affects player availability." | Fixture-clash detector §13.46.5 — when the same player resolves into two simultaneous fixtures across competitions (national + club, two cup ties on the same date), reactor emits `proof.flag.v1{kind=fixture_clash}` and forces explicit federation-published resolution before publish. |
+| 57 | "Audit-log size is unbounded; storage will absorb it." | Audit-log compaction policy §13.21 — append-only ledger compacted at `cfg.league_audit_compaction_days` (default 365) into a signed-merkle root; pre-compaction segments archived to cold storage per Phase 16 §16.8; integrity scan covers the merkle chain. |
+| 58 | "Catalog reload is safe during predictor cold-start." | Cold-start ↔ reload race §13.26 — predictor cold-start pins the catalog reference before subscribing to inflight; a reload aborts cleanly when any cold-starting replica still holds the previous reference (proof test `test_cold_start_reload_race_no_torn_view.py`). |
+| 59 | "An expulsion / forfeit applied retroactively can simply rewrite the standings." | Retroactive-sanction reactor §13.40.5 — retroactive expulsions / point deductions / forfeits emit an event at the original kickoff timestamp with a `retroactive_at` field; downstream consumers (table predictor, "to win league" market) reprocess the standings without rewriting raw fixtures. |
+| 60 | "All leagues use the same yellow / red card disciplinary calculus." | Per-competition disciplinary rule overlay §13.32 — UCL group-stage card threshold differs from Süper Lig differs from World Cup; rules live in `Competition.disciplinary_rules` and are read at suspension-derivation time. |
 
 ### 13.1 Catalog & schema authority (one-time platform work; ships with 13a)
 
@@ -3648,6 +3673,12 @@ In addition to Appendix B common DoD:
 - [ ] **Path-dependent priors** for `multi_stage_qualifier` are bounded — a team that has not yet played in the qualifier returns `cold_start` for the "to qualify for tournament" market (no fabrication, doctrine #3).
 - [ ] **Extra-time + penalty-shootout modeling.** `single_knockout` and `two_leg_knockout` outputs include `outcome_in_90 | outcome_in_120 | outcome_pens` with conditional probabilities summing to 1 ± 1e-6 (proof test `test_knockout_conditional_probs_sum.py`).
 - [ ] **VAR-era cutoff.** Per-competition `var_active_from` field; pre-VAR backtests use a different prior for late-game red-card / penalty rates (proof test `test_var_era_prior_shift.py`).
+- [ ] **Golden-goal / silver-goal era awareness.** Pre-2004 UEFA knockouts honour golden/silver-goal extra-time semantics (sudden-death termination); proof test `test_golden_goal_era_terminates_on_first_goal.py`.
+- [ ] **COVID 5-sub era.** `Competition.rules_variant.max_subs_window` honours the 2020-onward IFAB amendment (5 subs in 3 windows); pre-2020 backtests stay at 3-sub semantics (proof test `test_covid_sub_era_window.py`).
+- [ ] **Concussion-substitute additivity.** Concussion subs are additive to the standard limit and do not consume a substitution window; predictor's "time-to-fatigue" feature accounts for the additional fresh leg (proof test `test_concussion_sub_additive.py`).
+- [ ] **Drinks-break stamina recovery.** Hot-weather competitions (Qatar 2022, summer Süper Lig) declare `drinks_breaks: bool` per fixture; predictor's late-game stamina decay slows when set (proof test `test_drinks_break_late_stamina.py`).
+- [ ] **Olympic-football eligibility overlay.** Olympic men's tournament is U-23 with three overage outfield + one overage GK; eligibility resolver applies the overlay only to Olympic competitions (proof test `test_olympic_eligibility_overlay.py`).
+- [ ] **Lint forbids hardcoded era constants.** `xops/lint/no_hardcoded_eras.py` refuses any `if year < 2021` / `if season >= '2020-21'` / similar literals in `swarm/predictor/` and `swarm/proofreader/` — eras live in YAML, never in code (proof test `test_no_hardcoded_era_constants.py`).
 
 #### 13.13.5 Rules-variant overlay
 
@@ -3752,6 +3783,9 @@ In addition to Appendix B common DoD:
 - [ ] **Tracker-row + chart-bump enforcement.** Any catalog YAML diff in a commit must be accompanied by a `phases.csv` append row and (for tier-bearing fields) a `xops/versioning/chart.json` bump for that league's component key. Lint refuses the diff otherwise.
 - [ ] **Tampering detection.** `make leagues.audit.verify` re-computes hashes across the ledger; any mismatch alerts and quarantines the entire catalog (refusing further mutations) until ops investigates.
 - [ ] **Read-only mode.** `cfg.league_catalog_readonly=true` prevents any mutation except via `make leagues.audit.verify --rebuild` after a verified disaster recovery.
+- [ ] **Compaction policy.** Append-only ledger compacted at `cfg.league_audit_compaction_days` (default 365) into a signed-merkle-root snapshot; pre-compaction segments archived per Phase 16 §16.8 cold storage; verifier walks the merkle chain across compactions (proof test `test_audit_log_merkle_chain_across_compaction.py`). Retires assumption §13.0 #57.
+- [ ] **Tamper-proof retention.** Compaction never re-orders or deletes a row's effective payload; only the storage representation changes. Lint refuses a compaction routine that drops `actor` / `signature` / `before_sha256`.
+- [ ] **Operator key revocation.** Revoking a former operator's signing key via `make leagues.audit.revoke KEY=<fingerprint> REASON=""` does not invalidate historical signatures (chain stays valid); future submissions from that key are refused.
 
 ### 13.22 Disaster recovery: per-league backup / restore
 
@@ -3828,25 +3862,263 @@ In addition to Appendix B common DoD:
 - [ ] **Per-league suite must be green before T1 promotion.** §13.7 readiness gate consults the suite's pass-rate; any `xfail` in the suite blocks promotion.
 - [ ] **Corpus growth on regression.** Every demotion / quarantine / Phase 17 patcher artifact whose root cause maps to one of the above families auto-appends a regression case to the corpus (with a tracker row). Suite is monotonically growing.
 
+### 13.29 Match-officials registry
+
+> Retires assumption §13.0 #36. The referee dimension is a real
+> predictor input (foul rates, card rates, penalty rates) and a real
+> bias-detection dimension (§13.23).
+
+- [ ] **`Official` Reference-plane entity.** `(official_id, name, country, role_history[], appointment_history[])` keyed on `stable_id` (no per-source IDs leak); roles ∈ `{referee, ar1, ar2, fourth, var, avar, reserve_ar}`.
+- [ ] **`FixtureOfficials` join table.** `(fixture_id, role, official_id, appointment_source, appointed_at)`; refuses two officials in the same role for the same fixture (proof test `test_no_duplicate_role_assignment.py`).
+- [ ] **Appointment audit.** Every change to a fixture's officials emits `officials.assignment.v1{fixture_id, role, before, after, source, appointed_at}`; surfaces in the Phase 8 console.
+- [ ] **Referee feature shrinkage.** Per §13.23, a referee's `card_rate_adj` / `penalty_rate_adj` / `foul_rate_adj` features are shrunk per `cfg.referee_shrinkage_lambda` toward the league mean until the official has worked ≥ `cfg.referee_min_matches_for_full_weight` (default 30) fixtures.
+- [ ] **Cross-confederation referee identity.** A referee working in Süper Lig and UCL collapses to one `stable_id` via §13.4 anchor resolver; proof test `test_referee_cross_competition_identity.py`.
+- [ ] **VAR-era guard.** Officials with `var` / `avar` roles only appear in fixtures whose competition has `var_active=true` at kickoff; lint + proof test `test_var_official_only_in_var_competition.py`.
+- [ ] **Bias rotation tracking.** Per-official residual feeds §13.23; the bias-audit alert distinguishes referee bias from team / venue bias by partial regression.
+
+### 13.30 Player transfer & loan plane
+
+> Retires assumption §13.0 #37.
+
+- [ ] **`Transfer` Reference-plane entity.** `(transfer_id, player_id, from_club_id, to_club_id, window, transfer_date, fee_eur?, loan?, loan_end_date?, recall_clause?, sell_on_pct?)`; `window ∈ {summer, winter, emergency}`.
+- [ ] **`eligible_at(player_id, date, competition_id) → bool`** — single oracle; consumes transfers + cup-tied rules (UCL cup-tie: a player cannot represent two clubs in the same continental edition); proof test `test_cup_tied_rule_blocks_post_transfer.py`.
+- [ ] **Loan dual-eligibility join.** Generalises §13.4.5 — loans split into `parent_eligibility` (paused) + `loan_eligibility` (active until `loan_end_date`); recall-clause activation re-flips them with audit.
+- [ ] **Transfer-window calendar.** `xops/leagues/transfer_windows.yaml` per league + per season; predictor's "squad-stability" feature reads window-open / window-closed booleans; proof test `test_transfer_window_calendar.py`.
+- [ ] **Free-agent + bosman handling.** A player with no `to_club_id` (free agent) is unavailable for any club's predictions until a new transfer lands; lint refuses a fabrication of a synthetic free-agent transfer (doctrine #3).
+- [ ] **Source-conflict reconciliation.** Two sources reporting different fees collapse to one `Transfer` with `field_provenance` (per §13.36); proofreader does **not** emit predictions that depend on `fee_eur` until quorum.
+- [ ] **Privacy.** `fee_eur`, `salary_eur`, `agent_id` are `data_class=pii` per Phase 11 §11.39; admin-token only at the API edge.
+
+### 13.31 Weather plane
+
+> Retires assumption §13.0 #38. Lightweight first; full enrichment in
+> Phase 21.
+
+- [ ] **`Weather` Live-plane entity.** `(fixture_id, observed_at, temp_c, wind_kmh, precip_mm_h, humidity_pct, pitch_condition_enum, source_id)`; `pitch_condition_enum ∈ {dry, damp, wet, frozen, snow, sand}`.
+- [ ] **Optional, non-blocking.** Missing weather logs `negelir_fixture_weather_missing_total{league_id}` but never blocks publish; T1 promotion requires `coverage ≥ cfg.league_weather_coverage_min` (default 0.80) over the last 60 days.
+- [ ] **Weather-source registry.** `xops/leagues/weather_sources.yaml` per region; sources rate-limited per Phase 4 budget; offline-mock pinning via §13.6 mock-stack.
+- [ ] **Predictor feature gating.** Weather features attach only when observation timestamp is within `cfg.weather_freshness_max_h` (default 6 h) of kickoff; stale weather is dropped, not back-filled (no fabrication).
+- [ ] **Per-competition opt-in.** `Competition.uses_weather_features: bool` — turfed indoor competitions (futsal-style or roofed venues) opt out; proof test `test_indoor_competition_no_weather.py`.
+- [ ] **Catastrophic-weather fixture interaction.** Per §13.17, a weather-driven postponement (snow-out) is emitted as a `postponed` lifecycle event with `reason=weather`; predictor invalidates and waits for reschedule.
+
+### 13.32 Suspension & card-accumulation tracker
+
+> Retires assumptions §13.0 #39 and #60.
+
+- [ ] **`Card` Live-plane entity.** `(fixture_id, player_id, minute, card_type, reason_code?, source_id)`; `card_type ∈ {yellow, second_yellow, straight_red, blue}`.
+- [ ] **`DisciplinaryRule` per `Competition`.** `Competition.disciplinary_rules: {yellow_threshold_per_phase: int, reset_at: stage_id?, suspension_match_count_per_red: int, escalation_table: list}`; defaults documented per league.
+- [ ] **`SuspensionLedger` per `(player_id, competition_id)`.** Append-only; running totals computed by deterministic fold; `available_for(fixture_id) → bool` derived from the ledger + rule.
+- [ ] **Per-competition reset semantics.** UCL clears at QF, EURO at semi-final, Süper Lig at season; `test_card_reset_at_quarter_final.py` covers each rule.
+- [ ] **Cross-competition independence.** A yellow card in a domestic cup never carries into the league's competition (same player, different ledger); proof test `test_card_ledger_per_competition.py`.
+- [ ] **Retroactive sanctions.** Federation post-match additional bans (violent conduct caught on video) modify the suspension ledger via `make suspension.add PLAYER=<id> COMPETITION=<id> MATCHES=<n> REASON=""`; emits audit event; per §13.40.5 marks `retroactive_at`.
+- [ ] **Predictor feature surface.** "Player available" feature reads the ledger; a missing key suspension flips the predictor's confidence widening per `cfg.suspension_confidence_widen` (default 1.05×).
+
+### 13.33 Crowd-state plane
+
+> Retires assumption §13.0 #40.
+
+- [ ] **`Fixture.crowd_state` enum.** `{full, partial, behind_closed_doors, neutral, away_fans_banned, sanctioned_capacity_cap}`; never inferred from venue.
+- [ ] **`Fixture.attendance_actual` Live-plane field.** Authoritative source per league; missing field allowed for T2 but required for T1 (`cfg.attendance_coverage_t1_min`, default 0.95).
+- [ ] **Predictor home-advantage feature.** Reads the explicit `crowd_state` enum; `behind_closed_doors` and `neutral` zero the home-advantage component; `away_fans_banned` adds a small home-side bias (proof test `test_crowd_state_home_advantage.py`).
+- [ ] **Sanction propagation.** A federation-published stadium-closure sanction (UEFA disciplinary) for the next N home fixtures auto-flips those fixtures to `behind_closed_doors`; reactor refuses silent sanction propagation (must be sourced).
+- [ ] **Capacity-cap inference forbidden.** Lint (`xops/lint/no_capacity_cap_inference.py`) refuses any code that derives `crowd_state` from the ratio `attendance_actual / capacity`; the inference is always a federation-published fact.
+
+### 13.34 Per-league predictor warm-up
+
+> Retires assumption §13.0 #41.
+
+- [ ] **`LeagueRow.warming_state ∈ {cold, warming, hot}`.** A newly activated (or post-quarantine) league enters `warming` for `cfg.league_warmup_min_h` (default 24).
+- [ ] **Replay-based warm-up.** Warm-up replays the last `cfg.league_warmup_replay_n` (default 50) historical fixtures through the live predictor; emits per-fixture diff vs the historical realised log-loss; refuses to flip to `hot` when median diff > `cfg.league_warmup_max_diff` (default 0.04).
+- [ ] **Warming leagues are publicly visible but flagged.** API surfaces `X-League-Warming: true`; frontend renders a "kalibrasyon devam ediyor" notice (TR UX).
+- [ ] **Calibration doesn't update during warm-up.** No drift-fit, no profile mutation while warming; calibration freeze (per §13.18) reused.
+- [ ] **Warm-up audit topic.** `league.warmup.v1{league_id, started_at, finished_at, replay_n, max_diff, decision}` consumed by the Phase 8 console; tracker row appended on flip-to-`hot`.
+- [ ] **Cold ↔ warming ↔ hot FSM proof.** `test_league_warming_fsm.py` covers every legal and illegal transition (e.g. `cold → hot` direct is refused).
+
+### 13.35 Federation-catalog drift watcher
+
+> Retires assumption §13.0 #42.
+
+- [ ] **Per-league `federation_canonical_url`** in the catalog row; for FIFA / UEFA-organised competitions, `competition.federation_canonical_url` overrides the league's.
+- [ ] **Scheduled crawl + structural diff.** `xops/leagues/federation_drift.py` runs every `cfg.federation_drift_check_h` (default 24); diff fields: participant list, format (`group_then_knockout` etc.), stage dates, season name.
+- [ ] **`proof.flag.v1{kind=catalog_drift, league_id, fields[]}`.** Surfaces on Phase 8 console; T1 promotion blocks while a flag is unresolved.
+- [ ] **Drift-resolution audit.** `make leagues.drift.acknowledge LEAGUE=<id> FIELD=<f> RESOLUTION=""` writes a tracker row + signed audit entry per §13.21.
+- [ ] **No auto-mutation.** Drift watcher never edits the catalog YAML; only flags and notifies. Doctrine #3 (no fabrication) — federation-published changes still require human review + signed audit entry.
+- [ ] **Polite crawling.** Watcher honours per-source `robots.txt` + ToS hash per §13.25; refuses to fetch if either drifted.
+
+### 13.36 Source-attribution & field-provenance plane
+
+> Retires assumption §13.0 #43. The cornerstone of accountability for
+> downstream proofreader / patcher decisions.
+
+- [ ] **`field_provenance: dict[field_name → {source_id, observed_at, ingest_id}]`** on every `Fixture`, `Live`, and `Card` record; mandatory for T1 leagues, optional with warning for T2.
+- [ ] **Schema-gate.** Storage refuses a Reference-plane mutation lacking `field_provenance` for any field that originates from a scrape; lint refuses a hand-written record without the field (doctrine #3).
+- [ ] **Conflict resolution policy.** When two sources disagree on a field, reactor consults a per-source `trust_weight` (in `xops/mock/sources.py`) and the most-recent observation; ties resolved by lexicographic source ID (deterministic — tested by `test_source_conflict_deterministic.py`).
+- [ ] **Provenance audit feed.** `provenance.conflict.v1{record_id, field, sources[], resolution}` consumed by the Phase 8 console; per-source trust weights are tunable but mutations follow the §13.21 audit-log policy.
+- [ ] **Patcher consumption.** Phase 17 patcher's `diagnostic.json` is required to include `field_provenance` for any field referenced in the failing extractor; lint refuses an artifact without it.
+- [ ] **PII handling.** `field_provenance` values are tokenised when the field is `data_class=pii` per Phase 11 §11.39; raw source URLs never leak into the public API.
+
+### 13.37 Currency, tax & SKU localisation
+
+> Retires assumption §13.0 #44. Phase 20 dormant; the data model
+> ships now to avoid retrofit pain.
+
+- [ ] **Per-row fields.** `LeagueRow.currency: ISO-4217`, `tax_jurisdiction: str`, `sku_price_band: enum {budget, standard, premium, enterprise}`, `vat_rate_pct: float`.
+- [ ] **Phase 20 entitlement reads catalog.** `entitlements.yaml` references `LeagueRow.sku_price_band` (not raw price); per-tier prices live in `xops/monetization/sku_prices.yaml`. Lint refuses a hardcoded price in `entitlements.yaml`.
+- [ ] **Multi-currency display.** Phase 9 `/v1/catalog` surfaces per-row currency; Phase 15 frontend shows the localised currency by default with a manual override.
+- [ ] **VAT-rate snapshot.** Per-jurisdiction `vat_rate_pct` snapshot date stored alongside; VAT changes require a tracker row + chart bump (`xops/lint/sku_vat_lifecycle.py`).
+- [ ] **Sandbox immunity.** §13.43 sandbox league bypasses all currency / VAT logic — never charged.
+
+### 13.38 Competition-purity filter
+
+> Retires assumption §13.0 #45.
+
+- [ ] **`Competition.purity_class` enum.** `{competitive, exhibition, charity, testimonial, esports, youth_invitational}`; defaults documented per format.
+- [ ] **Predictor admission.** Only `competitive` (and `youth_invitational` scoped to age-cohort competitions) feeds predictor training and serving; lint refuses a profile mapping for non-competitive classes (proof test `test_only_competitive_feeds_predictor.py`).
+- [ ] **Sentiment / news bypass.** Sentiment + news pipelines (Phase 6 / Phase 21) consume non-competitive classes for context but flag them; UI badges "dostluk" / "yardımseverlik" / "vediasever" appropriately (TR UX).
+- [ ] **API tier surface.** `/v1/predictions` returns 409 for a non-competitive `competition_id` with `X-Reason: competition_class_excluded`.
+- [ ] **Migration.** Existing exhibitions / friendlies are bulk-classified at 13.0 ledger retirement; the migration is idempotent and tracker-row-audited.
+
+### 13.39 Match-integrity flag plane
+
+> Retires assumption §13.0 #46. Defensive: never publish a prediction
+> for a fixture whose integrity is publicly questioned.
+
+- [ ] **`IntegrityFlag` Reference-plane entity.** `(flag_id, fixture_id?, competition_id?, source_authority, severity ∈ {info, warn, suspended_competitively}, body_md, raised_at, resolved_at?)`.
+- [ ] **Predictor refusal.** A fixture with an unresolved `severity=suspended_competitively` flag refuses prediction publish (`X-Reason: integrity_flag_active`); proof test `test_integrity_flag_blocks_publish.py`.
+- [ ] **Tie propagation.** If one leg of a §13.12 two-leg tie is flagged, the entire tie is flagged (per `tie_id`); proof test `test_integrity_flag_propagates_across_legs.py`.
+- [ ] **Source authorities.** Configurable per `xops/leagues/integrity_authorities.yaml` (UEFA Integrity, FIFA Integrity, national-FA bulletin URLs); flags from non-listed sources surface as `info` only.
+- [ ] **Audit ledger.** Every flag mutation writes an audit-log entry per §13.21; resolution requires signed acknowledgement.
+- [ ] **Frontend banner.** Phase 15 surfaces a Turkish banner "müsabaka soruşturma altında" for affected fixtures.
+
+### 13.40 Cascade-postponement & withdrawal reactor
+
+> Retires assumption §13.0 #47.
+
+- [ ] **`swarm/proofreader/cascade_reactor.py`.** Consumes `fixture.lifecycle.v1`; computes the dependent set (group standings, knockout-bracket placeholders, tie legs); emits one transactional `cascade.invalidated.v1{fixture_ids[], standings_delta, tie_ids[]}`.
+- [ ] **Withdrawal cascade-set computation.** A team's withdrawal generates the deterministic full set of affected fixtures; `withdrawal_policy ∈ {annul_all_results, void_remaining_award_3_0, void_remaining_award_0_0}` per §13.18 chosen per league rule.
+- [ ] **Cycle detection.** Reactor refuses to process a cascade whose dependency graph has a cycle (would only happen on bad data); audit + alert.
+- [ ] **Idempotency.** Re-running the cascade reactor on the same input is a no-op (proof test `test_cascade_reactor_idempotent.py`).
+- [ ] **Standings re-derivation determinism.** `make leagues.standings.recompute LEAGUE=<id> SEASON=<id>` is byte-identical across two runs given the same fixture history (proof test `test_standings_recompute_deterministic.py`).
+- [ ] **Audit topic.** `cascade.fan_out.v1{trigger_fixture_id, dependent_count, computed_at}` consumed by the Phase 8 console.
+
+#### 13.40.5 Retroactive-sanction reactor
+
+> Retires assumption §13.0 #59.
+
+- [ ] **Retroactive-event payload.** `RetroactiveSanction(target_id, kind ∈ {expulsion, point_deduction, forfeit, replay_ordered}, effective_kickoff_ts, retroactive_at, reason, source_authority)`.
+- [ ] **No raw-fixture rewrite.** Retroactive sanctions feed the standings re-derivation only; raw `Fixture` records are never modified (proof test `test_retroactive_no_fixture_rewrite.py`).
+- [ ] **Replay-ordered handling.** A federation-ordered replay creates a new fixture linked via `original_fixture_id`; predictor publishes a fresh prediction.
+- [ ] **Standings monotonicity in display.** Frontend renders both the "as-played" and "after-sanction" tables when divergent; predictor's "to win league" market reads the after-sanction view.
+
+### 13.41 League rebrand & display-name handover
+
+> Retires assumption §13.0 #48.
+
+- [ ] **`LeagueRow.legal_name`, `LeagueRow.display_name`, `LeagueRow.aliases`.** `league_id` is the join key and never changes; `legal_name` and `display_name` mutate via signed audit per §13.21.
+- [ ] **`make leagues.rename LEAGUE=<id> DISPLAY=<new> REASON=""`** writes the audit + tracker row + chart-bump (per §13.21 / §13.27); refuses to mutate `league_id`.
+- [ ] **Search alias propagation.** Old `display_name` is auto-added to `aliases[]` so historical queries still resolve; gazetteer (§13.11) auto-feeds.
+- [ ] **Country-split / merger drill.** Yugoslav-style federation split → multiple new `league_id` rows seeded from the dissolved league's history (manual mapping audited); proof test `test_federation_split_audit_trail.py`.
+- [ ] **API stability.** `/v1/catalog` returns both `legal_name` and `display_name`; clients are expected to render `display_name`.
+
+### 13.42 Catalog time-travel queries
+
+> Retires assumption §13.0 #49.
+
+- [ ] **`/v1/catalog?asof=<utc>` endpoint.** Returns the catalog as it was at that UTC moment by replaying §13.21 audit-ledger entries onto a snapshot baseline.
+- [ ] **Bounded asof range.** `asof` accepted within `cfg.catalog_asof_max_age_days` (default 730 = 2 years); requests outside range return `400 + X-Reason: asof_out_of_range`.
+- [ ] **Replay determinism.** Two calls with the same `asof` return byte-identical bodies (proof test `test_catalog_asof_deterministic.py`).
+- [ ] **Audit integration.** Time-travel reads do not write audit entries (read-only) but emit a `catalog.timetravel.v1{actor, asof, etag}` low-volume log line.
+- [ ] **Patcher / ops-console consumption.** Phase 17 patcher and Phase 8 ops console can reproduce a historical decision by joining `prediction.created_at` with the catalog `asof`.
+
+### 13.43 Sandbox-league lane
+
+> Retires assumption §13.0 #50.
+
+- [ ] **`__sandbox__` reserved `league_id`.** Always present in the catalog; not surfaced on the public `/v1/catalog` (admin-only).
+- [ ] **Smoke-E2E target.** `make leagues.sandbox.smoke` runs predictor + proofreader + emitter + (optionally) patcher against a curated synthetic competition under the sandbox league.
+- [ ] **Metric isolation.** All `negelir_league_*` metrics for `__sandbox__` carry `sandbox=true` label; cardinality budget §13.10 excludes the sandbox.
+- [ ] **Monetization isolation.** Sandbox bypasses all entitlement / quota checks (Phase 20); never invoiced.
+- [ ] **Patcher-target permission.** Phase 17 patcher artifacts targeted at the sandbox have a relaxed scope contract (still scope-bounded) so the harness can be exercised without touching real-league code.
+- [ ] **Lint.** `xops/lint/no_sandbox_in_prod_code.py` refuses any reference to `__sandbox__` in `swarm/predictor/` outside the predictor's bootstrap path; sandbox is for test/dev usage, not production logic.
+
+### 13.44 Coefficient-derivation plane
+
+> Retires assumption §13.0 #51. Defensive — federation-published
+> coefficients are sometimes wrong / late.
+
+- [ ] **`xops/leagues/coefficients.py`.** Computes UEFA / FIFA / continental coefficients from our own historical results; deterministic seed; reproducible.
+- [ ] **Lineage proof.** `make leagues.coefficients.derive --asof=<utc>` produces a JSON with every input fixture's `(stable_id, fixture_id, weight)` and a SHA-256 of the input set; proof test `test_coefficient_lineage_reproducible.py`.
+- [ ] **Drift alert vs federation number.** Computed coefficient is compared against the federation-published value; drift > `cfg.coefficient_drift_max` (default 0.05) raises `proof.flag.v1{kind=coefficient_drift}`.
+- [ ] **No fabrication.** Lint refuses a hand-typed coefficient table in `swarm/` or `ai/` (doctrine #3).
+- [ ] **Predictor consumption.** Coefficients feed the cross-competition strength prior (e.g. UCL group seeding); the prior is read at inference, not memoised.
+
+### 13.45 Per-league market roster
+
+> Retires assumption §13.0 #52.
+
+- [ ] **`LeagueRow.markets_supported: frozenset[market_id]`.** Each league declares which betting markets are valid for it (e.g. some leagues lack reliable corner-data and exclude `corners_over_under`).
+- [ ] **Emitter refusal.** Phase 16 emitter refuses to publish a market not declared (proof test `test_emitter_refuses_undeclared_market.py`).
+- [ ] **Proofreader veto.** Phase 6 proofreader vetoes a prediction whose market is not in the roster.
+- [ ] **Per-format intersection.** Effective roster is `LeagueRow.markets_supported ∩ Competition.markets_supported_for_format` (e.g. "to qualify for next round" only on knockout).
+- [ ] **Lint coverage.** `xops/lint/market_roster_coverage.py` asserts every market id mentioned in any extractor is declared in at least one `LeagueRow.markets_supported`; orphan markets fail CI.
+- [ ] **Audit on roster mutation.** Adding / removing a market from a T1 league forces tracker row + chart bump per §13.21.
+
+### 13.46 Match-clock semantics
+
+> Retires assumption §13.0 #53.
+
+- [ ] **`Competition.match_clock` payload.** `{regulation_min: int, et_enabled: bool, et_min: int, et_stoppage_min: int, golden_goal_active: bool, silver_goal_active: bool, halves: int, half_min: int, drinks_breaks_allowed: bool}`.
+- [ ] **Feature normalization.** Predictor features that read minutes (e.g. "goals after 60th minute") always normalise via `match_clock.regulation_min`; proof test `test_late_goal_feature_normalized.py` runs the same predictor on a 90-minute and a hypothetical 80-minute competition and asserts the feature normalises correctly.
+- [ ] **Stoppage-time bounds.** `Live.minute` accepted in `[0, regulation_min + cfg.stoppage_max_min]` (default 15 stoppage); higher values quarantine the record per Phase 7 sec.input.
+- [ ] **Era-overlay reuse.** §13.13 era flags (golden / silver-goal) live inside `match_clock`; lint refuses two competing sources of truth.
+
+#### 13.46.5 Fixture-clash detector
+
+> Retires assumption §13.0 #56.
+
+- [ ] **`swarm/proofreader/clash_detector.py`.** Detects when the same `player_id` resolves into two simultaneous fixtures across competitions (national + club; two cup ties same date); emits `proof.flag.v1{kind=fixture_clash}`.
+- [ ] **Time overlap definition.** Clash = `[kickoff_utc, kickoff_utc + match_clock.regulation_min + cfg.clash_buffer_min]` overlap (default buffer 60 minutes for travel).
+- [ ] **Federation resolution required.** A clash blocks publish for both fixtures' lineup-dependent predictions (1X2 still publishes, "player to score" does not) until federation publishes the eligibility resolution.
+- [ ] **Proof test.** `test_fixture_clash_blocks_lineup_predictions.py` covers a manufactured national-team / club clash.
+
+### 13.47 Data-portability export (GDPR Art 20 / KVKK)
+
+> Retires assumption §13.0 #54.
+
+- [ ] **`make export.actor ACTOR=<token_sha8>`** produces a portable JSON of every PII record + signed receipt; honoured per Phase 9 + Phase 11 §11.39.
+- [ ] **Export SLA.** Export honoured within `cfg.gdpr_export_max_days` (default 30); long-running exports surface progress via the Phase 8 console.
+- [ ] **Receipt signature.** Export tarball includes a signed receipt `{actor_token_sha8, generated_at, sha256, signer_key_id}`; auditable via `make export.verify`.
+- [ ] **Retention after export.** Exporting does not delete; deletion is a separate `make players.forget` (§13.24) workflow.
+- [ ] **Per-jurisdiction policy.** EU / TR / CA jurisdictions each have a YAML overlay (`xops/leagues/portability_policy.yaml`); KVKK timelines (60 days TR) and CCPA (45 days) honoured per actor's jurisdiction.
+
+### 13.48 Adversarial-corpus rotation & growth bound
+
+> Retires assumption §13.0 #55.
+
+- [ ] **Per-family LRU cap.** `cfg.adversarial_corpus_max_per_family` (default 500); oldest-not-pinned cases evicted on overflow.
+- [ ] **Pinning.** Cases born from a real demotion / quarantine / Phase 17 patcher artifact carry `pinned=true` (set by §13.28's auto-append) and are exempt from rotation.
+- [ ] **Eviction audit.** Each eviction emits `corpus.evicted.v1{family, league_id, sha256}` so an investigator can recover an evicted case from cold storage if needed.
+- [ ] **Coverage invariant.** Eviction policy must preserve at least one case per `(league_id, family)` tuple if any exist; `xops/lint/corpus_coverage.py` refuses an eviction batch that would orphan a tuple.
+- [ ] **Cross-corpus dedup.** Two cases with byte-identical `seed_payload_sha256` are deduplicated at append time (no double-counting against the cap).
+
 ### 13.16 Cross-phase coupling matrix (closing audit; lint-gated)
 
 | Other phase | What Phase 13 owes | Where |
 |---|---|---|
-| Phase 4 | New-source extractors per §13.6; rate-limit row per source; per-source TLS pin + ToS snapshot per §13.25 | §13.6, §13.25 |
-| Phase 5 | `CalibrationProfile` resolver + per-format predictor branches; tie reactor; rules-variant overlay; cold-start widening for promoted clubs | §13.2, §13.12, §13.13.5, §13.19 |
-| Phase 6 | Beta-tier widened CI; quorum honoured per league tier; per-league bias veto on T2→T1 | §13.7, §13.23 |
-| Phase 7 | New-source `sec.input` quarantine; identity-resolver veto on poisoned anchors; fixture-lifecycle-abuse rate-limit | §13.4, §13.6, §13.28 |
-| Phase 8 | Per-league dashboard panels; demotion alert routing; per-league replica scaling; quarantine surfacing; identity-merge audit topic | §13.4, §13.8, §13.10, §13.15 |
-| Phase 9 | API tier header `X-League-Tier`; 404 for T3 to non-admin tokens; `Sunset` / `Deprecation` headers; `/healthz` carries `catalog_sha256`; per-league inflight cap surfaces `503 + X-Reason: per_league_inflight_full` | §13.1, §13.7, §13.9, §13.10, §13.27 |
-| Phase 10 | Gazetteer auto-feed; competition + transfer/injury/referee/weather/suspension intents; locale-aware Unicode normalization | §13.11 |
-| Phase 11 | Capacity admission preflight when scaling new replicas; embedding model footprint; per-league inflight cap; PII data-class routing | §13.9, §13.10, §13.24 |
-| Phase 12 | Per-league adversarial corpus (§13.28) feeds the chaos suite; chaos-quarantine drill | §13.15, §13.28 |
-| Phase 14 | Multi-region storage routing per `LeagueRow.data_residency` | §13.24 |
-| Phase 16 | `competition.v1` feed; per-league NDJSON shard naming; `manifest.json` per-league counts; `predict.invalidated.v1` re-shard contract; data-residency shard policy | §13.2, §13.17, §13.24 |
-| Phase 17 | Patcher artifact tagged with `league_id` + `competition_id`; per-league cool-down (cooldown days × log-loss-volatility multiplier from this league's calibration history); auto-quarantine on unresolved artifact | §13.6, §13.8, §13.15 |
-| Phase 19 | Catalog-pluggability AST scan; T3 zero-cost-when-empty; T2 dwell-time ceiling drives long-tail churn back to T3 | §13.1, §13.10.5 |
-| Phase 20 | Per-league entitlement row; default_tenant_class; per-tier quota; PII gating per jurisdiction | §13.1, §13.9, §13.24 |
-| Phase 21 | Per-format enrichment requirements (player markets need lineups + cards planes per `ENRICHMENT_DATA.md`); `Player.eligibility` join feeds injury / suspension / FIFA-window features | §13.4.5, §13.11, §13.14 |
+| Phase 4 | New-source extractors per §13.6; rate-limit row per source; per-source TLS pin + ToS snapshot per §13.25; weather-source registry; integrity-authority registry; federation-canonical-URL crawl | §13.6, §13.25, §13.31, §13.35, §13.39 |
+| Phase 5 | `CalibrationProfile` resolver + per-format predictor branches; tie reactor; rules-variant overlay; cold-start widening for promoted clubs; per-league predictor warm-up; coefficient-derived priors; match-clock normalization; integrity / clash / purity / suspension publish-gates | §13.2, §13.12, §13.13, §13.13.5, §13.19, §13.32, §13.34, §13.38, §13.39, §13.44, §13.46, §13.46.5 |
+| Phase 6 | Beta-tier widened CI; quorum honoured per league tier; per-league bias veto on T2→T1; cascade reactor; market-roster veto; field-provenance conflict resolution | §13.7, §13.23, §13.36, §13.40, §13.45 |
+| Phase 7 | New-source `sec.input` quarantine; identity-resolver veto on poisoned anchors; fixture-lifecycle-abuse rate-limit; weather staleness drop; transfer-fee source-conflict hold; integrity-flag refusal | §13.4, §13.6, §13.28, §13.30, §13.31, §13.39 |
+| Phase 8 | Per-league dashboard panels; demotion alert routing; per-league replica scaling; quarantine surfacing; identity-merge audit topic; officials assignment audit; cascade fan-out audit; warm-up audit; drift flag console; integrity flag console; sandbox metric isolation | §13.4, §13.8, §13.10, §13.15, §13.29, §13.34, §13.35, §13.39, §13.40, §13.43 |
+| Phase 9 | API tier header `X-League-Tier`; 404 for T3 to non-admin tokens; `Sunset` / `Deprecation` headers; `/healthz` carries `catalog_sha256`; per-league inflight cap surfaces `503 + X-Reason: per_league_inflight_full`; warming-league header; integrity / clash refusal codes; data-portability endpoints; catalog `?asof=` time-travel | §13.1, §13.7, §13.9, §13.10, §13.27, §13.34, §13.39, §13.42, §13.46.5, §13.47 |
+| Phase 10 | Gazetteer auto-feed; competition + transfer/injury/referee/weather/suspension intents; locale-aware Unicode normalization; rebrand alias auto-feed | §13.11, §13.41 |
+| Phase 11 | Capacity admission preflight when scaling new replicas; embedding model footprint; per-league inflight cap; PII data-class routing for player + transfer + provenance + integrity; weight encryption for restricted league bundles | §13.9, §13.10, §13.24, §13.30, §13.36 |
+| Phase 12 | Per-league adversarial corpus (§13.28) feeds the chaos suite; chaos-quarantine drill; corpus rotation + pinning policy | §13.15, §13.28, §13.48 |
+| Phase 14 | Multi-region storage routing per `LeagueRow.data_residency`; per-jurisdiction VAT/portability overlays | §13.24, §13.37, §13.47 |
+| Phase 16 | `competition.v1` feed; per-league NDJSON shard naming; `manifest.json` per-league counts; `predict.invalidated.v1` re-shard contract; data-residency shard policy; market-roster declared per shard; field-provenance round-trip; cascade-invalidation re-shard | §13.2, §13.17, §13.24, §13.36, §13.40, §13.45 |
+| Phase 17 | Patcher artifact tagged with `league_id` + `competition_id`; per-league cool-down (cooldown days × log-loss-volatility multiplier from this league's calibration history); auto-quarantine on unresolved artifact; field-provenance required in diagnostic bundle; sandbox-relaxed scope contract | §13.6, §13.8, §13.15, §13.36, §13.43 |
+| Phase 19 | Catalog-pluggability AST scan; T3 zero-cost-when-empty; T2 dwell-time ceiling drives long-tail churn back to T3; rebrand handover | §13.1, §13.10.5, §13.41 |
+| Phase 20 | Per-league entitlement row; default_tenant_class; per-tier quota; PII gating per jurisdiction; SKU-band lookup (no hardcoded prices); market-roster intersection per SKU; sandbox immunity | §13.1, §13.9, §13.24, §13.37, §13.43, §13.45 |
+| Phase 21 | Per-format enrichment requirements (player markets need lineups + cards planes per `ENRICHMENT_DATA.md`); `Player.eligibility` join feeds injury / suspension / FIFA-window features; weather plane feeds match-conditions enrichment; officials registry feeds referee enrichment | §13.4.5, §13.11, §13.14, §13.29, §13.31, §13.32 |
 
 `xops/lint/phase13_coupling_matrix.py` refuses a PR that touches a referenced sub-section without updating this table.
 
@@ -3892,10 +4164,12 @@ In addition to Appendix B common DoD:
 **13a Definition of Done:**
 
 - [ ] All §13.1–§13.16 platform sub-phases green.
+- [ ] All new platform sub-phases §13.29–§13.48 green at least at the foundation level (registries seeded, schemas live, lint wired) — full per-league population continues into 13b / 13c.
 - [ ] Every domestic-league row above is T1 with calibration plot deviation ≤ `cfg.league_calibration_max_deviation` over a 4-week beta window.
 - [ ] Every cup / continental / international row above is at least T2 with mock seeds + readiness report `pass` for T3→T2.
 - [ ] Two-leg-tie idempotency + away-goals era-awareness verified end-to-end on a UCL knockout from the backtest corpus (one tie pre-2021/22, one post).
-- [ ] `make test.leagues` green; `test_no_league_id_branching.py`, `test_catalog_roundtrip.py`, `test_catalog_entitlements_consistency.py`, `test_catalog_chart_consistency.py`, `test_no_llm_in_calibration_resolver.py`, `test_friendlies_never_published.py`, `test_one_bad_league_isolated_at_startup.py` all green.
+- [ ] `make test.leagues` green; `test_no_league_id_branching.py`, `test_catalog_roundtrip.py`, `test_catalog_entitlements_consistency.py`, `test_catalog_chart_consistency.py`, `test_no_llm_in_calibration_resolver.py`, `test_friendlies_never_published.py`, `test_one_bad_league_isolated_at_startup.py`, `test_no_hardcoded_era_constants.py`, `test_emitter_refuses_undeclared_market.py`, `test_integrity_flag_blocks_publish.py`, `test_cascade_reactor_idempotent.py`, `test_league_warming_fsm.py`, `test_catalog_asof_deterministic.py` all green.
+- [ ] Sandbox-league lane (§13.43) live; `make leagues.sandbox.smoke` part of CI.
 - [ ] Per-league component keys at ≥ `0.1.0` in `xops/versioning/chart.json`; `project` umbrella bumped on the 13a milestone.
 
 ### 13b — +10 most popular non-Top-5 leagues (T2)
@@ -3952,13 +4226,14 @@ In addition to every per-section DoD above + Appendix B common DoD:
 
 - [ ] Wrong-assumption ledger (§13.0) — every retired assumption has at least one passing proof test (both directions where applicable: bug demonstrated, then fix demonstrated).
 - [ ] Cross-phase coupling matrix (§13.16) is complete; lint refuses a PR touching a referenced sub-section without updating the table.
-- [ ] `xops/env/.env.example` documents every new key (`NEGELIR_LEAGUE_CATALOG_LOAD_MAX_MS`, `NEGELIR_LEAGUE_CATALOG_MAX_RSS_MB`, `NEGELIR_LEAGUE_PER_ROW_MAX_KB`, `NEGELIR_LEAGUE_BETA_MIN_DAYS`, `NEGELIR_LEAGUE_T2_MAX_DWELL_DAYS`, `NEGELIR_LEAGUE_DEMOTION_MIN_DAYS`, `NEGELIR_LEAGUE_DEMOTION_EVIDENCE_WINDOW_H`, `NEGELIR_LEAGUE_READINESS_REPORT_MAX_AGE_H`, `NEGELIR_LEAGUE_READINESS_REPORT_RETENTION`, `NEGELIR_LEAGUE_PROMOTION_LOGLOSS_MAX`, `NEGELIR_LEAGUE_PROMOTION_BRIER_MAX`, `NEGELIR_LEAGUE_CALIBRATION_MAX_DEVIATION`, `NEGELIR_LEAGUE_METRICS_CARDINALITY_BUDGET`, `NEGELIR_LEAGUE_VENUE_MISSING_MAX_PCT`, `NEGELIR_LEAGUE_ERROR_RATE_CIRCUIT_OPEN`, `NEGELIR_LEAGUE_ERROR_RATE_CIRCUIT_HALF_OPEN`, `NEGELIR_LEAGUE_RTO_MAX_MINUTES`, `NEGELIR_LEAGUE_RPO_MAX_MINUTES`, `NEGELIR_NLP_PROMOTION_RECALL_MIN`, `NEGELIR_PROOFREADER_BETA_CI_WIDEN`, `NEGELIR_IDENTITY_MERGE_THRESHOLD`, `NEGELIR_IDENTITY_FALSE_SPLIT_MAX_PER_WEEK`, `NEGELIR_CUP_IDENTITY_COVERAGE_MIN`, `NEGELIR_CUP_EARLY_ROUND_CALIBRATION_MAX_DEVIATION`, `NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_<FORMAT>`, `NEGELIR_TIE_SOURCE_QUORUM`, `NEGELIR_FIXTURE_LIFECYCLE_QUORUM`, `NEGELIR_FIXTURE_INVALIDATION_RATE_MAX_PER_H`, `NEGELIR_SWARM_DLQ_MAX_LEN_PER_LEAGUE`, `NEGELIR_PREDICTOR_INFLIGHT_MAX_PER_LEAGUE`, `NEGELIR_COLD_START_WIDEN_FACTOR`, `NEGELIR_FATIGUE_WINDOW_H`, `NEGELIR_BIAS_RESIDUAL_THRESHOLD`, `NEGELIR_REFEREE_INTERACTION_MAX`, `NEGELIR_REFEREE_SHRINKAGE_LAMBDA`, `NEGELIR_ERA_DRIFT_TOLERANCE`, `NEGELIR_TZDATA_MAX_AGE_DAYS`, `NEGELIR_SOURCE_PIN_ROTATION_OVERLAP_H`, `NEGELIR_ROBOTS_RECHECK_H`, `NEGELIR_CATALOG_RELOAD_DRAIN_MAX_S`, `NEGELIR_CATALOG_RELOAD_PROPAGATION_MAX_S`, `NEGELIR_FIELD_REMOVAL_SHADOW_DAYS`, `NEGELIR_LEAGUE_CATALOG_READONLY`) with defaults that match `ai/common/config.py`.
-- [ ] `LEAGUE_CATALOG.md` updated with the new §11 SLO contract + error-budget policy and the §2 readiness checklist additions surfaced here (mock-corpus completeness gate, two-person T1 rule, dwell-time ceiling, venue-completeness gate, bias veto).
-- [ ] `COMPETITIONS.md` updated with the deterministic resolver tests, era-aware aggregation rules, rules-variant overlay (§13.13.5), and the competition lifecycle FSM (§13.2).
+- [ ] `xops/env/.env.example` documents every new key (`NEGELIR_LEAGUE_CATALOG_LOAD_MAX_MS`, `NEGELIR_LEAGUE_CATALOG_MAX_RSS_MB`, `NEGELIR_LEAGUE_PER_ROW_MAX_KB`, `NEGELIR_LEAGUE_BETA_MIN_DAYS`, `NEGELIR_LEAGUE_T2_MAX_DWELL_DAYS`, `NEGELIR_LEAGUE_DEMOTION_MIN_DAYS`, `NEGELIR_LEAGUE_DEMOTION_EVIDENCE_WINDOW_H`, `NEGELIR_LEAGUE_READINESS_REPORT_MAX_AGE_H`, `NEGELIR_LEAGUE_READINESS_REPORT_RETENTION`, `NEGELIR_LEAGUE_PROMOTION_LOGLOSS_MAX`, `NEGELIR_LEAGUE_PROMOTION_BRIER_MAX`, `NEGELIR_LEAGUE_CALIBRATION_MAX_DEVIATION`, `NEGELIR_LEAGUE_METRICS_CARDINALITY_BUDGET`, `NEGELIR_LEAGUE_VENUE_MISSING_MAX_PCT`, `NEGELIR_LEAGUE_ERROR_RATE_CIRCUIT_OPEN`, `NEGELIR_LEAGUE_ERROR_RATE_CIRCUIT_HALF_OPEN`, `NEGELIR_LEAGUE_RTO_MAX_MINUTES`, `NEGELIR_LEAGUE_RPO_MAX_MINUTES`, `NEGELIR_NLP_PROMOTION_RECALL_MIN`, `NEGELIR_PROOFREADER_BETA_CI_WIDEN`, `NEGELIR_IDENTITY_MERGE_THRESHOLD`, `NEGELIR_IDENTITY_FALSE_SPLIT_MAX_PER_WEEK`, `NEGELIR_CUP_IDENTITY_COVERAGE_MIN`, `NEGELIR_CUP_EARLY_ROUND_CALIBRATION_MAX_DEVIATION`, `NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_<FORMAT>`, `NEGELIR_TIE_SOURCE_QUORUM`, `NEGELIR_FIXTURE_LIFECYCLE_QUORUM`, `NEGELIR_FIXTURE_INVALIDATION_RATE_MAX_PER_H`, `NEGELIR_SWARM_DLQ_MAX_LEN_PER_LEAGUE`, `NEGELIR_PREDICTOR_INFLIGHT_MAX_PER_LEAGUE`, `NEGELIR_COLD_START_WIDEN_FACTOR`, `NEGELIR_FATIGUE_WINDOW_H`, `NEGELIR_BIAS_RESIDUAL_THRESHOLD`, `NEGELIR_REFEREE_INTERACTION_MAX`, `NEGELIR_REFEREE_SHRINKAGE_LAMBDA`, `NEGELIR_REFEREE_MIN_MATCHES_FOR_FULL_WEIGHT`, `NEGELIR_ERA_DRIFT_TOLERANCE`, `NEGELIR_TZDATA_MAX_AGE_DAYS`, `NEGELIR_SOURCE_PIN_ROTATION_OVERLAP_H`, `NEGELIR_ROBOTS_RECHECK_H`, `NEGELIR_CATALOG_RELOAD_DRAIN_MAX_S`, `NEGELIR_CATALOG_RELOAD_PROPAGATION_MAX_S`, `NEGELIR_FIELD_REMOVAL_SHADOW_DAYS`, `NEGELIR_LEAGUE_CATALOG_READONLY`, `NEGELIR_LEAGUE_AUDIT_COMPACTION_DAYS`, `NEGELIR_LEAGUE_WEATHER_COVERAGE_MIN`, `NEGELIR_WEATHER_FRESHNESS_MAX_H`, `NEGELIR_ATTENDANCE_COVERAGE_T1_MIN`, `NEGELIR_LEAGUE_WARMUP_MIN_H`, `NEGELIR_LEAGUE_WARMUP_REPLAY_N`, `NEGELIR_LEAGUE_WARMUP_MAX_DIFF`, `NEGELIR_FEDERATION_DRIFT_CHECK_H`, `NEGELIR_SUSPENSION_CONFIDENCE_WIDEN`, `NEGELIR_CATALOG_ASOF_MAX_AGE_DAYS`, `NEGELIR_COEFFICIENT_DRIFT_MAX`, `NEGELIR_STOPPAGE_MAX_MIN`, `NEGELIR_CLASH_BUFFER_MIN`, `NEGELIR_GDPR_EXPORT_MAX_DAYS`, `NEGELIR_ADVERSARIAL_CORPUS_MAX_PER_FAMILY`) with defaults that match `ai/common/config.py`.
+- [ ] `LEAGUE_CATALOG.md` updated with the new §11 SLO contract + error-budget policy and the §2 readiness checklist additions surfaced here (mock-corpus completeness gate, two-person T1 rule, dwell-time ceiling, venue-completeness gate, bias veto, weather-coverage gate, attendance-coverage gate, warm-up gate, federation-drift acknowledgement gate, market-roster declaration).
+- [ ] `COMPETITIONS.md` updated with the deterministic resolver tests, era-aware aggregation rules, rules-variant overlay (§13.13.5), competition lifecycle FSM (§13.2), match-clock semantics (§13.46), and purity-class taxonomy (§13.38).
 - [ ] `make test.leagues` is part of `make test` and is green on the smallest CI lane; `make test.leagues.adversarial` (per-league corpus §13.28) green per league before T1 promotion.
-- [ ] `make leagues.audit.verify` green; signed audit ledger has zero unsigned or chain-broken entries.
+- [ ] `make leagues.audit.verify` green; signed audit ledger has zero unsigned or chain-broken entries; merkle-chain across compactions verified.
 - [ ] DR drill (`make leagues.dr.rehearse`) executed at least once per the umbrella milestone with RTO/RPO honoured.
-- [ ] Wrong-assumption ledger (§13.0) has 35 retired entries, every one with at least one passing proof test in this phase (lint-gated by `xops/lint/phase13_ledger.py`).
+- [ ] Sandbox smoke (`make leagues.sandbox.smoke`) green on the smallest CI lane and metric-isolated (zero entries against any production-tier league metric).
+- [ ] Wrong-assumption ledger (§13.0) has 60 retired entries, every one with at least one passing proof test in this phase (lint-gated by `xops/lint/phase13_ledger.py`).
 - [ ] `project` umbrella version bumped on each of the three milestones (13a, 13b, 13c) per AGENTS.md §6.1.
 
 ---
