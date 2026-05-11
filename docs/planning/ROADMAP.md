@@ -2363,35 +2363,160 @@ client →[mTLS termination handled by service mesh in K8s; gin in compose]→
 
 ## 🎮 Phase 11 — GPU/CPU/NPU Compute Strategy
 
-**Goal:** Train and infer on whatever the host has, in this priority: **CUDA GPU → ROCm GPU → NPU (Intel/AMD) → CPU**.
-**Depends on:** Phase 5
+**Goal:** Train and infer on whatever the host has, deterministically, with
+the same image and the same code path: **CUDA GPU → ROCm GPU → NPU (Intel
+OpenVINO → AMD XDNA → Apple MPS) → CPU**. Accelerators are *optional*; the
+project must produce bit-identical predictions on CPU and meet every SLO on
+a GPU-less VPS.
 
-### 11.1 Device probe (`ai/model/device.py`)
+**Depends on:** Phase 5 (predictor parity contract), Phase 7 (sec.input
+classifier device contract), Phase 8 (`maint.scaler.v1` VRAM accounting and
+device-probe telemetry consumer), Phase 10 (humanizer GPU residency).
+**Forward-coupled to:** Phase 9 (Go API `cpu_only` build tag), Phase 12
+(GPU-loss / driver-crash chaos), Phase 14 (K8s device plugins, node
+selectors, taints/tolerations), Phase 16 (Emitter is CPU-only by contract),
+Phase 17 (patcher container is CPU-only by contract).
 
-- [ ] On startup: enumerate `torch.cuda`, ROCm, OpenVINO (Intel NPU), DirectML (AMD NPU on Windows hosts), MPS (Mac, low priority).
-- [ ] Pick by config: `NEGELIR_DEVICE=auto|cuda|rocm|npu|cpu`. `auto` follows the priority above.
-- [ ] Log the choice with capabilities (VRAM, compute capability, NPU TOPS) at INFO.
+**Anchor doc (binding):** [`design/COMPUTE_DEVICES.md`](../design/COMPUTE_DEVICES.md).
 
-### 11.2 RTX 4080 mobile (12 GB) targets
+> ⚠️ **Doctrine reminders.** (a) Single-source config — every device knob
+> goes through `ai/common/config.py` + `xops/env/.env.example` (Rule 1). The
+> legacy `AI_DEVICE` env var (used by `ai/model/device.py` today) is
+> **deprecated** in favour of `NEGELIR_DEVICE`; both must be honoured for
+> one minor cycle, with `AI_DEVICE` emitting a `cfg.deprecated` warning.
+> (b) Same code path, every device (Rule 5) — no `if device == "cpu"`
+> branches in business logic; differences belong inside the device-aware
+> backend modules. (c) Smallest model that works (Rule 4) — accelerator
+> presence must never *unlock* a heavier model that the CPU path can't
+> serve; it only makes the same model faster.
 
-- [ ] All XGBoost / LightGBM training: GPU enabled by default, falls back to CPU on OOM.
-- [ ] Predictor model bundles fit ≤ 1 GB VRAM each so multiple replicas co-exist on the GPU.
-- [ ] LLM-based agents (Phase 7 fallback classifier, Phase 10 humanizer, Phase 8 coder) share the GPU via a tiny in-process round-robin scheduler; never load two LLMs simultaneously by default.
+### 11.1 Device probe & registry (`ai/model/device.py` + `ai/common/devices/`)
 
-### 11.3 CPU fallback
+- [ ] **Probe on startup.** Enumerate, in priority order: `torch.cuda` (NVIDIA + ROCm-as-CUDA), native ROCm (`rocm-smi` / HIP), Intel NPU (OpenVINO 2025+ via `openvino.runtime.Core().available_devices`), AMD XDNA (`xrt-smi`), Apple MPS (`torch.backends.mps`), CPU (always present, baseline). Probe runs in a **subprocess** with a 5 s hard timeout so a wedged driver cannot block agent startup; on timeout the device is marked `unavailable, reason=probe_timeout` and the next priority wins.
+- [ ] **Selection policy.** `NEGELIR_DEVICE=auto|cuda|rocm|npu|cpu` (validated in `Config.__post_init__`; `auto` walks the priority above). Per-agent overrides already exist (`sec_input_classifier_device`, predictor backends, humanizer); they all delegate to the shared probe.
+- [ ] **Capability fingerprint.** For every detected device emit a stable record `{vendor, family, name, driver_version, runtime_version, compute_capability, vram_total_mb, npu_tops, supports_bf16, supports_fp16, supports_int8, supports_cuda_graphs}`. Persist to a tmpfs JSON (`/var/run/negelir/device.json`, override via `cfg.device_probe_path`) so every agent on the same host sees the same answer without re-probing. The file is written **atomically** (temp + rename) and includes a `probe_id` (UUID7) used in telemetry correlation.
+- [ ] **Driver / runtime pinning.** `xops/env/.env.example` documents the supported matrix (CUDA 12.4+, cuDNN 9.x, ROCm 6.2+, OpenVINO 2025.0+, NVIDIA driver ≥ R555). The probe **refuses** unsupported combinations and falls through to the next tier with `device.alert.v1{kind=unsupported_runtime, severity=warn}` instead of crashing.
+- [ ] **Telemetry contract.** Each agent that owns a model publishes `telemetry.v1{kind=device_probe, agent, host, device, vram_total_mb, vram_used_mb, vram_per_replica_mb, throttle_events_60s, temperature_c, power_w}` once per heartbeat — this is the binding source for Phase 8 `maint.scaler.v1` (already wired in §8.x).
+- [ ] **Container runtime guard.** When `device != cpu`, the probe verifies the container actually has the GPU mounted (`nvidia-container-toolkit` for CUDA, `--device=/dev/kfd,/dev/dri` for ROCm, `--device=/dev/accel*` for Intel NPU). Missing mount → `device.alert.v1{kind=runtime_missing}` and fall through to CPU; *no silent degradation* — operators see the alert.
 
-- [ ] All models must pass the `cpu_only` test marker — same accuracy, slower throughput.
-- [ ] Container images install both `xgboost-cpu` wheel and (separately) the `xgboost` GPU wheel; the device probe selects.
+### 11.2 GPU arbiter (`ai/swarm/sdk/gpu_arbiter.py`)
 
-### 11.4 NPU support
+- [ ] **Mutual exclusion for LLM-class loads.** A single per-host arbiter (Redis-backed lease, key `negelir:gpu_arbiter:lease:<host>`, TTL `cfg.gpu_arbiter_lease_ttl_s` default 60 s, auto-renewed every TTL/3) round-robins between Phase 7 fallback classifier, Phase 8 coder LLM, and Phase 10 humanizer. **Default policy: at most one LLM resident per GPU.**
+- [ ] **Priority + preemption.** Lease requests carry `priority ∈ {realtime, interactive, batch}`. `realtime` (sec.input classifier serving live `/v1/qa`) preempts `batch` (coder LLM) within `cfg.gpu_arbiter_preempt_grace_ms` (default 250 ms) by sending the holder a `gpu.evict.v1` and unloading on grace timeout. Preempted agents emit `gpu.preempted.v1` and fall back to CPU until the next lease cycle.
+- [ ] **Warm-pool option.** When VRAM allows, multiple bundles can be co-resident if their summed `vram_per_replica_mb` ≤ `cfg.predictor_max_vram_mb × replicas`. The arbiter exposes a read-only `/healthz` endpoint reporting current residents, queue depth, and last-N preemption decisions for the Phase 8 ops console.
+- [ ] **Liveness.** Arbiter operations are idempotent on lease expiry; a crashed leaseholder releases its slot within `lease_ttl_s` even if it never calls `release()`. Adversarial test: kill the LLM mid-inference, verify the next request acquires the lease within `lease_ttl_s + 1 s`.
 
-- [ ] Intel NPU via OpenVINO for the categorizer + sec.input classifier (both small enough).
-- [ ] AMD XDNA NPU support: stretch goal, behind `NEGELIR_NPU_VENDOR=amd` flag.
-- [ ] No NPU? No problem — they are accelerators, not requirements.
+### 11.3 VRAM budget & memory accounting
 
-### 11.5 Cloud parity
+- [ ] **Per-bundle cap.** Predictor bundles fit ≤ `cfg.predictor_max_vram_mb` (default 1024). Bundles whose **measured** peak (probe at load + after first inference) exceeds the cap are rejected with `model.reject.v1{reason=vram_cap_exceeded, observed_mb, cap_mb}`.
+- [ ] **Host-level budget.** `cfg.maint_scaler_vram_headroom_mb` (default 1024) is reserved for OS / driver / fragmentation. Auto-scaler honours `Σ vram_used_mb + projected_delta ≤ vram_total_mb − headroom` (Phase 8 §8.x is binding).
+- [ ] **OOM recovery.** On `torch.cuda.OutOfMemoryError` (or vendor equivalent): (1) emit `device.alert.v1{kind=oom, severity=warn, agent, attempted_mb}`; (2) call `torch.cuda.empty_cache()` + tear down the bundle; (3) retry on CPU with the same input; (4) increment `device_oom_total{agent}` Prom metric; (5) the auto-scaler treats persistent OOM (3+ in 5 min) as a signal to scale **down** GPU replicas, not retry.
+- [ ] **Fragmentation control.** Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb=128` in the GPU image; documented in `COMPUTE_DEVICES.md` §Memory-budget. Equivalent ROCm and OpenVINO settings documented in the same section.
+- [ ] **No model is ever loaded twice.** A process-global model registry keyed by `(model_uri, dtype, device)` returns the same handle on second load; tests guard against accidental double-residency.
 
-- [ ] Same image runs on Azure NC-series (NVIDIA), AKS with no GPU (CPU-only), or AWS Inf2 (Inferentia) with a vendor-specific extras image.
+### 11.4 Determinism & numerical parity (binding for Phase 5)
+
+- [ ] **CPU/GPU bit-parity.** All deterministic predictors (Elo, Dixon-Coles, XGB-form, XGB-xG) produce **identical PMFs within `ε = 1e-9` per outcome** on CPU vs. CUDA vs. ROCm vs. NPU. Phase 5 already enforces this; Phase 11 adds the device matrix to the parity test (`pytest -m device_parity`).
+- [ ] **Deterministic kernels.** Set `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`, `TF_DETERMINISTIC_OPS=1`. Document the throughput cost in `COMPUTE_DEVICES.md`. For predictors, determinism is **non-negotiable** (consensus depends on it). For LLM-class agents (humanizer, coder), determinism is opt-in via `cfg.<agent>_deterministic` (default `false`) since temperature > 0 sampling defeats the point.
+- [ ] **Mixed-precision policy.** Predictors run in **fp32** always (numerical parity). LLM-class agents may run in **bf16** on Ampere+ (`compute_capability ≥ 8.0`) or Apple Silicon, **fp16** on Turing/Volta, **int8/int4 GGUF** on CPU. Quantization choice is recorded in the model bundle manifest (Phase 5 contract) and validated against the runtime device.
+
+### 11.5 NPU support (Intel OpenVINO + AMD XDNA + Apple MPS)
+
+- [ ] **Intel NPU (Meteor / Lunar / Arrow Lake).** OpenVINO IR conversion pipeline (`xops/compute/openvino_convert.py`) for `categorizer.v1` and `sec.input.v1` (both ≤ 60 MB on disk). Conversion is run at image build, the IR file is shipped inside the image, and a SHA-256 of the IR is recorded in the bundle manifest.
+- [ ] **AMD XDNA (Ryzen AI 300/PRO).** Stretch goal behind `cfg.npu_vendor=amd`. Pinned to a specific XRT release (documented in `COMPUTE_DEVICES.md`); not on any agent's critical path.
+- [ ] **Apple MPS (dev-loop only).** `cfg.allow_mps=true` (default `false`) enables Mac dev hosts; never selected by `auto`. Skipped in CI.
+- [ ] **Graceful absence.** No NPU? `device.json` records `npu: unavailable`, the agent falls through to CPU; **no `if has_npu` business-logic branches** — only the backend module differs.
+
+### 11.6 Cross-stack support matrix (CUDA / ROCm / NPU / CPU / MPS)
+
+| Backend | Vendor | Status (Phase 11) | Validated workloads |
+|---|---|---|---|
+| `torch+cu124` | NVIDIA | **primary** | predictors, humanizer, coder, sec.input |
+| `xgboost-gpu` (CUDA) | NVIDIA | **primary** | XGB training + inference |
+| `torch+rocm6` | AMD | secondary | predictors, humanizer (no coder) |
+| `xgboost` (ROCm) | AMD | secondary | XGB training (CPU inference for parity) |
+| OpenVINO 2025+ | Intel | NPU + CPU | categorizer, sec.input |
+| XDNA / XRT | AMD | stretch | sec.input (opt-in) |
+| `torch+mps` | Apple | dev-only | parity testing on macOS |
+| CPU (`xgboost-cpu`, `torch-cpu`, `llama.cpp`) | any | **baseline** | every workload, every test |
+
+- [ ] One row per backend lands with a smoke test (`make test.compute BACKEND=<name>`) that exercises a tiny model end-to-end and asserts parity vs. CPU within the §11.4 tolerance.
+
+### 11.7 Image strategy (cpu / gpu / npu flavors)
+
+- [ ] **Three image flavors** built from a common `ai-base` per `COMPUTE_DEVICES.md` §Image-strategy: `ai-cpu:<digest>` (default in prod), `ai-gpu:<digest>` (CUDA 12.4 + cuDNN 9), `ai-npu:<digest>` (OpenVINO 2025 + Intel GPU/NPU drivers). Selection: `AI_IMAGE_FLAVOR=cpu|gpu|npu` (compose substitutes the tag). ROCm uses the `ai-gpu` tag with `--build-arg ACCEL=rocm` for now (separate flavor lands when there's a real ROCm host in CI).
+- [ ] **Reproducible builds.** Every image is `docker buildx build --provenance=true --sbom=true`; the wheels are pinned (CUDA wheel index URL is pinned, OpenVINO wheel version is pinned). The image SHA, wheel digests, and chosen device pin are recorded in the build manifest under `xops/versioning/build-manifest.json`.
+- [ ] **No host installs.** Per Rule 2 — no `pip install` on the dev host; no host CUDA install in CI. The CI matrix runs CPU on every PR and GPU/NPU on a nightly self-hosted runner only.
+- [ ] **Compose runtime.** `docker-compose.yml` uses `runtime: nvidia` + `deploy.resources.reservations.devices` for CUDA hosts; the same compose file works on a CPU-only host because the GPU resources block is gated behind `${NEGELIR_GPU_ENABLED:-false}` via a profile.
+
+### 11.8 Cloud parity & K8s
+
+- [ ] Same image runs on **Azure NC-series** (NVIDIA), **AKS without GPU** (CPU-only), **GKE A2** (NVIDIA), **EKS Inf2** (Inferentia, opt-in extras image only — not primary), **bare-metal VPS** (CPU baseline).
+- [ ] Phase 14 K8s manifests carry `nodeSelector: negelir.io/accel=<cuda|rocm|npu|cpu>` + matching tolerations; the device probe in §11.1 emits a self-reported label (`negelir.io/accel.detected`) so a Phase 8 admission webhook can refuse mis-scheduled pods.
+- [ ] **Multi-GPU host.** When `nvidia-smi -L` reports N>1 GPUs, the arbiter shards by `agent → gpu_index = hash(agent_id) % N` to avoid contention. MIG slicing is **not** in scope for Phase 11 (deferred to Phase 14).
+
+### 11.9 Observability & benchmarking
+
+- [ ] **Prometheus metrics** (exported by every agent that touches a device, names per `COMPUTE_DEVICES.md` §Metrics):
+  - `negelir_device_vram_total_bytes{agent,device}` gauge
+  - `negelir_device_vram_used_bytes{agent,device}` gauge
+  - `negelir_device_temperature_celsius{device}` gauge
+  - `negelir_device_power_watts{device}` gauge
+  - `negelir_device_throttle_events_total{device,reason}` counter (`reason ∈ thermal|power|sw_slowdown`)
+  - `negelir_device_oom_total{agent,device}` counter
+  - `negelir_inference_duration_seconds{agent,device}` histogram (buckets pinned in config)
+  - `negelir_gpu_arbiter_lease_wait_seconds{agent}` histogram
+  - `negelir_gpu_arbiter_preemptions_total{victim,winner}` counter
+- [ ] **Benchmark harness** (`make bench.compute`) runs a fixed corpus through every model on every available device and writes `docs/reports/bench/<date>.md` with throughput (records/s), latency p50/p95/p99, peak VRAM, and energy (J/inference where the platform exposes it via NVML/RAPL). Regression > `cfg.bench_regression_pct` (default 15%) vs. the last green report fails CI.
+- [ ] **Cold-start budget.** Model load + first inference ≤ `cfg.compute_cold_start_max_ms` per agent (predictors 500 ms, sec.input 1500 ms, humanizer 8000 ms, coder 15 000 ms). Tracked as `negelir_model_cold_start_seconds` histogram. A model that exceeds the budget gets a CUDA Graphs / `torch.compile` warmup step at boot; if still over budget after warmup, the arbiter pre-loads it on the GPU at supervisor start.
+
+### 11.10 Failure modes & graceful degradation (binding for Phase 12 chaos)
+
+| Failure | Detection | Response | SLO |
+|---|---|---|---|
+| Driver crash / Xid error | NVML poll every 5 s; missing `device.json` heartbeat | Mark device `unavailable`, restart agent on CPU, alert `device.alert.v1{kind=driver_crash, severity=critical}` | All requests served on CPU within 10 s |
+| GPU thermal throttle (>`cfg.gpu_thermal_max_c`, default 85) | NVML `temperature.gpu` | Warn at 80, throttle preempt-grace to 1 s above 85, refuse new GPU leases above 90 | Latency p95 stays within budget by demoting to CPU |
+| OOM | §11.3 | Retry on CPU; scale-down trigger | No request fails closed; counted in `device_oom_total` |
+| Container missing GPU mount | §11.1 runtime guard | Fall through to CPU; alert | Visible to operator |
+| NPU SDK runtime mismatch | §11.1 runtime pinning | Skip NPU tier; fall through | Visible to operator |
+| GPU arbiter lease orphaned (process killed) | TTL expiry | Next request reclaims | ≤ `lease_ttl_s` |
+
+- [ ] Every row above has a chaos test landing with Phase 12 (`make chaos-gpu-pull` simulates driver removal, `make chaos-gpu-thermal` simulates throttle via NVML stub).
+
+### 11.11 Security & supply chain
+
+- [ ] **Model file integrity.** Every model bundle (`.safetensors`, `.gguf`, OpenVINO IR) carries a SHA-256 in its manifest; the loader verifies before mapping into device memory. Mismatch → refuse to load + `sec.alert.v1{kind=model_integrity_fail, severity=critical}`.
+- [ ] **No `*-latest` model IDs in code** (per CLAUDE.md). All model URIs in `ai/common/config.py` are version-pinned; the lint rule `xops/lint/no_latest_model.py` enforces it.
+- [ ] **CUDA wheel index pinning.** The pip extra-index URL for CUDA wheels is pinned to NVIDIA's signed mirror; supply-chain attacks land with the build, not at runtime.
+- [ ] **No GPU memory leak across tenants.** When the arbiter evicts a model, it explicitly zeroes the freed buffer (or recreates the CUDA context for LLM-class models) before granting the slot to the next agent. This protects against cross-agent VRAM scrape.
+
+### 11.12 Tests (`ai/tests/test_compute_*.py`, `ai/swarm/tests/test_gpu_arbiter.py`)
+
+- [ ] `test_device_probe_priority_order` — mock each backend's availability and assert the priority cascade.
+- [ ] `test_device_probe_subprocess_timeout` — wedged probe times out in 5 s; next tier wins.
+- [ ] `test_device_legacy_env_var_warns` — `AI_DEVICE=cuda` resolves to CUDA but emits a `cfg.deprecated` warning.
+- [ ] `test_predictor_cpu_parity_matrix` — every must-status predictor produces identical PMFs across `cpu, cuda, rocm, npu` (skipped where backend absent; never xfail).
+- [ ] `test_gpu_arbiter_mutual_exclusion` — concurrent humanizer + coder leases serialize.
+- [ ] `test_gpu_arbiter_preemption_realtime_over_batch` — sec.input lease evicts coder within grace.
+- [ ] `test_gpu_arbiter_orphan_lease_recovered` — killed leaseholder's slot is reclaimed within TTL.
+- [ ] `test_vram_cap_rejects_oversized_bundle` — bundle over `predictor_max_vram_mb` is refused at load.
+- [ ] `test_oom_recovers_on_cpu` — synthetic OOM is caught, retried on CPU, and counted.
+- [ ] `test_thermal_throttle_demotes_to_cpu` — NVML stub at 92 °C blocks new GPU leases.
+- [ ] `test_runtime_guard_missing_gpu_mount` — CUDA selected but `/dev/nvidia*` absent → fall through + alert.
+- [ ] `test_model_integrity_sha_mismatch_refused` — tampered bundle refuses to load.
+- [ ] `test_bench_regression_gate` — fabricated 30% regression in the bench report fails the CI gate.
+- [ ] `test_compute_isolation` — `cfg.compute_class=cpu_only` containers (Phase 9 API, Phase 16 emitter, Phase 17 patcher) refuse to import any CUDA symbol; build-tag enforced.
+
+### 11.13 Definition of Done (Phase 11)
+
+In addition to Appendix B common DoD:
+
+- [ ] Device probe + arbiter shipped, **plus** the Phase 8 telemetry consumer (`device_probe` heartbeats actually feed `maint.scaler.v1` — this closes the deferred item from §8.x).
+- [ ] CPU/GPU/NPU parity test matrix is green on a self-hosted runner with at least one CUDA host and one Intel-NPU host; ROCm + AMD XDNA tracked as `[ ]` until hardware lands in CI.
+- [ ] `make bench.compute` runs in CI nightly and writes a baseline report; the regression gate is wired.
+- [ ] `xops/env/.env.example` documents every new key (`NEGELIR_DEVICE`, `NEGELIR_NPU_VENDOR`, `NEGELIR_GPU_ARBITER_LEASE_TTL_S`, `NEGELIR_GPU_THERMAL_MAX_C`, `NEGELIR_BENCH_REGRESSION_PCT`, `NEGELIR_COMPUTE_COLD_START_MAX_MS`, `NEGELIR_DEVICE_PROBE_PATH`, etc.) with defaults that match `ai/common/config.py`.
+- [ ] `COMPUTE_DEVICES.md` updated with the new Metrics, Failure-modes, Cold-start, and Arbiter sections; the legacy `AI_DEVICE` deprecation is noted with the planned removal version.
+- [ ] No agent imports `torch` / `xgboost` / `openvino` at module top-level in CPU-only build-tagged paths (Phase 9 API, Phase 16 emitter, Phase 17 patcher) — verified by `test_compute_isolation`.
 
 ---
 
