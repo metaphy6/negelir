@@ -4570,68 +4570,170 @@ In addition to every per-section DoD above + Appendix B common DoD:
 
 ## 📤 Phase 16 — Emitter & Feed Contract (Production Pivot v3)
 
-**Goal:** A dedicated `datasource/emitter` component projects Postgres + Redis state into NDJSON live feeds and Parquet training snapshots. After this phase, the swarm **only** reads feeds — no swarm code opens a DB connection, ever.
-**Depends on:** Phase R2 (modules moved to `datasource/`).
-**Anchor docs:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md), [`design/EMITTER.md`](../design/EMITTER.md), [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md).
+**Goal:** A dedicated `datasource/emitter` component projects Postgres + Redis state into NDJSON live feeds and Parquet training snapshots that the swarm and trainer consume. After this phase, **no file under `swarm/` opens a database connection or touches the bus' high-volume data topics directly** — every byte of ingested data the swarm sees flows through `FeedReader`.
+**Depends on:** Phase R2 (modules moved to `datasource/`), Phase 4.6 (telemetry watch set), Phase 5 (`CalibrationStore` Protocol seam in place), Phase 6 (`MatchOutcome` dataclass), Phase 7 (`QuarantineSample` dataclass), Phase 9 (auth surface for the read-side ACL), Phase R3 (component skeletons).
+**Anchor docs:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md), [`design/EMITTER.md`](../design/EMITTER.md), [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md), [`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md), [`design/SECURITY.md`](../design/SECURITY.md).
 
-### 16.1 Feed contract (frozen before code lands)
+**Cross-phase alignment (binding):**
 
-- [ ] `common/schemas/feeds/registry.json` ships with `v1` for all six record types (reference, schedule, score, lineup, editorial, market).
-- [ ] JSONSchema 2020-12 files land under `common/schemas/feeds/` and are loaded by both emitter (writer) and `FeedReader` (reader).
-- [ ] Contract test `common/schemas/tests/test_registry_consistent.py` passes.
+- **Phase 3 §3.5 topic catalog (boundary clarification line ~540).** Phase 16 swaps the *payload* of the existing high-volume bus topics — `scrape.raw` and `match.normalized` — from inline records to **feed-pointer envelopes** (`{plane, source, manifest_etag, ndjson_path, byte_range, record_count, sha256}`). The topic names do **not** change; the JSONSchema in `ai/swarm/sdk/schemas/<topic>.json` gets a `v2` entry alongside `v1`, and `v1` stays `active` for the dual-write window (§16.10). Control-plane topics (`predict.request`, `predict.vote`, `proof.flag`, `maint.event.v1`, `sec.alert.v1`, `sec.denylist.v1`) **stay on the bus, never on feeds**.
+- **Phase 4 storage layer.** Per-plane materialized views over the unified `match_normalized` table (Phase 4 §line 626) are the emitter's read source of truth. Emitter never writes to Postgres; it tails the storage agent's `match.stored` stream (offset cursor) plus a periodic full-table reconciliation pass to catch missed deltas.
+- **Phase 4.6 telemetry watch set.** `telemetry.v1._WATCHED_TOPICS` extends with `EMITTER_WRITE_LATENCY_MS`, `EMITTER_MANIFEST_AGE_MS`, `FEED_READER_LAG_MS`, `FEED_READER_GUESSED_PATH_REJECTS`. All four are histograms / gauges; cardinality bounded by `(plane, source)` enum (~36 series total at Phase 13a roster size).
+- **Phase 5 §5.4 / §5.6 calibration store.** `CalibrationStore` Feed backend lands here (§16.6). The Protocol shape is frozen at Phase 5; Phase 16 only ships the implementation.
+- **Phase 5 §5.6 `FeatureSource` Protocol mirror (deferred there → landed here).** Predictor `predict()` keeps the same signature; the constructor-injected `FeatureSource` flips from the in-memory backend to `FeedReader`-backed (`feeds/snapshots/score/`, `feeds/snapshots/lineup/`, etc., joined by `match_stable_id`) per §16.6.
+- **Phase 6 `MatchOutcome` dataclass.** Realized outcomes (`match.outcome.v1`) move from the bus to `feeds/score.v1.parquet` (the `score` plane already carries terminal `status=finished` rows). The drift agent's existing reader switches to `FeedReader.snapshot(plane="score", as_of=...)`.
+- **Phase 6 KS-test (`feature_ks`).** Phase 16 lights up the `feeds/feature_vectors.v1` plane that the deferred KS-test reserves. Schema landed under `common/schemas/feeds/feature_vectors.v1.json`; `MaintEvent.reason=feature_ks` becomes implementable without further plumbing.
+- **Phase 7 §7.8 quarantine plane.** `sec.quarantine.v1` migrates from a bus stream to `feeds/sec_quarantine.v1.parquet`. The `QuarantineSample` dataclass already maps 1:1 to the parquet row; producer swap is constructor injection. Bus stream stays as a 24h `XSTREAM MAXLEN ~ N` ring for live tailing only.
+- **Phase 9 API gateway.** Public read endpoints that today hit Postgres for fixtures / scores migrate to `FeedReader.snapshot()` behind a thin Go binding (`server/internal/feeds/reader.go`, generated from the same JSONSchemas) so the gateway gets the same contract the swarm gets — no DB hop on the read path. Token-derived ACL (§16.13) gates reads.
+- **Phase 11 device strategy.** Parquet snapshot builder respects `cfg.emitter_snapshot_writer_threads` (default = `os.cpu_count() // 2`, capped at 8) and the Phase-11 CPU-only marker. No GPU dependency.
+- **Phase 13a per-league config.** Catalog YAML edits do **not** trigger a feed-schema bump — `league_id` is already a payload field in `score`, `schedule`, `lineup`. New leagues land as new `(plane, source, league_id)` rows, never as new schema versions.
+- **Phase 14 cloud track.** S3-compatible driver lands in §16.8 against MinIO in dev; object-lock immutability test stays `xfail` until Phase 14 enables WORM buckets in prod. Phase 16 ships the hook (`cfg.feeds_object_lock_mode = governance|compliance|off`, default `off`).
+- **Phase 17 scraper-patcher.** The shadow regression gate consumes `feeds/score/*.ndjson` and `feeds/snapshots/score/...` directly via `FeedReader` — Phase 16's contract is the input to the patcher's parity check. Patcher's `parity` scope can read but **never write** feeds; emitter's write path is outside the patcher's allow-list (per [`CLAUDE.md`](../../CLAUDE.md)).
+- **Phase 18 isolation.** `test_no_db_imports.py` (§16.5) and `test_swarm_isolation.py` (§18.1) are complementary, not duplicates: the former bans transport libraries (`psycopg`, `redis`) under `swarm/`; the latter bans cross-component imports (`datasource.*`) outside `FeedReader`. Both gate Phase 18's DoD.
+- **Phase 21 enrichment overlays.** Each enrichment plane lands as its own feed (`feeds/enrich_<plane>.v1.*`) using the same writer/reader/registry; no Phase 16 surface needs to grow per-plane code paths.
+
+---
+
+### 16.1 Feed contract & registry (frozen before any writer code lands)
+
+- [ ] `common/schemas/feeds/registry.json` ships with `v1` for all six base record types (`reference`, `schedule`, `score`, `lineup`, `editorial`, `market`) **plus** the four cross-phase planes the emitter inherits: `feature_vectors.v1`, `sec_quarantine.v1`, `match_outcomes.v1` (alias view over `score@v1` terminal rows — see §16.6), `calibration.v1`.
+- [ ] JSONSchema 2020-12 files land under `common/schemas/feeds/`; loaded by both emitter (writer) and `FeedReader` (reader); `additionalProperties: false` on every payload struct so unknown keys fail closed at write-time.
+- [ ] `payload` size cap per Record: `cfg.emitter_max_payload_bytes` (default 64 KiB; oversize records are truncated with a `truncated_at_bytes` envelope field and a `proof.flag{kind=record_oversize}` raised on the bus).
+- [ ] **Canonical JSON form** mandatory: keys alphabetically sorted, no trailing whitespace, UTF-8 NFC normalized, `Z`-suffixed UTC timestamps. Proof test: `test_canonical_json_form.py` round-trips a corpus of 10k records through `json.loads` → `dumps(sort_keys=True)` and asserts byte equality with the on-disk line.
+- [ ] **Schema discoverability.** Emitter exposes `GET /schemas` (read-only HTTP on the management port) returning the active registry + sha256 of each schema file. `FeedReader` calls this on startup in dev and compares to its in-tree copy; mismatch → hard error (prevents version skew between a long-running predictor and a freshly-restarted emitter).
+- [ ] Contract tests: `test_registry_consistent.py`, `test_schemas_have_additional_properties_false.py`, `test_payload_size_cap_enforced.py`, `test_canonical_json_form.py`, `test_schema_discovery_endpoint.py`.
 
 ### 16.2 `FeedWriter` + NDJSON (R3.1–R3.2)
 
-- [ ] `datasource/emitter/writer.py` — per-`(plane, source)` append-only writer with atomic daily rotation at 00:00 UTC.
-- [ ] `manifest.json` updated atomically per tick (EMITTER §5).
-- [ ] Proof tests: `test_atomic_manifest.py`, `test_at_least_once_duplicates.py`, `test_monotonic_captured_at.py`, `test_utc_only.py` (all specified in EMITTER §6.1).
-- [ ] One live NDJSON feed running end-to-end for the `reference` plane against mock seeds; property-based fuzzer covers the writer.
+- [ ] `datasource/emitter/writer.py` — per-`(plane, source)` append-only writer with atomic daily rotation at 00:00 UTC; one writer process per `(plane, source)` enforced by a Redis-backed **single-writer lease** (`SET emitter:lease:<plane>:<source> <writer_id> NX PX <ttl>`), TTL-renewed every `cfg.emitter_lease_renew_ms` (default 5 s, TTL 15 s). Lease loss → writer flushes + exits with non-zero; supervisor restarts it after the previous holder's TTL elapses.
+- [ ] **Durability semantics:** every write is `write() + os.fsync()` on the file descriptor; rotation is `fsync + close + rename(tmp → .ndjson.zst) + fsync(parent_dir)`. `cfg.emitter_fsync_mode = always|batch|off` (default `always`; `batch` flushes every `cfg.emitter_fsync_batch_ms = 100` ms; `off` for tests only).
+- [ ] **Per-record CRC32C trailer** (last 8 hex chars of the line, after the closing `}`, separated by a single space) so a torn write is detectable on read without invalidating the whole file. Optional via `cfg.emitter_record_crc = on|off` (default `on`); reader skips a corrupted line and emits `feed_reader_corrupt_line_total` counter.
+- [ ] **Per-file checksum sidecar.** On rotation, emitter writes `<file>.sha256` next to the `.ndjson.zst`; manifest records both. Reader verifies on snapshot reads.
+- [ ] **Backpressure on disk usage.** When `df` on the feeds volume exceeds `cfg.emitter_disk_usage_warn_pct` (default 80) → `sec.alert.v1{kind=feeds_disk_warn}`; exceeds `cfg.emitter_disk_usage_block_pct` (default 95) → writer pauses, emits `proof.flag{kind=feeds_disk_blocked}`, supervisor pages. **Never silently drops records.**
+- [ ] `manifest.json` updated atomically per tick (write-tmp + `rename` + `fsync(parent_dir)` per EMITTER §5); manifest also records `writer_lease_holder`, `last_rotation_at`, `disk_usage_pct`.
+- [ ] Proof tests (EMITTER §6.1 set + new): `test_atomic_manifest.py`, `test_at_least_once_duplicates.py`, `test_monotonic_captured_at.py`, `test_utc_only.py`, `test_append_only.py`, `test_midnight_rotation.py`, `test_single_writer_lease.py`, `test_fsync_survives_kill_minus_9.py`, `test_per_record_crc_detects_torn_write.py`, `test_disk_full_blocks_not_drops.py`, `test_oversize_record_truncated_with_flag.py`.
+- [ ] Property-based fuzzer (`hypothesis`) covers writer: random Record streams, random kill/restart points, random clock jitter; invariant = "NDJSON+CRC ⇒ deduped record set ≡ input set".
 
 ### 16.3 Parquet training snapshots (R3.3)
 
-- [ ] `datasource/emitter/snapshot.py` — hourly hive-partitioned snapshots (`asof=YYYY-MM-DDThh/source=<s>/part-0000.parquet`).
-- [ ] Schema generator converts `common/schemas/records.py` TypedDicts into pyarrow schemas; drift CI test fails if they diverge.
-- [ ] Proof test: `test_parquet_snapshot_identical_to_ndjson_union` — the union of a day's NDJSON ≡ that day's Parquet snapshots (modulo compression).
+- [ ] `datasource/emitter/snapshot.py` — hourly hive-partitioned snapshots (`asof=YYYY-MM-DDThh/source=<s>/part-NNNN.parquet`); part files capped at `cfg.emitter_parquet_max_part_bytes` (default 128 MiB) so trainers parallelize cleanly.
+- [ ] **Deterministic ordering** within a part file: `(captured_at, stable_id)` ascending. Same input ⇒ byte-identical parquet (modulo `pyarrow` codec metadata, which is pinned).
+- [ ] **Idempotent rebuild.** `make feeds.snapshot.rebuild PLANE=score ASOF=2026-04-20T19` regenerates a snapshot from the corresponding NDJSON window; sha256 comparison against the original must match (proof test).
+- [ ] Footer metadata mandatory: `negelir.emitter.version`, `negelir.schema.version`, `negelir.record_count`, `negelir.sha256_of_ndjson_inputs`, `negelir.compressor`, `negelir.captured_at_min/max`.
+- [ ] Schema generator converts `common/schemas/records.py` TypedDicts → pyarrow schemas; CI test fails if generated parquet schema drifts from the TypedDict **or** from the JSONSchema (three-way consistency).
+- [ ] Proof tests: `test_parquet_snapshot_identical_to_ndjson_union.py` (union of a day's NDJSON ≡ day's parquet snapshots, modulo compression), `test_snapshot_deterministic_rebuild.py`, `test_parquet_footer_metadata_complete.py`, `test_three_way_schema_consistency.py` (TypedDict ↔ JSONSchema ↔ pyarrow).
 
 ### 16.4 `FeedReader` (R3.4)
 
-- [ ] `common/feeds/__init__.py` exposes `FeedReader.stream(plane, sources, since)` and `FeedReader.snapshot(plane, as_of, sources)`.
-- [ ] Reader rejects any path not referenced in `manifest.json`.
-- [ ] Proof tests: `test_reader_roundtrip.py`, `test_reader_handles_version_skew.py`, `test_reader_rejects_guessed_paths.py` (all specified in EMITTER §8.1).
+- [ ] `common/feeds/__init__.py` exposes `FeedReader.stream(plane, sources, since, version="*"|"v1"|...)` and `FeedReader.snapshot(plane, as_of, sources, version="*")`.
+- [ ] **Cursor / offset API.** `FeedReader.stream(...)` accepts `cursor: FeedCursor` and yields `(record, cursor)` so consumers can checkpoint and resume after restart with **no replay gap and no missed record** (the cursor is `(file_path, byte_offset, manifest_etag)`; mismatched etag forces a manifest re-read). Stored by reactors per the existing replay-window contract (Phase 5 `swarm/reactors/_base.py`).
+- [ ] **Built-in dedup helper.** `FeedReader.dedup(stream, key=("stable_id","captured_at"))` collapses at-least-once duplicates so downstream code stays simple. Phase 6 audit pattern (single-publication / monotonic) carries over: dedup uses a bounded LRU (`cfg.feed_reader_dedup_lru_size`, default 100k) keyed by `sha256(stable_id || captured_at)`.
+- [ ] Reader rejects any path not referenced in `manifest.json` **and** any file whose sidecar sha256 does not verify (counter `feed_reader_checksum_mismatch_total`).
+- [ ] Reader surfaces three telemetry signals (Phase 4.6 watch set): `feed_reader_lag_ms` (now − latest record's `captured_at`), `feed_reader_corrupt_line_total`, `feed_reader_guessed_path_rejects_total`.
+- [ ] **Version negotiation.** `FeedReader(version_pin={"score":"v1"})` ignores `score@v2` records cleanly; `version_pin={"score":"v2"}` raises if v2 is not yet `active` in the registry. Default `"*"` returns the union with the version surfaced in the envelope.
+- [ ] Proof tests (EMITTER §8.1 set + new): `test_reader_roundtrip.py`, `test_reader_handles_version_skew.py`, `test_reader_rejects_guessed_paths.py`, `test_reader_rejects_bad_checksum.py`, `test_reader_cursor_resumes_without_gap.py`, `test_reader_dedup_idempotent.py`, `test_reader_lag_metric_fires.py`.
 
-### 16.5 Swarm migration to feeds (R3.4)
+### 16.5 Swarm migration to feeds (R3.4) + isolation gate
 
-- [ ] One predictor (`pred.elo.v1`) migrated to read from `FeedReader` only; parity test against the DB-reading version on 4 weeks of mock history shows identical outputs.
-- [ ] `swarm/tests/test_no_db_imports.py` — no file under `swarm/` imports `psycopg` or `redis`. **This is the cornerstone swarm-isolation test.**
-- [ ] All other predictors migrated over the phase; each migration gates on an individual parity check.
+- [ ] **Migration order (binding):** (1) `pred.elo.v1` (cheapest, smallest input set), (2) `pred.poisson.v1`, (3) `pred.xg.v1`, (4) `pred.market.v1`, (5) `consensus.v1`, (6) drift agent, (7) proofreader replicas. Each step gates on (a) parity test against the DB-reading version on **8 weeks** of mock history showing **byte-identical** prediction outputs (not just within tolerance — the input data is identical), (b) telemetry showing `feed_reader_lag_ms_p99 < cfg.feed_reader_max_lag_ms` (default 2000) for 24 h on the mock stack, (c) shadow window of `cfg.swarm_feeds_shadow_hours` (default 48 h) where both the DB and Feed paths run side-by-side and agree.
+- [ ] **Parity harness CLI.** `xops/feeds/parity.py --predictor pred.elo.v1 --window 8w --tolerance 0` runs both backends on the same fixture set and reports drift; exit non-zero on any mismatch. Wired into `make test.feeds.parity`.
+- [ ] `swarm/tests/test_no_db_imports.py` — AST scan: no file under `swarm/` imports `psycopg`, `psycopg2`, `asyncpg`, `redis`, `aioredis`, or `sqlalchemy`. **Cornerstone swarm-isolation test.**
+- [ ] `swarm/tests/test_no_bus_data_topics.py` — no file under `swarm/` subscribes to `scrape.raw` or `match.normalized` (those carry feed-pointer envelopes post-§16.10; the actual data must be loaded via `FeedReader`).
+- [ ] **`FeatureSource` Protocol Feed backend** (Phase 5 §5.6 deferred → here): `swarm/predictors/features/source.py` exports `FeatureSource(Protocol)`; `FeedFeatureSource` implementation joins `feeds/snapshots/score`, `feeds/snapshots/lineup`, `feeds/snapshots/schedule` by `match_stable_id`. Predictor `predict()` signature unchanged. Parity test against the in-memory backend on the Phase 5 fixture set.
+- [ ] **`CalibrationStore` Feed backend** (Phase 5 §5.4 deferred → here): `swarm/predictors/calibration/feed_store.py` reads `feeds/snapshots/calibration/asof=<latest>/...`. Re-uses the Protocol from Phase 5 verbatim; constructor injection only.
 
-### 16.6 Versioned-schemas evolution (R3.5)
+### 16.6 Versioned-schema evolution (R3.5)
 
-- [ ] Land a second active version of `score.v2` (additive) and confirm emitter writes both while a `score.v1`-pinned predictor stays green.
-- [ ] Proof test: `test_emitter_writes_all_active_versions.py`, `test_reads_versioned.py`.
+- [ ] Land a second active version `score.v2` (additive only — exercises §4.2 minor-bump path) and confirm emitter writes both while a `score.v1`-pinned predictor stays green.
+- [ ] **Registry change-management workflow.** Schema edits go through a PR that runs `make feeds.schema.review` (diffs old vs new, classifies the bump per §4.2, asserts the chart-bump matches). PR body must include the deprecation date for any version flipped to `deprecated`.
+- [ ] **Deprecation timer.** `make feeds.schema.audit` (CI-nightly) fails when a version has been `deprecated` longer than `cfg.feeds_schema_max_deprecation_days` (default 90) without flipping to `eol`; fails when an `eol` version still has writes recorded in the last 24h.
+- [ ] **Cross-plane alias views.** `match_outcomes.v1` is a virtual plane defined as `score.v1 WHERE status='finished'`; the alias is declared in `registry.json` and materialized by `FeedReader.snapshot(plane="match_outcomes")` without duplicating bytes on disk.
+- [ ] Proof tests: `test_emitter_writes_all_active_versions.py`, `test_reads_versioned.py`, `test_eol_version_blocks_writes.py`, `test_deprecation_timer_fires.py`, `test_alias_view_match_outcomes.py`.
 
 ### 16.7 Storage backends (R3.6)
 
-- [ ] Local-disk driver (default) and S3-compatible driver (MinIO in dev, Azure Blob / AWS S3 in prod) behind one `FeedsStore` protocol.
-- [ ] Proof test: `test_s3_roundtrip.py` against MinIO in a compose-side container.
+- [ ] Local-disk driver (default) and S3-compatible driver behind one `FeedsStore(Protocol)` (`open_append`, `put_object`, `get_object`, `list_prefix`, `head_object`, `rename_atomic`).
+- [ ] S3 driver: SSE-S3 by default; SSE-KMS hook gated on `cfg.feeds_s3_kms_key_arn` (Phase 14 wire-up). Etag verification on every read; conditional PUT (`If-None-Match: *`) on snapshot writes to prevent silent overwrite.
+- [ ] **Transparent retry** with capped exponential backoff on `5xx` / `SlowDown` / `RequestTimeout`; budget surfaced as `feeds_store_retry_total{driver,op,outcome}` counter.
+- [ ] Proof tests: `test_s3_roundtrip.py` (MinIO compose-side container; byte-identical to local-disk driver), `test_s3_etag_verified_on_read.py`, `test_s3_conditional_put_blocks_overwrite.py`, `test_s3_retry_budget_capped.py`.
 
-### 16.8 Retention & cold rollup (R3.7; Phase 14 prerequisite)
+### 16.8 Retention, integrity sweep & cold rollup (R3.7; Phase 14 prerequisite for object-lock)
 
-- [ ] `make feeds.prune` with configurable retention (default 30 days NDJSON, 365 days snapshots).
-- [ ] Monthly cold rollup (`cold/<plane>/<YYYY-MM>/<source>.parquet`).
-- [ ] Proof test: `test_retention.py`, `test_cold_rollup_coverage.py`.
+- [ ] `make feeds.prune` with configurable retention (`cfg.feeds_retention_ndjson_days` default 30; `cfg.feeds_retention_snapshot_days` default 365). **Refuses to delete** any file whose path is referenced by an active reader cursor (queried via the reactor cursor table from Phase 5 `_base.py`) or that is missing its sidecar checksum.
+- [ ] Monthly cold rollup (`cold/<plane>/<YYYY-MM>/<source>.parquet`); rollup verified by snapshot equivalence test before the source NDJSON files are pruned.
+- [ ] **Nightly integrity sweep.** `make feeds.fsck` (`xops/feeds/fsck.py`) walks the manifest, recomputes sha256s, verifies sidecars, asserts every NDJSON line round-trips JSON → canonical → JSON byte-equal, asserts every parquet file's footer count equals row count, asserts every record has `captured_at >= file's first day 00:00 UTC`. Failures → `sec.alert.v1{kind=feeds_integrity_violation, severity=error}`.
+- [ ] Proof tests: `test_retention.py`, `test_retention_refuses_to_orphan_active_cursor.py`, `test_cold_rollup_coverage.py`, `test_cold_rollup_byte_equivalent_after_rebuild.py`, `test_fsck_finds_planted_corruption.py`.
+- [ ] `test_object_lock_immutability.py` stays `xfail(reason="phase-14 prerequisite")`.
 
-### 16.9 Definition of Done
+### 16.9 Backfill from Postgres → seed historical feeds
 
-- [ ] All six planes emit NDJSON live feeds and hourly Parquet snapshots against the mock stack.
-- [ ] `FeedReader` is the only supported way for `swarm/*` to read ingested data.
-- [ ] `test_swarm_isolation.py` (no `datasource.*` imports outside `FeedReader`) and `test_no_db_imports.py` (no `psycopg`/`redis` under `swarm/`) both green in CI — they are complementary, not duplicates.
-- [ ] All EMITTER §6.1 writer-guarantee tests green: `test_atomic_manifest`, `test_at_least_once_duplicates`, `test_monotonic_captured_at`, `test_utc_only`, `test_append_only`, `test_midnight_rotation`.
-- [ ] All EMITTER §7.3 storage tests green: `test_s3_roundtrip`, `test_retention` (object-lock test may stay `xfail` until Phase 14).
-- [ ] All EMITTER §8.1 reader-contract tests green: `test_reader_roundtrip`, `test_reader_handles_version_skew`, `test_reader_rejects_guessed_paths`.
-- [ ] Versioned-schema coexistence verified: `test_emitter_writes_all_active_versions` and `test_reads_versioned` green with `score@v1` and `score@v2` active simultaneously.
-- [ ] At least one live predictor and one trainer run migrated to feeds with parity maintained.
-- [ ] `datasource_emitter` component bumped to ≥ `1.0.0`; `swarm` component bumped to reflect the read-surface change.
+**Why this exists:** the swarm cannot migrate to feeds until the feeds *contain* the history the predictors trained on. Live emitter only produces records from "now"; backfill closes the gap.
+
+- [ ] `xops/feeds/backfill.py --plane <p> --since <iso> --until <iso> [--source <s>]` reads the unified `match_normalized` table in `cfg.emitter_backfill_batch_size` (default 5000) row chunks, projects each row through the same writer code path as live emit, and writes to a sidecar root `feeds_backfill/` first.
+- [ ] **Promotion gate:** `xops/feeds/backfill_promote.py` runs the §16.8 `fsck` against `feeds_backfill/`, then atomically renames partitions into `feeds/`. No writes on `feeds/` during promotion (writer lease must be held by the backfill tool for the affected `(plane, source)` partitions).
+- [ ] **Idempotency:** running backfill twice on the same window produces the same output (sha256-identical at the part-file level).
+- [ ] Proof tests: `test_backfill_idempotent.py`, `test_backfill_promotion_atomic.py`, `test_backfill_respects_writer_lease.py`, `test_backfill_recovers_from_kill.py` (kill mid-batch → resume picks up at the last completed chunk via a Postgres-backed cursor table `feeds_backfill_cursor`).
+
+### 16.10 Bus-to-feeds cutover (`scrape.raw` / `match.normalized` envelope swap)
+
+- [ ] **Dual-write window** of `cfg.emitter_dual_write_days` (default 14): `scrape.raw` and `match.normalized` topics carry **both** the inline payload (`v1`) and the new feed-pointer envelope (`v2`) per message; consumers opt into v2 via subscription option `prefer_version="v2"`.
+- [ ] **Consumer migration order:** (1) categorizer, (2) processor, (3) storage, (4) proofreader replicas, (5) swarm read paths. Each consumer must demonstrate 24 h of v2-only consumption with zero v1 fallback before the v1 publisher is removed.
+- [ ] **Rollback plan documented** in `docs/runbooks/feeds_cutover_rollback.md`: how to flip a consumer back to v1, how to backfill a missed v1→v2 window, what the SLO impact is per minute of rollback.
+- [ ] **Cutover guard test** `test_dual_write_payload_equivalent.py`: for every message published during dual-write, the v1 inline payload and the bytes pointed to by the v2 envelope's `(ndjson_path, byte_range, sha256)` must hash identically.
+- [ ] **Removal gate:** v1 publish path stays code-resident behind `cfg.emitter_publish_v1 = on|off` (default `on` until cutover complete; flipped to `off` per environment, gated on the §18 isolation tests being green for that env's swarm).
+
+### 16.11 Observability & SLOs
+
+- [ ] **Metrics (Prometheus, scraped from emitter `:9100/metrics`):** `emitter_records_written_total{plane,source,version}`, `emitter_write_latency_ms` (histogram), `emitter_manifest_age_ms` (gauge — flips alarm if > `cfg.emitter_manifest_max_age_ms`, default 30 000), `emitter_disk_usage_pct{volume}`, `emitter_lease_holder_changes_total{plane,source}`, `emitter_oversize_records_truncated_total`, `emitter_snapshot_build_seconds` (histogram), `feed_reader_lag_ms{plane,source,consumer}`, `feed_reader_checksum_mismatch_total`, `feed_reader_corrupt_line_total`, `feed_reader_guessed_path_rejects_total`, `feeds_store_retry_total{driver,op,outcome}`.
+- [ ] **SLOs (binding for Phase 16 sign-off):** writer `p99` per-record latency < 5 ms (local disk), < 50 ms (S3); manifest age `p99` < 5 s; reader `stream()` cold-start < 250 ms; reader `snapshot()` for one `(plane, source, day)` < 2 s; integrity sweep wall-time on the mock corpus < 60 s.
+- [ ] **Alert rules** (`xops/observability/alerts/emitter.yaml`): `EmitterManifestStale`, `EmitterDiskUsageHigh`, `EmitterLeaseFlapping` (> 3 changes / 5 min), `FeedReaderLagHigh`, `FeedsIntegrityViolation`, `FeedsSnapshotBuildSlow`. Each alert routes per the Phase 7 `sec.alert.v1` severity ladder.
+- [ ] Proof tests: `test_emitter_metrics_exposed.py`, `test_alert_rules_load_in_promtool.py`, `test_slo_budget_enforced_in_ci.py` (a synthetic load fails CI if median write latency exceeds 2× the SLO on the reference workload).
+
+### 16.12 Reliability & disaster recovery
+
+- [ ] **Manifest rebuild from filesystem.** `make feeds.manifest.rebuild` walks the feeds tree and reconstructs `manifest.json` from on-disk truth (sidecar checksums + parquet footers + NDJSON line-count scan). Exits non-zero if any file is unreferenced or any reference is missing. Required after any restore-from-backup.
+- [ ] **Backup / restore drill** (added to `make test.dr` once Phase 14 lands; ships in Phase 16 as the local-disk variant). Procedure: snapshot the feeds volume → wipe → restore → run `feeds.manifest.rebuild` → run `feeds.fsck` → run one predictor parity check against pre-backup output. End-to-end test in CI: `test_restore_drill_local_disk.py`.
+- [ ] **Multi-emitter scale-out (scale-symmetry, Rule 5).** N emitter replicas can run simultaneously; each holds the lease for a disjoint subset of `(plane, source)` partitions. Test: `test_two_emitters_partition_cleanly.py` (two emitter processes, half the planes each, no overlapping writes, manifest stays consistent).
+- [ ] **Crash recovery proof:** `test_kill_minus_9_loses_at_most_one_record.py` (with `cfg.emitter_fsync_mode=always`, the only loss window is the line currently in the syscall; fsync acks survive a `kill -9` of the writer process).
+
+### 16.13 Security & access control
+
+- [ ] **Read ACL.** `FeedReader` constructed with a `principal` (Phase 9 token claim or service identity); `cfg.feeds_acl` (YAML) maps `principal → allowed (plane, source) globs`. Default-deny for unknown principals. Swarm predictors get a service identity scoped to the planes they declare; the patcher gets read-only on `score`/`schedule`/`lineup`/`reference`; the trainer gets read-only on snapshots, no live.
+- [ ] **No secrets in records.** AST scan + runtime guard: payload field names matching `/(token|secret|password|apikey|cookie)/i` raise `proof.flag{kind=secret_in_payload}` and the record is quarantined (routed to `sec.quarantine.v1` / `feeds/sec_quarantine.v1.parquet`), never written to the live plane.
+- [ ] **Audit log.** Every `FeedReader.snapshot()` call by a non-swarm principal (i.e., humans via `xops`, gateway forwards) logs `(principal, plane, sources, as_of, byte_count, sha256_of_first_part)` to `audit.feeds.v1` (Postgres, retained per Phase 9 audit policy). Swarm reads are exempt (high-volume, identity already covered by service-identity).
+- [ ] Signed-manifest hook reserved (HMAC over manifest bytes with rotated key); spec-only in Phase 16, implemented in Phase 17 if the patcher's auto-merge requires per-record provenance.
+- [ ] Proof tests: `test_read_acl_default_deny.py`, `test_secret_field_quarantined.py`, `test_audit_log_records_human_reads.py`.
+
+### 16.14 Performance budgets & load testing
+
+- [ ] **Load test corpus** in `xops/feeds/loadgen.py`: synthetic 24 h burst at 10× the Phase 13a peak (estimated 3 000 records/s across all planes/sources combined), randomized payload sizes within the 64 KiB cap.
+- [ ] **Budgets (binding):** sustained write throughput ≥ 5 000 records/s on a 4-core dev box with local disk; snapshot build ≤ 30 s for one hour of `score` plane at peak; reader `stream()` sustained ≥ 50 000 records/s on the same box; CPU ≤ 1.5 cores at the binding throughput; RSS ≤ 512 MiB per writer process.
+- [ ] CI regression: `test_loadgen_meets_budget.py` runs a 30 s burst and fails if any budget regresses by > 20 % vs the recorded baseline (`xops/feeds/baseline.json`).
+
+### 16.15 Operational tooling & runbooks
+
+- [ ] Make targets: `make feeds.up`, `make feeds.down`, `make feeds.tail PLANE=... SOURCE=...`, `make feeds.snapshot.rebuild`, `make feeds.prune`, `make feeds.fsck`, `make feeds.manifest.rebuild`, `make feeds.parity`, `make feeds.schema.review`, `make feeds.schema.audit`, `make feeds.backfill`, `make feeds.backfill.promote`. Each dispatches via `xops/feeds/*.py` per [`xops/README.md`](../../xops/README.md) conventions.
+- [ ] Runbooks under `docs/runbooks/`: `feeds_cutover_rollback.md`, `feeds_disk_full.md`, `feeds_lease_flapping.md`, `feeds_corruption_recovery.md`, `feeds_backfill_procedure.md`, `feeds_restore_from_backup.md`. Each runbook ends with a "test this runbook" section that maps to a CI test name.
+- [ ] **`xops/versioning/chart.json`** new keys (Pivot v3 placement): `datasource_emitter` (component), `common_feeds` (component for the reader library + schema registry). Both bumped to ≥ `1.0.0` at end of phase.
+
+### 16.16 Definition of Done
+
+- [ ] All six base planes plus the four cross-phase planes (`feature_vectors`, `sec_quarantine`, `match_outcomes` alias, `calibration`) emit NDJSON live feeds and hourly Parquet snapshots against the mock stack for ≥ 7 consecutive days with no integrity-sweep failures.
+- [ ] `FeedReader` is the only supported way for `swarm/*` to read ingested data; `test_swarm_isolation.py` (no `datasource.*` imports outside `FeedReader`), `test_no_db_imports.py` (no `psycopg`/`redis` under `swarm/`), and `test_no_bus_data_topics.py` (no swarm subscription to `scrape.raw`/`match.normalized`) all green in CI.
+- [ ] Bus-to-feeds cutover (§16.10) complete: `cfg.emitter_publish_v1=off` in dev and mock; documented rollback drill executed once successfully.
+- [ ] Backfill (§16.9) executed against the mock historical corpus; idempotency verified; promotion is byte-identical on a second run.
+- [ ] All EMITTER §6.1 writer-guarantee tests green plus the §16.2 additions (single-writer lease, fsync, per-record CRC, disk-full backpressure, oversize truncation).
+- [ ] All EMITTER §7.3 storage tests green plus the §16.7 additions (etag verification, conditional PUT, retry budget). Object-lock test stays `xfail` until Phase 14.
+- [ ] All EMITTER §8.1 reader-contract tests green plus the §16.4 additions (cursor resume, dedup helper, checksum reject, lag metric).
+- [ ] Versioned-schema coexistence verified (`score@v1` + `score@v2`); deprecation timer fires; EOL gate blocks writes; alias view materializes `match_outcomes`.
+- [ ] All Phase 5 / 6 / 7 deferred Feed backends landed and parity-tested: `FeatureSource` Feed backend, `CalibrationStore` Feed backend, `MatchOutcome` reader migration, `QuarantineSample` parquet plane, `feature_vectors.v1` plane available for Phase 6 KS-test.
+- [ ] All §16.11 metrics exposed; alert rules pass `promtool check rules`; SLO budget test green in CI on the reference workload.
+- [ ] DR drill (§16.12): restore-from-backup test green in CI; multi-emitter partition test green; `kill -9` test green.
+- [ ] Read ACL enforced with default-deny; secret-in-payload guard verified; audit log populated for human reads.
+- [ ] Load test (§16.14) meets all five budgets; baseline recorded.
+- [ ] All seven predictors + consensus + drift + proofreader replicas migrated to feeds with parity maintained on 8 weeks of mock history.
+- [ ] All 16 runbooks present and each maps to a named CI test.
+- [ ] `datasource_emitter` ≥ `1.0.0`; `common_feeds` ≥ `1.0.0`; `swarm` bumped to reflect the read-surface change; `ai` chart key still `active` (EOL deferred to Phase 18).
 
 ---
 
