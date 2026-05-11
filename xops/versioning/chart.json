@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 47,
+    "build": 48,
     "released": null
   },
   "components": {
@@ -24,9 +24,9 @@
       "last_changed": "2026-05-06T14:30:28+00:00"
     },
     "docs": {
-      "version": "1.56.0",
+      "version": "1.57.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-11T14:21:44+00:00"
+      "last_changed": "2026-05-11T14:43:23+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -2904,6 +2904,15 @@
       "from": "1.55.0",
       "to": "1.56.0",
       "build": 47
+    },
+    {
+      "timestamp": "2026-05-11T14:43:23+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 18 enrichment: 20 new ledger entries + 8 new sub-phases covering container resource/UID/network/secrets/build/cache/Redis/automation/vocabulary/calendar/clock isolation",
+      "from": "1.56.0",
+      "to": "1.57.0",
+      "build": 48
     }
   ]
 }
