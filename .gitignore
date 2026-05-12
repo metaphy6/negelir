@@ -47,3 +47,7 @@ Thumbs.db
 # ── Logs ──
 *.log
 logs/
+
+
+# Phase orchestration runtime state (xops/orchestrator/)
+.orchestrator/

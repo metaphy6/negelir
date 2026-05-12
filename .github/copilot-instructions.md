@@ -17,6 +17,11 @@
 4. [`docs/coding/ai/automation.md`](../docs/coding/ai/automation.md)
    — the Copilot roadmap (this surface). Refer to it when a new
    prompt / mode / MCP wrapper is being added.
+5. [`xops/orchestrator/README.md`](../xops/orchestrator/README.md)
+   — only when delegating ROADMAP phases through the parallel
+   loop (`/orchestrate.roadmap` prompt + `phase-implementer`
+   / `phase-reviewer` / `phase-verifier` chatmodes). Otherwise
+   informational.
 
 If the user request conflicts with `docs/planning/ROADMAP.md`,
 **ask before deviating** (`AGENTS.md` §1).

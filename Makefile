@@ -475,6 +475,57 @@ version.validate: ## Validate chart.json schema
 	@$(XOPS)/version.py validate
 
 # ══════════════════════════════════════════════════════════════
+#               ROADMAP PHASE ORCHESTRATION
+# ══════════════════════════════════════════════════════════════
+#  Parallel-safe coordinator for delegating ROADMAP phases to
+#  context-isolated subagents. See xops/orchestrator/README.md and
+#  .github/prompts/orchestrate.roadmap.prompt.md.
+#
+#  Filter env vars (most targets): INCLUDE=5,8.13  EXCLUDE=9.17.11
+#                                  INCLUDE_BRANCHES=1  INCLUDE_COMPLETE=1
+#                                  JSON=1  LEAVES=1
+
+.PHONY: orchestrate.list
+orchestrate.list: ## List every phase with checkbox status (LEAVES=1 for leaves only)
+	@$(XOPS)/orchestrate.py list
+
+.PHONY: orchestrate.plan
+orchestrate.plan: ## Dry-run the include/exclude filter (INCLUDE=…  EXCLUDE=…)
+	@$(XOPS)/orchestrate.py plan
+
+.PHONY: orchestrate.next
+orchestrate.next: ## Print the next eligible un-claimed phase
+	@$(XOPS)/orchestrate.py next
+
+.PHONY: orchestrate.slice
+orchestrate.slice: ## Print the ROADMAP slice for PHASE=<id> [OUT=path]
+	@$(XOPS)/orchestrate.py slice
+
+.PHONY: orchestrate.claim
+orchestrate.claim: ## Acquire the per-phase lock — PHASE=<id> [CLAIMER=<id>]
+	@$(XOPS)/orchestrate.py claim
+
+.PHONY: orchestrate.release
+orchestrate.release: ## Release the per-phase lock — PHASE=<id> [FORCE=1]
+	@$(XOPS)/orchestrate.py release
+
+.PHONY: orchestrate.locks
+orchestrate.locks: ## List currently held phase locks
+	@$(XOPS)/orchestrate.py locks
+
+.PHONY: orchestrate.state
+orchestrate.state: ## Show orchestrator state — [PHASE=<id>] for one phase
+	@$(XOPS)/orchestrate.py state
+
+.PHONY: orchestrate.advance
+orchestrate.advance: ## Record a review pass — PHASE=<id> [STATUS=…] [ROLE=…] [OUTCOME=…] [MODEL=…] [NOTES=…]
+	@$(XOPS)/orchestrate.py advance
+
+.PHONY: orchestrate.unlock
+orchestrate.unlock: ## [OPERATOR] Force-clear a stale lock — PHASE=<id>
+	@$(XOPS)/orchestrate.py unlock
+
+# ══════════════════════════════════════════════════════════════
 #                  GIT (HUMAN-ONLY)
 # ══════════════════════════════════════════════════════════════
 #  ⚠️  AI assistants MUST NOT invoke `git` (see AGENTS.md §10).
