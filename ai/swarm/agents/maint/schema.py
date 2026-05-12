@@ -17,6 +17,7 @@ sampling on a quiet one.
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
@@ -29,7 +30,7 @@ from common.config import cfg as _cfg
 from ...sdk import schemas as _schemas
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
-from ..topics import MAINT_ACK, MAINT_EVENT
+from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from . import _schema_drift as _drift
 from ._pause_state import PauseState
 
@@ -69,7 +70,7 @@ class MaintSchemaSentinel:
     # maint_resume per §8.10/§8.13.5; sample taps for Detector A
     # are still wired by the bootstrap via :meth:`observe`.
     subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
-    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
+    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
         self,
@@ -90,6 +91,11 @@ class MaintSchemaSentinel:
         self._last_pg_check_at: float = float("-inf")
         # §8.13.5 pause/isolation matrix.
         self._pause = PauseState()
+        # §8.6 binding boundary — `maint_schema_auto_apply_enabled` is
+        # forward-compat only. Phase 8 is detect-only; if the operator
+        # flips the flag we surface a loud one-shot warning + sec.alert
+        # at boot. The runner drains :attr:`boot_alerts` on startup.
+        self.boot_alerts: list[Message] = list(self._check_auto_apply_boundary())
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -380,6 +386,49 @@ class MaintSchemaSentinel:
             attempt=1,
         )
         return Message(envelope=env, payload=payload)
+
+
+    # ── §8.6 binding boundary — auto-apply forward-compat guard ──
+    _AUTO_APPLY_WARNING = (
+        "maint_schema_auto_apply_enabled=true is reserved for forward "
+        "compatibility; Phase 8 is detect-only — no auto-apply will occur"
+    )
+
+    def _check_auto_apply_boundary(self) -> Iterable[Message]:
+        """Boot-time check: if ``cfg.maint_schema_auto_apply_enabled``
+        is truthy, log a loud warning AND emit a one-shot
+        ``sec.alert.v1{kind=schema_auto_apply_misconfigured,
+        severity=warn}``. The auto-apply code path does not exist in
+        Phase 8 (see ``test_schema_auto_apply_boundary.py``); the
+        knob is wired only so a future patcher can detect operator
+        intent without colliding with this surface.
+        """
+        if not bool(_cfg.maint_schema_auto_apply_enabled):
+            return
+        _log.warning(self._AUTO_APPLY_WARNING)
+        payload = {
+            "alert_id": secrets.token_hex(8),
+            "kind": "schema_auto_apply_misconfigured",
+            "severity": "warn",
+            "source": self.name,
+            "reason": self._AUTO_APPLY_WARNING[:1024],
+            "subject": "cfg.maint_schema_auto_apply_enabled",
+            "request_id": None,
+            "client_id": None,
+            "ip": None,
+            "evidence_ref": None,
+            "produced_at": self._clock_iso(),
+        }
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        yield Message(envelope=env, payload=payload)
 
 
 __all__ = ["MaintSchemaSentinel"]

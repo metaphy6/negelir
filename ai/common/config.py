@@ -467,6 +467,10 @@ class Config:
     sec_input_classifier_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_CLASSIFIER_MAX_PENDING", "256")))
     sec_input_breaker_open_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_BREAKER_OPEN_S", "30")))
     sec_input_pattern_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_PATTERN_RELOAD_S", "30")))
+    # Phase 8 §8.7 — pattern_allowlist read-side cache poll interval.
+    # Mirrors the §7.4 sec.config fan-out cadence (mtime-style polling
+    # against `pattern_allowlist_meta.version` under REPEATABLE READ).
+    sec_input_allowlist_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_ALLOWLIST_RELOAD_S", "60")))
 
     # sec.quarantine.v1 envelope + storage backpressure (§7.1 + §7.5)
     sec_quarantine_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_QUARANTINE_TTL_DAYS", "30")))
@@ -684,6 +688,14 @@ class Config:
     # 0 to a large value and would otherwise scale from 1 → N in one
     # tick. Default 1 preserves the legacy step magnitude.
     maint_scaler_max_step_per_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_STEP_PER_WINDOW", "1")))
+    # Phase 8 §8.2 — observability: histogram bucket boundaries for
+    # ``maint_scaler_runtime_call_seconds`` (the wall-clock duration
+    # of every ``RuntimeController.apply`` call). CSV of strictly
+    # positive floats in seconds; the parser sorts ascending and
+    # de-duplicates. The default mirrors the prometheus default
+    # latency ladder (5ms..10s) which covers both the noop path
+    # (~µs) and a slow ``docker compose --scale`` (~seconds).
+    maint_scaler_runtime_histogram_buckets: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS", "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"))
 
     # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
     maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
@@ -738,6 +750,17 @@ class Config:
     # — the crawl runs information_schema.columns once per tick and
     # is cheap, but cadence below 60s adds noise without recall gain).
     maint_schema_pg_check_interval_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_PG_CHECK_INTERVAL_S", "3600")))
+    # Phase 8 §8.6 binding boundary — auto-apply migrations is
+    # OUT OF SCOPE for v1. The sentinel is detect-only; humans (or
+    # the Phase 17 patcher under `migration` scope) drive the fix.
+    # This knob exists for forward compatibility only: when set to
+    # ``true`` the schema sentinel logs a warning at boot AND emits
+    # a one-shot ``sec.alert.v1{kind=schema_auto_apply_misconfigured,
+    # severity=warn}``. No `psql -f migrations/NNN_*.sql` code path
+    # exists in v1; the AST boundary test in
+    # ``ai/swarm/agents/maint/tests/test_schema_auto_apply_boundary.py``
+    # locks this so a future patch wiring auto-apply gets caught.
+    maint_schema_auto_apply_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCHEMA_AUTO_APPLY_ENABLED", "false").lower() in ("1", "true", "yes"))
 
     # ── Phase 8 §8.7 + §8.8 — `maint.sec.v1` agent ───────────────────
     maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_TTL_S", "604800")))
@@ -1127,6 +1150,7 @@ class Config:
         _bounded("sec_input_classifier_max_pending", self.sec_input_classifier_max_pending, 1, 1_000_000)
         _bounded("sec_input_breaker_open_s", self.sec_input_breaker_open_s, 1, 86_400)
         _bounded("sec_input_pattern_reload_s", self.sec_input_pattern_reload_s, 1, 86_400)
+        _bounded("sec_input_allowlist_reload_s", self.sec_input_allowlist_reload_s, 1, 86_400)
         _SEC_DEVICES = {"auto", "cpu", "cuda", "rocm", "npu"}
         if self.sec_input_classifier_device not in _SEC_DEVICES:
             issues.append(
@@ -1233,6 +1257,36 @@ class Config:
         _bounded("maint_scaler_signal_window_samples", self.maint_scaler_signal_window_samples, 0, 10_000)
         _bounded("maint_scaler_target_load_per_replica", self.maint_scaler_target_load_per_replica, 0, 10_000_000)
         _bounded("maint_scaler_max_step_per_window", self.maint_scaler_max_step_per_window, 1, 10_000)
+        # Phase 8 §8.2 observability — histogram bucket CSV must
+        # parse to at least one strictly-positive float; values
+        # outside (0, 86_400] are rejected to keep the bucket count
+        # small and the bound monotonic.
+        if self.maint_scaler_runtime_histogram_buckets.strip():
+            seen: set[float] = set()
+            for raw in self.maint_scaler_runtime_histogram_buckets.split(","):
+                tok = raw.strip()
+                if not tok:
+                    continue
+                try:
+                    v = float(tok)
+                except ValueError:
+                    issues.append(
+                        f"maint_scaler_runtime_histogram_buckets entry "
+                        f"{tok!r} is not a float"
+                    )
+                    continue
+                if not (0.0 < v <= 86_400.0):
+                    issues.append(
+                        f"maint_scaler_runtime_histogram_buckets entry "
+                        f"{v!r} out of (0, 86400]"
+                    )
+                    continue
+                seen.add(v)
+            if not seen:
+                issues.append(
+                    "maint_scaler_runtime_histogram_buckets parsed "
+                    "to no usable buckets"
+                )
         if self.maint_runtime not in ("none", "compose", "k8s"):
             issues.append(
                 f"maint_runtime={self.maint_runtime!r} must be one of: "

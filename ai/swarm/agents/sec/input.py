@@ -75,6 +75,13 @@ from ..topics import (
 )
 from ...sdk.types import Message, Topic
 from ._alert import SecAlertDebouncer
+from ._allowlist import (
+    AllowlistCache,
+    InMemoryAllowlistReader,
+    PatternAllowlistReader,
+    compute_pattern_key,
+)
+from ..maint.scaler import _LabelCounter
 
 _log = logging.getLogger("swarm.agents.sec.input")
 
@@ -189,6 +196,7 @@ class SecInputAgent:
         new_id: Callable[[], str] | None = None,
         pattern_path: str | None = None,
         ruleset: RuleSet | None = None,
+        allowlist_reader: PatternAllowlistReader | None = None,
     ) -> None:
         self._classifier = classifier
         # ── Deterministic injection-pattern engine (§7.1, binding) ─
@@ -259,6 +267,25 @@ class SecInputAgent:
             0.001, float(_cfg.sec_quarantine_storage_lag_alert_ms) / 1000.0
         )
         self._lock = threading.Lock()
+        # Phase 8 §8.7 — pattern_allowlist read-side cache. The
+        # default reader is an empty in-memory shim so dev/test boots
+        # see no suppressions; production wires a Postgres-backed
+        # reader (Phase 8.7b) that runs the version+rows SELECTs under
+        # REPEATABLE READ snapshot isolation.
+        self._allowlist_cache = AllowlistCache(
+            allowlist_reader if allowlist_reader is not None
+            else InMemoryAllowlistReader(),
+            reload_s=int(_cfg.sec_input_allowlist_reload_s),
+            clock_mono=self._clock_mono,
+        )
+        # Phase 8 §8.7 — observability surface (binding).
+        # Counter ``sec_input_allowlist_hits_total{rule_id}``: one
+        # increment per pattern-rule hit that was suppressed by an
+        # active allowlist entry. Visible via :meth:`metrics_snapshot`
+        # — the suppression is never silently lost.
+        self._m_allowlist_hits = _LabelCounter(
+            "sec_input_allowlist_hits_total", ("rule_id",)
+        )
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -372,14 +399,34 @@ class SecInputAgent:
         if self._ruleset is not None:
             hit = self._ruleset.match(clean_text)
             if hit is not None:
-                yield from self._emit_quarantine(
-                    req,
-                    classifier_reason=f"rule:{hit.rule_id}",
-                    kind=hit.kind,
-                    severity=hit.severity if hit.severity != "info" else "warn",
-                    extra_reasons=(hit.reason,),
+                # Phase 8 §8.7 — pattern_allowlist suppression. Operator-
+                # confirmed false positives shadow the rule for this
+                # exact (source, rule_id, hit_substring) triple. The
+                # raw substring is hashed (NFC + sha256[:16]) so the
+                # cache never holds the unredacted text. Suppression
+                # is counted, not silently dropped.
+                m = hit.pattern.search(clean_text)
+                hit_substring = m.group(0) if m is not None else clean_text
+                allow_key = compute_pattern_key(
+                    "qa", hit.rule_id, hit_substring,
                 )
-                return
+                if self._allowlist_cache.is_allowlisted(allow_key):
+                    self._m_allowlist_hits.inc((hit.rule_id,))
+                    _log.debug(
+                        "%s: pattern hit suppressed by allowlist "
+                        "(rule_id=%s)", self.name, hit.rule_id,
+                    )
+                    # Fall through — request continues to the
+                    # classifier as if the rule had not matched.
+                else:
+                    yield from self._emit_quarantine(
+                        req,
+                        classifier_reason=f"rule:{hit.rule_id}",
+                        kind=hit.kind,
+                        severity=hit.severity if hit.severity != "info" else "warn",
+                        extra_reasons=(hit.reason,),
+                    )
+                    return
 
         verdict, reason = self._classify(clean_text)
 
@@ -517,6 +564,20 @@ class SecInputAgent:
                 ip=req.ip,
             )
             yield Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
+
+    # ── §8.7 observability surface ────────────────────────────────
+    def metrics_snapshot(self) -> dict[str, dict[tuple[str, ...], int]]:
+        """Return a snapshot of agent counters keyed by metric name.
+
+        The shape mirrors :class:`maint.scaler._LabelCounter` series:
+        ``{metric_name: {label_tuple: count}}``. v1 only exposes the
+        §8.7 ``sec_input_allowlist_hits_total{rule_id}`` counter; the
+        Prometheus/OTel exporter (Phase 14) wires this surface into
+        the scrape endpoint.
+        """
+        return {
+            self._m_allowlist_hits.name: dict(self._m_allowlist_hits.series()),
+        }
 
     def _emit_quarantine(
         self,

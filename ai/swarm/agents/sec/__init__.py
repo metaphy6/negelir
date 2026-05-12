@@ -60,5 +60,19 @@ from __future__ import annotations
 from .input import SecInputAgent
 from .rate import SecRateAgent
 from .scrape import SecScrapeAgent
+from ._allowlist import (
+    AllowlistCache,
+    InMemoryAllowlistReader,
+    PatternAllowlistReader,
+    compute_pattern_key,
+)
 
-__all__ = ["SecInputAgent", "SecRateAgent", "SecScrapeAgent"]
+__all__ = [
+    "SecInputAgent",
+    "SecRateAgent",
+    "SecScrapeAgent",
+    "AllowlistCache",
+    "InMemoryAllowlistReader",
+    "PatternAllowlistReader",
+    "compute_pattern_key",
+]

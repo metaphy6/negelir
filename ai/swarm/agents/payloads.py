@@ -1138,6 +1138,10 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     # maint.scaler.v1 (§8.16.1 default-policy fallback + orphan-cfg)
     "maint_scaler_unconfigured_agent",
     "maint_scaler_orphan_cfg",
+    # maint.schema.v1 (§8.6 forward-compat boundary — auto-apply is
+    # detect-only in Phase 8; setting cfg.maint_schema_auto_apply_enabled
+    # true emits a one-shot warn alert at boot).
+    "schema_auto_apply_misconfigured",
     # maint.storage.v1 (§8.13.2 cumulative storage cap)
     "maint_storage_pressure",
     # maint.dlq.v1 (§8.5 backlog-pressure damping)

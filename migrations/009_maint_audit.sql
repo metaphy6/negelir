@@ -109,3 +109,37 @@ END $$;
 
 GRANT SELECT, INSERT ON maint_audit_log_pii TO PUBLIC;
 GRANT DELETE, TRUNCATE ON maint_audit_log_pii TO negelir_audit_pruner;
+
+-- ---------------------------------------------------------------------------
+-- Phase 8 §8.7 — pattern_allowlist version row for cache-reload race.
+--
+-- Co-located with the maint audit DDL per ROADMAP §8.9 (which assigns
+-- the `pattern_allowlist_version` metadata scaffolding to this
+-- migration). The sec.input.v1 reader polls this single-row table
+-- every `cfg.sec_input_allowlist_reload_s` seconds (default 60s)
+-- under `REPEATABLE READ` snapshot isolation: the same transaction
+-- reads `version` from here and then `pattern` rows from
+-- `pattern_allowlist`, so a writer committing between the two
+-- SELECTs is invisible to the reader (the reader sees the OLD
+-- version + OLD set OR the NEW version + NEW set, never a
+-- half-applied state). The next poll tick catches the new state.
+--
+-- Single-row contract (singleton CHAR(1) PRIMARY KEY pinned to 'x')
+-- — there is exactly one meta row for the whole allowlist. The
+-- maint.sec.v1 writer bumps `version` after every successful state
+-- transition (pending→active, active→expired, etc.) inside the same
+-- advisory-lock-held transaction.
+
+CREATE TABLE IF NOT EXISTS pattern_allowlist_meta (
+    singleton  CHAR(1)      PRIMARY KEY DEFAULT 'x',
+    version    BIGINT       NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT pattern_allowlist_meta_singleton_chk CHECK (singleton = 'x')
+);
+
+-- Seed the singleton row idempotently so the reader never sees an
+-- empty meta table (which would otherwise force a defensive code
+-- path on first boot).
+INSERT INTO pattern_allowlist_meta (singleton, version)
+VALUES ('x', 0)
+ON CONFLICT (singleton) DO NOTHING;

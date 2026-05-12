@@ -99,7 +99,7 @@ def test_check_permissions_clean_dir_passes(tmp_path: Path, monkeypatch):
 def test_check_permissions_flags_loose_dir(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path), raising=False)
     os.chmod(tmp_path, 0o755)  # group/other can read+exec → violation
-    agent = MaintBackupAgent()
+    agent = MaintBackupAgent(enforce_permissions=False)
     violations = agent.check_permissions()
     assert any("0o755" in v or "looser" in v for v in violations), violations
 
@@ -111,7 +111,7 @@ def test_check_permissions_flags_world_readable_file(tmp_path: Path, monkeypatch
     f = tmp_path / "negelir.dump"
     f.write_bytes(b"x")
     os.chmod(f, 0o644)  # world-readable → violation
-    agent = MaintBackupAgent()
+    agent = MaintBackupAgent(enforce_permissions=False)
     violations = agent.check_permissions()
     assert any("looser" in v for v in violations), violations
 
@@ -122,3 +122,64 @@ def test_check_permissions_missing_dir_is_ok(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(missing), raising=False)
     agent = MaintBackupAgent()
     assert agent.check_permissions() == []
+
+
+# ── Startup enforcement (ROADMAP §8.3 "Permissions" checkbox) ──────────
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits required")
+def test_init_refuses_loose_dir(tmp_path: Path, monkeypatch):
+    """``enforce_permissions=True`` (the default) must raise on a
+    backup dir that group/other can read or traverse."""
+    from ai.swarm.agents.maint.backup import BackupPermissionError
+
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path), raising=False)
+    os.chmod(tmp_path, 0o755)
+    with pytest.raises(BackupPermissionError) as exc_info:
+        MaintBackupAgent()
+    assert "0o755" in str(exc_info.value) or "looser" in str(exc_info.value)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits required")
+def test_init_refuses_loose_file(tmp_path: Path, monkeypatch):
+    """A 0o644 file inside an otherwise-clean 0o700 dir must also
+    refuse-to-start — pg_dump output mode is the threat surface."""
+    from ai.swarm.agents.maint.backup import BackupPermissionError
+
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path), raising=False)
+    os.chmod(tmp_path, 0o700)
+    f = tmp_path / "stale.dump"
+    f.write_bytes(b"x")
+    os.chmod(f, 0o644)
+    with pytest.raises(BackupPermissionError) as exc_info:
+        MaintBackupAgent()
+    assert "looser" in str(exc_info.value)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits required")
+def test_init_sets_umask_0o077(tmp_path: Path, monkeypatch):
+    """Successful boot leaves the process umask at ``0o077`` so any
+    file the agent (or its subprocess) creates is 0o600 by default."""
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path), raising=False)
+    os.chmod(tmp_path, 0o700)
+    prev = os.umask(0o022)  # establish a known-loose umask first
+    try:
+        MaintBackupAgent()
+        # Read the post-init umask without disturbing it permanently.
+        current = os.umask(0o022)
+        os.umask(current)
+        assert current == 0o077
+    finally:
+        os.umask(prev)
+
+
+def test_init_skips_enforcement_when_opted_out(tmp_path: Path, monkeypatch):
+    """``enforce_permissions=False`` keeps the audit-only path open
+    for tests that probe :meth:`check_permissions` directly."""
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path), raising=False)
+    if os.name == "posix":
+        os.chmod(tmp_path, 0o755)  # would normally refuse-to-start
+    # Must NOT raise — opt-out honoured.
+    agent = MaintBackupAgent(enforce_permissions=False)
+    if os.name == "posix":
+        assert agent.check_permissions(), "audit primitive still flags the dir"

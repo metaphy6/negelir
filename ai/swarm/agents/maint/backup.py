@@ -48,6 +48,7 @@ What this slice DOES NOT ship (deferred, intentionally):
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -105,6 +106,19 @@ PRUNE_SKIP_REASONS: frozenset[str] = frozenset({
     "prune_only_refused",
     "leader_lost",
 })
+
+
+class BackupPermissionError(RuntimeError):
+    """Raised at agent startup when ``cfg.maint_backup_dir`` (or files
+    inside it) carry mode bits looser than the §8.3 binding contract
+    (``0o700`` for the directory, ``0o600`` for files).
+
+    Distinct subclass so an operator-facing supervisor can refuse
+    to mark the pod ready (vs swallowing it as a generic
+    ``RuntimeError``). The agent picks this surface over
+    ``PermissionError`` because the OS did not deny anything — the
+    refusal is policy, not a syscall failure.
+    """
 
 
 # ── Protocol-typed adapters ─────────────────────────────────────────────
@@ -272,6 +286,7 @@ class MaintBackupAgent:
         clock_wall: Callable[[], datetime] | None = None,
         clock_mono_ns: Callable[[], int] | None = None,
         new_id: Callable[[], str] | None = None,
+        enforce_permissions: bool = True,
     ) -> None:
         self._dump = dump if dump is not None else NoopDumpExecutor()
         self._verifier = verifier if verifier is not None else NoopVerifier()
@@ -309,6 +324,15 @@ class MaintBackupAgent:
         # explicit binding contract (silent-failure mode is the threat).
         self._last_completed_wall: datetime | None = None  # any-outcome ok
         self._last_verified_wall: datetime | None = None    # outcome=ok only
+
+        # ROADMAP §8.3 binding: agent process runs with umask 0o077
+        # so any file `pg_dump` (or our scratch writes) creates is
+        # 0o600 by default, and the parent dir / file modes are
+        # audited against the same contract — refusing to start on
+        # looser perms. Tests that intentionally exercise loose
+        # perms construct with ``enforce_permissions=False``.
+        if enforce_permissions:
+            self._enforce_startup_permissions()
 
     # ── Bus contract: handle quarantine_erase ───────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -673,6 +697,31 @@ class MaintBackupAgent:
                     f"{child} mode {oct(cmode)} is looser than {oct(limit)}"
                 )
         return violations
+
+    def _enforce_startup_permissions(self) -> None:
+        """Set process umask to ``0o077`` and refuse-to-start on
+        looser-than-contract perms in ``cfg.maint_backup_dir``.
+
+        Wired from :meth:`__init__` (controlled by the
+        ``enforce_permissions`` kwarg, default ``True``). Raises
+        :class:`BackupPermissionError` listing every violation
+        found by :meth:`check_permissions` so the operator sees
+        the full picture, not just the first failure.
+
+        On non-POSIX hosts (``os.name != "posix"``) the umask call
+        is skipped and only the audit runs — :meth:`check_permissions`
+        already returns ``[]`` on filesystems with no mode bits, so
+        this is a no-op on Windows / CIFS shares.
+        """
+
+        if os.name == "posix":
+            os.umask(0o077)
+        violations = self.check_permissions()
+        if violations:
+            raise BackupPermissionError(
+                "maint.backup.v1: refusing to start; "
+                + "; ".join(violations)
+            )
 
     # ── Emission helpers ────────────────────────────────────────────────
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,

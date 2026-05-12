@@ -218,6 +218,7 @@ phase7:
   sec_input_classifier_max_pending: 256            # NEGELIR_SEC_INPUT_CLASSIFIER_MAX_PENDING
   sec_input_breaker_open_s: 30                     # NEGELIR_SEC_INPUT_BREAKER_OPEN_S
   sec_input_pattern_reload_s: 30                   # NEGELIR_SEC_INPUT_PATTERN_RELOAD_S
+  sec_input_allowlist_reload_s: 60                 # NEGELIR_SEC_INPUT_ALLOWLIST_RELOAD_S — §8.7 cache poll
   # sec.quarantine.v1 + storage backpressure (§7.1 + §7.5)
   sec_quarantine_ttl_days: 30                      # NEGELIR_SEC_QUARANTINE_TTL_DAYS
   sec_quarantine_payload_max_bytes: 65536          # NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES — pre-base64 cap
@@ -310,6 +311,7 @@ phase8:
   maint_scaler_global_max_replicas: 64             # NEGELIR_MAINT_SCALER_GLOBAL_MAX_REPLICAS
   maint_scaler_min_decision_interval_s: 90         # NEGELIR_MAINT_SCALER_MIN_DECISION_INTERVAL_S
   maint_scaler_vram_headroom_mb: 1024              # NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB
+  maint_scaler_runtime_histogram_buckets: "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"  # NEGELIR_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS
   # ── §8.5 maint.dlq.v1 ──
   maint_dlq_per_topic_quota: 100                   # NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA
   maint_dlq_replay_backoff_s: 60                   # NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S
@@ -329,6 +331,10 @@ phase8:
   maint_schema_drift_debounce_s: 60                # NEGELIR_MAINT_SCHEMA_DRIFT_DEBOUNCE_S
   maint_schema_drift_lru: 512                      # NEGELIR_MAINT_SCHEMA_DRIFT_LRU
   maint_schema_pg_check_interval_s: 3600           # NEGELIR_MAINT_SCHEMA_PG_CHECK_INTERVAL_S
+  # §8.6 binding boundary — auto-apply migrations is detect-only in
+  # v1; this knob exists for forward compatibility only. Setting it
+  # true logs a warning + emits sec.alert{schema_auto_apply_misconfigured}.
+  maint_schema_auto_apply_enabled: false           # NEGELIR_MAINT_SCHEMA_AUTO_APPLY_ENABLED
   # ── §8.7 + §8.8 maint.sec.v1 ──
   maint_sec_pattern_ttl_s: 604800                  # NEGELIR_MAINT_SEC_PATTERN_TTL_S
   maint_sec_pattern_promote_threshold: 1           # NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD

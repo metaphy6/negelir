@@ -1,0 +1,183 @@
+"""Phase 8 §8.7 — sec.input.v1 read-side pattern_allowlist cache.
+
+The §8.7 maint.sec.v1 writer promotes operator-confirmed false-
+positive patterns into the ``pattern_allowlist`` table (state ``'a'``,
+optional ``expires_at``). The sec.input.v1 reader consults this
+allowlist on every deterministic-rule hit; if the
+``(source, rule_id, hit_fingerprint)`` triple matches an active row,
+the hit is suppressed (counted in ``sec_input_allowlist_hits_total``,
+never silently lost) and the request continues to the classifier.
+
+**Cache-reload race (binding).** The reader polls a single-row
+``pattern_allowlist_meta(version)`` table every
+``cfg.sec_input_allowlist_reload_s`` seconds. The version-row read
+and the subsequent ``SELECT pattern FROM pattern_allowlist WHERE
+state='a' ...`` MUST happen on the same connection under
+``REPEATABLE READ`` snapshot isolation, so a concurrent writer that
+commits between the two reads is invisible (consumer either sees
+old version + old set OR new version + new set, never half-applied).
+The next poll tick catches the new state. The proof test is in §8.9.
+
+**Codec.** The lookup key is::
+
+    sha256(NFC(f"{source}|{rule_id}|{hit_substring}").encode("utf-8")).hexdigest()[:16]
+
+— deterministic, NFC-normalized, language-stable, and the raw
+``hit_substring`` is never persisted (§8.7 SQL-injection guard line:
+"hit_substring is never placed in a SQL LIKE or = clause — only the
+fingerprint hash is").
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import threading
+import time
+import unicodedata
+from dataclasses import dataclass, field
+from typing import Callable, Iterable, Protocol
+
+
+_log = logging.getLogger("swarm.agents.sec.allowlist")
+
+
+# ── Codec ────────────────────────────────────────────────────────────
+def compute_pattern_key(source: str, rule_id: str, hit_substring: str) -> str:
+    """Return the canonical pattern_allowlist lookup key.
+
+    Single source of truth for both reader and writer. Stable across
+    locales: NFC normalize the composite string before hashing so a
+    pre/post-NFC payload never produces two different keys.
+    """
+    composite = f"{source}|{rule_id}|{hit_substring}"
+    nfc = unicodedata.normalize("NFC", composite)
+    return hashlib.sha256(nfc.encode("utf-8")).hexdigest()[:16]
+
+
+# ── Reader protocol ──────────────────────────────────────────────────
+class PatternAllowlistReader(Protocol):
+    """Read-only adapter over the ``pattern_allowlist`` + ``meta`` tables.
+
+    Implementations MUST guarantee snapshot consistency between the
+    returned ``version`` and ``active_keys`` set (REPEATABLE READ in
+    Postgres; trivially atomic for the in-memory shim).
+    """
+
+    def read_active_snapshot(self) -> tuple[int, frozenset[str]]:
+        """Return ``(version, active_keys)`` under snapshot isolation."""
+        ...
+
+
+@dataclass
+class InMemoryAllowlistReader:
+    """Test/bootstrap shim for :class:`PatternAllowlistReader`.
+
+    Production driver (Phase 8.7b) lives in ``server/`` and wraps a
+    psycopg connection with explicit ``BEGIN ISOLATION LEVEL
+    REPEATABLE READ``.
+    """
+
+    version: int = 0
+    active_keys: frozenset[str] = field(default_factory=frozenset)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def read_active_snapshot(self) -> tuple[int, frozenset[str]]:
+        with self._lock:
+            return self.version, self.active_keys
+
+    # Test helpers — bump version on every mutation so the cache
+    # picks up the change on the next poll tick.
+    def add(self, key: str) -> None:
+        with self._lock:
+            self.active_keys = frozenset(self.active_keys | {key})
+            self.version += 1
+
+    def remove(self, key: str) -> None:
+        with self._lock:
+            self.active_keys = frozenset(self.active_keys - {key})
+            self.version += 1
+
+    def replace(self, keys: Iterable[str]) -> None:
+        with self._lock:
+            self.active_keys = frozenset(keys)
+            self.version += 1
+
+
+# ── Cache ────────────────────────────────────────────────────────────
+class AllowlistCache:
+    """Per-process cache wrapping a :class:`PatternAllowlistReader`.
+
+    The first :meth:`is_allowlisted` call triggers an eager load.
+    Subsequent calls within ``reload_s`` reuse the cached snapshot.
+    Reader exceptions keep the previous snapshot in place (fail-open
+    — same doctrine as §7.7 pattern reload).
+    """
+
+    __slots__ = (
+        "_reader", "_reload_s", "_clock_mono",
+        "_version", "_keys", "_last_check_mono",
+        "_loaded", "_lock",
+    )
+
+    def __init__(
+        self,
+        reader: PatternAllowlistReader,
+        *,
+        reload_s: float,
+        clock_mono: Callable[[], float] | None = None,
+    ) -> None:
+        self._reader = reader
+        self._reload_s = max(1.0, float(reload_s))
+        self._clock_mono = clock_mono or time.monotonic
+        self._version = -1
+        self._keys: frozenset[str] = frozenset()
+        self._last_check_mono = 0.0
+        self._loaded = False
+        self._lock = threading.Lock()
+
+    def is_allowlisted(self, key: str) -> bool:
+        self._maybe_reload()
+        return key in self._keys
+
+    def force_reload(self) -> None:
+        """Bypass the throttle and re-read the snapshot now.
+
+        Used by tests and by the §8.9 race-proof test. Production
+        callers should prefer the throttled :meth:`is_allowlisted`
+        path.
+        """
+        with self._lock:
+            self._last_check_mono = 0.0
+            self._loaded = False
+        self._maybe_reload()
+
+    def snapshot_version(self) -> int:
+        """Return the version of the currently-cached snapshot.
+
+        ``-1`` means the cache has not loaded yet. Used by metrics
+        + tests; not part of the hot path.
+        """
+        with self._lock:
+            return self._version
+
+    def _maybe_reload(self) -> None:
+        now = self._clock_mono()
+        with self._lock:
+            if self._loaded and (now - self._last_check_mono) < self._reload_s:
+                return
+            self._last_check_mono = now
+        try:
+            version, keys = self._reader.read_active_snapshot()
+        except Exception as exc:  # noqa: BLE001 — fail-open contract
+            # Keep the stale snapshot. Loud log so an operator notices
+            # repeated failures; the next poll tick will retry.
+            _log.warning(
+                "pattern_allowlist read failed (%s); keeping cached "
+                "snapshot version=%d", exc, self._version,
+            )
+            return
+        with self._lock:
+            self._loaded = True
+            if version != self._version:
+                self._version = int(version)
+                self._keys = frozenset(keys)

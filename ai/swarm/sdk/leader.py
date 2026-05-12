@@ -113,4 +113,27 @@ class KubernetesLeader:
         raise NotImplementedError
 
 
-__all__ = ["Leader", "SingleProcessLeader", "KubernetesLeader"]
+#: ROADMAP §8.10 — single source of truth for the set of maint-plane
+#: agent ids that **must** route every emit through a :class:`Leader`
+#: gate. Two replicas of any of these agents would either double-emit
+#: side-effects (scaler decisions, dlq replays, backup runs) or race
+#: on shared state (sec hysteresis timer, schema-change auto-apply
+#: ledger). The boundary test in
+#: ``ai/swarm/agents/maint/tests/test_leader_boundary.py`` pins this
+#: set against the live registry so an agent that gets renamed,
+#: removed, or added without a matching update here fails CI.
+LEADER_REQUIRED_AGENTS: frozenset[str] = frozenset({
+    "maint.scaler.v1",
+    "maint.backup.v1",
+    "maint.dlq.v1",
+    "maint.schema.v1",
+    "maint.sec.v1",
+})
+
+
+__all__ = [
+    "Leader",
+    "SingleProcessLeader",
+    "KubernetesLeader",
+    "LEADER_REQUIRED_AGENTS",
+]

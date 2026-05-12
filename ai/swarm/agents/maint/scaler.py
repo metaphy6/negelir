@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time as _time_mod
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -112,6 +113,160 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     # streak has not yet reached cfg.maint_scaler_scale_down_grace_windows).
     "scale_down_grace",
 })
+
+
+# Phase 8 §8.2 — bounded reason allow-list shared by the
+# observability counter. The decisions counter normalises every
+# reason not in this set to ``"unknown"`` so a malformed code path
+# (or a future reason added by accident) cannot blow up label
+# cardinality on Prometheus.
+_KNOWN_REASONS: frozenset[str] = DECISION_REASONS | THROTTLE_REASONS
+
+# Phase 8 §8.2 — outcome label values for ``maint_scaler_decisions_total``.
+# Closed enum: extending requires a minor bump on the ``ai`` component.
+_OUTCOME_APPLIED = "applied"
+_OUTCOME_THROTTLED = "throttled"
+_OUTCOME_ERROR = "error"
+_DECISION_OUTCOMES: frozenset[str] = frozenset(
+    {_OUTCOME_APPLIED, _OUTCOME_THROTTLED, _OUTCOME_ERROR}
+)
+
+
+def _parse_runtime_histogram_buckets(raw: str) -> tuple[float, ...]:
+    """Parse the ``maint_scaler_runtime_histogram_buckets`` CSV.
+
+    The cfg layer already rejects malformed entries at boot; this
+    helper is the runtime fallback that drops bad tokens silently
+    so a field-overridden value can never crash the agent. Returns
+    a sorted, de-duplicated tuple of strictly positive floats.
+    """
+    out: list[float] = []
+    seen: set[float] = set()
+    for raw_tok in raw.split(","):
+        tok = raw_tok.strip()
+        if not tok:
+            continue
+        try:
+            v = float(tok)
+        except ValueError:
+            continue
+        if v <= 0.0 or v in seen:
+            continue
+        seen.add(v)
+        out.append(v)
+    out.sort()
+    return tuple(out)
+
+
+# Fallback bucket ladder used when cfg parses to zero usable
+# entries. Matches the cfg default so a runtime-only override
+# accident still produces a sane histogram.
+_FALLBACK_RUNTIME_BUCKETS: tuple[float, ...] = (
+    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+)
+
+
+class _LabelCounter:
+    """Tiny labelled counter — Prometheus-style.
+
+    Series live in a dict keyed on the label-value tuple. ``inc``
+    silently drops calls whose label arity does not match the
+    declared ``label_names`` (cardinality safety).
+    """
+
+    __slots__ = ("name", "label_names", "_values")
+
+    def __init__(self, name: str, label_names: tuple[str, ...]) -> None:
+        self.name = name
+        self.label_names = label_names
+        self._values: dict[tuple[str, ...], int] = {}
+
+    def inc(self, labels: tuple[str, ...], n: int = 1) -> None:
+        if len(labels) != len(self.label_names):
+            return
+        self._values[labels] = self._values.get(labels, 0) + int(n)
+
+    def value(self, labels: tuple[str, ...]) -> int:
+        return self._values.get(labels, 0)
+
+    def series(self) -> Iterable[tuple[tuple[str, ...], int]]:
+        return self._values.items()
+
+
+class _LabelGauge:
+    """Tiny labelled gauge — last-write-wins per label tuple."""
+
+    __slots__ = ("name", "label_names", "_values")
+
+    def __init__(self, name: str, label_names: tuple[str, ...]) -> None:
+        self.name = name
+        self.label_names = label_names
+        self._values: dict[tuple[str, ...], float] = {}
+
+    def set(self, labels: tuple[str, ...], value: float) -> None:
+        if len(labels) != len(self.label_names):
+            return
+        self._values[labels] = float(value)
+
+    def value(self, labels: tuple[str, ...]) -> float | None:
+        return self._values.get(labels)
+
+    def series(self) -> Iterable[tuple[tuple[str, ...], float]]:
+        return self._values.items()
+
+
+class _LabelHistogram:
+    """Tiny labelled histogram — Prometheus-style cumulative buckets."""
+
+    __slots__ = ("name", "label_names", "buckets", "_counts", "_sums",
+                 "_totals")
+
+    def __init__(self, name: str, label_names: tuple[str, ...],
+                 buckets: tuple[float, ...]) -> None:
+        self.name = name
+        self.label_names = label_names
+        self.buckets = buckets
+        self._counts: dict[tuple[str, ...], list[int]] = {}
+        self._sums: dict[tuple[str, ...], float] = {}
+        self._totals: dict[tuple[str, ...], int] = {}
+
+    def observe(self, labels: tuple[str, ...], value: float) -> None:
+        if len(labels) != len(self.label_names):
+            return
+        v = float(value)
+        counts = self._counts.get(labels)
+        if counts is None:
+            counts = [0] * len(self.buckets)
+            self._counts[labels] = counts
+        for i, bound in enumerate(self.buckets):
+            if v <= bound:
+                counts[i] += 1
+        self._sums[labels] = self._sums.get(labels, 0.0) + v
+        self._totals[labels] = self._totals.get(labels, 0) + 1
+
+    def total(self, labels: tuple[str, ...]) -> int:
+        return self._totals.get(labels, 0)
+
+    def sum(self, labels: tuple[str, ...]) -> float:
+        return self._sums.get(labels, 0.0)
+
+    def bucket_counts(self, labels: tuple[str, ...]) -> tuple[int, ...]:
+        return tuple(self._counts.get(labels, [0] * len(self.buckets)))
+
+    def series(
+        self,
+    ) -> Iterable[tuple[tuple[str, ...], list[int], float, int]]:
+        for labels, counts in self._counts.items():
+            yield (labels, counts, self._sums[labels], self._totals[labels])
+
+
+def _format_label_block(label_names: tuple[str, ...],
+                        label_values: tuple[str, ...]) -> str:
+    """Render ``{k=v,k=v}`` for use in a flat metric key. Caller
+    guarantees arity matches; values are cast to str (the agent
+    only ever passes already-bounded labels)."""
+    parts = [f"{n}={v}" for n, v in zip(label_names, label_values)]
+    return "{" + ",".join(parts) + "}"
 
 
 # ── Welford rolling sketch (Phase 8 §8.2 A1) ───────────────────────────
@@ -237,6 +392,37 @@ class MaintScaler:
         # test that proves every reason in DECISION_REASONS ∪
         # THROTTLE_REASONS gets exercised by the agent.
         self._counters: dict[tuple[str, str, str], int] = {}
+        # Phase 8 §8.2 — observability surface (binding):
+        #   * Counter ``maint_scaler_decisions_total{agent,reason,outcome}``
+        #     where ``outcome ∈ {applied, throttled, error}``.
+        #   * Gauge ``maint_scaler_desired_replicas{agent}`` — set on
+        #     every emitted ``scale_decision`` to the new replica count.
+        #   * Gauge ``maint_scaler_vram_budget_mb{host}`` — set inside
+        #     :meth:`_check_vram_budget` whenever a fresh probe is
+        #     observed.
+        #   * Histogram ``maint_scaler_runtime_call_seconds{controller,outcome}``
+        #     — wraps every :meth:`RuntimeController.apply` call.
+        # Bucket boundaries are sourced from cfg so operators can
+        # tune the SLO ladder without a code change. Empty / malformed
+        # cfg falls back to the prometheus default ladder.
+        buckets = _parse_runtime_histogram_buckets(
+            str(_cfg.maint_scaler_runtime_histogram_buckets)
+        ) or _FALLBACK_RUNTIME_BUCKETS
+        self._m_decisions = _LabelCounter(
+            "maint_scaler_decisions_total",
+            ("agent", "reason", "outcome"),
+        )
+        self._m_desired = _LabelGauge(
+            "maint_scaler_desired_replicas", ("agent",)
+        )
+        self._m_vram_budget = _LabelGauge(
+            "maint_scaler_vram_budget_mb", ("host",)
+        )
+        self._m_runtime = _LabelHistogram(
+            "maint_scaler_runtime_call_seconds",
+            ("controller", "outcome"),
+            buckets,
+        )
         # Phase 8 §8.16.1 — one-shot tracking for unconfigured-agent
         # alerts. Once a target's name lands here, no further
         # ``maint_scaler_unconfigured_agent`` alert / ``maint_scaler_default_applied``
@@ -297,7 +483,7 @@ class MaintScaler:
         ttl_s = max(1, min(ttl_s, 86400))
         st.pin_replicas = replicas
         st.pin_expires_at_ns = self._now_ns() + ttl_s * 1_000_000_000
-        accepted = self._controller.apply(target, replicas)
+        accepted = self._invoke_runtime(target, replicas)
         prev = st.last_replicas
         yield self._notify("scale_decision",
                            target=target,
@@ -311,6 +497,10 @@ class MaintScaler:
                                   "controller_accepted": accepted,
                                   "decision_window_id": self._window_id()})
         self._bump_counter("scale_decision", "manual_pin")
+        self._record_decision_metric(
+            "manual_pin", _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR
+        )
+        self._set_desired_replicas(target, replicas)
         st.last_replicas = replicas
         st.last_decision_at_ns = self._now_ns()
         yield self._ack(msg, request_id, accepted=True, reason="pin_set",
@@ -374,13 +564,18 @@ class MaintScaler:
         # warm-up is a no-op. Honest semantics over surprise shrinkage.
         if st.last_replicas >= warmup_replicas:
             return
-        accepted = self._controller.apply(warmup_target, warmup_replicas)
+        accepted = self._invoke_runtime(warmup_target, warmup_replicas)
         prev = st.last_replicas
         st.last_replicas = warmup_replicas
         st.history.append(warmup_replicas)
         st.last_window_ns = self._window_anchor()
         st.last_decision_at_ns = self._now_ns()
         self._bump_counter("scale_decision", "retrain_request_warmup")
+        self._record_decision_metric(
+            "retrain_request_warmup",
+            _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR,
+        )
+        self._set_desired_replicas(warmup_target, warmup_replicas)
         yield self._notify(
             "scale_decision",
             target=warmup_target,
@@ -436,6 +631,9 @@ class MaintScaler:
                 continue  # already decided in this window
             if st.pin_replicas is not None:
                 self._bump_counter("scale_throttled", "manual_pin_active")
+                self._record_decision_metric(
+                    "manual_pin_active", _OUTCOME_THROTTLED
+                )
                 out.append(self._notify(
                     "scale_throttled",
                     target=target,
@@ -457,6 +655,9 @@ class MaintScaler:
                     if throttle_reason == "max_replicas_cap":
                         extra["max_replicas"] = self._max_replicas_for(target)
                     self._bump_counter("scale_throttled", throttle_reason)
+                    self._record_decision_metric(
+                        throttle_reason, _OUTCOME_THROTTLED
+                    )
                     out.append(self._notify(
                         "scale_throttled",
                         target=target,
@@ -473,6 +674,9 @@ class MaintScaler:
                 and (now_ns - st.last_decision_at_ns) < min_interval_ns
             ):
                 self._bump_counter("scale_throttled", "min_decision_interval")
+                self._record_decision_metric(
+                    "min_decision_interval", _OUTCOME_THROTTLED
+                )
                 out.append(self._notify(
                     "scale_throttled",
                     target=target,
@@ -490,6 +694,9 @@ class MaintScaler:
             projected = roster_total - (st.last_replicas or 0) + decision
             if decision > st.last_replicas and projected > global_cap:
                 self._bump_counter("scale_throttled", "global_max_replicas")
+                self._record_decision_metric(
+                    "global_max_replicas", _OUTCOME_THROTTLED
+                )
                 out.append(self._notify(
                     "scale_throttled",
                     target=target,
@@ -506,6 +713,9 @@ class MaintScaler:
                 vram_throttle = self._check_vram_budget(target, decision)
                 if vram_throttle is not None:
                     self._bump_counter("scale_throttled", vram_throttle)
+                    self._record_decision_metric(
+                        vram_throttle, _OUTCOME_THROTTLED
+                    )
                     out.append(self._notify(
                         "scale_throttled",
                         target=target,
@@ -518,6 +728,9 @@ class MaintScaler:
                     continue
             if emitted >= max_changes:
                 self._bump_counter("scale_throttled", "max_changes_per_window")
+                self._record_decision_metric(
+                    "max_changes_per_window", _OUTCOME_THROTTLED
+                )
                 out.append(self._notify(
                     "scale_throttled",
                     target=target,
@@ -529,11 +742,16 @@ class MaintScaler:
                     },
                 ))
                 continue
-            accepted = self._controller.apply(target, decision)
+            accepted = self._invoke_runtime(target, decision)
             decision_reason = self._classify_decision_reason(
                 st.last_replicas, decision, sig
             )
             self._bump_counter("scale_decision", decision_reason)
+            self._record_decision_metric(
+                decision_reason,
+                _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR,
+            )
+            self._set_desired_replicas(target, decision)
             out.append(self._notify("scale_decision",
                                     target=target,
                                     extra={"replicas": decision,
@@ -867,30 +1085,127 @@ class MaintScaler:
 
     # ── Counters / VRAM probe ────────────────────────────────────
     def _bump_counter(self, kind: str, reason: str) -> None:
-        """Increment ``maint_scaler_decisions_total{agent,kind,reason}``."""
+        """Legacy counter bump: increments the per-(agent, kind, reason)
+        ledger consumed by ``metrics_snapshot()`` for the legacy
+        Prometheus key shape ``maint_scaler_<kind>_total{...}``.
+
+        The Phase 8.2 observability counter
+        ``maint_scaler_decisions_total{agent,reason,outcome}`` is
+        bumped via :meth:`_record_decision_metric` at the call site
+        (the ``kind`` → ``outcome`` mapping is decided there because
+        only the call site knows whether the runtime call accepted).
+        """
         key = (self.name, kind, reason)
         self._counters[key] = self._counters.get(key, 0) + 1
 
-    def metrics_snapshot(self) -> dict[str, int]:
-        """Return a flat dict for Prometheus-style export. Keys are
-        ``"maint_scaler_<kind>_total{agent=..,reason=..}"`` so a
-        downstream exporter can split them on ``{`` for label parsing."""
-        out: dict[str, int] = {}
+    def _record_decision_metric(self, reason: str, outcome: str) -> None:
+        """Bump ``maint_scaler_decisions_total{agent,reason,outcome}``.
+
+        Cardinality safety: a ``reason`` that is not in
+        :data:`_KNOWN_REASONS` is normalised to ``"unknown"`` before
+        the increment so a malformed code path cannot spawn a new
+        Prometheus series. An ``outcome`` outside the closed enum is
+        dropped silently (defence-in-depth — the call sites only
+        ever pass one of the three valid values).
+        """
+        if outcome not in _DECISION_OUTCOMES:
+            return
+        norm_reason = reason if reason in _KNOWN_REASONS else "unknown"
+        self._m_decisions.inc((self.name, norm_reason, outcome))
+
+    def _set_desired_replicas(self, target: str, replicas: int) -> None:
+        """Update ``maint_scaler_desired_replicas{agent}`` to reflect
+        the latest emitted decision for ``target``."""
+        self._m_desired.set((target,), float(replicas))
+
+    def _invoke_runtime(self, target: str, replicas: int) -> bool:
+        """Wrap :meth:`RuntimeController.apply` with timing + the
+        ``maint_scaler_runtime_call_seconds{controller,outcome}``
+        histogram. Outcome is ``"success"`` when the controller
+        returned truthy, ``"error"`` otherwise (or when the
+        controller raised — exception is re-raised after the
+        histogram is observed so callers can react)."""
+        controller_name = getattr(self._controller, "name", "unknown")
+        t0 = _time_mod.perf_counter()
+        outcome = "error"
+        try:
+            accepted = bool(self._controller.apply(target, replicas))
+            outcome = "success" if accepted else "error"
+            return accepted
+        finally:
+            elapsed = _time_mod.perf_counter() - t0
+            self._m_runtime.observe((str(controller_name), outcome), elapsed)
+
+    def metrics_snapshot(self) -> dict[str, float]:
+        """Return a flat dict for Prometheus-style export.
+
+        Two key shapes are present:
+
+        * Legacy (kept for back-compat with the Phase 8.2 surface
+          coverage test): ``maint_scaler_<kind>_total{agent=..,reason=..}``.
+        * Observability (Phase 8.2 binding):
+          ``maint_scaler_decisions_total{agent=..,reason=..,outcome=..}``,
+          ``maint_scaler_desired_replicas{agent=..}``,
+          ``maint_scaler_vram_budget_mb{host=..}``,
+          ``maint_scaler_runtime_call_seconds_count{controller=..,outcome=..}``,
+          ``maint_scaler_runtime_call_seconds_sum{controller=..,outcome=..}``,
+          and one ``..._bucket{..,le=X}`` per histogram bucket.
+        """
+        out: dict[str, float] = {}
+        # Legacy counters.
         for (agent, kind, reason), count in self._counters.items():
-            out[f"maint_scaler_{kind}_total{{agent={agent},reason={reason}}}"] = count
+            out[
+                f"maint_scaler_{kind}_total"
+                f"{{agent={agent},reason={reason}}}"
+            ] = count
+        # Observability counter.
+        for labels, count in self._m_decisions.series():
+            out[
+                self._m_decisions.name
+                + _format_label_block(self._m_decisions.label_names, labels)
+            ] = count
+        # Observability gauges.
+        for gauge in (self._m_desired, self._m_vram_budget):
+            for labels, value in gauge.series():
+                out[
+                    gauge.name
+                    + _format_label_block(gauge.label_names, labels)
+                ] = value
+        # Observability histogram (count + sum + per-bucket).
+        for labels, counts, total_sum, total_n in self._m_runtime.series():
+            block = _format_label_block(
+                self._m_runtime.label_names, labels
+            )
+            out[f"{self._m_runtime.name}_count{block}"] = total_n
+            out[f"{self._m_runtime.name}_sum{block}"] = total_sum
+            for bound, c in zip(self._m_runtime.buckets, counts):
+                # ``le`` formatted with ``g`` keeps integer bucket
+                # bounds clean (``1`` not ``1.0``) without losing
+                # precision on fractional bounds (``0.005``).
+                bucket_block = block[:-1] + f",le={bound:g}}}"
+                out[f"{self._m_runtime.name}_bucket{bucket_block}"] = c
         return out
 
     def update_device_probe(self, target: str, *,
                             vram_total_mb: float,
                             vram_used_mb: float,
                             vram_per_replica_mb: float,
-                            observed_at_ns: int | None = None) -> None:
+                            observed_at_ns: int | None = None,
+                            host: str | None = None) -> None:
         """Push a fresh device probe for ``target``. Called by the
         Phase 6.x device telemetry collector (or by tests directly).
 
         The probe is treated as stale (and the scaler refuses to
         scale up) once it is older than 5 decision windows.
+
+        Phase 8.2 observability: the per-host VRAM budget gauge
+        ``maint_scaler_vram_budget_mb{host}`` is updated immediately
+        from this probe (``budget = vram_total_mb - vram_headroom_mb``).
+        ``host`` defaults to ``target`` because the v1 probe shape
+        carries no separate host field (Phase 11 contract); callers
+        that already split host from agent pass ``host=`` explicitly.
         """
+        host_label = host if host is not None else target
         self._device_probes[target] = {
             "vram_total_mb": float(vram_total_mb),
             "vram_used_mb": float(vram_used_mb),
@@ -898,7 +1213,11 @@ class MaintScaler:
             "observed_at_ns": int(
                 observed_at_ns if observed_at_ns is not None else self._now_ns()
             ),
+            "host": str(host_label),
         }
+        headroom = float(_cfg.maint_scaler_vram_headroom_mb)
+        budget = max(0.0, float(vram_total_mb) - headroom)
+        self._m_vram_budget.set((str(host_label),), budget)
 
     def _check_vram_budget(self, target: str, projected_replicas: int) -> str | None:
         """Return throttle reason if the projected replica count would
@@ -921,6 +1240,12 @@ class MaintScaler:
             return "vram_telemetry_stale"
         headroom = float(_cfg.maint_scaler_vram_headroom_mb)
         budget = max(0.0, float(probe["vram_total_mb"]) - headroom)
+        # Phase 8.2 observability — keep the gauge fresh on every
+        # decision (in case headroom cfg changed since the last
+        # probe). ``host`` defaults to target when probes pre-date
+        # the host-aware ``update_device_probe`` field.
+        host_label = str(probe.get("host", target))
+        self._m_vram_budget.set((host_label,), budget)
         per_replica = float(probe["vram_per_replica_mb"])
         # Baseline: keep currently-used VRAM minus what the existing
         # replicas account for, then add the projected count's draw.

@@ -37,6 +37,7 @@ _PHASE7_KNOBS: tuple[str, ...] = (
     "sec_input_classifier_max_pending",
     "sec_input_breaker_open_s",
     "sec_input_pattern_reload_s",
+    "sec_input_allowlist_reload_s",
     "sec_quarantine_ttl_days",
     "sec_quarantine_payload_max_bytes",
     "sec_quarantine_producer_queue_max",
