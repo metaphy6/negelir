@@ -25,7 +25,7 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from xops.backup.executors import LocalPgDumpExecutor
+from xops.backup.executors import LocalPgDumpExecutor, LocalPgPruner
 from xops.backup.role_probe import BackupRoleError, verify_backup_role
 from xops.backup.verifier import LocalSubprocessVerifier
 
@@ -48,6 +48,7 @@ class BackupDrivers:
 
     dump: Optional[LocalPgDumpExecutor]
     verifier: Optional[LocalSubprocessVerifier]
+    pruner: Optional[LocalPgPruner]
     profile: str  # "live" | "shim"
 
 
@@ -72,7 +73,17 @@ def build_backup_drivers(cfg: "Config") -> BackupDrivers:
     dsn = (cfg.maint_backup_pg_dsn or "").strip()
     if not dsn:
         _log.info("build_backup_drivers profile=shim (no pg_dsn)")
-        return BackupDrivers(dump=None, verifier=None, profile="shim")
+        return BackupDrivers(dump=None, verifier=None, pruner=None, profile="shim")
+
+    # ROADMAP §8.3 restore-verify mechanism is runtime-aware.
+    # `LocalSubprocessVerifier` is compose/host only; `k8s`
+    # requires the SidecarVerifier adapter that lands in Phase 14.
+    runtime = str(getattr(cfg, "maint_runtime", "none") or "none").strip()
+    if runtime == "k8s":
+        raise BackupWiringError(
+            "maint_runtime='k8s' requires SidecarVerifier (Phase 14); "
+            "LocalSubprocessVerifier is compose-only"
+        )
 
     recipients = (cfg.maint_backup_age_recipients_file or "").strip()
     identity = (cfg.maint_backup_age_identity_file or "").strip()
@@ -118,11 +129,19 @@ def build_backup_drivers(cfg: "Config") -> BackupDrivers:
         age_identity_file=identity,
         pg_jobs=int(cfg.maint_backup_pg_jobs),
     )
+    pruner = LocalPgPruner(
+        pg_dsn=dsn,
+        prune_batch=int(cfg.maint_backup_prune_batch),
+        sec_quarantine_ttl_days=int(cfg.sec_quarantine_ttl_days),
+        schema_snapshot_retention_days=int(cfg.maint_schema_snapshot_retention_days),
+        dlq_retention_days=int(cfg.swarm_dlq_pg_retention_days),
+        audit_retention_days=int(cfg.maint_audit_retention_days),
+    )
     _log.info(
         "build_backup_drivers profile=live dir=%s pg_jobs=%d image=%s",
         cfg.maint_backup_dir, cfg.maint_backup_pg_jobs, image,
     )
-    return BackupDrivers(dump=dump, verifier=verifier, profile="live")
+    return BackupDrivers(dump=dump, verifier=verifier, pruner=pruner, profile="live")
 
 
 __all__ = [

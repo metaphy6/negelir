@@ -11,6 +11,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from swarm.sdk.wire_contracts import (
+    SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER,
+    SEC_ALERT_V1_ALLOWED_PRODUCERS,
+)
+
 
 # Plane + record-type vocabulary lives at module scope so it is not
 # shadowed by dataclass field machinery (Python 3.13 made class-level
@@ -1079,16 +1084,7 @@ class MaintAck:
 
 _ALLOWED_QA_VERDICTS: frozenset[str] = frozenset({"pass", "sanitized"})
 _ALLOWED_SEC_SOURCES: frozenset[str] = frozenset({
-    "sec.input.v1", "sec.scrape.v1", "sec.rate.v1",
-    "source.watcher.v1",
-    "maint.deadmans.v1",
-    # Phase 8 §8.5 — DLQ supervisor publishes
-    # ``dlq_backlog_high`` warnings on per-topic queue pressure.
-    "maint.dlq.v1",
-    # Phase 8 §8.3 — backup reactor publishes ``backup_clock_skew``
-    # (severity=error backwards / severity=warn forward) and
-    # ``backup_age_alert`` (severity=error late catch-up).
-    "maint.backup.v1",
+    *SEC_ALERT_V1_ALLOWED_PRODUCERS,
 })
 _ALLOWED_SEC_SEVERITIES: frozenset[str] = frozenset({
     "info", "warn", "error", "critical",
@@ -1279,6 +1275,12 @@ class SecAlert:
             raise ValueError(
                 f"SecAlert.kind={self.kind!r} fails open-enum shape "
                 f"(/^[a-z][a-z0-9_]{{0,63}}$/)"
+            )
+        allowed_kinds = SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER.get(self.source)
+        if allowed_kinds is not None and self.kind not in allowed_kinds:
+            raise ValueError(
+                f"SecAlert.kind={self.kind!r} not allowed for source={self.source!r}; "
+                f"allowed={sorted(allowed_kinds)}"
             )
 
     def as_dict(self) -> dict[str, Any]:

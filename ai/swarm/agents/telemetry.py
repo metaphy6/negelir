@@ -12,12 +12,13 @@ SDK stays stdlib-only. Production deployments add the
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Iterable
+from typing import Callable, Iterable
 
 from ..sdk.types import Message
 from common.config import cfg
@@ -46,6 +47,10 @@ from .topics import (
 )
 
 _log = logging.getLogger(__name__)
+
+_METRIC_KEY_RE = re.compile(
+    r"^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>[^}]*)\})?$"
+)
 
 
 _WATCHED_TOPICS = (
@@ -149,15 +154,48 @@ class _Counters:
             return "\n".join(lines)
 
 
+def _quote_label_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _render_flat_snapshot(snapshot: dict[str, float]) -> str:
+    """Render ``{"metric{a=b}": n}`` into Prometheus text lines.
+
+    The maint reactors expose snapshots in flat-key form. Telemetry
+    parses that shape and quotes label values so the resulting text is
+    valid Prometheus exposition.
+    """
+    lines: list[str] = []
+    for raw_key in sorted(snapshot.keys()):
+        m = _METRIC_KEY_RE.match(str(raw_key))
+        if m is None:
+            continue
+        name = m.group("name")
+        raw_labels = (m.group("labels") or "").strip()
+        labels: list[str] = []
+        if raw_labels:
+            for part in raw_labels.split(","):
+                if "=" not in part:
+                    continue
+                k, v = part.split("=", 1)
+                k = k.strip()
+                if not k:
+                    continue
+                labels.append(f'{k}="{_quote_label_value(v.strip())}"')
+        label_block = "{" + ",".join(labels) + "}" if labels else ""
+        lines.append(f"{name}{label_block} {float(snapshot[raw_key]):g}")
+    return "\n".join(lines)
+
+
 class _MetricsHandler(BaseHTTPRequestHandler):  # pragma: no cover - thin HTTP shim
-    counters: "_Counters"
+    render: Callable[[], str]
 
     def do_GET(self) -> None:  # noqa: N802 — http.server contract
         if self.path != "/metrics":
             self.send_response(404)
             self.end_headers()
             return
-        body = self.counters.render_prometheus().encode("utf-8")
+        body = self.render().encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4")
         self.send_header("Content-Length", str(len(body)))
@@ -175,6 +213,7 @@ class TelemetryAgent:
 
     def __init__(self) -> None:
         self.counters = _Counters()
+        self._extra_metric_sources: list[Callable[[], dict[str, float]]] = []
         self._server: HTTPServer | None = None
         self._server_thread: threading.Thread | None = None
 
@@ -212,6 +251,33 @@ class TelemetryAgent:
         self.counters.observe(str(msg.envelope.topic), latency_ms=latency_ms)
         return ()
 
+    def register_metric_source(
+        self,
+        source: Callable[[], dict[str, float]],
+    ) -> None:
+        """Register an extra metrics snapshot source.
+
+        Sources are rendered on every scrape and must return a flat
+        numeric snapshot (e.g. ``MaintScaler.metrics_snapshot``).
+        """
+        self._extra_metric_sources.append(source)
+
+    def render_prometheus(self) -> str:
+        body = self.counters.render_prometheus().rstrip("\n")
+        extra_chunks: list[str] = []
+        for source in self._extra_metric_sources:
+            try:
+                snap = source()
+            except Exception:
+                _log.exception("telemetry: metric source failed")
+                continue
+            extra = _render_flat_snapshot(snap)
+            if extra:
+                extra_chunks.append(extra)
+        if not extra_chunks:
+            return body + "\n"
+        return body + "\n" + "\n".join(extra_chunks) + "\n"
+
     # ── Optional HTTP exposer ───────────────────────────────────────
     def start_http(self, port: int, *, bind: str = "127.0.0.1") -> None:
         """Start a tiny /metrics HTTP server. Idempotent.
@@ -227,7 +293,7 @@ class TelemetryAgent:
         handler = type(
             "_BoundHandler",
             (_MetricsHandler,),
-            {"counters": self.counters},
+            {"render": self.render_prometheus},
         )
         self._server = HTTPServer((bind, port), handler)
         self._server_thread = threading.Thread(

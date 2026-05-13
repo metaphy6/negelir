@@ -1875,6 +1875,106 @@ class TestPhase3MainSignalShutdown:
         assert "NegelirScheduler" in source or "scheduler" in source.lower()
 
 
+# ── Phase 8 §8.9: Maint Audit Immutability ──────────────────────────────────
+
+
+class TestMaintAuditImmutability:
+    """Tests for Phase 8 §8.9 INSERT-only enforcement on maint_audit_log_pii.
+    
+    Binding contract: the migration file (migrations/009_maint_audit.sql) must
+    contain (1) REVOKE UPDATE, DELETE ON maint_audit_log_pii FROM PUBLIC and
+    (2) a BEFORE UPDATE OR DELETE trigger that raises audit_log_immutable
+    exception for all roles except negelir_audit_pruner.
+    """
+
+    def test_migration_009_exists(self):
+        """Verify migration file exists."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        assert os.path.isfile(path), "migrations/009_maint_audit.sql not found"
+
+    def test_migration_contains_revoke_update_delete(self):
+        """AC: Migration includes REVOKE UPDATE, DELETE on maint_audit_log_pii FROM PUBLIC."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        with open(path) as f:
+            content = f.read()
+        # Must have REVOKE UPDATE, DELETE
+        assert "REVOKE UPDATE, DELETE ON maint_audit_log_pii FROM PUBLIC" in content, \
+            "Missing REVOKE UPDATE, DELETE statement"
+
+    def test_migration_contains_audit_log_immutable_trigger(self):
+        """AC: Migration includes audit_log_immutable trigger and function."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        with open(path) as f:
+            content = f.read()
+        # Must have the trigger function
+        assert "CREATE OR REPLACE FUNCTION audit_log_immutable()" in content, \
+            "Missing audit_log_immutable() function"
+        # Must have the trigger
+        assert "CREATE TRIGGER trg_audit_log_immutable" in content, \
+            "Missing trg_audit_log_immutable trigger"
+        # Must check for negelir_audit_pruner role
+        assert "current_role != 'negelir_audit_pruner'" in content, \
+            "Trigger does not check negelir_audit_pruner role"
+        # Must raise audit_log_immutable exception
+        assert "audit_log_immutable:" in content or "audit_log_immutable" in content, \
+            "Trigger does not raise audit_log_immutable exception"
+
+    def test_migration_trigger_fires_on_update_or_delete(self):
+        """AC: Trigger is defined for BEFORE UPDATE OR DELETE."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        with open(path) as f:
+            content = f.read()
+        assert "BEFORE UPDATE OR DELETE ON maint_audit_log_pii" in content, \
+            "Trigger not defined for BEFORE UPDATE OR DELETE"
+
+    def test_migration_pruner_role_created(self):
+        """AC: Migration creates the negelir_audit_pruner role."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        with open(path) as f:
+            content = f.read()
+        assert "negelir_audit_pruner" in content, \
+            "negelir_audit_pruner role not created"
+        assert "CREATE ROLE negelir_audit_pruner" in content, \
+            "CREATE ROLE negelir_audit_pruner statement missing"
+
+    def test_migration_grants_delete_to_pruner_only(self):
+        """AC: Migration grants DELETE and TRUNCATE to negelir_audit_pruner only."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        with open(path) as f:
+            content = f.read()
+        assert "GRANT DELETE, TRUNCATE ON maint_audit_log_pii TO negelir_audit_pruner" in content, \
+            "GRANT DELETE/TRUNCATE to negelir_audit_pruner missing"
+
+    def test_migration_grants_insert_select_to_public(self):
+        """AC: Migration grants SELECT and INSERT to PUBLIC."""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", "009_maint_audit.sql"
+        )
+        with open(path) as f:
+            content = f.read()
+        assert "GRANT SELECT, INSERT ON maint_audit_log_pii TO PUBLIC" in content, \
+            "GRANT SELECT, INSERT to PUBLIC missing"
+
+
 
 # ── Source Health & Cross-Validation ────────────────────────────────────────
 

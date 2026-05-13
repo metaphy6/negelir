@@ -297,6 +297,33 @@ def test_metrics_snapshot_increments_on_decision(monkeypatch) -> None:
     assert any(k.startswith("maint_scaler_scale_decision_total") for k in snap)
 
 
+def test_observability_metrics_cover_phase8_2_contract(monkeypatch) -> None:
+    """Phase 8.2 observability contract: decisions counter + desired
+    replicas gauge + VRAM budget gauge + runtime histogram."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    agent = MaintScaler()
+    agent.update_device_probe(
+        "predictor.elo",
+        vram_total_mb=8192,
+        vram_used_mb=2048,
+        vram_per_replica_mb=512,
+        host="host-a",
+    )
+    agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+    snap = agent.metrics_snapshot()
+    assert (
+        "maint_scaler_decisions_total"
+        "{agent=maint.scaler.v1,reason=queue_depth_high,outcome=applied}"
+    ) in snap
+    assert "maint_scaler_desired_replicas{agent=predictor.elo}" in snap
+    assert "maint_scaler_vram_budget_mb{host=host-a}" in snap
+    assert (
+        "maint_scaler_runtime_call_seconds_count"
+        "{controller=noop,outcome=success}"
+    ) in snap
+
+
 def test_compose_controller_invokes_subprocess(tmp_path) -> None:
     """ComposeController must shell out to ``docker compose --scale``
     and surface the exit code."""

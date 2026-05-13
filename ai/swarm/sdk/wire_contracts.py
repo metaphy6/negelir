@@ -22,7 +22,7 @@ certainly depending on the producer's emissions.
 """
 from __future__ import annotations
 
-from typing import FrozenSet
+from typing import FrozenSet, Mapping
 
 
 # `maint.event.v1` producers (ROADMAP §7.3 cross-phase note).
@@ -87,7 +87,37 @@ SEC_CONFIG_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
 })
 
 
+# `sec.alert.v1` producers (ROADMAP §7.4 open-enum + §8.9 boundary).
+#
+# Producers are bounded to sec.* and maint.* control-plane surfaces,
+# plus the source-watcher summarizer and telemetry's dead-man relay.
+# Additions are append-only with a tracker row + minor bump.
+SEC_ALERT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "sec.input.v1",
+    "sec.scrape.v1",
+    "sec.rate.v1",
+    "maint.deadmans.v1",
+    "maint.dlq.v1",
+    "maint.scaler.v1",
+    "maint.schema.v1",
+    "maint.backup.v1",
+    "maint.storage.v1",
+    "source.watcher.v1",
+    "telemetry.v1",
+})
+
+
+# Per-producer kind pins for sec.alert.v1 (only producers listed here
+# are constrained; all others use the global KNOWN_SEC_ALERT_KINDS gate).
+SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER: Mapping[str, FrozenSet[str]] = {
+    # Phase 8 §8.9: telemetry may only relay the dead-man silence alert.
+    "telemetry.v1": frozenset({"maint_silence_alert"}),
+}
+
+
 __all__ = [
     "MAINT_EVENT_V1_ALLOWED_PRODUCERS",
+    "SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER",
+    "SEC_ALERT_V1_ALLOWED_PRODUCERS",
     "SEC_CONFIG_V1_ALLOWED_PRODUCERS",
 ]

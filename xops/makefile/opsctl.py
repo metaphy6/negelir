@@ -15,6 +15,7 @@ is the source of truth for argument shape.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from xops.makefile._common import dispatch, err  # noqa: E402
 
 PYTHON = sys.executable or "python3"
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _env(name: str, default: str = "") -> str:
@@ -328,22 +330,29 @@ def cmd_backup_rotate_key(_argv: List[str]) -> int:
 
 
 def cmd_restore(_argv: List[str]) -> int:
-    """`make ops.restore TARGET=YYYY-MM-DD [FROM_OFFSITE=1] [DESTINATION_CONN=<dsn>] [CONFIRM_OVERWRITE_LIVE=1] CONFIRM=<token>`."""
-    target = _env("TARGET")
-    if not target:
-        err("ops.restore: TARGET=YYYY-MM-DD is required")
+    """`make ops.restore DATE=YYYY-MM-DD [TARGET=<conn>] [FROM_OFFSITE=1] [CONFIRM_OVERWRITE_LIVE=1] CONFIRM=<token>`."""
+    dump_date = _env("DATE")
+    destination_conn = _env("TARGET")
+    legacy_destination_conn = _env("DESTINATION_CONN")
+
+    # Backward compatibility with the old shape where TARGET carried
+    # the dump date and DESTINATION_CONN carried the destination DSN.
+    if not dump_date and _DATE_RE.match(destination_conn) and not legacy_destination_conn:
+        dump_date = destination_conn
+        destination_conn = ""
+
+    if not dump_date:
+        err("ops.restore: DATE=YYYY-MM-DD is required")
         return 64
-    args = ["restore", "--target", target]
+    args = ["restore", "--target", dump_date]
     if _env("FROM_OFFSITE", "0") == "1":
         args.append("--from-offsite")
-    dest = _env("DESTINATION_CONN")
-    if dest:
-        args.extend(["--destination-conn", dest])
+    if not destination_conn:
+        destination_conn = legacy_destination_conn
+    if destination_conn:
+        args.extend(["--destination-conn", destination_conn])
     if _env("CONFIRM_OVERWRITE_LIVE", "0") == "1":
         args.append("--confirm-overwrite-live")
-    reason = _env("REASON")
-    if reason:
-        args.extend(["--reason", reason])
     _append_common_flags(args)
     return _run_opsctl(args)
 

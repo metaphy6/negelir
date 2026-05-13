@@ -35,6 +35,8 @@ import ast
 import re
 from pathlib import Path
 
+import pytest
+
 from swarm.agents.payloads import (
     KNOWN_SEC_ALERT_KINDS,
     SecAlert,
@@ -111,6 +113,30 @@ def test_sec_alert_kind_pattern_anchors_open_enum_shape() -> None:
     pattern = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
     for kind in KNOWN_SEC_ALERT_KINDS:
         assert pattern.match(kind), f"KNOWN_SEC_ALERT_KINDS member {kind!r} violates kebab shape"
+
+
+def test_telemetry_source_allows_only_maint_silence_alert() -> None:
+    ok = SecAlert(
+        alert_id="alert-telemetry-ok",
+        kind="maint_silence_alert",
+        severity="critical",
+        source="telemetry.v1",
+        reason="dead-man relay",
+        produced_at="2026-05-13T00:00:00+00:00",
+    )
+    assert ok.kind == "maint_silence_alert"
+
+
+def test_telemetry_source_rejects_other_kinds() -> None:
+    with pytest.raises(ValueError, match="not allowed for source"):
+        SecAlert(
+            alert_id="alert-telemetry-bad",
+            kind="summarizer_unreachable",
+            severity="warn",
+            source="telemetry.v1",
+            reason="must be blocked by producer-kind pin",
+            produced_at="2026-05-13T00:00:00+00:00",
+        )
 
 
 def test_retired_phase7_knobs_do_not_creep_back() -> None:

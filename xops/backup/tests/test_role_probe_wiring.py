@@ -104,6 +104,12 @@ class _StubCfg:
     maint_backup_verify_pg_image: str = "postgres:16-alpine"
     maint_backup_dir: str = "./data/backups"
     maint_backup_pg_jobs: int = 2
+    maint_backup_prune_batch: int = 10_000
+    sec_quarantine_ttl_days: int = 30
+    maint_schema_snapshot_retention_days: int = 90
+    swarm_dlq_pg_retention_days: int = 14
+    maint_audit_retention_days: int = 365
+    maint_runtime: str = "none"
 
 
 def test_wiring_returns_shim_when_dsn_empty() -> None:
@@ -111,6 +117,7 @@ def test_wiring_returns_shim_when_dsn_empty() -> None:
     assert drivers.profile == "shim"
     assert drivers.dump is None
     assert drivers.verifier is None
+    assert drivers.pruner is None
 
 
 def test_wiring_refuses_missing_recipients(tmp_path: Path) -> None:
@@ -170,6 +177,20 @@ def test_wiring_live_path_invokes_role_probe(monkeypatch: pytest.MonkeyPatch, tm
     assert isinstance(drivers.dump, LocalPgDumpExecutor)
     assert drivers.dump.pg_jobs == 4
     assert drivers.dump.exclude_quarantine_data is True
+    assert drivers.pruner is not None
+
+
+def test_wiring_refuses_k8s_runtime_until_sidecar_lands(tmp_path: Path) -> None:
+    rec = tmp_path / "rec.txt"; rec.write_text("age1\n")
+    ident = tmp_path / "id.key"; ident.write_text("AGE-SECRET\n")
+    cfg = _StubCfg(
+        maint_backup_pg_dsn="postgresql://x@y/z",
+        maint_backup_age_recipients_file=str(rec),
+        maint_backup_age_identity_file=str(ident),
+        maint_runtime="k8s",
+    )
+    with pytest.raises(BackupWiringError, match="SidecarVerifier"):
+        build_backup_drivers(cfg)
 
 
 # ── exclude_quarantine_data argv check ────────────────────────────────

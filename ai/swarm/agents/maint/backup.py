@@ -65,7 +65,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Protocol
 from uuid import uuid4
@@ -564,6 +564,7 @@ class MaintBackupAgent:
         # first ``flush_expired()`` call (handles the cold-start case
         # without firing immediately).
         self._next_fire_at: datetime | None = None
+        self._startup_catch_up_due: bool = False
         # Same arm-on-first-tick contract for the cold-verify pass.
         self._cold_verify_next_fire_at: datetime | None = None
         self._last_fire_wall: datetime | None = None
@@ -968,11 +969,34 @@ class MaintBackupAgent:
         out: list[Message] = []
         # Nightly backup state machine.
         if self._next_fire_at is None:
-            self._next_fire_at = next_fire_after(self._cron, now_wall)
-        elif now_wall >= self._next_fire_at:
+            day_start = now_wall.replace(hour=0, minute=0, second=0, microsecond=0)
+            successful_today = (
+                self._last_completed_wall is not None
+                and self._last_completed_wall.astimezone(timezone.utc).date()
+                == now_wall.astimezone(timezone.utc).date()
+            )
+            if successful_today:
+                # Resume from today's successful anchor so a restart
+                # does not re-fire the same UTC day.
+                arm_anchor = self._last_completed_wall
+            else:
+                # No success yet for this UTC day: arm from today's first
+                # cron slot and trigger a single catch-up if already late.
+                arm_anchor = day_start - timedelta(minutes=1)
+            self._next_fire_at = next_fire_after(self._cron, arm_anchor)
+            self._startup_catch_up_due = (
+                not successful_today and now_wall >= self._next_fire_at
+            )
+        if self._next_fire_at is not None and now_wall >= self._next_fire_at:
             fire_wall = self._next_fire_at
+            startup_catch_up_due = self._startup_catch_up_due
+            self._startup_catch_up_due = False
             self._next_fire_at = next_fire_after(self._cron, now_wall)
-            out.extend(self._fire(fire_wall=fire_wall, now_wall=now_wall))
+            out.extend(self._fire(
+                fire_wall=fire_wall,
+                now_wall=now_wall,
+                startup_catch_up_due=startup_catch_up_due,
+            ))
         # ROADMAP §8.3 weekly cold-verify (silent storage rot). Runs
         # the same restore-verify pipeline against the oldest still-
         # retained Sunday dump on its own cron tick. Ordering is
@@ -1022,7 +1046,11 @@ class MaintBackupAgent:
         return out
 
     def _fire(
-        self, *, fire_wall: datetime, now_wall: datetime
+        self,
+        *,
+        fire_wall: datetime,
+        now_wall: datetime,
+        startup_catch_up_due: bool = False,
     ) -> Iterable[Message]:
         """Run one iteration of the state machine (dump → verify →
         prune). Emits the corresponding `backup_*` and `prune_*`
@@ -1033,22 +1061,21 @@ class MaintBackupAgent:
         )
         mono_ns = self._clock_mono_ns()
 
-        # ── Catch-up policy ───────────────────────────────────────────
-        # If the monotonic delta vs the last successful fire exceeds
-        # `max_skew_h`, this fire is the make-up run. Coalesce: at
-        # most ONE make-up per restart — subsequent missed windows
-        # wait for their natural next-fire moment.
-        catch_up = False
+        # ── Catch-up seed (needs to precede backwards-step check) ────────
+        # Initialized here so `catch_up` is defined when the skew block
+        # may reference it in `_record_audit`. The full refinement
+        # (delta_h) runs later, after same-day idempotency.
+        catch_up = bool(startup_catch_up_due)
         catch_up_late_h: float | None = None
-        if self._last_fire_wall is not None:
-            delta_h = (now_wall - self._last_fire_wall).total_seconds() / 3600.0
-            max_skew = float(_cfg.maint_backup_max_skew_h)
-            if delta_h > max_skew and not self._catch_up_used:
-                catch_up = True
-                catch_up_late_h = delta_h
-                self._catch_up_used = True
+        if startup_catch_up_due:
+            late_h = (now_wall - fire_wall).total_seconds() / 3600.0
+            if late_h > float(_cfg.maint_backup_max_skew_h):
+                catch_up_late_h = late_h
 
         # ── Skew detection (backwards wall-clock step) ────────────────
+        # Checked BEFORE same-day idempotency — safety and operator
+        # visibility take priority. The operator must see the clock
+        # anomaly even if a backup already ran today.
         if self._last_fire_wall is not None:
             backward = (self._last_fire_wall - now_wall).total_seconds()
             if backward > float(_cfg.maint_backup_clock_step_back_alert_s):
@@ -1089,6 +1116,37 @@ class MaintBackupAgent:
                     outcome="skew_skipped", verified=False, catch_up=catch_up,
                 )
                 return
+
+        # ── Same-day idempotency ──────────────────────────────────────
+        # ROADMAP §8.3: if a successful run already exists for this UTC
+        # day, this fire is a no-op. Closes the duplicate-fire hole
+        # when a scheduler or operator forces `_next_fire_at` same-day.
+        if self._last_completed_wall is not None:
+            already_done_today = (
+                self._last_completed_wall.astimezone(timezone.utc).date()
+                == fire_wall.astimezone(timezone.utc).date()
+            )
+            if already_done_today:
+                _log.info(
+                    "maint.backup.v1: skip duplicate same-day fire %s; "
+                    "already completed at %s",
+                    fire_window_id,
+                    self._last_completed_wall.isoformat(),
+                )
+                return
+
+        # ── Catch-up policy refinement ────────────────────────────────
+        # If the monotonic delta vs the last successful fire exceeds
+        # `max_skew_h`, this fire is the make-up run. Coalesce: at
+        # most ONE make-up per restart — subsequent missed windows
+        # wait for their natural next-fire moment.
+        if self._last_fire_wall is not None:
+            delta_h = (now_wall - self._last_fire_wall).total_seconds() / 3600.0
+            max_skew = float(_cfg.maint_backup_max_skew_h)
+            if delta_h > max_skew and not self._catch_up_used:
+                catch_up = True
+                catch_up_late_h = delta_h
+                self._catch_up_used = True
 
         # ── Skew detection (forward wall-clock leap) ──────────────────
         # Forward leaps > `clock_step_forward_alert_h` are operator-

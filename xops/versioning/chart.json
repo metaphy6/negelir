@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 82,
+    "build": 108,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.8.3",
+      "version": "1.8.13",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-13T10:15:00+00:00"
+      "last_changed": "2026-05-13T13:59:43+00:00"
     },
     "server": {
       "version": "1.6.2",
@@ -19,14 +19,14 @@
       "last_changed": "2026-05-05T12:57:44+00:00"
     },
     "xops": {
-      "version": "3.16.2",
+      "version": "3.16.6",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-13T09:21:53+00:00"
+      "last_changed": "2026-05-13T14:21:57+00:00"
     },
     "docs": {
-      "version": "1.57.2",
+      "version": "1.57.11",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-12T11:57:45+00:00"
+      "last_changed": "2026-05-13T16:30:59+00:00"
     },
     "infra_mock": {
       "version": "1.4.2",
@@ -34,9 +34,9 @@
       "last_changed": "2026-04-28T08:41:52+00:00"
     },
     "source_watcher": {
-      "version": "2.0.1",
+      "version": "3.0.1",
       "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
-      "last_changed": "2026-05-13T10:59:55+00:00"
+      "last_changed": "2026-05-13T15:47:17+00:00"
     },
     "datasource_scraper": {
       "version": "0.1.0",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.42.0",
+      "version": "0.43.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-13T10:53:58+00:00"
+      "last_changed": "2026-05-13T15:28:53+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -3219,6 +3219,240 @@
       "from": "2.0.0",
       "to": "2.0.1",
       "build": 82
+    },
+    {
+      "timestamp": "2026-05-13T11:45:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.9 first DoD bullet surface coverage proof",
+      "from": "1.8.3",
+      "to": "1.8.4",
+      "build": 83
+    },
+    {
+      "timestamp": "2026-05-13T11:51:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.9 sec.alert producer allow-list + telemetry kind pin boundary guard",
+      "from": "1.8.4",
+      "to": "1.8.5",
+      "build": 84
+    },
+    {
+      "timestamp": "2026-05-13T12:34:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.2 scaler observability metrics",
+      "from": "1.8.5",
+      "to": "1.8.6",
+      "build": 85
+    },
+    {
+      "timestamp": "2026-05-13T12:42:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.2 reviewer fix: scaler decision metric compat + label",
+      "from": "1.8.6",
+      "to": "1.8.7",
+      "build": 86
+    },
+    {
+      "timestamp": "2026-05-13T12:49:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "align maint scaler decisions counter label expectation",
+      "from": "1.8.7",
+      "to": "1.8.8",
+      "build": 87
+    },
+    {
+      "timestamp": "2026-05-13T13:00:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.3 scheduler catch-up arming + startup make-up run",
+      "from": "1.8.8",
+      "to": "1.8.9",
+      "build": 88
+    },
+    {
+      "timestamp": "2026-05-13T13:06:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.3 nightly dump idempotency guard",
+      "from": "1.8.9",
+      "to": "1.8.10",
+      "build": 89
+    },
+    {
+      "timestamp": "2026-05-13T13:11:24+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase8.3 restore-verify runtime-aware wiring guard",
+      "from": "3.16.2",
+      "to": "3.16.3",
+      "build": 90
+    },
+    {
+      "timestamp": "2026-05-13T13:14:28+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.3: tick weekly cold-verify checklist item",
+      "from": "1.57.2",
+      "to": "1.57.3",
+      "build": 91
+    },
+    {
+      "timestamp": "2026-05-13T13:20:06+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "ops.restore make DATE/TARGET contract + restore runbook alignment",
+      "from": "3.16.3",
+      "to": "3.16.4",
+      "build": 92
+    },
+    {
+      "timestamp": "2026-05-13T13:26:09+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase 8.3 ttl prune jobs live pg pruner",
+      "from": "3.16.4",
+      "to": "3.16.5",
+      "build": 93
+    },
+    {
+      "timestamp": "2026-05-13T13:26:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.3 wire backup pruner into maint.backup",
+      "from": "1.8.10",
+      "to": "1.8.11",
+      "build": 94
+    },
+    {
+      "timestamp": "2026-05-13T13:28:43+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.3 disk-usage guard checkbox ticked",
+      "from": "1.57.3",
+      "to": "1.57.4",
+      "build": 95
+    },
+    {
+      "timestamp": "2026-05-13T13:33:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.3: backup-age gauge bullet closed",
+      "from": "1.8.11",
+      "to": "1.8.12",
+      "build": 96
+    },
+    {
+      "timestamp": "2026-05-13T13:59:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.3 permissions startup check + test isolation",
+      "from": "1.8.12",
+      "to": "1.8.13",
+      "build": 97
+    },
+    {
+      "timestamp": "2026-05-13T14:21:57+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.3: TableResolutionError raised on psql failures instead of silent fallbacks",
+      "from": "3.16.5",
+      "to": "3.16.6",
+      "build": 98
+    },
+    {
+      "timestamp": "2026-05-13T14:47:20+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.9: maint_audit_log INSERT-only enforcement (REVOKE UPDATE/DELETE, audit_log_immutable trigger)",
+      "from": "1.57.4",
+      "to": "1.57.5",
+      "build": 99
+    },
+    {
+      "timestamp": "2026-05-13T15:28:46+00:00",
+      "component": "source_watcher",
+      "level": "major",
+      "note": "SDK migration: scheduler now ticks via AgentRunner heartbeats instead of standalone subprocess",
+      "from": "2.0.1",
+      "to": "3.0.0",
+      "build": 100
+    },
+    {
+      "timestamp": "2026-05-13T15:28:53+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8.4: source.watcher.v1 SDK migration — heartbeat-driven periodic schema-drift detector",
+      "from": "0.42.0",
+      "to": "0.43.0",
+      "build": 101
+    },
+    {
+      "timestamp": "2026-05-13T15:42:39+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.4 summarizer graduation checkbox closed",
+      "from": "1.57.5",
+      "to": "1.57.6",
+      "build": 102
+    },
+    {
+      "timestamp": "2026-05-13T15:45:06+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.4 boundary test closed",
+      "from": "1.57.6",
+      "to": "1.57.7",
+      "build": 103
+    },
+    {
+      "timestamp": "2026-05-13T15:47:17+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "Phase 8.4 cost cap landed",
+      "from": "3.0.0",
+      "to": "3.0.1",
+      "build": 104
+    },
+    {
+      "timestamp": "2026-05-13T15:49:03+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.4 versioning checkbox closed",
+      "from": "1.57.7",
+      "to": "1.57.8",
+      "build": 105
+    },
+    {
+      "timestamp": "2026-05-13T16:10:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.4 SDK migration checkbox closed",
+      "from": "1.57.8",
+      "to": "1.57.9",
+      "build": 106
+    },
+    {
+      "timestamp": "2026-05-13T16:17:00+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.4 hygiene cleanup: remove accidental duplicate roadmap line and restore audit ledger",
+      "from": "1.57.9",
+      "to": "1.57.10",
+      "build": 107
+    },
+    {
+      "timestamp": "2026-05-13T16:30:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Closed 8.6 schema-sentinel binding checkbox",
+      "from": "1.57.10",
+      "to": "1.57.11",
+      "build": 108
     }
   ]
 }

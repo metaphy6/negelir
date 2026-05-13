@@ -27,6 +27,7 @@ What this asserts (binding):
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -36,6 +37,7 @@ from common.config import cfg as _cfg
 
 from ai.swarm.agents.maint import KNOWN_MAINT_EVENT_KINDS
 from ai.swarm.agents.maint.backup import (
+    BackupPermissionError,
     InMemoryPrunerStorage,
     InMemoryQuarantineStore,
     MaintBackupAgent,
@@ -78,26 +80,39 @@ def _build_agent(
     clock: _StubClock,
     pruner_counts: dict[str, int] | None = None,
     verifier: NoopVerifier | None = None,
+    dump: NoopDumpExecutor | None = None,
     disk_free_bytes: int = 64 * 1024 ** 3,
     disk_last_dump_bytes: int = 0,
     quarantine_seed: dict[str, int] | None = None,
+    backup_dir: str = "/nonexistent/negelir_test_backup",
 ) -> MaintBackupAgent:
-    return MaintBackupAgent(
-        dump=NoopDumpExecutor(bytes_written=4096),
-        verifier=verifier or NoopVerifier(),
-        pruner=InMemoryPrunerStorage(counts=dict(pruner_counts or {})),
-        quarantine=InMemoryQuarantineStore(
-            rows_per_client=dict(quarantine_seed or {}),
-        ),
-        disk=StaticDiskGauge(
-            free_bytes=disk_free_bytes,
-            last_dump_bytes=disk_last_dump_bytes,
-        ),
-        clock_iso=lambda: clock.wall().isoformat(timespec="seconds"),
-        clock_wall=clock.wall,
-        clock_mono_ns=clock.mono_ns,
-        new_id=lambda: "fixed-id",
-    )
+    # Temporarily override maint_backup_dir during construction so the
+    # agent never seeds _last_completed_wall from a real audit.csv.
+    # Tests that need a real audit.csv pass backup_dir=str(tmp_path).
+    # _record_audit is best-effort and silently ignores write failures.
+    _prior_backup_dir = _cfg.maint_backup_dir
+    _cfg.maint_backup_dir = backup_dir  # type: ignore[attr-defined]
+    try:
+        agent = MaintBackupAgent(
+            dump=dump or NoopDumpExecutor(bytes_written=4096),
+            verifier=verifier or NoopVerifier(),
+            pruner=InMemoryPrunerStorage(counts=dict(pruner_counts or {})),
+            quarantine=InMemoryQuarantineStore(
+                rows_per_client=dict(quarantine_seed or {}),
+            ),
+            disk=StaticDiskGauge(
+                free_bytes=disk_free_bytes,
+                last_dump_bytes=disk_last_dump_bytes,
+            ),
+            clock_iso=lambda: clock.wall().isoformat(timespec="seconds"),
+            clock_wall=clock.wall,
+            clock_mono_ns=clock.mono_ns,
+            new_id=lambda: "fixed-id",
+            enforce_permissions=False,
+        )
+    finally:
+        _cfg.maint_backup_dir = _prior_backup_dir  # type: ignore[attr-defined]
+    return agent
 
 
 def _kinds(msgs: Iterable[Message]) -> list[str]:
@@ -147,6 +162,72 @@ def test_fire_at_cron_moment_runs_full_state_machine() -> None:
     ]
     completed = msgs[-1].payload
     assert completed["outcome"] == "ok"
+
+
+def test_missed_daily_window_triggers_single_startup_catch_up() -> None:
+    """If the agent starts after today's cron slot and no successful
+    run exists for this UTC day, the first heartbeat performs exactly
+    one make-up run and marks it as catch-up."""
+
+    clock = _StubClock(_t(2025, 1, 1, 12, 0))  # after 03:00 UTC
+    agent = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 1})
+
+    first = list(agent.flush_expired())
+    started = next(m.payload for m in first if m.payload["kind"] == "backup_started")
+    completed = next(
+        m.payload for m in first if m.payload["kind"] == "backup_completed"
+    )
+    assert started["catch_up"] is True
+    assert completed["outcome"] == "ok"
+
+    # Coalesced policy: once the make-up run fired, subsequent
+    # heartbeats on the same day stay silent.
+    clock.set(_t(2025, 1, 1, 12, 1))
+    assert list(agent.flush_expired()) == []
+
+
+def test_duplicate_same_day_fire_is_noop(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
+    """§8.3 nightly idempotency: if a successful run already exists for
+    the same UTC day, a forced duplicate fire is skipped and does not
+    invoke the dump executor again."""
+
+    class _CountingDump(NoopDumpExecutor):
+        def __init__(self) -> None:
+            super().__init__(bytes_written=4096)
+            self.calls = 0
+
+        def dump(self, *, fire_window_id: str, dry_run: bool) -> tuple[int, int]:
+            self.calls += 1
+            return super().dump(fire_window_id=fire_window_id, dry_run=dry_run)
+
+    monkeypatch.setattr(_cfg, "maint_backup_dry_run", False)
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
+    clock = _StubClock(_t(2025, 1, 1, 2, 30))
+    dump = _CountingDump()
+    agent = _build_agent(
+        clock=clock,
+        dump=dump,
+        pruner_counts={"opsctl_audit": 1},
+    )
+
+    list(agent.flush_expired())
+    clock.set(_t(2025, 1, 1, 3, 0))
+    first = list(agent.flush_expired())
+    assert any(
+        m.payload["kind"] == "backup_completed"
+        and m.payload["outcome"] == "ok"
+        for m in first
+    )
+    assert dump.calls == 1
+
+    # Force an additional fire inside the same UTC day.
+    agent._next_fire_at = _t(2025, 1, 1, 3, 1)  # noqa: SLF001 — test
+    clock.set(_t(2025, 1, 1, 3, 2))
+    second = list(agent.flush_expired())
+    assert second == []
+    assert dump.calls == 1
 
 
 # ── PRUNE_ORDER discipline ──────────────────────────────────────────────
@@ -680,9 +761,8 @@ def test_audit_csv_records_every_fire(tmp_path, monkeypatch: pytest.MonkeyPatch)
     (binding \u00a78.3 Scheduler prose)."""
     import csv as _csv
 
-    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
     clock = _StubClock(_t(2025, 1, 1, 2, 30))
-    agent = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 1})
+    agent = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 1}, backup_dir=str(tmp_path))
     list(agent.flush_expired())  # arm
     clock.set(_t(2025, 1, 1, 3, 0))
     list(agent.flush_expired())  # ok run
@@ -711,17 +791,16 @@ def test_audit_replay_seeds_last_completed_so_no_double_fire(
     sensible value and the catch-up policy sees today's dump as
     already done (binding idempotency on
     ``(job_id, backup_date_utc)``)."""
-    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
     monkeypatch.setattr(_cfg, "maint_backup_max_skew_h", 36)
     # First agent fires once at 03:00 then "crashes".
     clock = _StubClock(_t(2025, 1, 1, 2, 30))
-    agent_a = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 1})
+    agent_a = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 1}, backup_dir=str(tmp_path))
     list(agent_a.flush_expired())
     clock.set(_t(2025, 1, 1, 3, 0))
     list(agent_a.flush_expired())
     # New agent boots later the same day, sharing the same audit.csv.
     clock_b = _StubClock(_t(2025, 1, 1, 12, 0))
-    agent_b = _build_agent(clock=clock_b, pruner_counts={"opsctl_audit": 1})
+    agent_b = _build_agent(clock=clock_b, pruner_counts={"opsctl_audit": 1}, backup_dir=str(tmp_path))
     # Boot replay should have seeded the verified anchor.
     age = agent_b.backup_age_hours(verified=True)
     assert age is not None
@@ -1152,3 +1231,89 @@ def test_cold_verify_kinds_validate_against_subschemas(
             errors = schemas.validate_kind(MAINT_EVENT, m.payload)
             assert errors == [], (kind, errors)
         assert kind in KNOWN_MAINT_EVENT_KINDS
+
+
+# ── Permissions (§8.3 binding) ──────────────────────────────────────────
+
+
+@pytest.mark.skipif(os.name != "posix", reason="mode bits are POSIX-only")
+def test_check_permissions_ok_on_correct_modes(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Directory 0o700 + one file 0o600 → no violations."""
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
+    tmp_path.chmod(0o700)
+    (tmp_path / "audit.csv").write_text("")
+    (tmp_path / "audit.csv").chmod(0o600)
+    agent = MaintBackupAgent(enforce_permissions=False)
+    assert agent.check_permissions() == []
+
+
+@pytest.mark.skipif(os.name != "posix", reason="mode bits are POSIX-only")
+def test_check_permissions_no_dir_returns_empty(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When cfg.maint_backup_dir does not exist yet, check returns [] (first run)."""
+    absent = tmp_path / "does_not_exist"
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(absent))
+    agent = MaintBackupAgent(enforce_permissions=False)
+    assert agent.check_permissions() == []
+
+
+@pytest.mark.skipif(os.name != "posix", reason="mode bits are POSIX-only")
+def test_check_permissions_loose_dir_mode_reports_violation(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Directory with group read bit (e.g. 0o755) is a violation."""
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
+    tmp_path.chmod(0o755)
+    agent = MaintBackupAgent(enforce_permissions=False)
+    violations = agent.check_permissions()
+    assert len(violations) == 1
+    assert str(tmp_path) in violations[0]
+    assert "looser" in violations[0]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="mode bits are POSIX-only")
+def test_check_permissions_loose_file_mode_reports_violation(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """File with group read bit (0o644) inside 0o700 dir is a violation."""
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
+    tmp_path.chmod(0o700)
+    f = tmp_path / "audit.csv"
+    f.write_text("")
+    f.chmod(0o644)
+    agent = MaintBackupAgent(enforce_permissions=False)
+    violations = agent.check_permissions()
+    assert any(str(f) in v for v in violations)
+    assert any("looser" in v for v in violations)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="mode bits are POSIX-only")
+def test_enforce_startup_permissions_raises_on_loose_dir(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Agent refuses to start (BackupPermissionError) when dir mode is too loose."""
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
+    tmp_path.chmod(0o755)
+    with pytest.raises(BackupPermissionError, match="refusing to start"):
+        MaintBackupAgent(enforce_permissions=True)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="mode bits are POSIX-only")
+def test_enforce_startup_permissions_sets_umask(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Constructing the agent with enforce_permissions=True sets the process
+    umask to 0o077 (ROADMAP §8.3 binding)."""
+    absent = tmp_path / "backup"
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(absent))
+    old_umask = os.umask(0o022)  # known baseline
+    try:
+        MaintBackupAgent(enforce_permissions=True)
+        current = os.umask(0o077)  # read back; reset to what agent set
+        os.umask(current)          # restore the agent's value
+        assert current == 0o077
+    finally:
+        os.umask(old_umask)

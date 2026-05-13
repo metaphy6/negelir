@@ -110,6 +110,40 @@ END $$;
 GRANT SELECT, INSERT ON maint_audit_log_pii TO PUBLIC;
 GRANT DELETE, TRUNCATE ON maint_audit_log_pii TO negelir_audit_pruner;
 
+-- INSERT-only enforcement (binding per §8.9).
+-- Prevent UPDATE/DELETE except by the dedicated pruner role.
+-- This makes the audit log append-only and immutable for auditing
+-- purposes. The pruner role obtains DELETE authority solely for
+-- TTL-based partition management.
+REVOKE UPDATE, DELETE ON maint_audit_log_pii FROM PUBLIC;
+
+-- §8.9 — BEFORE UPDATE OR DELETE trigger that raises audit_log_immutable
+-- exception for all roles except negelir_audit_pruner. The application
+-- role and negelir_backup cannot mutate audit rows by design — only
+-- INSERT and SELECT are permitted for the general case.
+CREATE OR REPLACE FUNCTION audit_log_immutable() RETURNS TRIGGER AS $$
+BEGIN
+    -- Allow mutations only for the negelir_audit_pruner role.
+    -- The pruner obtains this role via SET ROLE only inside the
+    -- retention prune transaction (§8.3).
+    IF current_role != 'negelir_audit_pruner' THEN
+        RAISE EXCEPTION 'audit_log_immutable: UPDATE/DELETE not allowed on maint_audit_log_pii';
+    END IF;
+    -- If we reach here (negelir_audit_pruner), proceed with the mutation.
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_audit_log_immutable ON maint_audit_log_pii;
+CREATE TRIGGER trg_audit_log_immutable
+    BEFORE UPDATE OR DELETE ON maint_audit_log_pii
+    FOR EACH ROW
+    EXECUTE FUNCTION audit_log_immutable();
+
 -- ---------------------------------------------------------------------------
 -- Phase 8 §8.7 — pattern_allowlist version row for cache-reload race.
 --

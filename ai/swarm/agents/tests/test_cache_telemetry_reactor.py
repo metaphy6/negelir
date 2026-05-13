@@ -224,6 +224,39 @@ def test_telemetry_watches_phase7_defense_topics() -> None:
     assert "sec.denylist.v1" in subs
 
 
+def test_telemetry_renders_registered_metric_source() -> None:
+    agent = TelemetryAgent()
+    agent.register_metric_source(lambda: {
+        "maint_scaler_desired_replicas{agent=predictor.elo}": 3.0,
+    })
+    text = agent.render_prometheus()
+    assert 'maint_scaler_desired_replicas{agent="predictor.elo"} 3' in text
+
+
+def test_build_agents_wires_scaler_metrics_into_telemetry(monkeypatch) -> None:
+    from swarm.agents.maint.scaler import MaintScaler
+    from swarm.agents.maint.backup import MaintBackupAgent
+    from swarm.bootstrap import build_agents
+
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(
+        MaintBackupAgent,
+        "_enforce_startup_permissions",
+        lambda self: None,
+        raising=False,
+    )
+
+    agents = build_agents()
+    telemetry = next(a for a in agents if a.name == "telemetry.v1")
+    scaler = next(a for a in agents if isinstance(a, MaintScaler))
+    scaler.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
+
+    text = telemetry.render_prometheus()  # type: ignore[attr-defined]
+    assert "maint_scaler_decisions_total" in text
+    assert 'agent="predictor.elo"' in text
+
+
 # ── Reactor base ───────────────────────────────────────────────
 
 

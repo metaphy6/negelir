@@ -126,6 +126,7 @@ def _build_predictors() -> list[Agent]:
     if _cfg.predictor_market_features_enabled:
         predictors.append(LgbmMarketPredictor())
     return predictors
+    from .source_watcher.agent import SourceWatcherAgent
 
 
 def _build_proofreader_replicas() -> list[Agent]:
@@ -171,6 +172,9 @@ def build_agents() -> list[Agent]:
     # both is safe; the Postgres-backed cache lift in Phase 9 will
     # need leader election on the *invalidation* path, not here.
     cache = CacheAgent()
+        # Phase 8.4 source-watcher — holds per-source snapshot + diff state,
+        # single-publication for baseline_reset and SOURCE_WATCH_REPORT_V1.
+        "source.watcher.v1",
     telemetry = TelemetryAgent.from_config(start_http=False)
     # Phase 7 defense agents (escalation tier — the gateway middleware
     # in `server/internal/sec/*` carries the deterministic hot-path
@@ -187,6 +191,7 @@ def build_agents() -> list[Agent]:
     # `cfg.maint_backup_pg_dsn` is set; otherwise the in-memory
     # shims are used (dev / CI profile).
     maint_scaler = MaintScaler()
+    telemetry.register_metric_source(maint_scaler.metrics_snapshot)
     maint_dlq = MaintDlqSupervisor()
     maint_schema = MaintSchemaSentinel()
     maint_sec = MaintSecAgent()
@@ -195,7 +200,18 @@ def build_agents() -> list[Agent]:
     maint_backup = MaintBackupAgent(
         dump=_backup_drivers.dump,
         verifier=_backup_drivers.verifier,
+        pruner=_backup_drivers.pruner,
     )
+       # Phase 8.4 source-watcher: time-driven periodic diff agent.
+       # Stub fetcher returns empty dict (full integration with real
+       # scrapers deferred; mock sources work via mock profiles).
+       def _stub_fetcher(source: str) -> dict:
+           return {}
+
+       source_watcher = SourceWatcherAgent(
+           sources=("mackolik", "nesine", "tff", "openfootball.local"),
+           fetcher=_stub_fetcher,
+       )
     return [
         *predictors,
         consensus,
@@ -212,6 +228,7 @@ def build_agents() -> list[Agent]:
         maint_schema,
         maint_sec,
         maint_backup,
+           source_watcher,
     ]
 
 

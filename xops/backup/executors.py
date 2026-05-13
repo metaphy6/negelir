@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -42,6 +43,15 @@ from typing import Callable, Mapping, Optional, Protocol, Sequence
 
 
 _log = logging.getLogger("xops.backup.executors")
+
+
+class TableResolutionError(RuntimeError):
+    """Raised when a psql existence-probe or count query fails unexpectedly.
+
+    This signals a database connectivity or binary error. Callers must NOT
+    treat this as "table not found" — it means the probing infrastructure
+    itself is broken and the prune run cannot proceed safely.
+    """
 
 
 # Filenames inside the per-fire-window directory. Pinned so the
@@ -453,6 +463,208 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+_NOTICE_TOTAL_RE = re.compile(r"pruned_total=(\d+)")
+
+
+@dataclass(frozen=True)
+class _PruneSpec:
+    table_candidates: tuple[str, ...]
+    where_sql: str
+    order_col: str
+
+
+def _sql_quote_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+class LocalPgPruner:
+    """Live Postgres-backed TTL pruner for Phase 8.3.
+
+    Implements the ``PrunerStorage`` protocol consumed by
+    ``MaintBackupAgent``:
+
+    * Deletes are performed in batched loops using ``LIMIT`` and
+      ordered ``ctid`` victim selection.
+    * Each table prune runs in a single server-side transactional
+      ``DO`` block.
+    * Missing tables are treated as zero-row no-ops (the migration
+      surface is still converging).
+    * ``dry_run=True`` returns would-delete counts without mutating
+      rows.
+    """
+
+    def __init__(
+        self,
+        *,
+        pg_dsn: str,
+        prune_batch: int,
+        sec_quarantine_ttl_days: int,
+        schema_snapshot_retention_days: int,
+        dlq_retention_days: int,
+        audit_retention_days: int,
+        runner: CommandRunner = _default_runner,
+        psql_binary: Optional[str] = None,
+    ) -> None:
+        self._pg_dsn = str(pg_dsn or "").strip()
+        self._batch = int(prune_batch)
+        self._runner = runner
+        self._psql_binary = psql_binary or shutil.which("psql") or "psql"
+        self._specs: dict[str, _PruneSpec] = {
+            "opsctl_audit": _PruneSpec(
+                table_candidates=("opsctl_audit",),
+                where_sql=(
+                    "ts_utc < now() - interval "
+                    f"'{int(audit_retention_days)} days'"
+                ),
+                order_col="ts_utc",
+            ),
+            "schema_snapshots": _PruneSpec(
+                table_candidates=("schema_snapshots",),
+                where_sql=(
+                    "captured_at < now() - interval "
+                    f"'{int(schema_snapshot_retention_days)} days'"
+                ),
+                order_col="captured_at",
+            ),
+            "pattern_allowlist": _PruneSpec(
+                table_candidates=("pattern_allowlist",),
+                where_sql="expires_at IS NOT NULL AND expires_at < now()",
+                order_col="expires_at",
+            ),
+            "dlq_entries": _PruneSpec(
+                table_candidates=("dlq_entries",),
+                where_sql=(
+                    "created_at < now() - interval "
+                    f"'{int(dlq_retention_days)} days'"
+                ),
+                order_col="created_at",
+            ),
+            "quarantine_samples": _PruneSpec(
+                table_candidates=("quarantine_samples",),
+                where_sql=(
+                    "detected_at < now() - interval "
+                    f"'{int(sec_quarantine_ttl_days)} days'"
+                ),
+                order_col="detected_at",
+            ),
+            "maint_audit_log": _PruneSpec(
+                table_candidates=("maint_audit_log", "maint_audit_log_pii"),
+                where_sql=(
+                    "produced_at < now() - interval "
+                    f"'{int(audit_retention_days)} days'"
+                ),
+                order_col="produced_at",
+            ),
+        }
+
+    def prune(self, *, dry_run: bool) -> Mapping[str, int]:
+        from xops.maint.prune_order import PRUNE_ORDER
+
+        out: dict[str, int] = {}
+        for logical in PRUNE_ORDER:
+            spec = self._specs[logical]
+            table = self._resolve_table(spec.table_candidates)
+            if table is None:
+                out[logical] = 0
+                continue
+            if dry_run:
+                out[logical] = self._count_where(table=table, where_sql=spec.where_sql)
+            else:
+                out[logical] = self._delete_batched(
+                    table=table,
+                    where_sql=spec.where_sql,
+                    order_col=spec.order_col,
+                )
+        return out
+
+    def _run_psql(self, sql: str) -> "subprocess.CompletedProcess[bytes]":
+        argv = [
+            self._psql_binary,
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            "--dbname", self._pg_dsn,
+            "--set", "ON_ERROR_STOP=1",
+            "-c", sql,
+        ]
+        return self._runner(argv)
+
+    def _resolve_table(self, candidates: tuple[str, ...]) -> Optional[str]:
+        for name in candidates:
+            literal = _sql_quote_literal(f"public.{name}")
+            sql = f"SELECT to_regclass({literal}) IS NOT NULL;"
+            try:
+                res = self._run_psql(sql)
+            except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+                raise TableResolutionError(
+                    f"psql existence probe failed for candidates {candidates!r}: {exc}"
+                ) from exc
+            raw = (res.stdout or b"").decode("utf-8", errors="replace").strip().lower()
+            if raw in {"t", "true", "1"}:
+                return name
+        return None
+
+    def _count_where(self, *, table: str, where_sql: str) -> int:
+        sql = f"SELECT COUNT(*) FROM {table} WHERE {where_sql};"
+        try:
+            res = self._run_psql(sql)
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or b"").decode("utf-8", errors="replace")
+            if "does not exist" in stderr:
+                return 0
+            raise
+        raw = (res.stdout or b"").decode("utf-8", errors="replace").strip()
+        try:
+            return int(raw or "0")
+        except ValueError:
+            raise TableResolutionError(
+                f"psql returned non-integer output for COUNT on {table!r}: {raw!r}"
+            ) from None
+
+    def _delete_batched(self, *, table: str, where_sql: str, order_col: str) -> int:
+        sql = (
+            "DO $$\n"
+            "DECLARE\n"
+            "  v_deleted INTEGER := 0;\n"
+            "  v_total INTEGER := 0;\n"
+            "BEGIN\n"
+            "  LOOP\n"
+            f"    WITH victims AS (\n"
+            f"      SELECT ctid FROM {table}\n"
+            f"      WHERE {where_sql}\n"
+            f"      ORDER BY {order_col} ASC\n"
+            f"      LIMIT {int(self._batch)}\n"
+            "    ), del AS (\n"
+            f"      DELETE FROM {table} t\n"
+            "      USING victims v\n"
+            "      WHERE t.ctid = v.ctid\n"
+            "      RETURNING 1\n"
+            "    )\n"
+            "    SELECT COUNT(*) INTO v_deleted FROM del;\n"
+            "    v_total := v_total + v_deleted;\n"
+            "    EXIT WHEN v_deleted = 0;\n"
+            "  END LOOP;\n"
+            "  RAISE NOTICE 'pruned_total=%', v_total;\n"
+            "END $$;"
+        )
+        try:
+            res = self._run_psql(sql)
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or b"").decode("utf-8", errors="replace")
+            if "does not exist" in stderr:
+                return 0
+            raise
+        text = (
+            (res.stdout or b"").decode("utf-8", errors="replace")
+            + "\n"
+            + (res.stderr or b"").decode("utf-8", errors="replace")
+        )
+        m = _NOTICE_TOTAL_RE.search(text)
+        if m is None:
+            return 0
+        return int(m.group(1))
+
+
 # §8.3 binding: Restore-verify failure quarantines the bad dump dir.
 # Suffix appended to the per-fire-window directory name; the next
 # nightly cron therefore does not see the failed run as today's
@@ -527,6 +739,7 @@ __all__ = [
     "ENCRYPTED_NAME",
     "FAILED_DIR_SUFFIX",
     "LocalPgDumpExecutor",
+    "LocalPgPruner",
     "MANIFEST_NAME",
     "QUARANTINE_META_NAME",
     "quarantine_failed_dump_dir",

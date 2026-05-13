@@ -53,6 +53,7 @@ from swarm.agents.topics import (
     SEC_QUARANTINE,
 )
 from swarm.sdk.wire_contracts import MAINT_EVENT_V1_ALLOWED_PRODUCERS
+from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_PRODUCERS
 
 
 # Predictor agent classes that exist today (Phase 5).
@@ -500,16 +501,33 @@ def test_sec_alert_v1_producer_set_is_sec_only() -> None:
     cache agent emitting a sec alert would smuggle non-defense
     events onto the operator pager channel.
     """
+    from swarm.agents.maint.backup import MaintBackupAgent  # noqa: PLC0415
+    from swarm.agents.maint.deadmans import MaintDeadmansSwitch  # noqa: PLC0415
+    from swarm.agents.maint.dlq import MaintDlqSupervisor  # noqa: PLC0415
+    from swarm.agents.maint.schema import MaintSchemaSentinel  # noqa: PLC0415
+    from swarm.agents.maint.scaler import MaintScaler  # noqa: PLC0415
+
     offenders: list[str] = []
-    for agent in _registry_agents():
-        label = _agent_label(agent)
-        if label.startswith("sec.") or label.startswith("maint."):
-            continue
-        if SEC_ALERT in tuple(getattr(agent, "publishes", ())):
-            offenders.append(label)
+    classes = (
+        *_NON_SEC_AGENTS,
+        SecInputAgent,
+        SecScrapeAgent,
+        SecRateAgent,
+        MaintDeadmansSwitch,
+        MaintDlqSupervisor,
+        MaintScaler,
+        MaintSchemaSentinel,
+        MaintBackupAgent,
+    )
+    for cls in classes:
+        label = getattr(cls, "name", cls.__name__)
+        if SEC_ALERT in tuple(getattr(cls, "publishes", ())):
+            if label not in SEC_ALERT_V1_ALLOWED_PRODUCERS:
+                offenders.append(label)
     assert offenders == [], (
-        "sec.alert.v1 producer set is bounded to sec.* + maint.* "
-        f"agents (§7.5 / §8.x). Non-defense offenders: {offenders}."
+        "sec.alert.v1 producer set must stay inside "
+        f"SEC_ALERT_V1_ALLOWED_PRODUCERS={sorted(SEC_ALERT_V1_ALLOWED_PRODUCERS)}; "
+        f"offenders: {offenders}."
     )
 
 def test_telemetry_watches_phase7_topics() -> None:

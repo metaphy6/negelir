@@ -498,7 +498,7 @@ class MaintScaler:
                                   "decision_window_id": self._window_id()})
         self._bump_counter("scale_decision", "manual_pin")
         self._record_decision_metric(
-            "manual_pin", _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR
+            target, "manual_pin", _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR
         )
         self._set_desired_replicas(target, replicas)
         st.last_replicas = replicas
@@ -572,6 +572,7 @@ class MaintScaler:
         st.last_decision_at_ns = self._now_ns()
         self._bump_counter("scale_decision", "retrain_request_warmup")
         self._record_decision_metric(
+            warmup_target,
             "retrain_request_warmup",
             _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR,
         )
@@ -632,7 +633,7 @@ class MaintScaler:
             if st.pin_replicas is not None:
                 self._bump_counter("scale_throttled", "manual_pin_active")
                 self._record_decision_metric(
-                    "manual_pin_active", _OUTCOME_THROTTLED
+                    target, "manual_pin_active", _OUTCOME_THROTTLED
                 )
                 out.append(self._notify(
                     "scale_throttled",
@@ -656,7 +657,7 @@ class MaintScaler:
                         extra["max_replicas"] = self._max_replicas_for(target)
                     self._bump_counter("scale_throttled", throttle_reason)
                     self._record_decision_metric(
-                        throttle_reason, _OUTCOME_THROTTLED
+                        target, throttle_reason, _OUTCOME_THROTTLED
                     )
                     out.append(self._notify(
                         "scale_throttled",
@@ -675,7 +676,7 @@ class MaintScaler:
             ):
                 self._bump_counter("scale_throttled", "min_decision_interval")
                 self._record_decision_metric(
-                    "min_decision_interval", _OUTCOME_THROTTLED
+                    target, "min_decision_interval", _OUTCOME_THROTTLED
                 )
                 out.append(self._notify(
                     "scale_throttled",
@@ -695,7 +696,7 @@ class MaintScaler:
             if decision > st.last_replicas and projected > global_cap:
                 self._bump_counter("scale_throttled", "global_max_replicas")
                 self._record_decision_metric(
-                    "global_max_replicas", _OUTCOME_THROTTLED
+                    target, "global_max_replicas", _OUTCOME_THROTTLED
                 )
                 out.append(self._notify(
                     "scale_throttled",
@@ -714,7 +715,7 @@ class MaintScaler:
                 if vram_throttle is not None:
                     self._bump_counter("scale_throttled", vram_throttle)
                     self._record_decision_metric(
-                        vram_throttle, _OUTCOME_THROTTLED
+                        target, vram_throttle, _OUTCOME_THROTTLED
                     )
                     out.append(self._notify(
                         "scale_throttled",
@@ -729,7 +730,7 @@ class MaintScaler:
             if emitted >= max_changes:
                 self._bump_counter("scale_throttled", "max_changes_per_window")
                 self._record_decision_metric(
-                    "max_changes_per_window", _OUTCOME_THROTTLED
+                    target, "max_changes_per_window", _OUTCOME_THROTTLED
                 )
                 out.append(self._notify(
                     "scale_throttled",
@@ -748,6 +749,7 @@ class MaintScaler:
             )
             self._bump_counter("scale_decision", decision_reason)
             self._record_decision_metric(
+                target,
                 decision_reason,
                 _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR,
             )
@@ -1098,7 +1100,12 @@ class MaintScaler:
         key = (self.name, kind, reason)
         self._counters[key] = self._counters.get(key, 0) + 1
 
-    def _record_decision_metric(self, reason: str, outcome: str) -> None:
+    def _record_decision_metric(
+        self,
+        reason_or_agent: str,
+        outcome_or_reason: str,
+        maybe_outcome: str | None = None,
+    ) -> None:
         """Bump ``maint_scaler_decisions_total{agent,reason,outcome}``.
 
         Cardinality safety: a ``reason`` that is not in
@@ -1108,6 +1115,17 @@ class MaintScaler:
         dropped silently (defence-in-depth — the call sites only
         ever pass one of the three valid values).
         """
+        # Backward-compat signature support:
+        #   _record_decision_metric(reason, outcome)
+        #   _record_decision_metric(target_agent, reason, outcome)
+        # The ``agent`` label is intentionally the scaler id
+        # (self.name), not a target worker name.
+        if maybe_outcome is None:
+            reason = str(reason_or_agent)
+            outcome = str(outcome_or_reason)
+        else:
+            reason = str(outcome_or_reason)
+            outcome = str(maybe_outcome)
         if outcome not in _DECISION_OUTCOMES:
             return
         norm_reason = reason if reason in _KNOWN_REASONS else "unknown"

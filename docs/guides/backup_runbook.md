@@ -19,13 +19,13 @@
   `ALWAYS_DESTRUCTIVE` and gates every invocation through the
   Phase 8 §8.1 typed-token preimage.
 * **Default destination is ephemeral.** Without
-  `DESTINATION_CONN=...`, the consumer (`maint.backup.v1`)
+   `TARGET=...`, the consumer (`maint.backup.v1`)
   resolves the target to `negelir_restore_<dump_date>`. The
   operator promotes that database to "live" by hand, in a
   separate step that is NOT covered by this runbook (because the
   promotion semantics depend on the deployment platform).
 * **Live primary requires two flags.** Pointing
-  `DESTINATION_CONN` at the live application Postgres AND
+   `TARGET` at the live application Postgres AND
   passing `CONFIRM_OVERWRITE_LIVE=1` are both required; the
   consumer refuses with `live_overwrite_requires_confirm`
   otherwise. A typed `--confirm` token alone is not enough.
@@ -44,8 +44,8 @@ on-call backup owner first. Don't experiment in production.
 
 ```bash
 make ops.restore \
-    TARGET=YYYY-MM-DD \
-    [DESTINATION_CONN=<postgres-dsn>] \
+   DATE=YYYY-MM-DD \
+   [TARGET=<postgres-dsn>] \
     [CONFIRM_OVERWRITE_LIVE=1] \
     [FROM_OFFSITE=1] \
     [REASON="<short narrative>"] \
@@ -112,7 +112,7 @@ host.
    finishes.**
 3. **Dry-run the restore to see the envelope and token.**
    ```bash
-   make ops.restore TARGET=2026-04-30 FROM_OFFSITE=1 \
+      make ops.restore DATE=2026-04-30 FROM_OFFSITE=1 \
        REASON="DR cold start: cluster A lost" \
        DRY_RUN=1
    ```
@@ -139,10 +139,10 @@ once.
    that dump_date.
 3. **Dry-run + execute.**
    ```bash
-   make ops.restore TARGET=2026-04-23 \
+      make ops.restore DATE=2026-04-23 \
        REASON="point-in-time compare for incident #482" \
        DRY_RUN=1
-   make ops.restore TARGET=2026-04-23 \
+      make ops.restore DATE=2026-04-23 \
        REASON="point-in-time compare for incident #482" \
        CONFIRM=<token>
    ```
@@ -167,8 +167,8 @@ writing, on the on-call channel.
    `pattern_allowlist` (`make ops.maint-pause TARGET=maint.sec.v1`).
 2. **Dry-run with the live DSN AND the live-overwrite flag.**
    ```bash
-   make ops.restore TARGET=2026-04-29 \
-       DESTINATION_CONN="$NEGELIR_MAINT_BACKUP_PG_DSN" \
+      make ops.restore DATE=2026-04-29 \
+         TARGET="$NEGELIR_MAINT_BACKUP_PG_DSN" \
        CONFIRM_OVERWRITE_LIVE=1 \
        REASON="incident #491: restore pattern_allowlist; second-op approval @<handle>" \
        DRY_RUN=1
@@ -191,7 +191,7 @@ writing, on the on-call channel.
 | Symptom | Likely surface | What to do |
 |---|---|---|
 | `acks[0].reason == "dr_key_required"` | A verify-class key was wired into the restore path | Re-provision the DR-class identity; never re-use a verify key. |
-| `acks[0].reason == "live_overwrite_requires_confirm"` | `DESTINATION_CONN` matched the live DSN without the live-overwrite flag | Re-issue with `CONFIRM_OVERWRITE_LIVE=1` (and second-op approval). |
+| `acks[0].reason == "live_overwrite_requires_confirm"` | `TARGET` matched the live DSN without the live-overwrite flag | Re-issue with `CONFIRM_OVERWRITE_LIVE=1` (and second-op approval). |
 | `outcome == "decrypt_failed"` | No DR-class key file resolved | Check `cfg.maint_backup_age_identity_file` exists and is readable by the agent process. |
 | `outcome == "restore_failed"` (`exit_code != 0`) | `pg_restore` died | Inspect agent logs for the captured stderr; check disk pressure on the destination. |
 | `outcome == "post_verify_failed"` | `pg_restore` finished but `verify.sql` returned empty | Likely a partial restore or a destination DB the verify role cannot reach. Re-run with a clean destination. |

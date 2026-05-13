@@ -50,7 +50,10 @@ from xops.backup.executors import (
     MANIFEST_NAME,
     QUARANTINE_META_NAME,
     LocalPgDumpExecutor,
+    LocalPgPruner,
+    TableResolutionError,
 )
+from xops.maint.prune_order import PRUNE_ORDER
 from xops.backup.verifier import LocalSubprocessVerifier, _parse_verify_output
 
 
@@ -78,6 +81,124 @@ class FakeRunner:
                 args=list(argv), returncode=0, stdout=b"", stderr=b"",
             )
         return handler(list(argv), env, cwd)
+
+
+def _sql_from_argv(argv: list[str]) -> str:
+    return argv[argv.index("-c") + 1]
+
+
+def test_pg_pruner_dry_run_counts_without_mutation() -> None:
+    calls: list[str] = []
+
+    def fake_psql(argv: list[str], *_a: Any) -> "subprocess.CompletedProcess[bytes]":
+        sql = _sql_from_argv(argv)
+        calls.append(sql)
+        # Existence probes.
+        if "to_regclass('public.opsctl_audit')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        if "to_regclass('public.schema_snapshots')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        if "to_regclass('public.pattern_allowlist')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        if "to_regclass('public.dlq_entries')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.quarantine_samples')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        if "to_regclass('public.maint_audit_log')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.maint_audit_log_pii')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        # Dry-run counts.
+        if "COUNT(*) FROM opsctl_audit" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"9\n", stderr=b"")
+        if "COUNT(*) FROM schema_snapshots" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"4\n", stderr=b"")
+        if "COUNT(*) FROM pattern_allowlist" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"3\n", stderr=b"")
+        if "COUNT(*) FROM quarantine_samples" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"2\n", stderr=b"")
+        if "COUNT(*) FROM maint_audit_log_pii" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"1\n", stderr=b"")
+        return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"0\n", stderr=b"")
+
+    runner = FakeRunner(handlers={"psql": fake_psql})
+    pruner = LocalPgPruner(
+        pg_dsn="postgresql://x@y/z",
+        prune_batch=10,
+        sec_quarantine_ttl_days=30,
+        schema_snapshot_retention_days=90,
+        dlq_retention_days=14,
+        audit_retention_days=365,
+        runner=runner,
+        psql_binary="psql",
+    )
+    out = pruner.prune(dry_run=True)
+    assert tuple(out.keys()) == PRUNE_ORDER
+    assert out["opsctl_audit"] == 9
+    assert out["schema_snapshots"] == 4
+    assert out["pattern_allowlist"] == 3
+    assert out["dlq_entries"] == 0
+    assert out["quarantine_samples"] == 2
+    assert out["maint_audit_log"] == 1
+    assert not any("DO $$" in sql for sql in calls), "dry-run must not execute deletes"
+
+
+def test_pg_pruner_batched_delete_uses_do_loop_and_alias_fallback() -> None:
+    calls: list[str] = []
+
+    def fake_psql(argv: list[str], *_a: Any) -> "subprocess.CompletedProcess[bytes]":
+        sql = _sql_from_argv(argv)
+        calls.append(sql)
+        if "to_regclass('public.opsctl_audit')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        if "to_regclass('public.schema_snapshots')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.pattern_allowlist')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.dlq_entries')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.quarantine_samples')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.maint_audit_log')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"f\n", stderr=b"")
+        if "to_regclass('public.maint_audit_log_pii')" in sql:
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"t\n", stderr=b"")
+        if "DO $$" in sql and "opsctl_audit" in sql:
+            return subprocess.CompletedProcess(
+                args=argv,
+                returncode=0,
+                stdout=b"",
+                stderr=b"NOTICE:  pruned_total=7\n",
+            )
+        if "DO $$" in sql and "maint_audit_log_pii" in sql:
+            return subprocess.CompletedProcess(
+                args=argv,
+                returncode=0,
+                stdout=b"",
+                stderr=b"NOTICE:  pruned_total=2\n",
+            )
+        return subprocess.CompletedProcess(args=argv, returncode=0, stdout=b"", stderr=b"")
+
+    runner = FakeRunner(handlers={"psql": fake_psql})
+    pruner = LocalPgPruner(
+        pg_dsn="postgresql://x@y/z",
+        prune_batch=123,
+        sec_quarantine_ttl_days=30,
+        schema_snapshot_retention_days=90,
+        dlq_retention_days=14,
+        audit_retention_days=365,
+        runner=runner,
+        psql_binary="psql",
+    )
+    out = pruner.prune(dry_run=False)
+    assert out["opsctl_audit"] == 7
+    assert out["maint_audit_log"] == 2
+    # Alias fallback picks maint_audit_log_pii when logical table is absent.
+    assert any("to_regclass('public.maint_audit_log_pii')" in sql for sql in calls)
+    delete_sql = "\n".join(sql for sql in calls if "DO $$" in sql)
+    assert "LIMIT 123" in delete_sql
+    assert "ORDER BY ts_utc ASC" in delete_sql
+    assert "ORDER BY produced_at ASC" in delete_sql
 
 
 # ── LocalPgDumpExecutor ────────────────────────────────────────────────
@@ -736,3 +857,86 @@ def test_cfg_refuses_latest_verify_image(monkeypatch: pytest.MonkeyPatch) -> Non
     cfg = Config()
     issues = cfg.validate()
     assert any("verify_pg_image" in i for i in issues), issues
+
+
+# ── TableResolutionError doctrine tests ───────────────────────────────
+
+
+def _make_pruner(runner: FakeRunner) -> LocalPgPruner:
+    return LocalPgPruner(
+        pg_dsn="postgresql://x@y/z",
+        prune_batch=10,
+        sec_quarantine_ttl_days=30,
+        schema_snapshot_retention_days=90,
+        dlq_retention_days=14,
+        audit_retention_days=365,
+        runner=runner,
+        psql_binary="psql",
+    )
+
+
+def test_resolve_table_raises_table_resolution_error_on_subprocess_failure() -> None:
+    """_resolve_table must NOT silently return None when psql itself fails.
+
+    A CalledProcessError from psql (e.g. connection refused) is a
+    database infrastructure error, not a "table not found" signal.
+    Swallowing it would let the prune run silently report 0 for every
+    table while postgres is unreachable.
+    """
+
+    def failing_psql(
+        argv: list[str], *_a: Any
+    ) -> "subprocess.CompletedProcess[bytes]":
+        raise subprocess.CalledProcessError(
+            1, argv, output=b"", stderr=b"connection refused"
+        )
+
+    pruner = _make_pruner(FakeRunner(handlers={"psql": failing_psql}))
+    with pytest.raises(TableResolutionError, match="existence probe failed"):
+        pruner.prune(dry_run=True)
+
+
+def test_resolve_table_raises_table_resolution_error_on_missing_binary() -> None:
+    """_resolve_table must NOT silently return None when the psql binary is missing.
+
+    FileNotFoundError means the binary is absent entirely; treating it as
+    "table not found" would hide an environment misconfiguration.
+    """
+
+    def missing_binary(
+        argv: list[str], *_a: Any
+    ) -> "subprocess.CompletedProcess[bytes]":
+        raise FileNotFoundError(2, "No such file or directory", argv[0])
+
+    pruner = _make_pruner(FakeRunner(handlers={"psql": missing_binary}))
+    with pytest.raises(TableResolutionError):
+        pruner.prune(dry_run=True)
+
+
+def test_count_where_raises_table_resolution_error_on_non_integer_output() -> None:
+    """_count_where must NOT silently return 0 when psql returns unexpected output.
+
+    A successful psql invocation that returns non-integer stdout is a
+    logic error in the query or an unexpected DB message — returning 0
+    would hide it and could cause the prune run to skip prunable rows.
+    """
+
+    def weird_output(
+        argv: list[str], *_a: Any
+    ) -> "subprocess.CompletedProcess[bytes]":
+        sql = _sql_from_argv(argv)
+        if "to_regclass" in sql:
+            # Probe says table exists.
+            return subprocess.CompletedProcess(
+                args=argv, returncode=0, stdout=b"t\n", stderr=b""
+            )
+        # COUNT(*) returns a non-parseable string instead of a number.
+        return subprocess.CompletedProcess(
+            args=argv, returncode=0, stdout=b"ERROR: some db message\n", stderr=b""
+        )
+
+    # Use a pruner that will hit the COUNT path (dry_run=True on a table
+    # that resolves to a real name).
+    pruner = _make_pruner(FakeRunner(handlers={"psql": weird_output}))
+    with pytest.raises(TableResolutionError, match="non-integer"):
+        pruner.prune(dry_run=True)

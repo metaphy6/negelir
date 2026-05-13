@@ -26,13 +26,9 @@ Callers that opt-in:
   invokes the LLM when the return is :data:`AdmitResult.ADMIT`.
 * Tests can use :class:`InMemorySummarizerLedger` (no disk I/O).
 
-Out of scope for this slice (deferred):
-
-* The actual ``sec.alert.v1{kind=summarizer_cost_capped}`` emission
-  — requires extending the closed sec.alert source enum to include
-  ``source.watcher.v1`` (separate diff). The ledger surfaces
-  :class:`AdmitResult` so the caller can emit when the wire is open.
-* Daily-debounce of the alert per scope — kept caller-side.
+The ledger only decides admission. Callers map
+:class:`AdmitResult` to narration fallback and any operator alerting
+policy they need.
 """
 from __future__ import annotations
 

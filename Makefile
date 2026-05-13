@@ -420,7 +420,7 @@ ops.backup-rotate-key: ## §8.1/§8.13.6 — rotate backup keys (TARGET=<label> 
 	@$(XOPS)/opsctl.py backup-rotate-key
 
 .PHONY: ops.restore
-ops.restore: ## §8.1/§8.3 — restore PG (TARGET=YYYY-MM-DD [FROM_OFFSITE=1] [DESTINATION_CONN=<dsn>] [CONFIRM_OVERWRITE_LIVE=1] CONFIRM=<token>) DESTRUCTIVE
+ops.restore: ## §8.1/§8.3 — restore PG (DATE=YYYY-MM-DD [TARGET=<dsn>] [FROM_OFFSITE=1] [CONFIRM_OVERWRITE_LIVE=1] CONFIRM=<token>) DESTRUCTIVE
 	@$(XOPS)/opsctl.py restore
 
 .PHONY: ops.allowlist-extend
