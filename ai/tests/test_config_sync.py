@@ -239,6 +239,29 @@ def test_validate_rejects_bad_url_scheme(monkeypatch: pytest.MonkeyPatch) -> Non
         Config().validate(strict=True)
 
 
+def test_validate_rejects_latest_source_watcher_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Phase 8.4: summarizer model ids must be pinned, never *-latest."""
+    from common.config import Config
+
+    monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_ENABLED", "true")
+    monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MODEL_ID", "gpt-4.1-latest")
+    monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_URL", "https://example.com/health")
+    with pytest.raises(ValueError):
+        Config().validate(strict=True)
+
+
+def test_validate_rejects_summarizer_daily_cap_below_per_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Phase 8.4: daily token cap must be >= per-call cap."""
+    from common.config import Config
+
+    monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_CALL", "4096")
+    monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_DAY", "1024")
+    with pytest.raises(ValueError):
+        Config().validate(strict=True)
+
+
 def test_shared_env_keys_are_marked() -> None:
     """Phase 1.3: any key consumed by BOTH Python and Go must carry `# shared`."""
     py = _python_env_keys()

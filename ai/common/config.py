@@ -924,6 +924,17 @@ class Config:
     # dump is needed for real DR. Boot validation in
     # `MaintBackupAgent` refuses cron syntax errors loudly.
     maint_backup_cold_verify_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON", "0 5 * * 0"))
+    # Phase 8 §8.4 — source-watcher summarizer graduation gate.
+    # The summarizer may only enable when a pinned model id is
+    # configured AND a startup reachability probe can contact the
+    # summarizer endpoint from the agent's network namespace.
+    source_watcher_summarizer_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_ENABLED", "false").lower() in ("true", "1", "yes"))
+    source_watcher_summarizer_model_id: str = field(default_factory=lambda: os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MODEL_ID", ""))
+    source_watcher_summarizer_probe_url: str = field(default_factory=lambda: os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_URL", ""))
+    source_watcher_summarizer_probe_timeout_sec: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_TIMEOUT_SEC", "2.0")))
+    source_watcher_summarizer_max_tokens_per_call: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_CALL", "4096")))
+    source_watcher_summarizer_max_tokens_per_day: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_DAY", "50000")))
+    source_watcher_summarizer_ledger_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_LEDGER_PATH", "data/maint/summarizer_ledger.json"))
 
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
@@ -1507,6 +1518,59 @@ class Config:
                 f"maint_backup_verify_pg_image={self.maint_backup_verify_pg_image!r} "
                 f"must pin a specific tag (no *-latest)"
             )
+        _bounded(
+            "source_watcher_summarizer_probe_timeout_sec",
+            self.source_watcher_summarizer_probe_timeout_sec,
+            0.1,
+            60.0,
+        )
+        _bounded(
+            "source_watcher_summarizer_max_tokens_per_call",
+            self.source_watcher_summarizer_max_tokens_per_call,
+            1,
+            131_072,
+        )
+        _bounded(
+            "source_watcher_summarizer_max_tokens_per_day",
+            self.source_watcher_summarizer_max_tokens_per_day,
+            1,
+            10_000_000,
+        )
+        if (
+            self.source_watcher_summarizer_max_tokens_per_day
+            < self.source_watcher_summarizer_max_tokens_per_call
+        ):
+            issues.append(
+                "source_watcher_summarizer_max_tokens_per_day must be >= "
+                "source_watcher_summarizer_max_tokens_per_call"
+            )
+        if not self.source_watcher_summarizer_ledger_path.strip():
+            issues.append(
+                "source_watcher_summarizer_ledger_path must be non-empty"
+            )
+        if (
+            self.source_watcher_summarizer_model_id.strip()
+            and (
+                self.source_watcher_summarizer_model_id.endswith(":latest")
+                or self.source_watcher_summarizer_model_id.endswith("-latest")
+            )
+        ):
+            issues.append(
+                "source_watcher_summarizer_model_id="
+                f"{self.source_watcher_summarizer_model_id!r} must pin a "
+                "specific model id (no *-latest)"
+            )
+        if self.source_watcher_summarizer_enabled:
+            if not self.source_watcher_summarizer_model_id.strip():
+                issues.append(
+                    "source_watcher_summarizer_enabled=true requires a non-empty "
+                    "source_watcher_summarizer_model_id"
+                )
+            if not self.source_watcher_summarizer_probe_url.strip():
+                issues.append(
+                    "source_watcher_summarizer_enabled=true requires a non-empty "
+                    "source_watcher_summarizer_probe_url"
+                )
 
         # Hour/minute ranges
         _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)
@@ -1575,6 +1639,10 @@ class Config:
         _check_url("scrape_source_4", self.scrape_source_4)
         _check_url("scrape_source_5", self.scrape_source_5)
         _check_url("scrape_source_fallback", self.scrape_source_fallback)
+        _check_url(
+            "source_watcher_summarizer_probe_url",
+            self.source_watcher_summarizer_probe_url,
+        )
         for extra in self.scrape_source_extra.split(","):
             extra = extra.strip()
             if extra:

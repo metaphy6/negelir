@@ -51,3 +51,6 @@ logs/
 
 # Phase orchestration runtime state (xops/orchestrator/)
 .orchestrator/
+
+# Runtime maint artifacts
+data/maint/summarizer_ledger.json

@@ -87,3 +87,16 @@ def test_summarize_empty_llm_response_falls_back() -> None:
     result = summarize(up, enabled=True, llm=lambda p: "")
     assert result.source == "fallback"
     assert result.text
+
+
+def test_summarize_passes_max_tokens_when_llm_accepts_keyword() -> None:
+    up, _ = _make_breaking_plan()
+    observed = {"max_tokens": None}
+
+    def capped_llm(_plan, *, max_tokens=None):
+        observed["max_tokens"] = max_tokens
+        return "Özet hazır"
+
+    result = summarize(up, enabled=True, llm=capped_llm, max_tokens=321)
+    assert result.source == "llm"
+    assert observed["max_tokens"] == 321

@@ -87,6 +87,9 @@ class AgentRunner:
         # agents pay zero cost.
         self._has_flush = callable(getattr(agent, "flush_expired", None))
         self._last_flush_at = 0.0
+        # Phase 8.4: time-driven agents (for example source.watcher.v1)
+        # tick from the runner heartbeat rather than a standalone loop.
+        self._has_heartbeat_tick = callable(getattr(agent, "on_heartbeat", None))
 
     # ── Lifecycle ───────────────────────────────────────────────────────
     def register(self) -> None:
@@ -128,7 +131,6 @@ class AgentRunner:
         try:
             while not self._stop_event.is_set():
                 did_work = self.step()
-                self._maybe_heartbeat()
                 if not did_work:
                     self._stop_event.wait(self.tick_sec)
         finally:
@@ -137,7 +139,7 @@ class AgentRunner:
     def step(self) -> bool:
         """One iteration of the loop. Returns True if any message was processed."""
         did_work = False
-        now = time.monotonic()
+        now = self._monotonic()
         for topic in self.agent.subscribes:
             # First: try to reclaim any long-pending messages from dead peers,
             # but throttled so we don't scan the pending set every tick.
@@ -180,6 +182,8 @@ class AgentRunner:
                 self.bus.publish(out)
                 self.metrics.inc("msg_published")
                 did_work = True
+        if self._maybe_heartbeat():
+            did_work = True
         return did_work
 
     # ── Per-message processing ──────────────────────────────────────────
@@ -272,10 +276,27 @@ class AgentRunner:
         return f"{self.consumer_group_prefix}:{self.agent.name}"
 
     def _maybe_heartbeat(self) -> None:
-        now = time.monotonic()
+        now = self._monotonic()
         if now - self._last_heartbeat >= self.heartbeat_sec:
             self._heartbeat_now()
+            if self._has_heartbeat_tick:
+                try:
+                    outputs = list(self.agent.on_heartbeat() or ())  # type: ignore[attr-defined]
+                except Exception as exc:  # noqa: BLE001 — mirror handler-failure semantics
+                    self.metrics.inc("heartbeat_failed")
+                    _log.warning("agent=%s on_heartbeat raised: %s", self.agent.name, exc)
+                    return False
+                for out in outputs:
+                    self.bus.publish(out)
+                    self.metrics.inc("msg_published")
+                return bool(outputs)
+        return False
 
     def _heartbeat_now(self) -> None:
         self.registry.heartbeat(self.instance_id)
-        self._last_heartbeat = time.monotonic()
+        self._last_heartbeat = self._monotonic()
+
+    def _monotonic(self) -> float:
+        if hasattr(self._clock, "monotonic"):
+            return float(self._clock.monotonic())
+        return time.monotonic()

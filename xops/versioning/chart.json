@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.3.2",
-    "build": 73,
+    "build": 82,
     "released": null
   },
   "components": {
@@ -34,9 +34,9 @@
       "last_changed": "2026-04-28T08:41:52+00:00"
     },
     "source_watcher": {
-      "version": "1.4.1",
+      "version": "2.0.1",
       "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
-      "last_changed": "2026-05-06T13:56:20+00:00"
+      "last_changed": "2026-05-13T10:59:55+00:00"
     },
     "datasource_scraper": {
       "version": "0.1.0",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.39.0",
+      "version": "0.42.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-13T08:45:16+00:00"
+      "last_changed": "2026-05-13T10:53:58+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -3138,6 +3138,87 @@
       "from": "1.8.2",
       "to": "1.8.3",
       "build": 73
+    },
+    {
+      "timestamp": "2026-05-13T10:29:19+00:00",
+      "component": "source_watcher",
+      "level": "minor",
+      "note": "Phase 8.4 SDK heartbeat migration + source watch report topic",
+      "from": "1.4.1",
+      "to": "1.5.0",
+      "build": 74
+    },
+    {
+      "timestamp": "2026-05-13T10:29:19+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8.4 source watcher SDK heartbeat + report topic",
+      "from": "0.39.0",
+      "to": "0.40.0",
+      "build": 75
+    },
+    {
+      "timestamp": "2026-05-13T10:40:17+00:00",
+      "component": "source_watcher",
+      "level": "minor",
+      "note": "8.4 summarizer graduation gate",
+      "from": "1.5.0",
+      "to": "1.6.0",
+      "build": 76
+    },
+    {
+      "timestamp": "2026-05-13T10:40:17+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "8.4 source watcher summarizer unreachable alert",
+      "from": "0.40.0",
+      "to": "0.41.0",
+      "build": 77
+    },
+    {
+      "timestamp": "2026-05-13T10:47:17+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "8.4 summarizer graduation gate",
+      "from": "1.6.0",
+      "to": "1.6.1",
+      "build": 78
+    },
+    {
+      "timestamp": "2026-05-13T10:52:50+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "Phase 8.4 cost-cap ledger + summarizer fallback integration",
+      "from": "1.6.1",
+      "to": "1.6.2",
+      "build": 79
+    },
+    {
+      "timestamp": "2026-05-13T10:53:58+00:00",
+      "component": "source_watcher",
+      "level": "major",
+      "note": "Phase 8.4 graduation versioning closure",
+      "from": "1.6.2",
+      "to": "2.0.0",
+      "build": 80
+    },
+    {
+      "timestamp": "2026-05-13T10:53:58+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8.4 8.x landing versioning closure",
+      "from": "0.41.0",
+      "to": "0.42.0",
+      "build": 81
+    },
+    {
+      "timestamp": "2026-05-13T10:59:55+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "fix source.watch.report schema summary fields and ignore runtime ledger artifact",
+      "from": "2.0.0",
+      "to": "2.0.1",
+      "build": 82
     }
   ]
 }

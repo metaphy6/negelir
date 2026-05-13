@@ -84,6 +84,12 @@ MAINT_EVENT = Topic("maint.event.v1")
 # `swarm.agents.maint.expected_ack_set(kind)`.
 MAINT_ACK = Topic("maint.ack.v1")
 
+# Phase 8.4 — source-watcher SDK migration report stream. The watcher
+# remains time-driven, but it now publishes its deterministic diff /
+# classification result on the bus so downstream agents can observe the
+# same plan the legacy scheduler produced.
+SOURCE_WATCH_REPORT_V1 = Topic("source.watch.report.v1")
+
 # ── Phase 7 — Defense agents ─────────────────────────────────────
 # ROADMAP §7 ships three sec.* agents: an input-sanitization escalator
 # (§7.1), an upstream-anomaly detector (§7.2), and a rate-limit /
@@ -160,5 +166,6 @@ __all__ = [
     "SEC_CONFIG",
     "SEC_DENYLIST",
     "SEC_QUARANTINE",
+    "SOURCE_WATCH_REPORT_V1",
     "TELEMETRY",
 ]

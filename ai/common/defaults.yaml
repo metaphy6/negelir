@@ -198,6 +198,16 @@ phase6:
   drift_window_size: 50                # NEGELIR_DRIFT_WINDOW_SIZE — rolling Brier/log-loss window
   drift_brier_ceiling: 0.30            # NEGELIR_DRIFT_BRIER_CEILING — trip when mean Brier > ceiling
   drift_pvalue: 0.01                   # NEGELIR_DRIFT_PVALUE — KS-test stationarity threshold
+
+# ── Phase 8.4 — source-watcher summarizer graduation ───────────────────────
+source_watcher:
+  summarizer_enabled: false            # NEGELIR_SOURCE_WATCHER_SUMMARIZER_ENABLED
+  summarizer_model_id: ""             # NEGELIR_SOURCE_WATCHER_SUMMARIZER_MODEL_ID
+  summarizer_probe_url: ""           # NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_URL
+  summarizer_probe_timeout_sec: 2.0    # NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_TIMEOUT_SEC
+  summarizer_max_tokens_per_call: 4096 # NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_CALL
+  summarizer_max_tokens_per_day: 50000 # NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_DAY
+  summarizer_ledger_path: data/maint/summarizer_ledger.json # NEGELIR_SOURCE_WATCHER_SUMMARIZER_LEDGER_PATH
   drift_max_pending: 100000            # NEGELIR_DRIFT_MAX_PENDING — LRU bound on unsettled predictions
   drift_max_settled: 100000            # NEGELIR_DRIFT_MAX_SETTLED — LRU bound on settled (match,market) keys
 

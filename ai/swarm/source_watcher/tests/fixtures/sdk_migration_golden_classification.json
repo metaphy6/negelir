@@ -1,0 +1,14 @@
+[
+  {
+    "kind": "type_changed",
+    "path": "$.rounds[0].matches[0].score.ft",
+    "reason": "type_changed at $.rounds[0].matches[0].score.ft",
+    "severity": "schema_breaking"
+  },
+  {
+    "kind": "removed",
+    "path": "$.teams",
+    "reason": "removed at $.teams",
+    "severity": "schema_breaking"
+  }
+]

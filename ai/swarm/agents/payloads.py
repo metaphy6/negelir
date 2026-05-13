@@ -1080,6 +1080,7 @@ class MaintAck:
 _ALLOWED_QA_VERDICTS: frozenset[str] = frozenset({"pass", "sanitized"})
 _ALLOWED_SEC_SOURCES: frozenset[str] = frozenset({
     "sec.input.v1", "sec.scrape.v1", "sec.rate.v1",
+    "source.watcher.v1",
     "maint.deadmans.v1",
     # Phase 8 §8.5 — DLQ supervisor publishes
     # ``dlq_backlog_high`` warnings on per-topic queue pressure.
@@ -1158,6 +1159,9 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "backup_age_alert",
     "backup_verify_failed",
     "backup_disk_pressure",
+    # source.watcher.v1 (§8.4 summarizer startup downgrade)
+    "summarizer_unreachable",
+    "summarizer_cost_capped",
 })
 
 
