@@ -328,6 +328,14 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "row_count": 7,
         "ttl_days": 30,
     },
+    "pattern_allowlist_expired": {
+        "kind": "pattern_allowlist_expired",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:45Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "count": 4,
+        "reason": "ttl",
+    },
     "pii_erased": {
         "kind": "pii_erased",
         "kind_schema_version": 1,
@@ -337,6 +345,25 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "table": "quarantine_samples",
         "row_count": 3,
         "erased_at": "2025-01-01T12:00:00Z",
+    },
+    # Phase 8 §8.3 weekly cold-verify (silent storage rot detector).
+    "backup_cold_verify_completed": {
+        "kind": "backup_cold_verify_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-05T05:00:30Z",
+        "fire_window_id": "cold:ab12cd34:2024-12-29",
+        "dump_date": "2024-12-29",
+        "duration_ms": 4200,
+        "verified": True,
+    },
+    "backup_cold_verify_failed": {
+        "kind": "backup_cold_verify_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-05T05:00:30Z",
+        "fire_window_id": "cold:ab12cd34:2024-12-29",
+        "dump_date": "2024-12-29",
+        "error": "restore-verify returned empty row-count map",
+        "duration_ms": 4200,
     },
     # Phase 8 §8.1 — operator-driven backup lifecycle (consumer
     # maint.backup.v1 lands in §8.3).
@@ -361,6 +388,30 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "request_id": "req-bk3",
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
+    },
+    # Phase 8 §8.3 — operator-driven restore runbook notifications.
+    "backup_restore_started": {
+        "kind": "backup_restore_started",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T00:00:00Z",
+        "request_id": "req-bk3",
+        "target": "negelir_restore_2025-01-01",
+        "dump_date": "2025-01-01",
+        "requested_by": "ops@host",
+        "destination_conn": "",
+        "ephemeral": True,
+    },
+    "backup_restore_completed": {
+        "kind": "backup_restore_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T00:00:01Z",
+        "request_id": "req-bk3",
+        "target": "negelir_restore_2025-01-01",
+        "dump_date": "2025-01-01",
+        "duration_ms": 1234,
+        "exit_code": 0,
+        "outcome": "ok",
+        "ephemeral": True,
     },
     # Phase 8 §8.1 — operator-driven pattern_allowlist lifecycle
     # (consumer maint.sec.v1 lands in §8.7).

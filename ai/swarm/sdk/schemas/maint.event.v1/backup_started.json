@@ -13,7 +13,8 @@
     "wall_clock_utc":        { "type": "string", "description": "ISO-8601 UTC at fire moment." },
     "monotonic_ns_at_fire":  { "type": "integer", "minimum": 0, "description": "CLOCK_BOOTTIME ns at fire — paired with wall_clock_utc for skew detection." },
     "dry_run":               { "type": "boolean" },
-    "catch_up":              { "type": "boolean", "description": "True when this fire is the single make-up run after a missed window." }
+    "catch_up":              { "type": "boolean", "description": "True when this fire is the single make-up run after a missed window." },
+    "forward_leap_h":        { "type": ["number", "null"], "description": "Wall-clock forward leap (hours) since the previous fire when it exceeds cfg.maint_backup_clock_step_forward_alert_h; null otherwise. Operator-visibility only — the catch-up policy still owns the missed window." }
   },
   "additionalProperties": false
 }

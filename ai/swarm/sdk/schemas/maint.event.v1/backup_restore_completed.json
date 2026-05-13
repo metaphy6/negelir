@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_restore_completed",
+  "title": "maint.event.v1{kind=backup_restore_completed}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 once the operator-driven `restore` pipeline finishes (success OR failure — branch by `exit_code`). Notification only. Mirrored as a row in `maint_audit_log` (right-to-restore traceability).",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "request_id", "target", "dump_date", "duration_ms", "exit_code"],
+  "properties": {
+    "kind":                { "const": "backup_restore_completed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "request_id":          { "type": "string", "minLength": 1 },
+    "target":              { "type": "string", "minLength": 1 },
+    "dump_date":           { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "duration_ms":         { "type": "integer", "minimum": 0 },
+    "exit_code":           { "type": "integer", "description": "0 on success; non-zero is the surface code from the failing stage (`pg_restore` exit, `dr_key_required`, `live_overwrite_requires_confirm`, etc.)." },
+    "outcome":             { "type": "string", "enum": ["ok", "dr_key_required", "live_overwrite_requires_confirm", "decrypt_failed", "restore_failed", "post_verify_failed"], "description": "Closed taxonomy mirroring the failure surface tokens." },
+    "verify_summary":      { "type": "object", "description": "Per-table row counts from the post-restore `verify.sql` run (omitted on non-ok outcomes)." },
+    "ephemeral":           { "type": "boolean", "description": "Mirrored from `backup_restore_started`." }
+  },
+  "additionalProperties": false
+}

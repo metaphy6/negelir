@@ -328,7 +328,7 @@ def cmd_backup_rotate_key(_argv: List[str]) -> int:
 
 
 def cmd_restore(_argv: List[str]) -> int:
-    """`make ops.restore TARGET=YYYY-MM-DD [FROM_OFFSITE=1] [DESTINATION_CONN=<dsn>] CONFIRM=<token>`."""
+    """`make ops.restore TARGET=YYYY-MM-DD [FROM_OFFSITE=1] [DESTINATION_CONN=<dsn>] [CONFIRM_OVERWRITE_LIVE=1] CONFIRM=<token>`."""
     target = _env("TARGET")
     if not target:
         err("ops.restore: TARGET=YYYY-MM-DD is required")
@@ -339,6 +339,8 @@ def cmd_restore(_argv: List[str]) -> int:
     dest = _env("DESTINATION_CONN")
     if dest:
         args.extend(["--destination-conn", dest])
+    if _env("CONFIRM_OVERWRITE_LIVE", "0") == "1":
+        args.append("--confirm-overwrite-live")
     reason = _env("REASON")
     if reason:
         args.extend(["--reason", reason])

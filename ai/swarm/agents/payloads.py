@@ -1084,6 +1084,10 @@ _ALLOWED_SEC_SOURCES: frozenset[str] = frozenset({
     # Phase 8 §8.5 — DLQ supervisor publishes
     # ``dlq_backlog_high`` warnings on per-topic queue pressure.
     "maint.dlq.v1",
+    # Phase 8 §8.3 — backup reactor publishes ``backup_clock_skew``
+    # (severity=error backwards / severity=warn forward) and
+    # ``backup_age_alert`` (severity=error late catch-up).
+    "maint.backup.v1",
 })
 _ALLOWED_SEC_SEVERITIES: frozenset[str] = frozenset({
     "info", "warn", "error", "critical",
@@ -1148,6 +1152,12 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "dlq_backlog_high",
     # xops.maint.advisory_lock (§8.15.3 hold-time guard)
     "maint_advisory_lock_held_long",
+    # maint.backup.v1 (§8.3 scheduler skew + age watchdog +
+    # restore-verify failure)
+    "backup_clock_skew",
+    "backup_age_alert",
+    "backup_verify_failed",
+    "backup_disk_pressure",
 })
 
 

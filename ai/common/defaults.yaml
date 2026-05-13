@@ -151,6 +151,7 @@ swarm:
 # ── Phase 4 — Worker agents (scrape → categorize → process → store) ──────────
 phase4:
   scrape_profile: mock                # SCRAPE_PROFILE  (mock|real)
+  profile: mock                       # NEGELIR_PROFILE  (mock|prod)
   scrape_http_max_retries: 3          # SCRAPE_HTTP_MAX_RETRIES
   categorizer_min_conf: 0.55          # NEGELIR_CATEGORIZER_MIN_CONF
   categorizer_model_path: data/models/categorizer_v1.joblib  # NEGELIR_CATEGORIZER_MODEL_PATH
@@ -374,12 +375,20 @@ phase8:
   maint_backup_max_skew_h: 36                      # NEGELIR_MAINT_BACKUP_MAX_SKEW_H
   maint_backup_age_alert_h: 30                     # NEGELIR_MAINT_BACKUP_AGE_ALERT_H
   maint_backup_clock_step_back_alert_s: 300        # NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S
+  maint_backup_clock_step_forward_alert_h: 24      # NEGELIR_MAINT_BACKUP_CLOCK_STEP_FORWARD_ALERT_H
   maint_backup_pg_jobs: 2                          # NEGELIR_MAINT_BACKUP_PG_JOBS
   maint_backup_prune_batch: 10000                  # NEGELIR_MAINT_BACKUP_PRUNE_BATCH
+  maint_schema_snapshot_retention_days: 90         # NEGELIR_MAINT_SCHEMA_SNAPSHOT_RETENTION_DAYS
+  swarm_dlq_pg_retention_days: 14                  # NEGELIR_SWARM_DLQ_PG_RETENTION_DAYS
+  maint_audit_retention_days: 365                  # NEGELIR_MAINT_AUDIT_RETENTION_DAYS
   maint_backup_pg_dsn: ""                          # NEGELIR_MAINT_BACKUP_PG_DSN
   maint_backup_age_recipients_file: ""             # NEGELIR_MAINT_BACKUP_AGE_RECIPIENTS_FILE
+  maint_backup_encryption_key_dir: ""              # NEGELIR_MAINT_BACKUP_ENCRYPTION_KEY_DIR
+  maint_backup_min_dr_recipients: 2                # NEGELIR_MAINT_BACKUP_MIN_DR_RECIPIENTS
   maint_backup_age_identity_file: ""               # NEGELIR_MAINT_BACKUP_AGE_IDENTITY_FILE
   maint_backup_verify_pg_image: "postgres:16-alpine"  # NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE
+  maint_backup_verify_mode: "full"                 # NEGELIR_MAINT_BACKUP_VERIFY_MODE  (full | toc_only)
+  maint_backup_cold_verify_cron: "0 5 * * 0"       # NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON  (Sun 05:00 UTC)
 
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:

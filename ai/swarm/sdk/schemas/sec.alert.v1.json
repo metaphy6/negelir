@@ -16,7 +16,7 @@
     "alert_id":     { "type": "string", "minLength": 1 },
     "kind":         { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "x-enum-open": true, "description": "Open enum (ROADMAP §7.4). The hand-rolled validator in `ai/swarm/sdk/schemas/__init__.py` checks pattern only; the producer-side AST scan in `test_open_enum_producers_emit_only_known_kinds` enforces that emission sites use only `KNOWN_SEC_ALERT_KINDS`." },
     "severity":     { "type": "string", "enum": ["info", "warn", "error", "critical"] },
-    "source":       { "type": "string", "enum": ["sec.input.v1", "sec.scrape.v1", "sec.rate.v1", "maint.deadmans.v1"] },
+    "source":       { "type": "string", "enum": ["sec.input.v1", "sec.scrape.v1", "sec.rate.v1", "maint.deadmans.v1", "maint.dlq.v1", "maint.backup.v1"] },
     "reason":       { "type": "string", "description": "Free-form human-readable diagnostic. Capped at 1024 chars by producers (mirrors `proof.flag.detail`); evidence pointer goes in `evidence_ref`, never inlined here.", "maxLength": 1024 },
     "subject":      { "type": ["string", "null"], "description": "IP/CIDR, client_id, source_id, or other opaque subject. Payload-only — never a metric label dimension (cardinality bound)." },
     "request_id":   { "type": ["string", "null"] },

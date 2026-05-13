@@ -83,13 +83,15 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # agent id), the consumer set is just that agent.
     "maint_pause":       frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
     "maint_resume":      frozenset({"maint.scaler.v1", "maint.dlq.v1", "maint.schema.v1", "maint.sec.v1"}),
-    # Phase 8 §8.3 — operator-driven backup lifecycle. Consumer is
-    # maint.backup.v1, which lands in §8.3; until then the consumer
-    # set is empty and KINDS_PENDING_CONSUMER_LANDING below cites
-    # the upcoming phase.
+    # Phase 8 §8.3 — operator-driven backup lifecycle. `backup_now`
+    # and `backup_rotate_key` consumers still land later in §8.3;
+    # `restore` is wired to maint.backup.v1 (operator-driven restore
+    # runbook — `ops.restore`). Until the deferred two land their
+    # consumer sets stay empty and KINDS_PENDING_CONSUMER_LANDING
+    # below cites the upcoming phase.
     "backup_now":        frozenset(),
     "backup_rotate_key": frozenset(),
-    "restore":           frozenset(),
+    "restore":           frozenset({"maint.backup.v1"}),
     # Phase 8 §8.7 — operator-driven pattern_allowlist lifecycle.
     # Consumer is maint.sec.v1 (FP feedback loop), which lands in
     # §8.7; until then the consumer set is empty.
@@ -131,7 +133,16 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "prune_completed":             frozenset(),
     "prune_skipped":               frozenset(),
     "quarantine_pruned":           frozenset(),
+    "pattern_allowlist_expired":   frozenset(),
     "pii_erased":                  frozenset(),
+    # ROADMAP §8.3 weekly cold-verify (silent storage rot detector).
+    "backup_cold_verify_completed": frozenset(),
+    "backup_cold_verify_failed":    frozenset(),
+    # ROADMAP §8.3 operator-driven restore runbook (`ops.restore`).
+    # Notification-only — the operator already received their
+    # `maint.ack.v1` for the originating `restore` envelope.
+    "backup_restore_started":       frozenset(),
+    "backup_restore_completed":     frozenset(),
 }
 
 # Kinds whose consumer set is empty BY DESIGN at this point in the
@@ -142,7 +153,6 @@ KINDS_PENDING_CONSUMER_LANDING: Final[Mapping[str, str]] = {
     "retrain_approve":  "Phase 5.x (trainer-as-agent)",
     "backup_now":        "Phase 8.3 (maint.backup.v1)",
     "backup_rotate_key": "Phase 8.3 (maint.backup.v1)",
-    "restore":           "Phase 8.3 (maint.backup.v1)",
     "allowlist_extend":  "Phase 8.7 (maint.sec.v1 allowlist surface)",
     "allowlist_approve": "Phase 8.7 (maint.sec.v1 allowlist surface)",
     "allowlist_show":    "Phase 8.7 (maint.sec.v1 allowlist surface)",
@@ -171,7 +181,14 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "prune_completed",
     "prune_skipped",
     "quarantine_pruned",
+    "pattern_allowlist_expired",
     "pii_erased",
+    # ROADMAP §8.3 weekly cold-verify (silent storage rot detector).
+    "backup_cold_verify_completed",
+    "backup_cold_verify_failed",
+    # ROADMAP §8.3 operator-driven restore runbook (`ops.restore`).
+    "backup_restore_started",
+    "backup_restore_completed",
 })
 
 # Stable, alphabetised view of all known kinds (test imports this).

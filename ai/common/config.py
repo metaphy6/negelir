@@ -300,6 +300,12 @@ class Config:
 
     # Phase 4 worker agents — scrape → categorize → process → store loop
     scrape_profile: str = field(default_factory=lambda: os.getenv("SCRAPE_PROFILE", "mock"))
+    # Deployment profile (cross-cutting). ``mock`` is the local-dev /
+    # CI default; ``prod`` flips fail-safe gates that refuse insecure
+    # configurations outright (e.g. unencrypted nightly backups —
+    # ROADMAP §8.3 ``fail_safe_no_encryption_in_prod``). Validated
+    # below; only the closed enum {mock, prod} is admitted.
+    profile: str = field(default_factory=lambda: os.getenv("NEGELIR_PROFILE", "mock"))
     scrape_http_max_retries: int = field(default_factory=lambda: int(os.getenv("SCRAPE_HTTP_MAX_RETRIES", "3")))
     categorizer_min_conf: float = field(default_factory=lambda: float(os.getenv("NEGELIR_CATEGORIZER_MIN_CONF", "0.55")))
     categorizer_model_path: str = field(default_factory=lambda: os.getenv(
@@ -851,11 +857,28 @@ class Config:
     # sec.alert.v1{kind=backup_clock_skew, severity=error} and skip
     # this fire (refuse-to-start safety floor).
     maint_backup_clock_step_back_alert_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S", "300")))
+    # Forward wall-clock leap (last_fire → now) bigger than this (hours)
+    # → log a warn-level operator-visibility marker AND tag the next
+    # `backup_started` event with `forward_leap_h: float`. The catch-up
+    # policy still handles the missed window itself; this is purely the
+    # early-warning surface (`scope=forward` per ROADMAP §8.3 prose).
+    # The corresponding `sec.alert.v1{kind=backup_clock_skew, severity=warn,
+    # scope=forward}` emission is deferred until the closed sec.alert.v1
+    # source enum is extended to admit `maint.backup.v1`.
+    maint_backup_clock_step_forward_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_CLOCK_STEP_FORWARD_ALERT_H", "24")))
     # pg_dump parallelism (-j flag); 1 disables parallel mode.
     maint_backup_pg_jobs: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_JOBS", "2")))
     # DELETE batch size for the destructive prune phase. Bounded so a
     # single cron run cannot hold a long-lived row-lock cascade.
     maint_backup_prune_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PRUNE_BATCH", "10000")))
+    # ROADMAP §8.3 TTL prune retention windows. Each is a calendar-day
+    # cap; rows whose `created_at` (or `expires_at` for the allowlist)
+    # falls outside the window are pruned by the nightly maint.backup.v1
+    # tick. The audit-log retention is intentionally the longest — the
+    # operator trail is the highest-value record on disk.
+    maint_schema_snapshot_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_SNAPSHOT_RETENTION_DAYS", "90")))
+    swarm_dlq_pg_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_DLQ_PG_RETENTION_DAYS", "14")))
+    maint_audit_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_RETENTION_DAYS", "365")))
     # Live `pg_dump` DSN — empty string means "no live driver wired"
     # (the in-memory shim is used; refused at agent boot in production
     # profile by the swarm bootstrap).
@@ -863,12 +886,44 @@ class Config:
     # Path to the `age` recipients file (one DR-class public key per
     # line). Required when the live `LocalPgDumpExecutor` is wired.
     maint_backup_age_recipients_file: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_AGE_RECIPIENTS_FILE", ""))
+    # Directory of versioned recipient public keys (``keys.vN.age.pub``
+    # + optional ``keys.vN.recipients.txt``). Empty string disables
+    # encryption-at-rest. ROADMAP §8.3 binding: when ``profile=prod``
+    # AND ``maint_runtime != none``, an unset key dir AND unset
+    # recipients file refuses-to-start (``fail_safe_no_encryption_in_prod``).
+    # The dir-format full implementation lands in a follow-up bullet;
+    # this knob exists today so the prod-profile refusal can gate on
+    # both surfaces uniformly.
+    maint_backup_encryption_key_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_ENCRYPTION_KEY_DIR", ""))
+    # Minimum DR-class recipients required in each `keys.vN.recipients.txt`
+    # under `maint_backup_encryption_key_dir`. Default `2` matches the
+    # ROADMAP §8.3 prod binding ("at least 2 in prod") — a single DR
+    # recipient is a single point of disaster-recovery failure. Mock
+    # / dev stacks override down to `1` via env when running the
+    # encryption surface end-to-end without an off-cluster custodian.
+    maint_backup_min_dr_recipients: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MIN_DR_RECIPIENTS", "2")))
     # Path to the `age` identity file used by the restore-verifier to
     # decrypt dumps in the ephemeral scratch container.
     maint_backup_age_identity_file: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_AGE_IDENTITY_FILE", ""))
     # Pinned Postgres image for the restore-verifier scratch container.
     # Must NOT be `*-latest` (CLAUDE.md doctrine: pin specific tags).
     maint_backup_verify_pg_image: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE", "postgres:16-alpine"))
+    # Restore-verify mode (ROADMAP §8.3 escape hatch). `full` (default)
+    # runs the complete `pg_restore` + verify.sql suite; `toc_only` runs
+    # only `pg_restore --list` to validate the dump's table-of-contents
+    # without restoring rows — forward escape hatch for very-large-DB ops
+    # where a nightly full restore exceeds the maintenance window. The
+    # weekly cold-verify still runs the full suite regardless. Boot
+    # validation in `MaintBackupAgent` refuses any other value.
+    maint_backup_verify_mode: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_MODE", "full"))
+    # ROADMAP §8.3 binding (weekly cold-verify — silent storage rot).
+    # 5-field UTC cron expression that fires the cold-verify pass on
+    # the oldest still-retained Sunday dump. Default `0 5 * * 0`
+    # (Sunday 05:00 UTC, after the nightly window). Catches bit-rot /
+    # S3 lifecycle bugs / silent encryption-key loss long before the
+    # dump is needed for real DR. Boot validation in
+    # `MaintBackupAgent` refuses cron syntax errors loudly.
+    maint_backup_cold_verify_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON", "0 5 * * 0"))
 
     # Bootstrap / data validation
     bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
@@ -1051,6 +1106,10 @@ class Config:
         if self.scrape_profile not in ("mock", "real"):
             issues.append(
                 f"scrape_profile={self.scrape_profile!r} not in ('mock', 'real')"
+            )
+        if self.profile not in ("mock", "prod"):
+            issues.append(
+                f"profile={self.profile!r} not in ('mock', 'prod')"
             )
 
         # Telemetry metrics bind: minimal sanity. Reject empty / whitespace
@@ -1416,6 +1475,20 @@ class Config:
             # (e.g. some pickled-cfg unit tests). Defer to the agent's
             # own parse at construction time.
             pass
+        # Phase 8 §8.3 — weekly cold-verify cron.
+        try:
+            from xops.backup.cron import CronSyntaxError, parse_cron
+            _parsed_cv = parse_cron(str(self.maint_backup_cold_verify_cron))
+            if _parsed_cv.fires_every_minute:
+                issues.append(
+                    "maint_backup_cold_verify_cron resolves to every-minute "
+                    f"firing ({self.maint_backup_cold_verify_cron!r}); "
+                    "refusing — set a specific hour/minute"
+                )
+        except CronSyntaxError as exc:
+            issues.append(f"maint_backup_cold_verify_cron: {exc}")
+        except ImportError:
+            pass
         _bounded("maint_backup_retention_days", self.maint_backup_retention_days, 1, 3650)
         _bounded("maint_backup_retention_weeks", self.maint_backup_retention_weeks, 1, 520)
         _bounded("maint_backup_min_free_gb", self.maint_backup_min_free_gb, 1, 100_000)
@@ -1424,6 +1497,10 @@ class Config:
         _bounded("maint_backup_clock_step_back_alert_s", self.maint_backup_clock_step_back_alert_s, 1, 86_400)
         _bounded("maint_backup_pg_jobs", self.maint_backup_pg_jobs, 1, 64)
         _bounded("maint_backup_prune_batch", self.maint_backup_prune_batch, 1, 1_000_000)
+        _bounded("maint_schema_snapshot_retention_days", self.maint_schema_snapshot_retention_days, 1, 3650)
+        _bounded("swarm_dlq_pg_retention_days", self.swarm_dlq_pg_retention_days, 1, 3650)
+        _bounded("maint_audit_retention_days", self.maint_audit_retention_days, 1, 3650)
+        _bounded("maint_backup_min_dr_recipients", self.maint_backup_min_dr_recipients, 1, 64)
         # Refuse `*-latest` style verify-image tags — CLAUDE.md doctrine.
         if str(self.maint_backup_verify_pg_image).endswith(":latest") or self.maint_backup_verify_pg_image.endswith("-latest"):
             issues.append(

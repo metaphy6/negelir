@@ -41,9 +41,24 @@ What this slice DOES NOT ship (deferred, intentionally):
 * Cold-verify (separate-host restore) — same Protocol, separate
   adapter, tracked for §8.3 follow-up.
 * ``ops.restore`` CLI (xops/opsctl) — separate change.
-* ``sec.alert.v1`` emission for skew / disk-pressure — would
-  require extending the closed ``sec.alert.v1.source`` enum to
-  include ``maint.backup.v1`` (separate diff).
+* Cold-verify (separate-host restore) — same Protocol, separate
+  adapter, tracked for §8.3 follow-up.
+
+What this slice DOES ship for the Scheduler bullet:
+
+* Append-only audit ledger at ``cfg.maint_backup_dir/audit.csv``
+  written on every fire (`wall_clock_utc`, `monotonic_ns_at_fire`,
+  outcome, verified, catch_up). On boot, the agent re-seeds its
+  in-memory ``_last_completed_wall`` / ``_last_verified_wall``
+  from today's most recent rows so a restart-mid-day does NOT
+  re-fire the dump (idempotency on `(job_id, backup_date_utc)`).
+* ``sec.alert.v1`` emission on three skew conditions:
+  ``backup_clock_skew{severity=error}`` for backwards wall-clock
+  steps beyond ``cfg.maint_backup_clock_step_back_alert_s``;
+  ``backup_clock_skew{severity=warn, scope=forward}`` for forward
+  leaps beyond ``cfg.maint_backup_clock_step_forward_alert_h``;
+  ``backup_age_alert{severity=error}`` when a make-up run is more
+  than ``cfg.maint_backup_max_skew_h`` late (the run still fires).
 """
 from __future__ import annotations
 
@@ -59,15 +74,23 @@ from common.config import cfg as _cfg
 
 # pylint: disable=relative-beyond-top-level
 from ...sdk.types import Envelope, Message, Topic
-from ..payloads import MaintAck
-from ..topics import MAINT_ACK, MAINT_EVENT
+from ..payloads import MaintAck, SecAlert
+from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 
 # Importing the cron module fails-soft on the cfg-validation path
 # (early bootstrap) but is mandatory at agent construction — the
 # constructor below re-raises any cron parse error so a typo cannot
 # silently disable nightly backup.
+from xops.backup.audit import (
+    AuditRow,
+    append_row as _append_audit_row,
+    last_completed_today,
+    last_verified_today,
+)
 from xops.backup.cron import CronExpr, CronSyntaxError, parse_cron, utc_now
+from xops.backup.executors import quarantine_failed_dump_dir
+from xops.backup.retention import oldest_retained_sunday_dump, prune_retained_dumps
 from xops.maint.prune_order import PRUNE_ORDER
 
 
@@ -107,6 +130,13 @@ PRUNE_SKIP_REASONS: frozenset[str] = frozenset({
     "leader_lost",
 })
 
+# ROADMAP §8.3 escape hatch: restore-verify mode. `full` runs the
+# complete `pg_restore` + verify.sql suite; `toc_only` runs only
+# `pg_restore --list` (TOC validation, no row restore) for
+# very-large-DB nightly windows. Closed set; agent boot validation
+# refuses any other value.
+VALID_VERIFY_MODES: frozenset[str] = frozenset({"full", "toc_only"})
+
 
 class BackupPermissionError(RuntimeError):
     """Raised at agent startup when ``cfg.maint_backup_dir`` (or files
@@ -118,6 +148,22 @@ class BackupPermissionError(RuntimeError):
     ``RuntimeError``). The agent picks this surface over
     ``PermissionError`` because the OS did not deny anything — the
     refusal is policy, not a syscall failure.
+    """
+
+
+class BackupConfigError(RuntimeError):
+    """Raised at agent startup when the cross-cutting deployment
+    profile and the backup-encryption configuration are mutually
+    inconsistent.
+
+    Currently the only trigger is ROADMAP §8.3's
+    ``fail_safe_no_encryption_in_prod`` gate: ``cfg.profile=='prod'``
+    AND ``cfg.maint_runtime != 'none'`` AND no encryption surface
+    configured (both ``maint_backup_encryption_key_dir`` and
+    ``maint_backup_age_recipients_file`` empty). Distinct subclass so
+    operators can grep the supervisor logs for the policy class
+    without disturbing the looser-perms refusal
+    (:class:`BackupPermissionError`).
     """
 
 
@@ -137,9 +183,33 @@ class DumpExecutor(Protocol):
 class RestoreVerifier(Protocol):
     """Restore the latest dump into a scratch DB and return per-table
     row counts (and ``schema_migrations`` max version under the key
-    ``"_schema_max_version"``). Empty mapping = verify failed."""
+    ``"_schema_max_version"``). Empty mapping = verify failed.
 
-    def verify(self, *, fire_window_id: str) -> Mapping[str, int]:
+    ``mode`` is :data:`VALID_VERIFY_MODES` — ``"full"`` runs the
+    complete ``pg_restore`` + ``verify.sql`` suite; ``"toc_only"`` is a
+    ROADMAP §8.3 escape hatch that runs only ``pg_restore --list`` to
+    validate the dump's TOC without restoring rows. Implementations
+    MUST honour both modes; the agent exposes the current value as
+    ``backup_completed.verify_mode`` for operator visibility.
+
+    Implementations:
+
+    * :class:`xops.backup.verifier.LocalSubprocessVerifier` — compose-
+      only dev driver. Spawns an ephemeral ``postgres:16-alpine``
+      container per fire window via the host's docker socket; carries
+      the same docker-socket caveat as :class:`ComposeController` and
+      is **forbidden in prod**.
+    * ``SidecarVerifier`` — **deferred to Phase 14** (Kubernetes
+      sidecar / Job template at ``infra/k8s/jobs/restore-verify.yaml``
+      with a least-privilege ServiceAccount in the
+      ``negelir-maint-verify`` namespace). The Protocol shape here is
+      the binding contract Phase 14 must implement; nothing else in
+      the §8.3 vertical slice depends on the K8s adapter being live.
+    """
+
+    def verify(
+        self, *, fire_window_id: str, mode: str = "full",
+    ) -> Mapping[str, int]:
         ...
 
     def sweep_orphans(self) -> tuple[str, ...]:
@@ -173,6 +243,67 @@ class DiskGauge(Protocol):
         ...
 
 
+# ── Restore-runbook surface (ROADMAP §8.3 `ops.restore`) ────────────────
+
+
+class RestoreKeyClass(Protocol):
+    """Resolve the ``age`` private-key class for a given dump date.
+
+    ROADMAP §8.3 binding: the ``ops.restore`` runbook MUST decrypt
+    using a **DR-class** private key. Verify-class keys are
+    explicitly rejected with surface code ``dr_key_required`` —
+    they are per-dump ephemeral keys for restore-verify only and
+    must never gate a real restore.
+
+    Implementations return one of ``"dr"`` / ``"verify"`` / ``""``
+    (empty when no key is available — surfaced as
+    ``decrypt_failed``).
+    """
+
+    def classify(self, *, dump_date: str) -> str:
+        ...
+
+
+class RestoreExecutor(Protocol):
+    """Run the actual ``age -d | tar -xf - | pg_restore`` pipeline
+    against ``destination`` and then run ``verify.sql``. Returns
+    ``(exit_code, verify_summary)`` — ``exit_code == 0`` is the only
+    success path; non-zero short-circuits the agent into
+    ``backup_restore_completed{outcome='restore_failed'}`` (or the
+    outcome the executor surfaces via the closed taxonomy).
+
+    The v1 vertical slice ships :class:`NoopRestoreExecutor`. The
+    real subprocess-driving adapter lives alongside
+    :class:`xops.backup.verifier.LocalSubprocessVerifier` and is
+    injected by the Phase R1 datasource bootstrap.
+    """
+
+    def restore(
+        self, *, dump_date: str, destination: str, ephemeral: bool,
+    ) -> tuple[int, Mapping[str, int]]:
+        ...
+
+
+class MaintAuditLogger(Protocol):
+    """Append a ROADMAP §8.3 right-to-restore audit row. The v1
+    slice writes through an in-memory shim
+    (:class:`InMemoryMaintAuditLogger`); the Phase R1 datasource
+    bootstrap injects a Postgres-backed writer hitting
+    ``maint_audit_log_pii`` (migration 009).
+    """
+
+    def append(
+        self,
+        *,
+        kind: str,
+        request_id: str,
+        target: str,
+        actor: str,
+        details: Mapping[str, object],
+    ) -> None:
+        ...
+
+
 # ── In-memory shims (test-only by construction) ─────────────────────────
 
 
@@ -203,10 +334,21 @@ class NoopVerifier:
     )
     orphans: tuple[str, ...] = ()
     fail: bool = False
+    last_mode: str | None = None
 
-    def verify(self, *, fire_window_id: str) -> Mapping[str, int]:
+    def verify(
+        self, *, fire_window_id: str, mode: str = "full",
+    ) -> Mapping[str, int]:
+        # Record the mode the agent passed so tests can assert the
+        # cfg → verifier wiring without coupling to schema details.
+        self.last_mode = mode
         if self.fail:
             return {}
+        if mode == "toc_only":
+            # Sentinel TOC-only success payload: row counts are not
+            # available without a full restore, so we return a marker
+            # the agent can opaquely include in `verify_summary`.
+            return {"_toc_only": 1, "_schema_max_version": int(self.summary.get("_schema_max_version", 0))}
         return dict(self.summary)
 
     def sweep_orphans(self) -> tuple[str, ...]:
@@ -250,6 +392,93 @@ class StaticDiskGauge:
         return (self.free_bytes, self.last_dump_bytes)
 
 
+# ── Restore-runbook surface taxonomies + shims ──────────────────────────
+
+# Closed set of ``backup_restore_completed.outcome`` tokens. Mirrors
+# the JSON schema enum 1-for-1; extending this requires a swarm
+# minor bump so dashboards can colour the new bucket.
+RESTORE_OUTCOMES: frozenset[str] = frozenset({
+    "ok",
+    "dr_key_required",
+    "live_overwrite_requires_confirm",
+    "decrypt_failed",
+    "restore_failed",
+    "post_verify_failed",
+})
+
+
+@dataclass
+class StaticRestoreKeyClass:
+    """Test-only :class:`RestoreKeyClass` — returns a fixed class
+    (default ``"dr"``) regardless of dump date. Real production
+    adapter consults ``cfg.maint_backup_encryption_key_dir`` and
+    matches the dump's encryption_key_version against the
+    DR/verify recipient classification per
+    :mod:`xops.backup.recipients`."""
+
+    key_class: str = "dr"
+
+    def classify(self, *, dump_date: str) -> str:
+        return str(self.key_class)
+
+
+@dataclass
+class NoopRestoreExecutor:
+    """No-op :class:`RestoreExecutor` — claims the restore succeeded
+    (or pre-set ``exit_code`` for failure-path tests) and returns a
+    fixed verify summary. Real driver decrypts + pipes through
+    ``pg_restore`` + runs ``xops/backup/verify.sql`` (Phase R1
+    bootstrap)."""
+
+    exit_code: int = 0
+    summary: dict[str, int] = field(
+        default_factory=lambda: {
+            "matches": 0,
+            "predict_final": 0,
+            "_schema_max_version": 11,
+        }
+    )
+    last_destination: str | None = None
+    last_dump_date: str | None = None
+    last_ephemeral: bool | None = None
+
+    def restore(
+        self, *, dump_date: str, destination: str, ephemeral: bool,
+    ) -> tuple[int, Mapping[str, int]]:
+        self.last_destination = destination
+        self.last_dump_date = dump_date
+        self.last_ephemeral = ephemeral
+        if self.exit_code != 0:
+            return (int(self.exit_code), {})
+        return (0, dict(self.summary))
+
+
+@dataclass
+class InMemoryMaintAuditLogger:
+    """In-memory :class:`MaintAuditLogger` — appends to a list
+    callers can inspect. Phase R1 bootstrap will swap in a Postgres
+    writer hitting ``maint_audit_log_pii`` (migration 009)."""
+
+    rows: list[dict[str, object]] = field(default_factory=list)
+
+    def append(
+        self,
+        *,
+        kind: str,
+        request_id: str,
+        target: str,
+        actor: str,
+        details: Mapping[str, object],
+    ) -> None:
+        self.rows.append({
+            "kind": str(kind),
+            "request_id": str(request_id),
+            "target": str(target),
+            "actor": str(actor),
+            "details": dict(details),
+        })
+
+
 # ── Agent ───────────────────────────────────────────────────────────────
 
 
@@ -272,7 +501,7 @@ class MaintBackupAgent:
 
     name = "maint.backup.v1"
     subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
-    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
+    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
         self,
@@ -282,6 +511,9 @@ class MaintBackupAgent:
         pruner: PrunerStorage | None = None,
         quarantine: QuarantineStore | None = None,
         disk: DiskGauge | None = None,
+        restore_executor: RestoreExecutor | None = None,
+        restore_key_class: RestoreKeyClass | None = None,
+        audit_logger: MaintAuditLogger | None = None,
         clock_iso: Callable[[], str] | None = None,
         clock_wall: Callable[[], datetime] | None = None,
         clock_mono_ns: Callable[[], int] | None = None,
@@ -297,6 +529,18 @@ class MaintBackupAgent:
         self._disk = disk if disk is not None else StaticDiskGauge(
             free_bytes=_gb_to_bytes(_cfg.maint_backup_min_free_gb) * 4,
         )
+        self._restore_executor = (
+            restore_executor if restore_executor is not None
+            else NoopRestoreExecutor()
+        )
+        self._restore_key_class = (
+            restore_key_class if restore_key_class is not None
+            else StaticRestoreKeyClass()
+        )
+        self._audit_logger = (
+            audit_logger if audit_logger is not None
+            else InMemoryMaintAuditLogger()
+        )
         self._clock_iso = clock_iso or _utc_iso
         self._clock_wall = clock_wall or utc_now
         self._clock_mono_ns = clock_mono_ns or (
@@ -307,6 +551,11 @@ class MaintBackupAgent:
         # Parse cron up-front so a typo refuses-to-start instead of
         # silently disabling the nightly backup.
         self._cron: CronExpr = parse_cron(str(_cfg.maint_backup_cron))
+        # ROADMAP §8.3 weekly cold-verify cron (silent storage rot).
+        # Parsed up-front for the same refuse-to-start contract.
+        self._cold_verify_cron: CronExpr = parse_cron(
+            str(_cfg.maint_backup_cold_verify_cron)
+        )
         # Fire-window tracking (see backup_started.fire_window_id).
         # Random pod-instance prefix so a leader flip after restart
         # cannot collide window ids in the audit ledger.
@@ -315,6 +564,8 @@ class MaintBackupAgent:
         # first ``flush_expired()`` call (handles the cold-start case
         # without firing immediately).
         self._next_fire_at: datetime | None = None
+        # Same arm-on-first-tick contract for the cold-verify pass.
+        self._cold_verify_next_fire_at: datetime | None = None
         self._last_fire_wall: datetime | None = None
         self._last_fire_mono_ns: int | None = None
         self._catch_up_used: bool = False
@@ -324,6 +575,13 @@ class MaintBackupAgent:
         # explicit binding contract (silent-failure mode is the threat).
         self._last_completed_wall: datetime | None = None  # any-outcome ok
         self._last_verified_wall: datetime | None = None    # outcome=ok only
+        # ROADMAP §8.3 backup-age watchdog: debounce wall-clock anchor
+        # for the silent-failure ``backup_age_alert`` re-emission. The
+        # late-catch-up path (see ``_fire``) emits the same alert
+        # kind on its own; this anchor only gates the heartbeat-driven
+        # watchdog so a stuck-but-alive agent does not flood the bus
+        # once per heartbeat. Re-fires after one full alert window.
+        self._last_age_alert_wall: datetime | None = None
 
         # ROADMAP §8.3 binding: agent process runs with umask 0o077
         # so any file `pg_dump` (or our scratch writes) creates is
@@ -334,18 +592,85 @@ class MaintBackupAgent:
         if enforce_permissions:
             self._enforce_startup_permissions()
 
-    # ── Bus contract: handle quarantine_erase ───────────────────────────
+        # ROADMAP §8.3 binding (`fail_safe_no_encryption_in_prod`): in
+        # the prod profile with a non-trivial maint runtime wired up,
+        # an unencrypted nightly backup is a fail-safe violation —
+        # refuse to start. Mock profile (default) keeps the existing
+        # warn-only path so dev / CI never trip on it. The check is a
+        # closed conjunction so any single guard flipping back to a
+        # safe default (profile=mock OR runtime=none OR either
+        # encryption surface set) reopens the boot path.
+        encryption_configured = bool(
+            (str(_cfg.maint_backup_encryption_key_dir) or "").strip()
+            or (str(_cfg.maint_backup_age_recipients_file) or "").strip()
+        )
+        if (
+            str(_cfg.profile) == "prod"
+            and str(_cfg.maint_runtime) != "none"
+            and not encryption_configured
+        ):
+            raise BackupConfigError(
+                "maint.backup.v1: refusing to start; "
+                "fail_safe_no_encryption_in_prod — cfg.profile='prod' "
+                f"with cfg.maint_runtime={_cfg.maint_runtime!r} requires "
+                "either cfg.maint_backup_encryption_key_dir or "
+                "cfg.maint_backup_age_recipients_file to be set"
+            )
+
+        # ROADMAP §8.3 binding: the restore-verify mode is a closed
+        # enum (`VALID_VERIFY_MODES`). Refuse-to-start on any other
+        # value so a typo cannot silently downgrade nightly verify to
+        # a no-op or wedge the agent on an unknown branch.
+        self._verify_mode: str = str(_cfg.maint_backup_verify_mode)
+        if self._verify_mode not in VALID_VERIFY_MODES:
+            raise BackupConfigError(
+                "maint.backup.v1: refusing to start; "
+                f"cfg.maint_backup_verify_mode={self._verify_mode!r} not in "
+                f"{sorted(VALID_VERIFY_MODES)}"
+            )
+
+        # ROADMAP §8.3 binding (Scheduler): replay today's audit
+        # ledger so a restart-mid-day does NOT re-fire the dump
+        # (idempotency on `(job_id, backup_date_utc)`). Failures
+        # are silent — a missing / unreadable file just means
+        # "first run today", which is the same as a fresh install.
+        self._audit_path: Path = Path(_cfg.maint_backup_dir) / "audit.csv"
+        try:
+            now_wall = self._clock_wall()
+            seeded_completed = last_completed_today(
+                self._audit_path, today=now_wall,
+            )
+            seeded_verified = last_verified_today(
+                self._audit_path, today=now_wall,
+            )
+            if seeded_completed is not None:
+                self._last_completed_wall = seeded_completed
+                self._last_fire_wall = seeded_completed
+            if seeded_verified is not None:
+                self._last_verified_wall = seeded_verified
+        except OSError:
+            # Best-effort — a corrupt ledger must not wedge boot.
+            pass
+
+    # ── Bus contract: handle quarantine_erase + restore ─────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
-        """Route inbound `maint.event.v1{kind=quarantine_erase}` to the
-        PII-erasure handler. Any other kind is ignored (other reactors
-        own them; non-routing here keeps the boundary discipline)."""
+        """Route inbound `maint.event.v1` envelopes:
+
+        * ``kind=quarantine_erase`` → PII-erasure handler.
+        * ``kind=restore`` → operator-driven restore runbook
+          (ROADMAP §8.3 ``ops.restore``).
+
+        Any other kind is ignored (other reactors own them; non-routing
+        here keeps the boundary discipline)."""
         if msg.envelope.topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
         kind = payload.get("kind")
-        if kind != "quarantine_erase":
-            return ()
-        return list(self._handle_quarantine_erase(msg, payload))
+        if kind == "quarantine_erase":
+            return list(self._handle_quarantine_erase(msg, payload))
+        if kind == "restore":
+            return list(self._handle_restore(msg, payload))
+        return ()
 
     def _handle_quarantine_erase(
         self, msg: Message, payload: dict
@@ -389,6 +714,248 @@ class MaintBackupAgent:
             details={"row_count": row_count, "client_id": target_client},
         )
 
+    # ── Bus contract: operator-driven restore (`ops.restore`) ───────────
+    def _handle_restore(
+        self, msg: Message, payload: dict
+    ) -> Iterable[Message]:
+        """Handle ``maint.event.v1{kind=restore}`` per ROADMAP §8.3.
+
+        Wire flow (binding):
+
+        1. Refuse without ``request_id`` / ``target`` (acceptance gate).
+        2. Resolve destination — empty ``destination_conn`` defaults to
+           the ephemeral target ``negelir_restore_<dump_date>`` (NEVER
+           the live primary).
+        3. Live-overwrite gate — when ``destination_conn`` matches the
+           live primary DSN AND ``confirm_overwrite_live`` is missing,
+           refuse with ``live_overwrite_requires_confirm`` (ack false,
+           paired ``backup_restore_completed{outcome=...}``).
+        4. DR-key gate — ``RestoreKeyClass`` MUST classify the dump
+           as ``"dr"``. ``"verify"`` rejects with ``dr_key_required``.
+        5. Pipe restore via :class:`RestoreExecutor` (real driver
+           calls ``age -d | tar -xf - | pg_restore --jobs=...``).
+        6. Run post-restore ``verify.sql`` — the executor returns
+           the row-count map; empty = post_verify_failed.
+        7. Emit ``backup_restore_started`` BEFORE the executor runs
+           and ``backup_restore_completed`` once it returns; mirror
+           both as ``maint_audit_log`` rows (right-to-restore
+           traceability).
+        """
+        request_id = str(payload.get("request_id") or "")
+        dump_date = str(payload.get("target") or "")
+        actor = str(payload.get("client_id") or "")
+        if not request_id or not dump_date or not actor:
+            yield self._ack(
+                msg,
+                request_id=request_id or msg.envelope.message_id,
+                accepted=False,
+                reason="restore missing request_id, target, or client_id",
+            )
+            return
+
+        destination_conn = str(payload.get("destination_conn") or "")
+        confirm_overwrite_live = bool(
+            payload.get("confirm_overwrite_live") or False
+        )
+        from_offsite = bool(payload.get("from_offsite") or False)
+        reason_text = str(payload.get("reason") or "")
+
+        # ── Resolve destination (default = ephemeral, NEVER live) ─────
+        if destination_conn:
+            destination = destination_conn
+            ephemeral = False
+        else:
+            destination = f"negelir_restore_{dump_date}"
+            ephemeral = True
+
+        # ── Live-overwrite gate (binding §8.3) ────────────────────────
+        live_dsn = str(_cfg.maint_backup_pg_dsn or "").strip()
+        if (
+            destination_conn
+            and live_dsn
+            and destination_conn == live_dsn
+            and not confirm_overwrite_live
+        ):
+            yield self._ack(
+                msg,
+                request_id=request_id,
+                accepted=False,
+                reason="live_overwrite_requires_confirm",
+                details={
+                    "destination_conn": destination_conn,
+                    "dump_date": dump_date,
+                },
+            )
+            yield self._notify(
+                "backup_restore_completed",
+                extra={
+                    "request_id": request_id,
+                    "target": destination,
+                    "dump_date": dump_date,
+                    "duration_ms": 0,
+                    "exit_code": 1,
+                    "outcome": "live_overwrite_requires_confirm",
+                    "ephemeral": False,
+                },
+            )
+            self._audit_logger.append(
+                kind="backup_restore_completed",
+                request_id=request_id,
+                target=destination,
+                actor=actor,
+                details={
+                    "dump_date": dump_date,
+                    "outcome": "live_overwrite_requires_confirm",
+                    "exit_code": 1,
+                },
+            )
+            return
+
+        # ── DR-key gate (binding §8.3) ────────────────────────────────
+        key_class = str(
+            self._restore_key_class.classify(dump_date=dump_date) or ""
+        )
+        if key_class != "dr":
+            outcome = (
+                "dr_key_required" if key_class == "verify" else "decrypt_failed"
+            )
+            reject_reason = (
+                "dr_key_required"
+                if outcome == "dr_key_required"
+                else f"decrypt_failed: no key class for dump_date={dump_date}"
+            )
+            yield self._ack(
+                msg,
+                request_id=request_id,
+                accepted=False,
+                reason=reject_reason,
+                details={"dump_date": dump_date, "key_class": key_class},
+            )
+            yield self._notify(
+                "backup_restore_completed",
+                extra={
+                    "request_id": request_id,
+                    "target": destination,
+                    "dump_date": dump_date,
+                    "duration_ms": 0,
+                    "exit_code": 1,
+                    "outcome": outcome,
+                    "ephemeral": ephemeral,
+                },
+            )
+            self._audit_logger.append(
+                kind="backup_restore_completed",
+                request_id=request_id,
+                target=destination,
+                actor=actor,
+                details={
+                    "dump_date": dump_date,
+                    "outcome": outcome,
+                    "exit_code": 1,
+                    "key_class": key_class,
+                },
+            )
+            return
+
+        # ── Accept + emit started + audit ─────────────────────────────
+        yield self._ack(
+            msg,
+            request_id=request_id,
+            accepted=True,
+            reason=(
+                "restore accepted into ephemeral target"
+                if ephemeral
+                else "restore accepted into operator-supplied destination"
+            ),
+            details={
+                "dump_date": dump_date,
+                "target": destination,
+                "ephemeral": ephemeral,
+            },
+        )
+        started_extra: dict = {
+            "request_id": request_id,
+            "target": destination,
+            "dump_date": dump_date,
+            "requested_by": actor,
+            "destination_conn": destination_conn,
+            "ephemeral": ephemeral,
+            "from_offsite": from_offsite,
+        }
+        if reason_text:
+            started_extra["reason"] = reason_text
+        yield self._notify("backup_restore_started", extra=started_extra)
+        self._audit_logger.append(
+            kind="backup_restore_started",
+            request_id=request_id,
+            target=destination,
+            actor=actor,
+            details={
+                "dump_date": dump_date,
+                "destination_conn": destination_conn,
+                "ephemeral": ephemeral,
+                "from_offsite": from_offsite,
+                "reason": reason_text,
+            },
+        )
+
+        # ── Run the pipeline ──────────────────────────────────────────
+        start_mono_ns = self._clock_mono_ns()
+        try:
+            exit_code, verify_summary = self._restore_executor.restore(
+                dump_date=dump_date,
+                destination=destination,
+                ephemeral=ephemeral,
+            )
+        except Exception as exc:  # noqa: BLE001 — Protocol surface is broad
+            _log.warning(
+                "maint.backup.v1: restore executor raised on dump_date=%s: %r",
+                dump_date, exc,
+            )
+            exit_code = 1
+            verify_summary = {}
+            outcome = "restore_failed"
+        else:
+            if exit_code != 0:
+                outcome = "restore_failed"
+            elif not verify_summary:
+                outcome = "post_verify_failed"
+                # Map the empty-summary failure to a non-zero exit so
+                # downstream dashboards do not treat post-verify-fail
+                # as a clean restore.
+                exit_code = 1 if exit_code == 0 else exit_code
+            else:
+                outcome = "ok"
+        duration_ms = int(
+            (self._clock_mono_ns() - start_mono_ns) / 1_000_000
+        )
+
+        completed_extra: dict = {
+            "request_id": request_id,
+            "target": destination,
+            "dump_date": dump_date,
+            "duration_ms": duration_ms,
+            "exit_code": int(exit_code),
+            "outcome": outcome,
+            "ephemeral": ephemeral,
+        }
+        if outcome == "ok":
+            completed_extra["verify_summary"] = dict(verify_summary)
+        yield self._notify("backup_restore_completed", extra=completed_extra)
+        self._audit_logger.append(
+            kind="backup_restore_completed",
+            request_id=request_id,
+            target=destination,
+            actor=actor,
+            details={
+                "dump_date": dump_date,
+                "outcome": outcome,
+                "exit_code": int(exit_code),
+                "duration_ms": duration_ms,
+                "ephemeral": ephemeral,
+            },
+        )
+
     # ── Cron tick: state machine ────────────────────────────────────────
     def flush_expired(self) -> Iterable[Message]:
         """Cron-tick entry point — called by :class:`AgentRunner` on a
@@ -397,19 +964,62 @@ class MaintBackupAgent:
         wall clock crosses :attr:`_next_fire_at`. Returns the list of
         messages to publish (empty when nothing is due)."""
         now_wall = self._clock_wall()
-        if self._next_fire_at is None:
-            from xops.backup.cron import next_fire_after
-            self._next_fire_at = next_fire_after(self._cron, now_wall)
-            return ()
-        if now_wall < self._next_fire_at:
-            return ()
-        # Capture the fire moment + arm the next one BEFORE running
-        # the state machine so a downstream raise cannot wedge the
-        # cron schedule.
-        fire_wall = self._next_fire_at
         from xops.backup.cron import next_fire_after
-        self._next_fire_at = next_fire_after(self._cron, now_wall)
-        return list(self._fire(fire_wall=fire_wall, now_wall=now_wall))
+        out: list[Message] = []
+        # Nightly backup state machine.
+        if self._next_fire_at is None:
+            self._next_fire_at = next_fire_after(self._cron, now_wall)
+        elif now_wall >= self._next_fire_at:
+            fire_wall = self._next_fire_at
+            self._next_fire_at = next_fire_after(self._cron, now_wall)
+            out.extend(self._fire(fire_wall=fire_wall, now_wall=now_wall))
+        # ROADMAP §8.3 weekly cold-verify (silent storage rot). Runs
+        # the same restore-verify pipeline against the oldest still-
+        # retained Sunday dump on its own cron tick. Ordering is
+        # intentional: cold-verify runs AFTER any nightly fire on the
+        # same heartbeat so a Sunday-morning run sees today's dump
+        # already on disk.
+        if self._cold_verify_next_fire_at is None:
+            self._cold_verify_next_fire_at = next_fire_after(
+                self._cold_verify_cron, now_wall,
+            )
+        elif now_wall >= self._cold_verify_next_fire_at:
+            cv_fire_wall = self._cold_verify_next_fire_at
+            self._cold_verify_next_fire_at = next_fire_after(
+                self._cold_verify_cron, now_wall,
+            )
+            out.extend(self._fire_cold_verify(
+                fire_wall=cv_fire_wall, now_wall=now_wall,
+            ))
+        # ROADMAP §8.3 binding — backup-age watchdog. Independent of
+        # the cron tick: catches the silent-failure mode where the
+        # agent is alive (heartbeats firing) but every dump is
+        # failing verify, so neither the catch-up branch in ``_fire``
+        # nor a successful ``backup_completed`` ever closes the gap.
+        # Debounced by one full ``cfg.maint_backup_age_alert_h``
+        # window so a still-broken pipeline emits at most one alert
+        # per window, not one per heartbeat.
+        if self.backup_age_alert_due():
+            window_h = float(_cfg.maint_backup_age_alert_h)
+            should_fire = (
+                self._last_age_alert_wall is None
+                or (now_wall - self._last_age_alert_wall).total_seconds()
+                    >= window_h * 3600.0
+            )
+            if should_fire:
+                age_h = self.backup_age_hours(verified=True)
+                self._last_age_alert_wall = now_wall
+                out.append(self._sec_alert(
+                    kind="backup_age_alert",
+                    severity="error",
+                    reason=(
+                        f"verified-backup age {age_h:.2f}h exceeded "
+                        f"threshold {window_h:.0f}h; agent alive but "
+                        "no successful verified dump in this window"
+                    ),
+                    subject="maint.backup.v1",
+                ))
+        return out
 
     def _fire(
         self, *, fire_wall: datetime, now_wall: datetime
@@ -429,11 +1039,13 @@ class MaintBackupAgent:
         # most ONE make-up per restart — subsequent missed windows
         # wait for their natural next-fire moment.
         catch_up = False
+        catch_up_late_h: float | None = None
         if self._last_fire_wall is not None:
             delta_h = (now_wall - self._last_fire_wall).total_seconds() / 3600.0
             max_skew = float(_cfg.maint_backup_max_skew_h)
             if delta_h > max_skew and not self._catch_up_used:
                 catch_up = True
+                catch_up_late_h = delta_h
                 self._catch_up_used = True
 
         # ── Skew detection (backwards wall-clock step) ────────────────
@@ -446,6 +1058,15 @@ class MaintBackupAgent:
                     "maint.backup.v1: backwards wall-clock step %.1fs "
                     "exceeded threshold; skipping fire window %s",
                     backward, fire_window_id,
+                )
+                yield self._sec_alert(
+                    kind="backup_clock_skew",
+                    severity="error",
+                    reason=(
+                        f"backwards wall-clock step {backward:.1f}s exceeded "
+                        f"threshold {float(_cfg.maint_backup_clock_step_back_alert_s):.0f}s"
+                    ),
+                    subject=fire_window_id,
                 )
                 yield self._notify(
                     "backup_completed",
@@ -462,7 +1083,58 @@ class MaintBackupAgent:
                         "reason": "skew_skipped",
                     },
                 )
+                self._record_audit(
+                    fire_wall=fire_wall, mono_ns=mono_ns,
+                    fire_window_id=fire_window_id,
+                    outcome="skew_skipped", verified=False, catch_up=catch_up,
+                )
                 return
+
+        # ── Skew detection (forward wall-clock leap) ──────────────────
+        # Forward leaps > `clock_step_forward_alert_h` are operator-
+        # visibility only — the catch-up policy above already handles
+        # the missed window. We log a warning AND tag the upcoming
+        # `backup_started` event with `forward_leap_h` so the leap is
+        # discoverable in the audit ledger. (`sec.alert.v1{scope=
+        # forward}` emission is deferred until the closed sec.alert
+        # source enum admits `maint.backup.v1`; see module docstring.)
+        forward_leap_h: float | None = None
+        if self._last_fire_wall is not None:
+            forward_h = (now_wall - self._last_fire_wall).total_seconds() / 3600.0
+            threshold_h = float(_cfg.maint_backup_clock_step_forward_alert_h)
+            if forward_h > threshold_h:
+                forward_leap_h = forward_h
+                _log.warning(
+                    "maint.backup.v1: forward wall-clock leap %.2fh "
+                    "exceeded threshold %.2fh; fire window %s flagged",
+                    forward_h, threshold_h, fire_window_id,
+                )
+                yield self._sec_alert(
+                    kind="backup_clock_skew",
+                    severity="warn",
+                    reason=(
+                        f"forward wall-clock leap {forward_h:.2f}h exceeded "
+                        f"threshold {threshold_h:.2f}h scope=forward"
+                    ),
+                    subject=fire_window_id,
+                )
+
+        # ── Late catch-up alert ───────────────────────────────────────
+        # Make-up run is more than `max_skew_h` late. Per §8.3 the run
+        # still fires (catch-up flag below already handles that); the
+        # alert is operator visibility for the silent-failure mode
+        # where the agent was down across one or more cron windows.
+        if catch_up and catch_up_late_h is not None:
+            yield self._sec_alert(
+                kind="backup_age_alert",
+                severity="error",
+                reason=(
+                    f"catch-up run {catch_up_late_h:.2f}h late exceeded "
+                    f"threshold {float(_cfg.maint_backup_max_skew_h):.0f}h; "
+                    "firing anyway"
+                ),
+                subject=fire_window_id,
+            )
 
         dry_run = bool(_cfg.maint_backup_dry_run)
 
@@ -486,6 +1158,7 @@ class MaintBackupAgent:
                 "monotonic_ns_at_fire": int(mono_ns),
                 "dry_run": dry_run,
                 "catch_up": catch_up,
+                "forward_leap_h": forward_leap_h,
             },
         )
         start_mono_ns = mono_ns
@@ -501,6 +1174,18 @@ class MaintBackupAgent:
                 "maint.backup.v1: disk pressure free=%d < floor=%d; "
                 "skipping fire %s",
                 free_bytes, floor, fire_window_id,
+            )
+            # §8.3 disk-usage guard: refusal counts toward the catch-up
+            # debt — next tick retries. The sec.alert.v1 surfaces the
+            # refusal to operators (debounced per §7.4 default).
+            yield self._sec_alert(
+                kind="backup_disk_pressure",
+                severity="error",
+                reason=(
+                    f"free {int(free_bytes)}B < floor {int(floor)}B "
+                    f"(2× last_dump_size or {int(_cfg.maint_backup_min_free_gb)}GB)"
+                ),
+                subject=fire_window_id,
             )
             yield self._notify(
                 "backup_completed",
@@ -521,6 +1206,12 @@ class MaintBackupAgent:
             )
             self._last_fire_wall = now_wall
             self._last_fire_mono_ns = mono_ns
+            self._record_audit(
+                fire_wall=fire_wall, mono_ns=mono_ns,
+                fire_window_id=fire_window_id,
+                outcome="disk_pressure_skipped", verified=False,
+                catch_up=catch_up,
+            )
             return
 
         # ── Dump ──────────────────────────────────────────────────────
@@ -529,8 +1220,21 @@ class MaintBackupAgent:
         )
 
         # ── Restore-verify ────────────────────────────────────────────
-        verify_summary = dict(self._verifier.verify(fire_window_id=fire_window_id))
+        verify_summary = dict(
+            self._verifier.verify(
+                fire_window_id=fire_window_id, mode=self._verify_mode,
+            )
+        )
         if not verify_summary:
+            # §8.3 binding: quarantine the bad dump dir so the next
+            # nightly cron does not see it as today's success and the
+            # disk-usage guard still accounts for the on-disk bytes.
+            # Best-effort — a missing source dir (the in-memory shim
+            # path) is the dominant case and a no-op.
+            quarantined: Path | None = quarantine_failed_dump_dir(
+                backup_dir=str(_cfg.maint_backup_dir),
+                fire_window_id=fire_window_id,
+            )
             yield self._notify(
                 "backup_completed",
                 extra={
@@ -541,6 +1245,10 @@ class MaintBackupAgent:
                     ),
                     "dump_bytes": int(dump_bytes),
                     "encrypted_bytes": int(encrypted_bytes),
+                    "verify_mode": self._verify_mode,
+                    "quarantined_dir": (
+                        quarantined.name if quarantined is not None else None
+                    ),
                 },
             )
             yield self._notify(
@@ -550,8 +1258,27 @@ class MaintBackupAgent:
                     "reason": "verify_failed",
                 },
             )
+            # §8.3 binding: critical operator-paging signal. Severity
+            # `critical` bypasses the §7.4 SecAlertDebouncer per the
+            # default-bypass rule for critical alerts.
+            yield self._sec_alert(
+                kind="backup_verify_failed",
+                severity="critical",
+                reason=(
+                    f"restore-verify returned empty row-count map for "
+                    f"fire_window_id={fire_window_id}; dump dir "
+                    f"quarantined to {quarantined.name if quarantined else '<no-dump-dir>'}"
+                ),
+                subject=fire_window_id,
+            )
             self._last_fire_wall = now_wall
             self._last_fire_mono_ns = mono_ns
+            self._record_audit(
+                fire_wall=fire_wall, mono_ns=mono_ns,
+                fire_window_id=fire_window_id,
+                outcome="verify_failed", verified=False,
+                catch_up=catch_up,
+            )
             return
 
         # ── Destructive prune (PRUNE_ORDER discipline) ────────────────
@@ -578,6 +1305,53 @@ class MaintBackupAgent:
             prune_extra["would_delete_count"] = sum(deleted_per_table.values())
         yield self._notify("prune_completed", extra=prune_extra)
 
+        # ── Per-table TTL prune notifications (binding §8.3) ──────────
+        # Specific tables surface their own notification kind on top
+        # of the aggregate ``prune_completed`` so dashboards / audit
+        # consumers can hook table-scoped retention without having
+        # to parse ``deleted_per_table`` themselves. Emitted only
+        # when the table actually had rows pruned (or would have, in
+        # dry-run); silent on the no-op path.
+        quarantine_pruned_count = int(
+            deleted_per_table.get("quarantine_samples", 0)
+        )
+        if quarantine_pruned_count > 0:
+            yield self._notify(
+                "quarantine_pruned",
+                extra={
+                    "fire_window_id": fire_window_id,
+                    "row_count": quarantine_pruned_count,
+                    "ttl_days": int(_cfg.sec_quarantine_ttl_days),
+                    "dry_run": dry_run,
+                },
+            )
+        allowlist_expired_count = int(
+            deleted_per_table.get("pattern_allowlist", 0)
+        )
+        if allowlist_expired_count > 0:
+            yield self._notify(
+                "pattern_allowlist_expired",
+                extra={
+                    "fire_window_id": fire_window_id,
+                    "count": allowlist_expired_count,
+                    "reason": "ttl",
+                    "dry_run": dry_run,
+                },
+            )
+
+        # ── Dump-on-disk retention (GFS-light, §8.3) ──────────────────
+        # Only fires after a successful verify + DB-row prune. The
+        # safety floor (``cfg.maint_backup_dry_run``) propagates to
+        # the retention pruner too: dry-run reports the same
+        # partition without removing anything from disk.
+        retention = prune_retained_dumps(
+            backup_dir=str(_cfg.maint_backup_dir),
+            keep_days=int(_cfg.maint_backup_retention_days),
+            keep_weeks=int(_cfg.maint_backup_retention_weeks),
+            now=now_wall,
+            dry_run=dry_run,
+        )
+
         # ── backup_completed (ok) ─────────────────────────────────────
         outcome = "dry_run" if dry_run else "ok"
         yield self._notify(
@@ -585,13 +1359,27 @@ class MaintBackupAgent:
             extra={
                 "fire_window_id": fire_window_id,
                 "outcome": outcome,
+                # ROADMAP §8.3 binding: explicit `verified` field on
+                # the success path. ``ok`` carries `verified: true`
+                # (verify_summary above is the proof); ``dry_run``
+                # would have verified (NoopVerifier-style) but did
+                # not run live, so we report ``false`` so dashboards
+                # never count a dry-run as a verified backup.
+                "verified": outcome == "ok",
                 "duration_ms": int(
                     (self._clock_mono_ns() - start_mono_ns) / 1_000_000
                 ),
                 "dump_bytes": int(dump_bytes),
                 "encrypted_bytes": int(encrypted_bytes),
                 "verify_summary": dict(verify_summary),
+                "verify_mode": self._verify_mode,
                 "dry_run": dry_run,
+                "dump_retention": {
+                    "kept": list(retention.kept),
+                    "pruned": list(retention.pruned),
+                    "unparseable": list(retention.unparseable),
+                    "skipped_quarantine": list(retention.skipped_quarantine),
+                },
             },
         )
         self._last_fire_wall = now_wall
@@ -603,6 +1391,95 @@ class MaintBackupAgent:
         self._last_completed_wall = now_wall
         if outcome == "ok":
             self._last_verified_wall = now_wall
+        self._record_audit(
+            fire_wall=fire_wall, mono_ns=mono_ns,
+            fire_window_id=fire_window_id,
+            outcome=outcome, verified=(outcome == "ok"),
+            catch_up=catch_up,
+        )
+
+    # ── Cold-verify state machine (§8.3 weekly silent-rot detector) ──
+    def _fire_cold_verify(
+        self, *, fire_wall: datetime, now_wall: datetime,
+    ) -> Iterable[Message]:
+        """Run one cold-verify pass on the oldest still-retained
+        Sunday dump. Reuses the same ``RestoreVerifier`` Protocol so
+        the SidecarVerifier (Phase 14) implementation is the binding
+        target; the ``LocalSubprocessVerifier`` adapter routes by the
+        ``fire_window_id`` prefix (``cold:<dump_date>``) to spawn an
+        independent ephemeral PVC per the §8.3 contract.
+
+        Cold-verify NEVER prunes — failures are operator-decided per
+        the binding ROADMAP §8.3 prose ("Cold-verify failures DO NOT
+        prune the dump"). Successes do not advance the
+        ``maint_backup_age_hours{verified}`` gauge either; that gauge
+        is gated on the nightly window only.
+        """
+
+        candidate = oldest_retained_sunday_dump(
+            backup_dir=str(_cfg.maint_backup_dir),
+        )
+        if candidate is None:
+            # No retained Sunday dump yet — nothing to cold-verify.
+            # Silent no-op (notification noise on a fresh stack would
+            # train operators to ignore it).
+            return
+        dump_day, _dir_name = candidate
+        dump_date = dump_day.strftime("%Y-%m-%d")
+        fire_window_id = f"cold:{self._pod_instance_id}:{dump_date}"
+        start_mono_ns = self._clock_mono_ns()
+        try:
+            verify_summary = dict(
+                self._verifier.verify(
+                    fire_window_id=fire_window_id,
+                    mode=self._verify_mode,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — verifier surface is broad
+            _log.warning(
+                "maint.backup.v1: cold-verify raised on dump_date=%s: %r",
+                dump_date, exc,
+            )
+            verify_summary = {}
+            error_text = f"verifier raised: {type(exc).__name__}: {exc}"
+        else:
+            error_text = (
+                "restore-verify returned empty row-count map"
+                if not verify_summary else ""
+            )
+        duration_ms = int(
+            (self._clock_mono_ns() - start_mono_ns) / 1_000_000
+        )
+        if not verify_summary:
+            yield self._notify(
+                "backup_cold_verify_failed",
+                extra={
+                    "fire_window_id": fire_window_id,
+                    "dump_date": dump_date,
+                    "error": error_text,
+                    "duration_ms": duration_ms,
+                },
+            )
+            yield self._sec_alert(
+                kind="backup_verify_failed",
+                severity="critical",
+                reason=(
+                    f"cold-verify failed on dump_date={dump_date} "
+                    f"scope=cold; {error_text}"
+                ),
+                subject=fire_window_id,
+            )
+            return
+        yield self._notify(
+            "backup_cold_verify_completed",
+            extra={
+                "fire_window_id": fire_window_id,
+                "dump_date": dump_date,
+                "duration_ms": duration_ms,
+                "verified": True,
+                "verify_summary": dict(verify_summary),
+            },
+        )
 
     # ── Public observability surface ────────────────────────────────────
     def backup_age_hours(self, *, verified: bool = True) -> float | None:
@@ -631,6 +1508,25 @@ class MaintBackupAgent:
             return None
         delta = self._clock_wall() - anchor
         return delta.total_seconds() / 3600.0
+
+    def metrics_snapshot(self) -> dict[str, float | None]:
+        """ROADMAP §8.3 binding telemetry surface.
+
+        Returns the ``maint_backup_age_hours{verified=true|false}``
+        gauge values in Prometheus-label-encoded form so an operator
+        scraper can render the exposition without consulting the
+        agent's internal state. ``None`` means "no qualifying dump
+        yet" — scrapers should drop the line (Prometheus has no NaN-
+        sentinel for gauges that legitimately have no value), not
+        substitute zero (which would falsely declare freshness).
+        """
+
+        return {
+            'maint_backup_age_hours{verified="true"}':
+                self.backup_age_hours(verified=True),
+            'maint_backup_age_hours{verified="false"}':
+                self.backup_age_hours(verified=False),
+        }
 
     def backup_age_alert_due(self) -> bool:
         """``True`` when ``backup_age_hours(verified=True)`` exceeds
@@ -746,6 +1642,67 @@ class MaintBackupAgent:
         )
         return Message(envelope=env, payload=ack.as_dict())
 
+    def _record_audit(
+        self,
+        *,
+        fire_wall: datetime,
+        mono_ns: int,
+        fire_window_id: str,
+        outcome: str,
+        verified: bool,
+        catch_up: bool,
+    ) -> None:
+        """Append a single :class:`AuditRow` to ``audit.csv``. Best-
+        effort \u2014 a write failure is logged but does NOT abort the
+        run. The in-memory state machine remains the source of
+        truth for the running agent; the ledger replay only matters
+        across restarts."""
+
+        try:
+            _append_audit_row(
+                self._audit_path,
+                AuditRow(
+                    wall_clock_utc=fire_wall.isoformat(),
+                    monotonic_ns_at_fire=int(mono_ns),
+                    fire_window_id=fire_window_id,
+                    outcome=outcome,
+                    verified=verified,
+                    catch_up=catch_up,
+                ),
+            )
+        except OSError as exc:
+            _log.warning(
+                "maint.backup.v1: audit ledger write failed: %r", exc,
+            )
+
+    def _sec_alert(
+        self, *, kind: str, severity: str, reason: str,
+        subject: str | None = None,
+    ) -> Message:
+        """Build and wrap a :class:`SecAlert` envelope with
+        ``source=maint.backup.v1``. The closed source enum admits
+        this producer per ROADMAP \u00a78.3."""
+
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind=kind,
+            severity=severity,
+            source=self.name,
+            reason=reason,
+            produced_at=self._clock_iso(),
+            subject=subject,
+        )
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=alert.as_dict())
+
     def _notify(self, kind: str, *, extra: dict) -> Message:
         # Defence-in-depth: if a typo creeps into a callsite the
         # boundary test would catch it AT TEST TIME. This fires AT
@@ -775,15 +1732,22 @@ class MaintBackupAgent:
 __all__ = [
     "BACKUP_OUTCOMES",
     "PRUNE_SKIP_REASONS",
+    "RESTORE_OUTCOMES",
     "DiskGauge",
     "DumpExecutor",
+    "InMemoryMaintAuditLogger",
     "InMemoryPrunerStorage",
     "InMemoryQuarantineStore",
+    "MaintAuditLogger",
     "MaintBackupAgent",
     "NoopDumpExecutor",
+    "NoopRestoreExecutor",
     "NoopVerifier",
     "PrunerStorage",
     "QuarantineStore",
+    "RestoreExecutor",
+    "RestoreKeyClass",
     "RestoreVerifier",
     "StaticDiskGauge",
+    "StaticRestoreKeyClass",
 ]

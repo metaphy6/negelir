@@ -25,6 +25,17 @@ from common.config import cfg as _cfg
 from ai.swarm.agents.maint.backup import MaintBackupAgent
 
 
+@pytest.fixture(autouse=True)
+def _isolate_backup_dir(tmp_path_factory, monkeypatch):
+    """Phase \u00a78.3 Scheduler bullet writes ``audit.csv`` under
+    ``cfg.maint_backup_dir`` and replays it at boot \u2014 isolate every
+    test so a prior run does not seed ``_last_completed_wall`` /
+    ``_last_verified_wall`` and break the cold-start contracts
+    below."""
+    isolated = tmp_path_factory.mktemp("backup_dir_iso")
+    monkeypatch.setattr(_cfg, "maint_backup_dir", str(isolated), raising=False)
+
+
 @pytest.fixture
 def freezer():
     """Tiny mutable wall-clock fixture."""
@@ -183,3 +194,109 @@ def test_init_skips_enforcement_when_opted_out(tmp_path: Path, monkeypatch):
     agent = MaintBackupAgent(enforce_permissions=False)
     if os.name == "posix":
         assert agent.check_permissions(), "audit primitive still flags the dir"
+
+
+# ── Backup-age telemetry surface + watchdog (ROADMAP §8.3 binding) ──────
+
+
+def test_metrics_snapshot_exposes_labelled_age_gauge(freezer):
+    """``metrics_snapshot()`` returns the
+    ``maint_backup_age_hours{verified=...}`` gauge for both label
+    values (operator-scrapable telemetry surface)."""
+    agent = MaintBackupAgent(clock_wall=freezer)
+    snap = agent.metrics_snapshot()
+    assert set(snap.keys()) == {
+        'maint_backup_age_hours{verified="true"}',
+        'maint_backup_age_hours{verified="false"}',
+    }
+    # No qualifying dump yet → both labels report None (scrapers drop
+    # the line; never substitute zero — that would falsely declare
+    # freshness).
+    assert snap['maint_backup_age_hours{verified="true"}'] is None
+    assert snap['maint_backup_age_hours{verified="false"}'] is None
+    # Simulate a verified completion at t=0; advance 4h.
+    agent._last_verified_wall = freezer()  # type: ignore[attr-defined]
+    agent._last_completed_wall = freezer()  # type: ignore[attr-defined]
+    freezer.advance(4.0)
+    snap = agent.metrics_snapshot()
+    assert snap['maint_backup_age_hours{verified="true"}'] == pytest.approx(
+        4.0, abs=1e-6,
+    )
+    assert snap['maint_backup_age_hours{verified="false"}'] == pytest.approx(
+        4.0, abs=1e-6,
+    )
+
+
+def test_watchdog_emits_sec_alert_on_silent_failure(freezer, monkeypatch):
+    """Heartbeat-driven watchdog fires
+    ``sec.alert.v1{kind=backup_age_alert, severity=error,
+    source=maint.backup.v1}`` when the verified-age gauge exceeds
+    ``cfg.maint_backup_age_alert_h`` — the silent-failure mode where
+    the agent is alive but every dump is failing verify."""
+    monkeypatch.setattr(_cfg, "maint_backup_age_alert_h", 24, raising=False)
+    # Use a far-future cron so the nightly state machine never fires
+    # in this test — we are isolating the watchdog branch only.
+    monkeypatch.setattr(_cfg, "maint_backup_cron", "0 3 31 12 *", raising=False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_cold_verify_cron", "0 5 31 12 0", raising=False,
+    )
+    agent = MaintBackupAgent(clock_wall=freezer)
+    # Seed a verified completion at t=0.
+    agent._last_verified_wall = freezer()  # type: ignore[attr-defined]
+    # Below threshold — no alert.
+    freezer.advance(20.0)
+    msgs = list(agent.flush_expired())
+    alerts = [m for m in msgs if m.envelope.topic == "sec.alert.v1"]
+    assert alerts == []
+    # Cross threshold — one alert.
+    freezer.advance(10.0)  # now 30h, > 24h threshold
+    msgs = list(agent.flush_expired())
+    alerts = [m for m in msgs if m.envelope.topic == "sec.alert.v1"]
+    assert len(alerts) == 1
+    payload = alerts[0].payload
+    assert payload["kind"] == "backup_age_alert"
+    assert payload["severity"] == "error"
+    assert payload["source"] == "maint.backup.v1"
+    assert "30." in payload["reason"] or "30 " in payload["reason"]
+
+
+def test_watchdog_debounced_within_window(freezer, monkeypatch):
+    """Re-emission is debounced by one full
+    ``cfg.maint_backup_age_alert_h`` window so a stuck-but-alive
+    agent emits at most one alert per window — not one per
+    heartbeat."""
+    monkeypatch.setattr(_cfg, "maint_backup_age_alert_h", 24, raising=False)
+    monkeypatch.setattr(_cfg, "maint_backup_cron", "0 3 31 12 *", raising=False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_cold_verify_cron", "0 5 31 12 0", raising=False,
+    )
+    agent = MaintBackupAgent(clock_wall=freezer)
+    agent._last_verified_wall = freezer()  # type: ignore[attr-defined]
+    freezer.advance(30.0)  # > threshold
+    first = list(agent.flush_expired())
+    assert len([m for m in first if m.envelope.topic == "sec.alert.v1"]) == 1
+    # Heartbeat 1 minute later — still over threshold but inside
+    # debounce window → no second alert.
+    freezer.advance(1.0 / 60.0)
+    second = list(agent.flush_expired())
+    assert [m for m in second if m.envelope.topic == "sec.alert.v1"] == []
+    # Advance past one full window from the last fire — re-arm.
+    freezer.advance(24.0)
+    third = list(agent.flush_expired())
+    assert len([m for m in third if m.envelope.topic == "sec.alert.v1"]) == 1
+
+
+def test_watchdog_silent_before_first_run(freezer, monkeypatch):
+    """Cold-start: no successful dump ever → watchdog refuses to
+    fire (Phase 8.10 dead-mans-switch handles cold-start
+    independently). Honours the ``backup_age_alert_due() is False``
+    contract from the existing hardening tests."""
+    monkeypatch.setattr(_cfg, "maint_backup_age_alert_h", 24, raising=False)
+    monkeypatch.setattr(_cfg, "maint_backup_cron", "0 3 31 12 *", raising=False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_cold_verify_cron", "0 5 31 12 0", raising=False,
+    )
+    agent = MaintBackupAgent(clock_wall=freezer)
+    freezer.advance(72.0)  # 3 days, no seeded completion
+    msgs = list(agent.flush_expired())
+    assert [m for m in msgs if m.envelope.topic == "sec.alert.v1"] == []

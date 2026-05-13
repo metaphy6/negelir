@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_cold_verify_completed",
+  "title": "maint.event.v1{kind=backup_cold_verify_completed}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 when the weekly cold-verify pass on the oldest still-retained Sunday dump succeeds. Notification only; cold-verify never auto-prunes.",
+  "type": "object",
+  "required": ["kind", "produced_at", "fire_window_id", "dump_date", "duration_ms", "verified", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "backup_cold_verify_completed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "dump_date":           { "type": "string", "description": "ISO calendar date (UTC) of the Sunday dump that was cold-verified." },
+    "duration_ms":         { "type": "integer", "minimum": 0 },
+    "verified":            { "type": "boolean", "description": "Always true on this kind — failed cold-verify uses backup_cold_verify_failed." },
+    "verify_summary":      { "type": "object", "description": "Per-table row counts + schema_migrations max version returned by the verifier." }
+  },
+  "additionalProperties": false
+}

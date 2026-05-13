@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_restore_started",
+  "title": "maint.event.v1{kind=backup_restore_started}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 when an operator-driven `restore` request begins (consumer of `maint.event.v1{kind=restore}`). Notification only; the operator already received their `maint.ack.v1` for the originating `restore` envelope (acceptance gate). Mirrored as a row in `maint_audit_log` for right-to-restore traceability.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "request_id", "target", "dump_date", "requested_by", "destination_conn", "ephemeral"],
+  "properties": {
+    "kind":                { "const": "backup_restore_started" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "request_id":          { "type": "string", "minLength": 1, "description": "Originating `restore` request_id (carried for cross-event correlation)." },
+    "target":              { "type": "string", "minLength": 1, "description": "Resolved DSN-or-DB-name the dump was restored into (synthesized ephemeral target when the operator did not pass `destination_conn`)." },
+    "dump_date":           { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "Source dump date (UTC, YYYY-MM-DD)." },
+    "requested_by":        { "type": "string", "minLength": 1, "description": "`client_id` from the originating `restore` envelope." },
+    "destination_conn":    { "type": "string", "description": "Operator-supplied destination DSN (empty when defaulted to ephemeral target)." },
+    "ephemeral":           { "type": "boolean", "description": "True iff the consumer synthesized an ephemeral target (`negelir_restore_<dump_date>`); false iff it restored into operator-supplied `destination_conn`." },
+    "from_offsite":        { "type": "boolean", "description": "Mirrored from the originating `restore` envelope." },
+    "reason":              { "type": "string", "description": "Operator narration mirrored from the originating `restore` envelope." }
+  },
+  "additionalProperties": false
+}

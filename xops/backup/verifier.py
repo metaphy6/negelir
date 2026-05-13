@@ -41,6 +41,7 @@ from xops.backup.executors import (
     CHECKSUM_NAME,
     CommandRunner,
     DUMP_DIR_NAME,
+    DUMP_FILE_NAME,
     ENCRYPTED_NAME,
     _default_runner,
 )
@@ -96,13 +97,32 @@ class LocalSubprocessVerifier:
     # Path to verify.sql; defaults to the sibling file under this pkg.
     verify_sql_path: Optional[str] = None
 
-    def verify(self, *, fire_window_id: str) -> Mapping[str, int]:
+    def verify(
+        self, *, fire_window_id: str, mode: str = "full",
+    ) -> Mapping[str, int]:
         """Restore the dump and return per-table row counts.
+
+        ``mode`` is the ROADMAP §8.3 escape hatch:
+
+        * ``"full"`` (default) — decrypt → untar → spin postgres →
+          ``pg_restore`` → ``verify.sql`` → return row counts.
+        * ``"toc_only"`` — decrypt → untar → ``pg_restore --list``
+          only. No container, no row restore. Returns
+          ``{"_toc_only": 1, "_toc_entries": <int>}`` on success;
+          empty dict on any failure (Protocol contract).
 
         Empty dict means verify failed (the Protocol contract
         ``MaintBackupAgent`` reads as ``verify_failed`` outcome).
         """
+        if mode not in ("full", "toc_only"):
+            _log.warning(
+                "LocalSubprocessVerifier.verify window=%s rejected unknown mode=%r",
+                fire_window_id, mode,
+            )
+            return {}
         try:
+            if mode == "toc_only":
+                return self._verify_toc_only(fire_window_id=fire_window_id)
             return self._verify_inner(fire_window_id=fire_window_id)
         except Exception as exc:  # noqa: BLE001 — Protocol contract: empty dict on any failure
             _log.warning(
@@ -154,8 +174,9 @@ class LocalSubprocessVerifier:
             scratch_path = Path(scratch)
             tar_path = scratch_path / "dump.tar"
             dump_dir = scratch_path / DUMP_DIR_NAME
+            dump_file = scratch_path / DUMP_FILE_NAME
 
-            # ── Decrypt with age (DR-class identity) ───────────────────
+            # ── Decrypt with age (DR-class identity) ───────────────────────
             self.runner([
                 age, "-d",
                 "-i", self.age_identity_file,
@@ -168,6 +189,20 @@ class LocalSubprocessVerifier:
                 # filter=data avoids the Python 3.14 deprecation warning
                 # while still rejecting absolute paths / device files.
                 _safe_extract(tar, scratch_path)
+
+            # §8.3 binding: the dump artefact is either ``dump.d/``
+            # (``-Fd``, multi-job) or ``negelir.dump`` (``-Fc``,
+            # single-job). Detect which one is present and pass that
+            # path to ``pg_restore`` — it auto-detects the format.
+            if dump_dir.is_dir():
+                restore_target = dump_dir
+            elif dump_file.is_file():
+                restore_target = dump_file
+            else:
+                raise RuntimeError(
+                    f"no recognised dump artefact in {scratch_path} "
+                    f"(expected {DUMP_DIR_NAME}/ or {DUMP_FILE_NAME})"
+                )
 
             # ── Spin ephemeral postgres container ─────────────────────
             try:
@@ -202,7 +237,7 @@ class LocalSubprocessVerifier:
                         "--no-owner",
                         "--no-privileges",
                         "--dbname=negelir_verify",
-                        str(dump_dir),
+                        str(restore_target),
                     ],
                     env=env,
                 )
@@ -226,6 +261,84 @@ class LocalSubprocessVerifier:
                     self.runner([docker, "rm", "-f", container])
                 except Exception:  # pragma: no cover
                     pass
+
+    def _verify_toc_only(self, *, fire_window_id: str) -> Mapping[str, int]:
+        """ROADMAP §8.3 escape hatch: validate the dump's TOC only.
+
+        Decrypts + untars the dump like the full path, then runs
+        ``pg_restore --list <target>`` and counts the TOC entries.
+        No ephemeral Postgres container is started; suitable for
+        very-large-DB nightly windows where a full restore exceeds
+        the maintenance window. Weekly cold-verify still runs the
+        full suite — toc-only catches checksum/decrypt/format
+        corruption, not row-level integrity.
+        """
+        safe_window = fire_window_id.replace(":", "_").replace("/", "_")
+        window_dir = Path(self.backup_dir) / safe_window
+        encrypted = window_dir / ENCRYPTED_NAME
+        checksum = window_dir / CHECKSUM_NAME
+        if not encrypted.is_file():
+            raise RuntimeError(f"encrypted dump missing: {encrypted}")
+        if not checksum.is_file():
+            raise RuntimeError(f"checksum missing: {checksum}")
+
+        # Same checksum gate as the full path — silent-corruption is
+        # the threat model toc_only must still catch.
+        expected = checksum.read_text(encoding="utf-8").split()[0].strip()
+        actual = _sha256_file(encrypted)
+        if expected.lower() != actual.lower():
+            raise RuntimeError(
+                f"checksum mismatch: expected={expected[:16]} "
+                f"actual={actual[:16]}"
+            )
+
+        if not self.age_identity_file or not os.path.isfile(self.age_identity_file):
+            raise RuntimeError(
+                f"age identity file missing: {self.age_identity_file!r}"
+            )
+
+        age = self.age_binary or shutil.which("age") or "age"
+        pg_restore = (
+            self.pg_restore_binary or shutil.which("pg_restore") or "pg_restore"
+        )
+
+        with tempfile.TemporaryDirectory(prefix="negelir-verify-toc-") as scratch:
+            scratch_path = Path(scratch)
+            tar_path = scratch_path / "dump.tar"
+            dump_dir = scratch_path / DUMP_DIR_NAME
+            dump_file = scratch_path / DUMP_FILE_NAME
+
+            # Decrypt + untar (same as full path).
+            self.runner([
+                age, "-d",
+                "-i", self.age_identity_file,
+                "-o", str(tar_path),
+                str(encrypted),
+            ])
+            import tarfile
+            with tarfile.open(tar_path, "r") as tar:
+                _safe_extract(tar, scratch_path)
+
+            if dump_dir.is_dir():
+                restore_target = dump_dir
+            elif dump_file.is_file():
+                restore_target = dump_file
+            else:
+                raise RuntimeError(
+                    f"no recognised dump artefact in {scratch_path} "
+                    f"(expected {DUMP_DIR_NAME}/ or {DUMP_FILE_NAME})"
+                )
+
+            cp = self.runner([pg_restore, "--list", str(restore_target)])
+            stdout = (cp.stdout or b"").decode(errors="replace")
+            entries = sum(
+                1
+                for raw in stdout.splitlines()
+                if raw.strip() and not raw.lstrip().startswith(";")
+            )
+            if entries <= 0:
+                raise RuntimeError("pg_restore --list returned no TOC entries")
+            return {"_toc_only": 1, "_toc_entries": int(entries)}
 
     def sweep_orphans(self) -> tuple[str, ...]:
         """Drop any leftover ``negelir-verify-*`` containers.

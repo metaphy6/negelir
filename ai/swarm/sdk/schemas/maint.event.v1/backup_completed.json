@@ -15,6 +15,20 @@
     "dump_bytes":          { "type": "integer", "minimum": 0 },
     "encrypted_bytes":     { "type": "integer", "minimum": 0 },
     "verify_summary":      { "type": "object", "description": "Per-table row counts + schema_migrations max version when outcome=ok." },
+    "verify_mode":         { "type": "string", "enum": ["full", "toc_only"], "description": "Restore-verify mode that ran (ROADMAP §8.3 escape hatch)." },
+    "verified":            { "type": "boolean", "description": "True iff outcome=ok (i.e. restore-verify produced a non-empty verify_summary). dry_run runs report false so dashboards never count a dry-run as a verified backup." },
+    "dump_retention":      {
+      "type": "object",
+      "description": "GFS-light retention sweep that ran after a successful prune (omitted on non-ok outcomes). Reports the partition of on-disk dump-window dirs.",
+      "additionalProperties": false,
+      "properties": {
+        "kept":               { "type": "array", "items": { "type": "string" } },
+        "pruned":             { "type": "array", "items": { "type": "string" } },
+        "unparseable":        { "type": "array", "items": { "type": "string" } },
+        "skipped_quarantine": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "quarantined_dir":     { "type": ["string", "null"], "description": "On verify_failed, the renamed `<window>.failed/` dir; null when no on-disk dump existed." },
     "dry_run":             { "type": "boolean" }
   },
   "additionalProperties": false

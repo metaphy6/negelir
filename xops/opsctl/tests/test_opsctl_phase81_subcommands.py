@@ -260,6 +260,36 @@ class TestRestore(unittest.TestCase):
                 "postgresql://drill@host/db",
             )
 
+    def test_dry_run_confirm_overwrite_live_in_payload(self) -> None:
+        """ROADMAP §8.3 — `--confirm-overwrite-live` flows through the
+        envelope payload AND is folded into the typed-token preimage so
+        an operator cannot drop the flag and reuse a prior token."""
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="2025-06-15",
+                from_offsite=False,
+                destination_conn="postgresql://app@live/negelir",
+                confirm_overwrite_live=True,
+                reason="emergency cutover",
+                dry_run=True,
+            )
+            rc, out = _capture(restore, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertTrue(out["payload"]["confirm_overwrite_live"])
+            # Token preimage changes when confirm_overwrite_live is set.
+            token_with = out["expected_confirm_token"]
+            args_no = _ns(
+                target="2025-06-15",
+                from_offsite=False,
+                destination_conn="postgresql://app@live/negelir",
+                confirm_overwrite_live=False,
+                reason="emergency cutover",
+                dry_run=True,
+            )
+            _, out_no = _capture(restore, args_no)
+            token_without = out_no["expected_confirm_token"]
+            self.assertNotEqual(token_with, token_without)
+
 
 # ────────────────────────────────────────────────────────────────────
 # allowlist-extend / -approve / -show

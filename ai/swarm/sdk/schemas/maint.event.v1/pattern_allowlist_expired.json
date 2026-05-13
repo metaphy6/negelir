@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/pattern_allowlist_expired",
+  "title": "maint.event.v1{kind=pattern_allowlist_expired}",
+  "description": "Phase 8 §8.3 — emitted by maint.backup.v1 (TTL prune phase) and maint.sec.v1 (per-pattern expiry tick) when one or more pattern_allowlist rows whose `expires_at < now()` are removed. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "pattern_allowlist_expired" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "count":               { "type": "integer", "minimum": 0 },
+    "target":              { "type": "string", "minLength": 1, "description": "Subject id (`<source>:<rule_id>`) when emitted per-pattern by maint.sec.v1; omitted when emitted as a batch summary by maint.backup.v1." },
+    "reason":              { "type": "string", "enum": ["ttl"] },
+    "dry_run":             { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

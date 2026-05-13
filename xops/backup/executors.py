@@ -47,9 +47,34 @@ _log = logging.getLogger("xops.backup.executors")
 # Filenames inside the per-fire-window directory. Pinned so the
 # verifier + restore CLI can find them without an inventory probe.
 DUMP_DIR_NAME: str = "dump.d"
+# §8.3 binding: ``-Fc`` (custom) single-file dump filename, used when
+# ``pg_jobs <= 1``. The format is selected by ``LocalPgDumpExecutor``
+# at dump time; the verifier auto-detects which artefact is present
+# inside the encrypted tar (file vs directory) and dispatches to
+# ``pg_restore`` accordingly.
+DUMP_FILE_NAME: str = "negelir.dump"
 ENCRYPTED_NAME: str = "dump.tar.age"
 CHECKSUM_NAME: str = "negelir.checksum.txt"
 MANIFEST_NAME: str = "manifest.json"
+# PII-aware sanitized projection of ``quarantine_samples`` (§8.3
+# binding contract). Written alongside the encrypted dump as
+# **operator-only forensic evidence** — it is NOT a ``pg_restore``
+# input. After restore, ``quarantine_samples`` will be empty (schema
+# present, no rows) by design; this CSV preserves the metadata trail
+# (no raw bytes) so an operator can audit what was quarantined at
+# backup time. Mode 0600, never auto-loaded.
+QUARANTINE_META_NAME: str = "negelir.quarantine_meta.csv"
+# Sanitized projection SQL — mirrors the actual ``quarantine_samples``
+# schema (migration 007) minus ``raw_bytes`` and any direct PII
+# identifiers (``client_id``, ``ip``). ``erased_at`` is included so
+# the operator can distinguish post-erasure rows from live ones.
+_QUARANTINE_META_SQL: str = (
+    "SELECT quarantine_id, source, verdict, "
+    "array_to_string(reasons, '|') AS reasons, "
+    "bytes_sha256, detected_at, erased_at, pii_redacted "
+    "FROM quarantine_samples "
+    "ORDER BY detected_at"
+)
 
 
 class CommandRunner(Protocol):
@@ -164,6 +189,7 @@ class LocalPgDumpExecutor:
     # via ``shutil.which`` lazily on the first ``dump()`` call).
     age_binary: Optional[str] = None
     pg_dump_binary: Optional[str] = None
+    psql_binary: Optional[str] = None
     # PII-aware policy (§8.3 binding contract). When true,
     # ``--exclude-table-data=quarantine_samples`` is appended to the
     # ``pg_dump`` argv so the raw bytes of quarantined samples never
@@ -208,20 +234,45 @@ class LocalPgDumpExecutor:
         safe_window = fire_window_id.replace(":", "_").replace("/", "_")
         window_dir = root / safe_window
         _ensure_secure_dir(window_dir)
-        dump_dir = window_dir / DUMP_DIR_NAME
-        _ensure_secure_dir(dump_dir)
 
         # ── pg_dump ────────────────────────────────────────────────────
+        # Format-jobs invariant (§8.3 binding): ``--jobs > 1`` requires
+        # ``-Fd`` (directory format). When ``pg_jobs <= 1`` we use
+        # ``-Fc`` (custom, single-file) and drop the ``--jobs`` flag
+        # entirely — pg_dump is single-threaded by default, ``-Fc``
+        # cannot parallelise, and ``negelir.dump`` is operationally
+        # easier to ship around than a directory tree (one file = one
+        # checksum = one rsync). The downstream tar/age pipeline stays
+        # uniform — we tar the single file (or directory) before
+        # encrypting; the verifier auto-detects post-extract which one
+        # is present and dispatches ``pg_restore`` accordingly.
+        # ``-Z 9`` selects maximum gzip compression for the dump payload
+        # — large prediction tables compress >10× and the CPU cost is
+        # paid by the backup role, not the application connection pool.
+        use_directory = int(self.pg_jobs) > 1
+        if use_directory:
+            dump_target: Path = window_dir / DUMP_DIR_NAME
+            _ensure_secure_dir(dump_target)
+            tar_arcname = DUMP_DIR_NAME
+            format_arg = "--format=directory"
+            format_label = "directory"
+        else:
+            dump_target = window_dir / DUMP_FILE_NAME
+            tar_arcname = DUMP_FILE_NAME
+            format_arg = "--format=custom"
+            format_label = "custom"
         pg_dump = self.pg_dump_binary or shutil.which("pg_dump") or "pg_dump"
         argv = [
             pg_dump,
-            "--format=directory",
-            f"--jobs={int(self.pg_jobs)}",
+            format_arg,
+            "--compress=9",
             "--no-owner",
             "--no-privileges",
-            "--file", str(dump_dir),
+            "--file", str(dump_target),
             "--dbname", self.pg_dsn,
         ]
+        if use_directory:
+            argv.insert(2, f"--jobs={int(self.pg_jobs)}")
         if self.exclude_quarantine_data:
             # PII-aware policy — schema is still dumped, only the row
             # data is excluded. Restore-verify gets an empty table.
@@ -240,14 +291,34 @@ class LocalPgDumpExecutor:
         except FileNotFoundError as exc:
             raise RuntimeError(f"pg_dump binary not found: {exc}") from exc
 
-        dump_bytes = _dir_size(dump_dir)
+        if use_directory:
+            dump_bytes = _dir_size(dump_target)
+        else:
+            try:
+                _chmod_secure(dump_target)
+                _fsync_path(dump_target)
+                dump_bytes = dump_target.stat().st_size
+            except OSError as exc:
+                raise RuntimeError(
+                    f"pg_dump produced no output file at {dump_target}: {exc}"
+                ) from exc
+
+        # ── PII-aware sanitized projection (§8.3 binding contract) ───
+        # When ``--exclude-table-data=quarantine_samples`` was passed,
+        # the encrypted dump will restore an empty table. We separately
+        # write a forensic-evidence CSV (no raw bytes, no client_id,
+        # no ip) so the operator can audit what was quarantined at
+        # backup time. The CSV stays OUTSIDE the encrypted tar — it is
+        # operator-only forensic evidence, not a ``pg_restore`` input.
+        if self.exclude_quarantine_data:
+            self._write_quarantine_meta_csv(window_dir)
 
         # ── tar + age encrypt ─────────────────────────────────────────
         encrypted_path = window_dir / ENCRYPTED_NAME
         tar_path = window_dir / "_dump.tar"
         try:
             with tarfile.open(tar_path, "w") as tar:
-                tar.add(dump_dir, arcname=DUMP_DIR_NAME)
+                tar.add(dump_target, arcname=tar_arcname)
             _chmod_secure(tar_path)
             _fsync_path(tar_path)
 
@@ -302,7 +373,8 @@ class LocalPgDumpExecutor:
                 f'"dump_bytes":{dump_bytes},'
                 f'"encrypted_bytes":{encrypted_bytes},'
                 f'"sha256":"{digest}",'
-                f'"pg_jobs":{int(self.pg_jobs)}'
+                f'"pg_jobs":{int(self.pg_jobs)},'
+                f'"format":"{format_label}"'
                 "}\n"
             ),
             encoding="utf-8",
@@ -310,19 +382,63 @@ class LocalPgDumpExecutor:
         _chmod_secure(manifest_path)
         _fsync_path(manifest_path)
 
-        # Drop the intermediate Postgres dump directory now that the
-        # encrypted artefact is durable on disk; it would otherwise
-        # double the storage cost of every backup.
+        # Drop the intermediate Postgres dump artefact now that the
+        # encrypted blob is durable on disk; it would otherwise double
+        # the storage cost of every backup. Directory format → rmtree;
+        # custom (-Fc) format → unlink.
         try:
-            shutil.rmtree(dump_dir)
+            if use_directory:
+                shutil.rmtree(dump_target)
+            else:
+                dump_target.unlink(missing_ok=True)
         except OSError as exc:  # pragma: no cover
-            _log.warning("rmtree %s failed: %s", dump_dir, exc)
+            _log.warning("cleanup %s failed: %s", dump_target, exc)
 
         _log.info(
             "pg_dump+age window=%s dump_bytes=%d encrypted_bytes=%d sha256=%s",
             fire_window_id, dump_bytes, encrypted_bytes, digest[:16],
         )
         return (int(dump_bytes), int(encrypted_bytes))
+
+    def _write_quarantine_meta_csv(self, window_dir: Path) -> None:
+        """Write the sanitized ``quarantine_samples`` projection.
+
+        Invokes ``psql --csv -c "<projection SQL>"`` against the
+        configured DSN, captures stdout, and writes it to
+        ``<window_dir>/negelir.quarantine_meta.csv`` with mode 0o600
+        + fsync. A failure to produce the CSV is fatal — silently
+        skipping it would let the encrypted dump ship without the
+        forensic-evidence companion file the §8.3 contract promises.
+        """
+        psql = self.psql_binary or shutil.which("psql") or "psql"
+        argv = [
+            psql,
+            "--no-psqlrc",
+            "--csv",
+            "--tuples-only=off",
+            "--dbname", self.pg_dsn,
+            "-c", _QUARANTINE_META_SQL,
+        ]
+        _log.info(
+            "psql quarantine-meta argv=%s",
+            shlex.join(argv[:-3] + ["<dsn-redacted>", "-c", "<sql>"]),
+        )
+        try:
+            result = self.runner(argv)
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or b"").decode(errors="replace")[:2048]
+            raise RuntimeError(
+                f"psql quarantine-meta failed (rc={exc.returncode}): "
+                f"{stderr.strip()}"
+            ) from exc
+        except FileNotFoundError as exc:
+            raise RuntimeError(f"psql binary not found: {exc}") from exc
+
+        meta_path = window_dir / QUARANTINE_META_NAME
+        payload = result.stdout or b""
+        meta_path.write_bytes(payload)
+        _chmod_secure(meta_path)
+        _fsync_path(meta_path)
 
 
 def _dir_size(path: Path) -> int:
@@ -337,11 +453,82 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+# §8.3 binding: Restore-verify failure quarantines the bad dump dir.
+# Suffix appended to the per-fire-window directory name; the next
+# nightly cron therefore does not see the failed run as today's
+# success and the disk-usage guard still accounts for the on-disk
+# bytes.  The rename is best-effort: a missing source dir is treated
+# as a no-op (the in-memory shim verifier path used by the test
+# suite never writes a window dir).
+FAILED_DIR_SUFFIX: str = ".failed"
+
+
+def safe_window_name(fire_window_id: str) -> str:
+    """Sanitize a ``fire_window_id`` (which may be an ISO timestamp
+    containing ``:`` / ``/``) into a safe filename component.
+
+    Mirrors the in-line transform in ``LocalPgDumpExecutor.dump`` so
+    the agent's verify-failure quarantine path computes the SAME
+    window directory the dump executor wrote to, without re-deriving
+    the rule by hand.
+    """
+
+    return fire_window_id.replace(":", "_").replace("/", "_")
+
+
+def quarantine_failed_dump_dir(
+    *, backup_dir: str, fire_window_id: str,
+) -> Optional[Path]:
+    """Rename ``<backup_dir>/<safe_window>/`` →
+    ``<backup_dir>/<safe_window>.failed/`` after a verify failure.
+
+    Returns the new path on a successful rename, ``None`` if the
+    source dir does not exist (which is the dominant case in the
+    pure-Python test path that uses ``NoopVerifier`` /
+    ``NoopDumpExecutor``). If a ``<safe_window>.failed/`` already
+    exists from a prior failure on the same window (catch-up replay
+    of the same window-id), the rename appends a numeric suffix to
+    avoid clobbering forensic evidence.
+
+    The function NEVER raises into the agent's state machine — any
+    OSError is logged and swallowed; the verify-fail emit path must
+    always complete so the operator-paging ``sec.alert.v1`` lands.
+    """
+
+    src = Path(backup_dir) / safe_window_name(fire_window_id)
+    if not src.exists():
+        return None
+    dst = src.with_name(src.name + FAILED_DIR_SUFFIX)
+    if dst.exists():
+        # Disambiguate while preserving prior evidence.
+        i = 2
+        while True:
+            candidate = src.with_name(f"{src.name}{FAILED_DIR_SUFFIX}.{i}")
+            if not candidate.exists():
+                dst = candidate
+                break
+            i += 1
+    try:
+        src.rename(dst)
+    except OSError as exc:
+        _log.warning(
+            "xops.backup.quarantine_failed_dump_dir: rename %s -> %s "
+            "failed: %r", src, dst, exc,
+        )
+        return None
+    return dst
+
+
 __all__ = [
     "CHECKSUM_NAME",
     "CommandRunner",
     "DUMP_DIR_NAME",
+    "DUMP_FILE_NAME",
     "ENCRYPTED_NAME",
+    "FAILED_DIR_SUFFIX",
     "LocalPgDumpExecutor",
     "MANIFEST_NAME",
+    "QUARANTINE_META_NAME",
+    "quarantine_failed_dump_dir",
+    "safe_window_name",
 ]

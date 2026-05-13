@@ -12,7 +12,8 @@
     "client_id":   { "type": "string", "minLength": 1 },
     "produced_at": { "type": "string" },
     "from_offsite": { "type": "boolean", "description": "When true, pull the dump from the off-host replica (§8.12) instead of the on-host PVC. Default false." },
-    "destination_conn": { "type": "string", "description": "Optional override DSN (used by DR drills targeting a fresh PG instance per §8.12). When unset, restores into the live primary — destructive." },
+    "destination_conn": { "type": "string", "description": "Optional override DSN. When unset, the consumer (maint.backup.v1) restores into an ephemeral target named `negelir_restore_<dump_date>` (per §8.3 binding) which the operator then promotes manually. When set AND it resolves to the live application Postgres, the consumer also requires `confirm_overwrite_live=true`." },
+    "confirm_overwrite_live": { "type": "boolean", "description": "Operator opt-in to overwrite the live primary (i.e. `destination_conn` resolves to the live app DSN). Without this flag the consumer refuses with reason `live_overwrite_requires_confirm`. Default false." },
     "reason":      { "type": "string", "description": "Operator narration for the audit trail." }
   },
   "additionalProperties": false
