@@ -1,8 +1,8 @@
 ---
 description: Drain ROADMAP phases end-to-end via parallel subagents. Never stops mid-flight, never asks permission, never declares "too big" — decomposes large rollup phases into per-bullet rounds.
 mode: agent
-model: GPT-5-Codex
-tools: ['codebase', 'search', 'usages', 'fetch', 'searchResults', 'githubRepo', 'editFiles', 'runCommands', 'runTasks', 'problems', 'changes', 'findTestFiles']
+tools: ['codebase', 'search', 'usages', 'fetch', 'searchResults', 'githubRepo', 'editFiles', 'runCommands', 'runTasks', 'problems', 'changes', 'findTestFiles', 'agent']
+agents: ['phase-implementer', 'phase-reviewer', 'phase-verifier']
 ---
 
 # Orchestrate ROADMAP Phases
