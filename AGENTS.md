@@ -75,6 +75,7 @@ Every PR, every diff, every agent run must respect them:
 | 8 | **Phase gates** | A phase ships only when its checklist in `ROADMAP.md` and the matching DoD in Appendix B are fully green. |
 | 9 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. **Everything else is open for agent use** — running tests, `docker compose`, `make` (including the bookkeeping targets `make track.add` / `make version.bump` / `make version.validate`, the mock-data targets `make mock.capture` / `make mock.up` / `make mock.down`, and the sanctioned `sudo` callers `make hosts.install` / `make hosts.uninstall` / `make mock.trust` / `make mock.untrust` / `make mock.setup`), rendering certs, editing files in place, etc. The agent is expected to run the tracker + version-bump commands itself as part of completing a change, not to suggest them and wait. **System-level changes are permitted when they are scoped to making the project work** (installing a missing dev dependency the project needs, writing a hosts entry the mock stack relies on, etc.) provided they (a) do not weaken security, (b) do not destabilise the host, and (c) are reversible. System maintenance unrelated to the project (upgrading unrelated packages, changing global firewall rules, touching other users' files) still defers to the human. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
 | 10 | **Tests track code, always** | Every code change must leave the test suite **truthful**. Concretely: (a) **new feature / public surface** → add tests that exercise the happy path *and* at least one adversarial branch (Rule 7); (b) **bug fix** → add a regression test that fails before the fix and passes after — no exceptions; (c) **refactor / rename / signature change** → update every test that touches the moved surface in the same commit (no leaving stale fixtures or skipped tests behind); (d) **behaviour change** → revise existing assertions so they reflect the new contract, not the old one. **Never weaken or delete a test to make a build green.** If an existing test was wrong, fix it and explain why in the tracker row. If you cannot reach a test you should have written, leave the change out and say so — a passing build with no test for new behaviour is a false positive. Run `make test.ai` (or the relevant subset) before declaring done. |
+| 11 | **Phase persistence — do not stop mid-phase** | When the human asks you to implement / finish / complete a phase, sub-phase, or slice, the work is the **entire named scope**. Loop internally over every `- [ ]` bullet in that scope (in `docs/planning/ROADMAP.md` and the matching `docs/design/*.md` checklists) until they are all `[x]` or a *real* blocker is hit. Real blockers are narrow: cross-phase forbidden-edit, doctrine conflict, an actually-stuck failing test, a DoD item that requires a human decision (operator key, prod credential), or the human capped scope in the request. **Not** blockers: "this is large", "many edits", "shall I continue?", "I finished part X — proceed with Y?". Per-bullet bookkeeping (tracker row + version bump + checkbox flip per §3.4 / §6.1) still happens for every bullet — you batch the *work*, not the bookkeeping. Final summary once the phase is genuinely drained: list every bullet closed, every command you ran, and any `[ ]` still open with the explicit doctrine reason. Then hand back for `make git`. The chat-mode equivalent of this rule lives in [`.github/copilot-instructions.md`](.github/copilot-instructions.md) §6 and binds every Copilot session by default. |
 
 ---
 
@@ -185,12 +186,19 @@ as part of "done", same as tests and version bumps.
 
 ## 4. Workflow checklist
 
-Use this loop for every non-trivial change:
+Use this loop for every non-trivial change. **When the human asks
+you to "implement Phase X", "finish §Y", "do this sub-phase", or
+similar, you run the loop once per `- [ ]` bullet covered by the
+request and only stop when every covered bullet is `[x]` or a real
+blocker (Rule 11) is hit. The steps below describe one bullet; do
+not return control to the human after a single bullet if more open
+bullets remain in the named scope.**
 
 1. **Identify the phase.** Match the user's request to a roadmap phase
    (or sub-phase). If it doesn't fit, say so before coding.
 2. **Read the phase's checklist** in `ROADMAP.md`. Pick the smallest
-   sub-checkbox that the request advances.
+   sub-checkbox that the request advances. (On a "drain this phase"
+   request: list every `- [ ]` in scope first, then iterate.)
 3. **(If starting fresh)** Write a `start` tracker row.
 4. **Make the change.** Respect the doctrine (§2). Touch only what the
    request requires.

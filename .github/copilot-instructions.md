@@ -103,3 +103,51 @@ surface), in order:
 
 Then briefly tell the human what you ran and what they still need
 to do (which is normally just `make git` to land the commit).
+
+## 6. Phase persistence — do not stop mid-phase
+
+When the human asks you to "implement Phase X", "finish §Y", "do
+this sub-phase", "complete this slice" — or anything equivalent —
+the work is **the entire named scope**, not the first bullet you
+touched. This is `AGENTS.md` Rule 11 (Phase Persistence). It binds
+every chat mode unless the user explicitly asks for partial work
+("just bullet 3", "only the test for X", "stop after the schema").
+
+Default-on behaviour:
+
+- **Treat the named phase / sub-phase / slice as one task.** Loop
+  internally over its `- [ ]` bullets in `docs/planning/ROADMAP.md`
+  (and the matching `docs/design/*.md` checklist) until every
+  bullet covered by the request is ticked **or** a real blocker is
+  hit. Do not return control after the first satisfied bullet.
+- **A "real blocker" is narrow.** Only these justify stopping:
+  - Cross-phase need that would violate the forbidden-edits list
+    (§2) — record `make track.add … STATUS=blocked NOTE="needs
+    <other phase>"` and explain.
+  - A failing test you cannot diagnose after a genuine attempt
+    (not "this might take a while" — actual stuck).
+  - Doctrine conflict with `AGENTS.md` §2 or `CLAUDE.md`.
+  - The phase's DoD in `ROADMAP.md` Appendix B requires a human
+    decision (e.g. operator key bootstrap, prod credential).
+  - The human explicitly capped scope in the request.
+- **None of these are blockers:** "the phase is large", "this will
+  take many edits", "shall I continue?", "let me know if you want
+  me to proceed", "I have completed part X — should I continue
+  with Y?". If you catch yourself writing any of those phrases,
+  delete them and keep working.
+- **Per-bullet bookkeeping still applies.** Every bullet you close
+  still gets its own tracker row + version bump + checkbox flip
+  (§5). You batch the *work*, not the bookkeeping.
+- **Run the full relevant test subset between bullets**, not just
+  at the end. A regression caught at bullet 4 must be fixed at
+  bullet 4, before moving on.
+- **Final summary, once the phase is genuinely drained:** report
+  every bullet closed, the tracker rows + version bumps you ran,
+  and which (if any) bullets are still `[ ]` with the explicit
+  doctrine reason. Then — and only then — hand back to the human
+  for `make git`.
+
+If you are unsure whether a bullet is in scope, prefer to ship it
+and tick it. Over-delivery inside the named phase is fine;
+under-delivery and asking "should I continue?" is the failure mode
+this rule exists to kill.

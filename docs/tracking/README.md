@@ -48,6 +48,18 @@ prefer adding a new row so the timeline stays intact.
 | `cancelled` | Phase abandoned. |
 | `blocked` | Cannot progress without external input/decision. |
 
+> **`completed` is a high bar.** A row with `status=completed` means
+> the phase or sub-phase's full DoD checklist (in `ROADMAP.md`
+> Appendix B *and* the per-section `- [ ]` list) is `[x]` and the
+> relevant tests pass. **Never** write a `completed` row to "close
+> out" partially-shipped work — that violates `AGENTS.md` Rule 11
+> (Phase Persistence). If you ran out of context or budget mid-phase
+> but the bullets you actually closed are real, write
+> `in-progress` rows for those bullets and let the next session
+> resume. The only legitimate non-`completed` terminal rows are
+> `blocked` (with a concrete external dependency in the note) and
+> `cancelled` / `diverged` (with stakeholder approval).
+
 ---
 
 ## 🛠 CLI usage
