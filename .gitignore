@@ -48,6 +48,16 @@ Thumbs.db
 *.log
 logs/
 
+# ── CodeGraph (local semantic-index, dev tooling) ──
+# .codegraph/config.json + .codegraph/.gitignore are committed (define
+# what gets indexed); the SQLite DB and caches are machine-local. The
+# inner .codegraph/.gitignore handles the DB; we ignore stale Node
+# scratch only.
+.codegraph/cache/
+.codegraph/*.db
+.codegraph/*.db-wal
+.codegraph/*.db-shm
+
 
 # Phase orchestration runtime state (xops/orchestrator/)
 .orchestrator/

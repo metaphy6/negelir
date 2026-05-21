@@ -439,3 +439,5 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-05-21T09:35:37+00:00,8,12,in-progress,note,"boundary-discipline: secret_smoke.py scanner+plugin, conftest, test_offsite_boundary.py (11 tests: 4 AST-scan + 7 secret_smoke unit); remaining: 1",
 2026-05-21T09:37:03+00:00,8,,in-progress,note,"8.12: versioning bullet shipped — xops→3.22.0 (minor), infra_mock→1.4.4 (patch); all 8.12 bullets now [x]",
 2026-05-21T09:49:17+00:00,8,,in-progress,note,fix: liveness test missing enforce_permissions=False,
+2026-05-21T10:20:14+00:00,0,,in-progress,note,"Integrated CodeGraph MCP across VS Code/Claude/Cursor/Codex; index built (461 files, 8.9k nodes, 8.5k edges); added codegraph component to chart, doctrine note in AGENTS.md §2 Rule 2, allow-list expansion in CLAUDE.md, guide at docs/guides/CODEGRAPH.md",
+2026-05-21T10:33:00+00:00,0,,in-progress,note,"Added make codegraph.{status,reindex,check,upgrade}; AGENTS.md/copilot-instructions wrap-up step now requires status after big diffs and reindex after refactors; docs/guides/CODEGRAPH.md documents pin-vs-latest doctrine and automated upgrade flow",

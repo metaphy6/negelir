@@ -66,14 +66,14 @@ Every PR, every diff, every agent run must respect them:
 | # | Rule | Concretely |
 |---|---|---|
 | 1 | **Single-source configuration** | New tunables go through `ai/common/config.py` (Python) or `server/internal/config` (Go) and are documented in `xops/env/.env.example`. No magic numbers, no hardcoded URLs, no inline thresholds. |
-| 2 | **Containerized only** | All run/test instructions assume `docker compose`. Never tell the user to `pip install` or `go install` on the host. |
+| 2 | **Containerized only** | All run/test instructions assume `docker compose`. Never tell the user to `pip install` or `go install` on the host. *Sanctioned dev-time host exception:* the CodeGraph MCP server (`npx -y @colbymchenry/codegraph` — node 20–24) is treated as host-installed dev tooling on the same footing as VS Code itself; it produces no runtime artifact and is wired only into agent surfaces. See [`docs/guides/CODEGRAPH.md`](docs/guides/CODEGRAPH.md). |
 | 3 | **No fabricated production data** | Synthetic data is only allowed inside `*/tests/`. Production code must never silently fall back to fake data. |
 | 4 | **Smallest model that works** | Prefer deterministic code → scikit-learn / XGBoost → small transformers (≤ 100 MB) → mid LLMs only with explicit justification in the agent's `README`. |
 | 5 | **Scale symmetry** | Same code path runs with 1 replica or 1000. State lives in Redis / Postgres, never in process memory. |
 | 6 | **Turkish UX, English infra** | User-facing text & AI input/output in Turkish. Code, comments, log messages, metric names, config keys in English. |
 | 7 | **Adversarial tests are first-class** | Every public surface (HTTP, bus topic, scrape callback) needs at least one fuzzing / injection / chaos test. |
 | 8 | **Phase gates** | A phase ships only when its checklist in `ROADMAP.md` and the matching DoD in Appendix B are fully green. |
-| 9 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. **Everything else is open for agent use** — running tests, `docker compose`, `make` (including the bookkeeping targets `make track.add` / `make version.bump` / `make version.validate`, the mock-data targets `make mock.capture` / `make mock.up` / `make mock.down`, and the sanctioned `sudo` callers `make hosts.install` / `make hosts.uninstall` / `make mock.trust` / `make mock.untrust` / `make mock.setup`), rendering certs, editing files in place, etc. The agent is expected to run the tracker + version-bump commands itself as part of completing a change, not to suggest them and wait. **System-level changes are permitted when they are scoped to making the project work** (installing a missing dev dependency the project needs, writing a hosts entry the mock stack relies on, etc.) provided they (a) do not weaken security, (b) do not destabilise the host, and (c) are reversible. System maintenance unrelated to the project (upgrading unrelated packages, changing global firewall rules, touching other users' files) still defers to the human. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
+| 9 | **Git is the only AI-restricted surface** | AI assistants must not invoke `git` (commit, push, pull, reset, rebase, stash, tag, branch operations, remote changes, etc.) on the user's behalf. **Everything else is open for agent use** — running tests, `docker compose`, `make` (including the bookkeeping targets `make track.add` / `make version.bump` / `make version.validate`, the mock-data targets `make mock.capture` / `make mock.up` / `make mock.down`, the CodeGraph maintenance targets `make codegraph.status` / `make codegraph.reindex` / `make codegraph.check` (read/refresh only — `codegraph.upgrade` mutates committed wirings and is human-driven), and the sanctioned `sudo` callers `make hosts.install` / `make hosts.uninstall` / `make mock.trust` / `make mock.untrust` / `make mock.setup`), rendering certs, editing files in place, etc. The agent is expected to run the tracker + version-bump commands itself as part of completing a change, not to suggest them and wait. **System-level changes are permitted when they are scoped to making the project work** (installing a missing dev dependency the project needs, writing a hosts entry the mock stack relies on, etc.) provided they (a) do not weaken security, (b) do not destabilise the host, and (c) are reversible. System maintenance unrelated to the project (upgrading unrelated packages, changing global firewall rules, touching other users' files) still defers to the human. The dedicated driver `xops/makefile/git_helper.py` remains the human-only entry point for scripted git flows. |
 | 10 | **Tests track code, always** | Every code change must leave the test suite **truthful**. Concretely: (a) **new feature / public surface** → add tests that exercise the happy path *and* at least one adversarial branch (Rule 7); (b) **bug fix** → add a regression test that fails before the fix and passes after — no exceptions; (c) **refactor / rename / signature change** → update every test that touches the moved surface in the same commit (no leaving stale fixtures or skipped tests behind); (d) **behaviour change** → revise existing assertions so they reflect the new contract, not the old one. **Never weaken or delete a test to make a build green.** If an existing test was wrong, fix it and explain why in the tracker row. If you cannot reach a test you should have written, leave the change out and say so — a passing build with no test for new behaviour is a false positive. Run `make test.ai` (or the relevant subset) before declaring done. |
 | 11 | **Phase persistence — do not stop mid-phase** | When the human asks you to implement / finish / complete a phase, sub-phase, or slice, the work is the **entire named scope**. Loop internally over every `- [ ]` bullet in that scope (in `docs/planning/ROADMAP.md` and the matching `docs/design/*.md` checklists) until they are all `[x]` or a *real* blocker is hit. Real blockers are narrow: cross-phase forbidden-edit, doctrine conflict, an actually-stuck failing test, a DoD item that requires a human decision (operator key, prod credential), or the human capped scope in the request. **Not** blockers: "this is large", "many edits", "shall I continue?", "I finished part X — proceed with Y?". Per-bullet bookkeeping (tracker row + version bump + checkbox flip per §3.4 / §6.1) still happens for every bullet — you batch the *work*, not the bookkeeping. Final summary once the phase is genuinely drained: list every bullet closed, every command you ran, and any `[ ]` still open with the explicit doctrine reason. Then hand back for `make git`. The chat-mode equivalent of this rule lives in [`.github/copilot-instructions.md`](.github/copilot-instructions.md) §6 and binds every Copilot session by default. |
 
@@ -218,8 +218,17 @@ bullets remain in the named scope.**
    checklists touched by the change.
 8. **Write the tracker row** describing what shipped (or diverged /
    blocked / adapted). One row per event.
-9. **Summarize.** Tell the user what changed, what tests ran, and what
-   the next sub-phase would be.
+9. **Refresh CodeGraph if needed.** If the change moved/renamed files,
+   added a new public surface, or touched > ~10 files, run
+   `make codegraph.status`. If the structure looks stale (or after
+   a big refactor / mass rename / `git rebase` that moved files), run
+   `make codegraph.reindex` so the next agent has an accurate index.
+   Both are part of the agent toolset (Rule 9). Periodically (or
+   when an upgrade is plausible) run `make codegraph.check` and
+   surface the result in your summary — the human runs
+   `make codegraph.upgrade` to actually bump the pin.
+10. **Summarize.** Tell the user what changed, what tests ran, and what
+    the next sub-phase would be.
 
 ---
 
@@ -320,6 +329,7 @@ xops            — Repo automation
 docs            — Roadmap, design docs, tracking, guides
 infra_mock      — Mock-data dev stack (Phase 2)
 source_watcher  — Source-watcher AI agent (Phase 2.8)
+codegraph       — Local CodeGraph MCP server pin (dev tooling)
 ```
 
 **Hard rules:**
@@ -356,10 +366,14 @@ xops/makefile/_common.py        # shared helpers (compose runner, logger)
 xops/makefile/git_helper.py     # `make git` driver — HUMAN-ONLY
 xops/versioning/chart.json      # centralized SemVer chart (single source)
 xops/versioning/version.py      # version CLI (used by `make version.*`)
+xops/makefile/codegraph.py      # `make codegraph.*` dispatcher (status/reindex/check/upgrade)
 xops/mock/                      # Phase 2 mock-data helpers (manifest, verify, capture)
 infra/mock/                     # Phase 2 mock-data root (CA, certs, seeds, nginx vhosts)
 ai/swarm/source_watcher/        # Phase 2.8 source-drift detector (deterministic core)
 xops/README.md                  # xops conventions & how to extend
+docs/guides/CODEGRAPH.md        # CodeGraph MCP dev tooling (Node host process)
+.codegraph/                     # CodeGraph local index (DB gitignored, config tracked)
+.vscode/mcp.json .mcp.json .cursor/mcp.json  # MCP wirings (codegraph + future)
 ```
 
 ```bash
@@ -373,6 +387,10 @@ make track.show PHASE=0         # full history for one phase
 make track.add  PHASE=1 STATUS=in-progress NOTE="…"
 make version.show               # show project + component versions
 make version.bump COMPONENT=<key> LEVEL=<patch|minor|major> NOTE="..."
+make codegraph.status           # cheap health check of the local code index
+make codegraph.reindex          # rebuild after big refactors / mass renames
+make codegraph.check            # pinned vs latest on npm + wiring drift audit
+make codegraph.upgrade          # [HUMAN] bump pin across all 4 wirings [VERSION=…]
 make mock.verify                # offline integrity check of Phase 2 seed corpus
 make hosts.preview              # list mock hostnames
 ```

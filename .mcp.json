@@ -1,0 +1,10 @@
+{
+  "//": "Claude Code project-scope MCP config. Managed by humans; codegraph entry pinned to npx (no global install per AGENTS.md Rule 2 spirit).",
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@colbymchenry/codegraph@0.8.0", "serve", "--mcp"]
+    }
+  }
+}

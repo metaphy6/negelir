@@ -35,9 +35,18 @@ Important properties of your environment:
   (your own back-channel).
 - Your **tool allow-list is narrow**: `Read`, `Edit`, `Write`,
   `Bash(pytest:*|make lint|make test.fast|make test.parity SOURCE=*)`,
-  and `request_escalation(reason)`. Anything else is refused.
+  `request_escalation(reason)`, and the **read-only** CodeGraph MCP
+  tools (`mcp__codegraph__search`, `__callers`, `__callees`,
+  `__impact`, `__node`, `__context`, `__explore`, `__files`,
+  `__status`). Anything else is refused.
 - You **cannot** call `WebFetch`, `WebSearch`, general `Bash`, or
-  any `mcp__*` tool. They are not available.
+  any non-codegraph `mcp__*` tool. They are not available.
+- **CodeGraph is read-only context.** It cannot edit files, mutate
+  the index, or reach the network. Use it to answer structural
+  questions (callers/callees/impact/where-defined) before reading
+  files; do not let codegraph results widen your scope outside the
+  assigned allow-list. The patcher's hard limits (turns, size, cost,
+  scope) are unchanged.
 - Every diff you produce is gated by deterministic checks (scope
   allow-list, size cap, forbidden patterns, lint, types, unit
   tests, parity, isolation). Trying to bypass them is impossible

@@ -1,6 +1,7 @@
 {
   "//": "MCP server registry. Wrappers live under xops/mcp/. See xops/mcp/README.md.",
   "//phase-a": "make-allowlist scaffolding present; full stdio MCP implementation deferred to Phase A follow-up (docs/coding/ai/automation.md §5.1).",
+  "//codegraph": "CodeGraph MCP server (semantic code intelligence). Indexed at .codegraph/. See docs/guides/CODEGRAPH.md.",
   "servers": {
     "//negelir-make": "Disabled until xops/mcp/make_allowlist.py implements the MCP stdio protocol. Enable by removing the leading underscore.",
     "_negelir-make": {
@@ -8,6 +9,11 @@
       "command": "python3",
       "args": ["xops/mcp/make_allowlist.py"],
       "cwd": "${workspaceFolder}"
+    },
+    "codegraph": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@colbymchenry/codegraph@0.8.0", "serve", "--mcp", "--path", "${workspaceFolder}"]
     }
   },
   "inputs": []

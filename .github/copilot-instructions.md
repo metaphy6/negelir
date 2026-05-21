@@ -100,6 +100,13 @@ surface), in order:
    line.
 3. Any `[ ]` → `[x]` checkbox flips in `docs/planning/ROADMAP.md`
    or the touched `docs/design/*.md` (`AGENTS.md` §3.4).
+4. **CodeGraph refresh** (per `AGENTS.md` §4 step 9 and
+   `docs/guides/CODEGRAPH.md`):
+   - Touched > ~10 files / added new public surface → `make codegraph.status`.
+   - Big refactor / mass rename / files moved → `make codegraph.reindex`.
+   - Periodically (cheap) → `make codegraph.check` and surface the
+     output. `codegraph.upgrade` is **human-driven** — never run it
+     yourself, just flag when an upgrade is available.
 
 Then briefly tell the human what you ran and what they still need
 to do (which is normally just `make git` to land the commit).

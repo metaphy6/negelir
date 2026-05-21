@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.4.0",
-    "build": 15,
+    "build": 18,
     "released": null
   },
   "components": {
@@ -19,14 +19,14 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.22.0",
+      "version": "3.23.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-21T09:36:35+00:00"
+      "last_changed": "2026-05-21T10:33:00+00:00"
     },
     "docs": {
-      "version": "1.57.22",
+      "version": "1.58.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-21T09:27:42+00:00"
+      "last_changed": "2026-05-21T10:33:00+00:00"
     },
     "infra_mock": {
       "version": "1.4.4",
@@ -112,6 +112,11 @@
       "version": "0.1.0",
       "description": "(Phase 21) Plane 9 — weather forecast/actual + pitch condition. Anchor: design/ENRICHMENT_DATA.md §5.",
       "last_changed": "2026-04-28T09:04:56+00:00"
+    },
+    "codegraph": {
+      "version": "0.1.0",
+      "description": "Dev tooling — local CodeGraph MCP server (semantic code index). Host npx invocation; not a runtime dep. See docs/guides/CODEGRAPH.md.",
+      "last_changed": "2026-05-21T13:16:00+00:00"
     }
   },
   "changelog": [
@@ -4434,6 +4439,33 @@
       "from": "1.23.0",
       "to": "1.23.1",
       "build": 15
+    },
+    {
+      "timestamp": "2026-05-21T10:20:22+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "CodeGraph integration: docs/guides/CODEGRAPH.md, AGENTS.md §2 Rule 2 sanctioned exception + §6.1 components list + §7 quick ref, CLAUDE.md tool allow-list expanded for read-only codegraph_* MCP",
+      "from": "1.57.22",
+      "to": "1.58.0",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-05-21T10:33:00+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "codegraph.* Make targets (status/reindex/check/upgrade) + pin-audit dispatcher",
+      "from": "3.22.0",
+      "to": "3.23.0",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-05-21T10:33:00+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "codegraph: document agent refresh discipline + always-latest upgrade flow",
+      "from": "1.58.0",
+      "to": "1.58.1",
+      "build": 18
     }
   ]
 }

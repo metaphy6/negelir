@@ -475,6 +475,29 @@ version.validate: ## Validate chart.json schema
 	@$(XOPS)/version.py validate
 
 # ══════════════════════════════════════════════════════════════
+#                CODEGRAPH (dev MCP index)
+# ══════════════════════════════════════════════════════════════
+#  Local semantic code index exposed to all four agent surfaces.
+#  Sanctioned host-tool exception per AGENTS.md §2 Rule 2.
+#  See docs/guides/CODEGRAPH.md.
+
+.PHONY: codegraph.status
+codegraph.status: ## Sanity-check the local CodeGraph index (cheap; agent-safe)
+	@$(XOPS)/codegraph.py status
+
+.PHONY: codegraph.reindex
+codegraph.reindex: ## Rebuild the CodeGraph index from scratch (after big refactors)
+	@$(XOPS)/codegraph.py reindex
+
+.PHONY: codegraph.check
+codegraph.check: ## Compare pinned npm version to latest; audit wiring drift
+	@$(XOPS)/codegraph.py check
+
+.PHONY: codegraph.upgrade
+codegraph.upgrade: ## Bump pin across all wirings [VERSION=x.y.z, default=latest]
+	@$(XOPS)/codegraph.py upgrade
+
+# ══════════════════════════════════════════════════════════════
 #               ROADMAP PHASE ORCHESTRATION
 # ══════════════════════════════════════════════════════════════
 #  Parallel-safe coordinator for delegating ROADMAP phases to
