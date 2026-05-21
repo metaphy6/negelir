@@ -53,10 +53,29 @@ shape because:
 | `sec.input.v1` | 7 | `swarm/defense/` | yes | 2 | optional |
 | `sec.scrape.v1` | 7 | `swarm/defense/` | yes | 1 | no |
 | `sec.rate.v1` | 7 | `swarm/defense/` | yes | 2 | no |
-| `maint.schema.v1` | 8 | **absorbed into `datasource/patcher/`** | yes | n/a | no |
-| `maint.scaler.v1` | 8 | `swarm/` shared infra | yes | 1 | no |
-| `maint.coder.v1` | 8 | **absorbed into `datasource/patcher/`** | yes | n/a | yes |
-| `maint.backup.v1` | 8 | `swarm/` shared infra | yes | 1 | no |
+| `maint.schema.v1` | 8 | `ai/swarm/agents/maint/` (transitional; **absorbed into `datasource/patcher/`** post-R2) | yes | 1 | no |
+| `maint.scaler.v1` | 8 | `ai/swarm/agents/maint/` (transitional; `swarm/reactors/maint/` post-R2) | yes | 1 | no |
+| `maint.backup.v1` | 8 | `ai/swarm/agents/maint/` (transitional; `swarm/reactors/maint/` post-R2) | yes | 1 | no |
+| `maint.dlq.v1` | 8 | `ai/swarm/agents/maint/` (transitional; `swarm/reactors/maint/` post-R2) | yes | 1 | no |
+| `maint.sec.v1` | 8 | `ai/swarm/agents/maint/` (transitional; `swarm/reactors/maint/` post-R2) | yes | 1 | no |
+| `source.watcher.v1` | 2 | `ai/swarm/source_watcher/` (Phase 8 SDK-migrated; `swarm/watchers/` post-R2) | yes | 1 | no |
+| `maint.coder.v1` | 17 | **deferred to Phase 17 patcher** — `datasource/patcher/`; not present in Phase 8 (AST gate enforced) | yes | n/a | yes |
+
+### Phase 8 maint-plane ownership
+
+All Phase 8 maint agents live under `ai/swarm/agents/maint/` (transitional path);
+they will be git-moved to `swarm/reactors/maint/` at Pivot R2. The ops console
+(`xops/opsctl/`) is **not** a swarm agent — it is a CLI tool that publishes to
+`maint.event.v1` and reads `maint.ack.v1`; it has no process lifetime of its own.
+
+| Agent | Responsibility | Key config knob group |
+|---|---|---|
+| `maint.scaler.v1` | Auto-scales predictor / defense agents by queue depth + VRAM budget; honors manual pins + leader-election at Phase 14 | `maint_scaler_*` |
+| `maint.backup.v1` | Nightly `pg_dump`, encryption (age), age-alert watchdog, offsite upload (S3/minio), restore-verify Job, cold-verify cron | `maint_backup_*` |
+| `maint.dlq.v1` | DLQ supervisor — fair replay budgets per topic, poison-pattern detection, mid-replay allow-list hot-reload | `maint_dlq_*` |
+| `maint.schema.v1` | Schema sentinel (Detectors A/B/C) — guards dataclass-vs-bus-schema parity on every rolling deploy | `maint_schema_*` |
+| `maint.sec.v1` | Denylist decimate (Lua `sec_denylist_decimate.lua`), pattern-allowlist sweeper + promote gate, `sec.alert.v1` publisher | `maint_sec_*` |
+| `source.watcher.v1` | Source-shape / schema drift detector at ingestion edge; **not** prediction-quality drift — see boundary note above | `source_watcher_*` |
 
 ### Doctrine lock — `maint.event.v1` allowed producers
 
@@ -78,6 +97,7 @@ The producer set, locked here for cross-agent review:
 - `maint.sec.v1`
 - `ops_console`
 - `source.watcher.v1`
+- `telemetry.v1`
 <!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:end -->
 
 `test_swarm_md_locks_maint_event_producer_set` (in

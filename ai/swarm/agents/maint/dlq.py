@@ -41,8 +41,63 @@ from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck, SecAlert
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from ._liveness import LivenessMixin
 
 _log = logging.getLogger("swarm.agents.maint.dlq")
+
+
+# Topics whose JSON schemas declare ``additionalProperties:false``.
+# When the DLQ supervisor (or the future Bus.replay_dlq() primitive)
+# replays a message back to one of these topics, ``__dlq_meta``
+# MUST NOT be injected into the payload — it would fail schema
+# validation.  Instead the bus adapter carries it in the Redis Stream
+# entry header (out-of-band transport).
+#
+# Topics NOT in this set are "opt-in": the replay layer MAY merge
+# ``__dlq_meta`` directly into the payload dict before re-publishing.
+#
+# Derived from ``ai/swarm/sdk/schemas/`` (grep additionalProperties:false).
+# Extend as new strict schemas land; the :func:`dlq_meta_policy` test
+# gate will catch drift.
+_STRICT_PAYLOAD_TOPICS: frozenset[str] = frozenset({
+    "freshness.events.v1",
+    "maint.ack.v1",
+    "match.normalized",
+    "match.outcome.v1",
+    "match.stored",
+    "models.events.v1",
+    "predict.approved.v1",
+    "predict.final",
+    "predict.proofreader_verdict.v1",
+    "predict.request",
+    "predict.vote",
+    "qa.request",
+    "qa.request.v1",
+    "scrape.classified",
+    "scrape.raw",
+    "scrape.request",
+    "sec.alert.v1",
+    "sec.config.v1",
+    "sec.denylist.v1",
+    "sec.quarantine.v1",
+    "source.watch.report.v1",
+})
+
+
+def dlq_meta_policy(origin_topic: str) -> str:
+    """Return the ``__dlq_meta`` placement policy for *origin_topic*.
+
+    ``"out_of_band"``
+        The schema has ``additionalProperties:false``.  The bus adapter
+        must carry ``__dlq_meta`` in the Redis Stream entry header and
+        must NOT merge it into the message payload.
+
+    ``"inject"``
+        The schema is permissive; the replay layer may merge
+        ``__dlq_meta`` directly into the payload dict before
+        re-publication.  Payload schema validation still passes.
+    """
+    return "out_of_band" if origin_topic in _STRICT_PAYLOAD_TOPICS else "inject"
 
 
 # DLQs we MUST NOT replay — replaying these would loop the maint
@@ -102,7 +157,16 @@ class _RateBucket:
     count: int = 0
 
 
-class MaintDlqSupervisor:
+@dataclass
+class _RpsSecBucket:
+    """Per-topic token bucket over a rolling 1-second window.
+    Used by the Phase 8 §8.9 DoD ``maint_dlq_replay_rps`` cap."""
+
+    sec_epoch: int = 0
+    count: int = 0
+
+
+class MaintDlqSupervisor(LivenessMixin):
     """`maint.dlq.v1` reactor.
 
     Subscribes ``maint.event.v1`` (kind=dlq_replay).
@@ -122,31 +186,42 @@ class MaintDlqSupervisor:
         clock_iso: Callable[[], str] | None = None,
         clock_s: Callable[[], float] | None = None,
         new_id: Callable[[], str] | None = None,
+        liveness_clock: Callable[[], float] | None = None,
     ) -> None:
         self._leader = leader if leader is not None else SingleProcessLeader(name=self.name)
         self._clock_iso = clock_iso or _utc_iso
         self._clock_s = clock_s
         self._new_id = new_id or _new_id
-        self._state: dict[str, _RunState] = {}
+        # Phase 8 §8.9 DoD — insertion-order LRU bounded at
+        # ``cfg.maint_dlq_state_max``. Oldest entry evicted on cap
+        # hit; cap-pressure alert fires when the evicted entry is
+        # younger than backoff_s × backoff_factor × 3 (fill rate
+        # outpaces the natural backoff window).
+        self._state_max: int = max(1, int(_cfg.maint_dlq_state_max))
+        self._state: "OrderedDict[str, _RunState]" = OrderedDict()
         # LRU of recently-seen request_ids for backoff dedup.
         self._req_lru: "OrderedDict[str, None]" = OrderedDict()
-        # Allow-list parsed once at construction. Empty set ⇒ allow
-        # every topic not in :data:`RECURSION_DENY_SET`. Operators
-        # opt in to a topic by adding it to the cfg knob.
-        self._allow_list: frozenset[str] = frozenset(
-            _parse_csv_set(str(_cfg.maint_dlq_replay_topics_allow_csv))
-        )
+        # Per-topic budget from the last completed tick. Used to compute
+        # ``in_flight_count`` when the allow-list removes a topic mid-replay
+        # (§8.9 DoD: "DLQ allow-list mid-replay" bullet).
+        self._last_tick_budgets: dict[str, int] = {}
+        # Topics for which we already emitted ``dlq_topic_disabled_drained``
+        # with ``in_flight_count`` (fires exactly once per removal event).
+        # Cleared when the topic re-appears in the eligible set.
+        self._disabled_notified: set[str] = set()
         # Per-(topic, request_id) visit-count map for escalation.
         # Bounded by ``cfg.maint_dlq_visit_lru`` per §8.9 DoD bullet
         # ("bounded state in every reactor").
         self._visit_lru: "OrderedDict[tuple[str, str], int]" = OrderedDict()
         # Per-topic rate bucket for ops.dlq-replay attempts/min.
         self._rate_buckets: dict[str, _RateBucket] = {}
+        # Phase 8 §8.9 DoD — per-topic per-second rate bucket.
+        self._rps_buckets: dict[str, _RpsSecBucket] = {}
         # Phase 8 §8.5 C2 — poison-pattern detection.
         # Per-topic deque of (escalation_ts_s, request_id). Trimmed
-        # on insert by ``cfg.maint_dlq_poison_window_s``. When the
+        # on insert by ``cfg.maint_dlq_consumer_broken_window_s``. When the
         # number of *distinct* request_ids in the window crosses
-        # ``cfg.maint_dlq_poison_distinct_threshold`` the topic is
+        # ``cfg.maint_dlq_consumer_broken_threshold`` the topic is
         # added to ``self._frozen_topics`` and refuses further
         # dlq_replay until an operator sends ``dlq_unfreeze``.
         from collections import deque as _deque
@@ -162,6 +237,7 @@ class MaintDlqSupervisor:
         # once cleared, the entry is dropped from the dict and the
         # topic resumes its normal per-tick replay budget.
         self._backlog_damped: dict[str, dict[str, float]] = {}
+        self._liveness_init(liveness_clock=liveness_clock)
 
     def _now_s(self) -> float:
         if self._clock_s is not None:
@@ -169,15 +245,35 @@ class MaintDlqSupervisor:
         import time as _t
         return _t.time()
 
+    def _current_allow_list(self) -> frozenset[str]:
+        """Return the live allow-list from cfg. Re-parsed on every call
+        to honour runtime config changes — operators can remove a topic
+        at runtime and the supervisor honours the change on the next
+        tick boundary."""
+        return frozenset(_parse_csv_set(str(_cfg.maint_dlq_replay_topics_allow_csv)))
+
     def _is_allowed_topic(self, target_dlq: str) -> bool:
         """A topic passes the allow-list gate if (a) it is NOT in the
         recursion deny set AND (b) either the configured allow-list
         is empty (open default) or the topic is explicitly listed."""
         if target_dlq in RECURSION_DENY_SET:
             return False
-        if not self._allow_list:
+        allow = self._current_allow_list()
+        if not allow:
             return True
-        return target_dlq in self._allow_list
+        return target_dlq in allow
+
+    def _dlq_meta_policy(self, target_dlq: str) -> str:
+        """Return the ``__dlq_meta`` placement policy for *target_dlq*.
+
+        Strips the ``.dlq`` suffix to recover the origin topic name,
+        then delegates to the module-level :func:`dlq_meta_policy`
+        function.  The bus adapter uses this to decide whether to
+        inject ``__dlq_meta`` into the payload or carry it out-of-band
+        in the Redis Stream entry header (see :data:`_STRICT_PAYLOAD_TOPICS`).
+        """
+        origin = target_dlq[:-4] if target_dlq.endswith(".dlq") else target_dlq
+        return dlq_meta_policy(origin)
 
     def _bump_visit(self, target_dlq: str, request_id: str) -> int:
         """Increment and return the visit-count for ``(topic, req)``.
@@ -192,6 +288,22 @@ class MaintDlqSupervisor:
             while len(self._visit_lru) > cap:
                 self._visit_lru.popitem(last=False)
         return self._visit_lru[key]
+
+    def _rps_rate_limited(self, target_dlq: str) -> bool:
+        """Return True if ``target_dlq`` has exceeded
+        ``cfg.maint_dlq_replay_rps`` replay attempts in the current
+        1-second epoch window (Phase 8 §8.9 DoD)."""
+        cap = max(1, int(_cfg.maint_dlq_replay_rps))
+        now_s = self._now_s()
+        sec_epoch = int(now_s)
+        bucket = self._rps_buckets.get(target_dlq)
+        if bucket is None or bucket.sec_epoch != sec_epoch:
+            bucket = _RpsSecBucket(sec_epoch=sec_epoch, count=0)
+            self._rps_buckets[target_dlq] = bucket
+        if bucket.count >= cap:
+            return True
+        bucket.count += 1
+        return False
 
     def _rate_limited(self, target_dlq: str) -> bool:
         """Return True if ``target_dlq`` has exceeded
@@ -279,6 +391,16 @@ class MaintDlqSupervisor:
             while len(self._req_lru) > backoff_lru:
                 self._req_lru.popitem(last=False)
 
+        # Per-topic per-second rate limit (cfg.maint_dlq_replay_rps).
+        if self._rps_rate_limited(target_dlq):
+            yield self._ack(msg, request_id, accepted=False,
+                            reason="rate_limited")
+            yield self._notify("dlq_dropped",
+                               target=target_dlq,
+                               extra={"reason": "rate_limited",
+                                      "request_id": request_id})
+            return
+
         # Per-topic rate limit (cfg.maint_dlq_per_topic_max_per_min).
         if self._rate_limited(target_dlq):
             yield self._ack(msg, request_id, accepted=False,
@@ -316,16 +438,17 @@ class MaintDlqSupervisor:
                                       "reason": "visit_max_exceeded"})
             # Phase 8 §8.5 C2 — record this escalation in the
             # poison-pattern window. If we just crossed the distinct-
-            # request_id threshold, freeze the topic and emit
-            # ``dlq_consumer_broken``.
+            # request_id threshold, freeze the topic, emit
+            # ``sec.alert.v1{kind=consumer_likely_broken}`` (the
+            # canonical operational alert per ROADMAP §8.5), and emit
+            # ``dlq_consumer_broken`` on maint.event.v1 for the audit
+            # trail (both per the _emit_backlog_alert pattern).
             if self._record_escalation(target_dlq, request_id):
                 self._frozen_topics[target_dlq] = "poison_pattern"
-                yield self._notify("dlq_consumer_broken",
-                                   target=target_dlq,
-                                   extra={"reason": "poison_pattern",
-                                          "distinct_request_ids":
-                                              len({r for _, r in self._poison_log[target_dlq]}),
-                                          "window_s": int(_cfg.maint_dlq_poison_window_s)})
+                distinct = len({r for _, r in self._poison_log[target_dlq]})
+                yield from self._emit_consumer_broken_alert(
+                    target_dlq, distinct
+                )
             return
 
         # Per-topic quota cap.
@@ -341,8 +464,10 @@ class MaintDlqSupervisor:
         # primitive; the agent already has the gating logic so the
         # follow-up is a single integration call.
         replayed = 0
-        st = self._state.setdefault(target_dlq, _RunState())
+        pressure_alerts = self._bump_state(target_dlq)
+        st = self._state[target_dlq]
         st.replayed = replayed
+        yield from iter(pressure_alerts)
         yield self._notify("dlq_replayed",
                            target=target_dlq,
                            extra={"replayed_count": replayed,
@@ -356,7 +481,8 @@ class MaintDlqSupervisor:
 
     # ── Periodic round-robin tick (Phase 8 §8.5 C1) ──────────────
     def tick(self, active_topics: list[str],
-             *, depths: dict[str, int] | None = None) -> list[Message]:
+             *, depths: dict[str, int] | None = None,
+             lag_tier: int = 0) -> list[Message]:
         """Run a fair-share periodic replay across ``active_topics``.
 
         Per-topic budget = ``max(1, cfg.maint_dlq_max_replays_per_tick
@@ -377,9 +503,16 @@ class MaintDlqSupervisor:
         the trip depth. Caller may omit ``depths`` to retain v1
         behaviour (no damping).
 
+        ``lag_tier`` is the current maint-plane lag tier (§8.11):
+        0 = healthy; 1 = budget halved; 2 = drain-only (no periodic
+        replays, only operator-driven escalations); 3 = observer-only.
+
         Returns the emitted messages so the caller (the bootstrap
         loop) can publish them. Honours leader gate + pause flag.
         """
+        # Phase 8 §8.11 — tier-3: observer-only, emit nothing.
+        if lag_tier >= 3:
+            return []
         if not active_topics:
             return []
         if not self._leader.is_leader():
@@ -388,6 +521,7 @@ class MaintDlqSupervisor:
         self._pause.expire_if_due(int(self._now_s() * 1_000_000_000))
         if self._pause.paused or self._pause.self_isolated:
             return []
+        active_set = set(active_topics)
         eligible: list[str] = []
         skipped_recursion: list[tuple[str, str]] = []
         skipped_rate: list[str] = []
@@ -407,8 +541,35 @@ class MaintDlqSupervisor:
             if bucket is not None and bucket.minute_epoch == minute_epoch and bucket.count >= cap:
                 skipped_rate.append(t)
                 continue
+            # Probe per-second RPS cap WITHOUT consuming a token.
+            rps_cap = max(1, int(_cfg.maint_dlq_replay_rps))
+            sec_epoch = int(now_s)
+            rps_bucket = self._rps_buckets.get(t)
+            if rps_bucket is not None and rps_bucket.sec_epoch == sec_epoch and rps_bucket.count >= rps_cap:
+                skipped_rate.append(t)
+                continue
             eligible.append(t)
         out: list[Message] = []
+        # §8.9 DoD — mid-tick allow-list removal detection.
+        # If a topic was in our per-topic budget map from the last tick
+        # but is now excluded, emit ``dlq_topic_disabled_drained`` with
+        # ``in_flight_count`` exactly once (fires on the first tick after
+        # the operator removes the topic from the allow-list).
+        current_allow = self._current_allow_list()
+        for t, prev_budget in list(self._last_tick_budgets.items()):
+            if t not in active_set or t in self._disabled_notified:
+                continue
+            # Topic still presented as active but now excluded.
+            if t in RECURSION_DENY_SET or (current_allow and t not in current_allow):
+                out.append(self._notify(
+                    "dlq_topic_disabled_drained",
+                    target=t,
+                    extra={
+                        "deny_reason": "allow_list_excluded",
+                        "in_flight_count": prev_budget,
+                    },
+                ))
+                self._disabled_notified.add(t)
         for t, reason in skipped_recursion:
             out.append(self._notify("dlq_topic_disabled_drained",
                                     target=t,
@@ -420,20 +581,34 @@ class MaintDlqSupervisor:
                                            "scheduler": "round_robin"}))
         if not eligible:
             return out
+        # Phase 8 §8.11 — tier-2: drain-only (no periodic replays;
+        # operator-commanded replays via _handle_replay() still run).
+        if lag_tier >= 2:
+            return out
         # Phase 8 §8.5 — backlog-pressure damping per topic.
         damped_topics: set[str] = set()
         if depths:
             damped_topics = self._update_backlog_damping(depths, out)
         total_budget = max(1, int(_cfg.maint_dlq_max_replays_per_tick))
+        # Phase 8 §8.11 — tier-1: halve the replay budget.
+        if lag_tier >= 1:
+            total_budget = max(1, total_budget // 2)
         per_topic = max(1, total_budget // len(eligible))
         # Damped topics receive 1/4 of the per-topic budget (floor 1)
         # so a broken consumer is not flooded harder. ROADMAP §8.5:
         # "drops the per-topic replay rate to replay_rps / 4 until
         # depth halves".
+        new_last_tick_budgets: dict[str, int] = {}
         for t in eligible:
-            st = self._state.setdefault(t, _RunState())
+            out.extend(self._bump_state(t))
+            st = self._state[t]
             st.replayed = 0  # v1 stub: §8.5b plumbs Bus.replay_dlq()
             topic_budget = max(1, per_topic // 4) if t in damped_topics else per_topic
+            # Track budget for mid-tick allow-list removal detection on
+            # the next tick (§8.9 DoD "DLQ allow-list mid-replay").
+            new_last_tick_budgets[t] = topic_budget
+            # Re-enabled: clear the one-shot disabled-notification flag.
+            self._disabled_notified.discard(t)
             extra = {
                 "replayed_count": 0,
                 "max_msgs": topic_budget,
@@ -447,6 +622,8 @@ class MaintDlqSupervisor:
             out.append(self._notify("dlq_replayed",
                                     target=t,
                                     extra=extra))
+        # Persist this tick's budgets for the next tick's mid-replay detection.
+        self._last_tick_budgets = new_last_tick_budgets
         return out
 
     # ── §8.5 backlog-pressure damping ────────────────────────────
@@ -546,20 +723,119 @@ class MaintDlqSupervisor:
         )
         return [Message(envelope=env, payload=alert.as_dict()), notif]
 
+    def _emit_consumer_broken_alert(
+        self, topic: str, distinct: int
+    ) -> list[Message]:
+        """Emit the paired ``sec.alert.v1{kind=consumer_likely_broken,
+        severity=error}`` and ``maint.event.v1{kind=dlq_consumer_broken}``
+        messages when the poison-pattern threshold is crossed.
+
+        The ``sec.alert.v1`` is the canonical operational pager per
+        ROADMAP §8.5. The ``maint.event.v1`` mirror is retained for
+        the audit trail (mirrors the ``_emit_backlog_alert`` pattern).
+        Edge-triggered: the caller only invokes this once per crossing.
+        """
+        window_s = max(1, int(_cfg.maint_dlq_consumer_broken_window_s))
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind="consumer_likely_broken",
+            severity="error",
+            source=self.name,
+            reason=(
+                f"distinct_escalations={distinct} >= "
+                f"cfg.maint_dlq_consumer_broken_threshold="
+                f"{int(_cfg.maint_dlq_consumer_broken_threshold)} "
+                f"within {window_s}s window"
+            ),
+            produced_at=self._clock_iso(),
+            subject=topic,
+        )
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        notif = self._notify(
+            "dlq_consumer_broken",
+            target=topic,
+            extra={
+                "reason": "poison_pattern",
+                "distinct_request_ids": distinct,
+                "window_s": window_s,
+            },
+        )
+        return [Message(envelope=env, payload=alert.as_dict()), notif]
+
     # ── Helpers ───────────────────────────────────────────────────
+    # ── State-cap LRU + pressure alert ──────────────────────────
+    def _bump_state(self, topic: str) -> list[Message]:
+        """Upsert ``topic`` in ``_state``, update ``last_run_at``, and
+        enforce the ``_state_max`` LRU cap.
+
+        Returns a list with a single ``sec.alert.v1{kind=
+        dlq_state_pressure}`` message if an eviction occurred AND the
+        evicted entry was younger than the cap-pressure window
+        (``maint_dlq_replay_backoff_s × maint_dlq_backoff_factor × 3``);
+        otherwise returns an empty list.
+        """
+        now_s = self._now_s()
+        if topic in self._state:
+            self._state.move_to_end(topic)
+            self._state[topic].last_run_at = now_s
+            return []
+        # New entry — insert, then evict if over cap.
+        self._state[topic] = _RunState(last_run_at=now_s)
+        out: list[Message] = []
+        while len(self._state) > self._state_max:
+            _evicted_topic, evicted_st = self._state.popitem(last=False)
+            backoff_s = max(1, int(_cfg.maint_dlq_replay_backoff_s))
+            factor = max(1, int(_cfg.maint_dlq_backoff_factor))
+            pressure_window_s = float(backoff_s * factor * 3)
+            if (now_s - evicted_st.last_run_at) < pressure_window_s:
+                out.append(self._make_state_pressure_alert())
+        return out
+
+    def _make_state_pressure_alert(self) -> Message:
+        """Build ``sec.alert.v1{kind=dlq_state_pressure, severity=warn}``."""
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind="dlq_state_pressure",
+            severity="warn",
+            source=self.name,
+            reason=(
+                f"state cap {self._state_max} hit; "
+                "fill rate outpaces backoff window"
+            ),
+            produced_at=self._clock_iso(),
+        )
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=alert.as_dict())
+
     def _record_escalation(self, topic: str, request_id: str) -> bool:
         """Append an escalation event to the topic's poison window
         and return True iff the freeze threshold was just crossed.
 
         Trims expired entries on insert (window =
-        ``cfg.maint_dlq_poison_window_s`` seconds). The detector is
-        edge-triggered: it returns True only on the transition,
+        ``cfg.maint_dlq_consumer_broken_window_s`` seconds). The detector
+        is edge-triggered: it returns True only on the transition,
         never re-fires while the topic stays above threshold.
         """
         from collections import deque
         now_s = self._now_s()
-        window_s = max(1, int(_cfg.maint_dlq_poison_window_s))
-        threshold = max(2, int(_cfg.maint_dlq_poison_distinct_threshold))
+        window_s = max(1, int(_cfg.maint_dlq_consumer_broken_window_s))
+        threshold = max(2, int(_cfg.maint_dlq_consumer_broken_threshold))
         log = self._poison_log.setdefault(topic, deque())
         # Prune expired
         cutoff = now_s - window_s
@@ -662,4 +938,9 @@ class MaintDlqSupervisor:
         return Message(envelope=env, payload=payload)
 
 
-__all__ = ["MaintDlqSupervisor", "RECURSION_DENY_SET"]
+__all__ = [
+    "MaintDlqSupervisor",
+    "RECURSION_DENY_SET",
+    "_STRICT_PAYLOAD_TOPICS",
+    "dlq_meta_policy",
+]

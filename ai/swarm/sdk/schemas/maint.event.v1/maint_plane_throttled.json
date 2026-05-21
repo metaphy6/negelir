@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/maint_plane_throttled",
+  "title": "maint.event.v1{kind=maint_plane_throttled}",
+  "description": "Phase 8 §8.11 — notification emitted by the maint-plane lag watchdog when consumer lag on maint.event.v1 exceeds a threshold tier. Also dual-published on sec.alert.v1{kind=maint_plane_lag_high}. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "lag_s", "tier"],
+  "properties": {
+    "kind":                { "const": "maint_plane_throttled" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "lag_s":               { "type": "number", "minimum": 0, "description": "Observed consumer lag in seconds." },
+    "tier":                { "type": "integer", "minimum": 1, "maximum": 3, "description": "Shedding tier (1=light, 2=medium, 3=observer-mode)." },
+    "action":              { "type": "string", "description": "Shedding action applied." }
+  },
+  "additionalProperties": false
+}

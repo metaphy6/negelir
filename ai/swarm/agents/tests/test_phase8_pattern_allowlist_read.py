@@ -274,3 +274,143 @@ def test_allowlist_cache_skips_rebuild_when_version_unchanged() -> None:
     assert cache.snapshot_version() == 1
     cache.force_reload()
     assert cache.snapshot_version() == 1  # unchanged
+
+
+# ── PgAllowlistReader — SQL contract + isolation ──────────────────
+
+
+def test_pg_allowlist_reader_uses_repeatable_read_and_correct_sql() -> None:
+    """PgAllowlistReader must:
+
+    * Set isolation level to REPEATABLE READ (value 2 in psycopg2)
+      before the first cursor operation, so both SELECTs share one
+      snapshot (§8.7 cache-reload race binding).
+    * Issue the meta query with ``singleton = 'x'`` and parse the
+      returned version integer.
+    * Issue the allowlist query with
+      ``state = 'a' AND (expires_at IS NULL OR expires_at > now())``,
+      which excludes pending ('p') and expired ('e') rows.
+    * Commit and close the connection.
+    """
+    from swarm.agents.sec._allowlist import PgAllowlistReader
+
+    isolation_calls: list[int] = []
+    sql_calls: list[str] = []
+
+    class _MockCursor:
+        """Records execute() calls; returns fixed rows for each."""
+
+        def __init__(self) -> None:
+            self._call = 0
+
+        def execute(self, sql: str, params=None) -> None:
+            sql_calls.append(sql)
+            self._call += 1
+
+        def fetchone(self):
+            # First query: meta version row.
+            return (9,)
+
+        def fetchall(self):
+            # Second query: active pattern rows.
+            return [("aabb1122ccdd3344",), ("deadbeef01234567",)]
+
+        def __enter__(self) -> "_MockCursor":
+            return self
+
+        def __exit__(self, *args) -> None:
+            pass
+
+    class _MockConn:
+        def __init__(self) -> None:
+            self._cursor = _MockCursor()
+            self.committed = False
+            self.closed = False
+
+        def set_isolation_level(self, level: int) -> None:
+            isolation_calls.append(level)
+
+        def cursor(self) -> _MockCursor:
+            return self._cursor
+
+        def commit(self) -> None:
+            self.committed = True
+
+        def rollback(self) -> None:
+            pass
+
+        def close(self) -> None:
+            self.closed = True
+
+    conn = _MockConn()
+    reader = PgAllowlistReader(conn_factory=lambda: conn)
+    version, keys = reader.read_active_snapshot()
+
+    # Correct return values.
+    assert version == 9
+    assert keys == frozenset({"aabb1122ccdd3344", "deadbeef01234567"})
+
+    # REPEATABLE READ isolation level set once before any cursor op.
+    assert isolation_calls == [PgAllowlistReader._ISOLATION_LEVEL]
+    assert PgAllowlistReader._ISOLATION_LEVEL == 2  # psycopg2 constant
+
+    # Both SQL statements issued in the right order.
+    assert len(sql_calls) == 2
+    assert "pattern_allowlist_meta" in sql_calls[0]
+    assert "singleton" in sql_calls[0]
+    # State + expiry filter is binding per §8.7.
+    assert "state = 'a'" in sql_calls[1]
+    assert "expires_at IS NULL OR expires_at > now()" in sql_calls[1]
+    assert "pattern_allowlist" in sql_calls[1]
+
+    # Connection committed and closed.
+    assert conn.committed
+    assert conn.closed
+
+
+def test_pg_allowlist_reader_rollback_and_close_on_error() -> None:
+    """On any exception from the cursor, the connection must be
+    rolled back and closed before the exception propagates.
+    """
+    from swarm.agents.sec._allowlist import PgAllowlistReader
+
+    class _ExplodingCursor:
+        def execute(self, sql: str, params=None) -> None:
+            raise RuntimeError("db connection lost")
+
+        def __enter__(self) -> "_ExplodingCursor":
+            return self
+
+        def __exit__(self, *args) -> None:
+            pass
+
+    class _MockConn:
+        def __init__(self) -> None:
+            self.rolled_back = False
+            self.closed = False
+
+        def set_isolation_level(self, level: int) -> None:
+            pass
+
+        def cursor(self) -> _ExplodingCursor:
+            return _ExplodingCursor()
+
+        def commit(self) -> None:
+            pass
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    conn = _MockConn()
+    reader = PgAllowlistReader(conn_factory=lambda: conn)
+
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match="db connection lost"):
+        reader.read_active_snapshot()
+
+    # Connection must be rolled back and closed even on error.
+    assert conn.rolled_back
+    assert conn.closed

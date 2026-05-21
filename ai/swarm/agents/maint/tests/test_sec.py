@@ -336,3 +336,148 @@ def test_sec_alert_non_critical_is_ignored() -> None:
         "produced_at": "2024-01-01T00:00:00+00:00",
     })))
     assert drv.calls == 0
+
+
+# ── §8.9 idempotency/hysteresis: parallel triggers collapse to one call ──
+
+def test_decimate_hysteresis_parallel_operator_then_alert() -> None:
+    """ROADMAP §8.9 idempotency: operator trigger fires first, then a
+    sec.alert.v1 arrives within min_interval_s — both share the same
+    _last_decimate_ms gate so the alert path is throttled.  Total
+    decimator.decimate() calls == 1."""
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {"evicted_count": 5, "decile_size": 5,
+                    "new_zcard": 95, "cap_cleared": False}
+
+    clock = {"ms": 1_700_000_000_000}
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: clock["ms"])
+
+    # Trigger 1: operator command → real eviction, gate armed.
+    out_op = list(agent.handle(_wrap({
+        "kind": "denylist_decimate_now",
+        "request_id": "req-par-op",
+        "target": "all",
+    })))
+    ack_op = [m for m in out_op if m.envelope.topic == MAINT_ACK][0]
+    assert ack_op.payload["reason"] == "decimated"
+    assert drv.calls == 1
+
+    # Trigger 2: alert fires inside the window (1 s elapsed).
+    clock["ms"] += 1000
+    out_alert = list(agent.handle(_alert_msg({
+        "alert_id": "a-par-1",
+        "kind": "denylist_growth_anomaly",
+        "severity": "critical",
+        "source": "sec.rate.v1",
+        "subject": "10.0.0.0/24",
+        "reason": "rejected_capped",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    })))
+    # Alert path must be throttled — no second decimate.
+    notif_kinds = [m.payload.get("kind") for m in out_alert
+                   if m.envelope.topic == MAINT_EVENT]
+    assert "denylist_decimate_throttled" in notif_kinds
+    assert "denylist_decimate" not in notif_kinds
+    assert drv.calls == 1  # still one call total
+
+
+def test_decimate_hysteresis_parallel_alert_then_operator() -> None:
+    """ROADMAP §8.9 idempotency: alert path fires first, then an
+    operator command arrives within min_interval_s — operator path is
+    throttled.  Total decimator.decimate() calls == 1."""
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {"evicted_count": 5, "decile_size": 5,
+                    "new_zcard": 95, "cap_cleared": False}
+
+    clock = {"ms": 1_700_000_000_000}
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: clock["ms"])
+
+    # Trigger 1: alert → real eviction, gate armed.
+    out_alert = list(agent.handle(_alert_msg({
+        "alert_id": "a-par-2",
+        "kind": "denylist_growth_anomaly",
+        "severity": "critical",
+        "source": "sec.rate.v1",
+        "subject": "10.0.0.0/24",
+        "reason": "rejected_capped",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    })))
+    notif_kinds_1 = [m.payload.get("kind") for m in out_alert
+                     if m.envelope.topic == MAINT_EVENT]
+    assert "denylist_decimate" in notif_kinds_1
+    assert drv.calls == 1
+
+    # Trigger 2: operator command inside the window (1 s elapsed).
+    clock["ms"] += 1000
+    out_op = list(agent.handle(_wrap({
+        "kind": "denylist_decimate_now",
+        "request_id": "req-par-op2",
+        "target": "all",
+    })))
+    ack_op = [m for m in out_op if m.envelope.topic == MAINT_ACK][0]
+    assert ack_op.payload["reason"] == "hysteresis_throttled"
+    notif_kinds_2 = [m.payload.get("kind") for m in out_op
+                     if m.envelope.topic == MAINT_EVENT]
+    assert "denylist_decimate_throttled" in notif_kinds_2
+    assert "denylist_decimate" not in notif_kinds_2
+    assert drv.calls == 1  # still one call total
+
+
+def test_decimate_hysteresis_two_simultaneous_alerts_collapse() -> None:
+    """ROADMAP §8.9 idempotency: two alerts arrive at the same clock_ms
+    (truly parallel in a bus-redelivery scenario) — because alert_id
+    dedup fires for the second identical alert, or the hysteresis gate
+    blocks a second distinct alert_id within the window.  Either way,
+    exactly one decimator call is made."""
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {"evicted_count": 5, "decile_size": 5,
+                    "new_zcard": 95, "cap_cleared": False}
+
+    clock = {"ms": 1_700_000_000_000}
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: clock["ms"])
+
+    # Two distinct alert_ids at the same millisecond (parallel arrival).
+    for aid in ("a-sim-1", "a-sim-2"):
+        list(agent.handle(_alert_msg({
+            "alert_id": aid,
+            "kind": "denylist_growth_anomaly",
+            "severity": "critical",
+            "source": "sec.rate.v1",
+            "subject": "10.0.0.0/24",
+            "reason": "rejected_capped",
+            "produced_at": "2024-01-01T00:00:00+00:00",
+        })))
+
+    # First alert decimates; second alert is blocked by hysteresis
+    # (same clock_ms → elapsed_ms == 0 < window_ms).
+    assert drv.calls == 1

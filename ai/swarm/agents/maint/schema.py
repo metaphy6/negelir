@@ -28,13 +28,26 @@ from uuid import uuid4
 from common.config import cfg as _cfg
 
 from ...sdk import schemas as _schemas
+from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from . import _schema_drift as _drift
+from ._liveness import LivenessMixin
 from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.schema")
+
+
+class SchemaSentinelStartupError(RuntimeError):
+    """Raised by :class:`MaintSchemaSentinel` when Detector C finds a
+    dataclass-vs-schema mismatch at boot time.
+
+    Design intent: only the sentinel's own startup fails; the exception
+    propagates to the bootstrap/runner that instantiated this agent.
+    All other agents in the registry are unaffected because they do not
+    call ``detect_c`` at init.
+    """
 
 
 def _utc_iso() -> str:
@@ -56,7 +69,7 @@ class _TopicBucket:
     drifted: int = 0
 
 
-class MaintSchemaSentinel:
+class MaintSchemaSentinel(LivenessMixin):
     """`maint.schema.v1` reactor — Detector A.
 
     Subscribes any topic the swarm bootstrap wires it to (test wires
@@ -78,6 +91,10 @@ class MaintSchemaSentinel:
         clock_iso: Callable[[], str] | None = None,
         clock_mono: Callable[[], float] | None = None,
         new_id: Callable[[], str] | None = None,
+        boot_c_map: "dict[str, tuple[set[str], set[str]]] | None" = None,
+        boot_c_payloads_path: "Path | None" = None,
+        liveness_clock: Callable[[], float] | None = None,
+        leader: Leader | None = None,
     ) -> None:
         self._clock_iso = clock_iso or _utc_iso
         self._clock_mono = clock_mono or time.monotonic
@@ -91,14 +108,36 @@ class MaintSchemaSentinel:
         self._last_pg_check_at: float = float("-inf")
         # §8.13.5 pause/isolation matrix.
         self._pause = PauseState()
+        self._leader: Leader = leader if leader is not None else SingleProcessLeader(name=self.name)
         # §8.6 binding boundary — `maint_schema_auto_apply_enabled` is
         # forward-compat only. Phase 8 is detect-only; if the operator
         # flips the flag we surface a loud one-shot warning + sec.alert
         # at boot. The runner drains :attr:`boot_alerts` on startup.
         self.boot_alerts: list[Message] = list(self._check_auto_apply_boundary())
+        # §8.6 Detector C boot gate — optional caller-supplied map.
+        # If provided, runs detect_c immediately and raises
+        # SchemaSentinelStartupError on any mismatch. Only this agent's
+        # startup is affected; other agents in the registry are unaffected.
+        if boot_c_map is not None:
+            c_errors = self.detect_c(
+                payloads_path=boot_c_payloads_path,
+                dataclass_schema_map=boot_c_map,
+            )
+            if c_errors:
+                targets = ", ".join(
+                    m.payload.get("target", "?") for m in c_errors
+                )
+                raise SchemaSentinelStartupError(
+                    f"Detector C found {len(c_errors)} mismatch(es) at boot "
+                    f"for: {targets}"
+                )
+        self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
+        # Non-leader: observe only, do not publish.
+        if not self._leader.is_leader():
+            return ()
         # Operator-driven maint_pause / maint_resume on MAINT_EVENT.
         if msg.envelope.topic == MAINT_EVENT:
             payload = msg.payload or {}
@@ -156,14 +195,22 @@ class MaintSchemaSentinel:
         )
         return Message(envelope=env, payload=ack.as_dict())
 
-    def observe(self, msg: Message) -> Iterable[Message]:
+    def observe(self, msg: Message, *, lag_tier: int = 0) -> Iterable[Message]:
         """Sample the message; emit a drift notification if the
-        payload fails its topic schema and the bucket allows it."""
+        payload fails its topic schema and the bucket allows it.
+
+        ``lag_tier`` is the current maint-plane lag tier (§8.11):
+        tier 2 reduces the effective sample rate to 0.1× config;
+        tier 3 skips all sampling (observer-only).
+        """
+        # Phase 8 §8.11 — tier-3: observer-only, skip sampling.
+        if lag_tier >= 3:
+            return
         topic = str(msg.envelope.topic)
         if not topic:
             return
         bucket = self._buckets[topic]
-        if not self._consume_token(bucket):
+        if not self._consume_token(bucket, lag_tier=lag_tier):
             return
         bucket.seen += 1
         # Validate payload against the topic schema (kind-discriminated
@@ -188,8 +235,11 @@ class MaintSchemaSentinel:
         yield self._notify_drift(topic, errors)
 
     # ── Token bucket ─────────────────────────────────────────────
-    def _consume_token(self, bucket: _TopicBucket) -> bool:
+    def _consume_token(self, bucket: _TopicBucket, *, lag_tier: int = 0) -> bool:
         rate = max(0.001, float(_cfg.maint_schema_sample_rate_per_s))
+        # Phase 8 §8.11 — tier-2+: reduce sample rate to 0.1× config.
+        if lag_tier >= 2:
+            rate *= 0.1
         burst = max(1, int(_cfg.maint_schema_burst))
         now = self._clock_mono()
         if bucket.last_refill == 0.0:
@@ -431,4 +481,4 @@ class MaintSchemaSentinel:
         yield Message(envelope=env, payload=payload)
 
 
-__all__ = ["MaintSchemaSentinel"]
+__all__ = ["MaintSchemaSentinel", "SchemaSentinelStartupError"]

@@ -119,6 +119,29 @@ def _kinds(msgs: Iterable[Message]) -> list[str]:
     return [(m.payload or {}).get("kind") for m in msgs]
 
 
+# ── Module-level fixture: force live-fire mode ───────────────────────────
+# §8.9 introduced mock-profile dry-run defaulting to True; this module
+# tests the *live-fire* path so we force dry_run=False for every test
+# here via an autouse fixture. Tests that explicitly want dry_run=True
+# call monkeypatch.setattr(_cfg, "maint_backup_dry_run", True) themselves
+# and that call wins (monkeypatch stacks; last setattr wins).
+
+
+@pytest.fixture(autouse=True)
+def _force_dry_run_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force cfg.maint_backup_dry_run=False for all tests in this module.
+
+    Also set a dummy encryption_key_dir so the §8.9 backup_unencrypted
+    debounced-daily warn does not pollute tests that assert on empty
+    flush_expired() output. Tests that specifically exercise the
+    unencrypted path override this via their own monkeypatch.setattr.
+    """
+    monkeypatch.setattr(_cfg, "maint_backup_dry_run", False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_encryption_key_dir", "/test/keys", raising=False,
+    )
+
+
 # ── Static surface contracts ────────────────────────────────────────────
 
 
@@ -153,11 +176,16 @@ def test_fire_at_cron_moment_runs_full_state_machine() -> None:
     clock.set(_t(2025, 1, 1, 3, 0))
     msgs = list(agent.flush_expired())
     seen = _kinds(msgs)
-    # Order matters: started → prune_started → prune_completed → completed.
+    # Order matters (concurrent model): started → prune_started → prune_completed
+    # → offsite_uploaded → completed. The upload thread starts concurrently with
+    # the prune; its result is collected after prune completes (§8.12). The
+    # NoopOffsiteTarget reports success with 0 bytes synchronously so the event
+    # always appears before backup_completed.
     assert seen == [
         "backup_started",
         "prune_started",
         "prune_completed",
+        "backup_offsite_uploaded",
         "backup_completed",
     ]
     completed = msgs[-1].payload
@@ -198,9 +226,9 @@ def test_duplicate_same_day_fire_is_noop(
             super().__init__(bytes_written=4096)
             self.calls = 0
 
-        def dump(self, *, fire_window_id: str, dry_run: bool) -> tuple[int, int]:
+        def dump(self, *, fire_window_id: str, dry_run: bool, pii_excluded: tuple[str, ...] = ()) -> tuple[int, int]:
             self.calls += 1
-            return super().dump(fire_window_id=fire_window_id, dry_run=dry_run)
+            return super().dump(fire_window_id=fire_window_id, dry_run=dry_run, pii_excluded=pii_excluded)
 
     monkeypatch.setattr(_cfg, "maint_backup_dry_run", False)
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
@@ -899,7 +927,13 @@ def test_sec_alert_payloads_validate_against_schema(
 # ── Bootstrap wiring ───────────────────────────────────────────────────
 
 
-def test_bootstrap_includes_backup_agent() -> None:
+def test_bootstrap_includes_backup_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ai.swarm.agents.maint.backup import MaintBackupAgent
+    # Bypass filesystem permission gate so the test does not depend on
+    # data/backups/audit.csv having exactly 0o600 mode in CI/dev.
+    monkeypatch.setattr(
+        MaintBackupAgent, "_enforce_startup_permissions", lambda self: None
+    )
     from ai.swarm.bootstrap import SINGLE_INSTANCE_AGENTS, build_agents
 
     names = {a.name for a in build_agents()}
@@ -1317,3 +1351,60 @@ def test_enforce_startup_permissions_sets_umask(
         assert current == 0o077
     finally:
         os.umask(old_umask)
+
+
+# ── Idempotency: two consecutive missed ticks coalesce to one ───────────
+
+
+def test_two_consecutive_missed_ticks_coalesce_to_one_makeup_run() -> None:
+    """ROADMAP §8.9 binding — catch-up coalescing.
+
+    When the agent was offline for 2+ calendar days (missing 2 or more
+    daily cron windows), exactly ONE make-up run fires on the first
+    heartbeat. The second missed tick does NOT get its own replay.
+
+    Scenario:
+      * Day 1  03:00 UTC — cron window missed (agent offline).
+      * Day 2  03:00 UTC — cron window missed (agent still offline).
+      * Day 2  12:00 UTC — agent boots; first ``flush_expired()``.
+      * Expected: ONE ``backup_started`` + ONE ``backup_completed``,
+        both with ``catch_up: True``.
+      * Second ``flush_expired()`` (still Day 2) → silent.
+    """
+
+    class _CountingDump(NoopDumpExecutor):
+        def __init__(self) -> None:
+            super().__init__(bytes_written=4096)
+            self.calls = 0
+
+        def dump(self, *, fire_window_id: str, dry_run: bool, pii_excluded: tuple[str, ...] = ()) -> tuple[int, int]:
+            self.calls += 1
+            return super().dump(fire_window_id=fire_window_id, dry_run=dry_run, pii_excluded=pii_excluded)
+
+    # Day 2 12:00 UTC — two daily windows (day 1 and day 2 03:00) have
+    # both passed without a successful run.
+    clock = _StubClock(_t(2025, 1, 2, 12, 0))
+    dump = _CountingDump()
+    agent = _build_agent(clock=clock, dump=dump, pruner_counts={"opsctl_audit": 1})
+
+    first = list(agent.flush_expired())
+
+    started_events = [m for m in first if m.payload["kind"] == "backup_started"]
+    completed_events = [m for m in first if m.payload["kind"] == "backup_completed"]
+
+    # Exactly ONE make-up run fires — not two.
+    assert len(started_events) == 1, (
+        "Expected exactly one backup_started; two consecutive missed ticks "
+        "must coalesce to one make-up run"
+    )
+    assert len(completed_events) == 1
+    assert started_events[0].payload["catch_up"] is True
+    assert completed_events[0].payload["outcome"] == "ok"
+    assert dump.calls == 1
+
+    # Subsequent same-day heartbeat is silent — no second replay.
+    clock.set(_t(2025, 1, 2, 12, 1))
+    second = list(agent.flush_expired())
+    assert second == [], (
+        "flush_expired() after the makeup run must be silent on the same day"
+    )

@@ -24,6 +24,7 @@ from ..sdk.types import Message
 from common.config import cfg
 from .topics import (
     FRESHNESS_EVENTS,
+    MAINT_ACK,
     MAINT_EVENT,
     MATCH_NORMALIZED,
     MATCH_OUTCOME,
@@ -93,6 +94,10 @@ _WATCHED_TOPICS = (
     SEC_ALERT,
     SEC_QUARANTINE,
     SEC_DENYLIST,
+    # Phase 8 — per-consumer ack acknowledgements. Telemetry counts
+    # accepted/rejected ratios and ack latency per consumer so the
+    # ops console can surface degraded consumers (§8.9 visibility).
+    MAINT_ACK,
 )
 
 
@@ -104,6 +109,32 @@ class _Counters:
         self.last_seen: dict[str, str] = {}
         self.latency_ms_total: dict[str, float] = defaultdict(float)
         self.latency_n: dict[str, int] = defaultdict(int)
+        # Phase 8 §8.9 — per-consumer ack counters for maint.ack.v1.
+        # Keyed by `accepted_by` (consumer identity string). These power
+        # the per-consumer ack latency and accepted/rejected ratio gauges
+        # on the Prometheus page so the ops console can surface degraded
+        # or slow consumers without log-grepping.
+        self.ack_accepted_by_consumer: dict[str, int] = defaultdict(int)
+        self.ack_rejected_by_consumer: dict[str, int] = defaultdict(int)
+        self.ack_latency_ms_total_by_consumer: dict[str, float] = defaultdict(float)
+        self.ack_latency_n_by_consumer: dict[str, int] = defaultdict(int)
+
+    def observe_ack(
+        self, *, consumer: str, accepted: bool, latency_ms: float
+    ) -> None:
+        """Record one `maint.ack.v1` observation.
+
+        ``consumer`` is the ``accepted_by`` field from the payload;
+        must be non-empty (callers skip observations with missing /
+        empty consumer identity).
+        """
+        with self._lock:
+            if accepted:
+                self.ack_accepted_by_consumer[consumer] += 1
+            else:
+                self.ack_rejected_by_consumer[consumer] += 1
+            self.ack_latency_ms_total_by_consumer[consumer] += latency_ms
+            self.ack_latency_n_by_consumer[consumer] += 1
 
     def observe(self, topic: str, *, latency_ms: float) -> None:
         with self._lock:
@@ -150,6 +181,46 @@ class _Counters:
                 lines.append(
                     f'negelir_bus_last_seen_epoch{{topic="{topic}"}} {epoch:.0f}'
                 )
+            # Phase 8 §8.9 — maint.ack.v1 per-consumer counters.
+            all_ack_consumers = sorted(
+                set(self.ack_accepted_by_consumer)
+                | set(self.ack_rejected_by_consumer)
+            )
+            if all_ack_consumers:
+                lines.append(
+                    "# HELP negelir_maint_ack_accepted_total"
+                    " maint.ack.v1 accepted=true count per consumer."
+                )
+                lines.append("# TYPE negelir_maint_ack_accepted_total counter")
+                for c in all_ack_consumers:
+                    n = self.ack_accepted_by_consumer.get(c, 0)
+                    lines.append(
+                        f'negelir_maint_ack_accepted_total{{consumer="{_quote_label_value(c)}"}}'  # noqa: E501
+                        f" {n}"
+                    )
+                lines.append(
+                    "# HELP negelir_maint_ack_rejected_total"
+                    " maint.ack.v1 accepted=false count per consumer."
+                )
+                lines.append("# TYPE negelir_maint_ack_rejected_total counter")
+                for c in all_ack_consumers:
+                    n = self.ack_rejected_by_consumer.get(c, 0)
+                    lines.append(
+                        f'negelir_maint_ack_rejected_total{{consumer="{_quote_label_value(c)}"}}'  # noqa: E501
+                        f" {n}"
+                    )
+                lines.append(
+                    "# HELP negelir_maint_ack_latency_ms_avg"
+                    " Average maint.ack.v1 processing latency per consumer."
+                )
+                lines.append("# TYPE negelir_maint_ack_latency_ms_avg gauge")
+                for c in all_ack_consumers:
+                    total = self.ack_latency_ms_total_by_consumer.get(c, 0.0)
+                    n = self.ack_latency_n_by_consumer.get(c, 0) or 1
+                    lines.append(
+                        f'negelir_maint_ack_latency_ms_avg{{consumer="{_quote_label_value(c)}"}}'  # noqa: E501
+                        f" {total / n:.3f}"
+                    )
             lines.append("")
             return "\n".join(lines)
 
@@ -248,7 +319,18 @@ class TelemetryAgent:
             )
         except ValueError:
             latency_ms = 0.0
-        self.counters.observe(str(msg.envelope.topic), latency_ms=latency_ms)
+        topic_str = str(msg.envelope.topic)
+        self.counters.observe(topic_str, latency_ms=latency_ms)
+        # Phase 8 §8.9 — ack-specific per-consumer counters.
+        if topic_str == str(MAINT_ACK):
+            consumer = str(msg.payload.get("accepted_by", "")).strip()
+            if consumer:
+                accepted = bool(msg.payload.get("accepted", False))
+                self.counters.observe_ack(
+                    consumer=consumer,
+                    accepted=accepted,
+                    latency_ms=latency_ms,
+                )
         return ()
 
     def register_metric_source(

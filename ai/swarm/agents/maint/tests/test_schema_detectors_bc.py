@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from swarm.agents.maint import _schema_drift as _drift
-from swarm.agents.maint.schema import MaintSchemaSentinel
+from swarm.agents.maint.schema import MaintSchemaSentinel, SchemaSentinelStartupError
 
 
 # ── Detector B: parser unit tests ──────────────────────────────────
@@ -345,3 +345,93 @@ def test_pg_check_interval_validator() -> None:
     assert any("maint_schema_pg_check_interval_s" in s for s in bad)
     good = Config(maint_schema_pg_check_interval_s=3600).validate()
     assert not any("maint_schema_pg_check_interval_s" in s for s in good)
+
+
+# ── Detector C boot gate — startup isolation ──────────────────────
+
+
+def test_detect_c_boot_gate_raises_on_mismatch(tmp_path: Path) -> None:
+    """Detector C boot gate: a dataclass-vs-schema mismatch raises
+    SchemaSentinelStartupError from __init__, failing ONLY this
+    agent's instantiation."""
+    src = tmp_path / "payloads.py"
+    src.write_text(
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\nclass Foo:\n    x: int\n    y: str\n",
+        encoding="utf-8",
+    )
+    # Schema says Foo must have field 'z' (required) — but dataclass has x, y.
+    bad_map = {"Foo": ({"z"}, {"z"})}
+    with pytest.raises(SchemaSentinelStartupError) as exc_info:
+        MaintSchemaSentinel(
+            boot_c_map=bad_map,
+            boot_c_payloads_path=src,
+        )
+    assert "Foo" in str(exc_info.value)
+
+
+def test_detect_c_boot_gate_clean_map_does_not_raise(tmp_path: Path) -> None:
+    """No drift → boot gate does NOT raise; sentinel starts normally."""
+    src = tmp_path / "payloads.py"
+    src.write_text(
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\nclass Bar:\n    a: int\n",
+        encoding="utf-8",
+    )
+    clean_map = {"Bar": ({"a"}, {"a"})}
+    # Must not raise.
+    s = MaintSchemaSentinel(boot_c_map=clean_map, boot_c_payloads_path=src)
+    assert s.name == "maint.schema.v1"
+
+
+def test_detect_c_startup_failure_isolated(tmp_path: Path) -> None:
+    """Negative test: Detector C drift fails *only* the schema-sentinel
+    agent's startup, not the registry boot.
+
+    Steps:
+    1. Sentinel init raises SchemaSentinelStartupError → sentinel is
+       never registered.
+    2. MaintScaler (a sibling agent) is instantiated and registered
+       successfully in the same registry — proving isolation.
+    """
+    from swarm.agents.maint.scaler import MaintScaler
+    from swarm.sdk.agent import AgentSpec
+    from swarm.sdk.registry import AgentRegistry
+
+    # Synthetic payloads file with a class whose schema doesn't match.
+    src = tmp_path / "payloads.py"
+    src.write_text(
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\nclass MyPayload:\n    field_a: int\n",
+        encoding="utf-8",
+    )
+    # Schema claims 'missing_field' is required — mismatch.
+    bad_map = {"MyPayload": ({"missing_field"}, {"missing_field"})}
+
+    registry = AgentRegistry()
+
+    # Sentinel startup fails — isolated exception, NOT a global crash.
+    sentinel_started = False
+    try:
+        MaintSchemaSentinel(boot_c_map=bad_map, boot_c_payloads_path=src)
+        sentinel_started = True
+    except SchemaSentinelStartupError:
+        pass  # Expected — sentinel's own startup failed.
+
+    assert not sentinel_started, "Sentinel should have raised at boot"
+
+    # Other agents in the same 'registry boot' are unaffected.
+    scaler = MaintScaler()
+    spec = AgentSpec(
+        name=scaler.name,
+        instance_id=f"{scaler.name}.test",
+        subscribes=tuple(scaler.subscribes),
+        publishes=tuple(scaler.publishes),
+    )
+    registry.register(spec)
+
+    all_specs = registry.all_specs()
+    assert f"{scaler.name}.test" in all_specs, "Scaler must be registered"
+    # Sentinel was never registered because its init raised.
+    sentinel_ids = [iid for iid in all_specs if "schema" in iid]
+    assert sentinel_ids == [], "Sentinel must NOT appear in the registry"

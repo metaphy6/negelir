@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/schema_drift_detected",
+  "title": "maint.event.v1{kind=schema_drift_detected}",
+  "description": "Phase 8 §8.6 — notification emitted by maint.schema.v1 (and source.watcher.v1) when a schema-drift detector fires. `detector` identifies which of the three detectors (A, B, C) tripped. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "target", "detector"],
+  "properties": {
+    "kind":                { "const": "schema_drift_detected" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "target":              { "type": "string", "minLength": 1, "description": "Table name or source id." },
+    "detector":            { "type": "string", "enum": ["A", "B", "C"], "description": "A=column-count, B=column-names, C=dataclass-vs-schema." },
+    "drift_type":          { "type": "string" },
+    "deferred":            { "type": "boolean", "description": "True when the agent will retry after the pending schema migration window." },
+    "fire_window_id":      { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

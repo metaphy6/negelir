@@ -76,6 +76,7 @@ class OpenEnum:
 # Append here when a new open enum lands. The contract tests will
 # pick it up automatically.
 from swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS as _SEC_ALERT_KINDS
+from swarm.agents.maint._ack_routing import KNOWN_MAINT_EVENT_KINDS as _MAINT_EVENT_KINDS
 
 OPEN_ENUM_REGISTRY: tuple[OpenEnum, ...] = (
     OpenEnum(
@@ -84,8 +85,15 @@ OPEN_ENUM_REGISTRY: tuple[OpenEnum, ...] = (
         known=_SEC_ALERT_KINDS,
         owner_module="swarm.agents.payloads:KNOWN_SEC_ALERT_KINDS",
     ),
-    # Future: Phase 8 will register MaintEventKind here when the
-    # `maint.event.v1` producer set widens beyond {drift.v1}.
+    # Phase 8 §8.9: maint.event.v1.kind open-enum. The known-kinds
+    # set is KNOWN_MAINT_EVENT_KINDS (= frozenset(_ACK_ROUTING_TABLE))
+    # so adding a new maint kind is a single-file change in _ack_routing.py.
+    OpenEnum(
+        topic="maint.event.v1",
+        field="kind",
+        known=_MAINT_EVENT_KINDS,
+        owner_module="swarm.agents.maint._ack_routing:KNOWN_MAINT_EVENT_KINDS",
+    ),
 )
 
 

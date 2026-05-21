@@ -25,12 +25,9 @@ Two complementary contracts are pinned here:
    calls ``self._notify`` from an unguarded function MUST be flagged
    by the same scanner.
 
-   Schema/sec/backup are listed in :data:`LEADER_REQUIRED_AGENTS`
-   but their leader gates are still being threaded through (Phase
-   8.10 follow-up). They live in ``_LEADER_PENDING`` and are
-   *not* AST-scanned yet. When their gates land, move them from
-   ``_LEADER_PENDING`` into ``_LEADER_GATED`` in this test file —
-   the scanner will then enforce the same contract on them.
+   All 5 maint-plane agents are fully wired through the §8.10 gate.
+   ``_LEADER_GATED`` now equals ``LEADER_REQUIRED_AGENTS`` and
+   ``_LEADER_PENDING`` is empty.
 """
 from __future__ import annotations
 
@@ -48,6 +45,9 @@ from swarm.sdk.leader import LEADER_REQUIRED_AGENTS
 _LEADER_GATED: frozenset[str] = frozenset({
     "maint.scaler.v1",
     "maint.dlq.v1",
+    "maint.backup.v1",
+    "maint.schema.v1",
+    "maint.sec.v1",
 })
 _LEADER_PENDING: frozenset[str] = LEADER_REQUIRED_AGENTS - _LEADER_GATED
 

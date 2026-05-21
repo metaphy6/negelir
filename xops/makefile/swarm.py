@@ -25,6 +25,129 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _common import REPO_ROOT, dispatch, info, ok  # noqa: E402
 
 
+def _run_phase8_opsctl_demo(bus: object) -> None:
+    """Phase 8 §8.9 — ops.denylist-clear round-trip + dry-run walk.
+
+    Extends ``make swarm.demo`` to prove two things using the same
+    ``InMemoryBus`` instance that the Phase 4 loop used:
+
+    1. ``--dry-run`` path: builds the envelope, validates the schema,
+       prints the expected ack set, but publishes **nothing**.
+    2. Live round-trip: publishes ``maint.event.v1{kind=denylist_clear}``
+       through the bus, a stub ``sec.rate.v1`` consumer emits the
+       ``maint.ack.v1``, and ack latency is asserted
+       ``< cfg.opsctl_ack_timeout_ms``.
+    """
+    import time
+    import uuid
+    from datetime import datetime, timezone
+
+    # REPO_ROOT on sys.path so opsctl modules can resolve ``ai.*`` imports.
+    repo_str = str(REPO_ROOT)
+    if repo_str not in sys.path:
+        sys.path.insert(0, repo_str)
+
+    from swarm.agents.maint._ack_routing import expected_ack_set  # noqa: E402
+    from swarm.agents.topics import MAINT_ACK, MAINT_EVENT  # noqa: E402
+    from swarm.sdk.bus import InMemoryBus  # noqa: E402
+    from swarm.sdk.types import Envelope, Message  # noqa: E402
+    from opsctl.subcommands.denylist_clear import run as _dc_run  # noqa: E402
+    from ai.common.config import Config  # noqa: E402
+
+    cfg = Config()
+
+    # ── 1. dry-run: zero bus publications ─────────────────────────────
+    dry_bus = InMemoryBus()
+    dry_args = argparse.Namespace(
+        target="203.0.113.1",
+        client_id="demo-op",
+        dry_run=True,
+        json=False,
+        confirm="",
+    )
+    rc = _dc_run(dry_args, bus=dry_bus)
+    msgs_published = sum(len(s) for s in dry_bus._streams.values())
+    if rc != 0:
+        raise AssertionError(f"ops.denylist-clear --dry-run exited {rc}")
+    if msgs_published != 0:
+        raise AssertionError(
+            f"dry-run published {msgs_published} unexpected messages"
+        )
+    ok("ops.denylist-clear --dry-run: no bus publish (correct)")
+
+    # ── 2. live round-trip through the shared bus ──────────────────────
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    rid = uuid.uuid4().hex
+    live_msg = Message(
+        envelope=Envelope(topic=MAINT_EVENT, producer="ops_console"),
+        payload={
+            "kind": "denylist_clear",
+            "target": "203.0.113.1",
+            "request_id": rid,
+            "client_id": "demo-op",
+            "produced_at": now_iso,
+        },
+    )
+
+    stub_group = "sec.rate.v1.demo"
+    bus.ensure_group(MAINT_EVENT, stub_group)  # type: ignore[attr-defined]
+
+    t0 = time.monotonic()
+    bus.publish(live_msg)  # type: ignore[attr-defined]
+
+    # sec.rate.v1 stub: reads denylist_clear, emits maint.ack.v1 ack.
+    deliveries = bus.read(  # type: ignore[attr-defined]
+        MAINT_EVENT, stub_group, "sec.rate.v1.stub", count=16, block_ms=0
+    )
+    for d in deliveries:
+        p = d.message.payload
+        if p.get("kind") == "denylist_clear" and str(p.get("request_id")) == rid:
+            ack_now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            bus.publish(Message(  # type: ignore[attr-defined]
+                envelope=Envelope(topic=MAINT_ACK, producer="sec.rate.v1"),
+                payload={
+                    "request_id": rid,
+                    "accepted": True,
+                    "accepted_by": "sec.rate.v1",
+                    "reason": "demo_denylist_clear",
+                    "processed_at": ack_now,
+                    "attempt": 1,
+                },
+            ))
+        bus.ack(MAINT_EVENT, stub_group, d.handle)  # type: ignore[attr-defined]
+
+    # opsctl side: drain the ack via the standard consumer-group pattern.
+    ack_group = f"opsctl.ack.{rid}"
+    bus.ensure_group(MAINT_ACK, ack_group)  # type: ignore[attr-defined]
+    ack_deliveries = bus.read(  # type: ignore[attr-defined]
+        MAINT_ACK, ack_group, "demo.opsctl", count=16, block_ms=0
+    )
+    received: set[str] = set()
+    for d in ack_deliveries:
+        p = d.message.payload
+        if str(p.get("request_id")) == rid:
+            ab = p.get("accepted_by")
+            if isinstance(ab, str):
+                received.add(ab)
+        bus.ack(MAINT_ACK, ack_group, d.handle)  # type: ignore[attr-defined]
+
+    latency_ms = (time.monotonic() - t0) * 1000.0
+    expected = expected_ack_set("denylist_clear")
+    if received != expected:
+        raise AssertionError(
+            f"ack mismatch: got {received!r}, expected {expected!r}"
+        )
+    budget = cfg.opsctl_ack_timeout_ms
+    if latency_ms >= budget:
+        raise AssertionError(
+            f"ack latency {latency_ms:.1f}ms >= budget {budget}ms"
+        )
+    ok(
+        f"ops.denylist-clear round-trip: ack in {latency_ms:.1f}ms "
+        f"(budget={budget}ms, acks={sorted(received)})"
+    )
+
+
 def _run_demo(league: str) -> int:
     # Make the ai/ package importable like the test suite does.
     ai_path = str(REPO_ROOT / "ai")
@@ -134,6 +257,9 @@ def _run_demo(league: str) -> int:
         for line in telemetry.counters.render_prometheus().splitlines():  # type: ignore[attr-defined]
             if line.startswith("negelir_"):
                 print(f"  {line}")
+        # ── Phase 8 extension: ops.denylist-clear round-trip + dry-run ─
+        info("swarm.demo (Phase 8): ops console round-trip")
+        _run_phase8_opsctl_demo(bus)
         return 0
     finally:
         for r in runners:

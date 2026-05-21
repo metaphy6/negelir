@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_verify_key_rotated",
+  "title": "maint.event.v1{kind=backup_verify_key_rotated}",
+  "description": "Phase 8 §8.3 — notification emitted by maint.backup.v1 after verifying that a rotated-key backup can be fully restored. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "job_id", "new_key_version"],
+  "properties": {
+    "kind":                { "const": "backup_verify_key_rotated" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "job_id":              { "type": "string", "minLength": 1 },
+    "backup_date_utc":     { "type": "string" },
+    "new_key_version":     { "type": "integer", "minimum": 1 }
+  },
+  "additionalProperties": false
+}

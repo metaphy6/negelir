@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/pattern_allowlist_pending",
+  "title": "maint.event.v1{kind=pattern_allowlist_pending}",
+  "description": "Phase 8 §8.7 — notification emitted by maint.sec.v1 when a new pattern has been inserted into the pattern_allowlist table with status='pending', awaiting operator approval. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "subject", "rule_id"],
+  "properties": {
+    "kind":                { "const": "pattern_allowlist_pending" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "subject":             { "type": "string", "minLength": 1, "description": "Subject id (<source>:<rule_id>)." },
+    "rule_id":             { "type": "string", "minLength": 1 },
+    "reason":              { "type": "string" },
+    "expires_at":          { "type": "string" }
+  },
+  "additionalProperties": false
+}

@@ -224,6 +224,59 @@ def test_telemetry_watches_phase7_defense_topics() -> None:
     assert "sec.denylist.v1" in subs
 
 
+def test_telemetry_watches_phase8_maint_ack() -> None:
+    """Phase 8 §8.9 — maint.ack.v1 must appear in the telemetry
+    watch-set so per-consumer ack latency and accepted/rejected ratios
+    surface on the Prometheus page without log-grepping."""
+    agent = TelemetryAgent()
+    subs = set(str(t) for t in agent.subscribes)
+    assert "maint.ack.v1" in subs, (
+        "telemetry._WATCHED_TOPICS is missing 'maint.ack.v1' (§8.9 visibility)"
+    )
+
+
+def test_telemetry_maint_ack_counters_surface_in_prometheus() -> None:
+    """§8.9 — feeding maint.ack.v1 messages must populate the
+    per-consumer accepted/rejected counters and the latency gauge in
+    the Prometheus text output."""
+    from swarm.sdk.types import Envelope
+    from swarm.agents.topics import MAINT_ACK
+
+    agent = TelemetryAgent()
+
+    def _ack_msg(consumer: str, accepted: bool) -> Message:
+        env = Envelope(
+            topic=MAINT_ACK,
+            message_id="mid-1",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        return Message(
+            envelope=env,
+            payload={
+                "request_id": "req-1",
+                "accepted": accepted,
+                "accepted_by": consumer,
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    # Two accepted acks for consumer-A, one rejected for consumer-B.
+    agent.handle(_ack_msg("consumer-A", True))
+    agent.handle(_ack_msg("consumer-A", True))
+    agent.handle(_ack_msg("consumer-B", False))
+
+    text = agent.render_prometheus()
+
+    # accepted counter for consumer-A = 2
+    assert 'negelir_maint_ack_accepted_total{consumer="consumer-A"} 2' in text
+    # rejected counter for consumer-B = 1; accepted = 0 (absent from dict,
+    # but the accepted block still emits 0 for every known consumer)
+    assert 'negelir_maint_ack_rejected_total{consumer="consumer-B"} 1' in text
+    # latency gauge must be present for both consumers
+    assert 'negelir_maint_ack_latency_ms_avg{consumer="consumer-A"}' in text
+    assert 'negelir_maint_ack_latency_ms_avg{consumer="consumer-B"}' in text
+
+
 def test_telemetry_renders_registered_metric_source() -> None:
     agent = TelemetryAgent()
     agent.register_metric_source(lambda: {

@@ -40,6 +40,7 @@ from swarm.agents.proofreader.replicas import (
 from swarm.agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from swarm.agents.storage import StorageAgent
 from swarm.agents.topics import (
+    MAINT_ACK,
     MAINT_EVENT,
     MATCH_OUTCOME,
     PREDICT_APPROVED,
@@ -53,6 +54,7 @@ from swarm.agents.topics import (
     SEC_QUARANTINE,
 )
 from swarm.sdk.wire_contracts import MAINT_EVENT_V1_ALLOWED_PRODUCERS
+from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER
 from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_PRODUCERS
 
 
@@ -262,12 +264,38 @@ def test_sec_rate_does_not_publish_proof_flag() -> None:
 
 
 def test_sec_rate_is_sole_producer_of_denylist() -> None:
-    """7.3 SOLE-writer contract."""
+    """7.3 / §8.9 SOLE-writer contract.
+
+    ``sec.rate.v1`` is the *only* direct publisher of
+    ``sec.denylist.v1`` on the bus.  The Phase 8.8 sweeper
+    (``maint.sec.v1``) interacts with the denylist exclusively via
+    the Lua atomic script (``sec_denylist_decimate.lua``) under the
+    existing Redis key prefix — it never emits ``sec.denylist.v1``
+    as a bus message.  No other agent may become a second direct
+    producer.
+    """
+    from swarm.agents.maint.backup import MaintBackupAgent  # noqa: PLC0415
+    from swarm.agents.maint.deadmans import MaintDeadmansSwitch  # noqa: PLC0415
+    from swarm.agents.maint.dlq import MaintDlqSupervisor  # noqa: PLC0415
+    from swarm.agents.maint.schema import MaintSchemaSentinel  # noqa: PLC0415
+    from swarm.agents.maint.scaler import MaintScaler  # noqa: PLC0415
+    from swarm.agents.maint.sec import MaintSecAgent  # noqa: PLC0415
+
     assert SEC_DENYLIST in tuple(SecRateAgent.publishes)
-    for cls in (*_NON_SEC_AGENTS, SecInputAgent, SecScrapeAgent):
+    _phase8_maint_agents = (
+        MaintSecAgent,
+        MaintScaler,
+        MaintDlqSupervisor,
+        MaintSchemaSentinel,
+        MaintBackupAgent,
+        MaintDeadmansSwitch,
+    )
+    for cls in (*_NON_SEC_AGENTS, SecInputAgent, SecScrapeAgent, *_phase8_maint_agents):
         assert SEC_DENYLIST not in tuple(getattr(cls, "publishes", ())), (
             f"{cls.__name__} must not publish sec.denylist.v1 - "
-            "only sec.rate.v1 may (single-writer denylist)."
+            "only sec.rate.v1 may (single-writer denylist). "
+            "The §8.8 sweeper uses Lua under the existing key prefix "
+            "and never emits a bus message on this topic."
         )
 
 
@@ -551,4 +579,155 @@ def test_telemetry_watches_phase7_topics() -> None:
         "telemetry._WATCHED_TOPICS is missing Phase 7 topic(s): "
         f"{sorted(missing)}. The §7.7 cross-phase alignment requires "
         "all five sec topics on the Prometheus page."
+    )
+
+
+# ── Rule 8 (Phase 8 §8.9): maint.event.v1 producer set — registry ──
+
+
+def test_maint_event_v1_producer_set_registry_bounded() -> None:
+    """§8.9 boundary discipline: ``maint.event.v1`` producer set in
+    the live registry must be a subset of
+    ``MAINT_EVENT_V1_ALLOWED_PRODUCERS`` (Phase 8-expanded).
+
+    Canonical permitted producers:
+      * ``drift.v1``         — Phase 6.3 retrain_request
+      * ``ops_console``      — Phase 8 CLI (not an in-process agent)
+      * ``maint.scaler.v1``  — Phase 8 reactor
+      * ``maint.backup.v1``  — Phase 8 reactor
+      * ``maint.dlq.v1``     — Phase 8 reactor
+      * ``maint.schema.v1``  — Phase 8 reactor
+      * ``maint.sec.v1``     — Phase 8 reactor
+      * ``source.watcher.v1`` — Phase 2.8 SDK-migrated producer
+
+    Any future in-process agent that needs to publish
+    ``maint.event.v1`` must add itself to
+    ``swarm.sdk.wire_contracts.MAINT_EVENT_V1_ALLOWED_PRODUCERS``
+    in a separate commit with a tracker row + minor version bump.
+    This test will fail at landing time, not in production.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if MAINT_EVENT in tuple(getattr(agent, "publishes", ())):
+            if label not in MAINT_EVENT_V1_ALLOWED_PRODUCERS:
+                offenders.append(label)
+    assert offenders == [], (
+        "maint.event.v1 producer set must stay inside "
+        f"MAINT_EVENT_V1_ALLOWED_PRODUCERS="
+        f"{sorted(MAINT_EVENT_V1_ALLOWED_PRODUCERS)}; "
+        f"unlisted producers found in registry: {offenders}. "
+        "Add the producer name to wire_contracts.py with a tracker "
+        "row + minor version bump."
+    )
+
+
+# ── Rule 9 (Phase 8 §8.9): maint.ack.v1 producer / consumer sets ─
+
+
+def test_maint_ack_v1_producers_are_maint_event_consumers() -> None:
+    """§8.9 boundary discipline: every in-process agent that
+    publishes ``maint.ack.v1`` must also subscribe to
+    ``maint.event.v1``.
+
+    Rationale: an ack is a receipt for a command carried on
+    ``maint.event.v1``.  Any agent that emits an ack without
+    listening to the command channel is either wrong or bypassing
+    the normal request→ack flow.  This test pins the invariant
+    so a future refactor cannot silently break it.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        pubs = tuple(getattr(agent, "publishes", ()))
+        subs = tuple(getattr(agent, "subscribes", ()))
+        if MAINT_ACK in pubs and MAINT_EVENT not in subs:
+            offenders.append(_agent_label(agent))
+    assert offenders == [], (
+        "maint.ack.v1 producers must also subscribe to "
+        "maint.event.v1 (ack implies receipt of a command). "
+        f"Offenders that publish ack without consuming event: {offenders}."
+    )
+
+
+def test_maint_ack_v1_no_in_process_consumer() -> None:
+    """§8.9 boundary discipline: no in-process *business-logic* agent in
+    the swarm registry may subscribe to ``maint.ack.v1``.
+
+    Only ``ops_console`` (an out-of-process CLI tool, not an agent
+    in ``build_agents()``) is allowed to wait for acks.  Agents
+    must NOT consume each other's acks — that would create
+    implicit coupling between reactors and break the single-reader
+    ops-console contract.
+
+    ``telemetry.v1`` is the one allowed exception: it is a meta-consumer
+    (counter-only, per §4.6) that watches every topic for Prometheus
+    metrics — it does not react to ack semantics, so it does not create
+    reactor coupling.  This mirrors the ``_TELEMETRY_LABEL`` allow-list
+    pattern used for every other consumer-set check in this file.
+    """
+    allowed = {_TELEMETRY_LABEL}
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if label in allowed:
+            continue
+        subs = tuple(getattr(agent, "subscribes", ()))
+        if MAINT_ACK in subs:
+            offenders.append(label)
+    assert offenders == [], (
+        "maint.ack.v1 must have no in-process business-logic consumer "
+        "(only the out-of-process ops_console CLI waits for acks; "
+        "telemetry.v1 is the one counter-only exception). "
+        f"In-registry subscribers found: {offenders}. "
+        "Agents must not consume each others' acks."
+    )
+
+
+# ── Rule 9 (Phase 8 §8.9): telemetry.v1 as sec.alert.v1 producer ──────
+
+
+def test_telemetry_is_allowed_sec_alert_producer() -> None:
+    """§8.9 boundary (positive): ``telemetry.v1`` MUST appear in
+    ``SEC_ALERT_V1_ALLOWED_PRODUCERS`` because the dead-mans-switch
+    relay is its single publication on that topic.  Removing it from
+    the set would silently break the Phase 8.10 silence alert.
+    """
+    assert "telemetry.v1" in SEC_ALERT_V1_ALLOWED_PRODUCERS, (
+        "telemetry.v1 must be in SEC_ALERT_V1_ALLOWED_PRODUCERS — it is"
+        " the dead-mans-switch relay for maint_silence_alert (§8.10).  "
+        "Do not remove it without adding a replacement relay agent."
+    )
+
+
+def test_telemetry_sec_alert_kind_pin() -> None:
+    """§8.9 boundary (pin): ``telemetry.v1`` may publish ``sec.alert.v1``
+    ONLY with ``kind=maint_silence_alert``.  Any other kind from telemetry
+    must fail the per-producer kind allow-list.
+
+    This test has two assertions:
+    (a) the pin set is exactly ``{maint_silence_alert}`` — no extras;
+    (b) every other kind in ``KNOWN_SEC_ALERT_KINDS`` is excluded from
+        the telemetry pin, so a coding error (adding a second kind to
+        the pin) is caught immediately.
+    """
+    from swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS  # noqa: PLC0415
+
+    telemetry_pin: frozenset[str] = SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER[
+        "telemetry.v1"
+    ]
+
+    # (a) Pin must equal exactly the one permitted kind.
+    assert telemetry_pin == frozenset({"maint_silence_alert"}), (
+        "SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER['telemetry.v1'] must be "
+        "exactly {'maint_silence_alert'} — adding any other kind grants "
+        "telemetry the ability to raise arbitrary operator alerts.  "
+        f"Actual pin: {sorted(telemetry_pin)}"
+    )
+
+    # (b) All other known sec.alert kinds must be outside the pin.
+    forbidden = KNOWN_SEC_ALERT_KINDS - telemetry_pin
+    leaked = telemetry_pin & forbidden
+    assert not leaked, (
+        "telemetry.v1 kind-pin contains kinds that should be off-limits: "
+        f"{sorted(leaked)}.  Only maint_silence_alert is permitted."
     )

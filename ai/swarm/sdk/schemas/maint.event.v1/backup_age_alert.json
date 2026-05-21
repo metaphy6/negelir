@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_age_alert",
+  "title": "maint.event.v1{kind=backup_age_alert}",
+  "description": "Phase 8 §8.3 — notification emitted by maint.backup.v1 when the age of the last verified backup exceeds cfg.maint_backup_age_alert_h. Also dual-published on sec.alert.v1 for alert routing. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version"],
+  "properties": {
+    "kind":                { "const": "backup_age_alert" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "age_hours":           { "type": "number", "minimum": 0, "description": "Hours since last verified backup." },
+    "threshold_hours":     { "type": "number", "minimum": 0 },
+    "backup_date_utc":     { "type": "string", "description": "Date of the last verified backup, ISO-8601." },
+    "dry_run":             { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

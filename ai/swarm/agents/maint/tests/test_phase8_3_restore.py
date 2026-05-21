@@ -75,6 +75,7 @@ def _agent(
         clock_wall=clock.wall,
         clock_mono_ns=clock.mono_ns,
         new_id=lambda: "fixed-id",
+        enforce_permissions=False,
     )
     return a, audit
 
@@ -124,6 +125,7 @@ def test_outcome_taxonomy_is_closed() -> None:
     """Surface tokens are pinned; extending requires a swarm minor bump."""
     assert RESTORE_OUTCOMES == frozenset({
         "ok",
+        "checksum_verify_failed",
         "dr_key_required",
         "live_overwrite_requires_confirm",
         "decrypt_failed",

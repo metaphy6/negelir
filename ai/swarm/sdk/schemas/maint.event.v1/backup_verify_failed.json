@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_verify_failed",
+  "title": "maint.event.v1{kind=backup_verify_failed}",
+  "description": "Phase 8 §8.3 — notification emitted by maint.backup.v1 when a restore-verify job fails. Also dual-published on sec.alert.v1{severity=critical}. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "job_id"],
+  "properties": {
+    "kind":                { "const": "backup_verify_failed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "job_id":              { "type": "string", "minLength": 1 },
+    "backup_date_utc":     { "type": "string" },
+    "error_summary":       { "type": "string" },
+    "scope":               { "type": "string", "enum": ["warm", "cold"] }
+  },
+  "additionalProperties": false
+}

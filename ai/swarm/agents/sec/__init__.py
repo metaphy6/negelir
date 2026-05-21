@@ -64,6 +64,7 @@ from ._allowlist import (
     AllowlistCache,
     InMemoryAllowlistReader,
     PatternAllowlistReader,
+    PgAllowlistReader,
     compute_pattern_key,
 )
 
@@ -74,5 +75,6 @@ __all__ = [
     "AllowlistCache",
     "InMemoryAllowlistReader",
     "PatternAllowlistReader",
+    "PgAllowlistReader",
     "compute_pattern_key",
 ]

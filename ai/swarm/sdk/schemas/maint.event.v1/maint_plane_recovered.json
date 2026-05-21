@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/maint_plane_recovered",
+  "title": "maint.event.v1{kind=maint_plane_recovered}",
+  "description": "Phase 8 §8.11 — notification emitted by the maint-plane lag watchdog when consumer lag drops below the recovery threshold after a throttled period. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "lag_s"],
+  "properties": {
+    "kind":                { "const": "maint_plane_recovered" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "lag_s":               { "type": "number", "minimum": 0 },
+    "tier_recovered_from": { "type": "integer", "minimum": 1, "maximum": 3 }
+  },
+  "additionalProperties": false
+}

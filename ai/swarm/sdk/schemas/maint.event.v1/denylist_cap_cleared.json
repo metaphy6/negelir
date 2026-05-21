@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/denylist_cap_cleared",
+  "title": "maint.event.v1{kind=denylist_cap_cleared}",
+  "description": "Phase 8 §8.8 — notification emitted by maint.sec.v1 immediately after a decimate sweep drops the ZCARD below cfg.sec_denylist_cap * cfg.sec_denylist_cap_exit_ratio, clearing the capped flag. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "target"],
+  "properties": {
+    "kind":                { "const": "denylist_cap_cleared" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "target":              { "type": "string", "minLength": 1 },
+    "new_zcard":           { "type": "integer", "minimum": 0 },
+    "decile_size":         { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

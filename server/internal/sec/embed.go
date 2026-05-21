@@ -27,6 +27,11 @@ var EmbeddedRateCheckLua string
 //go:embed embedded/sec_denylist_mutate.lua
 var EmbeddedDenylistMutateLua string
 
+// Canonical: infra/redis/lua/sec_denylist_decimate.lua
+//
+//go:embed embedded/sec_denylist_decimate.lua
+var EmbeddedDecimateLua string
+
 // Canonical: ai/swarm/sdk/schemas/qa.request.v1.json
 //
 //go:embed embedded/qa.request.v1.json

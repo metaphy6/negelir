@@ -53,6 +53,7 @@ from .agents.maint.schema import MaintSchemaSentinel
 from .agents.maint.sec import MaintSecAgent
 from .agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from .agents.telemetry import TelemetryAgent
+from .source_watcher.agent import SourceWatcherAgent
 from .sdk.agent import Agent
 from .sdk.bus import Bus
 from .sdk.registry import AgentRegistry
@@ -126,7 +127,6 @@ def _build_predictors() -> list[Agent]:
     if _cfg.predictor_market_features_enabled:
         predictors.append(LgbmMarketPredictor())
     return predictors
-    from .source_watcher.agent import SourceWatcherAgent
 
 
 def _build_proofreader_replicas() -> list[Agent]:
@@ -172,9 +172,6 @@ def build_agents() -> list[Agent]:
     # both is safe; the Postgres-backed cache lift in Phase 9 will
     # need leader election on the *invalidation* path, not here.
     cache = CacheAgent()
-        # Phase 8.4 source-watcher — holds per-source snapshot + diff state,
-        # single-publication for baseline_reset and SOURCE_WATCH_REPORT_V1.
-        "source.watcher.v1",
     telemetry = TelemetryAgent.from_config(start_http=False)
     # Phase 7 defense agents (escalation tier — the gateway middleware
     # in `server/internal/sec/*` carries the deterministic hot-path
@@ -202,16 +199,16 @@ def build_agents() -> list[Agent]:
         verifier=_backup_drivers.verifier,
         pruner=_backup_drivers.pruner,
     )
-       # Phase 8.4 source-watcher: time-driven periodic diff agent.
-       # Stub fetcher returns empty dict (full integration with real
-       # scrapers deferred; mock sources work via mock profiles).
-       def _stub_fetcher(source: str) -> dict:
-           return {}
+    # Phase 8.4 source-watcher: time-driven periodic diff agent.
+    # Stub fetcher returns empty dict (full integration with real
+    # scrapers deferred; mock sources work via mock profiles).
+    def _stub_fetcher(source: str) -> dict:
+        return {}
 
-       source_watcher = SourceWatcherAgent(
-           sources=("mackolik", "nesine", "tff", "openfootball.local"),
-           fetcher=_stub_fetcher,
-       )
+    source_watcher = SourceWatcherAgent(
+        sources=("mackolik", "nesine", "tff", "openfootball.local"),
+        fetcher=_stub_fetcher,
+    )
     return [
         *predictors,
         consensus,

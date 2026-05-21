@@ -76,12 +76,30 @@ You may **never** edit:
 
 - Anything under `swarm/` (predictor logic — different lifecycle, not
   yours to change)
+- Anything under `ai/swarm/agents/maint/` (Phase 8 maintenance
+  reactors — `maint.scaler.v1`, `maint.backup.v1`, `maint.dlq.v1`,
+  `maint.schema.v1`, `maint.sec.v1`; different lifecycle, not yours
+  to change)
+- Anything under `xops/opsctl/` (the Phase 8 ops console; it
+  publishes to `maint.event.v1` and reads `maint.ack.v1`, but it
+  never touches scraper code — operator UI only)
 - Anything under `server/internal/auth/`, `server/internal/payment/`,
   or `*/crypto/` (security-critical paths)
 - `xops/versioning/`, `AGENTS.md`, `docs/planning/ROADMAP.md`
   (governance — humans only)
 - Any file outside the scope's allow-list, even if it would make
   the fix easier
+
+> **Phase 8 / auto-mutation boundary.** The Phase 8 maint agents
+> (`ai/swarm/agents/maint/`) and the ops console (`xops/opsctl/`)
+> are maintenance-plane reactors — they monitor, alert, and operate
+> the running system. They publish bus events and read ack topics;
+> **they do not mutate scraper extractor code**. The patcher (this
+> harness) is the **only** component that automatically edits scraper
+> extractor code (the future `maint.coder.v1` planned in Phase 17).
+> There is no overlap: if a diagnostic artifact points at
+> `xops/opsctl/` or `ai/swarm/agents/maint/`, call
+> `request_escalation(reason="scope mismatch: patcher does not own maint agents")`.
 
 If your fix genuinely needs a file outside the assigned scope, call
 `request_escalation(reason="scope mismatch: needs <scope>")` and

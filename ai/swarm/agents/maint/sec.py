@@ -30,6 +30,7 @@ Boundaries:
 from __future__ import annotations
 
 import logging
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -38,9 +39,11 @@ from uuid import uuid4
 
 from common.config import cfg as _cfg
 
+from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from ._liveness import LivenessMixin
 from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.sec")
@@ -85,9 +88,27 @@ class InMemoryPatternStore:
     """Simple in-process implementation for tests + bootstrap.
 
     Real driver (Phase 8.7b) hits Postgres via psycopg with the
-    advisory lock ``LOCK_MAINT_SEC_ALLOWLIST``."""
+    advisory lock ``LOCK_MAINT_SEC_ALLOWLIST``.
+
+    Thread-safety model (mirrors ``pg_advisory_lock`` semantics):
+    ``_lock`` is acquired for any operation that touches *both*
+    ``rows`` (the DB-row state) and ``_active_cache`` (the
+    in-process active-pattern cache).  ``read_eval_snapshot``
+    acquires the same lock so a concurrent ``promote_to_active``
+    cannot produce a split state where the DB row says ``'a'`` but
+    the cache has not yet been updated (or vice-versa)."""
 
     rows: dict[str, dict] = field(default_factory=dict)
+    # pg_advisory_lock analogue — held while updating both `rows`
+    # and `_active_cache` so readers always see a consistent pair.
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, init=False, repr=False, compare=False
+    )
+    # Application-level cache of currently-active patterns,
+    # always kept in sync with rows[p]["state"] == "a" under _lock.
+    _active_cache: set = field(
+        default_factory=set, init=False, repr=False, compare=False
+    )
 
     def upsert_pending(self, pattern: str, *, qid: str, now_iso: str) -> bool:
         row = self.rows.get(pattern)
@@ -106,18 +127,86 @@ class InMemoryPatternStore:
 
     def promote_to_active(self, pattern: str, *, now_iso: str,
                           ttl_s: int) -> bool:
-        row = self.rows.get(pattern)
-        if row is None or row["state"] != "p":
-            return False
-        row["state"] = "a"
-        row["promoted_at"] = now_iso
-        row["ttl_s"] = ttl_s
-        return True
+        with self._lock:
+            row = self.rows.get(pattern)
+            if row is None or row["state"] != "p":
+                return False
+            row["state"] = "a"
+            row["promoted_at"] = now_iso
+            row["ttl_s"] = ttl_s
+            self._active_cache.add(pattern)
+            return True
 
     def expire_due(self, *, now_iso: str) -> list[str]:
-        # The in-memory shim leaves expiry to the test harness;
-        # production driver compares promoted_at + ttl_s vs now.
-        return []
+        """Mark active rows past their TTL as expired; prune pending rows
+        older than ``cfg.maint_sec_pattern_pending_ttl_days``.
+
+        Returns the list of patterns transitioned ``a`` → ``e`` (the
+        production Postgres driver does an UPDATE/RETURNING; this
+        shim mirrors the same semantics for tests).
+        """
+        from datetime import datetime, timezone
+        now = datetime.fromisoformat(now_iso)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        pending_ttl_s = int(_cfg.maint_sec_pattern_pending_ttl_days) * 86_400
+        expired: list[str] = []
+        to_prune: list[str] = []
+        for pattern, row in list(self.rows.items()):
+            state = row.get("state")
+            if state == "a":
+                promoted_at = row.get("promoted_at")
+                ttl_s = int(row.get("ttl_s") or 0)
+                if promoted_at and ttl_s > 0:
+                    promoted = datetime.fromisoformat(promoted_at)
+                    if promoted.tzinfo is None:
+                        promoted = promoted.replace(tzinfo=timezone.utc)
+                    if (now - promoted).total_seconds() >= ttl_s:
+                        row["state"] = "e"
+                        expired.append(pattern)
+            elif state == "p" and pending_ttl_s > 0:
+                ts = row.get("ts")
+                if ts:
+                    created = datetime.fromisoformat(ts)
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    if (now - created).total_seconds() >= pending_ttl_s:
+                        to_prune.append(pattern)
+        for pattern in to_prune:
+            del self.rows[pattern]
+        # Keep _active_cache consistent with newly-expired rows.
+        with self._lock:
+            for pattern in expired:
+                self._active_cache.discard(pattern)
+        return expired
+
+    def read_eval_snapshot(self, pattern: str) -> "tuple[str, bool] | None":
+        """Read ``(row_state, in_active_cache)`` under the advisory lock.
+
+        Returns ``None`` if the pattern is not known.  A consistent
+        snapshot always satisfies ``row_state == 'a' ↔ in_active_cache``.
+        Used by ``sec.input.v1`` evaluation and the promote-race proof test.
+        """
+        with self._lock:
+            row = self.rows.get(pattern)
+            if row is None:
+                return None
+            return row["state"], pattern in self._active_cache
+
+    def _reset_to_pending(self, pattern: str, *, qid: str, now_iso: str) -> None:
+        """Test helper — atomically reset a pattern to ``pending`` and clear
+        it from ``_active_cache`` (simulates a fresh operator cycle)."""
+        with self._lock:
+            row = self.rows.get(pattern)
+            if row is None:
+                self.rows[pattern] = {"state": "p", "qids": [qid], "ts": now_iso}
+            else:
+                row["state"] = "p"
+                row["qids"] = [qid]
+                row["ts"] = now_iso
+                row.pop("promoted_at", None)
+                row.pop("ttl_s", None)
+            self._active_cache.discard(pattern)
 
 
 @dataclass
@@ -147,7 +236,7 @@ class InMemoryDecimator:
 
 
 # ── Agent ───────────────────────────────────────────────────────────────
-class MaintSecAgent:
+class MaintSecAgent(LivenessMixin):
     """`maint.sec.v1` reactor — combines §8.7 FP loop + §8.8 decimator."""
 
     name = "maint.sec.v1"
@@ -162,6 +251,8 @@ class MaintSecAgent:
         clock_iso: Callable[[], str] | None = None,
         clock_ms: Callable[[], int] | None = None,
         new_id: Callable[[], str] | None = None,
+        liveness_clock: Callable[[], float] | None = None,
+        leader: Leader | None = None,
     ) -> None:
         self._patterns = pattern_store if pattern_store is not None else InMemoryPatternStore()
         self._decimator = decimator if decimator is not None else InMemoryDecimator()
@@ -172,6 +263,7 @@ class MaintSecAgent:
         self._req_lru: "OrderedDict[str, None]" = OrderedDict()
         # §8.13.5 pause/isolation matrix.
         self._pause = PauseState()
+        self._leader: Leader = leader if leader is not None else SingleProcessLeader(name=self.name)
         # §8.8 hysteresis: epoch-ms of the last *successful* decimate.
         # Drives the global ``cfg.maint_sec_decimate_min_interval_s``
         # window; the denylist zset is one shared resource so the
@@ -181,9 +273,13 @@ class MaintSecAgent:
         # SecAlert ``alert_id`` values so the sweeper does not double-
         # fire on bus redeliveries.
         self._alert_lru: "OrderedDict[str, None]" = OrderedDict()
+        self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
+        # Non-leader: observe only, do not publish.
+        if not self._leader.is_leader():
+            return ()
         topic = msg.envelope.topic
         if topic == SEC_ALERT:
             return list(self._handle_sec_alert(msg))
@@ -390,6 +486,8 @@ class MaintSecAgent:
 
     # ── Periodic expiry tick ────────────────────────────────────
     def expire_tick(self) -> list[Message]:
+        if not self._leader.is_leader():
+            return []
         now_iso = self._clock_iso()
         expired = self._patterns.expire_due(now_iso=now_iso)
         return [

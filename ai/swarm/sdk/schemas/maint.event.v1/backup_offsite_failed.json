@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_offsite_failed",
+  "title": "maint.event.v1{kind=backup_offsite_failed}",
+  "description": "Phase 8 §8.3 — notification emitted by maint.backup.v1 when an offsite upload fails. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "backup_id"],
+  "properties": {
+    "kind":                { "const": "backup_offsite_failed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 1 },
+    "backup_id":           { "type": "string", "minLength": 1 },
+    "target":              { "type": "string", "minLength": 1, "description": "Offsite target id / path." },
+    "error_summary":       { "type": "string" }
+  },
+  "additionalProperties": false
+}

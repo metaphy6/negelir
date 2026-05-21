@@ -702,6 +702,22 @@ class Config:
     # latency ladder (5ms..10s) which covers both the noop path
     # (~µs) and a slow ``docker compose --scale`` (~seconds).
     maint_scaler_runtime_histogram_buckets: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS", "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"))
+    # Phase 8 §8.9 DoD — bounded global decision history. The scaler
+    # keeps an insertion-ordered map of the most recent N
+    # ``scale_decision`` events (keyed by ``decision_window_id``).
+    # Oldest entries are evicted when the cap is hit (LRU by
+    # insertion order). Default 1024 holds ~14h of decisions at the
+    # default 30-second window cadence across a 256-target roster.
+    maint_scaler_history_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_HISTORY_MAX", "1024")))
+    # Phase 8 §8.9 DoD — leader-lease duration for maint-plane agents.
+    # When the K8s coordination API is unreachable, the in-memory
+    # :class:`~swarm.sdk.leader.ControllableK8sLeader` / Phase 14 real
+    # driver expire the lease after this many seconds.  A losing pod
+    # transitions to observer mode (``is_leader()`` returns False) no
+    # later than ``maint_leader_lease_duration_s`` after the last
+    # successful renewal.  Mirrors the ``leaseDurationSeconds`` field
+    # on the ``coordination.k8s.io/v1.Lease`` object (Phase 14).
+    maint_leader_lease_duration_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_LEADER_LEASE_DURATION_S", "15")))
 
     # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
     maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
@@ -731,20 +747,36 @@ class Config:
     # per topic, so a single hot topic cannot starve the others.
     maint_dlq_max_replays_per_tick: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_MAX_REPLAYS_PER_TICK", "50")))
     # Phase 8 §8.5 C2 — poison-pattern detection. If ≥
-    # ``maint_dlq_poison_distinct_threshold`` distinct request_ids
+    # ``maint_dlq_consumer_broken_threshold`` distinct request_ids
     # escalate on the same DLQ topic within
-    # ``maint_dlq_poison_window_s`` seconds, the supervisor freezes
-    # that topic (refusing further dlq_replay requests) and emits a
-    # ``dlq_consumer_broken`` event. Operator lifts the freeze with
-    # a ``dlq_unfreeze`` command.
-    maint_dlq_poison_distinct_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_POISON_DISTINCT_THRESHOLD", "5")))
-    maint_dlq_poison_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_POISON_WINDOW_S", "600")))
+    # ``maint_dlq_consumer_broken_window_s`` seconds, the supervisor
+    # freezes that topic (refusing further dlq_replay requests) and
+    # emits ``sec.alert.v1{kind=consumer_likely_broken, severity=error}``.
+    # Operator lifts the freeze via ``ops.dlq-resume --topic <t>``.
+    maint_dlq_consumer_broken_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_CONSUMER_BROKEN_THRESHOLD", "5")))
+    maint_dlq_consumer_broken_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_CONSUMER_BROKEN_WINDOW_S", "600")))
     # Phase 8 §8.5 backlog-pressure damping: per-topic DLQ depth
     # threshold above which the supervisor emits a debounced
     # ``sec.alert.v1{kind=dlq_backlog_high}`` and quarters that
     # topic's per-tick replay budget until depth falls below half
     # the original observed depth.
     maint_dlq_backlog_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_BACKLOG_ALERT", "1000")))
+    # Phase 8 §8.9 DoD — bounded in-memory topic-state map.
+    # ``_state`` is capped at this value with insertion-order LRU
+    # eviction. Default 100 000 covers large-scale deployments with
+    # thousands of DLQ topic variants. Cap-pressure alert fires when
+    # the evicted entry is younger than
+    # ``maint_dlq_replay_backoff_s × maint_dlq_backoff_factor × 3``.
+    maint_dlq_state_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_STATE_MAX", "100000")))
+    # Exponential-backoff multiplier used by the DLQ supervisor for
+    # cap-pressure evaluation (also referenced by the escalation
+    # window calculation). Default 2 matches the §8.5 "double the
+    # backoff window" pattern.
+    maint_dlq_backoff_factor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_BACKOFF_FACTOR", "2")))
+    # Phase 8 §8.9 DoD — per-topic per-second replay rate cap.
+    # Enforced on both the operator-driven handle() path and the
+    # periodic tick() scheduler. Default 10 rps per topic; values ≥ 1.
+    maint_dlq_replay_rps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_DLQ_REPLAY_RPS", "10")))
 
     # ── Phase 8 §8.6 — `maint.schema.v1` sentinel ────────────────────
     maint_schema_sample_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S", "5")))
@@ -771,6 +803,14 @@ class Config:
     # ── Phase 8 §8.7 + §8.8 — `maint.sec.v1` agent ───────────────────
     maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_TTL_S", "604800")))
     maint_sec_pattern_promote_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD", "1")))
+    # Days before an un-promoted `pending` row is pruned from the
+    # pattern_allowlist table. Bounds growth when operators never
+    # confirm a FP (e.g. noise generated by a transient rule hit).
+    maint_sec_pattern_pending_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_PENDING_TTL_DAYS", "30")))
+    # Formal Phase 8 DoD name for the pattern_allowlist pending-row TTL
+    # (same semantic as maint_sec_pattern_pending_ttl_days; canonical name
+    # required by the triangle-test bullet).  Default 30 days.
+    maint_sec_allowlist_pending_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_ALLOWLIST_PENDING_TTL_DAYS", "30")))
     maint_sec_request_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_REQUEST_LRU", "2048")))
     # Phase 8 §8.8 hysteresis: minimum seconds between two
     # ``denylist_decimate_now`` runs (global; the denylist zset is
@@ -781,6 +821,11 @@ class Config:
 
     # ── Phase 8 §8.10 — broadcast pause ──────────────────────────────
     maint_pause_default_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S", "600")))
+    # Hard upper-bound on any operator-specified pause TTL. Operators
+    # cannot request a pause longer than this; the agent caps the TTL
+    # and emits ``kind=maint_pause_ttl_capped`` if the request exceeds it.
+    # Default 86400s (24h) — prevents accidentally indefinite pauses.
+    maint_pause_max_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PAUSE_MAX_TTL_S", "86400")))
     maint_silence_dedup_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SILENCE_DEDUP_S", "300")))
     # Phase 8 §8.16 D2 — dead-mans-switch.
     # If no maint.event.v1 message has been observed for this many
@@ -794,6 +839,42 @@ class Config:
     # idempotency matrix; agent then refuses pause until an
     # operator explicitly resumes it).
     maint_self_dlq_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SELF_DLQ_ALERT", "100")))
+    # Growth-rate self-throttle (§8.11): if the agent's own DLQ depth
+    # grows by more than this many entries per minute, the agent halves
+    # its emit rate (token-bucket on its own producer side) until growth
+    # is non-positive for ``maint_self_dlq_throttle_recovery_s`` seconds.
+    # Distinct from the absolute-depth ``maint_self_dlq_alert`` above.
+    maint_self_dlq_growth_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SELF_DLQ_GROWTH_ALERT", "50")))
+    # How long (seconds) growth must remain non-positive before the
+    # per-agent DLQ self-throttle lifts (default 120 s = 2 minutes).
+    maint_self_dlq_throttle_recovery_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SELF_DLQ_THROTTLE_RECOVERY_S", "120")))
+
+    # ── Phase 8 §8.11 — consumer-lag watchdog ────────────────────────
+    # Lag threshold (ms) that triggers tier-1 shedding after the alert
+    # window has elapsed.  Tier 2 = 15 000ms, Tier 3 = 60 000ms.
+    maint_plane_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PLANE_LAG_ALERT_MS", "5000")))
+    # Lag must exceed the threshold for this many seconds before tier-1 fires.
+    maint_plane_lag_alert_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PLANE_LAG_ALERT_WINDOW_S", "60")))
+    # Lag must be below 1s for this many seconds before recovery fires.
+    maint_plane_recovery_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PLANE_RECOVERY_WINDOW_S", "120")))
+
+    # ── Phase 8 §8.9 — per-agent bus circuit-breaker ─────────────────
+    # Consecutive publish failures before the breaker opens (bus_degraded).
+    maint_bus_fail_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BUS_FAIL_THRESHOLD", "3")))
+    # Time window (seconds) within which consecutive failures must occur
+    # for the breaker to open.  A failure outside this window resets the
+    # streak counter.  Default 30s per §8.11 spec.
+    maint_bus_fail_window_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BUS_FAIL_WINDOW_S", "30.0")))
+    # Per-agent spool cap (entries).  Oldest entries are NOT evicted —
+    # new writes are refused when the cap is reached.
+    maint_bus_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BUS_SPOOL_MAX_ENTRIES", "1024")))
+    # Root directory for per-agent spools (one sub-dir per agent name).
+    maint_agent_spool_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AGENT_SPOOL_DIR", "data/maint/agent_spool"))
+    # Cap on entries stored per agent in its per-agent sub-spool under
+    # ``maint_agent_spool_dir``. Distinct from ``maint_bus_spool_max_entries``
+    # (the bus circuit-breaker spool cap). New writes are refused when
+    # the cap is reached; oldest entries are NOT evicted.
+    maint_agent_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AGENT_SPOOL_MAX_ENTRIES", "512")))
 
     # ── Phase 8 §8.11 — three-tier backpressure ──────────────────────
     maint_backpressure_yellow_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKPRESSURE_YELLOW_FACTOR", "4.0")))
@@ -842,7 +923,14 @@ class Config:
     maint_backup_retention_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_RETENTION_WEEKS", "4")))
     # Safety floor — when true, every emit carries dry_run=true and
     # NO destructive prune is executed (would_delete_count instead).
-    maint_backup_dry_run: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_DRY_RUN", "false").lower() in ("1", "true", "yes"))
+    # Defaults to true when NEGELIR_PROFILE is unset or "mock"
+    # (dev/CI safety net); false for production.
+    # Note: uses (os.getenv("NEGELIR_PROFILE") or "mock") so the
+    # _GETENV_DEFAULT_RE duplicate-key test ignores this nested read.
+    maint_backup_dry_run: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_MAINT_BACKUP_DRY_RUN",
+        "true" if (os.getenv("NEGELIR_PROFILE") or "mock") == "mock" else "false",
+    ).lower() in ("1", "true", "yes"))
     # Disk-pressure guard — refuse to start a dump if free space <
     # max(2*last_dump_size, min_free_gb*1GB).
     maint_backup_min_free_gb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MIN_FREE_GB", "5")))
@@ -868,9 +956,20 @@ class Config:
     maint_backup_clock_step_forward_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_CLOCK_STEP_FORWARD_ALERT_H", "24")))
     # pg_dump parallelism (-j flag); 1 disables parallel mode.
     maint_backup_pg_jobs: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_JOBS", "2")))
+    # ROADMAP §8.9 binding (fail_safe_pg_conn_limit_too_low): minimum
+    # Postgres role connection limit accepted at agent startup.  0 means
+    # "auto-derive": the agent requires at least pg_jobs + 1 (N parallel
+    # workers + 1 coordinator connection).  Set an explicit positive value
+    # to enforce a higher floor (e.g. pg_jobs + application pool headroom).
+    maint_backup_pg_conn_limit: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_CONN_LIMIT", "0")))
     # DELETE batch size for the destructive prune phase. Bounded so a
     # single cron run cannot hold a long-lived row-lock cascade.
     maint_backup_prune_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PRUNE_BATCH", "10000")))
+    # Maximum milliseconds a single prune batch may hold a table lock.
+    # Each DELETE batch is constrained so that
+    # (rows_in_batch × cost_per_row_ms) <= this budget.
+    # Default 500ms matches the §8.9 DoD lock-hold-time requirement.
+    maint_backup_prune_max_lock_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PRUNE_MAX_LOCK_MS", "500")))
     # ROADMAP §8.3 TTL prune retention windows. Each is a calendar-day
     # cap; rows whose `created_at` (or `expires_at` for the allowlist)
     # falls outside the window are pruned by the nightly maint.backup.v1
@@ -879,6 +978,13 @@ class Config:
     maint_schema_snapshot_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_SNAPSHOT_RETENTION_DAYS", "90")))
     swarm_dlq_pg_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_DLQ_PG_RETENTION_DAYS", "14")))
     maint_audit_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_RETENTION_DAYS", "365")))
+    # Per-kind retention overrides (JSON dict, str → int days). Keys are
+    # ``maint.event.v1`` kind strings; values override the global
+    # ``maint_audit_retention_days`` for that kind. Default ships the
+    # ROADMAP §8.9 right-to-erasure requirement: ``pii_erased`` rows
+    # are kept for 7 years (2555 days) as breach-evidence records.
+    # Example: '{"pii_erased": 2555, "backup_age_alert": 90}'.
+    maint_audit_retention_days_overrides: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AUDIT_RETENTION_DAYS_OVERRIDES", '{"pii_erased": 2555}'))
     # Live `pg_dump` DSN — empty string means "no live driver wired"
     # (the in-memory shim is used; refused at agent boot in production
     # profile by the swarm bootstrap).
@@ -924,6 +1030,91 @@ class Config:
     # dump is needed for real DR. Boot validation in
     # `MaintBackupAgent` refuses cron syntax errors loudly.
     maint_backup_cold_verify_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON", "0 5 * * 0"))
+    # ROADMAP §8.3 crash-cleanup invariant: on agent restart, orphaned
+    # `negelir-maint-verify/restore-verify-*` K8s Jobs + ephemeral PVCs older
+    # than this many hours are swept at boot and emit
+    # `maint.event.v1{kind=backup_verify_orphan_swept}`. Default 6h.
+    maint_backup_verify_orphan_ttl_h: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_ORPHAN_TTL_H", "6.0")))
+    # Size (Gi) of the ephemeral PVC provisioned for the K8s
+    # restore-verify job. Must be at least 2× the expected
+    # pg_restore output size; boot validation warns when this
+    # is below ``maint_backup_min_free_gb``. Default 10 Gi.
+    maint_backup_pvc_size_gb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PVC_SIZE_GB", "10")))
+    # PII-aware dump: comma-separated list of ``table.column`` entries excluded
+    # from the logical dump by default. The production ``LocalPgDumpExecutor``
+    # maps these to ``pg_dump --exclude-table-data`` / ``--exclude-column``.
+    # The in-memory ``NoopDumpExecutor`` records them in ``dump_toc`` so tests
+    # can assert the contract. ROADMAP §8.9 DoD: quarantine_samples.raw_bytes_b64
+    # excluded by default (right-to-erasure invariant).
+    maint_backup_pii_excluded_columns: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_MAINT_BACKUP_PII_EXCLUDED_COLUMNS",
+        "quarantine_samples.raw_bytes_b64",
+    ))
+    # ROADMAP §8.9 binding (`fail_safe_wrong_pg_role`): the expected
+    # Postgres role name the backup agent must run as. Defaults to the
+    # least-privilege backup role `negelir_backup` (migration 011).
+    # Changing this in prod requires an explicit env override and a
+    # matching Postgres GRANT; the default is the safe hardened value.
+    maint_backup_pg_role: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_MAINT_BACKUP_PG_ROLE",
+        "negelir_backup",
+    ))
+    # ROADMAP §8.9 two-class encryption: when True (default) each nightly
+    # dump gets a freshly-generated ephemeral verify-class recipient keypair.
+    # The verify key is included as a second recipient alongside the DR keys
+    # so the SidecarVerifier (Phase 14) can decrypt for restore-verify without
+    # holding a DR key. Set to False only for disaster-recovery drills where
+    # the verify sidecar is intentionally bypassed.
+    maint_backup_verify_key_rotate_per_dump: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_KEY_ROTATE_PER_DUMP", "true").lower() in ("true", "1", "yes"))
+    # ── ROADMAP §8.12 off-host replication ────────────────────────────────────────────────
+    # Target type: "none" (disabled, default) or "s3" (S3-compatible).
+    maint_backup_offsite_target: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_TARGET", "none"))
+    # S3-compatible endpoint URL (leave empty for AWS-default region routing).
+    maint_backup_offsite_endpoint: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_ENDPOINT", ""))
+    # Destination bucket name.
+    maint_backup_offsite_bucket: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_BUCKET", ""))
+    # Minimum file size (MB) to trigger multipart upload. 0 = single-part.
+    maint_backup_offsite_multipart_threshold_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_MULTIPART_THRESHOLD_MB", "64")))
+    # Bandwidth cap for offsite uploads (KB/s). 0 = unlimited.
+    maint_backup_offsite_bw_kbps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_BW_KBPS", "0")))
+    # Upload timeout per fire window (hours). Exceeded → offsite_failed.
+    maint_backup_offsite_upload_timeout_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_UPLOAD_TIMEOUT_H", "6")))
+    # Object-lock (WORM) retention period in days. 0 = no WORM enforcement.
+    maint_backup_offsite_object_lock_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_DAYS", "0")))
+    # Alert threshold: emit ``backup_offsite_age_alert`` when last successful
+    # offsite upload is older than this many hours. 0 = watchdog disabled.
+    maint_backup_offsite_age_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_AGE_ALERT_H", "48")))
+    # On-object retention in days for objects in the remote bucket.
+    # Default 90 d in prod (compliance-grade window), 7 d in mock/dev.
+    # Note: uses (os.getenv("NEGELIR_PROFILE") or "mock") so the
+    # _GETENV_DEFAULT_RE duplicate-key test ignores this nested read.
+    maint_backup_offsite_retention_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_MAINT_BACKUP_OFFSITE_RETENTION_DAYS",
+        "90" if (os.getenv("NEGELIR_PROFILE") or "mock") == "prod" else "7",
+    )))
+    # S3 access key ID (public, non-secret; the matching secret is referenced by
+    # maint_backup_offsite_secret_access_key_secret_ref below).
+    maint_backup_offsite_access_key_id: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_ACCESS_KEY_ID", ""))
+    # File-path reference to the S3 secret access key. In K8s this is a
+    # secretKeyRef volume-mount path (0400); in Compose/dev it is a plain file.
+    # NEVER the literal secret value — the agent reads the file at boot.
+    maint_backup_offsite_secret_access_key_secret_ref: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_SECRET_ACCESS_KEY_SECRET_REF", ""))
+    # AWS / S3-compatible region used for SigV4 signing (e.g. "us-east-1",
+    # "auto" for non-AWS services like R2 / B2 that don't enforce a region).
+    maint_backup_offsite_s3_region: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_S3_REGION", "us-east-1"))
+    # RsyncSshTarget: SSH host (or user@host) for the DR replica.
+    maint_backup_offsite_rsync_host: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_HOST", ""))
+    # RsyncSshTarget: absolute destination path on the remote SSH host.
+    maint_backup_offsite_rsync_dest_path: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_DEST_PATH", ""))
+    # RsyncSshTarget: path to a known_hosts file for strict host-key checking.
+    # Empty = fall back to agent's ~/.ssh/known_hosts (acceptable in K8s pods).
+    maint_backup_offsite_rsync_ssh_known_hosts: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_SSH_KNOWN_HOSTS", ""))
+    # Phase 8 §8.12 — DR-drill cadence gauge.
+    # Path to the append-only CSV recording quarterly DR-drill outcomes.
+    maint_backup_dr_drill_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_DR_DRILL_CSV", "data/backups/dr_drills.csv"))
+    # Days threshold for the cadence-overdue alert (default 100 — one quarter
+    # is ~91 d; the extra 9 d absorbs scheduling slippage before paging).
+    maint_backup_dr_drill_alert_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_DR_DRILL_ALERT_DAYS", "100")))
     # Phase 8 §8.4 — source-watcher summarizer graduation gate.
     # The summarizer may only enable when a pinned model id is
     # configured AND a startup reachability probe can contact the
@@ -1410,8 +1601,8 @@ class Config:
         _bounded("maint_dlq_per_topic_max_per_min", self.maint_dlq_per_topic_max_per_min, 1, 1_000_000)
         _bounded("maint_dlq_visit_lru", self.maint_dlq_visit_lru, 1, 1_000_000)
         _bounded("maint_dlq_max_replays_per_tick", self.maint_dlq_max_replays_per_tick, 1, 1_000_000)
-        _bounded("maint_dlq_poison_distinct_threshold", self.maint_dlq_poison_distinct_threshold, 2, 1000)
-        _bounded("maint_dlq_poison_window_s", self.maint_dlq_poison_window_s, 1, 86_400)
+        _bounded("maint_dlq_consumer_broken_threshold", self.maint_dlq_consumer_broken_threshold, 2, 1000)
+        _bounded("maint_dlq_consumer_broken_window_s", self.maint_dlq_consumer_broken_window_s, 1, 86_400)
         # Allow-list parse: every non-empty entry MUST end in ``.dlq``.
         if self.maint_dlq_replay_topics_allow_csv.strip():
             for raw in self.maint_dlq_replay_topics_allow_csv.split(","):
@@ -1432,16 +1623,30 @@ class Config:
         # Phase 8 §8.7 + §8.8 — sec maint.
         _bounded("maint_sec_pattern_ttl_s", self.maint_sec_pattern_ttl_s, 1, 31_536_000)
         _bounded("maint_sec_pattern_promote_threshold", self.maint_sec_pattern_promote_threshold, 1, 1_000_000)
+        _bounded("maint_sec_pattern_pending_ttl_days", self.maint_sec_pattern_pending_ttl_days, 1, 3_650)
+        _bounded("maint_sec_allowlist_pending_ttl_days", self.maint_sec_allowlist_pending_ttl_days, 1, 3_650)
         _bounded("maint_sec_request_lru", self.maint_sec_request_lru, 1, 1_000_000)
         _bounded("maint_sec_decimate_min_interval_s", self.maint_sec_decimate_min_interval_s, 1, 86_400)
         _bounded("maint_dlq_backlog_alert", self.maint_dlq_backlog_alert, 1, 100_000_000)
+        _bounded("maint_dlq_replay_rps", self.maint_dlq_replay_rps, 1, 100_000)
 
         # Phase 8 §8.10 — pause/resume.
         _bounded("maint_pause_default_ttl_s", self.maint_pause_default_ttl_s, 1, 604_800)
+        _bounded("maint_pause_max_ttl_s", self.maint_pause_max_ttl_s, self.maint_pause_default_ttl_s, 604_800)
         _bounded("maint_silence_dedup_s", self.maint_silence_dedup_s, 1, 86_400)
         _bounded("maint_silence_alert_h", self.maint_silence_alert_h, 1, 720)
         _bounded("maint_silence_warmup_s", self.maint_silence_warmup_s, 60, 86_400)
         _bounded("maint_self_dlq_alert", self.maint_self_dlq_alert, 1, 1_000_000)
+        _bounded("maint_self_dlq_growth_alert", self.maint_self_dlq_growth_alert, 1, 100_000)
+        _bounded("maint_self_dlq_throttle_recovery_s", self.maint_self_dlq_throttle_recovery_s, 1, 3_600)
+        _bounded("maint_plane_lag_alert_ms", self.maint_plane_lag_alert_ms, 100, 300_000)
+        _bounded("maint_plane_lag_alert_window_s", self.maint_plane_lag_alert_window_s, 1, 3_600)
+        _bounded("maint_plane_recovery_window_s", self.maint_plane_recovery_window_s, 1, 3_600)
+        # Phase 8 §8.9 — bus circuit-breaker.
+        _bounded("maint_bus_fail_threshold", self.maint_bus_fail_threshold, 1, 100)
+        _bounded("maint_bus_fail_window_s", self.maint_bus_fail_window_s, 1.0, 3_600.0)
+        _bounded("maint_bus_spool_max_entries", self.maint_bus_spool_max_entries, 1, 100_000)
+        _bounded("maint_agent_spool_max_entries", self.maint_agent_spool_max_entries, 1, 100_000)
 
         # Phase 8 §8.11 — backpressure.
         _bounded("maint_backpressure_yellow_factor", self.maint_backpressure_yellow_factor, 1.0, 1_000.0)
@@ -1507,11 +1712,22 @@ class Config:
         _bounded("maint_backup_age_alert_h", self.maint_backup_age_alert_h, 1, 8760)
         _bounded("maint_backup_clock_step_back_alert_s", self.maint_backup_clock_step_back_alert_s, 1, 86_400)
         _bounded("maint_backup_pg_jobs", self.maint_backup_pg_jobs, 1, 64)
+        _bounded("maint_backup_pg_conn_limit", self.maint_backup_pg_conn_limit, 0, 10_000)
         _bounded("maint_backup_prune_batch", self.maint_backup_prune_batch, 1, 1_000_000)
+        _bounded("maint_backup_prune_max_lock_ms", self.maint_backup_prune_max_lock_ms, 1, 300_000)
         _bounded("maint_schema_snapshot_retention_days", self.maint_schema_snapshot_retention_days, 1, 3650)
         _bounded("swarm_dlq_pg_retention_days", self.swarm_dlq_pg_retention_days, 1, 3650)
         _bounded("maint_audit_retention_days", self.maint_audit_retention_days, 1, 3650)
+        try:
+            import json as _json
+            _json.loads(self.maint_audit_retention_days_overrides)
+        except (ValueError, TypeError):
+            issues.append(
+                "maint_audit_retention_days_overrides must be a valid JSON object "
+                f"(got {self.maint_audit_retention_days_overrides!r})"
+            )
         _bounded("maint_backup_min_dr_recipients", self.maint_backup_min_dr_recipients, 1, 64)
+        _bounded("maint_backup_pvc_size_gb", self.maint_backup_pvc_size_gb, 1, 65_536)
         # Refuse `*-latest` style verify-image tags — CLAUDE.md doctrine.
         if str(self.maint_backup_verify_pg_image).endswith(":latest") or self.maint_backup_verify_pg_image.endswith("-latest"):
             issues.append(

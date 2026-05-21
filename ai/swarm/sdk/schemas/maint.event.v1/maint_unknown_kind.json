@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/maint_unknown_kind",
+  "title": "maint.event.v1{kind=maint_unknown_kind}",
+  "description": "Phase 8 §8.0 forward-compat: emitted by a maint agent when it receives a maint.event.v1 envelope with an unknown kind (rolling-upgrade scenario). Debounced per-kind. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "unknown_kind"],
+  "properties": {
+    "kind":                { "const": "maint_unknown_kind" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "unknown_kind":        { "type": "string", "minLength": 1 },
+    "source":              { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

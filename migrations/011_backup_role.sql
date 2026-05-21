@@ -20,3 +20,8 @@ $$;
 -- on every table in every schema, including future tables. This
 -- is exactly what `pg_dump` needs — read-only, no DDL, no DML.
 GRANT pg_read_all_data TO negelir_backup;
+
+-- pg_catalog USAGE lets pg_dump read system-catalog tables that
+-- describe the schema (pg_class, pg_attribute, pg_type, etc.).
+-- Without this grant, pg_dump falls back to superuser-only paths.
+GRANT USAGE ON SCHEMA pg_catalog TO negelir_backup;

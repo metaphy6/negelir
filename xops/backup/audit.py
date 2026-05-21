@@ -153,6 +153,42 @@ def last_completed_today(
     return last
 
 
+def last_completed_fire_window_id_today(
+    audit_path: Path, *, today: datetime
+) -> str | None:
+    """Return the ``fire_window_id`` of the most recent ``ok`` /
+    ``dry_run`` row dated ``today`` (UTC), or ``None``.
+
+    Used at agent boot alongside :func:`last_completed_today` to
+    cross-check the checksum for the seeded fire_window_id
+    (§8.9 kill-9 mid-dump guard: audit says ok but checksum missing
+    → re-fire instead of falsely considering today done).
+    """
+
+    if today.tzinfo is None:
+        today = today.replace(tzinfo=timezone.utc)
+    today_date = today.astimezone(timezone.utc).date().isoformat()
+    last_ts: datetime | None = None
+    last_fwid: str | None = None
+    for row in _read_rows(audit_path):
+        outcome = row.get("outcome", "")
+        if outcome not in ("ok", "dry_run"):
+            continue
+        ts_str = row.get("wall_clock_utc", "")
+        if not ts_str.startswith(today_date):
+            continue
+        try:
+            ts = datetime.fromisoformat(ts_str)
+        except ValueError:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if last_ts is None or ts > last_ts:
+            last_ts = ts
+            last_fwid = row.get("fire_window_id", "")
+    return last_fwid if last_fwid else None
+
+
 def last_verified_today(
     audit_path: Path, *, today: datetime
 ) -> datetime | None:
@@ -190,5 +226,6 @@ __all__ = [
     "AuditRow",
     "append_row",
     "last_completed_today",
+    "last_completed_fire_window_id_today",
     "last_verified_today",
 ]

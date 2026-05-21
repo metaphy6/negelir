@@ -26,6 +26,13 @@ Decision discipline (binding):
 * Throttle: at most ``cfg.maint_scaler_max_changes_per_window``
   scale_decisions per window across the whole roster — additional
   candidates emit ``scale_throttled`` and wait one window.
+* Restart idempotency caveat (v1): the first 1–2 windows after a
+  process restart may produce a duplicate ``scale_decision`` because
+  the new :attr:`_pod_instance_id` makes every ``decision_window_id``
+  unique while the window clock may still overlap the pre-restart
+  process's active window.  This is an accepted v1 limitation;
+  the Postgres audit ledger at Phase 9 absorbs collisions via
+  ``(agent, decision_window_id)`` dedup on ingest.
 """
 from __future__ import annotations
 
@@ -45,6 +52,8 @@ from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
+from ._liveness import LivenessMixin
 from .runtime import NoopController, RuntimeController  # re-exported
 
 _log = logging.getLogger("swarm.agents.maint.scaler")
@@ -102,6 +111,7 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     "min_replicas_floor",
     "hysteresis_block",
     "manual_pin_active",
+    "manual_pause",
     "max_changes_per_window",
     "min_decision_interval",
     "global_max_replicas",
@@ -112,6 +122,9 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     # below the down-scale threshold but the consecutive-low-windows
     # streak has not yet reached cfg.maint_scaler_scale_down_grace_windows).
     "scale_down_grace",
+    # Phase 8 §8.11 — maint-plane lag backpressure shedding.
+    "backpressure_tier1",
+    "backpressure_tier2",
 })
 
 
@@ -332,7 +345,7 @@ class _TargetState:
 
 
 # ── Agent ───────────────────────────────────────────────────────────────
-class MaintScaler:
+class MaintScaler(LivenessMixin):
     """`maint.scaler.v1` reactor.
 
     Subscribes ``maint.event.v1`` (kind=manual_scale_pin / maint_pause /
@@ -353,6 +366,7 @@ class MaintScaler:
         clock_iso: Callable[[], str] | None = None,
         clock_ns: Callable[[], int] | None = None,
         new_id: Callable[[], str] | None = None,
+        liveness_clock: Callable[[], float] | None = None,
     ) -> None:
         self._controller = controller if controller is not None else NoopController()
         self._leader = leader if leader is not None else SingleProcessLeader(name=self.name)
@@ -379,6 +393,10 @@ class MaintScaler:
         # envelopes do not double-emit warm-up scale_decisions.
         self._warmup_seen: "OrderedDict[str, None]" = OrderedDict()
         self._warmup_seen_max: int = 1024
+        # §8.9 forward-compat: per-unknown-kind dedup set so we emit
+        # maint_unknown_kind exactly once per unknown kind per process
+        # lifetime (debounced per ROADMAP §8.9 DoD).
+        self._unknown_kinds_seen: set[str] = set()
         # §8.2 VRAM accounting — a tiny in-memory probe map
         # ``{target: {vram_total_mb, vram_used_mb, vram_per_replica_mb,
         # observed_at_ns}}``. Populated externally via
@@ -437,6 +455,15 @@ class MaintScaler:
         # one alert per orphan per process. Populated by
         # :meth:`report_registered_agents`.
         self._orphan_cfg_alerted: set[str] = set()
+        # Phase 8 §8.9 DoD — bounded global decision history.
+        # Insertion-ordered map: decision_window_id → record dict.
+        # Oldest entry evicted when len exceeds _history_max (LRU
+        # by insertion order). Keyed on decision_window_id so that
+        # a replay of the same window (restart-restart race) keeps
+        # the latest record rather than duplicating.
+        self._history_max: int = max(1, int(_cfg.maint_scaler_history_max))
+        self._decision_history: "OrderedDict[str, dict]" = OrderedDict()
+        self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -452,6 +479,13 @@ class MaintScaler:
             return list(self._handle_pause(msg, payload, paused=False))
         if kind == "retrain_request":
             return list(self._handle_retrain_request(msg, payload))
+        # §8.9 forward-compat: unknown kind in a redelivered envelope
+        # (rolling-upgrade downgrade scenario). Emit a debounced
+        # maint_unknown_kind notification — never blanket-reject.
+        if kind and kind not in KNOWN_MAINT_EVENT_KINDS:
+            if kind not in self._unknown_kinds_seen:
+                self._unknown_kinds_seen.add(kind)
+                return (self._notify_unknown_kind(str(kind)),)
         return ()
 
     # ── manual_scale_pin ──────────────────────────────────────────
@@ -595,18 +629,49 @@ class MaintScaler:
         )
 
     # ── Periodic decision tick (not bus-driven) ──────────────────
-    def tick(self, signals: dict[str, dict[str, float]]) -> list[Message]:
+    def tick(self, signals: dict[str, dict[str, float]], *, lag_tier: int = 0) -> list[Message]:
         """Evaluate signals and emit at most
         ``cfg.maint_scaler_max_changes_per_window`` scale decisions.
 
         ``signals`` is ``{target: {queue_depth, in_flight, head_age_s}}``.
+        ``lag_tier`` is the current maint-plane lag tier (0 = healthy;
+        1 = non-emergency scale-downs suppressed; 2 = all scale-downs paused;
+        3 = observer-only, no output). Set by the bootstrap loop from
+        :class:`MaintLagWatchdog.tier` (§8.11).
         Returns the list of messages to publish.
         """
+        # Phase 8 §8.11 — tier-3: observer-only, emit nothing.
+        if lag_tier >= 3:
+            return []
         if self._pause.paused or self._pause.self_isolated or not self._leader.is_leader():
             # Honour TTL — re-check post-expiry once per tick.
-            self._pause.expire_if_due(self._now_ns())
-            if self._pause.paused or self._pause.self_isolated or not self._leader.is_leader():
-                return []
+            if self._pause.expire_if_due(self._now_ns()):
+                # TTL fired → emit maint_resumed; scale decisions resume next tick.
+                return [self._notify_agent_event("maint_resumed")]
+            if self._pause.paused and self._leader.is_leader():
+                # Leader but in planned pause: emit scale_throttled per signal
+                # target so operators can observe that decisions are held back
+                # during the pause window (mirrors the manual_pin_active path).
+                window_id = self._window_id()
+                throttled: list[Message] = []
+                for target in signals:
+                    st = self._evict_and_get(target)
+                    throttled.append(self._notify(
+                        "scale_throttled",
+                        target=target,
+                        extra={
+                            "would_be": st.last_replicas,
+                            "reason": "manual_pause",
+                            "decision_window_id": window_id,
+                        },
+                    ))
+                    self._bump_counter("scale_throttled", "manual_pause")
+                    self._record_decision_metric(
+                        target, "manual_pause", _OUTCOME_THROTTLED
+                    )
+                return throttled
+            # self_isolated or non-leader: silent.
+            return []
         out: list[Message] = []
         # Expire stale pins first.
         out.extend(self._expire_pins())
@@ -664,6 +729,25 @@ class MaintScaler:
                         target=target,
                         extra=extra,
                     ))
+                continue
+            # Phase 8 §8.11 — lag backpressure shedding (tiers 1 and 2).
+            # Tier 1: suppress non-emergency scale-down decisions.
+            # Tier 2: suppress ALL scale-down decisions (entirely paused).
+            # Emergency paths (manual_pin, retrain_request_warmup) bypass
+            # tick() entirely and are unaffected.
+            if lag_tier >= 1 and decision < st.last_replicas:
+                shed_reason = "backpressure_tier2" if lag_tier >= 2 else "backpressure_tier1"
+                self._bump_counter("scale_throttled", shed_reason)
+                self._record_decision_metric(target, shed_reason, _OUTCOME_THROTTLED)
+                out.append(self._notify(
+                    "scale_throttled",
+                    target=target,
+                    extra={
+                        "would_be": decision,
+                        "reason": shed_reason,
+                        "decision_window_id": window_id,
+                    },
+                ))
                 continue
             # Time-based hysteresis (separate from per-window gate):
             # refuse two decisions inside ``min_decision_interval_s``
@@ -766,11 +850,29 @@ class MaintScaler:
                                            "controller_accepted": accepted,
                                            "decision_window_id": window_id,
                                            "signals": dict(sig)}))
+            prev_replicas = st.last_replicas
             roster_total = roster_total - (st.last_replicas or 0) + decision
             st.last_replicas = decision
             st.history.append(decision)
             st.last_window_ns = window_anchor
             st.last_decision_at_ns = now_ns
+            # Append to bounded global decision history (LRU by
+            # insertion order). Key is ``"<target>:<window_id>"`` so
+            # different targets in the same tick each get their own
+            # slot; a post-restart replay of the same (target,window)
+            # moves the existing entry to the tail (keep-latest).
+            history_key = f"{target}:{window_id}"
+            if history_key in self._decision_history:
+                self._decision_history.move_to_end(history_key)
+            self._decision_history[history_key] = {
+                "target": target,
+                "replicas": decision,
+                "prev": prev_replicas,
+                "reason": decision_reason,
+                "window_id": window_id,
+            }
+            while len(self._decision_history) > self._history_max:
+                self._decision_history.popitem(last=False)
             emitted += 1
         return out
 
@@ -1306,6 +1408,55 @@ class MaintScaler:
         }
         if extra:
             payload.update(extra)
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=MAINT_EVENT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=payload)
+
+    def _notify_agent_event(self, kind: str, *, extra: dict | None = None) -> Message:
+        """Emit an agent-scoped lifecycle event (maint_paused / maint_resumed).
+
+        Uses ``agent_id`` rather than ``target`` per the §8.9 sub-schema for
+        these kinds (no target: they are self-announcements).
+        """
+        payload: dict = {
+            "kind": kind,
+            "kind_schema_version": 1,
+            "agent_id": self.name,
+            "produced_at": self._clock_iso(),
+        }
+        if extra:
+            payload.update(extra)
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=MAINT_EVENT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=payload)
+
+    def _notify_unknown_kind(self, unknown_kind: str) -> Message:
+        """Emit maint_unknown_kind for a redelivery of an unrecognised kind.
+
+        Produces a payload that matches the maint_unknown_kind sub-schema
+        (no ``target`` field; ``kind_schema_version`` present) per §8.9.
+        """
+        payload: dict = {
+            "kind": "maint_unknown_kind",
+            "kind_schema_version": 1,
+            "produced_at": self._clock_iso(),
+            "unknown_kind": unknown_kind,
+            "source": self.name,
+        }
         env = Envelope(
             message_id=self._new_id(),
             trace_id=self._new_id(),

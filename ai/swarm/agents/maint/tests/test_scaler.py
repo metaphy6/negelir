@@ -68,9 +68,14 @@ def test_non_leader_no_decision_but_acks() -> None:
     assert any(m.envelope.topic == MAINT_ACK for m in out)
 
 
-def test_unrelated_kind_ignored() -> None:
+def test_unrelated_kind_emits_maint_unknown_kind() -> None:
+    """§8.9 forward-compat: an unrecognised kind must produce a debounced
+    maint_unknown_kind notification, never a silent empty result."""
     agent = MaintScaler()
-    assert list(agent.handle(_wrap({"kind": "bogus"}))) == []
+    out = list(agent.handle(_wrap({"kind": "bogus"})))
+    assert len(out) == 1
+    assert out[0].payload["kind"] == "maint_unknown_kind"
+    assert out[0].payload["unknown_kind"] == "bogus"
 
 
 def test_maint_pause_acks_when_target_matches() -> None:
@@ -324,6 +329,63 @@ def test_observability_metrics_cover_phase8_2_contract(monkeypatch) -> None:
     ) in snap
 
 
+def test_idempotent_at_most_one_decision_per_window_under_redelivery(monkeypatch) -> None:
+    """Phase 8.9 DoD — at-least-once redelivery idempotency.
+
+    Calling ``tick()`` twice within the same decision window (same
+    clock value → same window anchor) must produce exactly one
+    ``scale_decision`` per target.  The window guard in
+    :meth:`MaintScaler.tick` (``last_window_ns >= window_anchor``)
+    absorbs duplicate signals that arrive under at-least-once bus
+    redelivery semantics.
+
+    v1 restart note (per §8.9 DoD): the first 1–2 windows after a
+    process restart may double-publish because the new
+    ``pod_instance_id`` prefix makes the new ``decision_window_id``
+    unique while the window clock may still be in the same wall-clock
+    slot as the pre-restart process.  This is an accepted v1 edge case;
+    the Postgres audit ledger at Phase 9 absorbs the collision via
+    ``(agent, decision_window_id)`` dedup on ingest.
+    """
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_decision_window_ms", 10_000, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_min_decision_interval_s", 0, raising=False)
+
+    # Fixed clock: epoch + 15 s, inside a 10 s-wide window whose anchor is 10 s.
+    # window_anchor_ns(10_000, now_ns=15_000_000_000) = 10_000_000_000
+    # Using a non-zero anchor is essential: the default _TargetState.last_window_ns
+    # is 0, so an anchor of 0 would falsely satisfy the guard (0 >= 0 → skip).
+    ns: list[int] = [15_000_000_000]
+    agent = MaintScaler(clock_ns=lambda: ns[0])
+
+    signals = {"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+
+    # First delivery of the signal → must emit exactly one scale_decision.
+    out1 = agent.tick(signals)
+    decisions1 = [m.payload for m in out1 if m.payload.get("kind") == "scale_decision"]
+    assert len(decisions1) == 1, "first tick must emit exactly one scale_decision"
+    wid1 = decisions1[0]["decision_window_id"]
+    assert wid1 == f"{agent._pod_instance_id}:10000000000"
+
+    # Re-delivery at same clock (same window anchor) → must be suppressed.
+    out2 = agent.tick(signals)
+    decisions2 = [m.payload for m in out2 if m.payload.get("kind") == "scale_decision"]
+    assert len(decisions2) == 0, (
+        "redelivery within the same window must not double-emit scale_decision"
+    )
+
+    # Advance clock to the next window → fresh window → fresh decision.
+    # window_anchor_ns(10_000, now_ns=25_000_000_000) = 20_000_000_000
+    ns[0] = 25_000_000_000
+    out3 = agent.tick(signals)
+    decisions3 = [m.payload for m in out3 if m.payload.get("kind") == "scale_decision"]
+    assert len(decisions3) == 1, "next window must emit a fresh scale_decision"
+    wid3 = decisions3[0]["decision_window_id"]
+    assert wid3 != wid1, "window IDs must differ across distinct windows"
+    assert wid3 == f"{agent._pod_instance_id}:20000000000"
+
+
 def test_compose_controller_invokes_subprocess(tmp_path) -> None:
     """ComposeController must shell out to ``docker compose --scale``
     and surface the exit code."""
@@ -528,3 +590,76 @@ def test_clamp_formula_disabled_falls_back_to_step(monkeypatch) -> None:
     decisions = [m for m in out if m.payload.get("kind") == "scale_decision"]
     assert decisions
     assert decisions[0].payload["next"] == 2  # +1 step from default 1
+
+
+# ── Phase 8 §8.9 DoD: bounded global decision history ─────────────────
+
+def test_decision_history_records_decisions(monkeypatch) -> None:
+    """Every ``scale_decision`` emitted by ``tick`` is recorded in
+    ``_decision_history`` keyed by ``"<target>:<decision_window_id>"``."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 10, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 8, raising=False)
+    agent = MaintScaler()
+    out = agent.tick({"agentA": {"queue_depth": 50, "in_flight": 0, "head_age_s": 0}})
+    decisions = [m for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions, "expected a scale_decision to be emitted"
+    win_id = decisions[0].payload["decision_window_id"]
+    history_key = f"agentA:{win_id}"
+    assert history_key in agent._decision_history
+    entry = agent._decision_history[history_key]
+    assert entry["target"] == "agentA"
+    assert entry["replicas"] == decisions[0].payload["next"]
+    assert entry["prev"] == decisions[0].payload["prev"]
+    assert entry["reason"] == decisions[0].payload["reason"]
+
+
+def test_decision_history_lru_eviction(monkeypatch) -> None:
+    """Once ``_decision_history`` reaches ``_history_max`` entries the
+    oldest (first inserted) entry is evicted on the next insert."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_history_max", 3, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_signal_window_samples", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 32, raising=False)
+
+    agent = MaintScaler()
+
+    def _drive_decision(target: str, qd: int) -> str:
+        """Force a new window anchor so tick always emits, return history key."""
+        if target in agent._targets:
+            agent._targets[target].last_window_ns = 0
+        out = agent.tick({target: {"queue_depth": qd, "in_flight": 0, "head_age_s": 0}})
+        decisions = [m for m in out if m.payload.get("kind") == "scale_decision"]
+        assert decisions, f"expected scale_decision for {target}"
+        win_id = decisions[0].payload["decision_window_id"]
+        return f"{target}:{win_id}"
+
+    hk1 = _drive_decision("t1", 50)
+    hk2 = _drive_decision("t2", 50)
+    hk3 = _drive_decision("t3", 50)
+    # All three fit.
+    assert len(agent._decision_history) == 3
+    assert hk1 in agent._decision_history
+
+    # 4th entry must evict hk1 (oldest).
+    hk4 = _drive_decision("t4", 50)
+    assert len(agent._decision_history) == 3
+    assert hk1 not in agent._decision_history, "oldest entry must have been evicted"
+    assert hk4 in agent._decision_history
+
+
+def test_decision_history_cap_from_cfg(monkeypatch) -> None:
+    """``_history_max`` is derived from ``cfg.maint_scaler_history_max``
+    (default 1024); changing the cfg knob changes the cap."""
+    from common.config import cfg
+    monkeypatch.setattr(cfg, "maint_scaler_history_max", 7, raising=False)
+    agent = MaintScaler()
+    assert agent._history_max == 7
+
+
+def test_decision_history_default_cap_is_1024() -> None:
+    """Default ``maint_scaler_history_max`` in config must be 1024."""
+    from common.config import cfg
+    assert cfg.maint_scaler_history_max == 1024

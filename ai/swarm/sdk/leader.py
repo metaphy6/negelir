@@ -66,6 +66,101 @@ class SingleProcessLeader:
             self._shed = False
 
 
+class ControllableK8sLeader:
+    """Test-harness double for a K8s coordination-lease leader.
+
+    Simulates the real ``coordination.k8s.io/v1`` lease protocol
+    without an actual API server.  The renewal loop is **explicit**
+    (call :meth:`tick_renewal` from the test); the clock is
+    injectable so tests can advance simulated time without sleeping.
+
+    Lifecycle:
+    * ``__init__`` grants the lease immediately (expiry = now +
+      ``lease_duration_s``).
+    * :meth:`tick_renewal` renews when the API is healthy; does
+      nothing when :meth:`inject_api_failure` has been called.
+    * :meth:`is_leader` returns True iff current clock < expiry.
+    * :meth:`restore_api` re-enables renewal AND immediately renews,
+      simulating the pod that wins re-election after the API comes
+      back.
+    * :meth:`shed` expires the lease immediately (losing pod path,
+      equivalent to the K8s controller removing the Lease object).
+
+    This class is intentionally **not** exported in ``__all__`` so
+    production code cannot accidentally import it.  Test modules must
+    use the full dotted name
+    ``swarm.sdk.leader.ControllableK8sLeader``.
+    """
+
+    def __init__(
+        self,
+        *,
+        name: str = "controllable-k8s",
+        lease_duration_s: float = 15.0,
+        clock=None,
+    ) -> None:
+        import time as _time
+
+        self.name = name
+        self._lease_duration_s = lease_duration_s
+        self._clock = clock if clock is not None else _time.monotonic
+        self._lock = threading.Lock()
+        self._api_up = True
+        # Grant lease at construction time.
+        self._expiry: float = self._clock() + self._lease_duration_s
+
+    # ── lease protocol ──────────────────────────────────────────
+
+    def tick_renewal(self) -> None:
+        """Renew the lease if the K8s API is healthy.
+
+        In the real driver this fires on a background thread at
+        ``renew_deadline_s`` intervals.  In tests, call it manually
+        to represent an API round-trip.
+        """
+        with self._lock:
+            if self._api_up:
+                self._expiry = self._clock() + self._lease_duration_s
+
+    def inject_api_failure(self) -> None:
+        """Simulate ``coordination.k8s.io/v1`` returning 503.
+
+        Subsequent :meth:`tick_renewal` calls silently no-op.  The
+        lease will expire naturally when the clock advances past
+        ``_expiry``.
+        """
+        with self._lock:
+            self._api_up = False
+
+    def restore_api(self) -> None:
+        """Simulate the K8s API recovering.
+
+        The first pod to call this after recovery re-acquires the
+        lease immediately (models the pod that wins the post-API
+        re-election).
+        """
+        with self._lock:
+            self._api_up = True
+            self._expiry = self._clock() + self._lease_duration_s
+
+    # ── Leader protocol ─────────────────────────────────────────
+
+    def is_leader(self) -> bool:
+        with self._lock:
+            return self._clock() < self._expiry
+
+    def shed(self) -> None:
+        """Immediately expire the lease (models losing pod giving up
+        the lease before the K8s controller forcibly removes it)."""
+        with self._lock:
+            self._expiry = self._clock() - 1.0
+
+    def reacquire(self) -> None:
+        """Reacquire the lease without going through the API.
+        Test-only convenience alias for :meth:`restore_api`."""
+        self.restore_api()
+
+
 class KubernetesLeader:
     """Placeholder lease-driver for the Phase 14 Kubernetes deploy.
 
@@ -136,4 +231,6 @@ __all__ = [
     "SingleProcessLeader",
     "KubernetesLeader",
     "LEADER_REQUIRED_AGENTS",
+    # ControllableK8sLeader is intentionally absent from __all__ so
+    # production imports cannot accidentally pull it in.
 ]

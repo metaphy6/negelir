@@ -25,6 +25,7 @@ func TestEmbeddedAssetsByteIdenticalToCanonical(t *testing.T) {
 	}{
 		{"server/internal/sec/embedded/sec_rate_check.lua", "infra/redis/lua/sec_rate_check.lua"},
 		{"server/internal/sec/embedded/sec_denylist_mutate.lua", "infra/redis/lua/sec_denylist_mutate.lua"},
+		{"server/internal/sec/embedded/sec_denylist_decimate.lua", "infra/redis/lua/sec_denylist_decimate.lua"},
 		{"server/internal/sec/embedded/qa.request.v1.json", "ai/swarm/sdk/schemas/qa.request.v1.json"},
 		{"server/internal/sec/embedded/injection_patterns.yaml", "ai/common/security/injection_patterns.yaml"},
 		{"server/internal/sec/embedded/endpoint_costs.yaml", "ai/common/security/endpoint_costs.yaml"},
@@ -55,6 +56,9 @@ func TestEmbeddedConstantsNonEmpty(t *testing.T) {
 	}
 	if len(EmbeddedDenylistMutateLua) == 0 {
 		t.Fatal("EmbeddedDenylistMutateLua is empty")
+	}
+	if len(EmbeddedDecimateLua) == 0 {
+		t.Fatal("EmbeddedDecimateLua is empty")
 	}
 	if len(EmbeddedQARequestV1Schema) == 0 {
 		t.Fatal("EmbeddedQARequestV1Schema is empty")

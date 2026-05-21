@@ -323,18 +323,23 @@ phase8:
   maint_scaler_min_decision_interval_s: 90         # NEGELIR_MAINT_SCALER_MIN_DECISION_INTERVAL_S
   maint_scaler_vram_headroom_mb: 1024              # NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB
   maint_scaler_runtime_histogram_buckets: "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"  # NEGELIR_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS
+  maint_scaler_history_max: 1024                   # NEGELIR_MAINT_SCALER_HISTORY_MAX
+  maint_leader_lease_duration_s: 15               # NEGELIR_MAINT_LEADER_LEASE_DURATION_S
   # ── §8.5 maint.dlq.v1 ──
   maint_dlq_per_topic_quota: 100                   # NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA
   maint_dlq_replay_backoff_s: 60                   # NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S
   maint_dlq_backoff_lru: 1024                      # NEGELIR_MAINT_DLQ_BACKOFF_LRU
+  maint_dlq_backoff_factor: 2                      # NEGELIR_MAINT_DLQ_BACKOFF_FACTOR
+  maint_dlq_state_max: 100000                      # NEGELIR_MAINT_DLQ_STATE_MAX
   maint_dlq_replay_topics_allow_csv: ""           # NEGELIR_MAINT_DLQ_REPLAY_TOPICS_ALLOW_CSV
   maint_dlq_visit_max: 2                           # NEGELIR_MAINT_DLQ_VISIT_MAX
   maint_dlq_per_topic_max_per_min: 60              # NEGELIR_MAINT_DLQ_PER_TOPIC_MAX_PER_MIN
   maint_dlq_visit_lru: 4096                        # NEGELIR_MAINT_DLQ_VISIT_LRU
   # §8.13.5 C1 / C2 — round-robin replay budget + poison freeze.
   maint_dlq_max_replays_per_tick: 50               # NEGELIR_MAINT_DLQ_MAX_REPLAYS_PER_TICK
-  maint_dlq_poison_distinct_threshold: 5           # NEGELIR_MAINT_DLQ_POISON_DISTINCT_THRESHOLD
-  maint_dlq_poison_window_s: 600                   # NEGELIR_MAINT_DLQ_POISON_WINDOW_S
+  maint_dlq_consumer_broken_threshold: 5           # NEGELIR_MAINT_DLQ_CONSUMER_BROKEN_THRESHOLD
+  maint_dlq_consumer_broken_window_s: 600          # NEGELIR_MAINT_DLQ_CONSUMER_BROKEN_WINDOW_S
+  maint_dlq_replay_rps: 10                         # NEGELIR_MAINT_DLQ_REPLAY_RPS
   maint_dlq_backlog_alert: 1000                    # NEGELIR_MAINT_DLQ_BACKLOG_ALERT
   # ── §8.6 maint.schema.v1 ──
   maint_schema_sample_rate_per_s: 5                # NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S
@@ -349,15 +354,30 @@ phase8:
   # ── §8.7 + §8.8 maint.sec.v1 ──
   maint_sec_pattern_ttl_s: 604800                  # NEGELIR_MAINT_SEC_PATTERN_TTL_S
   maint_sec_pattern_promote_threshold: 1           # NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD
+  maint_sec_pattern_pending_ttl_days: 30           # NEGELIR_MAINT_SEC_PATTERN_PENDING_TTL_DAYS
+  maint_sec_allowlist_pending_ttl_days: 30          # NEGELIR_MAINT_SEC_ALLOWLIST_PENDING_TTL_DAYS  (Phase 8 DoD canonical name)
   maint_sec_request_lru: 2048                      # NEGELIR_MAINT_SEC_REQUEST_LRU
   maint_sec_decimate_min_interval_s: 300           # NEGELIR_MAINT_SEC_DECIMATE_MIN_INTERVAL_S
   # ── §8.10 broadcast pause/resume ──
   maint_pause_default_ttl_s: 600                   # NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S
+  maint_pause_max_ttl_s: 86400                     # NEGELIR_MAINT_PAUSE_MAX_TTL_S  (hard cap; default 24h)
   maint_silence_dedup_s: 300                       # NEGELIR_MAINT_SILENCE_DEDUP_S
   # §8.16 D2 — dead-mans-switch.
   maint_silence_alert_h: 24                        # NEGELIR_MAINT_SILENCE_ALERT_H
   maint_silence_warmup_s: 3600                     # NEGELIR_MAINT_SILENCE_WARMUP_S
   maint_self_dlq_alert: 100                        # NEGELIR_MAINT_SELF_DLQ_ALERT
+  maint_self_dlq_growth_alert: 50                  # NEGELIR_MAINT_SELF_DLQ_GROWTH_ALERT  (entries/min growth threshold)
+  maint_self_dlq_throttle_recovery_s: 120          # NEGELIR_MAINT_SELF_DLQ_THROTTLE_RECOVERY_S
+  # ── §8.11 consumer-lag watchdog ──
+  maint_plane_lag_alert_ms: 5000                   # NEGELIR_MAINT_PLANE_LAG_ALERT_MS
+  maint_plane_lag_alert_window_s: 60               # NEGELIR_MAINT_PLANE_LAG_ALERT_WINDOW_S
+  maint_plane_recovery_window_s: 120               # NEGELIR_MAINT_PLANE_RECOVERY_WINDOW_S
+  # ── §8.9 per-agent bus circuit-breaker ──
+  maint_bus_fail_threshold: 3                      # NEGELIR_MAINT_BUS_FAIL_THRESHOLD
+  maint_bus_fail_window_s: 30.0                    # NEGELIR_MAINT_BUS_FAIL_WINDOW_S
+  maint_bus_spool_max_entries: 1024                # NEGELIR_MAINT_BUS_SPOOL_MAX_ENTRIES
+  maint_agent_spool_dir: "data/maint/agent_spool"  # NEGELIR_MAINT_AGENT_SPOOL_DIR
+  maint_agent_spool_max_entries: 512               # NEGELIR_MAINT_AGENT_SPOOL_MAX_ENTRIES  (per-agent sub-spool cap)
   # ── §8.11 three-tier backpressure ──
   maint_backpressure_yellow_factor: 4.0            # NEGELIR_MAINT_BACKPRESSURE_YELLOW_FACTOR
   maint_backpressure_yellow_queue_depth: 200       # NEGELIR_MAINT_BACKPRESSURE_YELLOW_QUEUE_DEPTH
@@ -387,10 +407,13 @@ phase8:
   maint_backup_clock_step_back_alert_s: 300        # NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S
   maint_backup_clock_step_forward_alert_h: 24      # NEGELIR_MAINT_BACKUP_CLOCK_STEP_FORWARD_ALERT_H
   maint_backup_pg_jobs: 2                          # NEGELIR_MAINT_BACKUP_PG_JOBS
+  maint_backup_pg_conn_limit: 0                    # NEGELIR_MAINT_BACKUP_PG_CONN_LIMIT  (0=auto: pg_jobs+1; fail_safe_pg_conn_limit_too_low)
   maint_backup_prune_batch: 10000                  # NEGELIR_MAINT_BACKUP_PRUNE_BATCH
+  maint_backup_prune_max_lock_ms: 500              # NEGELIR_MAINT_BACKUP_PRUNE_MAX_LOCK_MS
   maint_schema_snapshot_retention_days: 90         # NEGELIR_MAINT_SCHEMA_SNAPSHOT_RETENTION_DAYS
   swarm_dlq_pg_retention_days: 14                  # NEGELIR_SWARM_DLQ_PG_RETENTION_DAYS
   maint_audit_retention_days: 365                  # NEGELIR_MAINT_AUDIT_RETENTION_DAYS
+  maint_audit_retention_days_overrides: '{"pii_erased": 2555}'  # NEGELIR_MAINT_AUDIT_RETENTION_DAYS_OVERRIDES  (per-kind overrides JSON)
   maint_backup_pg_dsn: ""                          # NEGELIR_MAINT_BACKUP_PG_DSN
   maint_backup_age_recipients_file: ""             # NEGELIR_MAINT_BACKUP_AGE_RECIPIENTS_FILE
   maint_backup_encryption_key_dir: ""              # NEGELIR_MAINT_BACKUP_ENCRYPTION_KEY_DIR
@@ -398,7 +421,28 @@ phase8:
   maint_backup_age_identity_file: ""               # NEGELIR_MAINT_BACKUP_AGE_IDENTITY_FILE
   maint_backup_verify_pg_image: "postgres:16-alpine"  # NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE
   maint_backup_verify_mode: "full"                 # NEGELIR_MAINT_BACKUP_VERIFY_MODE  (full | toc_only)
+  maint_backup_verify_orphan_ttl_h: 6.0            # NEGELIR_MAINT_BACKUP_VERIFY_ORPHAN_TTL_H
+  maint_backup_pvc_size_gb: 10                     # NEGELIR_MAINT_BACKUP_PVC_SIZE_GB  (K8s ephemeral PVC for restore-verify, Gi)
+  maint_backup_pii_excluded_columns: "quarantine_samples.raw_bytes_b64"  # NEGELIR_MAINT_BACKUP_PII_EXCLUDED_COLUMNS
+  maint_backup_pg_role: "negelir_backup"            # NEGELIR_MAINT_BACKUP_PG_ROLE  (fail_safe_wrong_pg_role / fail_safe_superuser gates)
   maint_backup_cold_verify_cron: "0 5 * * 0"       # NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON  (Sun 05:00 UTC)
+  maint_backup_verify_key_rotate_per_dump: true     # NEGELIR_MAINT_BACKUP_VERIFY_KEY_ROTATE_PER_DUMP  (§8.9 two-class encryption)
+  # ── ROADMAP §8.12 off-host replication ──────────────────────────────────────────────
+  maint_backup_offsite_target: "none"             # NEGELIR_MAINT_BACKUP_OFFSITE_TARGET  (none|s3)
+  maint_backup_offsite_endpoint: ""               # NEGELIR_MAINT_BACKUP_OFFSITE_ENDPOINT
+  maint_backup_offsite_bucket: ""                 # NEGELIR_MAINT_BACKUP_OFFSITE_BUCKET
+  maint_backup_offsite_multipart_threshold_mb: 64  # NEGELIR_MAINT_BACKUP_OFFSITE_MULTIPART_THRESHOLD_MB
+  maint_backup_offsite_bw_kbps: 0                 # NEGELIR_MAINT_BACKUP_OFFSITE_BW_KBPS  (0=unlimited)
+  maint_backup_offsite_upload_timeout_h: 6        # NEGELIR_MAINT_BACKUP_OFFSITE_UPLOAD_TIMEOUT_H
+  maint_backup_offsite_object_lock_days: 0        # NEGELIR_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_DAYS  (0=no WORM)
+  maint_backup_offsite_age_alert_h: 48            # NEGELIR_MAINT_BACKUP_OFFSITE_AGE_ALERT_H  (0=watchdog disabled)
+  maint_backup_offsite_retention_days: 7          # NEGELIR_MAINT_BACKUP_OFFSITE_RETENTION_DAYS
+  maint_backup_offsite_access_key_id: ""          # NEGELIR_MAINT_BACKUP_OFFSITE_ACCESS_KEY_ID
+  maint_backup_offsite_secret_access_key_secret_ref: ""  # NEGELIR_MAINT_BACKUP_OFFSITE_SECRET_ACCESS_KEY_SECRET_REF
+  maint_backup_offsite_s3_region: "us-east-1"    # NEGELIR_MAINT_BACKUP_OFFSITE_S3_REGION
+  maint_backup_offsite_rsync_host: ""             # NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_HOST
+  maint_backup_offsite_rsync_dest_path: ""        # NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_DEST_PATH
+  maint_backup_offsite_rsync_ssh_known_hosts: ""  # NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_SSH_KNOWN_HOSTS
 
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:

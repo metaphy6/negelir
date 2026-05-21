@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/pattern_allowlist_added",
+  "title": "maint.event.v1{kind=pattern_allowlist_added}",
+  "description": "Phase 8 §8.7 — notification emitted by maint.sec.v1 when a pattern has been activated (status='active') in the pattern_allowlist table. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "subject", "rule_id"],
+  "properties": {
+    "kind":                { "const": "pattern_allowlist_added" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "subject":             { "type": "string", "minLength": 1 },
+    "rule_id":             { "type": "string", "minLength": 1 },
+    "added_by":            { "type": "string" },
+    "expires_at":          { "type": "string" }
+  },
+  "additionalProperties": false
+}

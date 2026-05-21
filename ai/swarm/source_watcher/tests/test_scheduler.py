@@ -297,6 +297,7 @@ def test_summarizer_runs_only_for_non_empty_plans(history_root: Path) -> None:
             "summarizer_probe_url": "https://summarizer.local/health",
             "reachability_probe": lambda _u, _t: True,
             "summarizer_llm": llm,
+            "summarizer_ledger_path": str(history_root / "maint" / "summarizer_ledger.json"),
         },
     )
 

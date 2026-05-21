@@ -36,6 +36,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from ai.swarm.sdk import InMemoryBus
 from xops.opsctl._classify import ALWAYS_DESTRUCTIVE, ALWAYS_SAFE
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl.subcommands import (
@@ -370,6 +371,26 @@ class TestAllowlistShow(unittest.TestCase):
             args = _ns(target="has spaces", include_expired=False, dry_run=False)
             rc, _ = _capture(allowlist_show, args)
             self.assertEqual(rc, 64)
+
+    def test_live_run_exits_no_consumer_bus_empty(self) -> None:
+        # §8.9 second-pass proof: ops.allowlist-show is ALWAYS_SAFE (no token
+        # required) but its kind has no registered consumer yet.  The runner
+        # must exit 5 (no_consumer_for_kind) BEFORE calling bus.publish — the
+        # envelope must never appear on maint.event.v1.
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            bus = InMemoryBus()
+            args = _ns(target="all", include_expired=False, dry_run=False)
+            rc, _ = _capture(allowlist_show, args, bus=bus)
+            self.assertEqual(
+                rc,
+                int(ExitCode.NO_CONSUMER_FOR_KIND),
+                msg="expected exit 5 (no_consumer_for_kind)",
+            )
+            self.assertEqual(
+                bus.length("maint.event.v1"),
+                0,
+                msg="envelope must not be published to maint.event.v1 before ack set resolved",
+            )
 
 
 # ────────────────────────────────────────────────────────────────────

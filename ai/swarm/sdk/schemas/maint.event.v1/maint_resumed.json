@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/maint_resumed",
+  "title": "maint.event.v1{kind=maint_resumed}",
+  "description": "Phase 8 §8.10 — notification emitted by a maint.* agent after it successfully processes a `maint_resume` command (or after a TTL auto-resume). Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "agent_id"],
+  "properties": {
+    "kind":                { "const": "maint_resumed" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "agent_id":            { "type": "string", "minLength": 1 },
+    "target":              { "type": "string", "minLength": 1 },
+    "request_id":          { "type": "string" },
+    "reason":              { "type": "string", "enum": ["operator_request", "ttl_expired"] }
+  },
+  "additionalProperties": false
+}

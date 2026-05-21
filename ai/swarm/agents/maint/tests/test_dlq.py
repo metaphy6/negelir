@@ -285,8 +285,8 @@ def test_poison_pattern_freezes_topic_after_threshold(monkeypatch) -> None:
     monkeypatch.setattr(cfg, "maint_dlq_backoff_lru", 0, raising=False)
     monkeypatch.setattr(cfg, "maint_dlq_per_topic_max_per_min", 1000, raising=False)
     monkeypatch.setattr(cfg, "maint_dlq_visit_max", 1, raising=False)
-    monkeypatch.setattr(cfg, "maint_dlq_poison_distinct_threshold", 3, raising=False)
-    monkeypatch.setattr(cfg, "maint_dlq_poison_window_s", 600, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_consumer_broken_threshold", 3, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_consumer_broken_window_s", 600, raising=False)
     agent = MaintDlqSupervisor()
     broken = []
     for i in range(3):
@@ -338,8 +338,8 @@ def test_poison_window_expiry_resets_count(monkeypatch) -> None:
     """Escalations older than the window must be pruned so a slow
     burst below threshold does not eventually freeze the topic."""
     from common.config import cfg
-    monkeypatch.setattr(cfg, "maint_dlq_poison_distinct_threshold", 3, raising=False)
-    monkeypatch.setattr(cfg, "maint_dlq_poison_window_s", 10, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_consumer_broken_threshold", 3, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_consumer_broken_window_s", 10, raising=False)
     now = [1000.0]
     agent = MaintDlqSupervisor(clock_s=lambda: now[0])
     # First 2 escalations at t=0..1
@@ -461,3 +461,251 @@ def test_tick_omitting_depths_preserves_v1_behaviour(monkeypatch) -> None:
     out = agent.tick(["a.dlq", "b.dlq"])
     assert all(m.envelope.topic != SEC_ALERT for m in out)
     assert agent._backlog_damped == {}  # noqa: SLF001
+
+
+# ── §8.9 DoD — idempotency / single-publication ──────────────────
+
+
+def test_dlq_replay_redelivery_no_second_downstream_emission() -> None:
+    """Negative test (§8.9 DoD idempotency bullet for maint.dlq.v1):
+
+    Replaying an already-accepted DLQ entry a second time (simulating
+    at-least-once bus redelivery) must NOT produce a second
+    ``dlq_replayed`` notification on the ``predict.vote → predict.final``
+    path.
+
+    Concretely:
+    - First delivery (attempt=1): accepted, one ``dlq_replayed`` emitted.
+    - Second delivery (attempt=2, same ``request_id``): backoff-dedup
+      gate fires, ack returned with ``accepted=False, reason=backoff_dedup``,
+      zero ``dlq_replayed`` emitted — the downstream path is NOT triggered
+      a second time.
+    """
+    agent = MaintDlqSupervisor()
+
+    def _make_msg(attempt: int) -> Message:
+        env = Envelope(
+            message_id="m-idempotency-dlq",
+            trace_id="t-idempotency",
+            topic=MAINT_EVENT,
+            producer="ops_console",
+            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            schema_version=1,
+            attempt=attempt,
+        )
+        return Message(
+            envelope=env,
+            payload={
+                "kind": "dlq_replay",
+                # Same request_id on both deliveries — identical logical op.
+                "request_id": "req-idempotency-001",
+                "client_id": "ops",
+                # The predict.vote → predict.final downstream path.
+                "target": "predict.vote.dlq",
+                "max_msgs": 5,
+                "produced_at": "2024-01-01T00:00:00+00:00",
+                "reason": "manual_replay",
+            },
+        )
+
+    # First delivery — must be accepted with one dlq_replayed.
+    out1 = list(agent.handle(_make_msg(attempt=1)))
+    replayed1 = [m for m in out1 if m.payload.get("kind") == "dlq_replayed"]
+    acks1 = [m.payload for m in out1 if m.envelope.topic == MAINT_ACK]
+    assert len(replayed1) == 1, "first delivery must emit exactly one dlq_replayed"
+    assert acks1 and acks1[0]["accepted"] is True
+
+    # Second delivery (bus redelivery, same request_id, attempt=2).
+    # Must NOT emit a second dlq_replayed — the downstream path must
+    # not be triggered again.
+    out2 = list(agent.handle(_make_msg(attempt=2)))
+    replayed2 = [m for m in out2 if m.payload.get("kind") == "dlq_replayed"]
+    acks2 = [m.payload for m in out2 if m.envelope.topic == MAINT_ACK]
+    assert replayed2 == [], (
+        "second delivery (redelivery) must not produce a second dlq_replayed "
+        "— downstream predict.vote path must not be triggered twice"
+    )
+    assert acks2 and acks2[0]["accepted"] is False
+    assert acks2[0]["reason"] == "backoff_dedup"
+
+
+# ── Phase 8 §8.9 DoD — _state LRU cap + cap-pressure alert ───────
+
+
+def test_state_map_lru_evicts_oldest_topic(monkeypatch) -> None:
+    """``_state`` must not grow beyond ``maint_dlq_state_max``.
+
+    With cap=3, inserting a 4th distinct topic evicts the oldest one
+    (insertion-order LRU). The 4th topic becomes the most-recent
+    entry; the first topic is gone.
+    """
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_dlq_state_max", 3, raising=False)
+    # Disable backoff LRU so each distinct request_id is accepted.
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_lru", 0, raising=False)
+
+    agent = MaintDlqSupervisor()
+    topics = [f"t{i}.dlq" for i in range(4)]
+    for i, t in enumerate(topics):
+        list(agent.handle(_wrap({
+            "kind": "dlq_replay",
+            "request_id": f"req-cap-{i}",
+            "client_id": "ops",
+            "target": t,
+            "produced_at": "2024-01-01T00:00:00+00:00",
+            "reason": "x",
+        })))
+
+    assert len(agent._state) == 3, "_state must be capped at 3"
+    assert "t0.dlq" not in agent._state, "oldest topic must have been evicted"
+    assert "t3.dlq" in agent._state, "newest topic must still be present"
+
+
+def test_state_map_cap_pressure_alert_fires_when_fill_rate_high(monkeypatch) -> None:
+    """Cap-pressure ``sec.alert.v1{kind=dlq_state_pressure}`` fires
+    when the evicted entry is younger than
+    ``backoff_s × backoff_factor × 3``.
+
+    Proof: cap=2, backoff_s=300, backoff_factor=2 → pressure window=1800s.
+    All inserts happen at the same simulated timestamp (all entries are
+    0 seconds old), so the eviction guard must fire on the 3rd insert.
+    """
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+
+    monkeypatch.setattr(cfg, "maint_dlq_state_max", 2, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_lru", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_backoff_s", 300, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_factor", 2, raising=False)
+
+    fixed_time = 5000.0
+    agent = MaintDlqSupervisor(clock_s=lambda: fixed_time)
+
+    pressure_alerts: list = []
+    for i in range(3):
+        out = list(agent.handle(_wrap({
+            "kind": "dlq_replay",
+            "request_id": f"req-pressure-{i}",
+            "client_id": "ops",
+            "target": f"p{i}.dlq",
+            "produced_at": "2024-01-01T00:00:00+00:00",
+            "reason": "x",
+        })))
+        pressure_alerts.extend(
+            m for m in out
+            if m.envelope.topic == SEC_ALERT
+            and m.payload.get("kind") == "dlq_state_pressure"
+        )
+
+    assert pressure_alerts, (
+        "at least one dlq_state_pressure alert must fire when the map "
+        "fills faster than the backoff window clears entries"
+    )
+    assert pressure_alerts[0].payload["severity"] == "warn"
+
+
+def test_state_map_no_pressure_alert_when_entries_are_old(monkeypatch) -> None:
+    """No cap-pressure alert when the evicted entry is OLDER than the
+    pressure window (fill rate is within normal backoff cadence).
+
+    Proof: cap=2, backoff_s=10, factor=2 → window=60s.
+    Insert t0 at time=0, then insert t1 at time=0 (at cap). Then insert t2
+    at time=1000 (well past the 60s window). The eviction of t0 at
+    time=1000 sees t0.last_run_at=0 → age=1000s > 60s → no alert.
+    """
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+
+    monkeypatch.setattr(cfg, "maint_dlq_state_max", 2, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_lru", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_replay_backoff_s", 10, raising=False)
+    monkeypatch.setattr(cfg, "maint_dlq_backoff_factor", 2, raising=False)
+
+    clock = [0.0]
+    agent = MaintDlqSupervisor(clock_s=lambda: clock[0])
+
+    # Insert t0 and t1 at time 0 (fills cap exactly).
+    for i in range(2):
+        list(agent.handle(_wrap({
+            "kind": "dlq_replay",
+            "request_id": f"req-old-{i}",
+            "client_id": "ops",
+            "target": f"old{i}.dlq",
+            "produced_at": "2024-01-01T00:00:00+00:00",
+            "reason": "x",
+        })))
+
+    # Advance clock well past the pressure window (60s).
+    clock[0] = 1000.0
+
+    # Insert t2 — evicts t0 (oldest). t0.last_run_at=0 → age=1000s > 60s.
+    out = list(agent.handle(_wrap({
+        "kind": "dlq_replay",
+        "request_id": "req-old-2",
+        "client_id": "ops",
+        "target": "old2.dlq",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+        "reason": "x",
+    })))
+
+    pressure = [
+        m for m in out
+        if m.envelope.topic == SEC_ALERT
+        and m.payload.get("kind") == "dlq_state_pressure"
+    ]
+    assert pressure == [], (
+        "no dlq_state_pressure alert must fire when evicted entry is older "
+        "than the backoff pressure window"
+    )
+
+
+# ── Phase 8 §8.9 DoD — loop-budget / heartbeat timing ───────────────
+
+
+def test_tick_loop_budget_10k_backlog_yields_within_heartbeat(
+    monkeypatch,
+) -> None:
+    """DLQ read loop yields back to heartbeat within ``swarm_heartbeat_sec``
+    even with 10k backlog entries (§8.9 DoD loop-budget test).
+
+    The ``tick()`` method must complete in < ``cfg.swarm_heartbeat_sec``
+    so the bootstrap loop can fire a heartbeat between ticks. This proves
+    the round-robin fair-share scheduler does not hold the event loop
+    hostage on a large backlog.
+
+    Asserts:
+    * elapsed wall-clock < swarm_heartbeat_sec (no missed heartbeat).
+    * Exactly 10k ``dlq_replayed`` notifications emitted (every topic
+      gets a fair-share slice — none silently dropped by the scheduler).
+    """
+    import time
+
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_dlq_replay_topics_allow_csv", "", raising=False)
+    # Set max_replays_per_tick high enough to cover all 10k topics so
+    # per-topic budget is at least 1 (per_topic = max(1, 10000 // 10000) = 1).
+    monkeypatch.setattr(cfg, "maint_dlq_max_replays_per_tick", 10_000, raising=False)
+
+    # 10k distinct DLQ topic names — none in RECURSION_DENY_SET, no
+    # prior rate-bucket state, so all are eligible.
+    active_topics = [f"predict.event.{i}.dlq" for i in range(10_000)]
+
+    agent = MaintDlqSupervisor()
+
+    start = time.monotonic()
+    out = agent.tick(active_topics)
+    elapsed = time.monotonic() - start
+
+    heartbeat_budget_s = max(1, int(cfg.swarm_heartbeat_sec))
+    assert elapsed < heartbeat_budget_s, (
+        f"tick() with 10k topics took {elapsed:.3f}s "
+        f"(budget: {heartbeat_budget_s}s = swarm_heartbeat_sec); "
+        "DLQ loop must yield within one heartbeat period"
+    )
+
+    replayed = [m for m in out if m.payload.get("kind") == "dlq_replayed"]
+    assert len(replayed) == 10_000, (
+        f"expected 10k dlq_replayed notifications, got {len(replayed)}"
+    )

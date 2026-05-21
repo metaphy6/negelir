@@ -100,6 +100,123 @@ class TestOpsctlBoundary(unittest.TestCase):
             msg=("xops/opsctl/ MUST NOT shell out to: " + repr(offenders)),
         )
 
+    # ── §8.9 boundary: opsctl topic publish + read discipline ────────────────
+
+    def test_opsctl_only_imports_maint_topics(self) -> None:
+        """opsctl may only import MAINT_EVENT and MAINT_ACK from
+        ai.swarm.agents.topics; no sec/predict/freshness/match symbols."""
+        ALLOWED_TOPIC_IMPORTS = frozenset({"MAINT_EVENT", "MAINT_ACK"})
+        offenders: list[tuple[str, str]] = []
+        for path in _iter_opsctl_py():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                mod = node.module or ""
+                if not (
+                    mod == "ai.swarm.agents.topics"
+                    or mod.endswith(".topics")
+                    and "swarm" in mod
+                ):
+                    continue
+                for alias in node.names:
+                    if alias.name not in ALLOWED_TOPIC_IMPORTS:
+                        offenders.append(
+                            (str(path.relative_to(OPSCTL_ROOT.parent)), alias.name)
+                        )
+        self.assertEqual(
+            offenders, [],
+            msg=(
+                "xops/opsctl/ may only import {MAINT_EVENT, MAINT_ACK} "
+                "from the topics module; forbidden import(s): " + repr(offenders)
+            ),
+        )
+
+    def test_opsctl_envelope_topic_is_maint_event(self) -> None:
+        """Every Envelope(topic=...) call in opsctl must use MAINT_EVENT_TOPIC
+        or MAINT_EVENT — never a forbidden prefix (sec/predict/freshness/match).
+        """
+        ALLOWED_NAMES = frozenset({"MAINT_EVENT_TOPIC", "MAINT_EVENT"})
+        FORBIDDEN_PREFIXES = ("sec.", "predict.", "freshness.", "match.")
+        offenders: list[tuple[str, str]] = []
+        for path in _iter_opsctl_py():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                # Look for Call nodes where the function is named "Envelope"
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                func_name = ""
+                if isinstance(func, ast.Name):
+                    func_name = func.id
+                elif isinstance(func, ast.Attribute):
+                    func_name = func.attr
+                if func_name != "Envelope":
+                    continue
+                # Find the 'topic' keyword argument
+                for kw in node.keywords:
+                    if kw.arg != "topic":
+                        continue
+                    val = kw.value
+                    if isinstance(val, ast.Name):
+                        # A named constant — must be in the allowed set
+                        if val.id not in ALLOWED_NAMES:
+                            offenders.append(
+                                (str(path.relative_to(OPSCTL_ROOT.parent)), val.id)
+                            )
+                    elif isinstance(val, ast.Constant) and isinstance(val.value, str):
+                        # A raw string literal — must not start with forbidden prefix
+                        if any(val.value.startswith(p) for p in FORBIDDEN_PREFIXES):
+                            offenders.append(
+                                (str(path.relative_to(OPSCTL_ROOT.parent)), val.value)
+                            )
+        self.assertEqual(
+            offenders, [],
+            msg=(
+                "Envelope(topic=...) in xops/opsctl/ must only publish on "
+                "maint.event.v1; forbidden topic(s) found: " + repr(offenders)
+            ),
+        )
+
+    def test_opsctl_bus_read_topic_is_maint_ack(self) -> None:
+        """Every bus.read(...) call in opsctl must use MAINT_ACK_TOPIC or
+        MAINT_ACK — never a forbidden prefix (sec/predict/freshness/match).
+        """
+        ALLOWED_NAMES = frozenset({"MAINT_ACK_TOPIC", "MAINT_ACK"})
+        FORBIDDEN_PREFIXES = ("sec.", "predict.", "freshness.", "match.")
+        offenders: list[tuple[str, str]] = []
+        for path in _iter_opsctl_py():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                # Match bus.read(...) or self.bus.read(...) patterns
+                if not (
+                    isinstance(func, ast.Attribute) and func.attr == "read"
+                ):
+                    continue
+                if not node.args:
+                    continue
+                first = node.args[0]
+                if isinstance(first, ast.Name):
+                    if first.id not in ALLOWED_NAMES:
+                        offenders.append(
+                            (str(path.relative_to(OPSCTL_ROOT.parent)), first.id)
+                        )
+                elif isinstance(first, ast.Constant) and isinstance(first.value, str):
+                    if any(first.value.startswith(p) for p in FORBIDDEN_PREFIXES):
+                        offenders.append(
+                            (str(path.relative_to(OPSCTL_ROOT.parent)), first.value)
+                        )
+        self.assertEqual(
+            offenders, [],
+            msg=(
+                "bus.read(...) in xops/opsctl/ must only read from maint.ack.v1; "
+                "forbidden topic(s) found: " + repr(offenders)
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/maint_silence_alert",
+  "title": "maint.event.v1{kind=maint_silence_alert}",
+  "description": "Phase 8 §8.16 D2 — dead-mans-switch audit row on maint.event.v1 when no maint.event.v1 has been observed for cfg.maint_silence_alert_h hours. Also dual-published on sec.alert.v1{kind=maint_silence_alert, severity=critical}. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "silence_s"],
+  "properties": {
+    "kind":                { "const": "maint_silence_alert" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "silence_s":           { "type": "number", "minimum": 0 },
+    "threshold_s":         { "type": "number", "minimum": 0 },
+    "reason":              { "type": "string" }
+  },
+  "additionalProperties": false
+}

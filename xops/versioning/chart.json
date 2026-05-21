@@ -3,40 +3,40 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.3.2",
-    "build": 109,
+    "version": "1.4.0",
+    "build": 15,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.8.13",
+      "version": "1.23.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-13T13:59:43+00:00"
+      "last_changed": "2026-05-21T09:49:23+00:00"
     },
     "server": {
-      "version": "1.6.2",
+      "version": "1.6.3",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-05-05T12:57:44+00:00"
+      "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.16.6",
+      "version": "3.22.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-13T14:21:57+00:00"
+      "last_changed": "2026-05-21T09:36:35+00:00"
     },
     "docs": {
-      "version": "1.57.12",
+      "version": "1.57.22",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-20T18:38:20+00:00"
+      "last_changed": "2026-05-21T09:27:42+00:00"
     },
     "infra_mock": {
-      "version": "1.4.2",
+      "version": "1.4.4",
       "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
-      "last_changed": "2026-04-28T08:41:52+00:00"
+      "last_changed": "2026-05-21T09:36:40+00:00"
     },
     "source_watcher": {
-      "version": "3.0.1",
+      "version": "3.0.3",
       "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
-      "last_changed": "2026-05-13T15:47:17+00:00"
+      "last_changed": "2026-05-21T06:01:41+00:00"
     },
     "datasource_scraper": {
       "version": "0.1.0",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.43.0",
+      "version": "0.45.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-13T15:28:53+00:00"
+      "last_changed": "2026-05-21T06:52:20+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -3462,6 +3462,978 @@
       "from": "1.57.11",
       "to": "1.57.12",
       "build": 109
+    },
+    {
+      "timestamp": "2026-05-20T18:51:37+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.7 PgAllowlistReader: REPEATABLE READ Postgres reader for sec.input.v1 allowlist cache",
+      "from": "1.8.13",
+      "to": "1.9.0",
+      "build": 110
+    },
+    {
+      "timestamp": "2026-05-20T19:06:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 DoD surface-coverage: maint agents + source-watcher SDK migration + opsctl verified",
+      "from": "1.9.0",
+      "to": "1.9.1",
+      "build": 111
+    },
+    {
+      "timestamp": "2026-05-20T19:22:52+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.9: enroll 18 maint.event.v1.kind + 2 sec.alert.v1.kind into open-enum registry; 18 sub-schemas; telemetry.v1 producer; bootstrap.py fixed",
+      "from": "1.9.1",
+      "to": "1.10.0",
+      "build": 112
+    },
+    {
+      "timestamp": "2026-05-20T19:27:42+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.9: maint.ack.v1 row added to §3.5 wire-authority table",
+      "from": "1.57.12",
+      "to": "1.57.13",
+      "build": 113
+    },
+    {
+      "timestamp": "2026-05-20T19:35:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: _python_reference_decimate + decimate embedded parity test",
+      "from": "1.10.0",
+      "to": "1.10.1",
+      "build": 114
+    },
+    {
+      "timestamp": "2026-05-20T19:35:11+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "8.9: EmbeddedDecimateLua embed + embedded_parity_test.go extended",
+      "from": "1.6.2",
+      "to": "1.6.3",
+      "build": 115
+    },
+    {
+      "timestamp": "2026-05-20T19:40:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.9: maint.scaler.v1 idempotency test + v1 restart caveat in docstring",
+      "from": "1.10.1",
+      "to": "1.10.2",
+      "build": 116
+    },
+    {
+      "timestamp": "2026-05-20T19:44:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 maint.backup.v1 idempotency: two-consecutive-missed-ticks coalesce test",
+      "from": "1.10.2",
+      "to": "1.10.3",
+      "build": 117
+    },
+    {
+      "timestamp": "2026-05-20T19:47:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9: dlq.v1 idempotency redelivery test",
+      "from": "1.10.3",
+      "to": "1.10.4",
+      "build": 118
+    },
+    {
+      "timestamp": "2026-05-20T19:50:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: maint.sec.v1 decimate hysteresis parallel-trigger test",
+      "from": "1.10.4",
+      "to": "1.10.5",
+      "build": 119
+    },
+    {
+      "timestamp": "2026-05-20T19:57:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "maint_scaler_history_max: bounded global decision history (1024 LRU)",
+      "from": "1.10.5",
+      "to": "1.10.6",
+      "build": 120
+    },
+    {
+      "timestamp": "2026-05-20T20:03:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: dlq._state capped at maint_dlq_state_max LRU; cap-pressure alert; 3 proof tests",
+      "from": "1.10.6",
+      "to": "1.10.7",
+      "build": 121
+    },
+    {
+      "timestamp": "2026-05-20T20:13:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: pattern_allowlist sweep impl + pending_ttl_days config key",
+      "from": "1.10.7",
+      "to": "1.10.8",
+      "build": 122
+    },
+    {
+      "timestamp": "2026-05-20T20:17:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9: DLQ loop-budget test — tick() 10k topic heartbeat guard",
+      "from": "1.10.8",
+      "to": "1.10.9",
+      "build": 123
+    },
+    {
+      "timestamp": "2026-05-20T20:32:01+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 BatchedPrunerStorage + maint_backup_prune_max_lock_ms config key",
+      "from": "1.10.9",
+      "to": "1.10.10",
+      "build": 124
+    },
+    {
+      "timestamp": "2026-05-20T20:43:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9: scaler cap triangle test + chaos-flap hysteresis test (test_chaos_flap_replicas), 9 tests",
+      "from": "1.10.10",
+      "to": "1.10.11",
+      "build": 125
+    },
+    {
+      "timestamp": "2026-05-20T20:54:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 scale-pin proof test: TTL expiry + runtime-mock no-call + TTL clamped assertions",
+      "from": "1.10.11",
+      "to": "1.10.12",
+      "build": 126
+    },
+    {
+      "timestamp": "2026-05-20T21:00:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 VRAM-budget refusal proof tests (scaler: stale/exceeded/cpu-only)",
+      "from": "1.10.12",
+      "to": "1.10.13",
+      "build": 127
+    },
+    {
+      "timestamp": "2026-05-20T21:14:20+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.9: mock-profile dry_run default + PII-aware dump TOC (pii_excluded_columns in backup_completed event + NoopDumpExecutor.dump_toc)",
+      "from": "1.10.13",
+      "to": "1.11.0",
+      "build": 128
+    },
+    {
+      "timestamp": "2026-05-20T21:20:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9: backup file 0600 + parent dir 0700 proof test",
+      "from": "1.11.0",
+      "to": "1.11.1",
+      "build": 129
+    },
+    {
+      "timestamp": "2026-05-20T21:35:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 backup ChecksumStore: post-fsync write, pre-restore gate, kill-9 boot guard",
+      "from": "1.11.1",
+      "to": "1.11.2",
+      "build": 130
+    },
+    {
+      "timestamp": "2026-05-20T21:43:47+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.9 maint_dlq_replay_rps per-second RPS cap + qa. DENY_PREFIX in dlq_replay + boundary tests",
+      "from": "1.11.2",
+      "to": "1.12.0",
+      "build": 131
+    },
+    {
+      "timestamp": "2026-05-20T21:43:56+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§8.9 qa. added to dlq_replay _DENY_PREFIXES",
+      "from": "3.16.6",
+      "to": "3.16.7",
+      "build": 132
+    },
+    {
+      "timestamp": "2026-05-20T21:46:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 no-coder guard: AST scan + module-absent test",
+      "from": "1.12.0",
+      "to": "1.12.1",
+      "build": 133
+    },
+    {
+      "timestamp": "2026-05-20T21:52:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 Detector C startup isolation gate + boot_c_map",
+      "from": "1.12.1",
+      "to": "1.12.2",
+      "build": 134
+    },
+    {
+      "timestamp": "2026-05-20T21:56:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 boundary: maint.event.v1 registry producer-set test",
+      "from": "1.12.2",
+      "to": "1.12.3",
+      "build": 135
+    },
+    {
+      "timestamp": "2026-05-20T22:00:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 maint.ack.v1 boundary tests: producer/consumer-set registry guards",
+      "from": "1.12.3",
+      "to": "1.12.4",
+      "build": 136
+    },
+    {
+      "timestamp": "2026-05-20T22:03:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 boundary: sec.denylist.v1 sole-producer test extended to Phase 8 maint agents",
+      "from": "1.12.4",
+      "to": "1.12.5",
+      "build": 137
+    },
+    {
+      "timestamp": "2026-05-20T22:07:21+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§8.9 opsctl topic-publish boundary tests",
+      "from": "3.16.7",
+      "to": "3.16.8",
+      "build": 138
+    },
+    {
+      "timestamp": "2026-05-20T22:09:20+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§8.9: opsctl AST-clean boundary confirmed; checkbox ticked",
+      "from": "3.16.8",
+      "to": "3.16.9",
+      "build": 139
+    },
+    {
+      "timestamp": "2026-05-20T22:11:19+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9: sec.py SQL-injection guard boundary test confirmed clean",
+      "from": "1.12.5",
+      "to": "1.12.6",
+      "build": 140
+    },
+    {
+      "timestamp": "2026-05-20T22:15:54+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "§8.9: summarizer boundary test extended to SDK-migrated path",
+      "from": "3.0.1",
+      "to": "3.0.2",
+      "build": 141
+    },
+    {
+      "timestamp": "2026-05-20T22:28:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 swarmctl visibility test: Phase 8 agents in ps + maint topics + DLQ streams in topics",
+      "from": "1.12.6",
+      "to": "1.12.7",
+      "build": 142
+    },
+    {
+      "timestamp": "2026-05-20T22:38:01+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 telemetry MAINT_ACK watch-set + per-consumer ack counters",
+      "from": "1.12.7",
+      "to": "1.12.8",
+      "build": 143
+    },
+    {
+      "timestamp": "2026-05-20T22:46:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 live-emission JSON-Schema validation test for all Phase 8 maint agents",
+      "from": "1.12.8",
+      "to": "1.12.9",
+      "build": 144
+    },
+    {
+      "timestamp": "2026-05-20T23:00:37+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 8.9: extended swarm.demo with ops.denylist-clear round-trip + dry-run",
+      "from": "3.16.9",
+      "to": "3.16.10",
+      "build": 145
+    },
+    {
+      "timestamp": "2026-05-20T23:02:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 DoD: dead-mans-switch maint_silence_alert bullet closed",
+      "from": "1.12.9",
+      "to": "1.12.10",
+      "build": 146
+    },
+    {
+      "timestamp": "2026-05-20T23:05:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9 tick: maint_backup_age_hours gauge + backup_age_alert proof tests",
+      "from": "1.12.10",
+      "to": "1.12.11",
+      "build": 147
+    },
+    {
+      "timestamp": "2026-05-20T23:11:30+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§8.9: phase12 chaos catalogue stubs for maint-plane (P12-8-A..O)",
+      "from": "1.57.13",
+      "to": "1.57.14",
+      "build": 148
+    },
+    {
+      "timestamp": "2026-05-20T23:17:02+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.9 second-pass: empty ack set rejected test added",
+      "from": "3.16.10",
+      "to": "3.16.11",
+      "build": 149
+    },
+    {
+      "timestamp": "2026-05-20T23:24:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: decision window post-restart scaler test",
+      "from": "1.12.11",
+      "to": "1.12.12",
+      "build": 150
+    },
+    {
+      "timestamp": "2026-05-20T23:31:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: K8s verify-Job orphan cleanup — boot sweep, verify_orphan_ttl_h config, 4 proof tests",
+      "from": "1.12.12",
+      "to": "1.12.13",
+      "build": 151
+    },
+    {
+      "timestamp": "2026-05-20T23:38:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: failed dump quarantine proof tests (test_phase8_9_failed_dump_quarantine.py)",
+      "from": "1.12.13",
+      "to": "1.12.14",
+      "build": 152
+    },
+    {
+      "timestamp": "2026-05-20T23:45:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: DLQ topic fairness proof tests",
+      "from": "1.12.14",
+      "to": "1.12.15",
+      "build": 153
+    },
+    {
+      "timestamp": "2026-05-21T00:06:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.9: DLQ poison-pattern consumer_likely_broken sec.alert + canonical config key rename + config_sync fixes",
+      "from": "1.12.15",
+      "to": "1.12.16",
+      "build": 154
+    },
+    {
+      "timestamp": "2026-05-21T00:12:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: DLQ payload-vs-schema discipline: _STRICT_PAYLOAD_TOPICS + dlq_meta_policy",
+      "from": "1.12.16",
+      "to": "1.12.17",
+      "build": 155
+    },
+    {
+      "timestamp": "2026-05-21T00:22:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: per-call summarizer cap tests (test_phase8_9_summarizer_cap.py)",
+      "from": "1.12.17",
+      "to": "1.12.18",
+      "build": 156
+    },
+    {
+      "timestamp": "2026-05-21T00:27:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: allowlist promote-while-evaluating race proof (RLock+_active_cache)",
+      "from": "1.12.18",
+      "to": "1.12.19",
+      "build": 157
+    },
+    {
+      "timestamp": "2026-05-21T00:29:50+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: decimate boundary cases tests verified green",
+      "from": "1.12.19",
+      "to": "1.12.20",
+      "build": 158
+    },
+    {
+      "timestamp": "2026-05-21T00:36:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: decimate cap-flag contention tests — exactly-once DEL, gateway subnet-mode fast-clear, Lua atomicity no-split-state",
+      "from": "1.12.20",
+      "to": "1.12.21",
+      "build": 159
+    },
+    {
+      "timestamp": "2026-05-21T00:49:38+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: MaintLagWatchdog + lag watchdog config keys + 11 proof tests",
+      "from": "1.12.21",
+      "to": "1.12.22",
+      "build": 160
+    },
+    {
+      "timestamp": "2026-05-21T01:01:51+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 8.9: BusCircuitBreaker per-agent spool + 3 config keys",
+      "from": "1.12.22",
+      "to": "1.13.0",
+      "build": 161
+    },
+    {
+      "timestamp": "2026-05-21T01:10:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: ControllableK8sLeader test double + leader split-brain proof tests",
+      "from": "1.13.0",
+      "to": "1.13.1",
+      "build": 162
+    },
+    {
+      "timestamp": "2026-05-21T01:10:49+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.9: leader split-brain checkbox ticked",
+      "from": "1.57.14",
+      "to": "1.57.15",
+      "build": 163
+    },
+    {
+      "timestamp": "2026-05-21T01:20:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: backup PG role enforcement (BackupRoleError + maint_backup_pg_role config key)",
+      "from": "1.13.1",
+      "to": "1.13.2",
+      "build": 164
+    },
+    {
+      "timestamp": "2026-05-21T01:44:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9: fail_safe_min_recipients gate + RecipientCounter injectable + 8 multi-recipient encryption proof tests",
+      "from": "1.13.2",
+      "to": "1.13.3",
+      "build": 165
+    },
+    {
+      "timestamp": "2026-05-21T01:54:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: backup_unencrypted debounced-daily emit on non-prod profile without encryption",
+      "from": "1.13.3",
+      "to": "1.13.4",
+      "build": 166
+    },
+    {
+      "timestamp": "2026-05-21T01:59:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: telemetry→sec.alert producer-kind boundary tests",
+      "from": "1.13.4",
+      "to": "1.13.5",
+      "build": 167
+    },
+    {
+      "timestamp": "2026-05-21T02:14:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.9: maint_unknown_kind redelivery handler in MaintScaler + per-kind shape proof tests",
+      "from": "1.13.5",
+      "to": "1.13.6",
+      "build": 168
+    },
+    {
+      "timestamp": "2026-05-21T02:21:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: Backup clock-skew proof tests (test_phase8_9_backup_clock_skew.py)",
+      "from": "1.13.6",
+      "to": "1.13.7",
+      "build": 169
+    },
+    {
+      "timestamp": "2026-05-21T02:35:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 PG conn-limit isolation: PgConnLimitChecker + fail_safe_pg_conn_limit_too_low boot gate",
+      "from": "1.13.7",
+      "to": "1.13.8",
+      "build": 170
+    },
+    {
+      "timestamp": "2026-05-21T02:52:19+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.9 two-class encryption: VerifyKeyRotator + per-dump verify key fingerprint rotation",
+      "from": "1.13.8",
+      "to": "1.14.0",
+      "build": 171
+    },
+    {
+      "timestamp": "2026-05-21T03:14:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.9 restore round-trip proof tests",
+      "from": "1.14.0",
+      "to": "1.14.1",
+      "build": 172
+    },
+    {
+      "timestamp": "2026-05-21T03:23:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 cold-verify storage-rot proof tests (ChecksumVerifier bit-flip)",
+      "from": "1.14.1",
+      "to": "1.14.2",
+      "build": 173
+    },
+    {
+      "timestamp": "2026-05-21T03:33:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.9 audit-log INSERT-only proof: AuditLogImmutableError + InMemoryImmutableAuditStore",
+      "from": "1.14.2",
+      "to": "1.14.3",
+      "build": 174
+    },
+    {
+      "timestamp": "2026-05-21T03:47:27+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 8.9: maint.ack.v1 payload cap integration proof test",
+      "from": "3.16.11",
+      "to": "3.16.12",
+      "build": 175
+    },
+    {
+      "timestamp": "2026-05-21T03:56:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: DLQ allow-list mid-replay — dynamic allow-list + in_flight_count notification",
+      "from": "1.14.3",
+      "to": "1.14.4",
+      "build": 176
+    },
+    {
+      "timestamp": "2026-05-21T04:06:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.9: pattern_allowlist partial-index plan proof test (EXPLAIN ANALYZE BUFFERS)",
+      "from": "1.14.4",
+      "to": "1.14.5",
+      "build": 177
+    },
+    {
+      "timestamp": "2026-05-21T04:23:35+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 8.9: off-host replication round-trip (§8.12) OffsiteBackupTarget Protocol + shims + agent wiring + 6 proof tests",
+      "from": "1.14.5",
+      "to": "1.15.0",
+      "build": 178
+    },
+    {
+      "timestamp": "2026-05-21T04:32:48+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.9 planned-pause symmetry: manual_pause in THROTTLE_REASONS, tick emits scale_throttled+maint_resumed",
+      "from": "1.15.0",
+      "to": "1.16.0",
+      "build": 179
+    },
+    {
+      "timestamp": "2026-05-21T04:35:31+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8 landing: 6 maint agents + maint.event.v1 + maint.ack.v1 topics shipped",
+      "from": "0.43.0",
+      "to": "0.44.0",
+      "build": 180
+    },
+    {
+      "timestamp": "2026-05-21T04:35:36+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8 landing: opsctl CLI shipped with full Phase 8 ops surface",
+      "from": "3.16.12",
+      "to": "3.17.0",
+      "build": 181
+    },
+    {
+      "timestamp": "2026-05-21T04:35:42+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "Phase 8 landing: restore-verify compose profile added",
+      "from": "1.4.2",
+      "to": "1.4.3",
+      "build": 182
+    },
+    {
+      "timestamp": "2026-05-21T04:49:35+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 8.9 triangle: 6 new maint cfg knobs (sec_allowlist_pending_ttl_days, pause_max_ttl_s, self_dlq_growth_alert, agent_spool_max_entries, audit_retention_days_overrides, backup_pvc_size_gb) added to config surface",
+      "from": "1.16.0",
+      "to": "1.17.0",
+      "build": 183
+    },
+    {
+      "timestamp": "2026-05-21T04:54:58+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.9: tick migrations/010_pattern_allowlist.sql (diverged — pattern TEXT key)",
+      "from": "1.57.15",
+      "to": "1.57.16",
+      "build": 184
+    },
+    {
+      "timestamp": "2026-05-21T04:58:48+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.9: tick migrations/011_backup_role.sql bullet",
+      "from": "1.57.16",
+      "to": "1.57.17",
+      "build": 185
+    },
+    {
+      "timestamp": "2026-05-21T05:11:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9: migration round-trip test (Detector B zero-drift + quarantine-meta CSV proof)",
+      "from": "1.17.0",
+      "to": "1.17.1",
+      "build": 186
+    },
+    {
+      "timestamp": "2026-05-21T05:19:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§8.9: SWARM.md roster updated with 6 maint agents + ownership notes",
+      "from": "1.57.17",
+      "to": "1.57.18",
+      "build": 187
+    },
+    {
+      "timestamp": "2026-05-21T05:25:30+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.9: SECURITY.md right-to-erasure + PII-aware backup policy sections",
+      "from": "1.57.18",
+      "to": "1.57.19",
+      "build": 188
+    },
+    {
+      "timestamp": "2026-05-21T05:33:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.9: CONFIGURATION.md gains Maintenance section for all Phase 8 cfg knobs",
+      "from": "1.57.19",
+      "to": "1.57.20",
+      "build": 189
+    },
+    {
+      "timestamp": "2026-05-21T05:35:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.9 CLAUDE.md scope table: patcher/Phase-8 boundary clarified",
+      "from": "1.57.20",
+      "to": "1.57.21",
+      "build": 190
+    },
+    {
+      "timestamp": "2026-05-21T05:56:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.9 reviewer fixes: schema backup_offsite_uploaded, enforce_permissions=False in restore tests, monkeypatch cfg isolation in e2e test",
+      "from": "1.17.1",
+      "to": "1.17.2",
+      "build": 191
+    },
+    {
+      "timestamp": "2026-05-21T06:01:41+00:00",
+      "component": "source_watcher",
+      "level": "patch",
+      "note": "fix test isolation: pin summarizer_ledger_path in test_summarizer_runs_only_for_non_empty_plans",
+      "from": "3.0.2",
+      "to": "3.0.3",
+      "build": 192
+    },
+    {
+      "timestamp": "2026-05-21T06:05:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "verifier fixes: audit.csv permissions + dlq_state_pressure in KNOWN_SEC_ALERT_KINDS",
+      "from": "1.17.2",
+      "to": "1.17.3",
+      "build": 193
+    },
+    {
+      "timestamp": "2026-05-21T06:20:42+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.10 liveness probes: heartbeat_age_s/is_alive/healthz_dict public surface on all 5 maint agents via LivenessMixin",
+      "from": "1.17.3",
+      "to": "1.18.0",
+      "build": 194
+    },
+    {
+      "timestamp": "2026-05-21T06:31:04+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.10 leader-election: Leader gate added to maint.backup.v1, maint.schema.v1, maint.sec.v1",
+      "from": "1.18.0",
+      "to": "1.19.0",
+      "build": 195
+    },
+    {
+      "timestamp": "2026-05-21T06:41:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.10 proof-tests: leader-election/dead-mans-switch/self-isolation/split-brain proof tests",
+      "from": "1.19.0",
+      "to": "1.19.1",
+      "build": 196
+    },
+    {
+      "timestamp": "2026-05-21T06:52:20+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 8.10 liveness/leader-election/proof-tests",
+      "from": "0.44.0",
+      "to": "0.45.0",
+      "build": 197
+    },
+    {
+      "timestamp": "2026-05-21T06:52:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.10 fixes",
+      "from": "1.19.1",
+      "to": "1.19.2",
+      "build": 198
+    },
+    {
+      "timestamp": "2026-05-21T07:12:53+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.11: lag shedding (tier 1/2/3) integrated into scaler, DLQ supervisor, schema sentinel",
+      "from": "1.19.2",
+      "to": "1.20.0",
+      "build": 199
+    },
+    {
+      "timestamp": "2026-05-21T07:17:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.11: tier-2 maint_plane_throttled emission + no-self-amplification tests",
+      "from": "1.20.0",
+      "to": "1.20.1",
+      "build": 200
+    },
+    {
+      "timestamp": "2026-05-21T07:31:26+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.11 per-agent DLQ growth-rate self-throttle (DlqSelfThrottle)",
+      "from": "1.20.1",
+      "to": "1.21.0",
+      "build": 201
+    },
+    {
+      "timestamp": "2026-05-21T07:31:26+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "§8.11 DlqSelfThrottle shipped",
+      "from": "1.3.2",
+      "to": "1.4.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-21T07:38:58+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§8.11 bus circuit-breaker: 30s fail window + maint_agent_spool_max_entries=512 + clock_s injectable",
+      "from": "1.21.0",
+      "to": "1.22.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-21T07:50:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.11 proof tests: 7 comprehensive scenario tests for all four backpressure mechanisms",
+      "from": "1.22.0",
+      "to": "1.22.1",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-21T08:12:17+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.12: OffsiteBackupTarget abstraction (S3/rsync_ssh/noop targets + pure-stdlib SigV4 signer)",
+      "from": "3.17.0",
+      "to": "3.18.0",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-05-21T08:21:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§8.12 bullet-2: offsite upload window — concurrent thread with hard timeout (maint_backup_offsite_upload_timeout_h), backup_offsite_failed{reason=timeout} emission",
+      "from": "1.22.1",
+      "to": "1.22.2",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-05-21T08:41:04+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§8.12 bullet-3: idempotent multipart resume in S3CompatibleTarget + concurrent upload order test fix",
+      "from": "3.18.0",
+      "to": "3.18.1",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-05-21T08:48:10+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.12: Object-Lock/WORM headers in S3CompatibleTarget",
+      "from": "3.18.1",
+      "to": "3.18.2",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-05-21T09:00:25+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.12: per-object integrity — upload_with_integrity + sidecar + S3 probe in xops/backup/offsite/integrity.py",
+      "from": "3.18.2",
+      "to": "3.19.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-05-21T09:09:55+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.12 offsite age gauge: offsite_age_hours() + maint_backup_offsite_age_hours telemetry + backup_age_alert/critical/scope=offsite watchdog",
+      "from": "1.22.2",
+      "to": "1.23.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-05-21T09:18:22+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.12 offsite retention: prune_offsite_objects() sweeper + OffsiteRetentionResult",
+      "from": "3.19.0",
+      "to": "3.20.0",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-05-21T09:27:42+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.12 DR drill cadence gauge + runbook + dr_drills.csv",
+      "from": "3.20.0",
+      "to": "3.21.0",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-05-21T09:27:42+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.12 dr_drill_runbook.md operator guide",
+      "from": "1.57.21",
+      "to": "1.57.22",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-05-21T09:35:42+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§8.12 boundary-discipline: secret_smoke.py + test_offsite_boundary.py",
+      "from": "3.21.0",
+      "to": "3.21.1",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-05-21T09:36:35+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 8.12: offsite backup replication in xops/backup/offsite/",
+      "from": "3.21.1",
+      "to": "3.22.0",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-05-21T09:36:40+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "Phase 8.12: MinIO compose profile for 8.9 proof tests",
+      "from": "1.4.3",
+      "to": "1.4.4",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-05-21T09:49:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix liveness test factory",
+      "from": "1.23.0",
+      "to": "1.23.1",
+      "build": 15
     }
   ]
 }

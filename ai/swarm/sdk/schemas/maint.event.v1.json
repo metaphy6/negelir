@@ -2,24 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/maint.event.v1",
   "title": "maint.event.v1",
-  "description": "Phase 6.3: drift agent → trainer/ops. Emitted when a predictor's rolling Brier/log-loss window breaches `cfg.drift_accuracy_floor`, or when a KS-test on input features rejects stationarity at `cfg.drift_pvalue`. Mirrors `ai/swarm/agents/payloads.py::MaintEvent`.",
+  "description": "Phase 6.3 + Phase 8: maintenance-plane event bus. `kind` is an open enum (ROADMAP §7.4/§8.9); per-kind sub-schemas live under `maint.event.v1/<kind>.json`. The base schema validates the envelope shape only; per-kind fields are validated by the sub-schema discriminated on `kind`.",
   "type": "object",
   "required": [
-    "kind",
-    "target",
-    "reason"
+    "kind"
   ],
   "properties": {
-    "kind":         { "type": "string", "enum": ["retrain_request", "recalibration_request"] },
-    "target":       { "type": "string", "minLength": 1, "description": "Predictor id (e.g. 'pred.elo.v1')." },
-    "reason":       { "type": "string", "enum": ["brier_floor", "logloss_floor", "feature_ks"] },
-    "league_id":    { "type": ["string", "null"] },
-    "market":       { "type": ["string", "null"] },
-    "metric":       { "type": "string" },
-    "metric_value": { "type": "number" },
-    "threshold":    { "type": "number" },
-    "sample_size":  { "type": "integer", "minimum": 0 },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "x-enum-open": true,
+      "description": "Open enum (ROADMAP §8.9). Producer-side closed set is KNOWN_MAINT_EVENT_KINDS in `ai/swarm/agents/maint/_ack_routing.py`; per-kind sub-schemas live under `ai/swarm/sdk/schemas/maint.event.v1/<kind>.json`."
+    },
+    "target":       { "type": "string", "minLength": 1 },
+    "reason":       { "type": "string" },
+    "request_id":   { "type": "string", "minLength": 1 },
+    "client_id":    { "type": "string", "minLength": 1 },
     "produced_at":  { "type": "string", "description": "ISO-8601 UTC." }
   },
-  "additionalProperties": false
+  "additionalProperties": true
 }

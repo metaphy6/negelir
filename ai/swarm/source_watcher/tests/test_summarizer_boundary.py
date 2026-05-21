@@ -34,15 +34,21 @@ from __future__ import annotations
 import ast
 import copy
 import inspect
+import textwrap
 from dataclasses import fields
+from pathlib import Path
 from typing import List
+from unittest.mock import patch
 
 import pytest
 
+from ai.swarm.source_watcher import scheduler as _scheduler_module
 from ai.swarm.source_watcher import summarizer as summarizer_module
+from ai.swarm.source_watcher.agent import SourceWatcherAgent
 from ai.swarm.source_watcher.classifier import classify
 from ai.swarm.source_watcher.differ import diff_json
 from ai.swarm.source_watcher.planner import UpdatePlan, plan
+from ai.swarm.source_watcher.scheduler import Tick
 from ai.swarm.source_watcher.summarizer import SummaryResult, summarize
 
 
@@ -95,7 +101,6 @@ def _scan_function_body(func) -> List[str]:
     src = inspect.cleandoc(src) if src.lstrip().startswith(("'''", '"""')) else src
     # ``inspect.getsource`` can return code indented inside its
     # enclosing block; ``ast.parse`` rejects that. Dedent to be safe.
-    import textwrap
     tree = ast.parse(textwrap.dedent(src))
 
     func_def = next(
@@ -272,3 +277,81 @@ def test_summarize_fallback_text_is_turkish() -> None:
     assert any(ch in _TURKISH_CHARS for ch in text), (
         f"deterministic fallback should be Turkish-language; got: {text!r}"
     )
+
+
+# ---------- 4. SDK-migrated path (SourceWatcherAgent) ----------------
+# The §8.4 boundary must hold when summarize() is called *through* the
+# SDK-integrated agent (_report_messages → summarize) rather than
+# directly. These three scenarios mirror §2 (disabled / healthy-LLM /
+# raising-LLM) and exercise the full on_heartbeat() call-chain.
+
+
+def _make_agent_for_boundary(
+    tmp_path: Path,
+    *,
+    summarizer_enabled: bool = False,
+    llm=None,
+) -> SourceWatcherAgent:
+    """Minimal SourceWatcherAgent configured for SDK boundary tests."""
+    return SourceWatcherAgent(
+        sources=["x.local"],
+        fetcher=lambda src: {},
+        snapshot_root=tmp_path / "snapshots",
+        summarizer_enabled=summarizer_enabled,
+        # Pinned model id required by _resolve_summarizer_enabled.
+        summarizer_model_id=(
+            "gpt-4o-mini-2024-07-18" if summarizer_enabled else ""
+        ),
+        summarizer_probe_url="http://localhost:0",
+        # Reachability probe bypassed for test isolation.
+        reachability_probe=lambda url, timeout: summarizer_enabled,
+        summarizer_ledger_path=str(tmp_path / "ledger.json"),
+        summarizer_llm=llm,
+    )
+
+
+@pytest.mark.parametrize("up", _make_plans())
+def test_sdk_agent_disabled_summarizer_does_not_mutate_plan(
+    tmp_path: Path, up: UpdatePlan
+) -> None:
+    """SDK-migrated path: disabled summarizer — plan unchanged after on_heartbeat()."""
+    snapshot = copy.deepcopy(up)
+    agent = _make_agent_for_boundary(tmp_path, summarizer_enabled=False)
+    tick = Tick(source="x.local", plan=up, skipped_reason=None)
+    with patch.object(_scheduler_module, "run_once", return_value=[tick]):
+        list(agent.on_heartbeat())
+    assert up == snapshot
+
+
+@pytest.mark.parametrize("up", _make_plans())
+def test_sdk_agent_enabled_healthy_llm_does_not_mutate_plan(
+    tmp_path: Path, up: UpdatePlan
+) -> None:
+    """SDK-migrated path: enabled summarizer + healthy LLM — plan unchanged."""
+    snapshot = copy.deepcopy(up)
+
+    def healthy(_p: UpdatePlan) -> str:
+        return "Kaynakta değişiklik tespit edildi."
+
+    agent = _make_agent_for_boundary(tmp_path, summarizer_enabled=True, llm=healthy)
+    tick = Tick(source="x.local", plan=up, skipped_reason=None)
+    with patch.object(_scheduler_module, "run_once", return_value=[tick]):
+        list(agent.on_heartbeat())
+    assert up == snapshot
+
+
+@pytest.mark.parametrize("up", _make_plans())
+def test_sdk_agent_enabled_raising_llm_does_not_mutate_plan(
+    tmp_path: Path, up: UpdatePlan
+) -> None:
+    """SDK-migrated path: enabled summarizer + raising LLM — plan unchanged."""
+    snapshot = copy.deepcopy(up)
+
+    def broken(_p: UpdatePlan) -> str:
+        raise RuntimeError("simulated LLM failure")
+
+    agent = _make_agent_for_boundary(tmp_path, summarizer_enabled=True, llm=broken)
+    tick = Tick(source="x.local", plan=up, skipped_reason=None)
+    with patch.object(_scheduler_module, "run_once", return_value=[tick]):
+        list(agent.on_heartbeat())
+    assert up == snapshot

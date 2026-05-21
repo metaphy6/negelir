@@ -1145,19 +1145,25 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "schema_auto_apply_misconfigured",
     # maint.storage.v1 (§8.13.2 cumulative storage cap)
     "maint_storage_pressure",
-    # maint.dlq.v1 (§8.5 backlog-pressure damping)
+    # maint.dlq.v1 (§8.5 backlog-pressure damping + state-cap pressure)
     "dlq_backlog_high",
+    "dlq_state_pressure",
     # xops.maint.advisory_lock (§8.15.3 hold-time guard)
     "maint_advisory_lock_held_long",
     # maint.backup.v1 (§8.3 scheduler skew + age watchdog +
-    # restore-verify failure)
+    # restore-verify failure + §8.9 unencrypted-in-non-prod warn)
     "backup_clock_skew",
     "backup_age_alert",
     "backup_verify_failed",
     "backup_disk_pressure",
+    "backup_unencrypted",
     # source.watcher.v1 (§8.4 summarizer startup downgrade)
     "summarizer_unreachable",
     "summarizer_cost_capped",
+    # maint.dlq.v1 (§8.5 / §8.9 consumer-broken poison-pattern detection)
+    "consumer_likely_broken",
+    # maint.* lag watchdog (§8.11 / §8.9 maint-plane lag tier alerts)
+    "maint_plane_lag_high",
 })
 
 

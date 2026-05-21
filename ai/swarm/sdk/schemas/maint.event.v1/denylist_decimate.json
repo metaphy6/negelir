@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/denylist_decimate",
+  "title": "maint.event.v1{kind=denylist_decimate}",
+  "description": "Phase 8 §8.8 — notification emitted by maint.sec.v1 after the Lua decimation sweep runs. Fields mirror the Lua return values. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "target"],
+  "properties": {
+    "kind":                { "const": "denylist_decimate" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "target":              { "type": "string", "minLength": 1, "description": "Subject prefix ('all' or a specific source id)." },
+    "decile_size":         { "type": "integer", "minimum": 0 },
+    "evicted_count":       { "type": "integer", "minimum": 0 },
+    "cap_cleared":         { "type": "boolean" },
+    "source":              { "type": "string", "enum": ["alert_trigger", "operator_request"] }
+  },
+  "additionalProperties": false
+}

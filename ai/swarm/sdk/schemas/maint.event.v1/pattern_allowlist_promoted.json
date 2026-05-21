@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/pattern_allowlist_promoted",
+  "title": "maint.event.v1{kind=pattern_allowlist_promoted}",
+  "description": "Phase 8 §8.7 — notification emitted by maint.sec.v1 when a pattern is promoted from 'pending' to 'active' via the ops.allowlist-approve command. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "subject", "rule_id"],
+  "properties": {
+    "kind":                { "const": "pattern_allowlist_promoted" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "subject":             { "type": "string", "minLength": 1 },
+    "rule_id":             { "type": "string", "minLength": 1 },
+    "promoted_by":         { "type": "string" },
+    "request_id":          { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

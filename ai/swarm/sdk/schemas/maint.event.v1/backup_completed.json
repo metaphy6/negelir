@@ -29,7 +29,9 @@
       }
     },
     "quarantined_dir":     { "type": ["string", "null"], "description": "On verify_failed, the renamed `<window>.failed/` dir; null when no on-disk dump existed." },
-    "dry_run":             { "type": "boolean" }
+    "dry_run":             { "type": "boolean" },
+    "pii_excluded_columns": { "type": "array", "items": { "type": "string" }, "description": "§8.9 PII-aware dump: list of table.column pairs excluded from the dump (populated from NEGELIR_MAINT_BACKUP_PII_EXCLUDED_COLUMNS)." },
+    "verify_key_fingerprint": { "type": "string", "description": "§8.9 two-class encryption: fingerprint of the per-dump ephemeral verify-class recipient keypair. Emitted on outcome=ok so operators can correlate the verify key to the dump." }
   },
   "additionalProperties": false
 }

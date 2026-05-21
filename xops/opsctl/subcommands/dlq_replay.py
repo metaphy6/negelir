@@ -30,7 +30,9 @@ KIND = "dlq_replay"
 
 # Mirrors ai.swarm.agents.maint.dlq.replay_policy.DENY_PREFIXES (kept
 # in sync via test_dlq_replay_policy_parity).
-_DENY_PREFIXES = ("maint.", "sec.", "auth.", "payment.", "patcher.")
+# qa.* added in Phase 8 §8.9 DoD: qa.request.v1.dlq is in
+# RECURSION_DENY_SET; operator must attest PII awareness.
+_DENY_PREFIXES = ("maint.", "sec.", "auth.", "payment.", "patcher.", "qa.")
 
 
 def add_parser(

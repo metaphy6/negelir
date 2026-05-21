@@ -35,7 +35,7 @@ import threading
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Protocol
+from typing import Any, Callable, Iterable, Protocol
 
 
 _log = logging.getLogger("swarm.agents.sec.allowlist")
@@ -181,3 +181,84 @@ class AllowlistCache:
             if version != self._version:
                 self._version = int(version)
                 self._keys = frozenset(keys)
+
+
+# ── Production Postgres reader ────────────────────────────────────
+class PgAllowlistReader:
+    """Production :class:`PatternAllowlistReader` backed by Postgres.
+
+    Each :meth:`read_active_snapshot` call opens a new connection via
+    ``conn_factory``, issues two SELECTs under
+    ``ISOLATION LEVEL REPEATABLE READ``, commits, then closes the
+    connection.  This satisfies the §8.7 snapshot-consistency binding:
+    a writer that commits between the two reads is invisible — the
+    reader sees the old version + old set OR the new version + new
+    set, never a half-applied state. The next
+    :class:`AllowlistCache` poll tick picks up any new state.
+
+    Parameters
+    ----------
+    conn_factory:
+        Zero-argument callable returning a new psycopg2 connection.
+        Called once per :meth:`read_active_snapshot` invocation; the
+        connection is committed and closed before the method returns,
+        or rolled back and closed on error. Connection pools should
+        wrap their ``getconn`` here.
+    """
+
+    # psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ == 2.
+    # Stored as a class attribute so tests can assert the value
+    # without importing psycopg2.extensions directly.
+    _ISOLATION_LEVEL: int = 2  # REPEATABLE READ
+
+    def __init__(self, conn_factory: Callable[[], Any]) -> None:
+        self._conn_factory = conn_factory
+
+    def read_active_snapshot(self) -> tuple[int, frozenset[str]]:
+        """Return ``(version, active_pattern_keys)`` under REPEATABLE READ.
+
+        Queries, in order, on the same connection and snapshot:
+
+        1. ``SELECT version FROM pattern_allowlist_meta``
+           ``WHERE singleton = 'x'``
+        2. ``SELECT pattern FROM pattern_allowlist``
+           ``WHERE state = 'a'``
+           ``AND (expires_at IS NULL OR expires_at > now())``
+
+        The ``pattern`` column stores the 16-char hex hit-fingerprint
+        produced by :func:`compute_pattern_key`.  Expired rows
+        (``state='e'``) and pending rows (``state='p'``) are
+        excluded by the SQL filter, so the returned frozenset only
+        contains currently-active suppressions.
+        """
+        conn = self._conn_factory()
+        try:
+            conn.set_isolation_level(self._ISOLATION_LEVEL)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT version FROM pattern_allowlist_meta"
+                    " WHERE singleton = 'x'"
+                )
+                row = cur.fetchone()
+                version = int(row[0]) if row is not None else 0
+                cur.execute(
+                    "SELECT pattern FROM pattern_allowlist"
+                    " WHERE state = 'a'"
+                    " AND (expires_at IS NULL OR expires_at > now())"
+                )
+                keys: frozenset[str] = frozenset(
+                    r[0] for r in cur.fetchall()
+                )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+        finally:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return version, keys

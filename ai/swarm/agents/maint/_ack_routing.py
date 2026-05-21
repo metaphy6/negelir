@@ -143,6 +143,36 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # `maint.ack.v1` for the originating `restore` envelope.
     "backup_restore_started":       frozenset(),
     "backup_restore_completed":     frozenset(),
+    # ── §8.9 / §8.3 additions (second-pass completeness) ─────────────
+    # Phase 8.3 backup watchdog + key rotation + offsite.
+    "backup_age_alert":             frozenset(),
+    "backup_key_rotated":           frozenset(),
+    "backup_offsite_uploaded":      frozenset(),
+    "backup_offsite_failed":        frozenset(),
+    "backup_verify_failed":         frozenset(),
+    "backup_verify_key_rotated":    frozenset(),
+    # Phase 8.8 sec.denylist decimate result + cap-cleared confirmation.
+    "denylist_decimate":            frozenset(),
+    "denylist_cap_cleared":         frozenset(),
+    # Phase 8.10 pause/resume acknowledgements emitted by maint agents
+    # after successfully processing the `maint_pause`/`maint_resume` cmd.
+    "maint_paused":                 frozenset(),
+    "maint_resumed":                frozenset(),
+    # Phase 8.11 maint-plane lag watchdog tier transitions.
+    "maint_plane_throttled":        frozenset(),
+    "maint_plane_recovered":        frozenset(),
+    # Phase 8.16 D2 dead-mans-switch notification (dual-published on both
+    # sec.alert.v1 and maint.event.v1 for audit trail purposes).
+    "maint_silence_alert":          frozenset(),
+    # Forward-compat: unknown kinds in redelivered envelopes after a
+    # downgrade drop here with a debounced audit notification.
+    "maint_unknown_kind":           frozenset(),
+    # Phase 8.7 pattern-allowlist lifecycle notifications from maint.sec.v1.
+    "pattern_allowlist_pending":    frozenset(),
+    "pattern_allowlist_added":      frozenset(),
+    "pattern_allowlist_promoted":   frozenset(),
+    # Phase 8.6 schema-sentinel / source-watcher drift notification.
+    "schema_drift_detected":        frozenset(),
 }
 
 # Kinds whose consumer set is empty BY DESIGN at this point in the
@@ -189,6 +219,25 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     # ROADMAP §8.3 operator-driven restore runbook (`ops.restore`).
     "backup_restore_started",
     "backup_restore_completed",
+    # §8.9 second-pass additions (see _ACK_ROUTING_TABLE).
+    "backup_age_alert",
+    "backup_key_rotated",
+    "backup_offsite_uploaded",
+    "backup_offsite_failed",
+    "backup_verify_failed",
+    "backup_verify_key_rotated",
+    "denylist_decimate",
+    "denylist_cap_cleared",
+    "maint_paused",
+    "maint_resumed",
+    "maint_plane_throttled",
+    "maint_plane_recovered",
+    "maint_silence_alert",
+    "maint_unknown_kind",
+    "pattern_allowlist_pending",
+    "pattern_allowlist_added",
+    "pattern_allowlist_promoted",
+    "schema_drift_detected",
 })
 
 # Stable, alphabetised view of all known kinds (test imports this).

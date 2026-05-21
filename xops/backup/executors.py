@@ -208,7 +208,7 @@ class LocalPgDumpExecutor:
     # without rows.
     exclude_quarantine_data: bool = True
 
-    def dump(self, *, fire_window_id: str, dry_run: bool) -> tuple[int, int]:
+    def dump(self, *, fire_window_id: str, dry_run: bool, pii_excluded: tuple[str, ...] = ()) -> tuple[int, int]:  # noqa: ARG002 — pii_excluded honours the Protocol; real exclusion via exclude_quarantine_data field
         """Run ``pg_dump`` then encrypt with ``age``.
 
         Returns ``(dump_bytes, encrypted_bytes)``. On ``dry_run=True``

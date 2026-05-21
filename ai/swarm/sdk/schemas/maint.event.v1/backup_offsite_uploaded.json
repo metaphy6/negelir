@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_offsite_uploaded",
+  "title": "maint.event.v1{kind=backup_offsite_uploaded}",
+  "description": "Phase 8 §8.12 — notification emitted by maint.backup.v1 after a successful offsite upload. Notification only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "fire_window_id", "uploaded_bytes", "manifest_checksum", "resumed_from_state"],
+  "properties": {
+    "kind":                { "const": "backup_offsite_uploaded" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "fire_window_id":      { "type": "string", "minLength": 0 },
+    "uploaded_bytes":      { "type": "integer", "minimum": 0, "description": "Total bytes transferred to the offsite target." },
+    "manifest_checksum":   { "type": "string", "description": "SHA-256 checksum of the uploaded manifest file; empty string when offsite target does not verify." },
+    "resumed_from_state":  { "type": "boolean", "description": "True when the upload resumed an interrupted multipart session." },
+    "backup_id":           { "type": "string", "minLength": 1, "description": "Deprecated — not emitted by the current agent; retained for schema evolution." },
+    "target":              { "type": "string", "minLength": 1, "description": "Offsite target id / path." },
+    "size_bytes":          { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

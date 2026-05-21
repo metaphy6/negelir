@@ -1,4 +1,4 @@
-"""Phase 8 §8.16 D2 — dead-mans-switch for the maintenance plane.
+"""Phase 8 §8.10 — dead-mans-switch for the maintenance plane.
 
 The bootstrap loop calls :meth:`MaintDeadmansSwitch.tick` on a timer
 (once a minute is plenty). The switch:

@@ -31,9 +31,17 @@ def _isolate_backup_dir(tmp_path_factory, monkeypatch):
     ``cfg.maint_backup_dir`` and replays it at boot \u2014 isolate every
     test so a prior run does not seed ``_last_completed_wall`` /
     ``_last_verified_wall`` and break the cold-start contracts
-    below."""
+    below.
+
+    Also set a dummy encryption_key_dir so the §8.9
+    backup_unencrypted debounced-daily warn does not pollute tests
+    that assert on specific sec.alert.v1 kinds.
+    """
     isolated = tmp_path_factory.mktemp("backup_dir_iso")
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(isolated), raising=False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_encryption_key_dir", "/test/keys", raising=False,
+    )
 
 
 @pytest.fixture
@@ -208,6 +216,7 @@ def test_metrics_snapshot_exposes_labelled_age_gauge(freezer):
     assert set(snap.keys()) == {
         'maint_backup_age_hours{verified="true"}',
         'maint_backup_age_hours{verified="false"}',
+        'maint_backup_offsite_age_hours',
     }
     # No qualifying dump yet → both labels report None (scrapers drop
     # the line; never substitute zero — that would falsely declare

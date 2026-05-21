@@ -62,21 +62,26 @@ What this slice DOES ship for the Scheduler bullet:
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Protocol
+from typing import Callable, Iterable, Iterator, Mapping, Protocol
 from uuid import uuid4
 
 from common.config import cfg as _cfg
 
 # pylint: disable=relative-beyond-top-level
+from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck, SecAlert
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
+from ._liveness import LivenessMixin
 
 # Importing the cron module fails-soft on the cfg-validation path
 # (early bootstrap) but is mandatory at agent construction — the
@@ -85,6 +90,7 @@ from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 from xops.backup.audit import (
     AuditRow,
     append_row as _append_audit_row,
+    last_completed_fire_window_id_today,
     last_completed_today,
     last_verified_today,
 )
@@ -167,6 +173,381 @@ class BackupConfigError(RuntimeError):
     """
 
 
+class BackupRoleError(RuntimeError):
+    """Raised at agent startup when the Postgres role the backup agent
+    is running as fails the §8.9 role-enforcement gate.
+
+    Two surface codes (carried in the exception message):
+
+    * ``fail_safe_wrong_pg_role`` — the current role is not
+      ``cfg.maint_backup_pg_role`` (default ``negelir_backup``).
+      A backup agent running as a superuser-adjacent role could
+      silently bypass row-security policies, so we refuse-to-start
+      rather than allowing a misconfigured deploy to proceed.
+    * ``fail_safe_superuser`` — the current role IS the expected
+      backup role but carries ``pg_catalog.pg_is_in_recovery()``-level
+      privileges (``is_superuser=True``). Superuser bypasses ALL RLS,
+      triggers, and ``SECURITY DEFINER`` guards — the backup agent must
+      never run as superuser.
+    """
+
+
+class OffsiteUnreachableError(RuntimeError):
+    """Raised by :class:`OffsiteBackupTarget.upload` when the off-host
+    target (S3, minio, etc.) cannot be contacted.
+
+    Distinct subclass so the agent state machine can emit
+    ``backup_offsite_failed`` + ``sec.alert.v1{severity=critical}``
+    without catching generic ``RuntimeError``.
+    """
+
+
+class WormEnforcementError(RuntimeError):
+    """Raised by :class:`OffsiteBackupTarget.upload` when the target
+    enforces S3 Object Lock (WORM) and an upload attempt would
+    overwrite an existing locked object.
+
+    Surfaces the WORM guarantee in the proof tests: callers must
+    NOT silently swallow this exception — a WORM violation means
+    the object already exists and the target is correctly refusing
+    the overwrite.
+    """
+
+
+class PgRoleChecker(Protocol):
+    """Query the current Postgres session role and superuser status.
+
+    Called once at agent startup by :meth:`MaintBackupAgent._enforce_pg_role`.
+    Returns ``(role_name, is_superuser)``.
+
+    Implementations:
+
+    * :class:`NoopPgRoleChecker` — injectable shim (default). Returns
+      a pre-configured ``(role_name, is_superuser)`` pair without
+      touching a real database. Used in all tests and in the
+      in-memory dev stack where no live Postgres is reachable.
+    * ``LivePgRoleChecker`` — Phase R1 bootstrap adapter that runs
+      ``SELECT current_user, pg_has_role(current_user, 'pg_catalog.pg_is_in_recovery', 'USAGE')``
+      (or equivalent) against ``cfg.maint_backup_pg_dsn``.
+    """
+
+    def query(self) -> tuple[str, bool]:
+        """Return ``(role_name, is_superuser)``."""
+        ...
+
+
+@dataclass
+class NoopPgRoleChecker:
+    """Injectable :class:`PgRoleChecker` shim.
+
+    Defaults to ``("negelir_backup", False)`` — the safe-to-start
+    combination — so existing tests that do not exercise the role
+    path continue to pass unchanged. Tests that prove the refusal
+    paths inject ``role_name`` / ``is_superuser`` to their desired
+    values.
+    """
+
+    role_name: str = "negelir_backup"
+    is_superuser: bool = False
+
+    def query(self) -> tuple[str, bool]:
+        return (str(self.role_name), bool(self.is_superuser))
+
+
+class RecipientCounter(Protocol):
+    """Count the DR-class public-key files present in an encryption
+    key directory.
+
+    ROADMAP §8.9 binding (``fail_safe_min_recipients``): in
+    ``profile=prod`` the agent refuses to start unless at least
+    ``cfg.maint_backup_min_dr_recipients`` (default 2) recipient keys
+    are found, ensuring no single custodian is a disaster-recovery
+    single point of failure.
+
+    Implementations:
+
+    * :class:`NoopRecipientCounter` — injectable shim (default).
+      Returns a pre-configured count without touching the filesystem.
+    * ``FilesystemRecipientCounter`` — Phase R1 adapter that counts
+      ``*.age.pub`` files inside ``cfg.maint_backup_encryption_key_dir``.
+    """
+
+    def count(self, key_dir: str) -> int:
+        """Return the number of DR-class recipient keys found."""
+        ...
+
+
+@dataclass
+class NoopRecipientCounter:
+    """Injectable :class:`RecipientCounter` shim.
+
+    Defaults to ``recipient_count=2`` — enough to satisfy the default
+    ``cfg.maint_backup_min_dr_recipients`` threshold — so existing
+    tests that do not exercise the multi-recipient path continue to
+    pass unchanged. Tests that prove the ``fail_safe_min_recipients``
+    refusal inject ``recipient_count=1``.
+    """
+
+    recipient_count: int = 2
+
+    def count(self, key_dir: str) -> int:
+        return int(self.recipient_count)
+
+
+class PgConnLimitChecker(Protocol):
+    """Query the Postgres role's connection limit (``rolconnlimit``).
+
+    Called once at agent startup by
+    :meth:`MaintBackupAgent._enforce_pg_conn_limit`.
+    Returns the ``rolconnlimit`` value for the current role:
+    ``-1`` means unlimited; any non-negative value is the hard cap.
+
+    Implementations:
+
+    * :class:`NoopPgConnLimitChecker` — injectable shim (default).
+      Returns a pre-configured limit without touching a real database.
+    * ``LivePgConnLimitChecker`` — Phase R1 adapter that runs
+      ``SELECT rolconnlimit FROM pg_roles WHERE rolname = current_user``
+      against ``cfg.maint_backup_pg_dsn``.
+    """
+
+    def query(self) -> int:
+        """Return the role's ``rolconnlimit`` (``-1`` = unlimited)."""
+        ...
+
+
+@dataclass
+class NoopPgConnLimitChecker:
+    """Injectable :class:`PgConnLimitChecker` shim.
+
+    Defaults to ``connection_limit=-1`` (unlimited) — the safe-to-start
+    value — so existing tests that do not exercise the connection-limit
+    gate continue to pass unchanged.  Tests that prove the refusal path
+    inject a low positive value.
+    """
+
+    connection_limit: int = -1
+
+    def query(self) -> int:
+        return int(self.connection_limit)
+
+
+class VerifyKeyRotator(Protocol):
+    """Generate a per-dump ephemeral verify-class recipient keypair.
+
+    ROADMAP §8.9 binding (two-class encryption): the verify keypair
+    MUST be rotated each nightly dump so the ephemeral verify key never
+    outlives the dump it was generated for. The fingerprint is included
+    in ``backup_completed.verify_key_fingerprint`` for traceability.
+
+    The verify key is a SEPARATE recipient from the DR keys:
+
+    * DR keys — persistent custodian keys. Required by ``ops.restore``
+      (``RestoreKeyClass.classify`` → ``"dr"``). Used for real
+      disaster-recovery restores.
+    * Verify key — ephemeral per-dump key. Accepted by
+      ``SidecarVerifier`` (Phase 14) to decrypt the dump inside the
+      restore-verify sidecar container. Rejected by ``ops.restore``
+      with surface code ``dr_key_required`` so it can never be used
+      for a real restore.
+
+    Implementations:
+
+    * :class:`NoopVerifyKeyRotator` — injectable shim (default).
+      Returns a fixed fingerprint/public-key pair so tests that do
+      not exercise rotation pass unchanged.
+    * :class:`RecordingVerifyKeyRotator` — records per-dump
+      fingerprints for two-class encryption proof tests.
+    * ``FilesystemVerifyKeyRotator`` — Phase R1 adapter that calls
+      ``age-keygen`` and writes the ephemeral private key to a scoped
+      temp dir (expired after verify completes).
+    """
+
+    def new_recipient(self, *, dump_date: str) -> tuple[str, str]:
+        """Return ``(fingerprint, public_key)`` for this dump's verify
+        recipient.  Each call for a DIFFERENT dump date MUST return a
+        different fingerprint when
+        ``cfg.maint_backup_verify_key_rotate_per_dump`` is ``True``."""
+        ...
+
+
+@dataclass
+class NoopVerifyKeyRotator:
+    """Injectable :class:`VerifyKeyRotator` shim.
+
+    Returns a fixed ``(fingerprint, public_key)`` pair regardless of
+    ``dump_date``. Safe to use in tests that do not exercise key
+    rotation or the two-class encryption path.
+    """
+
+    fingerprint: str = "VERIFY-FP-STATIC"
+    public_key: str = "age1verify-static"
+
+    def new_recipient(self, *, dump_date: str) -> tuple[str, str]:
+        return self.fingerprint, self.public_key
+
+
+@dataclass
+class RecordingVerifyKeyRotator:
+    """Test double that generates a unique fingerprint for each
+    distinct ``dump_date``.
+
+    Used in §8.9 two-class encryption proof test (d): consecutive
+    nightly dumps MUST produce different verify key fingerprints when
+    ``cfg.maint_backup_verify_key_rotate_per_dump`` is ``True``.
+    """
+
+    _history: dict[str, str] = field(default_factory=dict)
+    _counter: int = field(default=0, init=False)
+
+    def new_recipient(self, *, dump_date: str) -> tuple[str, str]:
+        if dump_date not in self._history:
+            self._counter += 1
+            self._history[dump_date] = f"VERIFY-FP-{self._counter:04d}"
+        fp = self._history[dump_date]
+        pub = f"age1verify-{self._counter:04d}"
+        return fp, pub
+
+    @property
+    def fingerprints(self) -> dict[str, str]:
+        """Read-only map of ``dump_date → fingerprint``."""
+        return dict(self._history)
+
+
+# ── Off-host replication (§8.12) ────────────────────────────────────────
+
+
+@dataclass
+class OffsiteUploadResult:
+    """Returned by :meth:`OffsiteBackupTarget.upload` on success."""
+
+    uploaded_bytes: int
+    manifest_checksum: str
+    resumed_from_state: bool = False
+    decryptable_by_dr_key: bool = True
+
+
+class OffsiteBackupTarget(Protocol):
+    """Upload the nightly verified dump to an off-host target (ROADMAP §8.12).
+
+    Called after restore-verify succeeds so only verified dumps are
+    replicated. Failures are non-blocking: the nightly backup and
+    prune continue regardless — offsite is a secondary replication
+    layer, not the primary recovery path.
+
+    Implementations:
+
+    * :class:`NoopOffsiteTarget` — no-op shim (default when
+      ``cfg.maint_backup_offsite_target == "none"``).
+    * :class:`RecordingOffsiteTarget` — records calls for proof tests;
+      supports WORM enforcement simulation and unreachable-target
+      injection.
+    * ``S3CompatibleTarget`` — Phase R1 adapter that streams the
+      encrypted dump to an S3-compatible bucket (AWS S3, minio)
+      using multipart upload with idempotent resume.
+    """
+
+    def upload(
+        self,
+        *,
+        fire_window_id: str,
+        dump_date: str,
+        encrypted_bytes: int,
+    ) -> OffsiteUploadResult:
+        """Stream the encrypted dump to the off-host target.
+
+        Raises :class:`OffsiteUnreachableError` when the target cannot
+        be contacted. Raises :class:`WormEnforcementError` when the
+        target enforces WORM and an object for ``dump_date`` already
+        exists (accidental overwrite prevention).
+        """
+        ...
+
+
+@dataclass
+class NoopOffsiteTarget:
+    """No-op :class:`OffsiteBackupTarget` shim.
+
+    Always reports success with zero uploaded bytes. Used as the
+    default when ``cfg.maint_backup_offsite_target == "none"``.
+    """
+
+    def upload(
+        self,
+        *,
+        fire_window_id: str,
+        dump_date: str,
+        encrypted_bytes: int,
+    ) -> OffsiteUploadResult:
+        return OffsiteUploadResult(uploaded_bytes=0, manifest_checksum="")
+
+
+@dataclass
+class RecordingOffsiteTarget:
+    """Test double for :class:`OffsiteBackupTarget`.
+
+    Records every :meth:`upload` call. Supports:
+
+    * ``fail_with`` — inject an :class:`OffsiteUnreachableError` to
+      test the agent's offsite-failure handling path.
+    * ``worm_enabled`` — simulate S3 Object Lock: a second upload for
+      the same ``dump_date`` raises :class:`WormEnforcementError`.
+    * ``resumed_on_second_call`` — the second (and subsequent)
+      :meth:`upload` calls return ``resumed_from_state=True`` to
+      simulate idempotent multipart resume after a mid-upload kill.
+    * ``sleep_s`` — sleep this many seconds inside ``upload()`` to
+      simulate a slow or long-running transfer. Used in upload-window
+      concurrency tests (§8.12).
+    """
+
+    uploaded_bytes: int = 1024
+    manifest_checksum: str = "manifest-sha256-ok"
+    decryptable_by_dr_key: bool = True
+    fail_with: Exception | None = None
+    worm_enabled: bool = False
+    resumed_on_second_call: bool = False
+    sleep_s: float = 0.0
+
+    upload_calls: list = field(default_factory=list, init=False)
+    _uploaded_dump_dates: set = field(default_factory=set, init=False)
+    _call_count: int = field(default=0, init=False)
+
+    def upload(
+        self,
+        *,
+        fire_window_id: str,
+        dump_date: str,
+        encrypted_bytes: int,
+    ) -> OffsiteUploadResult:
+        if self.sleep_s > 0.0:
+            time.sleep(self.sleep_s)
+        if self.fail_with is not None:
+            raise self.fail_with
+        if self.worm_enabled and dump_date in self._uploaded_dump_dates:
+            raise WormEnforcementError(
+                f"WORM: object_lock prevents overwrite of "
+                f"dump_date={dump_date!r}"
+            )
+        self._uploaded_dump_dates.add(dump_date)
+        call_idx = self._call_count
+        self._call_count += 1
+        resumed = bool(self.resumed_on_second_call and call_idx > 0)
+        result = OffsiteUploadResult(
+            uploaded_bytes=self.uploaded_bytes,
+            manifest_checksum=self.manifest_checksum,
+            resumed_from_state=resumed,
+            decryptable_by_dr_key=self.decryptable_by_dr_key,
+        )
+        self.upload_calls.append({
+            "fire_window_id": fire_window_id,
+            "dump_date": dump_date,
+            "encrypted_bytes": encrypted_bytes,
+            "resumed_from_state": resumed,
+            "decryptable_by_dr_key": self.decryptable_by_dr_key,
+        })
+        return result
+
+
 # ── Protocol-typed adapters ─────────────────────────────────────────────
 # The v1 vertical slice ships pure-Python shims. Live drivers
 # (real pg_dump, age, pg_restore, Postgres) are injected by the
@@ -176,7 +557,13 @@ class BackupConfigError(RuntimeError):
 class DumpExecutor(Protocol):
     """Take a logical Postgres dump. Returns (dump_bytes, encrypted_bytes)."""
 
-    def dump(self, *, fire_window_id: str, dry_run: bool) -> tuple[int, int]:
+    def dump(
+        self,
+        *,
+        fire_window_id: str,
+        dry_run: bool,
+        pii_excluded: tuple[str, ...] = (),
+    ) -> tuple[int, int]:
         ...
 
 
@@ -246,6 +633,76 @@ class DiskGauge(Protocol):
 # ── Restore-runbook surface (ROADMAP §8.3 `ops.restore`) ────────────────
 
 
+class ChecksumStore(Protocol):
+    """Write and verify per-fire-window dump checksums.
+
+    Written by the agent AFTER :meth:`DumpExecutor.dump` returns
+    (post-fsync, because the real executor writes
+    ``negelir.checksum.txt`` inside ``dump()`` before returning).
+    Verified BEFORE :meth:`RestoreExecutor.restore` (pre-restore
+    integrity gate) and cross-checked at agent boot against the
+    ``audit.csv`` seed to detect partial dumps where the process
+    was killed before the checksum was persisted
+    (§8.9 kill-9 mid-dump guard).
+
+    Implementations:
+    * :class:`NoopChecksumStore` — in-memory dict shim for tests.
+      ``always_trust=True`` (default) makes :meth:`verify` return
+      ``True`` for everything so existing tests are unaffected.
+    * ``FileChecksumStore`` — reads ``negelir.checksum.txt`` from
+      the per-fire-window dir and re-computes the SHA-256 of the
+      encrypted blob. Injected by the Phase R1 datasource bootstrap.
+    """
+
+    def write(self, *, fire_window_id: str) -> None:
+        """Record that ``fire_window_id``'s dump has a valid checksum.
+
+        Called by the agent after :meth:`DumpExecutor.dump` returns
+        successfully. The real executor already wrote
+        ``negelir.checksum.txt`` inside ``dump()``; this call tells
+        the in-memory shim (or future disk-backed store) that the
+        checksum is present so :meth:`verify` can confirm it.
+        """
+        ...
+
+    def verify(self, *, fire_window_id: str) -> bool:
+        """Return ``True`` if the checksum is present and valid.
+
+        ``False`` means the dump is partial or the checksum file
+        was not written (e.g. the agent was killed before
+        :meth:`write` was called). Callers must refuse to restore
+        or seed today's completed state from a ``False`` result.
+        """
+        ...
+
+
+@dataclass
+class NoopChecksumStore:
+    """In-memory :class:`ChecksumStore` shim.
+
+    ``always_trust=True`` (default): :meth:`verify` returns ``True``
+    for any ``fire_window_id`` regardless of prior :meth:`write`
+    calls — existing tests that do not exercise the checksum path
+    continue to pass unchanged.
+
+    ``always_trust=False``: :meth:`verify` returns ``True`` only for
+    ``fire_window_id`` values that were explicitly recorded via
+    :meth:`write`. Use this in tests that prove the kill-9 guard
+    or the pre-restore checksum rejection path.
+    """
+
+    always_trust: bool = True
+    _written: set = field(default_factory=set)
+
+    def write(self, *, fire_window_id: str) -> None:
+        self._written.add(fire_window_id)
+
+    def verify(self, *, fire_window_id: str) -> bool:
+        if self.always_trust:
+            return True
+        return fire_window_id in self._written
+
+
 class RestoreKeyClass(Protocol):
     """Resolve the ``age`` private-key class for a given dump date.
 
@@ -309,11 +766,25 @@ class MaintAuditLogger(Protocol):
 
 @dataclass
 class NoopDumpExecutor:
-    """No-op dump — claims to write a fixed-size envelope."""
+    """No-op dump — claims to write a fixed-size envelope.
+
+    ``dump_toc`` is populated on each call with the ``pii_excluded`` list
+    so proof tests can assert the §8.9 PII-aware dump contract without
+    needing a live ``pg_dump`` binary.
+    """
 
     bytes_written: int = 1024
+    dump_toc: list[str] = field(default_factory=list)
 
-    def dump(self, *, fire_window_id: str, dry_run: bool) -> tuple[int, int]:
+    def dump(
+        self,
+        *,
+        fire_window_id: str,
+        dry_run: bool,
+        pii_excluded: tuple[str, ...] = (),
+    ) -> tuple[int, int]:
+        # Record excluded columns for test inspection.
+        self.dump_toc = list(pii_excluded)
         if dry_run:
             return (0, 0)
         # encrypted_bytes is +16 bytes for the age header — close
@@ -371,6 +842,97 @@ class InMemoryPrunerStorage:
         return out
 
 
+class BatchLockBudgetExceeded(RuntimeError):
+    """Raised when a single prune batch would exceed the max lock hold time.
+
+    Attributes:
+        table: The table being pruned.
+        batch_rows: Number of rows in the offending batch.
+        simulated_ms: Computed lock hold time (rows × ms_per_row).
+        max_lock_ms: Configured budget ceiling.
+    """
+
+    def __init__(
+        self,
+        table: str,
+        batch_rows: int,
+        simulated_ms: float,
+        max_lock_ms: float,
+    ) -> None:
+        self.table = table
+        self.batch_rows = batch_rows
+        self.simulated_ms = simulated_ms
+        self.max_lock_ms = max_lock_ms
+        super().__init__(
+            f"prune batch on {table!r} would hold lock for "
+            f"{simulated_ms:.1f} ms (batch={batch_rows} rows × "
+            f"{simulated_ms / batch_rows:.3f} ms/row) — "
+            f"exceeds budget {max_lock_ms:.0f} ms"
+        )
+
+
+@dataclass
+class BatchedPrunerStorage:
+    """Batched pruner — deletes in chunks of at most ``batch_size`` rows.
+
+    Each chunk simulates one database transaction.  ``ms_per_row``
+    controls the simulated lock-hold cost per deleted row; if a batch's
+    simulated elapsed time would exceed ``max_lock_ms``,
+    :exc:`BatchLockBudgetExceeded` is raised *before* the batch is
+    applied so the caller can shrink ``batch_size``.
+
+    ``batches`` is populated by :meth:`prune` for introspection in
+    tests: each entry is ``(table, rows_deleted, simulated_lock_ms)``.
+    """
+
+    counts: dict[str, int] = field(default_factory=dict)
+    batch_size: int = 10_000
+    ms_per_row: float = 0.0
+    max_lock_ms: float = 500.0
+    batches: list[tuple[str, int, float]] = field(default_factory=list)
+
+    def prune(self, *, dry_run: bool) -> Mapping[str, int]:
+        if not self.counts:
+            return {}
+        out: dict[str, int] = {}
+        for table, total_rows in self.counts.items():
+            if total_rows <= 0:
+                out[table] = 0
+                continue
+            if dry_run:
+                # Dry-run: validate batch constraints without mutating.
+                remaining = total_rows
+                deleted = 0
+                while remaining > 0:
+                    batch = min(remaining, self.batch_size)
+                    elapsed_ms = batch * self.ms_per_row
+                    if elapsed_ms > self.max_lock_ms:
+                        raise BatchLockBudgetExceeded(
+                            table, batch, elapsed_ms, self.max_lock_ms
+                        )
+                    self.batches.append((table, batch, elapsed_ms))
+                    deleted += batch
+                    remaining -= batch
+                out[table] = deleted
+            else:
+                remaining = total_rows
+                deleted = 0
+                while remaining > 0:
+                    batch = min(remaining, self.batch_size)
+                    elapsed_ms = batch * self.ms_per_row
+                    if elapsed_ms > self.max_lock_ms:
+                        raise BatchLockBudgetExceeded(
+                            table, batch, elapsed_ms, self.max_lock_ms
+                        )
+                    self.batches.append((table, batch, elapsed_ms))
+                    deleted += batch
+                    remaining -= batch
+                out[table] = deleted
+        if not dry_run:
+            self.counts.clear()
+        return out
+
+
 @dataclass
 class InMemoryQuarantineStore:
     """In-memory quarantine store — a `dict[client_id, row_count]`."""
@@ -399,6 +961,7 @@ class StaticDiskGauge:
 # minor bump so dashboards can colour the new bucket.
 RESTORE_OUTCOMES: frozenset[str] = frozenset({
     "ok",
+    "checksum_verify_failed",
     "dr_key_required",
     "live_overwrite_requires_confirm",
     "decrypt_failed",
@@ -479,10 +1042,121 @@ class InMemoryMaintAuditLogger:
         })
 
 
+class AuditLogImmutableError(Exception):
+    """Raised when UPDATE or DELETE is attempted on ``maint_audit_log_pii``
+    without the ``negelir_audit_pruner`` role being active inside an explicit
+    ``SET ROLE`` transaction.
+
+    Mirrors the SQL trigger in ``migrations/009_maint_audit.sql``:
+
+    .. code-block:: sql
+
+        RAISE EXCEPTION 'audit_log_immutable: UPDATE/DELETE not allowed
+            on maint_audit_log_pii';
+
+    The in-memory model enforces the same invariant so proof tests can
+    exercise the constraint without a live Postgres connection.
+    """
+
+
+@dataclass
+class InMemoryImmutableAuditStore:
+    """In-memory model of ``maint_audit_log_pii`` with INSERT-only enforcement.
+
+    Rules (mirrors migration 009 trigger):
+
+    * ``append()`` — always succeeds (INSERT is unconditionally allowed).
+    * ``update()`` — raises :class:`AuditLogImmutableError` for every role
+      except ``negelir_audit_pruner`` active inside a
+      :meth:`set_role_pruner` context.
+    * ``delete_by_request_id()`` — same guard as ``update()``.
+    * :meth:`set_role_pruner` — context manager that sets the active role
+      to ``negelir_audit_pruner`` for the duration of the ``with`` block,
+      then reverts.  Modelling ``SET ROLE ... RESET ROLE`` in PG.
+
+    Thread-safety: a :class:`threading.RLock` guards ``_active_role`` so
+    two concurrent callers cannot smuggle each other's role context.
+    """
+
+    rows: list[dict[str, object]] = field(default_factory=list)
+    _active_role: str = field(default="negelir_app", init=False, repr=False)
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, init=False, repr=False
+    )
+
+    # Public constant used in tests to verify the error message text.
+    PRUNER_ROLE: str = field(default="negelir_audit_pruner", init=False, repr=False)
+
+    def append(
+        self,
+        *,
+        kind: str,
+        request_id: str,
+        target: str,
+        actor: str,
+        details: Mapping[str, object],
+    ) -> None:
+        """INSERT — always permitted regardless of active role."""
+        with self._lock:
+            self.rows.append({
+                "kind": str(kind),
+                "request_id": str(request_id),
+                "target": str(target),
+                "actor": str(actor),
+                "details": dict(details),
+            })
+
+    def update(self, request_id: str, **updates: object) -> None:
+        """UPDATE — raises :class:`AuditLogImmutableError` unless
+        ``negelir_audit_pruner`` is the active role inside
+        :meth:`set_role_pruner`."""
+        with self._lock:
+            if self._active_role != "negelir_audit_pruner":
+                raise AuditLogImmutableError(
+                    "audit_log_immutable: UPDATE not allowed on maint_audit_log_pii"
+                    f" (current role={self._active_role!r})"
+                )
+            for row in self.rows:
+                if row["request_id"] == request_id:
+                    row.update({str(k): v for k, v in updates.items()})
+
+    def delete_by_request_id(self, request_id: str) -> int:
+        """DELETE — raises :class:`AuditLogImmutableError` unless
+        ``negelir_audit_pruner`` is the active role inside
+        :meth:`set_role_pruner`.  Returns the number of rows deleted."""
+        with self._lock:
+            if self._active_role != "negelir_audit_pruner":
+                raise AuditLogImmutableError(
+                    "audit_log_immutable: DELETE not allowed on maint_audit_log_pii"
+                    f" (current role={self._active_role!r})"
+                )
+            before = len(self.rows)
+            self.rows = [r for r in self.rows if r["request_id"] != request_id]
+            return before - len(self.rows)
+
+    @contextlib.contextmanager
+    def set_role_pruner(self) -> Iterator[None]:
+        """Context manager that activates the ``negelir_audit_pruner`` role
+        for the duration of the ``with`` block — modelling PostgreSQL's
+        ``SET ROLE negelir_audit_pruner`` / ``RESET ROLE`` pair.
+
+        Outside this context the role reverts; DELETE/UPDATE remain
+        forbidden.
+        """
+        with self._lock:
+            prev = self._active_role
+            self._active_role = "negelir_audit_pruner"
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._active_role = prev
+
+
 # ── Agent ───────────────────────────────────────────────────────────────
 
 
-class MaintBackupAgent:
+class MaintBackupAgent(LivenessMixin):
     """`maint.backup.v1` reactor.
 
     Subscribes ``maint.event.v1`` (kind=quarantine_erase). Publishes
@@ -513,12 +1187,20 @@ class MaintBackupAgent:
         disk: DiskGauge | None = None,
         restore_executor: RestoreExecutor | None = None,
         restore_key_class: RestoreKeyClass | None = None,
+        checksum_store: ChecksumStore | None = None,
         audit_logger: MaintAuditLogger | None = None,
         clock_iso: Callable[[], str] | None = None,
         clock_wall: Callable[[], datetime] | None = None,
         clock_mono_ns: Callable[[], int] | None = None,
         new_id: Callable[[], str] | None = None,
         enforce_permissions: bool = True,
+        pg_role_checker: PgRoleChecker | None = None,
+        recipient_counter: RecipientCounter | None = None,
+        pg_conn_limit_checker: PgConnLimitChecker | None = None,
+        verify_key_rotator: VerifyKeyRotator | None = None,
+        offsite_target: OffsiteBackupTarget | None = None,
+        liveness_clock: Callable[[], float] | None = None,
+        leader: Leader | None = None,
     ) -> None:
         self._dump = dump if dump is not None else NoopDumpExecutor()
         self._verifier = verifier if verifier is not None else NoopVerifier()
@@ -537,6 +1219,10 @@ class MaintBackupAgent:
             restore_key_class if restore_key_class is not None
             else StaticRestoreKeyClass()
         )
+        self._checksum: ChecksumStore = (
+            checksum_store if checksum_store is not None
+            else NoopChecksumStore(always_trust=True)
+        )
         self._audit_logger = (
             audit_logger if audit_logger is not None
             else InMemoryMaintAuditLogger()
@@ -547,6 +1233,48 @@ class MaintBackupAgent:
             lambda: int(self._clock_wall().timestamp() * 1e9)
         )
         self._new_id = new_id or _new_id
+        self._pg_role_checker: PgRoleChecker = (
+            pg_role_checker if pg_role_checker is not None
+            else NoopPgRoleChecker()
+        )
+        self._recipient_counter: RecipientCounter = (
+            recipient_counter if recipient_counter is not None
+            else NoopRecipientCounter()
+        )
+        self._pg_conn_limit_checker: PgConnLimitChecker = (
+            pg_conn_limit_checker if pg_conn_limit_checker is not None
+            else NoopPgConnLimitChecker()
+        )
+        self._verify_key_rotator: VerifyKeyRotator = (
+            verify_key_rotator if verify_key_rotator is not None
+            else NoopVerifyKeyRotator()
+        )
+        # ROADMAP §8.12 off-host replication: injectable offsite target.
+        # Defaults to NoopOffsiteTarget when not configured (offsite
+        # disabled or explicitly set to "none").
+        self._offsite_target: OffsiteBackupTarget = (
+            offsite_target if offsite_target is not None
+            else NoopOffsiteTarget()
+        )
+        # Last successful offsite upload wall-clock anchor for the
+        # offsite age watchdog in flush_expired.
+        self._last_offsite_uploaded_wall: datetime | None = None
+        # Debounce anchor for the offsite age watchdog re-emission.
+        self._last_offsite_age_alert_wall: datetime | None = None
+
+        # ROADMAP §8.9 binding (`fail_safe_wrong_pg_role` /
+        # `fail_safe_superuser`): the backup agent must run as exactly
+        # ``cfg.maint_backup_pg_role`` (default ``negelir_backup``) and
+        # must NOT be a superuser. Running as the wrong role could bypass
+        # row-security policies; running as superuser bypasses ALL guards.
+        self._enforce_pg_role()
+        self._leader: Leader = leader if leader is not None else SingleProcessLeader(name=self.name)
+
+        # ROADMAP §8.9 binding (`fail_safe_pg_conn_limit_too_low`): the
+        # backup role's PG connection limit must accommodate parallel
+        # pg_dump workers (pg_jobs + 1 coordinator connection minimum).
+        # An unlimited role (-1) passes unconditionally.
+        self._enforce_pg_conn_limit()
 
         # Parse cron up-front so a typo refuses-to-start instead of
         # silently disabling the nightly backup.
@@ -583,6 +1311,19 @@ class MaintBackupAgent:
         # watchdog so a stuck-but-alive agent does not flood the bus
         # once per heartbeat. Re-fires after one full alert window.
         self._last_age_alert_wall: datetime | None = None
+        # ROADMAP §8.9 unencrypted-in-non-prod warn: debounce anchor so
+        # a long-running mock-profile agent emits ``backup_unencrypted``
+        # at most once per UTC day, not once per heartbeat. Stored as a
+        # UTC date string ("YYYY-MM-DD") for simple equality comparison.
+        self._last_unencrypted_warn_date: str | None = None
+        # ROADMAP §8.3 crash-cleanup invariant: sweep orphaned K8s
+        # Jobs + ephemeral PVCs once on the first flush_expired() call
+        # after boot. Prevents PVC leaks when the agent was killed
+        # mid-watch (kill-9 during pg_restore). The real K8s adapter
+        # (SidecarVerifier, Phase 14) filters by
+        # cfg.maint_backup_verify_orphan_ttl_h; the in-memory shim
+        # returns its pre-configured orphans list unchanged.
+        self._boot_orphan_swept: bool = False
 
         # ROADMAP §8.3 binding: agent process runs with umask 0o077
         # so any file `pg_dump` (or our scratch writes) creates is
@@ -618,6 +1359,26 @@ class MaintBackupAgent:
                 "cfg.maint_backup_age_recipients_file to be set"
             )
 
+        # ROADMAP §8.9 binding (`fail_safe_min_recipients`): in prod,
+        # the key dir must carry at least cfg.maint_backup_min_dr_recipients
+        # public keys so no single custodian is a disaster-recovery SPOF.
+        # Only fires when encryption_key_dir is explicitly configured
+        # (the gate above already handles the no-encryption case).
+        _key_dir = (str(_cfg.maint_backup_encryption_key_dir) or "").strip()
+        if (
+            str(_cfg.profile) == "prod"
+            and _key_dir
+        ):
+            _n_recipients = self._recipient_counter.count(_key_dir)
+            if _n_recipients < int(_cfg.maint_backup_min_dr_recipients):
+                raise BackupConfigError(
+                    "maint.backup.v1: refusing to start; "
+                    "fail_safe_min_recipients — cfg.profile='prod' requires "
+                    f"at least {_cfg.maint_backup_min_dr_recipients} "
+                    "DR-class recipient keys in "
+                    f"{_key_dir!r}; found {_n_recipients}"
+                )
+
         # ROADMAP §8.3 binding: the restore-verify mode is a closed
         # enum (`VALID_VERIFY_MODES`). Refuse-to-start on any other
         # value so a typo cannot silently downgrade nightly verify to
@@ -644,14 +1405,36 @@ class MaintBackupAgent:
             seeded_verified = last_verified_today(
                 self._audit_path, today=now_wall,
             )
-            if seeded_completed is not None:
-                self._last_completed_wall = seeded_completed
-                self._last_fire_wall = seeded_completed
-            if seeded_verified is not None:
-                self._last_verified_wall = seeded_verified
+            # §8.9 kill-9 mid-dump guard: cross-check the checksum for
+            # the seeded fire_window_id. If the checksum is missing
+            # (agent was killed before checksum was written), treat
+            # today as not completed and let the cron re-fire. This
+            # prevents a partial dump from being falsely considered
+            # "completed" across a process restart.
+            seeded_fwid = last_completed_fire_window_id_today(
+                self._audit_path, today=now_wall,
+            )
+            checksum_ok = (
+                seeded_fwid is None
+                or self._checksum.verify(fire_window_id=seeded_fwid)
+            )
+            if not checksum_ok:
+                _log.info(
+                    "maint.backup.v1: boot checksum verify failed for "
+                    "%s; treating today as not completed "
+                    "(§8.9 kill-9 mid-dump guard)",
+                    seeded_fwid,
+                )
+            else:
+                if seeded_completed is not None:
+                    self._last_completed_wall = seeded_completed
+                    self._last_fire_wall = seeded_completed
+                if seeded_verified is not None:
+                    self._last_verified_wall = seeded_verified
         except OSError:
             # Best-effort — a corrupt ledger must not wedge boot.
             pass
+        self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract: handle quarantine_erase + restore ─────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -666,6 +1449,8 @@ class MaintBackupAgent:
         if msg.envelope.topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
+        if not self._leader.is_leader():
+            return ()
         kind = payload.get("kind")
         if kind == "quarantine_erase":
             return list(self._handle_quarantine_erase(msg, payload))
@@ -858,6 +1643,44 @@ class MaintBackupAgent:
             )
             return
 
+        # ── Pre-restore checksum gate (§8.9 binding) ─────────────────
+        # Re-verify the dump's checksum before running the restore
+        # pipeline. A missing or corrupt checksum means the dump was
+        # partial (e.g. kill-9 during pg_dump) and must not be used
+        # for a restore. The operator must re-run the backup first.
+        if not self._checksum.verify(fire_window_id=dump_date):
+            yield self._ack(
+                msg,
+                request_id=request_id,
+                accepted=False,
+                reason="checksum_verify_failed",
+                details={"dump_date": dump_date},
+            )
+            yield self._notify(
+                "backup_restore_completed",
+                extra={
+                    "request_id": request_id,
+                    "target": destination,
+                    "dump_date": dump_date,
+                    "duration_ms": 0,
+                    "exit_code": 1,
+                    "outcome": "checksum_verify_failed",
+                    "ephemeral": ephemeral,
+                },
+            )
+            self._audit_logger.append(
+                kind="backup_restore_completed",
+                request_id=request_id,
+                target=destination,
+                actor=actor,
+                details={
+                    "dump_date": dump_date,
+                    "outcome": "checksum_verify_failed",
+                    "exit_code": 1,
+                },
+            )
+            return
+
         # ── Accept + emit started + audit ─────────────────────────────
         yield self._ack(
             msg,
@@ -964,9 +1787,32 @@ class MaintBackupAgent:
         the next fire on first call, then fire whenever the current
         wall clock crosses :attr:`_next_fire_at`. Returns the list of
         messages to publish (empty when nothing is due)."""
+        if not self._leader.is_leader():
+            return []
         now_wall = self._clock_wall()
         from xops.backup.cron import next_fire_after
         out: list[Message] = []
+        # ROADMAP §8.3 crash-cleanup invariant: on the very first
+        # flush_expired() call after agent boot, sweep any orphaned
+        # K8s Jobs + ephemeral PVCs left behind by a prior kill-9.
+        # The real SidecarVerifier (Phase 14) filters by
+        # cfg.maint_backup_verify_orphan_ttl_h; the NoopVerifier
+        # shim returns its pre-configured orphans list directly.
+        # Exactly one emission per agent lifetime (flag prevents
+        # repeated sweeps on every heartbeat tick).
+        if not self._boot_orphan_swept:
+            self._boot_orphan_swept = True
+            boot_orphans = tuple(self._verifier.sweep_orphans())
+            if boot_orphans:
+                out.append(self._notify(
+                    "backup_verify_orphan_swept",
+                    extra={
+                        "swept_jobs": list(boot_orphans),
+                        "count": len(boot_orphans),
+                        "scope": "boot",
+                        "ttl_h": float(_cfg.maint_backup_verify_orphan_ttl_h),
+                    },
+                ))
         # Nightly backup state machine.
         if self._next_fire_at is None:
             day_start = now_wall.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1043,6 +1889,79 @@ class MaintBackupAgent:
                     ),
                     subject="maint.backup.v1",
                 ))
+        # ROADMAP §8.9 binding — unencrypted-in-non-prod warn. When the
+        # deployment profile is not ``prod`` and no encryption surface is
+        # configured, log a warning and emit ``sec.alert.v1`` with
+        # ``kind=backup_unencrypted`` at most once per UTC day. The prod
+        # path is covered by the ``fail_safe_no_encryption_in_prod``
+        # refuse-to-start gate (above); this debounced heartbeat warn
+        # covers dev / CI / staging so operators notice misconfigured
+        # encryption without blocking CI runs.
+        _profile = str(_cfg.profile)
+        _enc_configured = bool(
+            (str(_cfg.maint_backup_encryption_key_dir) or "").strip()
+            or (str(_cfg.maint_backup_age_recipients_file) or "").strip()
+        )
+        if _profile != "prod" and not _enc_configured:
+            _today_str = now_wall.astimezone(timezone.utc).date().isoformat()
+            if self._last_unencrypted_warn_date != _today_str:
+                self._last_unencrypted_warn_date = _today_str
+                _log.warning(
+                    "maint.backup.v1: no encryption configured "
+                    "(profile=%s); backups are unencrypted at rest — "
+                    "set cfg.maint_backup_encryption_key_dir or "
+                    "cfg.maint_backup_age_recipients_file",
+                    _profile,
+                )
+                out.append(self._sec_alert(
+                    kind="backup_unencrypted",
+                    severity="warn",
+                    reason=(
+                        f"backup encryption not configured "
+                        f"(profile={_profile!r}); nightly dumps are "
+                        "stored unencrypted — set "
+                        "cfg.maint_backup_encryption_key_dir or "
+                        "cfg.maint_backup_age_recipients_file"
+                    ),
+                    subject="maint.backup.v1",
+                ))
+        # ROADMAP §8.12 binding — offsite age watchdog. Fires
+        # ``sec.alert.v1{kind=backup_age_alert, scope=offsite,
+        # severity=critical}`` when the last successful offsite upload
+        # is older than the configured threshold. Disabled when the
+        # threshold is 0 or when no offsite upload has been recorded
+        # yet (boot-warm guard). Uses the canonical ``backup_age_alert``
+        # kind with ``scope=offsite`` in the reason so the same alert
+        # routing rules apply for both on-host and offsite age breaches.
+        _offsite_age_h_cfg = int(_cfg.maint_backup_offsite_age_alert_h)
+        if (
+            _offsite_age_h_cfg > 0
+            and self._last_offsite_uploaded_wall is not None
+        ):
+            _offsite_elapsed_h = (
+                now_wall - self._last_offsite_uploaded_wall
+            ).total_seconds() / 3600.0
+            if _offsite_elapsed_h > _offsite_age_h_cfg:
+                _should_fire_offsite_alert = (
+                    self._last_offsite_age_alert_wall is None
+                    or (
+                        now_wall - self._last_offsite_age_alert_wall
+                    ).total_seconds() >= _offsite_age_h_cfg * 3600.0
+                )
+                if _should_fire_offsite_alert:
+                    self._last_offsite_age_alert_wall = now_wall
+                    out.append(self._sec_alert(
+                        kind="backup_age_alert",
+                        severity="critical",
+                        reason=(
+                            f"scope=offsite offsite backup age "
+                            f"{_offsite_elapsed_h:.2f}h exceeded "
+                            f"threshold {_offsite_age_h_cfg:.0f}h; "
+                            f"last upload at "
+                            f"{self._last_offsite_uploaded_wall.isoformat()}"
+                        ),
+                        subject="maint.backup.v1",
+                    ))
         return out
 
     def _fire(
@@ -1273,8 +2192,33 @@ class MaintBackupAgent:
             return
 
         # ── Dump ──────────────────────────────────────────────────────
+        # PII-aware dump: columns excluded from the logical dump by default.
+        # Config is a comma-separated string; empty string → no exclusions.
+        _pii_raw = str(_cfg.maint_backup_pii_excluded_columns).strip()
+        pii_excluded: tuple[str, ...] = tuple(
+            c.strip() for c in _pii_raw.split(",") if c.strip()
+        ) if _pii_raw else ()
         dump_bytes, encrypted_bytes = self._dump.dump(
-            fire_window_id=fire_window_id, dry_run=dry_run,
+            fire_window_id=fire_window_id,
+            dry_run=dry_run,
+            pii_excluded=pii_excluded,
+        )
+        # §8.9 binding: record checksum post-fsync. In the real
+        # executor (LocalPgDumpExecutor) the checksum file was
+        # already written inside dump() before it returned; this
+        # call tells the in-memory shim (and future disk-backed
+        # store) that the checksum is present, enabling the
+        # kill-9 mid-dump guard on the next boot-seed read.
+        self._checksum.write(fire_window_id=fire_window_id)
+
+        # §8.9 two-class encryption: generate the per-dump ephemeral
+        # verify-class recipient. The fingerprint is emitted in
+        # backup_completed so operators can correlate the verify key
+        # to the dump. The public key would be passed to the real
+        # DumpExecutor's encryption pipeline (Phase R1); the
+        # in-memory NoopDumpExecutor ignores it.
+        _verify_fp, _ = self._verify_key_rotator.new_recipient(
+            dump_date=fire_wall.strftime("%Y-%m-%d"),
         )
 
         # ── Restore-verify ────────────────────────────────────────────
@@ -1338,6 +2282,46 @@ class MaintBackupAgent:
                 catch_up=catch_up,
             )
             return
+
+        # ── Off-host replication (§8.12) — start concurrent with prune ─
+        # Upload starts as a daemon thread immediately after verify
+        # succeeds so it runs concurrently with the TTL-prune phase.
+        # The prune runs in the main thread (fast, DB-side).  After
+        # prune + retention, we collect the upload result against the
+        # per-fire deadline.  Failure is non-blocking: backup_completed
+        # still emits and prune still runs regardless.
+        # dry_run: skip upload (no verified bytes on disk).
+        _upload_thread: threading.Thread | None = None
+        _upload_result_box: list[OffsiteUploadResult] = []
+        _upload_exc_box: list[BaseException] = []
+        _upload_timeout_s: float = 0.0
+        _upload_deadline_mono: float = 0.0
+        if not dry_run:
+            _upload_timeout_s = (
+                float(_cfg.maint_backup_offsite_upload_timeout_h) * 3600.0
+            )
+            _upload_deadline_mono = time.monotonic() + _upload_timeout_s
+            _dump_date_str = fire_wall.strftime("%Y-%m-%d")
+            _enc_bytes_int = int(encrypted_bytes)
+            _fwid_snap = fire_window_id  # capture for thread closure
+
+            def _upload_task() -> None:
+                try:
+                    _res = self._offsite_target.upload(
+                        fire_window_id=_fwid_snap,
+                        dump_date=_dump_date_str,
+                        encrypted_bytes=_enc_bytes_int,
+                    )
+                    _upload_result_box.append(_res)
+                except BaseException as _e:  # noqa: BLE001
+                    _upload_exc_box.append(_e)
+
+            _upload_thread = threading.Thread(
+                target=_upload_task,
+                daemon=True,
+                name=f"offsite-upload:{fire_window_id}",
+            )
+            _upload_thread.start()
 
         # ── Destructive prune (PRUNE_ORDER discipline) ────────────────
         yield self._notify(
@@ -1410,6 +2394,85 @@ class MaintBackupAgent:
             dry_run=dry_run,
         )
 
+        # ── Collect offsite upload result (§8.12 upload window) ───────
+        # Join the upload thread with whatever time remains on the
+        # per-fire deadline.  Three outcomes:
+        #   • timeout: thread still alive after deadline → fail event
+        #   • exception: upload raised OffsiteUnreachableError → fail
+        #   • success: upload result in box → uploaded event
+        # In all failure cases backup_completed still emits "ok" — the
+        # offsite layer is non-blocking.
+        if not dry_run and _upload_thread is not None:
+            _remaining = _upload_deadline_mono - time.monotonic()
+            _upload_thread.join(timeout=max(_remaining, 0.0))
+            if _upload_thread.is_alive():
+                # Hard timeout — overrun. Thread runs as daemon and will
+                # eventually complete or die; the agent moves on.
+                _log.warning(
+                    "maint.backup.v1: offsite upload timed out "
+                    "(timeout_h=%s) for fire_window_id=%s",
+                    _cfg.maint_backup_offsite_upload_timeout_h,
+                    fire_window_id,
+                )
+                yield self._notify(
+                    "backup_offsite_failed",
+                    extra={
+                        "fire_window_id": fire_window_id,
+                        "reason": "timeout",
+                        "uploaded_bytes": 0,
+                    },
+                )
+                yield self._sec_alert(
+                    kind="backup_offsite_failed",
+                    severity="critical",
+                    reason=(
+                        f"offsite upload timed out after "
+                        f"{_cfg.maint_backup_offsite_upload_timeout_h}h for "
+                        f"fire_window_id={fire_window_id}"
+                    ),
+                    subject=fire_window_id,
+                )
+            elif _upload_exc_box:
+                _exc = _upload_exc_box[0]
+                _log.warning(
+                    "maint.backup.v1: offsite upload failed for "
+                    "fire_window_id=%s: %r",
+                    fire_window_id, _exc,
+                )
+                yield self._notify(
+                    "backup_offsite_failed",
+                    extra={
+                        "fire_window_id": fire_window_id,
+                        "reason": str(_exc),
+                    },
+                )
+                if isinstance(_exc, OffsiteUnreachableError):
+                    yield self._sec_alert(
+                        kind="backup_offsite_failed",
+                        severity="critical",
+                        reason=(
+                            f"offsite upload failed for "
+                            f"fire_window_id={fire_window_id}: {_exc}"
+                        ),
+                        subject=fire_window_id,
+                    )
+            elif _upload_result_box:
+                _offsite_result = _upload_result_box[0]
+                self._last_offsite_uploaded_wall = now_wall
+                yield self._notify(
+                    "backup_offsite_uploaded",
+                    extra={
+                        "fire_window_id": fire_window_id,
+                        "uploaded_bytes": int(_offsite_result.uploaded_bytes),
+                        "manifest_checksum": str(
+                            _offsite_result.manifest_checksum
+                        ),
+                        "resumed_from_state": bool(
+                            _offsite_result.resumed_from_state
+                        ),
+                    },
+                )
+
         # ── backup_completed (ok) ─────────────────────────────────────
         outcome = "dry_run" if dry_run else "ok"
         yield self._notify(
@@ -1432,6 +2495,11 @@ class MaintBackupAgent:
                 "verify_summary": dict(verify_summary),
                 "verify_mode": self._verify_mode,
                 "dry_run": dry_run,
+                "pii_excluded_columns": list(pii_excluded),
+                # §8.9 two-class encryption: fingerprint of the
+                # per-dump ephemeral verify-class recipient. Operator
+                # can correlate this to the verify sidecar's key.
+                "verify_key_fingerprint": _verify_fp,
                 "dump_retention": {
                     "kept": list(retention.kept),
                     "pruned": list(retention.pruned),
@@ -1567,16 +2635,33 @@ class MaintBackupAgent:
         delta = self._clock_wall() - anchor
         return delta.total_seconds() / 3600.0
 
-    def metrics_snapshot(self) -> dict[str, float | None]:
-        """ROADMAP §8.3 binding telemetry surface.
+    def offsite_age_hours(self) -> float | None:
+        """Return age of the most recent successful offsite upload in
+        hours, or ``None`` when no upload has been recorded yet.
 
-        Returns the ``maint_backup_age_hours{verified=true|false}``
-        gauge values in Prometheus-label-encoded form so an operator
-        scraper can render the exposition without consulting the
-        agent's internal state. ``None`` means "no qualifying dump
-        yet" — scrapers should drop the line (Prometheus has no NaN-
-        sentinel for gauges that legitimately have no value), not
-        substitute zero (which would falsely declare freshness).
+        ROADMAP §8.12 binding contract — exposed as the
+        ``maint_backup_offsite_age_hours`` telemetry gauge, separate
+        from the on-host ``maint_backup_age_hours{verified}`` gauge.
+        Returns ``None`` before the first successful
+        ``backup_offsite_uploaded`` event so callers honour the
+        boot-warm guard (do not fire the watchdog on cold start).
+        """
+        if self._last_offsite_uploaded_wall is None:
+            return None
+        delta = self._clock_wall() - self._last_offsite_uploaded_wall
+        return delta.total_seconds() / 3600.0
+
+    def metrics_snapshot(self) -> dict[str, float | None]:
+        """ROADMAP §8.3 / §8.12 binding telemetry surface.
+
+        Returns the ``maint_backup_age_hours{verified=true|false}`` and
+        ``maint_backup_offsite_age_hours`` gauge values in
+        Prometheus-label-encoded form so an operator scraper can render
+        the exposition without consulting the agent's internal state.
+        ``None`` means "no qualifying dump yet" — scrapers should drop
+        the line (Prometheus has no NaN-sentinel for gauges that
+        legitimately have no value), not substitute zero (which would
+        falsely declare freshness).
         """
 
         return {
@@ -1584,6 +2669,8 @@ class MaintBackupAgent:
                 self.backup_age_hours(verified=True),
             'maint_backup_age_hours{verified="false"}':
                 self.backup_age_hours(verified=False),
+            'maint_backup_offsite_age_hours':
+                self.offsite_age_hours(),
         }
 
     def backup_age_alert_due(self) -> bool:
@@ -1651,6 +2738,59 @@ class MaintBackupAgent:
                     f"{child} mode {oct(cmode)} is looser than {oct(limit)}"
                 )
         return violations
+
+    def _enforce_pg_role(self) -> None:
+        """Refuse-to-start when the Postgres role fails the §8.9 gate.
+
+        Two rejection codes:
+
+        * ``fail_safe_wrong_pg_role`` — current role is not
+          ``cfg.maint_backup_pg_role`` (default ``negelir_backup``).
+        * ``fail_safe_superuser`` — current role is correct but has
+          ``is_superuser=True``.
+
+        Wired unconditionally from :meth:`__init__`; the injectable
+        :attr:`_pg_role_checker` is the only bypass surface (tests
+        pass :class:`NoopPgRoleChecker` with desired values).
+        """
+        role_name, is_superuser = self._pg_role_checker.query()
+        expected = str(_cfg.maint_backup_pg_role)
+        if role_name != expected:
+            raise BackupRoleError(
+                "maint.backup.v1: refusing to start; "
+                f"fail_safe_wrong_pg_role — expected pg role "
+                f"{expected!r} but found {role_name!r}"
+            )
+        if is_superuser:
+            raise BackupRoleError(
+                "maint.backup.v1: refusing to start; "
+                f"fail_safe_superuser — role {role_name!r} must not "
+                "be a Postgres superuser"
+            )
+
+    def _enforce_pg_conn_limit(self) -> None:
+        """Refuse-to-start when the PG role's connection limit is too low.
+
+        ROADMAP §8.9 binding (``fail_safe_pg_conn_limit_too_low``):
+        ``pg_dump -j N`` uses N parallel worker processes plus one
+        coordinator connection, so the role needs at least
+        ``cfg.maint_backup_pg_jobs + 1`` connections available.
+
+        An unlimited role (``rolconnlimit == -1``) passes
+        unconditionally.  The injectable :attr:`_pg_conn_limit_checker`
+        is the only bypass surface; tests pass a
+        :class:`NoopPgConnLimitChecker` with the desired value.
+        """
+        role_limit = self._pg_conn_limit_checker.query()
+        min_required = int(_cfg.maint_backup_pg_jobs) + 1
+        if role_limit != -1 and role_limit < min_required:
+            raise BackupConfigError(
+                "maint.backup.v1: refusing to start; "
+                "fail_safe_pg_conn_limit_too_low — "
+                f"negelir_backup role CONNECTION LIMIT={role_limit} "
+                f"is less than cfg.maint_backup_pg_jobs+1={min_required} "
+                "(N parallel workers + 1 coordinator connection)"
+            )
 
     def _enforce_startup_permissions(self) -> None:
         """Set process umask to ``0o077`` and refuse-to-start on
@@ -1791,21 +2931,31 @@ __all__ = [
     "BACKUP_OUTCOMES",
     "PRUNE_SKIP_REASONS",
     "RESTORE_OUTCOMES",
+    "AuditLogImmutableError",
     "DiskGauge",
     "DumpExecutor",
+    "InMemoryImmutableAuditStore",
     "InMemoryMaintAuditLogger",
     "InMemoryPrunerStorage",
     "InMemoryQuarantineStore",
     "MaintAuditLogger",
     "MaintBackupAgent",
     "NoopDumpExecutor",
+    "NoopOffsiteTarget",
+    "NoopRecipientCounter",
     "NoopRestoreExecutor",
     "NoopVerifier",
+    "OffsiteBackupTarget",
+    "OffsiteUnreachableError",
+    "OffsiteUploadResult",
     "PrunerStorage",
     "QuarantineStore",
+    "RecipientCounter",
+    "RecordingOffsiteTarget",
     "RestoreExecutor",
     "RestoreKeyClass",
     "RestoreVerifier",
     "StaticDiskGauge",
     "StaticRestoreKeyClass",
+    "WormEnforcementError",
 ]
