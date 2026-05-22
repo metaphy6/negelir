@@ -229,14 +229,14 @@ def test_dlq_self_throttle_no_immediate_self_isolation(throttle_cfg):
 
 
 # ---------------------------------------------------------------------------
-# (iv) Bus circuit-breaker: spool fills then drains in arrival order
+# (iv) Bus circuit-breaker: spool fills then drains in newest-first order (§8.14.10)
 # ---------------------------------------------------------------------------
 
 
 def test_bus_circuit_breaker_spool_fills_and_drains_in_arrival_order(
     tmp_path: Path,
 ) -> None:
-    """3 bus failures → breaker opens; subsequent emits spool; restore → drains in order."""
+    """3 bus failures → breaker opens; subsequent emits spool; restore → drains newest-first (§8.14.10)."""
     call_count = [0]
     received_after_restore: list[Message] = []
 
@@ -286,9 +286,10 @@ def test_bus_circuit_breaker_spool_fills_and_drains_in_arrival_order(
         f"Expected 3 drained entries, got {len(drained)}: {drained}"
     )
     drained_kinds = [m.payload.get("kind") for m in drained]
-    # Arrival order is determined by the ms-prefix filename sort: c, d, e.
-    assert drained_kinds == ["msg_c", "msg_d", "msg_e"], (
-        f"Spool must drain in arrival (FIFO) order; got {drained_kinds}"
+    # §8.14.10 revised drain order: newest-first (mtime descending).
+    # msg_c was spooled first (oldest), msg_e last (newest) → e, d, c.
+    assert drained_kinds == ["msg_e", "msg_d", "msg_c"], (
+        f"Spool must drain in newest-first (§8.14.10) order; got {drained_kinds}"
     )
     # Spool directory must be empty after a complete drain.
     remaining = list(spool_dir.glob("*.envelope.json"))

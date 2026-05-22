@@ -167,6 +167,10 @@ def test_enabled_overridden_target_no_alert(monkeypatch: pytest.MonkeyPatch) -> 
                         "trainer.v1=8", raising=False)
     monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 16, raising=False)
     monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    # Phase 8 §8.14.8: trainer.v1 is the default self_scaling_target;
+    # disable that guard so the default-policy test can exercise trainer.v1
+    # as a normal auto-scaled target to verify no spurious unconfigured alert.
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     out = agent.tick({"trainer.v1": {
         "queue_depth": 100, "in_flight": 0, "head_age_s": 0,

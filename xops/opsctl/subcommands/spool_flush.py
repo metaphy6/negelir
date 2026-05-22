@@ -36,11 +36,13 @@ import fcntl
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
 from ai.common.config import Config
 from ai.swarm.sdk.types import Envelope, Message, Topic
+from ai.swarm.sdk.spool_aging import prune_aged_spool_entries, quarantine_retired_spool_entries
 
 from .._audit import append_audit_row, make_row
 from .._exit_codes import ExitCode
@@ -48,6 +50,47 @@ from .._publish import publish_event
 
 NAME = "spool-flush"
 LOCK_FILENAME = ".flush.lock"
+
+
+def _maybe_reap_flush_lock(lock_path: Path, stale_timeout_s: float) -> None:
+    """Delete the flush lockfile if it exists, is older than *stale_timeout_s*,
+    and has no live ``flock`` holder (§8.14.10 stale-flush-lock reaper).
+
+    Best-effort: never raises.
+    """
+    try:
+        st = lock_path.stat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+    age = time.time() - st.st_mtime
+    if age < stale_timeout_s:
+        return
+    # Probe for a live holder via a non-blocking exclusive flock on a
+    # fresh fd.  If we get the lock, no one is holding it — unlink.
+    try:
+        fd = os.open(str(lock_path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return  # Held by a live process — not stale; leave alone.
+        try:
+            os.unlink(str(lock_path))
+        except (FileNotFoundError, OSError):
+            pass
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
 
 def add_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> argparse.ArgumentParser:
@@ -64,8 +107,11 @@ def add_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]"
     parser.add_argument(
         "--max-entries",
         type=int,
-        default=0,
-        help="Stop after N successful publishes (0 = drain until empty or hard failure).",
+        default=None,
+        help=(
+            "Stop after N successful publishes "
+            "(0 = unlimited; default: cfg.opsctl_spool_flush_max_per_run)."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -77,19 +123,34 @@ def add_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]"
         action="store_true",
         help="Emit a single JSON object on stdout (deterministic).",
     )
+    parser.add_argument(
+        "--force-retired",
+        action="store_true",
+        help=(
+            "Re-publish envelopes quarantined in the .retired/ subdir. "
+            "The operator accepts that consumers will apply §0 forward-compat "
+            "(unknown-kind envelopes may be silently dropped by consumers). "
+            "Successfully re-published entries are removed from .retired/."
+        ),
+    )
     parser.set_defaults(func=run)
     return parser
 
 
 @contextlib.contextmanager
-def _flush_lock(spool_dir: Path) -> Iterator[bool]:
+def _flush_lock(spool_dir: Path, *, stale_timeout_s: float = 10.0) -> Iterator[bool]:
     """Acquire a non-blocking exclusive lock on the spool dir.
+
+    Stale locks (no live holder, mtime older than *stale_timeout_s*) are
+    reaped before the acquire attempt so a crashed flush process does not
+    permanently block the directory.
 
     Yields ``True`` on acquire, ``False`` on contention. Unlinks
     the lockfile on release.
     """
     spool_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
     lock_path = spool_dir / LOCK_FILENAME
+    _maybe_reap_flush_lock(lock_path, stale_timeout_s)
     fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         try:
@@ -147,8 +208,24 @@ def _load_spool_message(path: Path) -> Optional[Message]:
 def _spool_entries(spool_dir: Path) -> list[Path]:
     if not spool_dir.exists():
         return []
-    # Sort by filename — millisecond prefix gives append order.
-    return sorted(spool_dir.glob("*.envelope.json"))
+    # §8.14.10: newest-first (mtime descending) — fresh operator intent
+    # is more valuable than stale enqueued actions on bus recovery.
+    paths = list(spool_dir.glob("*.envelope.json"))
+    try:
+        return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        # Fallback if stat fails mid-iteration (file removed between glob and sort).
+        return sorted(paths, reverse=True)
+
+
+def _read_swarm_version() -> str:
+    """Best-effort read of the swarm component version from chart.json."""
+    try:
+        chart = Path(__file__).resolve().parents[3] / "xops" / "versioning" / "chart.json"
+        data = json.loads(chart.read_text())
+        return str(data.get("components", {}).get("swarm", {}).get("version", ""))
+    except Exception:
+        return ""
 
 
 def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
@@ -156,8 +233,17 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
     spool_dir = Path(cfg.opsctl_spool_dir_resolved)
     json_output = bool(getattr(args, "json", False))
     dry_run = bool(getattr(args, "dry_run", False))
-    max_entries = int(getattr(args, "max_entries", 0) or 0)
+    # §8.14.10: use cfg.opsctl_spool_flush_max_per_run as the default cap;
+    # --max-entries explicitly overrides (0 = unlimited).
+    _max_entries_arg = getattr(args, "max_entries", None)
+    if _max_entries_arg is None:
+        max_entries = int(cfg.opsctl_spool_flush_max_per_run)
+    else:
+        max_entries = int(_max_entries_arg)
+    force_retired = bool(getattr(args, "force_retired", False))
     host = os.uname().nodename
+    # §8.14.10: stale flush-lock timeout = 2 × opsctl_ack_timeout_ms.
+    stale_timeout_s = 2.0 * cfg.opsctl_ack_timeout_ms / 1000.0
 
     entries = _spool_entries(spool_dir)
     if dry_run:
@@ -185,7 +271,7 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
     skipped = 0
     last_exit = int(ExitCode.OK)
 
-    with _flush_lock(spool_dir) as acquired:
+    with _flush_lock(spool_dir, stale_timeout_s=stale_timeout_s) as acquired:
         if not acquired:
             note = "another spool-flush is in progress"
             sys.stderr.write(f"opsctl {NAME}: {note}\n")
@@ -206,6 +292,88 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
                 ))
                 sys.stdout.write("\n")
             return int(ExitCode.SPOOL_FLUSH_ALREADY_RUNNING)
+
+        # Pre-scan: quarantine malformed entries before the prune/retire
+        # steps.  A file named with an epoch-zero ms prefix (e.g. test
+        # fixtures) would otherwise be deleted as "aged out" before the
+        # malformed-detection loop below has a chance to rename it.
+        for _pre_path in list(entries):
+            if _load_spool_message(_pre_path) is None:
+                _pre_q = _pre_path.with_suffix(_pre_path.suffix + ".malformed")
+                try:
+                    _pre_path.rename(_pre_q)
+                except OSError:
+                    pass
+                failed += 1
+                last_exit = int(ExitCode.GENERIC_FAILURE)
+                append_audit_row(
+                    cfg.opsctl_audit_path_resolved,
+                    make_row(
+                        op=NAME, target=_pre_path.name, request_id="-",
+                        exit_code=int(ExitCode.GENERIC_FAILURE),
+                        expected_acks=0, received_acks=0,
+                        note=f"malformed spool entry quarantined as {_pre_q.name}",
+                        host=host,
+                    ),
+                )
+        # Refresh after malformed pre-scan so prune/quarantine don't see them.
+        entries = _spool_entries(spool_dir)
+
+        # §8.13.3 — prune aged entries before replaying live ones.
+        import time as _time
+        _prune_result = prune_aged_spool_entries(
+            spool_dir=spool_dir,
+            max_age_h=int(cfg.maint_spool_entry_max_age_h),
+            now_s=_time.time(),
+            target="opsctl",
+            producer="ops_console",
+            spool_label="opsctl",
+        )
+        if _prune_result.pruned_paths and bus is not None:
+            for _msg in _prune_result.maint_events + _prune_result.sec_alerts:
+                try:
+                    publish_event(bus, _msg)
+                except Exception:
+                    pass
+        # Refresh entry list after pruning.
+        entries = _spool_entries(spool_dir)
+
+        # §8.13.3 — quarantine retired-kind / schema-outdated entries.
+        from ai.swarm.agents.maint import KNOWN_MAINT_EVENT_KINDS
+        _retire_result = quarantine_retired_spool_entries(
+            spool_dir=spool_dir,
+            known_kinds=KNOWN_MAINT_EVENT_KINDS,
+            min_schema_version=int(cfg.swarm_min_supported_schema_version),
+            target="opsctl",
+            producer="ops_console",
+            current_version=_read_swarm_version(),
+            spool_label="opsctl",
+        )
+        if _retire_result.retired_paths and bus is not None:
+            for _msg in _retire_result.sec_alerts:
+                try:
+                    publish_event(bus, _msg)
+                except Exception:
+                    pass
+        # Refresh entry list after quarantine.
+        entries = _spool_entries(spool_dir)
+
+        # §8.13.3 --force-retired: re-publish quarantined envelopes.
+        if force_retired:
+            retired_dir = spool_dir / ".retired"
+            for rpath in sorted(retired_dir.glob("*.envelope.json")) if retired_dir.exists() else []:
+                message = _load_spool_message(rpath)
+                if message is None:
+                    continue
+                result = publish_event(bus, message)
+                if result.exit_code in (ExitCode.OK, ExitCode.NO_CONSUMER_FOR_KIND):
+                    try:
+                        rpath.unlink()
+                    except FileNotFoundError:
+                        pass
+                    succeeded += 1
+                    if max_entries and succeeded >= max_entries:
+                        break
 
         for path in entries:
             message = _load_spool_message(path)
@@ -279,6 +447,29 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
                 last_exit = int(ec)
                 break
 
+    # §8.14.10: emit spool_flush_partial audit row when the drain budget
+    # was exhausted and unprocessed entries remain.
+    _processed = succeeded + failed + skipped
+    _remaining = max(0, len(entries) - _processed)
+    _hit_budget = max_entries > 0 and succeeded >= max_entries and _remaining > 0
+    if _hit_budget:
+        append_audit_row(
+            cfg.opsctl_audit_path_resolved,
+            make_row(
+                op="spool-flush-partial",
+                target="-",
+                request_id="-",
+                exit_code=int(ExitCode.OK),
+                expected_acks=0,
+                received_acks=0,
+                note=(
+                    f"drain budget exhausted: drained={succeeded} "
+                    f"remaining={_remaining}"
+                ),
+                host=host,
+            ),
+        )
+
     summary = {
         "op": NAME,
         "spool_dir": str(spool_dir),
@@ -288,6 +479,9 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
         "exit_code": int(last_exit),
         "note": f"flushed {succeeded}/{len(entries)} spool entries",
     }
+    if _hit_budget:
+        summary["kind"] = "spool_flush_partial"
+        summary["remaining"] = _remaining
     if json_output:
         sys.stdout.write(json.dumps(summary, sort_keys=True, ensure_ascii=False))
         sys.stdout.write("\n")

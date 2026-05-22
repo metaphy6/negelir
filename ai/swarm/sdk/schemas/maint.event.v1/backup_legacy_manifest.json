@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_legacy_manifest",
+  "title": "maint.event.v1{kind=backup_legacy_manifest}",
+  "description": "Phase 8 §8.13.4 — emitted during restore when the dump's manifest is in legacy format (missing migration metadata, pre Phase 8.13.4). Fall-back: skip forward-migrate, run verify.sql against the dump schema only. Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "dump_date",
+    "fallback_action"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_legacy_manifest"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "dump_date": {
+      "type": "string",
+      "description": "ISO calendar date (UTC) of the dump whose manifest is in legacy format."
+    },
+    "fallback_action": {
+      "type": "string",
+      "enum": [
+        "verify_only"
+      ],
+      "description": "The fallback behaviour taken: skip forward-migrate, run verify.sql against the dump schema only."
+    },
+    "manifest_path": {
+      "type": "string",
+      "description": "Path of the legacy manifest file relative to the backup root."
+    }
+  },
+  "additionalProperties": false
+}

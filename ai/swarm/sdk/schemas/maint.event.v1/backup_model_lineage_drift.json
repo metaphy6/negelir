@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_model_lineage_drift",
+  "title": "maint.event.v1{kind=backup_model_lineage_drift}",
+  "description": "Phase 8 §8.13.1 — emitted when a live model artifact under data/models/ is missing its lineage sidecar or the sidecar predictor_id/version fields do not match the enclosing directory structure. Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "artifact_path",
+    "predictor_id",
+    "version",
+    "drift_reason"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_model_lineage_drift"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "artifact_path": {
+      "type": "string",
+      "description": "Path of the artifact relative to data/models/."
+    },
+    "predictor_id": {
+      "type": "string",
+      "description": "predictor_id inferred from the directory structure."
+    },
+    "version": {
+      "type": "string",
+      "description": "version inferred from the directory structure."
+    },
+    "drift_reason": {
+      "type": "string",
+      "enum": [
+        "sidecar_missing",
+        "predictor_id_mismatch",
+        "version_mismatch"
+      ],
+      "description": "Root cause of the lineage drift."
+    }
+  },
+  "additionalProperties": false
+}

@@ -82,6 +82,13 @@ from ..payloads import MaintAck, SecAlert
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 from ._liveness import LivenessMixin
+from ._op_signature import gate_op_envelope
+from .model_lineage import (
+    LineageMissingDebouncer,
+    SEC_ALERT_BACKUP_MODEL_LINEAGE_MISSING,
+    audit_model_artifacts,
+    iter_lineage_missing_alerts,
+)
 
 # Importing the cron module fails-soft on the cfg-validation path
 # (early bootstrap) but is mandatory at agent construction — the
@@ -96,8 +103,14 @@ from xops.backup.audit import (
 )
 from xops.backup.cron import CronExpr, CronSyntaxError, parse_cron, utc_now
 from xops.backup.executors import quarantine_failed_dump_dir
+from xops.backup.migration_state import (
+    SEC_ALERT_BACKUP_COMMIT_SHA_UNAVAILABLE,
+    consume_commit_sha_unavailable_alert,
+)
 from xops.backup.retention import oldest_retained_sunday_dump, prune_retained_dumps
 from xops.maint.prune_order import PRUNE_ORDER
+from xops.opsctl._audit import load_audit_chain_key
+from xops.opsctl.audit_chain import ChainVerifyResult, verify_audit_chain
 
 
 _log = logging.getLogger("swarm.agents.maint.backup")
@@ -330,6 +343,98 @@ class NoopPgConnLimitChecker:
 
     def query(self) -> int:
         return int(self.connection_limit)
+
+
+class PgSecretAgeChecker(Protocol):
+    """Query the age of the Postgres backup user's password in days.
+
+    Called once at agent startup by
+    :meth:`MaintBackupAgent._enforce_pg_secret_age`.
+    Returns the password age in days as an integer.
+
+    Implementations:
+
+    * :class:`NoopPgSecretAgeChecker` — injectable shim (default).
+      Returns a pre-configured age without touching a real database.
+    * ``LivePgSecretAgeChecker`` — Phase R1 adapter that runs
+      ``SELECT EXTRACT(EPOCH FROM (now() - valuntil))::int / 86400``
+      (or ``pg_catalog.pg_authid.rolvaliduntil``) against
+      ``cfg.maint_backup_pg_dsn``.
+    """
+
+    def query(self) -> int:
+        """Return the password age in days (0 = freshly set)."""
+        ...
+
+
+@dataclass
+class NoopPgSecretAgeChecker:
+    """Injectable :class:`PgSecretAgeChecker` shim.
+
+    Defaults to ``age_days=0`` — freshly set, safe-to-start — so
+    existing tests that do not exercise the secret-age gate continue
+    to pass unchanged.  Tests that prove the refusal path inject
+    an ``age_days`` value above ``cfg.maint_backup_pg_secret_max_age_days``.
+    """
+
+    age_days: int = 0
+
+    def query(self) -> int:
+        return int(self.age_days)
+
+
+class AgeVersionError(RuntimeError):
+    """Raised at agent startup when the ``age`` binary version does not
+    match ``cfg.maint_backup_age_binary_version``.
+
+    Surface code carried in the message: ``fail_safe_age_version_mismatch``.
+    The agent refuses-to-start so a silently-corrupted binary or an
+    operator-driven downgrade cannot go undetected.
+    """
+
+
+class AgeVersionChecker(Protocol):
+    """Probe the installed ``age`` binary and return its version string.
+
+    Called once at agent startup by
+    :meth:`MaintBackupAgent._enforce_age_binary_version`.
+
+    Implementations:
+
+    * :class:`NoopAgeVersionChecker` — injectable shim (default).
+      Returns a pre-configured version string without running a
+      subprocess. Used in all tests and in the in-memory dev stack.
+    * ``LiveAgeVersionChecker`` — Phase R1 adapter that runs
+      ``subprocess.run(['age', '--version'], check=True, capture_output=True)``
+      and parses the version from stdout.
+    """
+
+    def probe(self) -> str:
+        """Return the installed ``age`` version string (e.g. ``"1.2.0"``)."""
+        ...
+
+
+@dataclass
+class NoopAgeVersionChecker:
+    """Injectable :class:`AgeVersionChecker` shim.
+
+    Defaults to ``version="1.2.0"`` — matching the default pinned
+    version — so existing tests that do not exercise the age-version
+    gate continue to pass unchanged.  Tests that prove the refusal
+    path inject a ``version`` value that differs from
+    ``cfg.maint_backup_age_binary_version``.
+
+    Set ``raise_not_found=True`` to simulate the ``age`` binary being
+    absent (raises :class:`FileNotFoundError` on ``probe()``).
+    """
+
+    version: str = "1.2.0"
+    raise_not_found: bool = False
+
+    def probe(self) -> str:
+        if self.raise_not_found:
+            raise FileNotFoundError("age binary not found")
+        return self.version
 
 
 class VerifyKeyRotator(Protocol):
@@ -1201,6 +1306,8 @@ class MaintBackupAgent(LivenessMixin):
         offsite_target: OffsiteBackupTarget | None = None,
         liveness_clock: Callable[[], float] | None = None,
         leader: Leader | None = None,
+        pg_secret_age_checker: PgSecretAgeChecker | None = None,
+        age_version_checker: AgeVersionChecker | None = None,
     ) -> None:
         self._dump = dump if dump is not None else NoopDumpExecutor()
         self._verifier = verifier if verifier is not None else NoopVerifier()
@@ -1261,7 +1368,20 @@ class MaintBackupAgent(LivenessMixin):
         self._last_offsite_uploaded_wall: datetime | None = None
         # Debounce anchor for the offsite age watchdog re-emission.
         self._last_offsite_age_alert_wall: datetime | None = None
+        # §8.16.6 — when a recurring preflight probe fails, the agent enters
+        # spool-mode (stops attempting offsite uploads) until the next
+        # successful probe. Set True when probe fails; cleared on success.
+        self._offsite_preflight_spool_mode: bool = False
+        self._last_offsite_preflight_wall: datetime | None = None
 
+        self._pg_secret_age_checker: PgSecretAgeChecker = (
+            pg_secret_age_checker if pg_secret_age_checker is not None
+            else NoopPgSecretAgeChecker()
+        )
+        self._age_version_checker: AgeVersionChecker = (
+            age_version_checker if age_version_checker is not None
+            else NoopAgeVersionChecker()
+        )
         # ROADMAP §8.9 binding (`fail_safe_wrong_pg_role` /
         # `fail_safe_superuser`): the backup agent must run as exactly
         # ``cfg.maint_backup_pg_role`` (default ``negelir_backup``) and
@@ -1275,6 +1395,17 @@ class MaintBackupAgent(LivenessMixin):
         # pg_dump workers (pg_jobs + 1 coordinator connection minimum).
         # An unlimited role (-1) passes unconditionally.
         self._enforce_pg_conn_limit()
+        # ROADMAP §8.13.6 binding (`fail_safe_pg_secret_expired`): refuse
+        # to start when the backup-role password age exceeds the hard cap
+        # (cfg.maint_backup_pg_secret_max_age_days, default 120 days).
+        # Forces the operator to rotate before backups resume.  The
+        # injectable _pg_secret_age_checker is the only bypass surface.
+        self._enforce_pg_secret_age()
+        # ROADMAP §8.14.3 binding (`fail_safe_age_version_mismatch`): refuse
+        # to start when the installed `age` binary version differs from
+        # cfg.maint_backup_age_binary_version.  The injectable
+        # _age_version_checker is the only bypass surface.
+        self._enforce_age_binary_version()
 
         # Parse cron up-front so a typo refuses-to-start instead of
         # silently disabling the nightly backup.
@@ -1434,6 +1565,50 @@ class MaintBackupAgent(LivenessMixin):
         except OSError:
             # Best-effort — a corrupt ledger must not wedge boot.
             pass
+        # §8.13.1 post-hoc lineage-missing alert debouncer.  One instance
+        # per agent; debounce window from config so operators can tune.
+        self._lineage_missing_debouncer = LineageMissingDebouncer(
+            window_h=float(_cfg.maint_backup_model_lineage_missing_debounce_h)
+        )
+        # §8.13.4 restore version-invariant: emit once-at-boot alert when
+        # build_metadata.json is absent (repo_commit_sha unavailable).
+        # The module-level sentinel ensures at most one emission per
+        # process lifetime; the flag here defers the actual bus write to
+        # the first flush_expired() call (agent must be running to publish).
+        self._commit_sha_alert_due: bool = consume_commit_sha_unavailable_alert()
+
+        # §8.15.7 — opsctl_audit.csv hash-chain boot verify.
+        # Run at construction time (before the first cron tick) so a
+        # pod-restart after tampering is caught immediately. The chain
+        # key is loaded from cfg.audit_chain_hmac_key_path; if absent
+        # (not configured or file unreadable) the check is silently
+        # skipped. The break details are held until the first
+        # flush_expired() call publishes the sec.alert.v1.
+        self._audit_chain_break_due: ChainVerifyResult | None = None
+        # Hourly cron ticker for the continuous-verify pass.
+        # Initialized to None so the first flush_expired() call arms
+        # the timer without firing immediately (cold-start safety).
+        self._audit_chain_verify_cron: CronExpr | None = None
+        try:
+            self._audit_chain_verify_cron = parse_cron(
+                str(getattr(_cfg, "maint_backup_audit_chain_verify_cron", "0 * * * *"))
+            )
+        except (CronSyntaxError, Exception):
+            pass
+        self._audit_chain_verify_next_fire_at: datetime | None = None
+        _chain_key = load_audit_chain_key(str(_cfg.audit_chain_hmac_key_path))
+        if _chain_key is not None:
+            try:
+                _opsctl_audit_path = str(getattr(_cfg, "opsctl_audit_path_resolved", ""))
+                if _opsctl_audit_path:
+                    _result = verify_audit_chain(
+                        _opsctl_audit_path, _chain_key, include_rotated=True
+                    )
+                    if not _result.ok:
+                        self._audit_chain_break_due = _result
+            except Exception:  # noqa: BLE001 — boot verify must not wedge agent
+                pass
+
         self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract: handle quarantine_erase + restore ─────────────────
@@ -1449,6 +1624,19 @@ class MaintBackupAgent(LivenessMixin):
         if msg.envelope.topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
+        # ── §8.14.4 signature / authz gate (binding) ─────────────────────
+        _sig_ok, _sig_reason, _alert_kind = gate_op_envelope(payload, _cfg)
+        if not _sig_ok:
+            _req_id = str(payload.get("request_id") or msg.envelope.message_id)
+            return [
+                self._ack(msg, _req_id, accepted=False, reason=_sig_reason),
+                self._sec_alert(
+                    kind=_alert_kind, severity="critical",
+                    reason=_sig_reason,
+                    subject=str(payload.get("op_key_id") or "unknown"),
+                ),
+            ]
+        # ─────────────────────────────────────────────────────────────────
         if not self._leader.is_leader():
             return ()
         kind = payload.get("kind")
@@ -1813,6 +2001,25 @@ class MaintBackupAgent(LivenessMixin):
                         "ttl_h": float(_cfg.maint_backup_verify_orphan_ttl_h),
                     },
                 ))
+        # ROADMAP §8.13.4 restore version-invariant: emit once-at-boot
+        # sec.alert.v1{kind=backup_commit_sha_unavailable, severity=info}
+        # when build_metadata.json was absent at agent construction time.
+        # The flag is cleared after the first emission so subsequent
+        # heartbeat ticks never re-emit.
+        if self._commit_sha_alert_due:
+            self._commit_sha_alert_due = False
+            out.append(self._sec_alert(
+                kind=SEC_ALERT_BACKUP_COMMIT_SHA_UNAVAILABLE,
+                severity="info",
+                reason=(
+                    "xops/versioning/build_metadata.json not found; "
+                    "repo_commit_sha will be null in dump manifests "
+                    "(expected outside a built image)"
+                ),
+            ))
+        _preflight_msg = self._maybe_run_offsite_preflight(now_wall)
+        if _preflight_msg is not None:
+            out.append(_preflight_msg)
         # Nightly backup state machine.
         if self._next_fire_at is None:
             day_start = now_wall.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1962,6 +2169,89 @@ class MaintBackupAgent(LivenessMixin):
                         ),
                         subject="maint.backup.v1",
                     ))
+        # §8.13.1 post-hoc lineage audit.  Runs on every heartbeat tick
+        # (cheap filesystem scan) but is debounced per predictor_id so each
+        # persistently-missing-sidecar predictor emits at most one alert per
+        # cfg.maint_backup_model_lineage_missing_debounce_h window.  The
+        # `backup_model_lineage_missing` kind is severity=warn (not critical)
+        # so it does not page on-call but is visible on dashboards.
+        models_dir = Path(str(_cfg.model_dir))
+        _audit_entries = audit_model_artifacts(models_dir)
+        for _pid, _reason in iter_lineage_missing_alerts(
+            _audit_entries,
+            self._lineage_missing_debouncer,
+            now=now_wall,
+        ):
+            out.append(self._sec_alert(
+                kind=SEC_ALERT_BACKUP_MODEL_LINEAGE_MISSING,
+                severity="warn",
+                reason=_reason,
+                subject=_pid,
+            ))
+        # §8.15.7 — boot-time audit chain break alert (deferred from __init__).
+        # Fires exactly once on the first flush_expired() call after a
+        # chain break was detected at construction time. The deferred
+        # write lets the agent bus be ready before emitting alerts.
+        if self._audit_chain_break_due is not None:
+            _break = self._audit_chain_break_due
+            self._audit_chain_break_due = None
+            out.append(self._sec_alert(
+                kind="audit_log_integrity_break",
+                severity="critical",
+                reason=(
+                    f"opsctl_audit.csv hash-chain break at boot: "
+                    f"row {_break.first_break_row} — {_break.break_reason}"
+                ),
+                subject=_break.file_path,
+            ))
+        # §8.15.7 — hourly audit chain verify cron.
+        # Arms on the first flush_expired() call; verifies the chain
+        # on each hourly boundary. Emits maint.event.v1{kind=audit_chain_verify}
+        # on success and sec.alert.v1{kind=audit_log_integrity_break} on failure.
+        if self._audit_chain_verify_cron is not None:
+            if self._audit_chain_verify_next_fire_at is None:
+                self._audit_chain_verify_next_fire_at = next_fire_after(
+                    self._audit_chain_verify_cron, now_wall
+                )
+            elif now_wall >= self._audit_chain_verify_next_fire_at:
+                _cv_fire_wall = self._audit_chain_verify_next_fire_at
+                self._audit_chain_verify_next_fire_at = next_fire_after(
+                    self._audit_chain_verify_cron, now_wall
+                )
+                _chain_key = load_audit_chain_key(str(_cfg.audit_chain_hmac_key_path))
+                if _chain_key is not None:
+                    try:
+                        _opsctl_audit_path = str(
+                            getattr(_cfg, "opsctl_audit_path_resolved", "")
+                        )
+                        if _opsctl_audit_path:
+                            _cv_result = verify_audit_chain(
+                                _opsctl_audit_path, _chain_key, include_rotated=True
+                            )
+                            if not _cv_result.ok:
+                                out.append(self._sec_alert(
+                                    kind="audit_log_integrity_break",
+                                    severity="critical",
+                                    reason=(
+                                        f"opsctl_audit.csv hash-chain break "
+                                        f"(hourly cron): row "
+                                        f"{_cv_result.first_break_row} — "
+                                        f"{_cv_result.break_reason}"
+                                    ),
+                                    subject=_cv_result.file_path,
+                                ))
+                            out.append(self._notify(
+                                "audit_chain_verify",
+                                extra={
+                                    "ok": _cv_result.ok,
+                                    "rows_checked": _cv_result.rows_checked,
+                                    "first_break_row": _cv_result.first_break_row,
+                                    "break_reason": _cv_result.break_reason,
+                                    "audit_file_path": _cv_result.file_path,
+                                },
+                            ))
+                    except Exception:  # noqa: BLE001 — verify must not crash agent
+                        pass
         return out
 
     def _fire(
@@ -2296,7 +2586,7 @@ class MaintBackupAgent(LivenessMixin):
         _upload_exc_box: list[BaseException] = []
         _upload_timeout_s: float = 0.0
         _upload_deadline_mono: float = 0.0
-        if not dry_run:
+        if self._offsite_upload_enabled(dry_run=dry_run):
             _upload_timeout_s = (
                 float(_cfg.maint_backup_offsite_upload_timeout_h) * 3600.0
             )
@@ -2792,6 +3082,54 @@ class MaintBackupAgent(LivenessMixin):
                 "(N parallel workers + 1 coordinator connection)"
             )
 
+    def _enforce_pg_secret_age(self) -> None:
+        """Refuse-to-start when the backup-role PG password is too old.
+
+        ROADMAP §8.13.6 binding (``fail_safe_pg_secret_expired``):
+        if the password age in days exceeds
+        ``cfg.maint_backup_pg_secret_max_age_days`` (default 120)
+        the agent raises :class:`BackupPermissionError` carrying
+        ``fail_safe_pg_secret_expired`` so the operator is forced to
+        rotate before backups can resume.
+
+        The injectable :attr:`_pg_secret_age_checker` is the only
+        bypass surface; tests pass :class:`NoopPgSecretAgeChecker`
+        with the desired age.
+        """
+        age_days = self._pg_secret_age_checker.query()
+        max_age = int(_cfg.maint_backup_pg_secret_max_age_days)
+        if age_days > max_age:
+            raise BackupPermissionError(
+                "maint.backup.v1: refusing to start; "
+                "fail_safe_pg_secret_expired — "
+                f"pg backup-role password age {age_days}d exceeds "
+                f"cfg.maint_backup_pg_secret_max_age_days={max_age}d; "
+                "rotate the secret and restart"
+            )
+
+    def _enforce_age_binary_version(self) -> None:
+        """Refuse-to-start when the installed ``age`` binary version
+        does not match ``cfg.maint_backup_age_binary_version``.
+
+        ROADMAP §8.14.3 binding (``fail_safe_age_version_mismatch``):
+        the ``age`` binary is a first-class build-time dependency;
+        a version mismatch means the binary was silently replaced or
+        the operator rolled forward without updating the pin.
+
+        The injectable :attr:`_age_version_checker` is the only bypass
+        surface; tests pass :class:`NoopAgeVersionChecker` with the
+        desired version string or ``raise_not_found=True``.
+        """
+        expected = str(_cfg.maint_backup_age_binary_version)
+        installed = self._age_version_checker.probe()
+        if installed != expected:
+            raise AgeVersionError(
+                "maint.backup.v1: refusing to start; "
+                "fail_safe_age_version_mismatch — "
+                f"installed age version {installed!r} != "
+                f"cfg.maint_backup_age_binary_version={expected!r}"
+            )
+
     def _enforce_startup_permissions(self) -> None:
         """Set process umask to ``0o077`` and refuse-to-start on
         looser-than-contract perms in ``cfg.maint_backup_dir``.
@@ -2828,6 +3166,7 @@ class MaintBackupAgent(LivenessMixin):
             attempt=int(msg.envelope.attempt or 1),
             reason=reason,
             details=details,
+            trace_id=msg.envelope.trace_id,
         )
         env = Envelope(
             message_id=self._new_id(),
@@ -2925,6 +3264,51 @@ class MaintBackupAgent(LivenessMixin):
             attempt=1,
         )
         return Message(envelope=env, payload=payload)
+
+    def _maybe_run_offsite_preflight(
+        self,
+        now_wall: datetime,
+    ) -> Message | None:
+        """Run the §8.16.6 recurring offsite preflight when due.
+
+        On failure, flip the agent into spool-mode and emit a critical
+        sec.alert.v1{kind=backup_offsite_preflight_failed}. On success,
+        clear spool-mode and update the last successful probe timestamp.
+        """
+        if getattr(_cfg, "maint_backup_offsite_target", "none") == "none":
+            return None
+        preflight = getattr(self._offsite_target, "preflight", None)
+        if not callable(preflight):
+            return None
+
+        from xops.backup.s3_preflight import preflight_due
+
+        last_ts = 0.0
+        if self._last_offsite_preflight_wall is not None:
+            last_ts = self._last_offsite_preflight_wall.timestamp()
+        if not preflight_due(
+            last_ts,
+            float(_cfg.maint_backup_offsite_preflight_interval_h),
+        ):
+            return None
+
+        self._last_offsite_preflight_wall = now_wall
+        try:
+            preflight(_cfg)
+        except Exception as exc:  # noqa: BLE001
+            self._offsite_preflight_spool_mode = True
+            return self._sec_alert(
+                kind="backup_offsite_preflight_failed",
+                severity="critical",
+                reason=str(exc),
+            )
+
+        self._offsite_preflight_spool_mode = False
+        return None
+
+    def _offsite_upload_enabled(self, *, dry_run: bool) -> bool:
+        """Return whether this tick may attempt an offsite upload."""
+        return not dry_run and not self._offsite_preflight_spool_mode
 
 
 __all__ = [

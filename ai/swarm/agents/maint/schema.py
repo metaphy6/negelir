@@ -13,6 +13,11 @@ Sample-rate cap: ``cfg.maint_schema_sample_rate_per_s`` tokens per
 second per topic, with a `maint_schema_burst` cap. Per ROADMAP
 §8.14.7 binding, the cap is per-topic so a hot topic cannot starve
 sampling on a quiet one.
+
+Global RPS cap (§8.14.7): ``cfg.maint_schema_validate_max_rps`` is a
+hard per-process cross-topic ceiling. Over-budget validates are dropped
+and counted; a debounced ``sec.alert.v1{kind=maint_schema_sample_rate_too_high}``
+fires when the drop-rate exceeds 10 % of attempted over a 60 s window.
 """
 from __future__ import annotations
 
@@ -32,6 +37,7 @@ from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from ._op_signature import gate_op_envelope
 from . import _schema_drift as _drift
 from ._liveness import LivenessMixin
 from ._pause_state import PauseState
@@ -47,6 +53,16 @@ class SchemaSentinelStartupError(RuntimeError):
     propagates to the bootstrap/runner that instantiated this agent.
     All other agents in the registry are unaffected because they do not
     call ``detect_c`` at init.
+    """
+
+
+class SchemaRpsCapError(RuntimeError):
+    """Raised at boot when ``cfg.maint_schema_validate_max_rps > 500``.
+
+    Per ROADMAP §8.14.7 (``fail_safe_validate_rps_cap_exceeded``): the
+    hard ceiling is 500 rps.  A value above this is almost certainly a
+    finger-fumble in the safety knob itself and is refused outright so
+    the operator is forced to acknowledge the misconfiguration.
     """
 
 
@@ -67,6 +83,15 @@ class _TopicBucket:
     last_drift_at: float = 0.0
     seen: int = 0
     drifted: int = 0
+
+
+@dataclass
+class _RpsWindowTracker:
+    """Per-topic counters for the 60 s drop-rate alert window (§8.14.7)."""
+
+    attempted: int = 0   # passed per-topic bucket; presented to global cap
+    dropped: int = 0     # blocked by global cap
+    window_start: float = 0.0
 
 
 class MaintSchemaSentinel(LivenessMixin):
@@ -109,6 +134,21 @@ class MaintSchemaSentinel(LivenessMixin):
         # §8.13.5 pause/isolation matrix.
         self._pause = PauseState()
         self._leader: Leader = leader if leader is not None else SingleProcessLeader(name=self.name)
+        # §8.14.7 — global (per-process, cross-topic) token bucket.
+        self._global_tokens: float = 0.0
+        self._global_last_refill: float = 0.0
+        # §8.14.7 — per-topic drop-rate tracking (60 s rolling window).
+        self._rps_tracker: dict[str, _RpsWindowTracker] = defaultdict(_RpsWindowTracker)
+        # Debounce the maint_schema_sample_rate_too_high alert per topic.
+        self._rps_alert_last_at: dict[str, float] = {}
+        # §8.14.7 boot guard — fail_safe_validate_rps_cap_exceeded.
+        _max_rps = int(_cfg.maint_schema_validate_max_rps)
+        if _max_rps > 500:
+            raise SchemaRpsCapError(
+                f"fail_safe_validate_rps_cap_exceeded: "
+                f"cfg.maint_schema_validate_max_rps={_max_rps} exceeds "
+                f"the safety ceiling of 500 — reduce to ≤ 500"
+            )
         # §8.6 binding boundary — `maint_schema_auto_apply_enabled` is
         # forward-compat only. Phase 8 is detect-only; if the operator
         # flips the flag we surface a loud one-shot warning + sec.alert
@@ -142,9 +182,49 @@ class MaintSchemaSentinel(LivenessMixin):
         if msg.envelope.topic == MAINT_EVENT:
             payload = msg.payload or {}
             kind = payload.get("kind")
-            if kind == "maint_pause":
-                return list(self._handle_pause(msg, payload, paused=True))
-            if kind == "maint_resume":
+            if kind in ("maint_pause", "maint_resume"):
+                # ── §8.14.4 signature / authz gate (binding) ──────────────
+                _sig_ok, _sig_reason, _alert_kind = gate_op_envelope(
+                    payload, _cfg
+                )
+                if not _sig_ok:
+                    _req_id = str(
+                        payload.get("request_id") or msg.envelope.message_id
+                    )
+                    _ack = self._ack(
+                        msg, _req_id, accepted=False, reason=_sig_reason
+                    )
+                    _sa_payload = {
+                        "alert_id": secrets.token_hex(8),
+                        "kind": _alert_kind,
+                        "severity": "critical",
+                        "source": self.name,
+                        "reason": _sig_reason,
+                        "subject": str(
+                            payload.get("op_key_id") or "unknown"
+                        ),
+                        "request_id": None,
+                        "client_id": None,
+                        "ip": None,
+                        "evidence_ref": None,
+                        "produced_at": self._clock_iso(),
+                    }
+                    _sa_env = Envelope(
+                        message_id=self._new_id(),
+                        trace_id=msg.envelope.trace_id,
+                        topic=SEC_ALERT,
+                        producer=self.name,
+                        created_at=self._clock_iso(),
+                        schema_version=1,
+                        attempt=1,
+                    )
+                    return [
+                        _ack,
+                        Message(envelope=_sa_env, payload=_sa_payload),
+                    ]
+                # ─────────────────────────────────────────────────────────────
+                if kind == "maint_pause":
+                    return list(self._handle_pause(msg, payload, paused=True))
                 return list(self._handle_pause(msg, payload, paused=False))
             # Other maint kinds: still subject to Detector A sampling.
             return self.observe(msg)
@@ -183,6 +263,7 @@ class MaintSchemaSentinel(LivenessMixin):
             attempt=int(msg.envelope.attempt or 1),
             reason=reason,
             details=details,
+            trace_id=msg.envelope.trace_id,
         )
         env = Envelope(
             message_id=self._new_id(),
@@ -212,6 +293,28 @@ class MaintSchemaSentinel(LivenessMixin):
         bucket = self._buckets[topic]
         if not self._consume_token(bucket, lag_tier=lag_tier):
             return
+        # §8.14.7 — global cross-topic RPS cap gate.
+        # Record the attempt; gate on the global bucket; emit drop alert
+        # when drop-rate exceeds 10 % over a 60 s window.
+        tracker = self._rps_tracker[topic]
+        now = self._clock_mono()
+        if tracker.window_start == 0.0:
+            tracker.window_start = now
+        tracker.attempted += 1
+        rps_alerts = []
+        if not self._consume_global_token(now):
+            tracker.dropped += 1
+            rps_alerts = list(self._maybe_emit_rps_alert(topic, tracker, now))
+            if rps_alerts:
+                yield from rps_alerts
+            return
+        # Rotate window after consuming from global bucket too, in case
+        # the alert window just elapsed with no drops (reset cleanly).
+        window_elapsed = now - tracker.window_start
+        if window_elapsed >= 60.0:
+            tracker.attempted = 1
+            tracker.dropped = 0
+            tracker.window_start = now
         bucket.seen += 1
         # Validate payload against the topic schema (kind-discriminated
         # topics use validate_kind; flat topics use validate).
@@ -253,6 +356,91 @@ class MaintSchemaSentinel(LivenessMixin):
             bucket.tokens -= 1.0
             return True
         return False
+
+    # ── Global (per-process, cross-topic) RPS cap (§8.14.7) ──────
+    def _consume_global_token(self, now: float) -> bool:
+        """Consume one token from the per-process global validate-rps
+        bucket.  Returns ``True`` if the validate may proceed.
+
+        The global bucket refills at ``cfg.maint_schema_validate_max_rps``
+        tokens/second with a burst cap equal to the rate (1-second burst).
+        """
+        max_rps = max(1, int(_cfg.maint_schema_validate_max_rps))
+        if self._global_last_refill == 0.0:
+            self._global_last_refill = now
+            self._global_tokens = float(max_rps)
+        else:
+            elapsed = max(0.0, now - self._global_last_refill)
+            self._global_tokens = min(float(max_rps), self._global_tokens + elapsed * max_rps)
+            self._global_last_refill = now
+        if self._global_tokens >= 1.0:
+            self._global_tokens -= 1.0
+            return True
+        return False
+
+    def _maybe_emit_rps_alert(
+        self,
+        topic: str,
+        tracker: "_RpsWindowTracker",
+        now: float,
+    ) -> "Iterable[Message]":
+        """Emit a debounced ``sec.alert.v1{kind=maint_schema_sample_rate_too_high}``
+        when the 60 s window drop-rate exceeds 10 % of attempted.
+
+        One alert per topic per window so a sustained misconfig does not
+        flood the alert bus.
+        """
+        window_elapsed = now - tracker.window_start
+        if window_elapsed < 60.0:
+            # Window not yet complete — only emit if obviously wrong now
+            # (> 10 % inside a partial window that has at least 60 attempts).
+            if tracker.attempted < 60:
+                return
+        # Reset window for next interval.
+        attempted = tracker.attempted
+        dropped = tracker.dropped
+        tracker.attempted = 0
+        tracker.dropped = 0
+        tracker.window_start = now
+        if attempted == 0 or dropped == 0:
+            return
+        drop_ratio = dropped / attempted
+        if drop_ratio <= 0.10:
+            return
+        # Debounce: one alert per topic per debounce window
+        # (reuse cfg.maint_schema_drift_debounce_s for the debounce period).
+        debounce_s = max(60, int(_cfg.maint_schema_drift_debounce_s))
+        last = self._rps_alert_last_at.get(topic)
+        if last is not None and (now - last) < debounce_s:
+            return
+        self._rps_alert_last_at[topic] = now
+        payload = {
+            "alert_id": secrets.token_hex(8),
+            "kind": "maint_schema_sample_rate_too_high",
+            "severity": "warn",
+            "source": self.name,
+            "reason": (
+                f"validate drop-rate {drop_ratio:.1%} over 60 s window "
+                f"for topic {topic!r} — check cfg.maint_schema_sample_rate; "
+                f"attempted={attempted}, dropped={dropped}"
+            ),
+            "subject": topic,
+            "request_id": None,
+            "client_id": None,
+            "ip": None,
+            "evidence_ref": None,
+            "produced_at": self._clock_iso(),
+        }
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        yield Message(envelope=env, payload=payload)
 
     # ── Validation indirection (kind-discriminated aware) ────────
     def _validate(self, topic: str, payload: dict) -> list[str]:
@@ -481,4 +669,4 @@ class MaintSchemaSentinel(LivenessMixin):
         yield Message(envelope=env, payload=payload)
 
 
-__all__ = ["MaintSchemaSentinel", "SchemaSentinelStartupError"]
+__all__ = ["MaintSchemaSentinel", "SchemaRpsCapError", "SchemaSentinelStartupError"]

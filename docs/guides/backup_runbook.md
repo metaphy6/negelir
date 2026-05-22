@@ -209,3 +209,119 @@ writing, on the on-call channel.
 * **Recipient classifier:** [`xops/backup/recipients.py`](../../xops/backup/recipients.py).
 * **Consumer code:** [`ai/swarm/agents/maint/backup.py`](../../ai/swarm/agents/maint/backup.py)
   (`_handle_restore`).
+
+---
+
+## 5. `age` binary install and version pinning
+
+The backup agent encrypts and decrypts dump archives with
+[`age`](https://age-encryption.org/).  The agent **refuses to start** if
+the installed binary's self-reported version does not match
+`cfg.maint_backup_age_binary_version` (default `"1.2.0"`); a mismatch
+emits `sec.alert.v1{kind=fail_safe_age_version_mismatch_local, severity=critical}`.
+
+### 5.1 Install the pinned version
+
+```bash
+# Linux x86-64 — replace with the correct arch for your build
+AGE_VERSION="$(PYTHONPATH=ai python3 -c 'from common.config import Config; print(Config().maint_backup_age_binary_version)')"
+wget -q "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz"
+tar -xf "age-v${AGE_VERSION}-linux-amd64.tar.gz"
+sudo install -m 0755 age/age age/age-keygen /usr/local/bin/
+age --version   # must print v${AGE_VERSION}
+```
+
+> **Never** use a package-manager-provided `age` without verifying it
+> matches the cfg pin.  Distro packages frequently lag behind or patch
+> the binary in ways that invalidate the expected version string.
+
+### 5.2 Bumping the pin (verify-PG version-bump procedure)
+
+When upgrading the source PostgreSQL server (e.g. PG 16 → PG 17):
+
+1. Update `MAINT_BACKUP_VERIFY_PG_IMAGE` in `xops/env/.env.example`
+   (and in your active `xops/env/.env`) to match the new major version,
+   e.g. `postgres:17-alpine`.
+2. Rebuild the SidecarVerifier Job manifest to reference the new image.
+3. Run `make ops.backup-bump-age` (if available) **or** update
+   `MAINT_BACKUP_AGE_BINARY_VERSION` if you are simultaneously upgrading
+   the `age` binary.
+4. Verify the agent starts cleanly: check for absence of
+   `fail_safe_verify_pg_too_old` and `backup_verify_pg_version_mismatch`
+   alerts in the first 60 s after restart.
+
+> The source PG version is read from `negelir.manifest.json`
+> (`server_version_num: int` — raw integer from `SHOW server_version_num`).
+> The agent boot-validates `verify_pg_image_version_num >= source_server_version_num`.
+> A mismatch causes refusal with `fail_safe_verify_pg_too_old` **before**
+> any restore attempt touches live data.
+
+### 5.3 Config knobs summary
+
+| Knob | Default | Purpose |
+|---|---|---|
+| `MAINT_BACKUP_AGE_BINARY_VERSION` | `1.2.0` | Expected `age --version` string.  Agent refuses if mismatched. |
+| `MAINT_BACKUP_VERIFY_PG_IMAGE` | `postgres:16-alpine` | Docker image for the ephemeral restore-verify container.  Must be ≥ source PG version. |
+| `MAINT_BACKUP_PG_DUMP_NICE_LEVEL` | `10` | `nice` level wrapping `pg_dump` (0 = dev/no contention). |
+| `MAINT_BACKUP_PG_DUMP_IONICE` | `true` | Enable `ionice -c 2 -n 7` around `pg_dump` (Linux only). |
+
+---
+
+## 6. Offsite credential rotation and forensic capture (§8.15.10)
+
+### 6.1 Offsite credential rotation
+
+The offsite S3/GCS/B2 credentials stored in the agent's secrets are time-boxed
+to `cfg.maint_backup_offsite_credential_max_age_days` (default 90 d).
+
+**Rotation procedure:**
+
+1. On any backup run the agent checks the credential file mtime against the
+   threshold.  When age exceeds the threshold it emits
+   `sec.alert.v1{kind=offsite_credential_rotation_required, severity=warn}`
+   (debounced daily).
+2. Operator runs `make ops.rotate-offsite-creds PROVIDER=<s3|gcs|b2>` which:
+   a. Generates or imports new credentials.
+   b. Writes them to the secrets mount at the path in
+      `cfg.maint_backup_offsite_credential_path`.
+   c. Emits `maint.event.v1{kind=offsite_creds_rotated}` on the bus.
+3. The agent picks up the new credentials on the next run (no restart needed;
+   the path is re-read each time).
+
+### 6.2 Forensic capture on verify failure
+
+When `maint.backup.v1` restore-verify encounters a critical check failure
+(schema mismatch, row-count anomaly, or HMAC chain break) it triggers a
+forensic capture:
+
+1. It writes a `verify_forensic.json` sidecar alongside the failed dump
+   directory (renamed to `<date>.failed/verify_forensic.json`).
+2. The sidecar is bounded by `cfg.maint_backup_forensic_max_bytes` (default
+   262144 bytes = 256 KB).  Content beyond the cap is truncated with a
+   `…truncated` sentinel appended.
+3. The agent emits `maint.event.v1{kind=verify_forensic_captured}` on the bus
+   so operators know the sidecar is available.
+4. The verify pass then emits the normal failure alert (e.g.
+   `backup_verify_failed`) with `forensic_path` populated.
+
+**Postmortem walkthrough:**
+
+```
+data/backups/<date>.failed/
+├── <dump>.tar.age         # encrypted archive (may be truncated / absent)
+├── <dump>.tar.sha256      # outer checksum
+└── verify_forensic.json   # ≤ cfg.maint_backup_forensic_max_bytes
+```
+
+Inspect with:
+
+```bash
+# Check the forensic sidecar (pretty-print first 50 lines)
+cat data/backups/<date>.failed/verify_forensic.json | python3 -m json.tool | head -50
+```
+
+Cross-references:
+* `verify_forensic_captured` in `KIND_SCHEMA_VERSIONS` →
+  [`ai/swarm/sdk/kind_schema_version.py`](../../ai/swarm/sdk/kind_schema_version.py).
+* Chaos coverage: `P12-8-AD` (`chaos-verify-concurrency-deadlock`) in
+  [`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).

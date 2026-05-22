@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/opsctl_key_rotated",
+  "title": "maint.event.v1{kind=opsctl_key_rotated}",
+  "description": "Phase 8 §8.15.4 — audit event emitted by ops.rotate-key (via the destructive-token gate) when an operator HMAC key is rotated. Notification-only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "prev_key_id",
+    "new_key_id",
+    "operator_email"
+  ],
+  "properties": {
+    "kind": {
+      "const": "opsctl_key_rotated"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "prev_key_id": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 16,
+      "description": "Public key_id of the old key (now marked revoked)."
+    },
+    "new_key_id": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 16,
+      "description": "Public key_id of the replacement key."
+    },
+    "operator_email": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator email whose key was rotated."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Optional rotation reason."
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Originating opsctl request_id."
+    }
+  },
+  "additionalProperties": false
+}

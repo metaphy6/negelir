@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/spool_flush_acks_reconciled",
+  "title": "maint.event.v1{kind=spool_flush_acks_reconciled}",
+  "description": "Phase 8 §8.16.2 — emitted by SpoolAckReconciler (inside maint.dlq.v1) once all expected per-consumer acks have landed for a spool-flush invocation, OR the cfg.opsctl_spool_ack_max_wait_h deadline has elapsed. Notification-only; no ack expected.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "flush_invocation_id",
+    "request_id",
+    "expected_ack_count",
+    "received_ack_count",
+    "complete"
+  ],
+  "properties": {
+    "kind": {
+      "const": "spool_flush_acks_reconciled"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Agent or subsystem whose spool-flush triggered this reconciliation (e.g. 'opsctl')."
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "flush_invocation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique ID for the spool-flush invocation being reconciled (UUID4)."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The maint.event.v1 request_id that was flushed from spool."
+    },
+    "expected_ack_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of per-consumer acks expected for this flush invocation."
+    },
+    "received_ack_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of per-consumer acks received before emission."
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True when all expected acks landed; false when deadline elapsed before full ack set."
+    },
+    "missing_ack_consumers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "accepted_by values for consumers that did not ack before deadline. Empty when complete=true."
+    }
+  },
+  "additionalProperties": false
+}

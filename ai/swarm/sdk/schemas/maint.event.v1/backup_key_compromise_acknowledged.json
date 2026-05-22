@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_key_compromise_acknowledged",
+  "title": "maint.event.v1{kind=backup_key_compromise_acknowledged}",
+  "description": "Phase 8 §8.13.6 — emitted for the audit trail when an operator acknowledges a DR-key compromise and revokes the compromised recipient via ops.dr --add-recipient / --revoke. Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "scope",
+    "recipient_fingerprint",
+    "action"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_key_compromise_acknowledged"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "dr"
+      ],
+      "description": "Key scope that was compromised. Currently only 'dr' (disaster-recovery public key)."
+    },
+    "recipient_fingerprint": {
+      "type": "string",
+      "description": "Fingerprint of the compromised DR recipient key being revoked."
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "revoke"
+      ],
+      "description": "Action taken on the compromised key. Currently only 'revoke'."
+    },
+    "operator_id": {
+      "type": "string",
+      "description": "Identifier of the operator who acknowledged the compromise (if available)."
+    }
+  },
+  "additionalProperties": false
+}

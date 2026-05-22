@@ -4,13 +4,36 @@
   "title": "maint.event.v1{kind=scale_throttled}",
   "description": "Phase 8 §8.2 — notification emitted by maint.scaler.v1 when an automatic scale decision is suppressed. `reason` is a closed taxonomy so dashboards can filter without parsing free-form text.",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "would_be", "reason", "decision_window_id"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "would_be",
+    "reason",
+    "decision_window_id"
+  ],
   "properties": {
-    "kind":               { "const": "scale_throttled" },
-    "target":             { "type": "string", "minLength": 1 },
-    "produced_at":        { "type": "string" },
-    "would_be":           { "type": "integer", "minimum": 0, "maximum": 10000, "description": "Replica count the scaler WOULD have applied if not throttled." },
-    "reason":             {
+    "kind": {
+      "const": "scale_throttled"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "would_be": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000,
+      "description": "Replica count the scaler WOULD have applied if not throttled."
+    },
+    "reason": {
       "type": "string",
       "enum": [
         "max_changes_per_window",
@@ -18,12 +41,30 @@
         "max_replicas_cap",
         "min_replicas_floor",
         "hysteresis_block",
-        "vram_budget_exceeded"
+        "vram_budget_exceeded",
+        "self_scaling_target",
+        "noise_window_active"
       ]
     },
-    "decision_window_id": { "type": "string", "minLength": 1 },
-    "max_changes":        { "type": "integer", "minimum": 1, "description": "Cap from cfg.maint_scaler_max_changes_per_window when reason=max_changes_per_window." },
-    "max_replicas":       { "type": "integer", "minimum": 1, "description": "Cap from cfg.maint_scaler_max_replicas (or per-agent override) when reason=max_replicas_cap." }
+    "decision_window_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "max_changes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Cap from cfg.maint_scaler_max_changes_per_window when reason=max_changes_per_window."
+    },
+    "max_replicas": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Cap from cfg.maint_scaler_max_replicas (or per-agent override) when reason=max_replicas_cap."
+    },
+    "observed": {
+      "type": "object",
+      "description": "Phase 8 §8.15.9: contextual observed fields. When reason=noise_window_active, contains {noise_window: \"<cron>\"}.",
+      "additionalProperties": true
+    }
   },
   "additionalProperties": false
 }

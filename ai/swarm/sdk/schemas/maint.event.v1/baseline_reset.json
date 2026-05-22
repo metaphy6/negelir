@@ -4,14 +4,41 @@
   "title": "maint.event.v1{kind=baseline_reset}",
   "description": "Phase 7 §7.2 / Phase 8 §8.1 — operator-driven reset of sec.scrape.v1 source fingerprints (after a legitimate upstream redesign). `target` is the source key (mackolik / nesine / tff / openfootball, etc.).",
   "type": "object",
-  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "client_id",
+    "produced_at"
+  ],
   "properties": {
-    "kind":        { "const": "baseline_reset" },
-    "target":      { "type": "string", "minLength": 1, "description": "Source identifier from xops/mock/seeds/manifest.json sources." },
-    "request_id":  { "type": "string", "minLength": 1 },
-    "client_id":   { "type": "string", "minLength": 1 },
-    "produced_at": { "type": "string" },
-    "reason":      { "type": "string", "description": "Free-form operator note (e.g. 'mackolik 2026-Q2 redesign')." }
+    "kind": {
+      "const": "baseline_reset"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Source identifier from xops/mock/seeds/manifest.json sources."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Free-form operator note (e.g. 'mackolik 2026-Q2 redesign')."
+    }
   },
   "additionalProperties": false
 }

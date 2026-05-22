@@ -75,11 +75,38 @@ def kind_discriminated_topics() -> list[str]:
 
 def known_kinds(topic: str) -> list[str]:
     """Return the per-kind sub-schema names for a kind-discriminated
-    topic. Returns ``[]`` for topics that are not kind-discriminated."""
+    topic.  Returns ``[]`` for topics that are not kind-discriminated.
+
+    Note: **retired** kinds (those moved to ``<topic>/retired/``) are
+    NOT included in this list — they are accessible via
+    :func:`retired_kinds` and :func:`known_kinds_all`.
+    """
     sub_dir = _SCHEMA_DIR / topic
     if not sub_dir.is_dir():
         return []
+    return sorted(p.stem for p in sub_dir.glob("*.json") if not p.parent.name == "retired")
+
+
+def retired_kinds(topic: str) -> list[str]:
+    """Return the per-kind sub-schema names that have been retired for
+    ``topic`` (i.e. moved to the ``<topic>/retired/`` subdirectory after
+    their deprecation window elapsed).
+
+    Per §8.15.2 deprecation path: a retired kind is removed from
+    ``_ack_routing.py`` and its schema is moved to ``retired/``; spool
+    entries carrying a retired kind go through the §8.13.3
+    retired-kind path.
+    """
+    sub_dir = _SCHEMA_DIR / topic / "retired"
+    if not sub_dir.is_dir():
+        return []
     return sorted(p.stem for p in sub_dir.glob("*.json"))
+
+
+def known_kinds_all(topic: str) -> list[str]:
+    """Return all per-kind sub-schema names for ``topic``, including
+    retired ones.  Useful for migration tooling and tests."""
+    return sorted(known_kinds(topic) + retired_kinds(topic))
 
 
 @lru_cache(maxsize=128)

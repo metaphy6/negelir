@@ -75,6 +75,10 @@ services:
       - "60"
       - --io-threads
       - "2"
+      - --aclfile
+      - /etc/redis/acl.conf
+    volumes:
+      - ./infra/redis/acl.conf:/etc/redis/acl.conf:ro
     ports:
       - "6379:6379"
     tmpfs:

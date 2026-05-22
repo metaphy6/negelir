@@ -12,7 +12,8 @@
     "agent_id":            { "type": "string", "minLength": 1 },
     "target":              { "type": "string", "minLength": 1 },
     "request_id":          { "type": "string", "minLength": 1 },
-    "ttl_s":               { "type": "integer", "minimum": 1 }
+    "ttl_s":               { "type": "integer", "minimum": 1 },
+    "action":              { "type": "string", "enum": ["ttl_refresh", "no_op"] }
   },
   "additionalProperties": false
 }

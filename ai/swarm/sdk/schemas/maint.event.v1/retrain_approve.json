@@ -4,14 +4,42 @@
   "title": "maint.event.v1{kind=retrain_approve}",
   "description": "Phase 8 §8.1 — operator-published manual override that authorizes a trainer run. Carries `target=<predictor_id>` and `request_id` correlated to the drift event's request_id (so the trainer can join the two on the bus).",
   "type": "object",
-  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "client_id",
+    "produced_at"
+  ],
   "properties": {
-    "kind":        { "const": "retrain_approve" },
-    "target":      { "type": "string", "minLength": 1 },
-    "request_id":  { "type": "string", "minLength": 1, "description": "UUID — operator-issued; the corresponding drift retrain_request.request_id MAY be carried in `details.drift_request_id` for join (optional)." },
-    "client_id":   { "type": "string", "minLength": 1, "description": "<os_user>@<hostname> per ops console doctrine." },
-    "produced_at": { "type": "string" },
-    "details":     { "type": "object", "description": "Optional bag — e.g. {\"drift_request_id\": \"...\", \"note\": \"approved 2026-05-05\"}." }
+    "kind": {
+      "const": "retrain_approve"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "UUID — operator-issued; the corresponding drift retrain_request.request_id MAY be carried in `details.drift_request_id` for join (optional)."
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "<os_user>@<hostname> per ops console doctrine."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "details": {
+      "type": "object",
+      "description": "Optional bag — e.g. {\"drift_request_id\": \"...\", \"note\": \"approved 2026-05-05\"}."
+    }
   },
   "additionalProperties": false
 }

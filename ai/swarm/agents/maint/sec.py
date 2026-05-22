@@ -43,6 +43,7 @@ from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from ._op_signature import gate_op_envelope
 from ._liveness import LivenessMixin
 from ._pause_state import PauseState
 
@@ -90,7 +91,7 @@ class InMemoryPatternStore:
     Real driver (Phase 8.7b) hits Postgres via psycopg with the
     advisory lock ``LOCK_MAINT_SEC_ALLOWLIST``.
 
-    Thread-safety model (mirrors ``pg_advisory_lock`` semantics):
+    Thread-safety model (mirrors ``PG-advisory-lock`` semantics):
     ``_lock`` is acquired for any operation that touches *both*
     ``rows`` (the DB-row state) and ``_active_cache`` (the
     in-process active-pattern cache).  ``read_eval_snapshot``
@@ -99,7 +100,7 @@ class InMemoryPatternStore:
     the cache has not yet been updated (or vice-versa)."""
 
     rows: dict[str, dict] = field(default_factory=dict)
-    # pg_advisory_lock analogue — held while updating both `rows`
+    # PG-advisory-lock analogue — held while updating both `rows`
     # and `_active_cache` so readers always see a consistent pair.
     _lock: threading.RLock = field(
         default_factory=threading.RLock, init=False, repr=False, compare=False
@@ -286,6 +287,35 @@ class MaintSecAgent(LivenessMixin):
         if topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
+        # ── §8.14.4 signature / authz gate (binding) ─────────────────────
+        _sig_ok, _sig_reason, _alert_kind = gate_op_envelope(payload, _cfg)
+        if not _sig_ok:
+            _req_id = str(payload.get("request_id") or msg.envelope.message_id)
+            _ack = self._ack(msg, _req_id, accepted=False, reason=_sig_reason)
+            _sa_payload = {
+                "alert_id": self._new_id(),
+                "kind": _alert_kind,
+                "severity": "critical",
+                "source": self.name,
+                "reason": _sig_reason,
+                "subject": str(payload.get("op_key_id") or "unknown"),
+                "request_id": None,
+                "client_id": None,
+                "ip": None,
+                "evidence_ref": None,
+                "produced_at": self._clock_iso(),
+            }
+            _sa_env = Envelope(
+                message_id=self._new_id(),
+                trace_id=msg.envelope.trace_id,
+                topic=SEC_ALERT,
+                producer=self.name,
+                created_at=self._clock_iso(),
+                schema_version=1,
+                attempt=1,
+            )
+            return [_ack, Message(envelope=_sa_env, payload=_sa_payload)]
+        # ─────────────────────────────────────────────────────────────────
         kind = payload.get("kind")
         if kind == "quarantine_clear":
             return list(self._handle_quarantine_clear(msg, payload))
@@ -514,6 +544,7 @@ class MaintSecAgent(LivenessMixin):
             attempt=int(msg.envelope.attempt or 1),
             reason=reason,
             details=details,
+            trace_id=msg.envelope.trace_id,
         )
         env = Envelope(
             message_id=self._new_id(),

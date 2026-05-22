@@ -4,13 +4,39 @@
   "title": "maint.event.v1{kind=dlq_topic_disabled_drained}",
   "description": "Phase 8 §8.5 — notification emitted by maint.dlq.v1 when a replay request targets a topic in RECURSION_DENY_SET, is not in the configured allow-list, or transitions to disabled mid-run. Operator surface for 'why is my replay being refused?'.",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "deny_reason"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "deny_reason"
+  ],
   "properties": {
-    "kind":        { "const": "dlq_topic_disabled_drained" },
-    "target":      { "type": "string", "minLength": 1 },
-    "produced_at": { "type": "string" },
-    "deny_reason": { "type": "string", "enum": ["recursion_deny", "allow_list_excluded", "topic_disabled_mid_run"] },
-    "request_id":  { "type": "string", "description": "Originating operator request_id (if any)." }
+    "kind": {
+      "const": "dlq_topic_disabled_drained"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "deny_reason": {
+      "type": "string",
+      "enum": [
+        "recursion_deny",
+        "allow_list_excluded",
+        "topic_disabled_mid_run"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Originating operator request_id (if any)."
+    }
   },
   "additionalProperties": false
 }

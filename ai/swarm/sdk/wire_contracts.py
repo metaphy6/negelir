@@ -108,6 +108,9 @@ SEC_ALERT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
     "maint.storage.v1",
     "source.watcher.v1",
     "telemetry.v1",
+    # §8.14.6 — ops_console emits maint_ack_legacy_schema when it
+    # receives a maint.ack.v1 with schema_version=1 (legacy producer).
+    "ops_console",
 })
 
 
@@ -116,6 +119,8 @@ SEC_ALERT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
 SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER: Mapping[str, FrozenSet[str]] = {
     # Phase 8 §8.9: telemetry may only relay the dead-man silence alert.
     "telemetry.v1": frozenset({"maint_silence_alert"}),
+    # Phase 8 §8.14.6: ops_console may only emit the legacy-schema nudge.
+    "ops_console": frozenset({"maint_ack_legacy_schema"}),
 }
 
 

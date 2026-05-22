@@ -4,18 +4,65 @@
   "title": "maint.event.v1{kind=dlq_replayed}",
   "description": "Phase 8 §8.5 — notification emitted by maint.dlq.v1 after a replay run completes for a single (topic, request_id). `replayed_count` may be 0 (gating succeeded but bus drain primitive not yet wired in v1).",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "replayed_count", "max_msgs", "request_id"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "replayed_count",
+    "max_msgs",
+    "request_id"
+  ],
   "properties": {
-    "kind":           { "const": "dlq_replayed" },
-    "target":         { "type": "string", "minLength": 1, "description": "DLQ topic that was replayed." },
-    "produced_at":    { "type": "string" },
-    "replayed_count": { "type": "integer", "minimum": 0 },
-    "max_msgs":       { "type": "integer", "minimum": 1 },
-    "request_id":     { "type": "string", "minLength": 1 },
-    "visit_count":    { "type": "integer", "minimum": 1, "description": "Which visit this replay was (1 = first, etc.)." },
-    "budget_per_topic":   { "type": "integer", "minimum": 1, "description": "Phase 8 §8.5 C1: per-topic share of the round-robin tick budget." },
-    "active_topic_count": { "type": "integer", "minimum": 1, "description": "Phase 8 §8.5 C1: how many DLQ topics shared the budget this tick." },
-    "scheduler":      { "type": "string", "enum": ["operator", "round_robin"], "description": "Phase 8 §8.5 C1: who triggered this replay — an operator request or the periodic round-robin scheduler." }
+    "kind": {
+      "const": "dlq_replayed"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DLQ topic that was replayed."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "replayed_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_msgs": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "visit_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Which visit this replay was (1 = first, etc.)."
+    },
+    "budget_per_topic": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Phase 8 §8.5 C1: per-topic share of the round-robin tick budget."
+    },
+    "active_topic_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Phase 8 §8.5 C1: how many DLQ topics shared the budget this tick."
+    },
+    "scheduler": {
+      "type": "string",
+      "enum": [
+        "operator",
+        "round_robin"
+      ],
+      "description": "Phase 8 §8.5 C1: who triggered this replay — an operator request or the periodic round-robin scheduler."
+    }
   },
   "additionalProperties": false
 }

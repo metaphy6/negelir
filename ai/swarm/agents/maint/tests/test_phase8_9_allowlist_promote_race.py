@@ -1,6 +1,6 @@
 """Phase 8 §8.9 — Allowlist promote-while-evaluating race proof test.
 
-Uses pg_advisory_lock semantics (modelled as threading.RLock in the
+Uses PG-advisory-lock semantics (modelled as threading.RLock in the
 in-memory shim) to interleave: operator promotes pending→active while
 sec.input.v1 is mid-evaluation.  Assert the eval sees a self-consistent
 snapshot — either (row_state='p', in_cache=False) OR (row_state='a',
@@ -81,7 +81,7 @@ def test_no_split_state_under_promote_race() -> None:
     - row_state == 'a'  AND  in_active_cache == False  (DB ahead of cache)
     - row_state != 'a'  AND  in_active_cache == True   (cache ahead of DB)
 
-    pg_advisory_lock semantics (threading.RLock) must prevent both.
+    PG-advisory-lock semantics (threading.RLock) must prevent both.
     """
     store = _fresh_store()
     split_states: list[tuple[str, bool]] = []

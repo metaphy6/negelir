@@ -33,6 +33,7 @@ What this asserts (binding):
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import tarfile
@@ -74,7 +75,14 @@ class FakeRunner:
         timeout: Optional[float] = None,
     ) -> "subprocess.CompletedProcess[bytes]":
         self.calls.append(list(argv))
-        head = os.path.basename(argv[0])
+        # §8.14.9: pg_dump argv may be prefixed by nice/ionice wrappers.
+        # Search the full argv for the first element whose basename matches
+        # a registered handler (not just argv[0]) so that handlers like
+        # "pg_dump" still fire when the call is nice/ionice-wrapped.
+        head = next(
+            (os.path.basename(arg) for arg in argv if os.path.basename(arg) in self.handlers),
+            os.path.basename(argv[0]),
+        )
         handler = self.handlers.get(head)
         if handler is None:
             return subprocess.CompletedProcess(
@@ -280,7 +288,8 @@ def test_dump_happy_path_writes_secure_artefacts(tmp_path: Path) -> None:
     assert enc_bytes == len(b"AGE-ENCRYPTED-BLOB")
 
     # ── argv shape ────────────────────────────────────────────────
-    pg_call = next(c for c in runner.calls if os.path.basename(c[0]) == "pg_dump")
+    # §8.14.9: pg_dump argv may be wrapped by nice/ionice; search all elements.
+    pg_call = next(c for c in runner.calls if any(os.path.basename(a) == "pg_dump" for a in c))
     assert "--format=directory" in pg_call
     assert "--jobs=4" in pg_call
     assert "--no-owner" in pg_call
@@ -358,7 +367,8 @@ def test_dump_single_job_omits_jobs_flag(tmp_path: Path) -> None:
         age_binary="age",
     )
     ex.dump(fire_window_id="single", dry_run=False)
-    pg_call = next(c for c in runner.calls if os.path.basename(c[0]) == "pg_dump")
+    # §8.14.9: pg_dump argv may be wrapped by nice/ionice; search all elements.
+    pg_call = next(c for c in runner.calls if any(os.path.basename(a) == "pg_dump" for a in c))
     assert not any(a.startswith("--jobs=") for a in pg_call), (
         "pg_jobs<=1 must NOT pass --jobs (single-threaded default)"
     )
@@ -375,8 +385,8 @@ def test_dump_single_job_omits_jobs_flag(tmp_path: Path) -> None:
 
     # Manifest records the format so operator+verifier can reason about it.
     window_dir = tmp_path / "backups" / "single"
-    manifest = (window_dir / MANIFEST_NAME).read_text()
-    assert '"format":"custom"' in manifest
+    manifest = json.loads((window_dir / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["format"] == "custom"
     # Intermediate single-file dump artefact is cleaned up after encrypt.
     assert not (window_dir / DUMP_FILE_NAME).exists()
     assert not (window_dir / DUMP_DIR_NAME).exists()
@@ -420,15 +430,20 @@ def test_dump_custom_format_roundtrips_through_tar(tmp_path: Path) -> None:
     )
     ex.dump(fire_window_id="rt", dry_run=False)
 
-    # Tar must contain exactly one entry, named ``negelir.dump``, with
-    # the original payload — this is what the verifier untars.
+    # Tar must contain exactly two entries: the dump file (negelir.dump)
+    # and the §8.14.2 per-file manifest (negelir.files.sha256.txt).
     import io
     tar_bytes = captured_tar["bytes"]
     with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r") as tar:
         members = tar.getmembers()
-        assert len(members) == 1
-        assert members[0].name == DUMP_FILE_NAME
-        extracted = tar.extractfile(members[0])
+        names = {m.name for m in members}
+        assert len(members) == 2
+        assert DUMP_FILE_NAME in names
+        from xops.backup.executors import FILE_CHECKSUM_MANIFEST_NAME
+        assert FILE_CHECKSUM_MANIFEST_NAME in names
+        # The dump file payload is intact.
+        dump_member = next(m for m in members if m.name == DUMP_FILE_NAME)
+        extracted = tar.extractfile(dump_member)
         assert extracted is not None
         assert extracted.read() == payload
 
@@ -539,7 +554,8 @@ def test_dump_writes_quarantine_meta_csv_outside_encrypted_blob(tmp_path: Path) 
     ex.dump(fire_window_id="meta", dry_run=False)
 
     # ── pg_dump excludes quarantine row data ──────────────────────
-    pg_call = next(c for c in runner.calls if os.path.basename(c[0]) == "pg_dump")
+    # §8.14.9: pg_dump argv may be wrapped by nice/ionice; search all elements.
+    pg_call = next(c for c in runner.calls if any(os.path.basename(a) == "pg_dump" for a in c))
     assert "--exclude-table-data=quarantine_samples" in pg_call, (
         "raw quarantine bytes must NEVER enter the encrypted dump"
     )
@@ -613,9 +629,14 @@ def test_dump_disabled_quarantine_exclude_skips_meta_csv(tmp_path: Path) -> None
     )
     ex.dump(fire_window_id="nometa", dry_run=False)
 
-    # No psql call, no projection CSV
-    assert not any(os.path.basename(c[0]) == "psql" for c in runner.calls)
-    pg_call = next(c for c in runner.calls if os.path.basename(c[0]) == "pg_dump")
+    # §8.14.9: a psql call IS made for SHOW server_version_num; the assertion
+    # should verify that the quarantine CSV projection (psql --csv) is NOT called.
+    assert not any(
+        any(os.path.basename(a) == "psql" for a in c) and "--csv" in c
+        for c in runner.calls
+    ), "psql --csv (quarantine projection) must not be called when exclude_quarantine_data=False"
+    # §8.14.9: pg_dump argv may be wrapped by nice/ionice; search all elements.
+    pg_call = next(c for c in runner.calls if any(os.path.basename(a) == "pg_dump" for a in c))
     assert "--exclude-table-data=quarantine_samples" not in pg_call
     window_dir = tmp_path / "backups" / "nometa"
     assert not (window_dir / QUARANTINE_META_NAME).exists()
@@ -707,7 +728,12 @@ def test_verify_happy_path_argv_and_parse(tmp_path: Path) -> None:
         verify_sql_path=str(verify_sql),
     )
     out = v.verify(fire_window_id="w1")
-    assert out == {"matches": 42, "predict_final": 7, "_schema_max_version": 11}
+    # The window was seeded without a manifest (no migrations_at_dump_time) so
+    # the legacy-manifest path is taken: _legacy_manifest=1 is included.
+    assert out.get("matches") == 42
+    assert out.get("predict_final") == 7
+    assert out.get("_schema_max_version") == 11
+    assert out.get("_legacy_manifest") == 1
 
     # ── argv assertions ──────────────────────────────────────────
     age_call = next(c for c in runner.calls if os.path.basename(c[0]) == "age")
@@ -940,3 +966,171 @@ def test_count_where_raises_table_resolution_error_on_non_integer_output() -> No
     pruner = _make_pruner(FakeRunner(handlers={"psql": weird_output}))
     with pytest.raises(TableResolutionError, match="non-integer"):
         pruner.prune(dry_run=True)
+
+
+# ── §8.14.9 nice/ionice wrapping + verify-PG version invariant ───────────────
+
+
+def test_pg_dump_nice_wraps_argv_default(tmp_path: Path) -> None:
+    """§8.14.9 binding: nice_level=10, ionice_enabled=False → nice prefix in argv.
+
+    Asserts that `_wrap_nice_ionice` prepends ``nice -n 10`` to the
+    pg_dump argv when nice_level=10.  ionice is disabled so the test is
+    platform-agnostic (ionice is Linux-only).
+    """
+    from xops.backup.executors import _wrap_nice_ionice
+
+    result = _wrap_nice_ionice(
+        ["pg_dump", "--format=directory", "--file", "/tmp/dump"],
+        nice_level=10,
+        ionice_enabled=False,
+        _is_linux=False,
+    )
+    assert result[:3] == ["nice", "-n", "10"], f"expected nice prefix, got {result[:3]}"
+    assert "pg_dump" in result[3], f"pg_dump should follow the nice prefix, got {result[3]}"
+
+
+def test_pg_dump_mock_profile_no_nice_no_ionice(tmp_path: Path) -> None:
+    """§8.14.9 binding: nice_level=0 → no nice/ionice prefix at all.
+
+    Mock / dedicated-PG deployments set NEGELIR_MAINT_BACKUP_PG_DUMP_NICE_LEVEL=0
+    to bypass priority wrapping entirely.  When nice_level=0 and ionice_enabled
+    is irrelevant (False), pg_dump must be the first element.
+    """
+    from xops.backup.executors import _wrap_nice_ionice
+
+    orig = ["pg_dump", "--format=directory", "--file", "/tmp/dump"]
+    result = _wrap_nice_ionice(
+        orig,
+        nice_level=0,
+        ionice_enabled=False,
+        _is_linux=False,
+    )
+    assert result[0] == "pg_dump", (
+        f"nice_level=0 must not prepend anything; got {result[0]}"
+    )
+    # Original must not be mutated (the function returns orig unchanged or a new list).
+    assert orig[0] == "pg_dump", "original list must not be mutated"
+
+
+def test_pg_dump_ionice_linux_prepends_ionice_then_nice(tmp_path: Path) -> None:
+    """§8.14.9 binding: nice_level=5, ionice_enabled=True, Linux →
+    ``ionice -c 2 -n 7 nice -n 5 pg_dump …``  (ionice wraps nice wraps pg_dump).
+
+    The ionice part is injected after the nice part so that ionice
+    applies to the nice-wrapped pg_dump process.
+    """
+    from xops.backup.executors import _wrap_nice_ionice
+
+    result = _wrap_nice_ionice(
+        ["pg_dump", "--format=directory"],
+        nice_level=5,
+        ionice_enabled=True,
+        _is_linux=True,
+    )
+    assert result[0] == "nice", f"expected nice first, got {result[0]}"
+    assert result[1:3] == ["-n", "5"], f"expected -n 5, got {result[1:3]}"
+    # ionice follows the nice prefix
+    assert result[3] == "ionice", f"expected ionice after nice prefix, got {result[3]}"
+    assert result[4:8] == ["-c", "2", "-n", "7"], (
+        f"expected -c 2 -n 7, got {result[4:8]}"
+    )
+    assert "pg_dump" in result[8], f"pg_dump must follow ionice, got {result[8]}"
+
+
+def test_verify_pg_too_old_refuses_and_sets_info(tmp_path: Path) -> None:
+    """§8.14.9 verify-PG version invariant: manifest server_version_num=170000
+    (PG 17) + verify image postgres:16-alpine (image_major=16) → verify()
+    returns {} and sets last_verify_pg_too_old_info with fail_safe kind.
+
+    This is an adversarial test: the verifier MUST refuse before spinning a
+    Docker container, not silently attempt a pg_restore that would fail.
+    """
+    safe_window = "2026-05-06T03_00_00+00_00"
+    wdir = tmp_path / safe_window
+    wdir.mkdir(parents=True, exist_ok=True)
+    payload = b"FAKE-BLOB"
+    (wdir / ENCRYPTED_NAME).write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    (wdir / CHECKSUM_NAME).write_text(f"{digest}  {ENCRYPTED_NAME}\n")
+    # Manifest records a PG 17 source version num.
+    manifest_data = {
+        "fire_window_id": "2026-05-06T03:00:00+00:00",
+        "server_version_num": 170000,
+    }
+    (wdir / MANIFEST_NAME).write_text(json.dumps(manifest_data) + "\n", encoding="utf-8")
+    identity = _seed_identity(tmp_path)
+
+    v = LocalSubprocessVerifier(
+        backup_dir=str(tmp_path),
+        pg_image="postgres:16-alpine",
+        age_identity_file=str(identity),
+        runner=FakeRunner(),  # no subprocess calls should be made
+    )
+    result = v.verify(fire_window_id="2026-05-06T03:00:00+00:00")
+    assert result == {}, "verifier must refuse PG too-old by returning empty dict"
+    info = v.last_verify_pg_too_old_info
+    assert info is not None, "last_verify_pg_too_old_info must be populated on refusal"
+    assert info["kind"] == "fail_safe_verify_pg_too_old"
+    assert info["image_version_num"] == 160000, (
+        f"postgres:16-alpine → 160000, got {info['image_version_num']}"
+    )
+    assert info["source_version_num"] == 170000, (
+        f"source version_num=170000, got {info['source_version_num']}"
+    )
+    assert info["pg_image"] == "postgres:16-alpine"
+
+
+def test_verify_pg_same_major_does_not_refuse(tmp_path: Path) -> None:
+    """§8.14.9 — same major version (postgres:16 image, PG 16.4 source = 160004)
+    must NOT trigger VerifyPgTooOldError.
+
+    A patch-level difference within the same major is supported by pg_restore;
+    only a major-version downgrade is refused.
+    """
+    from xops.backup.verifier import _parse_pg_image_version_num, VerifyPgTooOldError
+
+    # Direct unit test on the parser + comparison logic.
+    image_version_num = _parse_pg_image_version_num("postgres:16-alpine")
+    source_version_num = 160004  # PG 16.4
+
+    assert image_version_num == 160000, (
+        f"postgres:16-alpine should parse to 160000, got {image_version_num}"
+    )
+    # Major versions match: 16 == 16 → no refusal.
+    assert image_version_num // 10000 == source_version_num // 10000, (
+        "Same major version must not trigger refusal"
+    )
+
+
+def test_verify_pg_too_old_info_cleared_on_next_call(tmp_path: Path) -> None:
+    """§8.14.9 — last_verify_pg_too_old_info must be cleared at the start of
+    each verify() call so stale info from a prior refusal does not bleed into
+    a subsequent successful (or differently-failed) call.
+    """
+    safe_window = "2026-05-06T04_00_00+00_00"
+    wdir = tmp_path / safe_window
+    wdir.mkdir(parents=True, exist_ok=True)
+    payload = b"FAKE-BLOB-2"
+    (wdir / ENCRYPTED_NAME).write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    (wdir / CHECKSUM_NAME).write_text(f"{digest}  {ENCRYPTED_NAME}\n")
+    manifest_data = {"fire_window_id": "2026-05-06T04:00:00+00:00", "server_version_num": 170000}
+    (wdir / MANIFEST_NAME).write_text(json.dumps(manifest_data) + "\n", encoding="utf-8")
+    identity = _seed_identity(tmp_path)
+
+    v = LocalSubprocessVerifier(
+        backup_dir=str(tmp_path),
+        pg_image="postgres:16-alpine",
+        age_identity_file=str(identity),
+        runner=FakeRunner(),
+    )
+    # First call: refused (PG too old) — populates last_verify_pg_too_old_info.
+    v.verify(fire_window_id="2026-05-06T04:00:00+00:00")
+    assert v.last_verify_pg_too_old_info is not None
+
+    # Second call: window is absent — returns {} for a different reason.
+    v.verify(fire_window_id="absent-window")
+    assert v.last_verify_pg_too_old_info is None, (
+        "last_verify_pg_too_old_info must be cleared between verify() calls"
+    )

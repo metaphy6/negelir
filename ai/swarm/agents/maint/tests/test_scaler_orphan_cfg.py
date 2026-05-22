@@ -35,6 +35,9 @@ def test_orphan_emits_info_alert_once(monkeypatch: pytest.MonkeyPatch) -> None:
         cfg, "maint_scaler_max_replicas_overrides_csv",
         "agent.live.v1=4,agent.retired.v1=2", raising=False,
     )
+    # Phase 8 §8.14.8: disable self_scaling_targets to isolate
+    # the max_replicas_overrides_csv orphan check.
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     out = agent.report_registered_agents(["agent.live.v1"])
     assert len(out) == 1
@@ -52,6 +55,7 @@ def test_orphan_one_shot_per_process(monkeypatch: pytest.MonkeyPatch) -> None:
         cfg, "maint_scaler_max_replicas_overrides_csv",
         "agent.retired.v1=2", raising=False,
     )
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     a = agent.report_registered_agents([])
     b = agent.report_registered_agents([])
@@ -66,6 +70,7 @@ def test_no_orphans_emits_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
         cfg, "maint_scaler_max_replicas_overrides_csv",
         "agent.alpha.v1=3,agent.beta.v1=5", raising=False,
     )
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     out = agent.report_registered_agents(
         ["agent.alpha.v1", "agent.beta.v1", "agent.gamma.v1"]
@@ -77,6 +82,7 @@ def test_empty_overrides_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         cfg, "maint_scaler_max_replicas_overrides_csv", "", raising=False,
     )
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     assert agent.report_registered_agents([]) == []
     assert agent.report_registered_agents(["whatever.v1"]) == []
@@ -104,6 +110,7 @@ def test_multiple_orphans_each_alerted_once(monkeypatch: pytest.MonkeyPatch) -> 
         cfg, "maint_scaler_max_replicas_overrides_csv",
         "agent.gone.a=1,agent.gone.b=2,agent.live=4", raising=False,
     )
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     out = agent.report_registered_agents(["agent.live"])
     subjects = sorted(m.payload["subject"] for m in out)
@@ -123,6 +130,7 @@ def test_late_registration_silences_followups(monkeypatch: pytest.MonkeyPatch) -
         cfg, "maint_scaler_max_replicas_overrides_csv",
         "agent.late.v1=3", raising=False,
     )
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
     agent = MaintScaler()
     first = agent.report_registered_agents([])
     assert len(first) == 1  # late-comer flagged on first sweep

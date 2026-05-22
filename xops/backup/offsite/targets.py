@@ -31,6 +31,7 @@ import json
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+from xml.etree import ElementTree
 from pathlib import Path
 from subprocess import CompletedProcess, SubprocessError
 from typing import Any, Callable, Protocol, Sequence, runtime_checkable
@@ -283,6 +284,11 @@ class S3CompatibleTarget:
         """Path-style URL: ``{endpoint}/{bucket}/{key}``."""
         return f"{self._endpoint}/{self._bucket}/{key.lstrip('/')}"
 
+    def _bucket_url(self, query: str = "") -> str:
+        """Path-style bucket URL optionally suffixed with an S3 subresource."""
+        suffix = f"?{query}" if query else ""
+        return f"{self._endpoint}/{self._bucket}{suffix}"
+
     # ── Object Lock (WORM) helpers ────────────────────────────────────────────
 
     def _object_lock_headers(
@@ -369,6 +375,84 @@ class S3CompatibleTarget:
                 f"{resp.data[:256]!r}"
             )
         return resp
+
+    def _request_allow_status(
+        self,
+        method: str,
+        url: str,
+        *,
+        body: bytes = b"",
+        extra_headers: dict[str, str] | None = None,
+        allowed_statuses: tuple[int, ...] = (),
+    ) -> Any:
+        """Sign and execute an HTTP request, allowing selected non-2xx statuses."""
+        headers: dict[str, str] = {
+            "Content-Type": "application/octet-stream",
+            **(extra_headers or {}),
+        }
+        payload_sha256 = _sha256_bytes(body)
+        signed = self._sign(method, url, headers, payload_sha256)
+        resp = self._http.request(method, url, body=body, headers=signed)
+        if resp.status >= 400 and resp.status not in allowed_statuses:
+            raise OSError(
+                f"S3 {method} {url} returned HTTP {resp.status}: "
+                f"{resp.data[:256]!r}"
+            )
+        return resp
+
+    def get_bucket_object_lock_configuration(self, *, Bucket: str) -> dict[str, Any]:
+        """Boto-style wrapper used by §8.16.6 preflight checks."""
+        if Bucket != self._bucket:
+            raise ValueError(f"unexpected bucket {Bucket!r}; expected {self._bucket!r}")
+        resp = self._request_allow_status("GET", self._bucket_url("object-lock"), allowed_statuses=(404,))
+        if resp.status == 404:
+            return {"ObjectLockConfiguration": {"ObjectLockEnabled": "Disabled"}}
+        root = ElementTree.fromstring(resp.data or b"<ObjectLockConfiguration />")
+        enabled = root.findtext("{*}ObjectLockEnabled") or root.findtext("ObjectLockEnabled") or "Disabled"
+        return {"ObjectLockConfiguration": {"ObjectLockEnabled": enabled}}
+
+    def put_object(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        Body: bytes,
+        ObjectLockMode: str,
+        ObjectLockRetainUntilDate: datetime,
+    ) -> dict[str, Any]:
+        """Boto-style wrapper used by §8.16.6 preflight checks."""
+        if Bucket != self._bucket:
+            raise ValueError(f"unexpected bucket {Bucket!r}; expected {self._bucket!r}")
+        headers = {
+            "x-amz-object-lock-mode": ObjectLockMode,
+            "x-amz-object-lock-retain-until-date": ObjectLockRetainUntilDate.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        }
+        self._request("PUT", self._object_url(Key), body=Body, extra_headers=headers)
+        return {}
+
+    def get_object_retention(self, *, Bucket: str, Key: str) -> dict[str, Any]:
+        """Boto-style wrapper used by §8.16.6 preflight checks."""
+        if Bucket != self._bucket:
+            raise ValueError(f"unexpected bucket {Bucket!r}; expected {self._bucket!r}")
+        resp = self._request("GET", f"{self._object_url(Key)}?retention")
+        root = ElementTree.fromstring(resp.data or b"<Retention />")
+        mode = root.findtext("{*}Mode") or root.findtext("Mode") or ""
+        retain_text = (
+            root.findtext("{*}RetainUntilDate")
+            or root.findtext("RetainUntilDate")
+            or ""
+        )
+        retain_until = None
+        if retain_text:
+            retain_until = datetime.fromisoformat(retain_text.replace("Z", "+00:00"))
+        return {"Retention": {"Mode": mode, "RetainUntilDate": retain_until}}
+
+    def delete_object(self, *, Bucket: str, Key: str) -> dict[str, Any]:
+        """Boto-style wrapper used by §8.16.6 preflight checks."""
+        if Bucket != self._bucket:
+            raise ValueError(f"unexpected bucket {Bucket!r}; expected {self._bucket!r}")
+        self._request("DELETE", self._object_url(Key))
+        return {}
 
     # ── Upload ────────────────────────────────────────────────────────────────
 
@@ -576,6 +660,17 @@ class S3CompatibleTarget:
                 f"{resp.status}: {resp.data[:128]!r}"
             )
         return bytes(resp.data)
+
+    def preflight(self, cfg: Any) -> None:  # type: ignore[type-arg]
+        """Run the §8.16.6 Object-Lock preflight probe.
+
+        Delegates to :class:`xops.backup.s3_preflight.S3PreflightChecker`.
+        Raises :exc:`ObjectLockDisabledError`, :exc:`RetentionNotAppliedError`,
+        or :exc:`LockNotEnforcedError` on failure.
+        """
+        from xops.backup.s3_preflight import S3PreflightChecker  # lazy — keeps
+        # targets.py importable without s3_preflight optional deps
+        S3PreflightChecker().run(self, self._bucket, cfg)
 
 
 # ── RsyncSshTarget ────────────────────────────────────────────────────────────

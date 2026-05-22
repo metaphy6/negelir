@@ -37,11 +37,19 @@ from uuid import uuid4
 
 from common.config import cfg as _cfg
 
-from ...sdk.leader import Leader, SingleProcessLeader
-from ...sdk.types import Envelope, Message, Topic
-from ..payloads import MaintAck, SecAlert
-from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
-from ._liveness import LivenessMixin
+from ....sdk.leader import Leader, SingleProcessLeader
+from ....sdk.types import Envelope, Message, Topic
+from ...payloads import MaintAck, SecAlert
+from ...topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from .replay_policy import (
+    LEGACY_EXACT_DENY_TOPICS,
+    build_policy_loaded_payload,
+    current_allow_overrides,
+    deny_reason as replay_policy_deny_reason,
+)
+from .._liveness import LivenessMixin
+from .._op_signature import gate_op_envelope
+from .._spool_ack_reconciler import SpoolAckReconciler
 
 _log = logging.getLogger("swarm.agents.maint.dlq")
 
@@ -102,20 +110,13 @@ def dlq_meta_policy(origin_topic: str) -> str:
 
 # DLQs we MUST NOT replay — replaying these would loop the maint
 # plane on itself. Doctrine: append-only, every entry justified.
-RECURSION_DENY_SET: frozenset[str] = frozenset({
-    # The maint plane's own DLQs.
-    "maint.event.v1.dlq",
-    "maint.ack.v1.dlq",
-    # Sec alert DLQ — rate.v1 is the sole denylist writer; a replay
-    # storm here could bypass the burst window.
-    "sec.alert.v1.dlq",
-    # Sec quarantine DLQ — quarantine_samples are forensic records;
-    # replaying them would re-trigger detector loops.
-    "sec.quarantine.v1.dlq",
-    # QA request DLQ — the proofreader response surface; replays
-    # would double-bill / double-page on already-handled requests.
-    "qa.request.v1.dlq",
-})
+# §8.14.5 (binding): RECURSION_DENY_SET = {maint.dlq.v1.dlq,
+# maint.event.v1.dlq, maint.ack.v1.dlq, sec.alert.v1.dlq} is the
+# core four. Additional entries below extend the set conservatively.
+# NOT operator-overridable (cfg.maint_dlq_replay_topics_deny exists
+# only to make the deny set visible in config audit; values are
+# always sourced from this constant, never from cfg).
+RECURSION_DENY_SET: frozenset[str] = LEGACY_EXACT_DENY_TOPICS
 
 
 def _utc_iso() -> str:
@@ -176,7 +177,7 @@ class MaintDlqSupervisor(LivenessMixin):
     """
 
     name = "maint.dlq.v1"
-    subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
+    subscribes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
     publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
@@ -228,7 +229,7 @@ class MaintDlqSupervisor(LivenessMixin):
         self._poison_log: dict[str, "_deque[tuple[float, str]]"] = {}
         self._frozen_topics: dict[str, str] = {}  # topic → reason
         # Phase 8 §8.13.5 — pause/resume idempotency state.
-        from ._pause_state import PauseState
+        from .._pause_state import PauseState
         self._pause = PauseState()
         # Phase 8 §8.5 backlog-pressure damping. Per-topic state:
         #   ``trip_depth``: depth observed when the alert first fired
@@ -238,6 +239,22 @@ class MaintDlqSupervisor(LivenessMixin):
         # topic resumes its normal per-tick replay budget.
         self._backlog_damped: dict[str, dict[str, float]] = {}
         self._liveness_init(liveness_clock=liveness_clock)
+        # Per-topic replay counter — incremented when a replay is
+        # accepted (not blocked by deny/rate/freeze). Used by proof
+        # tests (§8.14.5) to assert zero auto-replay for deny-set
+        # topics. Also surfaced via telemetry as
+        # ``maint_dlq_replays_total{topic}``.
+        self._replays_total: dict[str, int] = {}
+        # Tracks which deny-set orphans we have already alerted at
+        # boot, so the alert fires exactly once per process lifetime.
+        self._boot_recursion_alerted: set[str] = set()
+        # §8.16.2 — spool-flush ack reconciler; runs inside this agent
+        # as the ack-only consumer of maint.ack.v1 spool-flush envelopes.
+        self._spool_ack_reconciler = SpoolAckReconciler(
+            clock_s=clock_s,
+            clock_iso=clock_iso,
+            new_id=new_id,
+        )
 
     def _now_s(self) -> float:
         if self._clock_s is not None:
@@ -252,16 +269,92 @@ class MaintDlqSupervisor(LivenessMixin):
         tick boundary."""
         return frozenset(_parse_csv_set(str(_cfg.maint_dlq_replay_topics_allow_csv)))
 
+    def _current_allow_overrides(self) -> tuple[str, ...]:
+        """Return the live operator-attested replay exceptions."""
+        return current_allow_overrides()
+
+    def _policy_deny_reason(self, target_dlq: str) -> str | None:
+        """Return deny reason from the layered replay policy for a topic."""
+        return replay_policy_deny_reason(
+            target_dlq,
+            allow_overrides=self._current_allow_overrides(),
+        )
+
     def _is_allowed_topic(self, target_dlq: str) -> bool:
-        """A topic passes the allow-list gate if (a) it is NOT in the
-        recursion deny set AND (b) either the configured allow-list
-        is empty (open default) or the topic is explicitly listed."""
-        if target_dlq in RECURSION_DENY_SET:
+        """Return True iff topic passes policy and operator allow-list.
+
+        Layered deny/override policy is always enforced first.
+        """
+        if self._policy_deny_reason(target_dlq) is not None:
             return False
         allow = self._current_allow_list()
         if not allow:
             return True
         return target_dlq in allow
+
+    def boot_replay_policy_messages(self) -> list["Message"]:
+        """Emit policy-loaded audit event + orphan allow-list warnings."""
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id="boot-check",
+            topic=MAINT_EVENT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        payload = build_policy_loaded_payload(
+            produced_at=self._clock_iso(),
+            target=self.name,
+            allow_overrides=self._current_allow_overrides(),
+        )
+        return [Message(envelope=env, payload=payload), *self.boot_check_allow_list()]
+
+    def boot_check_allow_list(self) -> list["Message"]:
+        """Scan the operator-supplied allow-list for topics that also
+        appear in :data:`RECURSION_DENY_SET` (orphan entries).
+
+        For each orphan found, emits a single
+        ``sec.alert.v1{kind=dlq_recursion_blocked, severity=warn,
+        source=maint.dlq.v1, subject=<topic>}`` alert **once per
+        process lifetime** (idempotent via
+        ``_boot_recursion_alerted``). The orphan does NOT become
+        eligible for replay — :data:`RECURSION_DENY_SET` is
+        unconditional and NOT operator-overridable.
+
+        Returns the list of alert :class:`Message` objects so callers
+        can inject them into the bus without holding a direct bus
+        reference during boot.
+        """
+        allow = self._current_allow_list()
+        alerts: list[Message] = []
+        for topic in sorted(allow):  # sorted for determinism in tests
+            if topic in RECURSION_DENY_SET and topic not in self._boot_recursion_alerted:
+                self._boot_recursion_alerted.add(topic)
+                alert = SecAlert(
+                    alert_id=self._new_id(),
+                    kind="dlq_recursion_blocked",
+                    severity="warn",
+                    source=self.name,
+                    reason=(
+                        f"allow-list entry {topic!r} is in "
+                        "RECURSION_DENY_SET and will never be replayed; "
+                        "remove it from cfg.maint_dlq_replay_topics_allow_csv"
+                    )[:1024],
+                    produced_at=self._clock_iso(),
+                    subject=topic,
+                )
+                env = Envelope(
+                    message_id=self._new_id(),
+                    trace_id="boot-check",
+                    topic=SEC_ALERT,
+                    producer=self.name,
+                    created_at=self._clock_iso(),
+                    schema_version=1,
+                    attempt=1,
+                )
+                alerts.append(Message(envelope=env, payload=alert.as_dict()))
+        return alerts
 
     def _dlq_meta_policy(self, target_dlq: str) -> str:
         """Return the ``__dlq_meta`` placement policy for *target_dlq*.
@@ -324,19 +417,91 @@ class MaintDlqSupervisor(LivenessMixin):
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
         topic = msg.envelope.topic
+        # §8.16.2 — ack-only consumer of maint.ack.v1 spool-flush envelopes.
+        # Sweep is called on every tick regardless of topic so deadline-
+        # elapsed windows are closed even without incoming acks.
+        if topic == MAINT_ACK:
+            return list(self._handle_spool_ack(msg))
         if topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
+        # ── §8.14.4 signature / authz gate (binding) ─────────────────────
+        _sig_ok, _sig_reason, _alert_kind = gate_op_envelope(payload, _cfg)
+        if not _sig_ok:
+            _req_id = str(payload.get("request_id") or msg.envelope.message_id)
+            _ack = self._ack(msg, _req_id, accepted=False, reason=_sig_reason)
+            _alert = SecAlert(
+                alert_id=self._new_id(),
+                kind=_alert_kind,
+                severity="critical",
+                source=self.name,
+                reason=_sig_reason,
+                produced_at=self._clock_iso(),
+                subject=str(payload.get("op_key_id") or "unknown"),
+            )
+            _alert_env = Envelope(
+                message_id=self._new_id(),
+                trace_id=msg.envelope.trace_id,
+                topic=SEC_ALERT,
+                producer=self.name,
+                created_at=self._clock_iso(),
+                schema_version=1,
+                attempt=1,
+            )
+            return [_ack, Message(envelope=_alert_env, payload=_alert.as_dict())]
+        # ─────────────────────────────────────────────────────────────────
         kind = payload.get("kind")
         if kind == "dlq_replay":
             return list(self._handle_replay(msg, payload))
         if kind == "dlq_unfreeze":
             return list(self._handle_unfreeze(msg, payload))
+        if kind == "dlq_drop_request":
+            return list(self._handle_drop_request(msg, payload))
         if kind == "maint_pause":
             return list(self._handle_pause(msg, payload, paused=True))
         if kind == "maint_resume":
             return list(self._handle_pause(msg, payload, paused=False))
         return ()  # ignore other kinds
+
+    # §8.16.2 — spool-flush ack reconciliation ────────────────────
+    def _handle_spool_ack(self, msg: Message) -> Iterable[Message]:
+        """Consume a ``maint.ack.v1`` emitted by a spool-flush consumer.
+
+        Delegates to :class:`SpoolAckReconciler` to back-fill the
+        per-consumer ack receipt.  Also calls ``sweep()`` to close any
+        deadline-elapsed windows so the reconciler does not stall if no
+        further acks arrive.
+
+        Only acks that carry a ``flush_invocation_id`` in their
+        ``details`` dict are forwarded to the reconciler; all others are
+        silently ignored (they belong to normal operator-command acks
+        and are consumed by ops_console, not by us).
+        """
+        payload = msg.payload or {}
+        details = payload.get("details") or {}
+        flush_invocation_id = str(details.get("flush_invocation_id") or "").strip()
+        if not flush_invocation_id:
+            # Not a spool-flush ack — ignore (normal acks go to ops_console).
+            yield from self._spool_ack_reconciler.sweep()
+            return
+
+        request_id = str(payload.get("request_id") or "").strip()
+        accepted_by = str(payload.get("accepted_by") or "").strip()
+        if not request_id or not accepted_by:
+            yield from self._spool_ack_reconciler.sweep()
+            return
+
+        # Extract expected consumer set from details when present.
+        raw_expected = details.get("expected_ack_consumers")
+        expected = frozenset(raw_expected) if isinstance(raw_expected, list) else None
+
+        yield from self._spool_ack_reconciler.reconcile(
+            flush_invocation_id=flush_invocation_id,
+            request_id=request_id,
+            accepted_by=accepted_by,
+            expected=expected,
+        )
+        yield from self._spool_ack_reconciler.sweep()
 
     def _handle_replay(self, msg: Message, payload: dict) -> Iterable[Message]:
         request_id = str(payload.get("request_id") or "")
@@ -352,13 +517,14 @@ class MaintDlqSupervisor(LivenessMixin):
                             reason="leader_skip")
             return
 
-        # Recursion deny.
-        if target_dlq in RECURSION_DENY_SET:
+        # Layered replay-policy deny.
+        policy_reason = self._policy_deny_reason(target_dlq)
+        if policy_reason is not None:
             yield self._ack(msg, request_id, accepted=False,
-                            reason="recursion_deny")
+                            reason=policy_reason)
             yield self._notify("dlq_topic_disabled_drained",
                                target=target_dlq,
-                               extra={"deny_reason": "recursion_deny",
+                               extra={"deny_reason": policy_reason,
                                       "request_id": request_id})
             return
 
@@ -467,6 +633,13 @@ class MaintDlqSupervisor(LivenessMixin):
         pressure_alerts = self._bump_state(target_dlq)
         st = self._state[target_dlq]
         st.replayed = replayed
+        # §8.14.5: telemetry counter — incremented on every accepted
+        # operator-commanded replay (deny-set and rate-limited paths
+        # return early above, so this line is only reached for actual
+        # accepted replays).
+        self._replays_total[target_dlq] = (
+            self._replays_total.get(target_dlq, 0) + 1
+        )
         yield from iter(pressure_alerts)
         yield self._notify("dlq_replayed",
                            target=target_dlq,
@@ -526,8 +699,9 @@ class MaintDlqSupervisor(LivenessMixin):
         skipped_recursion: list[tuple[str, str]] = []
         skipped_rate: list[str] = []
         for t in active_topics:
-            if t in RECURSION_DENY_SET:
-                skipped_recursion.append((t, "recursion_deny"))
+            policy_reason = self._policy_deny_reason(t)
+            if policy_reason is not None:
+                skipped_recursion.append((t, policy_reason))
                 continue
             if not self._is_allowed_topic(t):
                 skipped_recursion.append((t, "allow_list_excluded"))
@@ -560,12 +734,13 @@ class MaintDlqSupervisor(LivenessMixin):
             if t not in active_set or t in self._disabled_notified:
                 continue
             # Topic still presented as active but now excluded.
-            if t in RECURSION_DENY_SET or (current_allow and t not in current_allow):
+            policy_reason = self._policy_deny_reason(t)
+            if policy_reason is not None or (current_allow and t not in current_allow):
                 out.append(self._notify(
                     "dlq_topic_disabled_drained",
                     target=t,
                     extra={
-                        "deny_reason": "allow_list_excluded",
+                        "deny_reason": policy_reason or "allow_list_excluded",
                         "in_flight_count": prev_budget,
                     },
                 ))
@@ -852,9 +1027,20 @@ class MaintDlqSupervisor(LivenessMixin):
     def _handle_unfreeze(self, msg: Message, payload: dict) -> Iterable[Message]:
         """Operator command: lift a poison-pattern freeze on a topic.
 
-        Phase 8 §8.5 C2. Acks ``accepted=true`` even if the topic
-        was not frozen (idempotent surface, mirrors the §8.13.5
-        pause/resume idempotency posture for D1).
+        Phase 8 §8.5 C2 / §8.13.5 idempotency matrix.
+
+        When the topic is already unfrozen, the ack reason is
+        context-sensitive per the §8.13.5 matrix:
+
+        * agent running  → ``already_running``
+        * agent paused   → ``paused_not_blocked``  (topic not blocked, agent is)
+        * agent self-isolated → ``already_unfrozen`` (no-op/partial per spec)
+
+        When the topic IS frozen, always ``unfrozen`` (regardless of
+        agent pause/isolation state — the operator clears the per-topic
+        freeze even while the agent is paused or self-isolated, giving
+        a partial outcome: topic unfrozen, but replays remain blocked
+        by the agent's own pause/isolation until that is lifted).
         """
         request_id = str(payload.get("request_id") or "")
         target_dlq = str(payload.get("target") or "")
@@ -863,15 +1049,94 @@ class MaintDlqSupervisor(LivenessMixin):
         if not self._leader.is_leader():
             yield self._ack(msg, request_id, accepted=True, reason="non_leader_noop")
             return
+        # Honour TTL expiry before reading pause state.
+        now_ns = int(self._now_s() * 1_000_000_000)
+        self._pause.expire_if_due(now_ns)
         was_frozen = self._frozen_topics.pop(target_dlq, None) is not None
         # Drop the poison log so the next burst starts fresh.
         self._poison_log.pop(target_dlq, None)
-        yield self._ack(msg, request_id, accepted=True,
-                        reason="unfrozen" if was_frozen else "already_unfrozen")
+        if was_frozen:
+            reason = "unfrozen"
+        elif self._pause.paused:
+            # §8.13.5: paused + dlq-resume (not blocked) → paused_not_blocked
+            reason = "paused_not_blocked"
+        elif self._pause.self_isolated:
+            # §8.13.5: self-isolated + dlq-resume (not blocked) → no-op
+            reason = "already_unfrozen"
+        else:
+            # §8.13.5: running + dlq-resume (not blocked) → already_running
+            reason = "already_running"
+        yield self._ack(msg, request_id, accepted=True, reason=reason)
         yield self._notify("dlq_topic_unfrozen",
                            target=target_dlq,
                            extra={"request_id": request_id,
                                   "was_frozen": was_frozen})
+
+    # ── dlq_drop_request (§8.15.9 operator explicit drop) ────────
+    def _handle_drop_request(
+        self, msg: Message, payload: dict
+    ) -> "Iterable[Message]":
+        """Operator command: explicitly drop a DLQ entry without replaying it.
+
+        Phase 8 §8.15.9 — the ops console sends ``kind=dlq_drop_request`` to
+        purge a poisoned or no-longer-relevant entry from the DLQ. The
+        supervisor acks the request AND emits ``kind=dlq_dropped{reason=
+        operator_drop}`` with full forensic fields so the audit channel
+        can reconstruct who dropped what and why.
+
+        The opsctl §8.14.4 signature gate has already run (in ``handle()``).
+        """
+        request_id = str(payload.get("request_id") or "")
+        target_dlq = str(payload.get("target") or "")
+
+        # Non-leader hot-spares ack so the ops console gets a full set.
+        if not self._leader.is_leader():
+            yield self._ack(msg, request_id, accepted=True, reason="leader_skip")
+            return
+
+        # Recursion deny check — cannot drop from protected DLQs.
+        if target_dlq in RECURSION_DENY_SET:
+            yield self._ack(msg, request_id, accepted=False,
+                            reason="recursion_deny")
+            return
+
+        # Extract forensic fields forwarded from the operator's payload.
+        dlq_entry_id = str(payload.get("dlq_entry_id") or "")
+        original_request_id = str(payload.get("original_request_id") or "")
+        original_envelope_summary: dict = (
+            payload.get("original_envelope_summary") or {}
+        )
+        drop_reason = str(
+            payload.get("drop_reason") or "operator_explicit_drop"
+        )
+        dropped_by = str(
+            payload.get("dropped_by") or payload.get("op_key_id") or "unknown"
+        )
+
+        # Ack the operator first, then emit the audit notification so the
+        # ops console always sees the ack regardless of the notify path.
+        yield self._ack(msg, request_id, accepted=True, reason="dropped")
+
+        # Derive origin topic from the DLQ topic name (strip .dlq suffix
+        # if present; otherwise use the target as-is).
+        origin_topic = (
+            target_dlq[: -len(".dlq")]
+            if target_dlq.endswith(".dlq")
+            else target_dlq
+        )
+        yield self._notify(
+            "dlq_dropped",
+            target=target_dlq,
+            extra={
+                "reason": "operator_drop",
+                "topic": origin_topic,
+                "dlq_entry_id": dlq_entry_id,
+                "original_request_id": original_request_id,
+                "original_envelope_summary": original_envelope_summary,
+                "dropped_by": dropped_by,
+                "drop_reason": drop_reason,
+            },
+        )
 
     # ── maint_pause / maint_resume (§8.13.5 idempotency matrix) ──
     def _handle_pause(self, msg: Message, payload: dict, *, paused: bool) -> Iterable[Message]:
@@ -883,17 +1148,69 @@ class MaintDlqSupervisor(LivenessMixin):
             yield self._ack(msg, request_id, accepted=True, reason="not_targeted")
             return
         now_ns = int(self._now_s() * 1_000_000_000)
-        self._pause.expire_if_due(now_ns)
+        # §8.13.5 bullet 4: emit maint_resumed when TTL auto-expires so the
+        # operator sees the expiry event regardless of what command arrives next.
+        if self._pause.expire_if_due(now_ns):
+            yield self._notify_lifecycle("maint_resumed",
+                                         extra={"reason": "ttl_expired"})
         if paused:
             ttl_s = int(payload.get("ttl_s") or 0) or int(_cfg.maint_pause_default_ttl_s)
             res = self._pause.apply_pause(ttl_s=ttl_s, now_ns=now_ns)
         else:
             res = self._pause.apply_resume()
-        details = None
+        details: dict | None = None
         if res.deadline_ns is not None:
-            details = {"ttl_s": (res.deadline_ns - now_ns) // 1_000_000_000}
+            # §8.13.5 bullet 3: audit row carries both requested and effective TTL.
+            details = {
+                "ttl_s": (res.deadline_ns - now_ns) // 1_000_000_000,
+                "requested_ttl_s": res.requested_ttl_s,
+                "effective_ttl_s": res.effective_ttl_s,
+            }
         yield self._ack(msg, request_id, accepted=res.accepted,
                         reason=res.reason, details=details)
+        # §8.13.5 self-isolation precedence: when a maint-pause is rejected
+        # because the agent is self-isolated, emit a sec.alert.v1 so the
+        # operator has a pager-level signal to investigate before resuming.
+        if not res.accepted and paused:
+            yield self._emit_pause_rejected_alert(msg, request_id)
+        # §8.13.5 bullet 4: emit maint_paused lifecycle notification.
+        # Re-pause cases carry explicit action=ttl_refresh or action=no_op.
+        if paused and res.accepted:
+            evt_extra: dict | None = None
+            if res.reason == "ttl_refreshed":
+                evt_extra = {"action": "ttl_refresh"}
+            elif res.reason == "already_paused":
+                evt_extra = {"action": "no_op"}
+            yield self._notify_lifecycle("maint_paused", extra=evt_extra)
+
+    def _emit_pause_rejected_alert(
+        self, msg: Message, request_id: str
+    ) -> Message:
+        """Emit ``sec.alert.v1{kind=maint_pause_rejected, severity=warn}``
+        when a ``maint_pause`` is refused because the agent is self-isolated
+        (§8.13.5 self-isolation precedence). Operator must issue
+        ``maint_resume`` to clear the involuntary isolation before any
+        pause command will be accepted.
+        """
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind="maint_pause_rejected",
+            severity="warn",
+            source=self.name,
+            reason="self_isolated",
+            produced_at=self._clock_iso(),
+            subject=request_id,
+        )
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=msg.envelope.trace_id,
+            topic=SEC_ALERT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=alert.as_dict())
 
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,
              reason: str, details: dict | None = None) -> Message:
@@ -905,6 +1222,7 @@ class MaintDlqSupervisor(LivenessMixin):
             attempt=int(msg.envelope.attempt or 1),
             reason=reason,
             details=details,
+            trace_id=msg.envelope.trace_id,
         )
         env = Envelope(
             message_id=self._new_id(),
@@ -922,6 +1240,32 @@ class MaintDlqSupervisor(LivenessMixin):
         payload: dict = {
             "kind": kind,
             "target": target,
+            "produced_at": self._clock_iso(),
+        }
+        if extra:
+            payload.update(extra)
+        env = Envelope(
+            message_id=self._new_id(),
+            trace_id=self._new_id(),
+            topic=MAINT_EVENT,
+            producer=self.name,
+            created_at=self._clock_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        return Message(envelope=env, payload=payload)
+
+    def _notify_lifecycle(self, kind: str, *,
+                          extra: dict | None = None) -> Message:
+        """Emit a self-scoped lifecycle notification (maint_paused / maint_resumed).
+
+        Uses ``agent_id`` (not ``target``) per the §8.9 sub-schema for these
+        kinds — they are self-announcements, not target-scoped decisions.
+        """
+        payload: dict = {
+            "kind": kind,
+            "kind_schema_version": 1,
+            "agent_id": self.name,
             "produced_at": self._clock_iso(),
         }
         if extra:

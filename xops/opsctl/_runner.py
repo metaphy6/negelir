@@ -31,7 +31,9 @@ from ._audit import append_audit_row, make_row
 from ._classify import Action, ClassifyRequest, classify
 from ._exit_codes import ExitCode
 from ._lock import reentrancy_lock
+from ._op_signature import inject_signature
 from ._publish import build_envelope, publish_event
+from ._redis_acl import assert_opsctl_redis_user
 from ._token import derive_confirm_token
 
 
@@ -144,6 +146,32 @@ def run_publish(spec: SubcommandSpec, *, bus: Optional[Any] = None) -> int:
     )
     request_id = str(message.payload["request_id"])
 
+    # ── Inject op_signature into the payload (Phase 8 §8.14.4) ─────
+    # Mutates message.payload in place (dict is mutable even though
+    # Message is frozen). Skipped in dry-run and when
+    # cfg.opsctl_require_signature is False (mock / test profile).
+    if not spec.dry_run:
+        try:
+            inject_signature(message.payload, cfg)
+        except (FileNotFoundError, PermissionError, ValueError) as exc:
+            note = f"signature injection failed: {exc}"
+            sys.stderr.write(f"opsctl {spec.name}: {note}\n")
+            _emit_summary(
+                spec=spec, exit_code=int(ExitCode.GENERIC_FAILURE),
+                request_id=request_id, expected=[], received=[],
+                note=note, action="refuse",
+            )
+            append_audit_row(
+                cfg.opsctl_audit_path_resolved,
+                make_row(
+                    op=spec.name, target=spec.target, request_id=request_id,
+                    exit_code=int(ExitCode.GENERIC_FAILURE),
+                    expected_acks=0, received_acks=0,
+                    note=note, host=host,
+                ),
+            )
+            return int(ExitCode.GENERIC_FAILURE)
+
     # ── Dry-run short-circuit (no token gate, no lock, no publish,
     #    no audit row). Per ROADMAP §8.1: dry-run is the safe-preview
     #    path so operators can inspect the envelope before paying the
@@ -209,6 +237,30 @@ def run_publish(spec: SubcommandSpec, *, bus: Optional[Any] = None) -> int:
             ),
         )
         return int(ExitCode.BAD_USAGE)
+
+    # ── Redis ACL WHOAMI gate (Phase 8 §8.14.4) ─────────────────────
+    # Runs only when a live bus is provided (skipped in unit tests that
+    # pass bus=None). The check guards against using the application
+    # user's credentials, which would have full bus access.
+    if bus is not None:
+        acl_code = assert_opsctl_redis_user(bus, cfg)
+        if acl_code is not None:
+            note = "fail_safe_wrong_redis_user: Redis ACL user mismatch"
+            _emit_summary(
+                spec=spec, exit_code=acl_code,
+                request_id=request_id, expected=[], received=[],
+                note=note, action="refuse",
+            )
+            append_audit_row(
+                cfg.opsctl_audit_path_resolved,
+                make_row(
+                    op=spec.name, target=spec.target, request_id=request_id,
+                    exit_code=acl_code,
+                    expected_acks=0, received_acks=0,
+                    note=note, host=host,
+                ),
+            )
+            return acl_code
 
     # ── Re-entrancy lock acquire ─────────────────────────────────────
     with reentrancy_lock(

@@ -74,6 +74,10 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "manual_scale_pin":  frozenset({"maint.scaler.v1"}),
     # Phase 8 §8.5 — operator-driven DLQ replay request.
     "dlq_replay":        frozenset({"maint.dlq.v1"}),
+    # Phase 8 §8.15.9 — operator explicitly drops a DLQ entry without
+    # replaying it. Supervisor acks AND emits dlq_dropped{reason=operator_drop}
+    # with forensic fields for the audit channel.
+    "dlq_drop_request":  frozenset({"maint.dlq.v1"}),
     # Phase 8 §8.5 C2 — operator lifts a poison-pattern freeze.
     "dlq_unfreeze":      frozenset({"maint.dlq.v1"}),
     # Phase 8 §8.8 — operator forces decimation sweep now.
@@ -106,6 +110,14 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # ``KINDS_NOTIFICATION_ONLY`` below.
     "scale_decision":              frozenset(),
     "scale_throttled":             frozenset(),
+    # Phase 8 §8.15.1 — emitted once at agent boot (resolved clock source)
+    # and on each detected container-suspend event.  Notification-only;
+    # no ack expected.  Action field disambiguates boot vs. suspend_detected.
+    "maint_clock_source_changed":  frozenset(),
+    # Phase 8 §8.14.8 — soft warm-up advisory emitted by maint.scaler.v1
+    # on retrain_request; replaces scale_decision{source=retrain_request_warmup}.
+    # The trainer MAY consume to pre-warm capacity; no ack expected.
+    "trainer_warmup_hint":         frozenset(),
     "manual_scale_pin_expired":    frozenset(),
     # Phase 8 §8.16.1 — emitted once per process lifetime per
     # unconfigured target by maint.scaler.v1 when default-policy
@@ -115,6 +127,7 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # is the paired sec.alert.v1{kind=maint_scaler_unconfigured_agent}.
     "maint_scaler_default_applied": frozenset(),
     "dlq_replayed":                frozenset(),
+    "dlq_replay_policy_loaded":    frozenset(),
     "dlq_escalated":               frozenset(),
     "dlq_topic_disabled_drained":  frozenset(),
     "dlq_dropped":                 frozenset(),
@@ -173,6 +186,79 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "pattern_allowlist_promoted":   frozenset(),
     # Phase 8.6 schema-sentinel / source-watcher drift notification.
     "schema_drift_detected":        frozenset(),
+    # ── Phase 8 §8.13.1 model-artifact backup discipline ─────────────
+    # Notification-only kinds emitted by the model-lineage / cold-mirror
+    # subsystem.  None require acks — they are telemetry for operators
+    # and dashboards.
+    "backup_model_uploaded":             frozenset(),
+    "backup_model_offsite_failed":       frozenset(),
+    "backup_model_cold_verify_completed": frozenset(),
+    "backup_model_cold_verify_failed":   frozenset(),
+    # Emitted when a live artifact under data/models/ is missing its
+    # lineage sidecar or the sidecar's predictor_id/version does not
+    # match the enclosing directory structure (lineage drift).
+    "backup_model_lineage_drift":        frozenset(),
+    # ── Phase 8 §8.13.3 spool entry aging ────────────────────────────
+    # Notification-only audit event emitted by spool-flush helpers when
+    # a spool entry is pruned because its age exceeds
+    # cfg.maint_spool_entry_max_age_h. Carries target, request_id,
+    # age_h, and the original kind of the aged-out envelope.
+    "spool_entry_aged_out":              frozenset(),    # Phase 8 §8.13.3 retired-kind / schema-outdated quarantine ──────────────
+    # Notification-only event emitted when a spool entry is moved to .retired/
+    # because its kind is no longer in KNOWN_MAINT_EVENT_KINDS or its
+    # schema_version is below cfg.swarm_min_supported_schema_version.
+    "spool_entry_retired_kind":          frozenset(),
+    # ── Phase 8 §8.13.7 cross-section additions ───────────────────────────────
+    # Emitted during restore when the dump's manifest is in legacy format
+    # (missing migration metadata from before Phase 8.13.4 revision).
+    # Fall-back: skip forward-migrate, run verify.sql against the dump's
+    # schema only. Notification-only (paired with severity=info restore log).
+    "backup_legacy_manifest":            frozenset(),
+    # Emitted when the backup-role PG password age exceeds the hard cap
+    # (cfg.maint_backup_pg_secret_max_age_days). The agent refuses to start
+    # until the password is rotated. Companion maint.event.v1 to the
+    # sec.alert.v1{kind=backup_pg_secret_expired} that fires concurrently.
+    "backup_pg_secret_expired":          frozenset(),
+    # Emitted for the audit trail when an operator acknowledges a DR-key
+    # compromise and revokes the compromised recipient. Carries scope, the
+    # compromised recipient fingerprint, and the action taken.
+    "backup_key_compromise_acknowledged": frozenset(),
+    # Phase 8 §8.14.2 per-file dump checksum manifest: emitted during
+    # restore-verify when the dump tarball contains no inner manifest
+    # (legacy dump pre-§8.14.2). Verify proceeds with outer-checksum-only
+    # detection. Notification-only (paired with severity=info restore log).
+    "backup_legacy_no_file_manifest":    frozenset(),
+    # Phase 8 §8.14.10 spool-flush partial-drain audit event: emitted when
+    # ops.spool-flush exhausts cfg.opsctl_spool_flush_max_per_run without
+    # emptying the spool directory. Notification-only; no ack expected.
+    "spool_flush_partial":               frozenset(),
+    # Phase 8 §8.15.4 — HMAC key lifecycle audit events.
+    # Emitted by ops.revoke-key / ops.rotate-key through the
+    # destructive-token gate.  Notification-only (operators observe via
+    # dashboards; the originating opsctl envelope carries the ack).
+    "opsctl_key_revoked":                frozenset(),
+    "opsctl_key_rotated":                frozenset(),
+    # Phase 8 §8.15.7 — opsctl_audit.csv hash-chain hourly verification.
+    # Emitted by maint.backup.v1 once per verification cron tick.
+    # Notification-only — no consumer ack expected.
+    "audit_chain_verify":                frozenset(),
+    # Phase 8 §8.15.10 Fix C — restore-verify forensic capture.
+    # Emitted by maint.backup.v1 when a failed restore-verify writes
+    # the verify_forensic.json sidecar to <date>.failed/.
+    # Carries target (date string), size_bytes (file size on disk).
+    # Notification-only — no consumer ack expected.
+    "verify_forensic_captured":          frozenset(),
+    # Phase 8 §8.16.2 — emitted by SpoolAckReconciler (inside
+    # maint.dlq.v1) once all expected acks land or the
+    # cfg.opsctl_spool_ack_max_wait_h deadline elapses.
+    # Notification-only — dashboards/operators consume via bus;
+    # no peer-agent ack expected.
+    "spool_flush_acks_reconciled":       frozenset(),
+    # Phase 8 §8.16.5 — multipart upload-id TTL.
+    # Emitted by MultipartResumeManager when the persisted upload_id is
+    # confirmed stale (either via ListParts NoSuchUpload or mtime > max_age_h).
+    # Agent restarts the upload from scratch. Notification-only.
+    "backup_offsite_upload_id_expired":  frozenset(),
 }
 
 # Kinds whose consumer set is empty BY DESIGN at this point in the
@@ -186,6 +272,9 @@ KINDS_PENDING_CONSUMER_LANDING: Final[Mapping[str, str]] = {
     "allowlist_extend":  "Phase 8.7 (maint.sec.v1 allowlist surface)",
     "allowlist_approve": "Phase 8.7 (maint.sec.v1 allowlist surface)",
     "allowlist_show":    "Phase 8.7 (maint.sec.v1 allowlist surface)",
+    # Phase 8 §8.14.8 — trainer_warmup_hint has an optional consumer
+    # (the trainer pre-warm logic) that lands with Phase 5.x trainer-as-agent.
+    "trainer_warmup_hint": "Phase 5.x (trainer-as-agent) pre-warm consumer",
 }
 
 # Kinds that are intentionally consumer-less because they are
@@ -197,7 +286,10 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "scale_throttled",
     "manual_scale_pin_expired",
     "maint_scaler_default_applied",
+    # Phase 8 §8.15.1 — clock-source boot validation + suspend detection.
+    "maint_clock_source_changed",
     "dlq_replayed",
+    "dlq_replay_policy_loaded",
     "dlq_escalated",
     "dlq_topic_disabled_drained",
     "dlq_dropped",
@@ -238,6 +330,37 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "pattern_allowlist_added",
     "pattern_allowlist_promoted",
     "schema_drift_detected",
+    # Phase 8 §8.13.1 model-artifact backup discipline.
+    "backup_model_uploaded",
+    "backup_model_offsite_failed",
+    "backup_model_cold_verify_completed",
+    "backup_model_cold_verify_failed",
+    "backup_model_lineage_drift",
+    # Phase 8 §8.13.3 spool entry aging + retired-kind quarantine.
+    "spool_entry_aged_out",
+    "spool_entry_retired_kind",
+    # Phase 8 §8.13.7 cross-section additions.
+    "backup_legacy_manifest",
+    "backup_pg_secret_expired",
+    "backup_key_compromise_acknowledged",
+    # Phase 8 §8.14.2 per-file dump checksum manifest (legacy path).
+    "backup_legacy_no_file_manifest",
+    # Phase 8 §8.14.10 spool-flush partial-drain audit notification.
+    # No consumer expected — notification-only event for operators/dashboards.
+    "spool_flush_partial",
+    # Phase 8 §8.15.4 — HMAC key lifecycle audit events.
+    "opsctl_key_revoked",
+    "opsctl_key_rotated",
+    # Phase 8 §8.15.7 — opsctl_audit.csv hash-chain hourly verify cron.
+    "audit_chain_verify",
+    # Phase 8 §8.15.10 Fix C — restore-verify forensic sidecar capture.
+    "verify_forensic_captured",
+    # Phase 8 §8.16.2 — spool-flush ack reconciliation summary.
+    # No consumer expected — the reconciler emits this as a notification
+    # once all acks have landed (or deadline has elapsed). Notification-only.
+    "spool_flush_acks_reconciled",
+    # Phase 8 §8.16.5 — multipart upload-id TTL audit notification.
+    "backup_offsite_upload_id_expired",
 })
 
 # Stable, alphabetised view of all known kinds (test imports this).

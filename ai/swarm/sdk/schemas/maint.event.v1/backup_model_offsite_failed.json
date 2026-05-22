@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_model_offsite_failed",
+  "title": "maint.event.v1{kind=backup_model_offsite_failed}",
+  "description": "Phase 8 §8.13.1 — notification emitted when the model-artifact tarball offsite upload fails. Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "tarball_date",
+    "error_summary"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_model_offsite_failed"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "tarball_date": {
+      "type": "string",
+      "description": "ISO calendar date (UTC) of the model tarball whose upload failed."
+    },
+    "error_summary": {
+      "type": "string",
+      "description": "Operator-readable summary of the upload failure."
+    },
+    "target": {
+      "type": "string",
+      "description": "Offsite target id / path."
+    }
+  },
+  "additionalProperties": false
+}

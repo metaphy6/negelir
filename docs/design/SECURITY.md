@@ -104,3 +104,30 @@ so operators can verify coverage without inspecting the archive.
 - Vault / Azure Key Vault / AWS Secrets Manager integration. Deliberately out for this project version. (See decision **A5**.)
 - WAF in front of the API. Optional in cloud, not part of base topology.
 - Penetration-test certification. We do internal adversarial testing in Phase 12.
+
+---
+
+## Audit-chain HMAC discipline (§8.15.7)
+
+The opsctl audit log (`data/maint/opsctl_audit.csv`) is protected by a forward-
+linked HMAC hash chain:
+
+* **`AUDIT_HEADER`** in [`xops/opsctl/_audit.py`](../../xops/opsctl/_audit.py)
+  defines the canonical column order.  It includes `prev_hmac` (HMAC of the
+  preceding row's fields) and `row_hmac` (HMAC of this row's fields plus
+  `prev_hmac`), anchoring each row to the one before it.
+* The HMAC key is loaded from the path at `cfg.audit_chain_hmac_key_path`
+  (default `/var/lib/negelir/secrets/audit_chain.key`).  The file must be
+  readable by the agent and non-world-readable (mode 0600 or stricter).
+* **Integrity verification** runs on agent startup and on the hourly cron.  A
+  break in the chain (truncated row, injected row, or field mutation) emits
+  `sec.alert.v1{kind=audit_log_integrity_break, severity=critical}` with
+  `first_break_row` identifying the tampered row index.
+* **Database mirror.** `maint_audit_log` and `maint_audit_log_pii` in
+  [`migrations/009_maint_audit.sql`](../../migrations/009_maint_audit.sql) carry
+  `prev_hmac CHAR(64) NOT NULL` and `row_hmac CHAR(64) NOT NULL` columns.  The
+  `maint_audit_stamp_row_hmac` BEFORE INSERT trigger computes and validates the
+  chain at insertion time.  Rows exceeding `cfg.maint_audit_row_max_bytes`
+  (default 16 384 B) are truncated to a `OVERSIZE_SENTINEL` before hashing.
+* **Chaos coverage:** `P12-8-AA` (`chaos-audit-truncate-attack`) in
+  [`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).

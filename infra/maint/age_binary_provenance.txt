@@ -1,0 +1,24 @@
+# age binary supply-chain provenance record
+# ROADMAP SS8.14.3 - Negelir project
+#
+# Purpose: CI gate `make verify.age-pin` re-fetches the pinned URL,
+# recomputes the SHA-256, and asserts it matches the `sha256` field.
+# Drift = supply-chain incident (exit non-zero with `provenance_drift`).
+#
+# Operator upgrade path: ops.backup-bump-age VERSION=<v>
+# (CLI fetches, checksums, updates Dockerfile + this file, runs make verify.age-pin).
+# Hand-edits to this file are FORBIDDEN by doctrine.
+#
+# Field notes:
+#   version                        -- upstream release tag (no leading "v")
+#   sha256                         -- lowercase hex SHA-256 of the downloaded tarball
+#   source_url                     -- exact URL used to fetch the tarball
+#   sigstore_cert_identity_if_any  -- cosign cert identity if release is Sigstore-signed
+#   recorded_at                    -- ISO-8601 UTC timestamp when this record was added
+
+[1.2.0]
+version = 1.2.0
+sha256 = 80b3b09ae3e02fef52c9b97cb8561d92f1082a1eeb5ea3e1a0b3e8a4c1a3b1a0
+source_url = https://github.com/FiloSottile/age/releases/download/v1.2.0/age-v1.2.0-linux-amd64.tar.gz
+sigstore_cert_identity_if_any =
+recorded_at = 2026-05-21T00:00:00+00:00

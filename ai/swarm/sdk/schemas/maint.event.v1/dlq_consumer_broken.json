@@ -4,14 +4,44 @@
   "title": "maint.event.v1{kind=dlq_consumer_broken}",
   "description": "Phase 8 §8.5 C2 — notification emitted by maint.dlq.v1 when the poison-pattern detector fires: ≥ cfg.maint_dlq_poison_distinct_threshold distinct request_ids escalated on the same topic within cfg.maint_dlq_poison_window_s seconds. The supervisor freezes that topic; an operator must send `dlq_unfreeze` to resume replays. Edge-triggered: emitted once per freeze, not on every escalation while frozen.",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "reason", "distinct_request_ids", "window_s"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "reason",
+    "distinct_request_ids",
+    "window_s"
+  ],
   "properties": {
-    "kind":                 { "const": "dlq_consumer_broken" },
-    "target":               { "type": "string", "minLength": 1, "description": "DLQ topic that was frozen." },
-    "produced_at":          { "type": "string" },
-    "reason":               { "type": "string", "enum": ["poison_pattern"] },
-    "distinct_request_ids": { "type": "integer", "minimum": 2 },
-    "window_s":             { "type": "integer", "minimum": 1 }
+    "kind": {
+      "const": "dlq_consumer_broken"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DLQ topic that was frozen."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "poison_pattern"
+      ]
+    },
+    "distinct_request_ids": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "window_s": {
+      "type": "integer",
+      "minimum": 1
+    }
   },
   "additionalProperties": false
 }

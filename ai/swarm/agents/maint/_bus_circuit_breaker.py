@@ -48,6 +48,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import errno
+import fcntl
 import time as _time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -58,6 +60,7 @@ from uuid import uuid4
 from common.config import cfg as _cfg
 
 from ...sdk.types import Message
+from ...sdk.spool_aging import prune_aged_spool_entries
 from ..topics import SEC_ALERT
 
 _log = logging.getLogger("swarm.agents.maint.bus_circuit_breaker")
@@ -110,9 +113,53 @@ def _spool_write(
     return str(target)
 
 
+_FLUSH_LOCK_FILENAME = ".flush.lock"
+
+
+def _maybe_reap_flush_lock(lock_path: "Path", stale_timeout_s: float) -> None:
+    """Reap a stale flush lock (no live holder, mtime older than *stale_timeout_s*).
+    Best-effort: never raises."""
+    try:
+        st = lock_path.stat()
+    except (FileNotFoundError, OSError):
+        return
+    if _time.time() - st.st_mtime < stale_timeout_s:
+        return
+    try:
+        fd = os.open(str(lock_path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return  # live holder
+        try:
+            os.unlink(str(lock_path))
+        except (FileNotFoundError, OSError):
+            pass
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
 def _spool_read_ordered(spool_dir: Path) -> list[Path]:
-    """Return spool entries sorted by filename (arrival order)."""
-    return sorted(spool_dir.glob("*.envelope.json"))
+    """Return spool entries in newest-first (mtime descending) order.
+
+    §8.14.10: fresh operator intent is replayed before stale entries
+    on bus recovery.  Fallback to reverse filename order if stat fails.
+    """
+    paths = list(spool_dir.glob("*.envelope.json"))
+    try:
+        return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        return sorted(paths, reverse=True)
 
 
 def _load_message(path: Path) -> Message | None:
@@ -171,6 +218,9 @@ class BusCircuitBreaker:
     _consecutive_failures: int = field(default=0, init=False)
     _last_failure_ts: float | None = field(default=None, init=False)
     self_isolated: bool = field(default=False, init=False)
+    # §8.13.3 spool aging debounce: last time a spool_entry_aged_out
+    # sec.alert was emitted for this agent (monotonic seconds).
+    _last_aged_out_alert_s: float = field(default=float("-inf"), init=False)
 
     def __post_init__(self) -> None:
         if self.spool_dir is None:
@@ -327,13 +377,104 @@ class BusCircuitBreaker:
             ]
 
     def _drain_spool(self) -> list[Message]:
-        """Replay spool entries in arrival order via publish_fn.
+        """Prune aged entries, then replay remaining spool entries in newest-first
+        order via publish_fn.
+
+        §8.14.10: acquires a non-blocking exclusive flock on
+        ``<spool_dir>/.flush.lock`` before iterating.  A concurrent drain
+        (e.g. two tick() calls from different threads) skips the drain and
+        returns an empty list.
+
+        Aged entries (older than cfg.maint_spool_entry_max_age_h) are deleted
+        and their audit + alert messages are published immediately (§8.13.3).
 
         Successfully published entries are unlinked.  On any failure
         the drain stops (the remaining entries stay for the next tick).
         Returns the list of successfully-drained messages.
         """
         assert self.spool_dir is not None
+        self.spool_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+
+        # §8.14.10: acquire dir-level flush lock before iterating.
+        _stale_s = 2.0 * int(_cfg.opsctl_ack_timeout_ms) / 1000.0
+        _lock_path = self.spool_dir / _FLUSH_LOCK_FILENAME
+        _maybe_reap_flush_lock(_lock_path, _stale_s)
+        _lock_fd: int | None = None
+        try:
+            _lock_fd = os.open(str(_lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as _exc:
+                if _exc.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+                    _log.debug(
+                        "%s: spool drain skipped — another drain in progress",
+                        self.agent_name,
+                    )
+                    try:
+                        os.close(_lock_fd)
+                    except OSError:
+                        pass
+                    return []
+                raise
+        except Exception:
+            if _lock_fd is not None:
+                try:
+                    os.close(_lock_fd)
+                except OSError:
+                    pass
+            raise
+
+        try:
+            return self._drain_spool_locked()
+        finally:
+            try:
+                fcntl.flock(_lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            try:
+                os.unlink(str(_lock_path))
+            except (FileNotFoundError, OSError):
+                pass
+            try:
+                os.close(_lock_fd)
+            except OSError:
+                pass
+
+    def _drain_spool_locked(self) -> list[Message]:
+        """Inner drain logic executed while holding the flush lock."""
+        # §8.13.3 — prune aged entries before draining.
+        # Use clock_ms (same clock that writes spool filenames) to compute
+        # epoch-based now_s, so tests with fake clocks stay consistent.
+        max_age_h = int(_cfg.maint_spool_entry_max_age_h)
+        now_s = self.clock_ms() / 1000.0
+        prune_result = prune_aged_spool_entries(
+            spool_dir=self.spool_dir,
+            max_age_h=max_age_h,
+            now_s=now_s,
+            target=self.agent_name,
+            producer=self.agent_name,
+            spool_label="agent",
+            new_id=self.new_id,
+        )
+        # Publish maint.event.v1 audit rows for each pruned entry.
+        for msg in prune_result.maint_events:
+            try:
+                self.publish_fn(msg)
+            except Exception as exc:
+                _log.warning("%s: failed to publish spool_entry_aged_out audit: %s",
+                             self.agent_name, exc)
+        # Publish sec.alert.v1 (debounced per agent: once per 1h).
+        _debounce_s = 3600.0
+        if (prune_result.sec_alerts
+                and (now_s - self._last_aged_out_alert_s) >= _debounce_s):
+            for msg in prune_result.sec_alerts:
+                try:
+                    self.publish_fn(msg)
+                except Exception as exc:
+                    _log.warning("%s: failed to publish spool_entry_aged_out alert: %s",
+                                 self.agent_name, exc)
+            self._last_aged_out_alert_s = now_s
+
         drained: list[Message] = []
         for path in _spool_read_ordered(self.spool_dir):
             msg = _load_message(path)

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/trainer_warmup_hint",
+  "title": "maint.event.v1{kind=trainer_warmup_hint}",
+  "description": "Phase 8 §8.14.8 — soft warm-up advisory emitted by maint.scaler.v1 on retrain_request. Replaces scale_decision{source=retrain_request_warmup}. The trainer MAY consume to pre-warm capacity; no ack is expected and no replica change is mandated by the scaler. The trainer remains the sole writer of its own replica count.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "retrain_request_id",
+    "projected_window_s"
+  ],
+  "properties": {
+    "kind": {
+      "const": "trainer_warmup_hint"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Self-scaling target being hinted (trainer.v1 in v1)."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "retrain_request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Correlates back to the originating retrain_request envelope."
+    },
+    "projected_window_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Scaler decision-window duration in seconds — hint for trainer pre-warm budget."
+    }
+  },
+  "additionalProperties": false
+}

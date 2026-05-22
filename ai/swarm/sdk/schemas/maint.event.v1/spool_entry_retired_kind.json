@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/spool_entry_retired_kind",
+  "title": "maint.event.v1{kind=spool_entry_retired_kind}",
+  "description": "Phase 8 §8.13.3 — emitted (as sec.alert.v1) when spool-flush quarantines a spool entry because its kind is no longer in KNOWN_MAINT_EVENT_KINDS or its schema_version is below cfg.swarm_min_supported_schema_version. Notification only. The envelope is moved to spool_dir/.retired/ with a <request_id>.retired.json sidecar.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "entry_kind",
+    "reason"
+  ],
+  "properties": {
+    "kind": {
+      "const": "spool_entry_retired_kind"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "target": {
+      "type": "string",
+      "description": "Agent name owning the spool (e.g. 'maint.scaler.v1') or 'opsctl' for the opsctl spool."
+    },
+    "request_id": {
+      "type": "string",
+      "description": "request_id extracted from the quarantined envelope payload."
+    },
+    "entry_kind": {
+      "type": "string",
+      "description": "The kind field of the quarantined envelope."
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["unknown_kind", "schema_outdated"],
+      "description": "Why the envelope was quarantined: 'unknown_kind' = kind not in KNOWN_MAINT_EVENT_KINDS; 'schema_outdated' = schema_version below cfg.swarm_min_supported_schema_version."
+    },
+    "spool": {
+      "type": "string",
+      "description": "Label identifying the spool: 'agent' or 'opsctl'."
+    },
+    "current_version": {
+      "type": "string",
+      "description": "Swarm component version at quarantine time (informational)."
+    },
+    "retired_at_version": {
+      "type": "string",
+      "description": "Swarm component version at quarantine time (informational; same as current_version)."
+    }
+  },
+  "additionalProperties": true
+}

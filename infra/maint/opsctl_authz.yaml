@@ -1,0 +1,21 @@
+# Phase 8 §8.14.4 — per-subcommand authorization map.
+#
+# Maps maint.event.v1 kind → list[key_id] or "*" (any registered operator).
+#
+# Defaults: every non-destructive kind allows any registered operator ("*").
+# Destructive kinds (per §8.1 ALWAYS_DESTRUCTIVE) require explicit key_ids;
+# the empty list means nobody is authorized — add key_ids before using.
+#
+# Consumer enforcement: if the signing key is not authorized for the kind,
+# the consumer acks with reason="op_not_authorized" and emits
+# sec.alert.v1{kind=opsctl_unauthorized, severity=critical, subject=<key_id>}.
+
+defaults: "*"
+
+overrides:
+  # Destructive: restoring a backup over live data.
+  restore: []
+  # Destructive: rotating the age encryption key.
+  backup_rotate_key: []
+  # Destructive: erasing a quarantined sample (no recovery).
+  quarantine_erase: []

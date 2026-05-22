@@ -26,6 +26,14 @@ valid reverse-topological cut (i.e. every table appears AFTER the
 tables that reference it). This catches the obvious bug where a new
 table is added with a stale references-column but the canonical
 order was forgotten.
+
+:class:`PruneOrderValidator` provides the same check under the
+``fail_safe_prune_order_invalid`` doctrine name (ROADMAP §8.16.3)
+via :meth:`PruneOrderValidator.validate_from_schema_dict`, which
+accepts a ``dict[str, list[str]]`` FK map (table → list of tables
+it references). Boot validation that detects FK drift calls this
+method; a :class:`PruneOrderViolation` signals the
+``fail_safe_prune_order_invalid`` condition.
 """
 from __future__ import annotations
 
@@ -44,6 +52,12 @@ PRUNE_ORDER: Final[tuple[str, ...]] = (
 
 class PruneOrderError(ValueError):
     """Raised when :func:`topo_check` finds a violation."""
+
+
+# ROADMAP §8.16.3 ``fail_safe_prune_order_invalid`` canonical exception.
+# Alias kept separate so call-sites can catch the doctrine-named variant
+# without importing the legacy ``PruneOrderError`` name.
+PruneOrderViolation = PruneOrderError
 
 
 def topo_check(fk_dag: Mapping[str, frozenset[str]],
@@ -80,4 +94,46 @@ def topo_check(fk_dag: Mapping[str, frozenset[str]],
                 )
 
 
-__all__ = ["PRUNE_ORDER", "PruneOrderError", "topo_check"]
+class PruneOrderValidator:
+    """Boot-time validator for the §8.16.3 prune-order doctrine.
+
+    Validates that :data:`PRUNE_ORDER` is a valid topological sort
+    of the tables' FK dependency graph so that no prune step leaves
+    dangling FK references. A mismatch signals the
+    ``fail_safe_prune_order_invalid`` condition — the caller should
+    refuse-to-start and emit a critical alert.
+
+    Usage::
+
+        validator = PruneOrderValidator()
+        # fk_map: table → list of tables it FK-references
+        validator.validate_from_schema_dict(fk_map)
+    """
+
+    def validate_from_schema_dict(
+        self,
+        fk_map: dict[str, list[str]],
+        order: tuple[str, ...] = PRUNE_ORDER,
+    ) -> None:
+        """Assert that ``order`` is a valid topological sort of ``fk_map``.
+
+        ``fk_map`` maps each table to the list of tables it **references**
+        (i.e. outgoing FK edges). For every FK edge ``A → B`` the validator
+        requires ``order.index(A) < order.index(B)`` — A is pruned before B.
+
+        Raises :class:`PruneOrderViolation` (``fail_safe_prune_order_invalid``)
+        on any violation.
+        """
+        frozen: dict[str, frozenset[str]] = {
+            tbl: frozenset(refs) for tbl, refs in fk_map.items()
+        }
+        topo_check(frozen, order)
+
+
+__all__ = [
+    "PRUNE_ORDER",
+    "PruneOrderError",
+    "PruneOrderViolation",
+    "PruneOrderValidator",
+    "topo_check",
+]

@@ -32,9 +32,10 @@ def test_pause_from_paused_is_idempotent() -> None:
 
 
 def test_pause_widens_deadline_on_longer_ttl() -> None:
+    # §8.13.5 bullet 3: a longer TTL widens the deadline and returns 'ttl_refreshed'.
     st = PauseState(paused=True, deadline_ns=1_500_000_000)
     res = st.apply_pause(ttl_s=10, now_ns=1_000_000_000)  # would extend
-    assert res.reason == "already_paused"
+    assert res.reason == "ttl_refreshed"
     assert st.deadline_ns == 1_000_000_000 + 10 * 1_000_000_000
 
 
@@ -56,10 +57,11 @@ def test_resume_from_paused_returns_resumed() -> None:
 
 
 def test_resume_from_running_is_idempotent() -> None:
+    # §8.13.5 matrix: running + maint-resume → already_running (no-op)
     st = PauseState()
     res = st.apply_resume()
     assert res.accepted is True
-    assert res.reason == "already_resumed"
+    assert res.reason == "already_running"
 
 
 def test_resume_clears_self_isolation() -> None:

@@ -37,9 +37,10 @@ import time as _time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Optional, Sequence
 
 from common.config import cfg as _cfg
+from ...sdk.shed_state import ShedStateStore
 from ...sdk.types import Message
 from ..topics import MAINT_EVENT, SEC_ALERT
 
@@ -81,9 +82,35 @@ def _maint_event(kind: str, tier: int, now_s: float) -> Message:
     )
 
 
+def _maint_event_inherited(
+    tier: int,
+    prior_leader_pod_instance_id: Optional[str],
+    now_s: float,
+) -> Message:
+    """§8.15.8 cross-pod coherency: one-per-handover inherited-tier announcement."""
+    return Message.new(
+        topic=MAINT_EVENT,
+        payload={
+            "kind": "maint_plane_throttled",
+            "tier": tier,
+            "action": "inherited_from_lease",
+            "prior_leader_pod_instance_id": prior_leader_pod_instance_id or "",
+            "source": "maint.lag_watchdog.v1",
+            "ts": _utc_iso(),
+        },
+        producer="maint.lag_watchdog.v1",
+    )
+
+
 @dataclass
 class MaintLagWatchdog:
-    """Consumer-lag watchdog for ``maint.event.v1`` (Phase 8 §8.11)."""
+    """Consumer-lag watchdog for ``maint.event.v1`` (Phase 8 §8.11).
+
+    §8.15.8 additions: shed-tier is persisted to a :class:`ShedStateStore`
+    on every tier transition so a new leader (or a restarted process)
+    can inherit the active tier and hold it for the full
+    ``maint_plane_recovery_window_s`` before independently recovering.
+    """
 
     # Ring buffer of (timestamp_s, lag_s) observations.
     _samples: deque = field(default_factory=deque)
@@ -94,6 +121,45 @@ class MaintLagWatchdog:
     _emitted_tiers: set[int] = field(default_factory=set)
     # Timestamp when lag first dropped below _RECOVERY_FLOOR_S.
     _recovery_start_s: float | None = None
+
+    # ── §8.15.8 fields ──────────────────────────────────────────
+    # Optional shed-state backing store (None disables persistence).
+    _shed_store: Optional[ShedStateStore] = field(
+        default=None, compare=False, repr=False
+    )
+    # Per-process identity written into every shed_state record.
+    _pod_instance_id: str = field(
+        default_factory=lambda: secrets.token_hex(8),
+        compare=False,
+        repr=False,
+    )
+    # Monotonic deadline (seconds) before which tier cannot be lowered
+    # after inheriting from a prior leader.
+    _inherit_lock_until_s: Optional[float] = field(
+        default=None, compare=False, repr=False
+    )
+    # True on the first tick() after inheriting — triggers the
+    # "inherited_from_lease" coherency announcement (once only).
+    _emit_inherited_pending: bool = field(
+        default=False, compare=False, repr=False
+    )
+    # Instance ID of the prior leader whose state we inherited.
+    _prior_leader_pod_id: Optional[str] = field(
+        default=None, compare=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        """§8.15.8 — inherit shed tier from a prior leader at boot."""
+        if self._shed_store is None:
+            return
+        record = self._shed_store.read()
+        if record is None or record.tier <= 0:
+            return
+        recovery_window_s = int(_cfg.maint_plane_recovery_window_s)
+        self._current_tier = record.tier
+        self._inherit_lock_until_s = _time.time() + recovery_window_s
+        self._emit_inherited_pending = True
+        self._prior_leader_pod_id = record.pod_instance_id
 
     # ── Public interface ────────────────────────────────────────
 
@@ -123,8 +189,32 @@ class MaintLagWatchdog:
         latest_lag: float = self._samples[-1][1]
         out: list[Message] = []
 
+        # --- §8.15.8: Inherited-tier announcement (first tick only) ---
+        # Emitted regardless of current lag state so operators see the
+        # inheritance + can correlate handover-driven tier continuation.
+        if self._emit_inherited_pending and self._current_tier > 0:
+            out.append(
+                _maint_event_inherited(
+                    tier=self._current_tier,
+                    prior_leader_pod_instance_id=self._prior_leader_pod_id,
+                    now_s=t,
+                )
+            )
+            self._emit_inherited_pending = False
+
         # --- Recovery path ---
         if latest_lag < _RECOVERY_FLOOR_S:
+            # §8.15.8: honour the inheritance lock — new leader must hold
+            # the inherited tier for at least maint_plane_recovery_window_s
+            # before it can independently decide to lower the tier.
+            if self._inherit_lock_until_s is not None:
+                if t >= self._inherit_lock_until_s:
+                    # Lock expired; fall through to normal recovery logic.
+                    self._inherit_lock_until_s = None
+                else:
+                    # Still in lock window — hold the inherited tier.
+                    return out
+
             recovery_window_s = int(_cfg.maint_plane_recovery_window_s)
             if (
                 self._current_tier > 0
@@ -135,6 +225,9 @@ class MaintLagWatchdog:
                 self._current_tier = 0
                 self._emitted_tiers = set()
                 self._recovery_start_s = None
+                # §8.15.8: clear the shed store on full recovery.
+                if self._shed_store is not None:
+                    self._shed_store.clear()
                 out.append(_maint_event(kind="maint_plane_recovered", tier=0, now_s=t))
             return out
         else:
@@ -193,6 +286,13 @@ class MaintLagWatchdog:
                         )
                     self._emitted_tiers.add(tier)
             self._current_tier = new_tier
+            # §8.15.8: persist new tier so a successor leader can inherit.
+            if self._shed_store is not None:
+                self._shed_store.write(
+                    tier=self._current_tier,
+                    reason=f"tier{self._current_tier}_from_lag",
+                    pod_instance_id=self._pod_instance_id,
+                )
 
         return out
 

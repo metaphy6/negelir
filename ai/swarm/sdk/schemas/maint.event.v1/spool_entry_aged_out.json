@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/spool_entry_aged_out",
+  "title": "maint.event.v1{kind=spool_entry_aged_out}",
+  "description": "Phase 8 §8.13.3 — emitted when a spool entry in opsctl_spool or agent_spool is pruned because its age exceeds cfg.maint_spool_entry_max_age_h. Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "age_h",
+    "entry_kind"
+  ],
+  "properties": {
+    "kind": {
+      "const": "spool_entry_aged_out"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "target": {
+      "type": "string",
+      "description": "Agent name owning the spool (e.g. 'maint.scaler.v1') or 'opsctl' for the opsctl spool."
+    },
+    "request_id": {
+      "type": "string",
+      "description": "The request_id from the aged-out spool entry."
+    },
+    "age_h": {
+      "type": "number",
+      "description": "How old the spool entry was in hours at prune time."
+    },
+    "entry_kind": {
+      "type": "string",
+      "description": "The maint.event.v1 kind field from the aged-out envelope payload."
+    },
+    "spool": {
+      "type": "string",
+      "description": "Which spool was pruned: 'opsctl' or 'agent'."
+    }
+  },
+  "additionalProperties": true
+}

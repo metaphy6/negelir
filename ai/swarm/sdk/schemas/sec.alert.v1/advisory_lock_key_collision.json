@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.alert.v1/advisory_lock_key_collision",
+  "title": "sec.alert.v1{kind=advisory_lock_key_collision}",
+  "description": "Phase 8 §8.15.3 — BoundLock constructor detected a key string not registered in ADVISORY_LOCK_KEYS; an ad-hoc pg_advisory_lock call bypassed the boundary constraint. Severity: critical.",
+  "type": "object",
+  "required": ["alert_id", "kind", "severity", "source", "reason", "produced_at"],
+  "properties": {
+    "kind":     { "const": "advisory_lock_key_collision" },
+    "severity": { "const": "critical" },
+    "source":   { "type": "string" },
+    "subject":  { "type": ["string", "null"], "description": "The unregistered lock key string." },
+    "reason":   { "type": "string" },
+    "alert_id": { "type": "string" },
+    "produced_at": { "type": "string" }
+  }
+}

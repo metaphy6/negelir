@@ -139,3 +139,36 @@ def _hgetall_str(client: Any, key: str) -> dict[str, str]:
         vs = v.decode() if isinstance(v, bytes) else str(v)
         out[ks] = vs
     return out
+
+
+def poll_heartbeats_from_host(
+    host: str,
+    port: int,
+    timeout: float = 2.0,
+) -> "tuple[bool, dict[str, str]]":
+    """Attempt a Redis connection and return raw heartbeat data.
+
+    Returns ``(available, beats)`` where *available* is ``False`` when
+    Redis is unreachable (redis-py not installed, connection refused,
+    timeout) and *beats* is an empty dict in that case.
+
+    Lazy-imports ``redis`` so this module is importable without redis-py.
+    Called by opsctl liveness to avoid a direct ``import redis`` in the
+    ops-console boundary (opsctl must not import storage-mutator modules
+    directly; only SDK seams may do so).
+    """
+    try:
+        import redis as _r  # noqa: PLC0415
+    except ImportError:
+        return False, {}
+    try:
+        client = _r.Redis(
+            host=host,
+            port=port,
+            socket_connect_timeout=timeout,
+            socket_timeout=timeout,
+        )
+        client.ping()
+    except Exception:  # noqa: BLE001
+        return False, {}
+    return True, _hgetall_str(client, HEARTBEAT_KEY)

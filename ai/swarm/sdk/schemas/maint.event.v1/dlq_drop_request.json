@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/dlq_drop_request",
+  "title": "maint.event.v1{kind=dlq_drop_request}",
+  "description": "Phase 8 §8.15.9 — operator command sent by the ops console to explicitly drop a specific DLQ entry without replaying it. The DLQ supervisor (maint.dlq.v1) acks and emits kind=dlq_dropped{reason=operator_drop} with forensic fields for the audit channel.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "produced_at"
+  ],
+  "properties": {
+    "kind": {
+      "const": "dlq_drop_request"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The DLQ topic the entry lives in (e.g. predict.vote.dlq)."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator-supplied idempotency key. Returned verbatim in the maint.ack.v1 so the ops console can correlate."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "dlq_entry_id": {
+      "type": "string",
+      "description": "Stable identifier of the specific DLQ entry to drop."
+    },
+    "original_request_id": {
+      "type": "string",
+      "description": "The request_id of the original failed envelope (informational — used in the dlq_dropped forensic audit payload)."
+    },
+    "original_envelope_summary": {
+      "type": "object",
+      "description": "§8.15.5-capped summary of the original failed envelope. Forwarded verbatim into dlq_dropped for the audit channel.",
+      "properties": {
+        "topic": { "type": "string" },
+        "producer": { "type": "string" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "last_error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "drop_reason": {
+      "type": "string",
+      "description": "Operator-supplied free-text reason for the explicit drop."
+    },
+    "dropped_by": {
+      "type": "string",
+      "description": "Operator key fingerprint / identity initiating the drop. Forwarded to dlq_dropped for the audit trail."
+    },
+    "op_key_id": {
+      "type": "string",
+      "description": "§8.14.4 opsctl signed-envelope operator key fingerprint."
+    },
+    "op_signature": {
+      "type": "string",
+      "description": "§8.14.4 opsctl HMAC signature hex-digest."
+    },
+    "op_signed_at": {
+      "type": "string",
+      "description": "§8.14.4 ISO-8601 UTC timestamp when the opsctl signature was created."
+    }
+  },
+  "additionalProperties": false
+}

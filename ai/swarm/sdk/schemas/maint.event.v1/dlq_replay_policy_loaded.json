@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/dlq_replay_policy_loaded",
+  "title": "maint.event.v1{kind=dlq_replay_policy_loaded}",
+  "description": "Phase 8 §8.16.7 — boot-time audit event emitted by maint.dlq.v1 describing the active layered replay policy.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "deny_prefixes",
+    "deny_suffixes",
+    "allow_overrides"
+  ],
+  "properties": {
+    "kind": {
+      "const": "dlq_replay_policy_loaded"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Supervisor identity that loaded the policy."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "deny_prefixes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "deny_suffixes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "allow_overrides": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false
+}

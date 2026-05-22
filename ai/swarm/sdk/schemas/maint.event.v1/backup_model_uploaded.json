@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_model_uploaded",
+  "title": "maint.event.v1{kind=backup_model_uploaded}",
+  "description": "Phase 8 §8.13.1 — notification emitted after a model-artifact tarball is successfully uploaded to the offsite target. Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "tarball_date",
+    "uploaded_bytes"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_model_uploaded"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "tarball_date": {
+      "type": "string",
+      "description": "ISO calendar date (UTC) of the model tarball that was uploaded."
+    },
+    "uploaded_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total compressed bytes transferred to the offsite target."
+    },
+    "target": {
+      "type": "string",
+      "description": "Offsite target id / path."
+    },
+    "artifact_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of model artifacts included in the tarball."
+    }
+  },
+  "additionalProperties": false
+}

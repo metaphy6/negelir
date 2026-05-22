@@ -54,7 +54,24 @@ from ..payloads import MaintAck
 from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 from ._liveness import LivenessMixin
+from ._op_signature import gate_op_envelope
 from .runtime import NoopController, RuntimeController  # re-exported
+
+# Phase 8 §8.15.9 — stdlib cron evaluator reused from §8.3.
+# Import-time is lazy (wrapped in try/except) so unit tests that do
+# not exercise noise windows still run without xops on sys.path.
+try:
+    from xops.backup.cron import CronExpr, CronSyntaxError, parse_cron
+except ImportError:  # pragma: no cover — only absent outside the repo
+    CronExpr = None  # type: ignore[assignment,misc]
+    CronSyntaxError = ValueError  # type: ignore[assignment,misc]
+    def parse_cron(expr: str) -> None:  # type: ignore[misc]
+        raise ValueError(f"xops.backup.cron unavailable; cannot parse {expr!r}")
+
+# Sentinel string used for the first-tick baseline of
+# ``_noise_window_last`` so that a transition to *no active window*
+# does NOT fire a spurious exit alert on the very first tick.
+_NOISE_WINDOW_NO_ACTIVE = "__INITIAL__"
 
 _log = logging.getLogger("swarm.agents.maint.scaler")
 
@@ -90,6 +107,84 @@ def _parse_overrides_csv(raw: str) -> dict[str, int]:
     return out
 
 
+def _parse_noise_windows(raw: str) -> "list[CronExpr]":
+    """Parse ``cfg.maint_scaler_noise_windows`` (JSON array of cron strings).
+
+    Silently drops malformed entries and logs a warning so a bad config
+    knob degrades gracefully rather than refusing to start.  An empty
+    or blank string returns an empty list (noise-window suppression
+    disabled entirely).
+    """
+    raw = raw.strip()
+    if not raw:
+        return []
+    import json as _json
+    try:
+        items = _json.loads(raw)
+    except (_json.JSONDecodeError, ValueError):
+        _log.warning(
+            "maint_scaler_noise_windows: cannot parse JSON %r — "
+            "noise-window suppression disabled",
+            raw,
+        )
+        return []
+    if not isinstance(items, list):
+        _log.warning(
+            "maint_scaler_noise_windows: expected JSON array, got %s — "
+            "noise-window suppression disabled",
+            type(items).__name__,
+        )
+        return []
+    result: "list[CronExpr]" = []
+    for expr in items:
+        if not isinstance(expr, str):
+            _log.warning(
+                "maint_scaler_noise_windows: non-string entry %r skipped",
+                expr,
+            )
+            continue
+        try:
+            result.append(parse_cron(expr))
+        except ValueError as exc:
+            _log.warning(
+                "maint_scaler_noise_windows: invalid cron %r skipped (%s)",
+                expr,
+                exc,
+            )
+    return result
+
+
+def _active_noise_window(
+    noise_windows: "list[CronExpr]", dt: datetime
+) -> "str | None":
+    """Return the ``raw`` cron string of the first active noise window, or
+    ``None`` if none apply.
+
+    A window is considered active during the entire UTC hour block that
+    matches the cron's hour set (day-of-week, day-of-month, and month
+    also checked; the minute field is intentionally ignored so the full
+    hour is suppressed, not just the single fire-minute).
+
+    Day-of-week conversion: Python weekday() uses Mon=0 … Sun=6;
+    cron uses Sun=0 … Sat=6.
+    """
+    if not noise_windows:
+        return None
+    # Python Mon=0 → cron Mon=1; Python Sun=6 → cron Sun=0
+    cron_dow = (dt.weekday() + 1) % 7
+    for cron in noise_windows:
+        if CronExpr is None:
+            break
+        if (
+            dt.hour in cron.hours
+            and cron_dow in cron.dows
+            and dt.day in cron.doms
+            and dt.month in cron.months
+        ):
+            return cron.raw
+    return None
+
+
 # ── Decision reason taxonomy ─────────────────────────────────────────
 # Reason codes attached to ``scale_decision.reason`` (binding per
 # ROADMAP §8.2). The set is closed for now — extending it requires a
@@ -100,7 +195,9 @@ DECISION_REASONS: frozenset[str] = frozenset({
     "head_age_high",
     "queue_depth_low",
     "manual_pin",
-    "retrain_request_warmup",
+    # Phase 8 §8.14.8: ``retrain_request_warmup`` removed. The scaler no
+    # longer emits ``scale_decision`` for trainer.v1 on retrain_request;
+    # it emits ``trainer_warmup_hint`` advisory instead.
 })
 
 # Throttle reason taxonomy attached to ``scale_throttled.reason``.
@@ -125,6 +222,14 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     # Phase 8 §8.11 — maint-plane lag backpressure shedding.
     "backpressure_tier1",
     "backpressure_tier2",
+    # Phase 8 §8.14.8 — target is in cfg.maint_scaler_self_scaling_targets;
+    # the auto-scaler must not emit scale_decision for it.
+    "self_scaling_target",
+    # Phase 8 §8.15.9 — current time is inside a configured noise window
+    # (maint_scaler_noise_windows). Load-driven scale decisions are
+    # suppressed; emergency decisions (vram_budget_exceeded, manual_pin,
+    # retrain_request_warmup, sec_rate_burst) bypass the check.
+    "noise_window_active",
 })
 
 
@@ -455,6 +560,18 @@ class MaintScaler(LivenessMixin):
         # one alert per orphan per process. Populated by
         # :meth:`report_registered_agents`.
         self._orphan_cfg_alerted: set[str] = set()
+        # Phase 8 §8.14.8 — set of agent names that self-scale; the
+        # auto-scaler must not emit scale_decision for any of them.
+        # Parsed once at boot from cfg.maint_scaler_self_scaling_targets.
+        self._self_scaling_targets: frozenset[str] = frozenset(
+            t.strip()
+            for t in str(_cfg.maint_scaler_self_scaling_targets).split(",")
+            if t.strip()
+        )
+        # Per-target one-shot debounce for sec.alert{kind=scaler_target_forbidden}.
+        # One alert per target per process lifetime regardless of trigger path
+        # (tick guard or orphan check in report_registered_agents).
+        self._scaler_target_forbidden_alerted: set[str] = set()
         # Phase 8 §8.9 DoD — bounded global decision history.
         # Insertion-ordered map: decision_window_id → record dict.
         # Oldest entry evicted when len exceeds _history_max (LRU
@@ -463,6 +580,20 @@ class MaintScaler(LivenessMixin):
         # the latest record rather than duplicating.
         self._history_max: int = max(1, int(_cfg.maint_scaler_history_max))
         self._decision_history: "OrderedDict[str, dict]" = OrderedDict()
+        # Phase 8 §8.15.9 — scheduler noise-window suppression.
+        # Parsed once at boot; re-parsed if the config knob changes are
+        # ever plumbed through (currently boot-time only).
+        self._noise_windows: "list[CronExpr]" = _parse_noise_windows(
+            str(_cfg.maint_scaler_noise_windows)
+        )
+        # Tracks the last active noise window cron string for edge
+        # detection. Starts as sentinel ``_NOISE_WINDOW_NO_ACTIVE`` so
+        # the first-ever None→<cron> transition fires the entry alert.
+        self._noise_window_last: "str | None" = _NOISE_WINDOW_NO_ACTIVE
+        # Per-target dedup: emits noise_window_active scale_throttled
+        # only once per target per window-entry.  Reset when the active
+        # cron string changes (entry or exit edge).
+        self._noise_window_target_notified: "dict[str, str]" = {}
         self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract ──────────────────────────────────────────────
@@ -470,6 +601,19 @@ class MaintScaler(LivenessMixin):
         if msg.envelope.topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
+        # ── §8.14.4 signature / authz gate (binding) ─────────────────────
+        _sig_ok, _sig_reason, _alert_kind = gate_op_envelope(payload, _cfg)
+        if not _sig_ok:
+            _req_id = str(payload.get("request_id") or msg.envelope.message_id)
+            return [
+                self._ack(msg, _req_id, accepted=False, reason=_sig_reason),
+                self._sec_alert(
+                    kind=_alert_kind, severity="critical",
+                    subject=str(payload.get("op_key_id") or "unknown"),
+                    reason=_sig_reason,
+                ),
+            ]
+        # ─────────────────────────────────────────────────────────────────
         kind = payload.get("kind")
         if kind == "manual_scale_pin":
             return list(self._handle_pin(msg, payload))
@@ -564,26 +708,27 @@ class MaintScaler(LivenessMixin):
         yield self._ack(msg, request_id, accepted=res.accepted,
                         reason=res.reason, details=details)
 
-    # ── retrain_request warm-up ──────────────────────────────────
+    # ── retrain_request warm-up (Phase 8 §8.14.8) ─────────────────────
     def _handle_retrain_request(self, msg: Message, payload: dict) -> Iterable[Message]:
-        """When the drift agent (Phase 6.3) emits a `retrain_request`,
-        the scaler warms the trainer up by emitting a single
-        `scale_decision{source=retrain_request_warmup}` for the target.
+        """When the drift agent (Phase 6.3) emits a ``retrain_request``,
+        emit a ``trainer_warmup_hint`` soft advisory for the trainer to
+        optionally pre-warm capacity.
 
-        retrain_request carries no `request_id` per its sub-schema (it
-        is a producer-driven envelope, not operator-driven), so we
-        derive a stable dedup key from envelope.message_id × target.
-        Empty consumer set → no ack is emitted (pending Phase 5.x
-        trainer-as-agent landing).
+        Phase 8 §8.14.8 boundary: the scaler no longer emits
+        ``scale_decision{target=trainer.v1}`` on retrain_request.
+        ``trainer.v1`` is in ``cfg.maint_scaler_self_scaling_targets``
+        and is the sole writer of its own replica count. The hint carries
+        ``retrain_request_id`` and ``projected_window_s`` so the trainer
+        can estimate its warm-up budget without the scaler racing it.
+
+        Dedup key: envelope.message_id × warmup_target — same semantics
+        as the old warmup path, preserving idempotency on re-delivery.
         """
         target = str(payload.get("target") or "")
         if not target:
             return
         if not self._leader.is_leader():
             return
-        # Scaler warms ONLY the trainer surface, not arbitrary targets.
-        # Predictor targets retain their existing replica counts; the
-        # trainer pod is what actually runs the retrain job.
         warmup_target = "trainer.v1"
         dedup_key = f"{msg.envelope.message_id}:{warmup_target}"
         if dedup_key in self._warmup_seen:
@@ -592,39 +737,16 @@ class MaintScaler(LivenessMixin):
         while len(self._warmup_seen) > self._warmup_seen_max:
             self._warmup_seen.popitem(last=False)
 
-        warmup_replicas = max(1, int(_cfg.maint_scaler_warmup_replicas))
-        st = self._evict_and_get(warmup_target)
-        # Don't downscale: if a higher count is already in effect, the
-        # warm-up is a no-op. Honest semantics over surprise shrinkage.
-        if st.last_replicas >= warmup_replicas:
-            return
-        accepted = self._invoke_runtime(warmup_target, warmup_replicas)
-        prev = st.last_replicas
-        st.last_replicas = warmup_replicas
-        st.history.append(warmup_replicas)
-        st.last_window_ns = self._window_anchor()
-        st.last_decision_at_ns = self._now_ns()
-        self._bump_counter("scale_decision", "retrain_request_warmup")
-        self._record_decision_metric(
-            warmup_target,
-            "retrain_request_warmup",
-            _OUTCOME_APPLIED if accepted else _OUTCOME_ERROR,
+        retrain_request_id = str(
+            payload.get("request_id") or msg.envelope.message_id
         )
-        self._set_desired_replicas(warmup_target, warmup_replicas)
+        projected_window_s = max(1, int(_cfg.maint_scaler_decision_window_ms)) / 1000.0
         yield self._notify(
-            "scale_decision",
+            "trainer_warmup_hint",
             target=warmup_target,
             extra={
-                "replicas": warmup_replicas,
-                "prev": prev,
-                "next": warmup_replicas,
-                "reason": "retrain_request_warmup",
-                "observed": {},
-                "source": "retrain_request_warmup",
-                "controller": self._controller.name,
-                "controller_accepted": accepted,
-                "decision_window_id": self._window_id(),
-                "request_id": str(payload.get("request_id") or msg.envelope.message_id),
+                "retrain_request_id": retrain_request_id,
+                "projected_window_s": projected_window_s,
             },
         )
 
@@ -686,12 +808,81 @@ class MaintScaler(LivenessMixin):
         roster_total = sum(
             (st.last_replicas or 0) for st in self._targets.values()
         )
+        # Phase 8 §8.15.9 — compute active noise window once per tick.
+        # Edge detection: emit sec.alert{kind=scaler_noise_window_active}
+        # on entry (None→<cron>) and exit (<cron>→None) transitions.
+        _now_utc = datetime.now(timezone.utc)
+        active_window = _active_noise_window(self._noise_windows, _now_utc)
+        if active_window != self._noise_window_last:
+            # Transition detected. Skip alert on the very first tick
+            # (sentinel → <value>) only if transitioning TO None (no
+            # window active on startup — not interesting). DO emit when
+            # transitioning from sentinel directly into a window (rare
+            # but operator-observable).
+            _prev = self._noise_window_last
+            self._noise_window_last = active_window
+            # Reset per-target dedup so all targets get one throttle
+            # notification in the new window state.
+            self._noise_window_target_notified.clear()
+            _is_real_entry = active_window is not None
+            _is_real_exit = (
+                active_window is None
+                and _prev != _NOISE_WINDOW_NO_ACTIVE
+            )
+            if _is_real_entry or _is_real_exit:
+                _edge = "entry" if _is_real_entry else "exit"
+                _cron_str = active_window if active_window is not None else _prev
+                out.append(self._sec_alert(
+                    kind="scaler_noise_window_active",
+                    severity="info",
+                    subject=str(_cron_str),
+                    reason=(
+                        f"noise window {_edge}: "
+                        f"{'entered' if _is_real_entry else 'exited'} "
+                        f"cron={_cron_str!r} at "
+                        f"{_now_utc.isoformat(timespec='seconds')}"
+                    ),
+                ))
         for target, sig in signals.items():
             # Phase 8 §8.16.1 — first sighting of an unconfigured
             # agent emits a one-shot warn alert + audit event before
             # any decision is computed. No-op when default-policy is
             # disabled OR when this target was already alerted.
             out.extend(self._emit_unconfigured_alerts(target))
+            # Phase 8 §8.14.8 — self-scaling target guard.
+            # Targets in cfg.maint_scaler_self_scaling_targets are the sole
+            # writers of their own replica counts. The auto-scaler emits
+            # scale_throttled every tick and a one-shot debounced
+            # sec.alert{kind=scaler_target_forbidden, severity=warn}.
+            if target in self._self_scaling_targets:
+                cur = self._targets.get(target, _TargetState()).last_replicas
+                out.append(self._notify(
+                    "scale_throttled",
+                    target=target,
+                    extra={
+                        "would_be": cur,
+                        "reason": "self_scaling_target",
+                        "decision_window_id": window_id,
+                    },
+                ))
+                self._bump_counter("scale_throttled", "self_scaling_target")
+                self._record_decision_metric(
+                    target, "self_scaling_target", _OUTCOME_THROTTLED
+                )
+                if target not in self._scaler_target_forbidden_alerted:
+                    self._scaler_target_forbidden_alerted.add(target)
+                    out.append(self._sec_alert(
+                        kind="scaler_target_forbidden",
+                        severity="warn",
+                        subject=target,
+                        reason=(
+                            f"auto-scaler attempted to decide replicas for "
+                            f"{target!r} which is in "
+                            f"maint_scaler_self_scaling_targets; "
+                            f"target is the sole writer of its own replica count"
+                        ),
+                    ))
+                continue
             st = self._evict_and_get(target)
             if st.last_window_ns >= window_anchor:
                 continue  # already decided in this window
@@ -811,6 +1002,31 @@ class MaintScaler(LivenessMixin):
                         },
                     ))
                     continue
+            # Phase 8 §8.15.9 — noise-window suppression.
+            # Must run AFTER the VRAM emergency check above so that
+            # capacity-critical vram_budget_exceeded decisions still fire.
+            # manual_pin and retrain_request_warmup bypass tick() entirely
+            # and are unaffected.
+            if active_window is not None:
+                notified_key = self._noise_window_target_notified.get(target)
+                if notified_key != active_window:
+                    # First suppression for this target in this window entry.
+                    self._noise_window_target_notified[target] = active_window
+                    self._bump_counter("scale_throttled", "noise_window_active")
+                    self._record_decision_metric(
+                        target, "noise_window_active", _OUTCOME_THROTTLED
+                    )
+                    out.append(self._notify(
+                        "scale_throttled",
+                        target=target,
+                        extra={
+                            "would_be": decision,
+                            "reason": "noise_window_active",
+                            "observed": {"noise_window": active_window},
+                            "decision_window_id": window_id,
+                        },
+                    ))
+                continue
             if emitted >= max_changes:
                 self._bump_counter("scale_throttled", "max_changes_per_window")
                 self._record_decision_metric(
@@ -1095,6 +1311,27 @@ class MaintScaler(LivenessMixin):
                     f"entry for {cfg_key!r} but no live agent of that "
                     f"name is registered; entry is ignored. Remove the "
                     f"cfg entry after the agent has been retired."
+                ),
+            ))
+        # Phase 8 §8.14.8 — orphan check for self_scaling_targets.
+        # Every name in self_scaling_targets must correspond to a live
+        # registered agent. An unmatched entry wastes a throttle slot
+        # and misleads operators about the sole-writer boundary.
+        for tgt in sorted(self._self_scaling_targets):
+            if tgt in registered:
+                continue
+            if tgt in self._scaler_target_forbidden_alerted:
+                continue
+            self._scaler_target_forbidden_alerted.add(tgt)
+            out.append(self._sec_alert(
+                kind="scaler_target_forbidden",
+                severity="warn",
+                subject=tgt,
+                reason=(
+                    f"cfg.maint_scaler_self_scaling_targets has entry for "
+                    f"{tgt!r} but no live agent of that name is registered; "
+                    f"entry may be stale. Remove the cfg entry after the "
+                    f"agent has been retired."
                 ),
             ))
         return out
@@ -1387,6 +1624,7 @@ class MaintScaler(LivenessMixin):
             attempt=int(msg.envelope.attempt or 1),
             reason=reason,
             details=details,
+            trace_id=msg.envelope.trace_id,
         )
         env = Envelope(
             message_id=self._new_id(),
@@ -1403,6 +1641,7 @@ class MaintScaler(LivenessMixin):
                 extra: dict | None = None) -> Message:
         payload: dict = {
             "kind": kind,
+            "kind_schema_version": 1,
             "target": target,
             "produced_at": self._clock_iso(),
         }

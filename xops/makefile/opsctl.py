@@ -398,6 +398,29 @@ def cmd_allowlist_show(_argv: List[str]) -> int:
     return _run_opsctl(args)
 
 
+def cmd_bootstrap_key(_argv: List[str]) -> int:
+    """`make ops.bootstrap-key` — generate a per-operator HMAC key (Phase 8 §8.14.4).
+
+    Writes 32 random bytes to ``~/.negelir/opsctl_key`` (mode 0600) and
+    prints the key_id to stdout.  If a key already exists, prints its
+    key_id without overwriting.  The operator must then add the key_id
+    to ``infra/maint/opsctl_operators.json`` and commit.
+    """
+    return _run_opsctl(["bootstrap-key"])
+
+
+def cmd_bootstrap_audit_key(_argv: List[str]) -> int:
+    """`make ops.bootstrap-audit-key` — generate audit chain HMAC key (§8.15.7).
+
+    Writes 32 random bytes to ``cfg.audit_chain_hmac_key_path`` (default
+    ``/var/lib/negelir/secrets/audit_chain.key``) with mode 0400.  If the
+    key already exists the command prints its path and exits without
+    overwriting (idempotent).  Only the maint-backup agent process user
+    should be able to read this file.
+    """
+    return _run_opsctl(["bootstrap-audit-key"])
+
+
 COMMANDS = {
     "liveness": cmd_liveness,
     "denylist-clear": cmd_denylist_clear,
@@ -422,6 +445,8 @@ COMMANDS = {
     "allowlist-extend": cmd_allowlist_extend,
     "allowlist-approve": cmd_allowlist_approve,
     "allowlist-show": cmd_allowlist_show,
+    "bootstrap-key": cmd_bootstrap_key,
+    "bootstrap-audit-key": cmd_bootstrap_audit_key,
 }
 
 

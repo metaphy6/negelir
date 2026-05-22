@@ -227,6 +227,8 @@ class TestSpoolDrain:
         assert "b" in drained_kinds
 
     def test_spool_drains_in_arrival_order(self, tmp_path: Path) -> None:
+        """§8.14.10 revised drain order to newest-first (mtime desc).
+        Test updated to assert that contract rather than the old FIFO order."""
         fail_flag = [True]
         received_kinds: list[str] = []
 
@@ -250,10 +252,10 @@ class TestSpoolDrain:
         fail_flag[0] = False
         breaker.tick()
 
-        # The drained kinds must appear in the same order we spooled them.
+        # §8.14.10: drain is newest-first (reverse of insertion order).
         spooled_drained = [k for k in received_kinds if k in ordered]
-        assert spooled_drained == ordered, (
-            f"Expected {ordered}, got {spooled_drained}"
+        assert spooled_drained == list(reversed(ordered)), (
+            f"Expected newest-first {list(reversed(ordered))}, got {spooled_drained}"
         )
 
     def test_spool_files_unlinked_after_successful_drain(self, tmp_path: Path) -> None:

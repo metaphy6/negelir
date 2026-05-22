@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/verify_forensic_captured",
+  "title": "maint.event.v1{kind=verify_forensic_captured}",
+  "description": "Phase 8 §8.15.10 Fix C — emitted by maint.backup.v1 when a failed restore-verify writes a forensic sidecar JSON to <date>.failed/verify_forensic.json. Notification-only; no ack expected.",
+  "type": "object",
+  "required": ["kind", "kind_schema_version", "produced_at", "target", "size_bytes"],
+  "properties": {
+    "kind":                { "const": "verify_forensic_captured" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ISO calendar date (UTC) of the dump whose verify failed, matching the <date>.failed/ directory name."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Actual size in bytes of the verify_forensic.json file written to disk."
+    },
+    "verifier_kind": {
+      "type": "string",
+      "description": "Which verifier ran: 'local' or 'sidecar'."
+    },
+    "pg_restore_exit_code": {
+      "type": ["integer", "null"],
+      "description": "Exit code from pg_restore; null when not applicable."
+    },
+    "duration_ms": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Total restore-verify duration in milliseconds."
+    }
+  },
+  "additionalProperties": false
+}

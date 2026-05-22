@@ -86,6 +86,26 @@ lint: ## Run hardcode/no-magic lint over ai/
 verify.lua: ## Phase 7 §7.3 — verify infra/redis/lua/*.lua SHA headers
 	@$(XOPS)/lua.py verify
 
+.PHONY: verify.age-pin
+verify.age-pin: ## Phase 8 §8.14.3 — verify age binary SHA-256 vs provenance record (CI supply-chain gate)
+	@$(XOPS)/backup_pin.py verify-age-pin
+
+.PHONY: verify.dlq-replay-policy
+verify.dlq-replay-policy: ## Phase 8 §8.16.7 — verify DLQ replay overrides vs security exception registry
+	@$(XOPS)/verify.py dlq-replay-policy
+
+.PHONY: ops.backup-bump-age
+ops.backup-bump-age: ## §8.14.3 — upgrade the age binary pin (VERSION=<v>) — sanctioned operator path
+	@$(XOPS)/backup_pin.py backup-bump-age
+
+.PHONY: ops.bootstrap-key
+ops.bootstrap-key: ## §8.14.4 — generate per-operator HMAC key at ~/.negelir/opsctl_key (mode 0600)
+	@$(XOPS)/opsctl.py bootstrap-key
+
+.PHONY: ops.bootstrap-audit-key
+ops.bootstrap-audit-key: ## §8.15.7 — generate audit chain HMAC key at cfg.audit_chain_hmac_key_path (mode 0400)
+	@$(XOPS)/opsctl.py bootstrap-audit-key
+
 .PHONY: fix.lua
 fix.lua: ## Phase 7 §7.3 — rewrite Lua SHA headers after intended edits
 	@$(XOPS)/lua.py fix

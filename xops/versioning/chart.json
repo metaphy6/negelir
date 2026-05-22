@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.4.0",
-    "build": 18,
+    "version": "1.4.1",
+    "build": 83,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.23.1",
+      "version": "1.34.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-21T09:49:23+00:00"
+      "last_changed": "2026-05-22T06:23:28+00:00"
     },
     "server": {
       "version": "1.6.3",
@@ -19,19 +19,19 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.23.0",
+      "version": "3.33.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-21T10:33:00+00:00"
+      "last_changed": "2026-05-22T06:16:55+00:00"
     },
     "docs": {
-      "version": "1.58.1",
+      "version": "1.64.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-21T10:33:00+00:00"
+      "last_changed": "2026-05-22T06:16:55+00:00"
     },
     "infra_mock": {
-      "version": "1.4.4",
+      "version": "1.4.5",
       "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
-      "last_changed": "2026-05-21T09:36:40+00:00"
+      "last_changed": "2026-05-21T22:23:48+00:00"
     },
     "source_watcher": {
       "version": "3.0.3",
@@ -69,9 +69,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.45.0",
+      "version": "0.50.2",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-21T06:52:20+00:00"
+      "last_changed": "2026-05-22T00:44:57+00:00"
     },
     "common": {
       "version": "0.2.0",
@@ -4466,6 +4466,1248 @@
       "from": "1.58.0",
       "to": "1.58.1",
       "build": 18
+    },
+    {
+      "timestamp": "2026-05-21T11:06:51+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.13.1 model artifact lineage sidecar and cold mirror",
+      "from": "1.23.1",
+      "to": "1.24.0",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-05-21T11:12:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.13.1 new maint.event.v1 kinds for model backup",
+      "from": "1.24.0",
+      "to": "1.24.1",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-05-21T11:23:31+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.13.1 sec.alert.v1 backup_model_lineage_missing + LineageMissingDebouncer",
+      "from": "1.24.1",
+      "to": "1.24.2",
+      "build": 21
+    },
+    {
+      "timestamp": "2026-05-21T11:25:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.13.1 AST boundary scan: pg_dump must not reference data/models/",
+      "from": "1.24.2",
+      "to": "1.24.3",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-05-21T11:35:26+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.1 model lineage + event kinds in swarm territory",
+      "from": "0.45.0",
+      "to": "0.45.1",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-05-21T11:48:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.13.1 regression: conftest session fixture for data/backups permissions + defaults.yaml lineage_missing_debounce_h key",
+      "from": "1.24.3",
+      "to": "1.24.4",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-05-21T11:55:58+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.2 maint storage telemetry gauges",
+      "from": "0.45.1",
+      "to": "0.45.2",
+      "build": 25
+    },
+    {
+      "timestamp": "2026-05-21T12:16:55+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.13.3 spool entry aging pruning (spool_aging.py + circuit breaker + spool_flush)",
+      "from": "1.24.4",
+      "to": "1.25.0",
+      "build": 26
+    },
+    {
+      "timestamp": "2026-05-21T12:32:21+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "8.13.3 retired-kind envelope handling (quarantine to .retired/ + sidecar + sec.alert + --force-retired + --retired)",
+      "from": "0.45.2",
+      "to": "0.46.0",
+      "build": 27
+    },
+    {
+      "timestamp": "2026-05-21T12:39:03+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.3 proof tests complete — TestProofTestsABC (a)(b)(c)",
+      "from": "0.46.0",
+      "to": "0.46.1",
+      "build": 28
+    },
+    {
+      "timestamp": "2026-05-21T12:42:16+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.3 opsctl: spool_flush --force-retired + spool_show --retired flags",
+      "from": "3.23.0",
+      "to": "3.23.1",
+      "build": 29
+    },
+    {
+      "timestamp": "2026-05-21T12:55:32+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "8.13.4 bullet 1: manifest captures dump-time migration state",
+      "from": "0.46.1",
+      "to": "0.47.0",
+      "build": 30
+    },
+    {
+      "timestamp": "2026-05-21T13:06:41+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.4 restore-verify version-skew: forward migrate + gap guard + wiring",
+      "from": "3.23.1",
+      "to": "3.23.2",
+      "build": 31
+    },
+    {
+      "timestamp": "2026-05-21T13:06:41+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.13.4 maint_backup_max_version_gap config field + backup_dump_too_old sec.alert kind",
+      "from": "1.25.0",
+      "to": "1.26.0",
+      "build": 32
+    },
+    {
+      "timestamp": "2026-05-21T13:12:24+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.4 migration DROP guard for forward-only doctrine",
+      "from": "3.23.2",
+      "to": "3.23.3",
+      "build": 33
+    },
+    {
+      "timestamp": "2026-05-21T13:17:07+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.4 explicit proof tests a/b/c complete",
+      "from": "3.23.3",
+      "to": "3.23.4",
+      "build": 34
+    },
+    {
+      "timestamp": "2026-05-21T13:31:14+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "8.13.5 pause/resume/dlq-resume idempotency matrix implemented",
+      "from": "0.47.0",
+      "to": "0.48.0",
+      "build": 35
+    },
+    {
+      "timestamp": "2026-05-21T13:38:36+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.5 self-isolation precedence for maint-pause",
+      "from": "0.48.0",
+      "to": "0.48.1",
+      "build": 36
+    },
+    {
+      "timestamp": "2026-05-21T13:43:08+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.5 TTL refresh semantics: larger pause wins; ttl_refreshed reason; audit requested+effective TTL",
+      "from": "0.48.1",
+      "to": "0.48.2",
+      "build": 37
+    },
+    {
+      "timestamp": "2026-05-21T13:56:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.13.5 proof tests complete incl full sequence TTL expiry",
+      "from": "1.26.0",
+      "to": "1.26.1",
+      "build": 38
+    },
+    {
+      "timestamp": "2026-05-21T14:11:21+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.5 opsctl publish: exit 7 on requires_resume_first rejection",
+      "from": "3.23.4",
+      "to": "3.23.5",
+      "build": 39
+    },
+    {
+      "timestamp": "2026-05-21T14:21:58+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.5 opsctl: fix redis boundary violation + malformed spool exit code",
+      "from": "3.23.5",
+      "to": "3.23.6",
+      "build": 40
+    },
+    {
+      "timestamp": "2026-05-21T14:26:27+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.13.6 encryption key compromise runbook",
+      "from": "1.58.1",
+      "to": "1.59.0",
+      "build": 41
+    },
+    {
+      "timestamp": "2026-05-21T14:33:11+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "8.13.6 PG secret age hard cap: fail_safe_pg_secret_expired",
+      "from": "0.48.2",
+      "to": "0.49.0",
+      "build": 42
+    },
+    {
+      "timestamp": "2026-05-21T14:38:40+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.6 proof tests complete: verify-key rotation, DR-key revocation, PG secret age",
+      "from": "0.49.0",
+      "to": "0.49.1",
+      "build": 43
+    },
+    {
+      "timestamp": "2026-05-21T14:48:16+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.13.7 chaos catalogue stubs for §8.13.x scenarios",
+      "from": "1.59.0",
+      "to": "1.59.1",
+      "build": 44
+    },
+    {
+      "timestamp": "2026-05-21T14:57:11+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.7 complete kind registration: backup_legacy_manifest, backup_pg_secret_expired, backup_key_compromise_acknowledged added to KNOWN_MAINT_EVENT_KINDS with sub-schemas",
+      "from": "0.49.1",
+      "to": "0.49.2",
+      "build": 45
+    },
+    {
+      "timestamp": "2026-05-21T15:04:43+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.13.7 versioning addendum: §8.13 additive revision complete",
+      "from": "0.49.2",
+      "to": "0.49.3",
+      "build": 46
+    },
+    {
+      "timestamp": "2026-05-21T15:04:48+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.13.7 versioning addendum: MaintStorageWarden + opsctl flags",
+      "from": "3.23.6",
+      "to": "3.23.7",
+      "build": 47
+    },
+    {
+      "timestamp": "2026-05-21T15:04:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.13.7 versioning addendum: backup_key_compromise + augmented backup_runbook",
+      "from": "1.59.1",
+      "to": "1.60.0",
+      "build": 48
+    },
+    {
+      "timestamp": "2026-05-21T15:20:51+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.14.1 maint_audit_log range-partitioning: partition_prune.py + audit_partitions.py",
+      "from": "3.23.7",
+      "to": "3.24.0",
+      "build": 49
+    },
+    {
+      "timestamp": "2026-05-21T15:20:51+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.14.1 ROADMAP checkboxes ticked",
+      "from": "1.60.0",
+      "to": "1.60.1",
+      "build": 50
+    },
+    {
+      "timestamp": "2026-05-21T15:46:07+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.14.2 per-file dump checksum manifest for silent-corruption detection in pg_dump artefacts",
+      "from": "3.24.0",
+      "to": "3.25.0",
+      "build": 51
+    },
+    {
+      "timestamp": "2026-05-21T15:46:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.2 backup_dump_file_corrupted added to KNOWN_SEC_ALERT_KINDS; backup_legacy_no_file_manifest added to _ACK_ROUTING_TABLE and KINDS_NOTIFICATION_ONLY",
+      "from": "1.26.1",
+      "to": "1.26.2",
+      "build": 52
+    },
+    {
+      "timestamp": "2026-05-21T16:49:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.2 routing test + schema fix",
+      "from": "1.26.2",
+      "to": "1.26.3",
+      "build": 53
+    },
+    {
+      "timestamp": "2026-05-21T17:01:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.3 age binary supply-chain pin — boot guard, provenance, restore parity, proof tests",
+      "from": "1.26.3",
+      "to": "1.26.4",
+      "build": 54
+    },
+    {
+      "timestamp": "2026-05-21T17:05:19+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.14.3 .env.example age binary version doc",
+      "from": "3.25.0",
+      "to": "3.25.1",
+      "build": 55
+    },
+    {
+      "timestamp": "2026-05-21T17:28:19+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.14.4 ops.bootstrap-key + Redis ACL mount + signed envelope injection in _runner + bootstrap_key subcommand",
+      "from": "3.25.1",
+      "to": "3.26.0",
+      "build": 56
+    },
+    {
+      "timestamp": "2026-05-21T17:28:25+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.14.4 consumer-side verify_envelope_signature + check_authz + config knobs (opsctl_require_signature etc)",
+      "from": "1.26.4",
+      "to": "1.27.0",
+      "build": 57
+    },
+    {
+      "timestamp": "2026-05-21T17:51:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.4 consumer sig/authz gate wired in all 5 maint agents",
+      "from": "1.27.0",
+      "to": "1.27.1",
+      "build": 58
+    },
+    {
+      "timestamp": "2026-05-21T18:10:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.5 DLQ recursion guard: maint.dlq.v1.dlq in RECURSION_DENY_SET, boot_check_allow_list, _replays_total counter, dlq_recursion_blocked kind",
+      "from": "1.27.1",
+      "to": "1.27.2",
+      "build": 59
+    },
+    {
+      "timestamp": "2026-05-21T18:10:25+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.14.5 opsctl: --confirm-destructive for maint.event.v1.dlq escalation, classifier CONFIRM case",
+      "from": "3.26.0",
+      "to": "3.26.1",
+      "build": 60
+    },
+    {
+      "timestamp": "2026-05-21T18:14:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.5 bullet 4: 14 proof tests for DLQ recursion guard",
+      "from": "1.27.2",
+      "to": "1.27.3",
+      "build": 61
+    },
+    {
+      "timestamp": "2026-05-21T18:30:19+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "maint.ack.v1 schema_version 1→2: trace_id and schema_version fields added (§8.14.6)",
+      "from": "0.49.3",
+      "to": "0.50.0",
+      "build": 62
+    },
+    {
+      "timestamp": "2026-05-21T18:30:33+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "opsctl _publish.py: legacy-schema detection + maint_ack_legacy_schema sec.alert emission (§8.14.6)",
+      "from": "3.26.1",
+      "to": "3.26.2",
+      "build": 63
+    },
+    {
+      "timestamp": "2026-05-21T18:30:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.14.6 proof tests for maint.ack.v1 trace_id (test_phase8_14_6_ack_trace_id.py)",
+      "from": "1.27.3",
+      "to": "1.27.4",
+      "build": 64
+    },
+    {
+      "timestamp": "2026-05-21T18:46:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.7 bullet 1: self-DoS gap acknowledged in schema sentinel",
+      "from": "1.27.4",
+      "to": "1.27.5",
+      "build": 65
+    },
+    {
+      "timestamp": "2026-05-21T18:46:38+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.7 bullet 2: maint_schema_validate_max_rps global token-bucket + fail_safe_validate_rps_cap_exceeded + drop alert",
+      "from": "1.27.5",
+      "to": "1.27.6",
+      "build": 66
+    },
+    {
+      "timestamp": "2026-05-21T18:46:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.7 bullet 3: 11 proof tests for validate_rps_cap (happy + adversarial)",
+      "from": "1.27.6",
+      "to": "1.27.7",
+      "build": 67
+    },
+    {
+      "timestamp": "2026-05-21T19:12:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.8 bullet 1: documented trainer scale-target sole-writer gap",
+      "from": "1.27.7",
+      "to": "1.27.8",
+      "build": 68
+    },
+    {
+      "timestamp": "2026-05-21T19:12:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.8 bullet 2: scaler self_scaling_targets boundary + trainer_warmup_hint kind",
+      "from": "1.27.8",
+      "to": "1.27.9",
+      "build": 69
+    },
+    {
+      "timestamp": "2026-05-21T19:12:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.8 bullet 3: proof tests for trainer sole-writer boundary",
+      "from": "1.27.9",
+      "to": "1.27.10",
+      "build": 70
+    },
+    {
+      "timestamp": "2026-05-21T19:30:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.9 pg_dump nice/ionice cfg knobs in config.py + defaults.yaml",
+      "from": "1.27.10",
+      "to": "1.27.11",
+      "build": 71
+    },
+    {
+      "timestamp": "2026-05-21T19:30:49+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.14.9 verify-PG version invariant: VerifyPgTooOldError + server_version_num in manifest + wiring nice/ionice knobs",
+      "from": "3.26.2",
+      "to": "3.26.3",
+      "build": 72
+    },
+    {
+      "timestamp": "2026-05-21T19:31:01+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "8.14.9 pg_dump priority + verify-PG version invariant complete",
+      "from": "1.4.0",
+      "to": "1.4.1",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-21T20:34:21+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.14.10 bullet 1: real gap documented",
+      "from": "1.60.1",
+      "to": "1.60.2",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-21T20:34:21+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.14.10 bullets 2-5: spool-flush dir-level flock, newest-first ordering, drain-budget, proof tests",
+      "from": "3.26.3",
+      "to": "3.27.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-21T20:34:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.10 bullets 2-3: agent-side flush lock + newest-first in BusCircuitBreaker; defaults.yaml + config.py",
+      "from": "1.27.11",
+      "to": "1.27.12",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-05-21T20:39:26+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.14.10 bullet 3: newest-first ordering in spool_flush.py",
+      "from": "3.27.0",
+      "to": "3.27.1",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-05-21T20:39:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.14.10 bullet 4: opsctl_spool_flush_max_per_run config knob",
+      "from": "1.27.12",
+      "to": "1.27.13",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-05-21T20:39:26+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.14.10 bullet 5: proof tests (a)(b)(c) 6/6 green",
+      "from": "3.27.1",
+      "to": "3.27.2",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-05-21T21:08:05+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.14.11: 6 new KNOWN_SEC_ALERT_KINDS, spool_flush_partial schema, routing table, proof test consolidation (27 new tests), spool newest-first drain order",
+      "from": "1.27.13",
+      "to": "1.28.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-05-21T21:08:05+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.14.11: opsctl ACL/signature surface, exit code docs, spool_flush stale lock fix, test stub fixes",
+      "from": "3.27.2",
+      "to": "3.27.3",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-05-21T21:08:05+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.14.11: new opsctl_security.md runbook + extended backup_runbook.md (age-pin) + dr_drill_runbook.md (per-file manifest step)",
+      "from": "1.60.2",
+      "to": "1.61.0",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-05-21T21:27:05+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.1 bullet 1: document clock-suspend real bug",
+      "from": "1.61.0",
+      "to": "1.61.1",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-05-21T21:27:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.1 bullet 2: boot_validate_clock_source + maint_clock_source_changed event kind",
+      "from": "1.28.0",
+      "to": "1.28.1",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-05-21T21:27:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.1 bullet 3: confirmed window_anchor_ns usage across all applicable sites",
+      "from": "1.28.1",
+      "to": "1.28.2",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-05-21T21:27:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.1 bullet 4: suspend-detection probe helper + config knob",
+      "from": "1.28.2",
+      "to": "1.28.3",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-05-21T21:27:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.1 bullet 5: proof + adversarial tests for clock-suspend resilience",
+      "from": "1.28.3",
+      "to": "1.28.4",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-05-21T21:44:26+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.2 bullet 1: real gap documented",
+      "from": "1.61.1",
+      "to": "1.61.2",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-05-21T21:44:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.2 bullet 2: kind_schema_version doctrine applied to all 73 schemas",
+      "from": "1.28.4",
+      "to": "1.28.5",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-05-21T21:44:33+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.15.2 bullet 3: new public surface swarm.sdk.kind_schema_version",
+      "from": "1.28.5",
+      "to": "1.29.0",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-05-21T21:44:39+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.15.2 bullet 4: new public surface swarm.sdk.payloads",
+      "from": "1.29.0",
+      "to": "1.30.0",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-05-21T21:44:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.2 bullet 5: deprecation path support",
+      "from": "1.30.0",
+      "to": "1.30.1",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-05-21T21:44:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.2 bullet 6: boundary tests for versioning doctrine",
+      "from": "1.30.1",
+      "to": "1.30.2",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-05-21T22:05:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.4: key lifecycle helpers _key_lifecycle.py (revocation, rotation, kill-switch, rate-limit, cache)",
+      "from": "1.30.2",
+      "to": "1.30.3",
+      "build": 21
+    },
+    {
+      "timestamp": "2026-05-21T22:05:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.4: _op_signature.py upgraded with grace window, age-check, kill-switch, rate-limit, cache-coherent verify",
+      "from": "1.30.3",
+      "to": "1.30.4",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-05-21T22:05:27+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.15.4: revoke_key.py + rotate_key.py subcommands; ALWAYS_DESTRUCTIVE updated; subcommands __init__ updated",
+      "from": "3.27.3",
+      "to": "3.28.0",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-05-21T22:05:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.4: _ack_routing.py + kind_schema_version.py + schema files for opsctl_key_revoked/rotated",
+      "from": "1.30.4",
+      "to": "1.30.5",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-05-21T22:05:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.4: proof tests test_phase8_15_4_key_lifecycle.py (17 passing); regression fix in test_phase8_14_4_consumer_gate.py",
+      "from": "1.30.5",
+      "to": "1.30.6",
+      "build": 25
+    },
+    {
+      "timestamp": "2026-05-21T22:23:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.5 bullet 1: real gap acknowledged in ROADMAP",
+      "from": "1.61.2",
+      "to": "1.61.3",
+      "build": 26
+    },
+    {
+      "timestamp": "2026-05-21T22:23:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.5 per-row hard cap: maint_audit.py helper + payloads audit_row_oversize kind + config keys",
+      "from": "1.30.6",
+      "to": "1.30.7",
+      "build": 27
+    },
+    {
+      "timestamp": "2026-05-21T22:23:48+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "8.15.5 migration 009 BEFORE INSERT trigger row-size cap branch",
+      "from": "1.4.4",
+      "to": "1.4.5",
+      "build": 28
+    },
+    {
+      "timestamp": "2026-05-21T22:24:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.5 per-kind details budget: config parsed property + MaintEvent._make soft fence",
+      "from": "1.30.7",
+      "to": "1.30.8",
+      "build": 29
+    },
+    {
+      "timestamp": "2026-05-21T22:24:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.5 proof tests: 22 tests covering sentinel round-trip, per-kind soft fence, apply_row_cap, adversarial edge cases",
+      "from": "1.30.8",
+      "to": "1.30.9",
+      "build": 30
+    },
+    {
+      "timestamp": "2026-05-21T22:27:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.5 defaults.yaml audit row size cap defaults",
+      "from": "1.30.9",
+      "to": "1.30.10",
+      "build": 31
+    },
+    {
+      "timestamp": "2026-05-21T22:39:07+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.15.6: new MAINT_DEPLOYMENT_CATALOGUE.md — K8s+compose single-source catalogue for all maint-plane agents",
+      "from": "1.61.3",
+      "to": "1.62.0",
+      "build": 32
+    },
+    {
+      "timestamp": "2026-05-21T22:39:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.6: _catalogue.py + test_phase8_15_6_catalogue.py — machine-readable catalogue and CI boundary test",
+      "from": "1.30.10",
+      "to": "1.30.11",
+      "build": 33
+    },
+    {
+      "timestamp": "2026-05-21T22:43:23+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.6 bullet 4: ROADMAP cross-reference back-links added",
+      "from": "1.62.0",
+      "to": "1.62.1",
+      "build": 34
+    },
+    {
+      "timestamp": "2026-05-21T23:10:00+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.15.7 hash-chain HMAC columns in opsctl_audit.csv; audit_chain.py verifier; ops.bootstrap-audit-key Make target",
+      "from": "3.28.0",
+      "to": "3.29.0",
+      "build": 35
+    },
+    {
+      "timestamp": "2026-05-21T23:10:06+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.7 backup agent wires audit chain boot+hourly verify; audit_chain_verify kind in payloads+routing",
+      "from": "1.30.11",
+      "to": "1.30.12",
+      "build": 36
+    },
+    {
+      "timestamp": "2026-05-21T23:10:11+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.7 ROADMAP all 5 bullets ticked",
+      "from": "1.62.1",
+      "to": "1.62.2",
+      "build": 37
+    },
+    {
+      "timestamp": "2026-05-21T23:18:19+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.15.7 bullet 2: user field in HMAC + audit_chain.py reconstruct fix",
+      "from": "3.29.0",
+      "to": "3.30.0",
+      "build": 38
+    },
+    {
+      "timestamp": "2026-05-21T23:18:19+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.7 bullet 4: audit_chain_verify kind schema",
+      "from": "1.30.12",
+      "to": "1.30.13",
+      "build": 39
+    },
+    {
+      "timestamp": "2026-05-21T23:18:19+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.7 bullet 1: real gap documented",
+      "from": "1.62.2",
+      "to": "1.62.3",
+      "build": 40
+    },
+    {
+      "timestamp": "2026-05-21T23:30:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.8 shed_state.py + _lag_watchdog inherit hook",
+      "from": "1.30.13",
+      "to": "1.30.14",
+      "build": 41
+    },
+    {
+      "timestamp": "2026-05-21T23:30:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.8 _maint_event_inherited + emit-pending flag in tick()",
+      "from": "1.30.14",
+      "to": "1.30.15",
+      "build": 42
+    },
+    {
+      "timestamp": "2026-05-21T23:30:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.8 test_leader_boundary shed-state annotation boundary tests",
+      "from": "1.30.15",
+      "to": "1.30.16",
+      "build": 43
+    },
+    {
+      "timestamp": "2026-05-21T23:30:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.8 test_phase8_15_8_shed_state.py — 4 proof tests all green",
+      "from": "1.30.16",
+      "to": "1.30.17",
+      "build": 44
+    },
+    {
+      "timestamp": "2026-05-21T23:35:54+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.15.8 bullet 1: real-gap doc — shed state lost on leader handover",
+      "from": "1.62.3",
+      "to": "1.62.4",
+      "build": 45
+    },
+    {
+      "timestamp": "2026-05-21T23:58:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.9 dlq_drop_request handling + dlq_dropped operator-drop forensic schema",
+      "from": "1.30.17",
+      "to": "1.30.18",
+      "build": 46
+    },
+    {
+      "timestamp": "2026-05-21T23:59:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.9 noise-window suppression for scaler tick() + edge-detection sec.alert",
+      "from": "1.30.18",
+      "to": "1.30.19",
+      "build": 47
+    },
+    {
+      "timestamp": "2026-05-21T23:59:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.9 proof tests: dlq_drop_request forensic + noise-window suppression",
+      "from": "1.30.19",
+      "to": "1.30.20",
+      "build": 48
+    },
+    {
+      "timestamp": "2026-05-22T00:04:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.9 fix: narrow except + adversarial _parse_noise_windows tests",
+      "from": "1.30.20",
+      "to": "1.30.21",
+      "build": 49
+    },
+    {
+      "timestamp": "2026-05-22T00:18:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.15.10 bullet 2: LOCK_MAINT_BACKUP_RESTORE_VERIFY + verify_concurrency.py",
+      "from": "3.30.0",
+      "to": "3.30.1",
+      "build": 50
+    },
+    {
+      "timestamp": "2026-05-22T00:18:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.15.10 bullet 4: credential_provider.py offsite cred hot-reload",
+      "from": "3.30.1",
+      "to": "3.30.2",
+      "build": 51
+    },
+    {
+      "timestamp": "2026-05-22T00:18:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.15.10 bullet 6: forensic.py restore-verify forensic sidecar",
+      "from": "3.30.2",
+      "to": "3.30.3",
+      "build": 52
+    },
+    {
+      "timestamp": "2026-05-22T00:18:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.10 config knobs: verify_lock_timeout_s + cred_reload_s + forensic_max_bytes",
+      "from": "1.30.21",
+      "to": "1.30.22",
+      "build": 53
+    },
+    {
+      "timestamp": "2026-05-22T00:18:16+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.15.10 verify_forensic_captured kind + verify_concurrency_blocked + offsite_credential_rotation_required",
+      "from": "0.50.0",
+      "to": "0.50.1",
+      "build": 54
+    },
+    {
+      "timestamp": "2026-05-22T00:25:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.15.10 fix: defaults.yaml knobs added",
+      "from": "1.30.22",
+      "to": "1.30.23",
+      "build": 55
+    },
+    {
+      "timestamp": "2026-05-22T00:25:53+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.15.10 fix: cfg helpers refactored, no blanket try/except",
+      "from": "3.30.3",
+      "to": "3.30.4",
+      "build": 56
+    },
+    {
+      "timestamp": "2026-05-22T00:44:57+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.15.11: MonotonicClock.boot_utc, verify_forensic_captured KSV, 4 sec.alert kinds, test_phase8_15_dod.py proof tests",
+      "from": "0.50.1",
+      "to": "0.50.2",
+      "build": 57
+    },
+    {
+      "timestamp": "2026-05-22T00:45:03+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.15.11: exit_code_to_label() in _classify.py",
+      "from": "3.30.4",
+      "to": "3.30.5",
+      "build": 58
+    },
+    {
+      "timestamp": "2026-05-22T00:45:09+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.15.11: chaos catalogue 6 stubs; opsctl_security §7, backup_runbook §6, SECURITY.md HMAC cross-link",
+      "from": "1.62.4",
+      "to": "1.63.0",
+      "build": 59
+    },
+    {
+      "timestamp": "2026-05-22T00:51:16+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.15.11 fix: migration 009 CHAR(64) alignment",
+      "from": "3.30.5",
+      "to": "3.30.6",
+      "build": 60
+    },
+    {
+      "timestamp": "2026-05-22T01:09:14+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.16.2: SpoolAckReconciler + spool_flush_acks kinds + DLQ supervisor wiring + proof tests",
+      "from": "1.30.23",
+      "to": "1.31.0",
+      "build": 61
+    },
+    {
+      "timestamp": "2026-05-22T01:21:40+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.3 prune_order.py PruneOrderViolation+Validator + backup_state_machine + prune_metrics",
+      "from": "3.30.6",
+      "to": "3.30.7",
+      "build": 62
+    },
+    {
+      "timestamp": "2026-05-22T01:21:41+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.3 config fail_safe_prune_order_invalid comment + proof tests test_phase8_16_3_prune_order.py",
+      "from": "1.31.0",
+      "to": "1.31.1",
+      "build": 63
+    },
+    {
+      "timestamp": "2026-05-22T01:26:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.3 fix: PruneMetrics test coverage added",
+      "from": "1.31.1",
+      "to": "1.31.2",
+      "build": 64
+    },
+    {
+      "timestamp": "2026-05-22T01:31:01+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.16.3: prune_order + prune_metrics + backup_state_machine new public surfaces",
+      "from": "3.30.7",
+      "to": "3.31.0",
+      "build": 65
+    },
+    {
+      "timestamp": "2026-05-22T01:43:39+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.16.4: AckMetrics + CardinalityGuardError + proof tests (new public surface ai.swarm.sdk.ack_metrics)",
+      "from": "1.31.2",
+      "to": "1.32.0",
+      "build": 66
+    },
+    {
+      "timestamp": "2026-05-22T01:43:39+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.4: ROADMAP bullets ticked, defaults.yaml + .env.example updated",
+      "from": "1.63.0",
+      "to": "1.63.1",
+      "build": 67
+    },
+    {
+      "timestamp": "2026-05-22T01:58:01+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.16.5: MultipartResumeManager + check_bucket_lifecycle (new public surface xops.backup.multipart_resume)",
+      "from": "1.32.0",
+      "to": "1.33.0",
+      "build": 68
+    },
+    {
+      "timestamp": "2026-05-22T01:58:01+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.5: multipart_resume.py added to xops/backup/",
+      "from": "3.31.0",
+      "to": "3.31.1",
+      "build": 69
+    },
+    {
+      "timestamp": "2026-05-22T01:58:01+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.5: ROADMAP bullets ticked, config + schema updated",
+      "from": "1.63.1",
+      "to": "1.63.2",
+      "build": 70
+    },
+    {
+      "timestamp": "2026-05-22T02:04:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.5 fix: kind routing test payload",
+      "from": "1.33.0",
+      "to": "1.33.1",
+      "build": 71
+    },
+    {
+      "timestamp": "2026-05-22T02:17:28+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.16.6: s3_preflight module + preflight_due cadence helper",
+      "from": "3.31.1",
+      "to": "3.32.0",
+      "build": 72
+    },
+    {
+      "timestamp": "2026-05-22T02:17:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.6: backup_offsite_preflight_failed in KNOWN_SEC_ALERT_KINDS + 3 fail_safe flags + preflight config",
+      "from": "1.33.1",
+      "to": "1.33.2",
+      "build": 73
+    },
+    {
+      "timestamp": "2026-05-22T05:33:19+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.6 fix: S3CompatibleTarget.preflight entry point",
+      "from": "3.32.0",
+      "to": "3.32.1",
+      "build": 74
+    },
+    {
+      "timestamp": "2026-05-22T05:33:19+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.6 fix: backup preflight hook + maint test determinism",
+      "from": "1.33.2",
+      "to": "1.33.3",
+      "build": 75
+    },
+    {
+      "timestamp": "2026-05-22T05:36:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.6 fix: backup preflight proof coverage tightened",
+      "from": "1.33.3",
+      "to": "1.33.4",
+      "build": 76
+    },
+    {
+      "timestamp": "2026-05-22T05:43:32+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.6 fix: concrete preflight S3 methods and GC scheduling",
+      "from": "3.32.1",
+      "to": "3.32.2",
+      "build": 77
+    },
+    {
+      "timestamp": "2026-05-22T05:55:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.6 fix: defaults sync and deterministic ai tests",
+      "from": "1.33.4",
+      "to": "1.33.5",
+      "build": 78
+    },
+    {
+      "timestamp": "2026-05-22T05:55:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.6 fix: mock Redis ACL file parses cleanly for test gate",
+      "from": "3.32.2",
+      "to": "3.32.3",
+      "build": 79
+    },
+    {
+      "timestamp": "2026-05-22T06:16:55+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.16.7 layered DLQ replay policy and tests",
+      "from": "1.33.5",
+      "to": "1.34.0",
+      "build": 80
+    },
+    {
+      "timestamp": "2026-05-22T06:16:55+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.16.7 replay policy verifier hook",
+      "from": "3.32.3",
+      "to": "3.33.0",
+      "build": 81
+    },
+    {
+      "timestamp": "2026-05-22T06:16:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.16.7 security exceptions registry and roadmap ticks",
+      "from": "1.63.2",
+      "to": "1.64.0",
+      "build": 82
+    },
+    {
+      "timestamp": "2026-05-22T06:23:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.7 fix: DLQ allow check regression",
+      "from": "1.34.0",
+      "to": "1.34.1",
+      "build": 83
     }
   ]
 }

@@ -91,7 +91,26 @@ Compare row counts against the source database census
 `verify_summary` field).  All tables must be within the
 expected range; `_schema_max_version` must match exactly.
 
-### Step (d) — Record drill outcome
+### Step (c2) — Verify per-file manifest integrity
+
+If the dump was created with the §8.14.2 per-file checksum manifest
+(`negelir.files.sha256.txt` inside the dump directory), verify it now:
+
+```bash
+# Extract the dump directory (if it is in tar+age form, age-decrypt + untar first)
+# Then, inside the extracted pg_dump directory:
+sha256sum --check negelir.files.sha256.txt
+```
+
+Expected output: every line ends with `OK`.  Any `FAILED` line
+indicates dump corruption **before** the outer tar — this is a
+`kind=backup_dump_file_corrupted` event and the drill result is
+**FAILED**.
+
+If the dump pre-dates §8.14.2 (i.e. `negelir.files.sha256.txt` is
+absent), the agent emits `kind=backup_legacy_no_file_manifest` and
+falls back to outer-tarball-checksum-only verification.  Record
+`per_file_manifest=absent` in the drill CSV notes column.
 
 Append a row to `data/backups/dr_drills.csv`:
 

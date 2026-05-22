@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/audit_chain_verify",
+  "title": "maint.event.v1{kind=audit_chain_verify}",
+  "description": "Phase 8 §8.15.7 — notification emitted by maint.backup.v1 once per hourly cron tick after verifying the opsctl_audit.csv hash chain. ok=true when the chain is intact. Notification-only; no ack expected.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "ok", "rows_checked"],
+  "properties": {
+    "kind":                { "const": "audit_chain_verify" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "ok":                  { "type": "boolean", "description": "True iff the entire chain is intact." },
+    "rows_checked":        { "type": "integer", "minimum": 0, "description": "Total data rows inspected across all files." },
+    "first_break_row":     { "type": ["integer", "null"], "description": "1-based row number of the first chain break; null when ok=true." },
+    "break_reason":        { "type": ["string", "null"], "description": "Human-readable description of the first break; null when ok=true." },
+    "audit_file_path":     { "type": "string", "description": "Path of the active audit CSV that was verified." }
+  },
+  "additionalProperties": false
+}

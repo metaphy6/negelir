@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/opsctl_key_revoked",
+  "title": "maint.event.v1{kind=opsctl_key_revoked}",
+  "description": "Phase 8 §8.15.4 — audit event emitted by ops.revoke-key (via the destructive-token gate) when an operator HMAC key is revoked. Notification-only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "key_id",
+    "revoked_by",
+    "reason"
+  ],
+  "properties": {
+    "kind": {
+      "const": "opsctl_key_revoked"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "key_id": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 16,
+      "description": "Public key_id of the revoked operator key."
+    },
+    "revoked_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator email who executed the revocation."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text justification."
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Originating opsctl request_id."
+    }
+  },
+  "additionalProperties": false
+}

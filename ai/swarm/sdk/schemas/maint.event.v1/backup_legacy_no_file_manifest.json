@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_legacy_no_file_manifest",
+  "title": "maint.event.v1{kind=backup_legacy_no_file_manifest}",
+  "description": "Phase 8 §8.14.2 — emitted during restore-verify when the dump lacks the inner per-file SHA-256 manifest (negelir.files.sha256.txt). Dump was written before §8.14.2 landed. Restore proceeds with outer-checksum-only verification. Severity=info, one-shot per dump.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "dump_date",
+    "fallback_action"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_legacy_no_file_manifest"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "dump_date": {
+      "type": "string",
+      "description": "ISO calendar date (UTC) of the dump that lacks an inner per-file manifest."
+    },
+    "fallback_action": {
+      "type": "string",
+      "enum": [
+        "outer_checksum_only"
+      ],
+      "description": "The fallback behaviour taken: outer tarball checksum verified only; no per-file integrity check."
+    },
+    "dump_path": {
+      "type": "string",
+      "description": "Path of the dump file or directory relative to the backup root."
+    }
+  },
+  "additionalProperties": false
+}

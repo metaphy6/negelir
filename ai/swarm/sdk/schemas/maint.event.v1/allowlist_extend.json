@@ -4,15 +4,48 @@
   "title": "maint.event.v1{kind=allowlist_extend}",
   "description": "Phase 8 §8.1 / §8.7 — operator extends the lifetime of a pattern_allowlist row (resets its TTL clock). `target` is '<source>:<rule_id>'. Consumer: maint.sec.v1 (lands in §8.7).",
   "type": "object",
-  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "client_id",
+    "produced_at"
+  ],
   "properties": {
-    "kind":        { "const": "allowlist_extend" },
-    "target":      { "type": "string", "minLength": 3, "pattern": "^[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+$", "description": "'<source>:<rule_id>' per §8.7 allowlist row addressing." },
-    "request_id":  { "type": "string", "minLength": 1 },
-    "client_id":   { "type": "string", "minLength": 1 },
-    "produced_at": { "type": "string" },
-    "ttl_s":       { "type": "integer", "minimum": 1, "maximum": 7776000, "description": "New TTL in seconds, capped at 90 days. Default applied at consumer when omitted." },
-    "reason":      { "type": "string", "description": "Free-text operator note." }
+    "kind": {
+      "const": "allowlist_extend"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[a-zA-Z0-9_.-]+:[a-zA-Z0-9_.-]+$",
+      "description": "'<source>:<rule_id>' per §8.7 allowlist row addressing."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "ttl_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7776000,
+      "description": "New TTL in seconds, capped at 90 days. Default applied at consumer when omitted."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Free-text operator note."
+    }
   },
   "additionalProperties": false
 }

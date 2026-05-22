@@ -44,6 +44,13 @@ LOCK_MAINT_AUDIT_PRUNE: Final[int] = 8_005
 # share a Postgres instance.
 LOCK_MAINT_SCALER_LEADER: Final[int] = 8_006
 
+# §8.15.10 restore-verify concurrency cap — cold-verify and nightly
+# restore-verify serialise through this advisory lock so two
+# concurrent pg_restore --jobs=N runs cannot OOM an under-provisioned
+# verify cluster.  cold-verify yields to nightly (cold-verify can
+# re-run next Sunday; nightly is daily).
+LOCK_MAINT_BACKUP_RESTORE_VERIFY: Final[int] = 8_007
+
 
 # Single source of truth — the uniqueness test reads ALL_LOCK_KEYS.
 ALL_LOCK_KEYS: dict[str, int] = {
@@ -53,6 +60,7 @@ ALL_LOCK_KEYS: dict[str, int] = {
     "LOCK_MAINT_SEC_DECIMATE": LOCK_MAINT_SEC_DECIMATE,
     "LOCK_MAINT_AUDIT_PRUNE": LOCK_MAINT_AUDIT_PRUNE,
     "LOCK_MAINT_SCALER_LEADER": LOCK_MAINT_SCALER_LEADER,
+    "LOCK_MAINT_BACKUP_RESTORE_VERIFY": LOCK_MAINT_BACKUP_RESTORE_VERIFY,
 }
 
 

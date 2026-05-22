@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/maint.ack.v1",
   "title": "maint.ack.v1",
-  "description": "Phase 8 §8.1 — Per-consumer acknowledgement of a maint.event.v1 envelope. Producer set: any registered consumer of maint.event.v1 (boundary test enforces). Consumer set: ops_console only — agents do not read each others' acks. Schema-version 1; field additions are minor bumps. Per-consumer semantics: every consumer that processes a maint.event.v1{request_id} publishes EXACTLY ONE maint.ack.v1 carrying its own accepted_by. Re-deliveries published by the bus do not produce additional acks (consumer idempotency ledger collapses dupes; ack.attempt > 1 is reserved for explicit consumer-driven retries).",
+  "description": "Phase 8 §8.1 — Per-consumer acknowledgement of a maint.event.v1 envelope. Producer set: any registered consumer of maint.event.v1 (boundary test enforces). Consumer set: ops_console only — agents do not read each others' acks. Schema-version 2 (§8.14.6: trace_id field added for distributed-trace correlation). Producers that still emit schema_version=1 are backward-compatible at the consumer but trigger sec.alert.v1{kind=maint_ack_legacy_schema} once-per-accepted_by. Per-consumer semantics: every consumer that processes a maint.event.v1{request_id} publishes EXACTLY ONE maint.ack.v1 carrying its own accepted_by. Re-deliveries published by the bus do not produce additional acks (consumer idempotency ledger collapses dupes; ack.attempt > 1 is reserved for explicit consumer-driven retries).",
   "type": "object",
   "required": [
     "request_id",
@@ -12,13 +12,15 @@
     "attempt"
   ],
   "properties": {
-    "request_id":   { "type": "string", "minLength": 1, "description": "Echoed from the maint.event.v1 payload (NOT the envelope) — the operator's correlator." },
-    "accepted":     { "type": "boolean", "description": "True when the consumer reached a terminal state (success OR no-op idempotent skip). False only on hard rejection (e.g. unknown subject, invalid arguments)." },
-    "accepted_by":  { "type": "string", "minLength": 1, "description": "Consumer agent id (e.g. 'sec.rate.v1', 'storage.v1'). The publisher's wait-for-acks loop matches this against the expected ack set computed from the kind→consumer routing map at publish-time." },
-    "reason":       { "type": "string", "description": "Operator-facing one-liner. ≤ cfg.maint_ack_reason_max_bytes (default 512). Truncation prefixes 'truncated:<original_len>'." },
-    "details":      { "type": "object", "description": "Optional flat key/value bag, ≤ cfg.maint_ack_details_max_bytes (default 2048). No nested arrays of objects (cardinality control). Consumer-defined contents." },
-    "processed_at": { "type": "string", "description": "ISO-8601 UTC timestamp of consumer's terminal-state decision." },
-    "attempt":      { "type": "integer", "minimum": 1, "description": "Per-consumer attempt counter. 1 is the steady state. >1 indicates an explicit consumer-driven retry (NOT a bus-level redelivery — those are absorbed by the consumer's idempotency ledger and do NOT publish a new ack)." }
+    "request_id":    { "type": "string", "minLength": 1, "description": "Echoed from the maint.event.v1 payload (NOT the envelope) — the operator's correlator." },
+    "accepted":      { "type": "boolean", "description": "True when the consumer reached a terminal state (success OR no-op idempotent skip). False only on hard rejection (e.g. unknown subject, invalid arguments)." },
+    "accepted_by":   { "type": "string", "minLength": 1, "description": "Consumer agent id (e.g. 'sec.rate.v1', 'storage.v1'). The publisher's wait-for-acks loop matches this against the expected ack set computed from the kind→consumer routing map at publish-time." },
+    "reason":        { "type": "string", "description": "Operator-facing one-liner. ≤ cfg.maint_ack_reason_max_bytes (default 512). Truncation prefixes 'truncated:<original_len>'." },
+    "details":       { "type": "object", "description": "Optional flat key/value bag, ≤ cfg.maint_ack_details_max_bytes (default 2048). No nested arrays of objects (cardinality control). Consumer-defined contents." },
+    "processed_at":  { "type": "string", "description": "ISO-8601 UTC timestamp of consumer's terminal-state decision." },
+    "attempt":       { "type": "integer", "minimum": 1, "description": "Per-consumer attempt counter. 1 is the steady state. >1 indicates an explicit consumer-driven retry (NOT a bus-level redelivery — those are absorbed by the consumer's idempotency ledger and do NOT publish a new ack)." },
+    "trace_id":      { "type": ["string", "null"], "description": "§8.14.6 — Copied verbatim from the maint.event.v1 envelope that this ack is acknowledging. MUST NOT be a freshly generated id. Null only for synthetic or test acks that arrived without a trace_id. When present in the source envelope, consumers MUST propagate it here so Jaeger-style traces can span the publish→ack→ops_console path without a gap." },
+    "schema_version": { "type": "integer", "minimum": 1, "description": "Payload schema version. 1 = pre-§8.14.6 (no trace_id). 2 = §8.14.6+ (trace_id field present). Consumers MUST tolerate schema_version=1 for backward compat; ops_console emits sec.alert.v1{kind=maint_ack_legacy_schema} once-per-accepted_by when it sees schema_version=1." }
   },
   "additionalProperties": false
 }

@@ -1953,15 +1953,23 @@ class TestMaintAuditImmutability:
             "CREATE ROLE negelir_audit_pruner statement missing"
 
     def test_migration_grants_delete_to_pruner_only(self):
-        """AC: Migration grants DELETE and TRUNCATE to negelir_audit_pruner only."""
+        """AC: Migration grants write access (MAINTAIN on PG15+, or DELETE/TRUNCATE
+        on PG14-) to negelir_audit_pruner only.  The migration was revised
+        in Phase 8.14.1 to use GRANT MAINTAIN (PG15+) executed via EXECUTE
+        inside a version-branched block; the old flat GRANT DELETE,TRUNCATE
+        was removed to prevent direct row-level mutation outside the trigger.
+        """
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
             "migrations", "009_maint_audit.sql"
         )
         with open(path) as f:
             content = f.read()
-        assert "GRANT DELETE, TRUNCATE ON maint_audit_log_pii TO negelir_audit_pruner" in content, \
-            "GRANT DELETE/TRUNCATE to negelir_audit_pruner missing"
+        # Phase 8.14.1 revised migration: uses GRANT MAINTAIN (PG15+) via
+        # EXECUTE inside a version-branch. Direct DELETE/TRUNCATE grant is
+        # intentionally absent; MAINTAIN covers partition management instead.
+        assert "GRANT MAINTAIN ON maint_audit_log_pii TO negelir_audit_pruner" in content, \
+            "GRANT MAINTAIN on maint_audit_log_pii to negelir_audit_pruner missing (Phase 8.14.1 revised migration)"
 
     def test_migration_grants_insert_select_to_public(self):
         """AC: Migration grants SELECT and INSERT to PUBLIC."""

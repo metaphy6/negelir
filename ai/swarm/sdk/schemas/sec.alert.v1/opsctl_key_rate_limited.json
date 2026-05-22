@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.alert.v1/opsctl_key_rate_limited",
+  "title": "sec.alert.v1{kind=opsctl_key_rate_limited}",
+  "description": "Phase 8 §8.15.4 — per-key token-bucket at cfg.opsctl_key_rate_limit_per_min exhausted. Envelope rejected. Debounced 5 min per key_id. Blast-radius cap for stolen keys. Severity: warn.",
+  "type": "object",
+  "required": ["alert_id", "kind", "severity", "source", "reason", "produced_at"],
+  "properties": {
+    "kind":     { "const": "opsctl_key_rate_limited" },
+    "severity": { "const": "warn" },
+    "source":   { "type": "string" },
+    "subject":  { "type": ["string", "null"], "description": "key_id of the rate-limited key." },
+    "reason":   { "type": "string" },
+    "alert_id": { "type": "string" },
+    "produced_at": { "type": "string" }
+  }
+}

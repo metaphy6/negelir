@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.alert.v1/opsctl_key_rotation_overdue",
+  "title": "sec.alert.v1{kind=opsctl_key_rotation_overdue}",
+  "description": "Phase 8 §8.15.4 — a non-revoked operator key's age exceeds cfg.opsctl_key_max_age_days (default 365). Debounced daily. Severity: warn.",
+  "type": "object",
+  "required": ["alert_id", "kind", "severity", "source", "reason", "produced_at"],
+  "properties": {
+    "kind":     { "const": "opsctl_key_rotation_overdue" },
+    "severity": { "const": "warn" },
+    "source":   { "type": "string" },
+    "subject":  { "type": ["string", "null"], "description": "key_id of the overdue key." },
+    "reason":   { "type": "string" },
+    "alert_id": { "type": "string" },
+    "produced_at": { "type": "string" }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_model_cold_verify_failed",
+  "title": "maint.event.v1{kind=backup_model_cold_verify_failed}",
+  "description": "Phase 8 §8.13.1 — emitted when the monthly model cold-verify pass fails (one or more artifacts could not be loaded). Notification only.",
+  "type": "object",
+  "required": [
+    "kind",
+    "produced_at",
+    "kind_schema_version",
+    "tarball_date",
+    "total_artifacts",
+    "loaded_ok",
+    "load_error_count"
+  ],
+  "properties": {
+    "kind": {
+      "const": "backup_model_cold_verify_failed"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "tarball_date": {
+      "type": "string",
+      "description": "ISO calendar date (UTC) of the model tarball that failed cold-verify."
+    },
+    "total_artifacts": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "loaded_ok": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "load_error_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of artifacts that failed to load."
+    },
+    "error_samples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "description": "Up to 10 error messages from load failures."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

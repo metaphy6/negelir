@@ -1015,6 +1015,8 @@ class MaintAck:
     attempt: int = 1
     reason: str = ""
     details: dict[str, Any] | None = None
+    trace_id: str | None = None
+    schema_version: int = 2
 
     def __post_init__(self) -> None:
         if not self.request_id:
@@ -1031,6 +1033,10 @@ class MaintAck:
                 "attempt > 1 is reserved for explicit consumer-driven "
                 "retries)"
             )
+        if self.schema_version < 1:
+            raise ValueError(
+                f"MaintAck.schema_version={self.schema_version!r} must be >= 1"
+            )
 
     def as_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -1039,6 +1045,7 @@ class MaintAck:
             "accepted_by": self.accepted_by,
             "processed_at": self.processed_at,
             "attempt": self.attempt,
+            "schema_version": self.schema_version,
         }
         # Optional fields only emitted when set, to keep wire payload
         # tight against the cfg.maint_ack_payload_max_bytes cap.
@@ -1046,6 +1053,10 @@ class MaintAck:
             out["reason"] = self.reason
         if self.details is not None:
             out["details"] = dict(self.details)
+        # §8.14.6 — trace_id copied from the source envelope; emitted
+        # only when present (null trace for synthetic/test acks is omitted).
+        if self.trace_id is not None:
+            out["trace_id"] = self.trace_id
         return out
 
     @classmethod
@@ -1059,6 +1070,8 @@ class MaintAck:
             attempt=int(data.get("attempt", 1)),
             reason=str(data.get("reason", "")),
             details=dict(details) if isinstance(details, dict) else None,
+            trace_id=str(data["trace_id"]) if data.get("trace_id") else None,
+            schema_version=int(data.get("schema_version", 1)),
         )
 
 
@@ -1139,17 +1152,34 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     # maint.scaler.v1 (§8.16.1 default-policy fallback + orphan-cfg)
     "maint_scaler_unconfigured_agent",
     "maint_scaler_orphan_cfg",
+    # maint.scaler.v1 (§8.15.9 scheduler noise-window suppression —
+    # emitted once per window-entry or window-exit edge transition,
+    # severity=info; not per tick).
+    "scaler_noise_window_active",
     # maint.schema.v1 (§8.6 forward-compat boundary — auto-apply is
     # detect-only in Phase 8; setting cfg.maint_schema_auto_apply_enabled
     # true emits a one-shot warn alert at boot).
     "schema_auto_apply_misconfigured",
+    # maint.schema.v1 (§8.14.7 self-DoS guard — drop-rate on the
+    # per-process cross-topic validation cap exceeded 10 % of
+    # attempted over a 60 s window; indicates sample_rate misconfig).
+    "maint_schema_sample_rate_too_high",
     # maint.storage.v1 (§8.13.2 cumulative storage cap)
     "maint_storage_pressure",
     # maint.dlq.v1 (§8.5 backlog-pressure damping + state-cap pressure)
     "dlq_backlog_high",
     "dlq_state_pressure",
+    # maint.dlq.v1 (§8.14.5 recursion guard — fires once at boot when
+    # an operator-supplied allow-list entry is also in RECURSION_DENY_SET;
+    # severity=warn so operators know to prune the stale entry).
+    "dlq_recursion_blocked",
     # xops.maint.advisory_lock (§8.15.3 hold-time guard)
     "maint_advisory_lock_held_long",
+    # xops.maint.advisory_lock (§8.15.3 — key-collision: BoundLock constructor
+    # detected a key string not in the registered ADVISORY_LOCK_KEYS set;
+    # severity=critical; indicates an un-registered ad-hoc lock bypassing the
+    # boundary constraint).
+    "advisory_lock_key_collision",
     # maint.backup.v1 (§8.3 scheduler skew + age watchdog +
     # restore-verify failure + §8.9 unencrypted-in-non-prod warn)
     "backup_clock_skew",
@@ -1157,6 +1187,20 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "backup_verify_failed",
     "backup_disk_pressure",
     "backup_unencrypted",
+    # maint.backup.v1 (§8.14.2 per-file dump checksum manifest —
+    # inner manifest detected a SHA-256 mismatch on a dump file
+    # before the tar+age pipeline; severity=critical)
+    "backup_dump_file_corrupted",
+    # maint.backup.v1 (§8.13.1 post-hoc audit — trainer reactor must always
+    # write a lineage sidecar; this surfaces when it did not)
+    "backup_model_lineage_missing",
+    # Phase 8 §8.13.3 — spool entry aging (pruned by spool-flush + circuit
+    # breaker; debounced per agent per flush run)
+    "spool_entry_aged_out",
+    # Phase 8 §8.13.3 — spool entry retired-kind / schema-outdated quarantine
+    # (envelope moved to .retired/ on flush when kind no longer in
+    # KNOWN_MAINT_EVENT_KINDS or schema_version < min_supported)
+    "spool_entry_retired_kind",
     # source.watcher.v1 (§8.4 summarizer startup downgrade)
     "summarizer_unreachable",
     "summarizer_cost_capped",
@@ -1164,6 +1208,104 @@ KNOWN_SEC_ALERT_KINDS: frozenset[str] = frozenset({
     "consumer_likely_broken",
     # maint.* lag watchdog (§8.11 / §8.9 maint-plane lag tier alerts)
     "maint_plane_lag_high",
+    # maint.backup.v1 (§8.13.4 restore version-invariant — absent
+    # build_metadata.json outside a built image; emitted once at boot)
+    "backup_commit_sha_unavailable",
+    # maint.backup.v1 (§8.13.4 restore version-invariant — dump schema
+    # version gap exceeds cfg.maint_backup_max_version_gap; operator must
+    # escalate to a manual restore using the historical commit).
+    "backup_dump_too_old",
+    # maint.backup.v1 (§8.13.4 forward-only doctrine guard — a migration
+    # file contains DROP TABLE / DROP COLUMN / DROP INDEX / TRUNCATE, which
+    # violates the additive-only assumption; emitted once at boot/verify).
+    "backup_migration_drop_detected",
+    # maint.dlq.v1 (§8.13.5 self-isolation precedence — maint-pause rejected
+    # because agent is self-isolated; operator must maint-resume first).
+    "maint_pause_rejected",
+    # maint.backup.v1 (§8.13.6 encryption-key compromise runbook —
+    # backup-role PG password age exceeds hard cap; agent refuses to start).
+    "backup_pg_secret_expired",
+    # ops_console (§8.14.6 — ack consumer detects legacy schema_version=1
+    # producer; emitted once-per-accepted_by per process lifetime as a soft
+    # nudge to upgrade the producer agent to schema_version=2).
+    "maint_ack_legacy_schema",
+    # maint.backup.v1 (§8.14.1c — audit-log partition pre-creation check:
+    # the next calendar month's audit partition does not yet exist; severity
+    # =critical; operator must run maint-create-audit-partition before
+    # month-end to avoid audit log gaps).
+    "maint_audit_partition_missing",
+    # maint.scaler.v1 (§8.14.8 self-scaling target guard — operator-supplied
+    # maint_scaler_self_scaling_targets contains a forbidden agent ID that the
+    # scaler must not scale itself; severity=critical).
+    "scaler_target_forbidden",
+    # maint.backup.v1 (§8.14.9 verify-PG version invariant — the ephemeral
+    # verify-PG image version is older than the dump's source PG server
+    # version_num; agent refuses to start restore-verify; severity=critical;
+    # operator must bump cfg.maint_backup_verify_pg_image before restoring).
+    "backup_verify_pg_version_mismatch",
+    # xops.opsctl (§8.14.4 signed-envelope gate — HMAC signature on the
+    # opsctl envelope is absent, expired (> cfg.opsctl_signature_ttl_s), or
+    # does not verify against the operator key; consumer rejects and emits
+    # this alert; severity=critical).
+    "opsctl_signature_invalid",
+    # xops.opsctl (§8.14.4 per-subcommand authz gate — operator identity
+    # (key fingerprint) is not in the authz file for the requested
+    # subcommand; consumer rejects; severity=critical).
+    "opsctl_unauthorized",
+    # xops.opsctl (§8.15.4 key rotation overdue — any non-revoked key's
+    # age exceeds cfg.opsctl_key_max_age_days; severity=warn, debounced daily).
+    "opsctl_key_rotation_overdue",
+    # xops.opsctl (§8.15.4 operators file unreadable — reload failure (file
+    # missing/corrupt); consumer fails safe, all signatures rejected;
+    # severity=critical, bypass debounce).
+    "opsctl_operators_unreadable",
+    # xops.opsctl (§8.15.4 per-key rate limit exceeded — token-bucket at
+    # cfg.opsctl_key_rate_limit_per_min exhausted; severity=warn, debounced
+    # 5 min per key_id; blast-radius cap for stolen keys).
+    "opsctl_key_rate_limited",
+    # maint.backup.v1 (§8.14.3 age binary pin — age binary on disk has a
+    # different version from cfg.maint_backup_age_binary_version; agent
+    # refuses to start; severity=critical; operator must update the age
+    # binary in the container image to the pinned version).
+    "fail_safe_age_version_mismatch_local",
+    # swarm.sdk.clock (§8.15.1 suspend-resilience — CLOCK_BOOTTIME not
+    # available on this platform; agent falls back to time.monotonic_ns();
+    # window IDs are not suspend-resilient; severity=warn, debounced per-pod).
+    "maint_clock_source_unsupported",
+    # maint_audit_log (§8.15.5 per-row size cap — the §8.14.1 BEFORE INSERT
+    # trigger backstop truncated an oversized payload and wrote the original
+    # to data/maint/audit_oversize/<row_id>.json; severity=warn, debounced
+    # per event_kind per 1h window).
+    "audit_row_oversize",
+    # maint.backup.v1 (§8.15.7 opsctl_audit.csv hash-chain HMAC integrity —
+    # chain break detected at boot or by the hourly verify cron;
+    # severity=critical; operator must investigate tampering or log rotation
+    # anomaly).
+    "audit_log_integrity_break",
+    # maint.backup.v1 (§8.15.10 Fix A — restore-verify concurrency cap:
+    # the second acquirer of LOCK_MAINT_BACKUP_RESTORE_VERIFY waited past
+    # maint_backup_verify_lock_timeout_s and yielded; severity=warn,
+    # debounced; cold-verify yields to nightly per policy).
+    "verify_concurrency_blocked",
+    # maint.backup.v1 (§8.15.10 Fix B — offsite credential age watchdog:
+    # the S3 access-key age has exceeded maint_backup_offsite_credential_max_age_days;
+    # severity=warn (daily debounce); escalates to severity=critical past
+    # max_age + maint_backup_offsite_credential_grace_days and the agent
+    # stops new uploads until the key is rotated).
+    "offsite_credential_rotation_required",
+    # maint.dlq.v1 (§8.16.2 — spool-flush ack reconciliation: one or more
+    # expected consumers did not ack within cfg.opsctl_spool_ack_max_wait_h;
+    # severity=warn, debounced per flush_invocation_id).
+    "spool_flush_acks_incomplete",
+    # maint.backup.v1 (§8.16.5 — bucket AbortIncompleteMultipartUpload
+    # DaysAfterInitiation < cfg.maint_backup_offsite_lifecycle_min_days;
+    # severity=warn, debounced daily; operator may have cost reasons but
+    # the recovery window is unsafe).
+    "backup_offsite_lifecycle_too_aggressive",
+    # maint.backup.v1 (§8.16.6 — Object-Lock / WORM preflight probe
+    # failed at boot or recurring cadence; severity=critical; agent
+    # flips to spool-mode until the next successful probe).
+    "backup_offsite_preflight_failed",
 })
 
 

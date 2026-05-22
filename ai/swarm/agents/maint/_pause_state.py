@@ -44,6 +44,8 @@ class PauseAckResult(NamedTuple):
     paused: bool                 # post-state
     self_isolated: bool          # post-state
     deadline_ns: int | None      # auto-resume deadline, None if running
+    requested_ttl_s: int = 0     # TTL the operator requested (0 for non-pause results)
+    effective_ttl_s: int = 0     # TTL actually applied; differs from requested when no-op
 
 
 @dataclass
@@ -73,14 +75,29 @@ class PauseState:
                                   self.deadline_ns)
         new_deadline = now_ns + max(1, int(ttl_s)) * 1_000_000_000
         if self.paused:
-            if self.deadline_ns is None or new_deadline > self.deadline_ns:
+            # TTL refresh contract (§8.13.5 bullet 3):
+            # Only widen — never shorten.  Distinguish the two cases so
+            # callers can surface the right ack reason and audit trail.
+            current_deadline = self.deadline_ns if self.deadline_ns is not None else 0
+            if new_deadline > current_deadline:
+                # Larger TTL: refresh deadline, record both TTLs.
                 self.deadline_ns = new_deadline
-            return PauseAckResult(True, "already_paused", True,
-                                  self.self_isolated, self.deadline_ns)
+                effective = int(ttl_s)
+                reason = "ttl_refreshed"
+            else:
+                # Smaller-or-equal TTL: preserve existing deadline.
+                effective = max(0, (current_deadline - now_ns) // 1_000_000_000)
+                reason = "already_paused"
+            return PauseAckResult(True, reason, True,
+                                  self.self_isolated, self.deadline_ns,
+                                  requested_ttl_s=int(ttl_s),
+                                  effective_ttl_s=effective)
         self.paused = True
         self.deadline_ns = new_deadline
         return PauseAckResult(True, "paused", True,
-                              self.self_isolated, self.deadline_ns)
+                              self.self_isolated, self.deadline_ns,
+                              requested_ttl_s=int(ttl_s),
+                              effective_ttl_s=int(ttl_s))
 
     def apply_resume(self) -> PauseAckResult:
         """Apply a ``maint_resume`` command and return the ack result.
@@ -94,7 +111,7 @@ class PauseState:
         was_isolated = self.self_isolated
         self.self_isolated = False
         if was_running:
-            return PauseAckResult(True, "already_resumed", False, False, None)
+            return PauseAckResult(True, "already_running", False, False, None)
         if was_isolated:
             return PauseAckResult(True, "resumed_from_isolation",
                                   False, False, None)

@@ -101,7 +101,11 @@ class InMemoryBus:
 
     name = "memory"
 
-    def __init__(self, codec: Codec | None = None) -> None:
+    def __init__(
+        self,
+        codec: Codec | None = None,
+        mock_redis_username: str = "negelir_opsctl",
+    ) -> None:
         self._codec = codec or JsonCodec()
         self._lock = threading.RLock()
         self._streams: dict[Topic, deque[tuple[str, bytes]]] = defaultdict(deque)
@@ -113,6 +117,9 @@ class InMemoryBus:
         self._pending: dict[tuple[Topic, str], dict[str, _PendingEntry]] = defaultdict(dict)
         # Monotonic id source for delivery handles
         self._next_id = 0
+        # Configurable Redis username for the ACL WHOAMI check.
+        # Tests that exercise the wrong-user path pass e.g. "negelir".
+        self._mock_redis_username = mock_redis_username
 
     # ── Bus protocol ────────────────────────────────────────────────────
     def ensure_group(self, topic: Topic | str, group: str) -> None:
@@ -221,6 +228,16 @@ class InMemoryBus:
             entries = list(self._streams[topic_t])
             self._streams[topic_t].clear()
         return [self._codec.decode(raw) for _, raw in entries]
+
+    def get_redis_username(self) -> str | None:
+        """Return the simulated Redis ACL username (Phase 8 §8.14.4).
+
+        In production this would be the result of ACL WHOAMI. Tests that
+        exercise the wrong-user boot-validation path pass
+        ``mock_redis_username="negelir"`` (application user) to the
+        constructor; production tests use the default ``"negelir_opsctl"``.
+        """
+        return self._mock_redis_username
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -359,3 +376,18 @@ class RedisStreamsBus:
         if isinstance(info, (list, tuple)) and info:
             return int(info[0])
         return 0
+
+    def get_redis_username(self) -> str | None:
+        """Return the authenticated Redis ACL username (Phase 8 §8.14.4).
+
+        Calls ``ACL WHOAMI`` on the underlying client. Returns ``None`` if
+        the command is unavailable (pre-6.0 Redis or network error); the
+        caller interprets ``None`` as "cannot verify — fail safe".
+        """
+        try:
+            result = self._client.acl_whoami()
+            if isinstance(result, bytes):
+                return result.decode()
+            return str(result) if result is not None else None
+        except Exception:  # noqa: BLE001 — pre-6.0 Redis / NOPERM
+            return None

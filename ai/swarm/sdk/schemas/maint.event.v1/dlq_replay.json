@@ -4,15 +4,46 @@
   "title": "maint.event.v1{kind=dlq_replay}",
   "description": "Phase 8 §8.5 — operator instructs the DLQ supervisor to replay messages on a single topic's DLQ. `target` is the DLQ topic (e.g. 'predict.vote.dlq'). The supervisor refuses topics in its `RECURSION_DENY_SET` (the maint plane's own DLQs).",
   "type": "object",
-  "required": ["kind", "target", "request_id", "client_id", "produced_at"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "client_id",
+    "produced_at"
+  ],
   "properties": {
-    "kind":        { "const": "dlq_replay" },
-    "target":      { "type": "string", "minLength": 1, "description": "DLQ topic to replay (must end in '.dlq')." },
-    "max_msgs":    { "type": "integer", "minimum": 1, "maximum": 100000, "description": "Cap on messages replayed in this run; 0/absent uses cfg." },
-    "request_id":  { "type": "string", "minLength": 1 },
-    "client_id":   { "type": "string", "minLength": 1 },
-    "produced_at": { "type": "string" },
-    "reason":      { "type": "string" }
+    "kind": {
+      "const": "dlq_replay"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DLQ topic to replay (must end in '.dlq')."
+    },
+    "max_msgs": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000,
+      "description": "Cap on messages replayed in this run; 0/absent uses cfg."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
   },
   "additionalProperties": false
 }

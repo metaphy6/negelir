@@ -4,14 +4,44 @@
   "title": "maint.event.v1{kind=dlq_escalated}",
   "description": "Phase 8 §8.5 — notification emitted by maint.dlq.v1 when a single (topic, request_id) hits cfg.maint_dlq_visit_max replays. The supervisor refuses further replays for that request and pages the operator via this notification (and the §8.7 sec.alert.v1 fan-out lands in §8.16).",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "request_id", "visit_count", "reason"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "request_id",
+    "visit_count",
+    "reason"
+  ],
   "properties": {
-    "kind":         { "const": "dlq_escalated" },
-    "target":       { "type": "string", "minLength": 1, "description": "DLQ topic." },
-    "produced_at":  { "type": "string" },
-    "request_id":   { "type": "string", "minLength": 1 },
-    "visit_count":  { "type": "integer", "minimum": 2 },
-    "reason":       { "type": "string", "enum": ["visit_max_exceeded"] }
+    "kind": {
+      "const": "dlq_escalated"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DLQ topic."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "visit_count": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "visit_max_exceeded"
+      ]
+    }
   },
   "additionalProperties": false
 }

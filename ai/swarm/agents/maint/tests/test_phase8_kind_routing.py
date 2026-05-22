@@ -114,12 +114,14 @@ def test_expected_ack_set_raises_on_unknown_kind() -> None:
 _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     "retrain_request": {
         "kind": "retrain_request",
+        "kind_schema_version": 1,
         "target": "pred.elo.v1",
         "reason": "brier_floor",
         "request_id": "req-001",
     },
     "retrain_approve": {
         "kind": "retrain_approve",
+        "kind_schema_version": 1,
         "target": "pred.elo.v1",
         "request_id": "req-002",
         "client_id": "ops@host",
@@ -127,6 +129,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "denylist_clear": {
         "kind": "denylist_clear",
+        "kind_schema_version": 1,
         "target": "ip:9.9.9.9",
         "request_id": "req-003",
         "client_id": "ops@host",
@@ -134,6 +137,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "baseline_reset": {
         "kind": "baseline_reset",
+        "kind_schema_version": 1,
         "target": "mackolik",
         "request_id": "req-004",
         "client_id": "ops@host",
@@ -141,6 +145,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "quarantine_erase": {
         "kind": "quarantine_erase",
+        "kind_schema_version": 1,
         "target": "user-42",
         "request_id": "req-005",
         "client_id": "ops@host",
@@ -148,6 +153,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "quarantine_clear": {
         "kind": "quarantine_clear",
+        "kind_schema_version": 1,
         "target": "qid-7",
         "request_id": "req-006",
         "client_id": "ops@host",
@@ -155,6 +161,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "manual_scale_pin": {
         "kind": "manual_scale_pin",
+        "kind_schema_version": 1,
         "target": "pred.elo.v1",
         "replicas": 3,
         "request_id": "req-007",
@@ -163,13 +170,35 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "dlq_replay": {
         "kind": "dlq_replay",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "request_id": "req-008",
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
     },
+    "dlq_replay_policy_loaded": {
+        "kind": "dlq_replay_policy_loaded",
+        "kind_schema_version": 1,
+        "target": "maint.dlq.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "deny_prefixes": ["maint.", "sec.", "auth.", "payment.", "patcher."],
+        "deny_suffixes": [".dlq.dlq"],
+        "allow_overrides": [],
+    },
+    "dlq_drop_request": {
+        "kind": "dlq_drop_request",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "request_id": "req-008c",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "dlq_entry_id": "entry-abc123",
+        "original_request_id": "orig-req-001",
+        "drop_reason": "poison entry — will never succeed",
+        "dropped_by": "sha256:deadbeef",
+    },
     "dlq_unfreeze": {
         "kind": "dlq_unfreeze",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "request_id": "req-008b",
         "client_id": "ops@host",
@@ -177,6 +206,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "denylist_decimate_now": {
         "kind": "denylist_decimate_now",
+        "kind_schema_version": 1,
         "target": "all",
         "request_id": "req-009",
         "client_id": "ops@host",
@@ -184,6 +214,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "maint_pause": {
         "kind": "maint_pause",
+        "kind_schema_version": 1,
         "target": "all",
         "ttl_s": 300,
         "request_id": "req-010",
@@ -192,6 +223,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "maint_resume": {
         "kind": "maint_resume",
+        "kind_schema_version": 1,
         "target": "all",
         "request_id": "req-011",
         "client_id": "ops@host",
@@ -200,6 +232,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     # Notification-only kinds (Phase 8.2 + 8.5).
     "scale_decision": {
         "kind": "scale_decision",
+        "kind_schema_version": 1,
         "target": "predictor.elo.v1",
         "produced_at": "2025-01-01T00:00:00Z",
         "replicas": 3,
@@ -210,20 +243,31 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "scale_throttled": {
         "kind": "scale_throttled",
+        "kind_schema_version": 1,
         "target": "predictor.elo.v1",
         "produced_at": "2025-01-01T00:00:00Z",
         "would_be": 4,
         "reason": "max_changes_per_window",
         "decision_window_id": "ab12cd34:1735689600000",
     },
+    "trainer_warmup_hint": {
+        "kind": "trainer_warmup_hint",
+        "kind_schema_version": 1,
+        "target": "trainer.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "retrain_request_id": "req-drift-001",
+        "projected_window_s": 30.0,
+    },
     "manual_scale_pin_expired": {
         "kind": "manual_scale_pin_expired",
+        "kind_schema_version": 1,
         "target": "predictor.elo.v1",
         "produced_at": "2025-01-01T00:00:00Z",
         "reason": "ttl",
     },
     "maint_scaler_default_applied": {
         "kind": "maint_scaler_default_applied",
+        "kind_schema_version": 1,
         "target": "predictor.elo.v1",
         "produced_at": "2025-01-01T00:00:00Z",
         "applied": 2,
@@ -231,6 +275,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "dlq_replayed": {
         "kind": "dlq_replayed",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "replayed_count": 0,
@@ -239,6 +284,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "dlq_escalated": {
         "kind": "dlq_escalated",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "request_id": "req-100",
@@ -247,18 +293,21 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "dlq_topic_disabled_drained": {
         "kind": "dlq_topic_disabled_drained",
+        "kind_schema_version": 1,
         "target": "maint.event.v1.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "deny_reason": "recursion_deny",
     },
     "dlq_dropped": {
         "kind": "dlq_dropped",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "reason": "rate_limited",
     },
     "dlq_consumer_broken": {
         "kind": "dlq_consumer_broken",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "reason": "poison_pattern",
@@ -267,6 +316,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "dlq_topic_unfrozen": {
         "kind": "dlq_topic_unfrozen",
+        "kind_schema_version": 1,
         "target": "predict.vote.dlq",
         "produced_at": "2025-01-01T00:00:00Z",
         "request_id": "req-008b",
@@ -369,6 +419,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     # maint.backup.v1 lands in §8.3).
     "backup_now": {
         "kind": "backup_now",
+        "kind_schema_version": 1,
         "target": "pg",
         "request_id": "req-bk1",
         "client_id": "ops@host",
@@ -376,6 +427,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "backup_rotate_key": {
         "kind": "backup_rotate_key",
+        "kind_schema_version": 1,
         "target": "verify-2026-Q3",
         "scope": "verify",
         "request_id": "req-bk2",
@@ -384,6 +436,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "restore": {
         "kind": "restore",
+        "kind_schema_version": 1,
         "target": "2025-01-01",
         "request_id": "req-bk3",
         "client_id": "ops@host",
@@ -417,6 +470,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     # (consumer maint.sec.v1 lands in §8.7).
     "allowlist_extend": {
         "kind": "allowlist_extend",
+        "kind_schema_version": 1,
         "target": "mackolik:rule_42",
         "ttl_s": 86400,
         "request_id": "req-al1",
@@ -425,6 +479,7 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "allowlist_approve": {
         "kind": "allowlist_approve",
+        "kind_schema_version": 1,
         "target": "mackolik:rule_42",
         "request_id": "req-al2",
         "client_id": "ops@host",
@@ -432,12 +487,34 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
     },
     "allowlist_show": {
         "kind": "allowlist_show",
+        "kind_schema_version": 1,
         "target": "all",
         "request_id": "req-al3",
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
     },
     # ── §8.9 second-pass notification-only kinds ─────────────────────────────
+    "audit_chain_verify": {
+        "kind": "audit_chain_verify",
+        "kind_schema_version": 1,
+        "produced_at": "2026-01-01T00:00:00Z",
+        "ok": True,
+        "rows_checked": 10,
+        "first_break_row": None,
+        "break_reason": None,
+        "audit_file_path": "/var/lib/negelir/maint/opsctl_audit.csv",
+    },
+    # Phase 8 §8.15.10 Fix C — restore-verify forensic sidecar captured.
+    "verify_forensic_captured": {
+        "kind": "verify_forensic_captured",
+        "kind_schema_version": 1,
+        "produced_at": "2026-05-22T05:00:00Z",
+        "target": "2026-05-22",
+        "size_bytes": 8192,
+        "verifier_kind": "local",
+        "pg_restore_exit_code": 1,
+        "duration_ms": 2300,
+    },
     "backup_age_alert": {
         "kind": "backup_age_alert",
         "kind_schema_version": 1,
@@ -465,6 +542,16 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "kind_schema_version": 1,
         "produced_at": "2025-01-01T03:00:00Z",
         "backup_id": "backup-2025-01-01",
+    },
+    "backup_offsite_upload_id_expired": {
+        "kind": "backup_offsite_upload_id_expired",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T04:00:00Z",
+        "dump_date": "2025-01-01",
+        "original_upload_id": "upload-abc123",
+        "age_h": 26.5,
+        "bucket": "negelir-backups",
+        "key": "2025/01/01/dump.tar.gz",
     },
     "backup_verify_failed": {
         "kind": "backup_verify_failed",
@@ -509,6 +596,19 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "produced_at": "2025-01-01T03:00:00Z",
         "lag_s": 45.2,
         "tier": 2,
+    },
+    # Phase 8 §8.15.1 — clock-source boot validation event.
+    "maint_clock_source_changed": {
+        "kind": "maint_clock_source_changed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "target": "maint.scaler.v1",
+        "action": None,
+        "prev": None,
+        "current": "boottime",
+        "suspend_resilient": True,
+        "gap_s": None,
+        "recovered_at_utc": None,
     },
     "maint_plane_recovered": {
         "kind": "maint_plane_recovered",
@@ -555,6 +655,142 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "produced_at": "2025-01-01T03:00:00Z",
         "target": "match_records",
         "detector": "A",
+    },
+    # Phase 8 §8.13.1 model-artifact backup discipline.
+    "backup_model_uploaded": {
+        "kind": "backup_model_uploaded",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T03:00:00Z",
+        "tarball_date": "2025-01-15",
+        "uploaded_bytes": 4096000,
+    },
+    "backup_model_offsite_failed": {
+        "kind": "backup_model_offsite_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T03:05:00Z",
+        "tarball_date": "2025-01-15",
+        "error_summary": "connection reset by peer",
+    },
+    "backup_model_cold_verify_completed": {
+        "kind": "backup_model_cold_verify_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:00:00Z",
+        "tarball_date": "2025-01-15",
+        "total_artifacts": 4,
+        "loaded_ok": 4,
+    },
+    "backup_model_cold_verify_failed": {
+        "kind": "backup_model_cold_verify_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:10:00Z",
+        "tarball_date": "2025-01-15",
+        "total_artifacts": 4,
+        "loaded_ok": 3,
+        "load_error_count": 1,
+    },
+    "backup_model_lineage_drift": {
+        "kind": "backup_model_lineage_drift",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:15:00Z",
+        "artifact_path": "super_lig_v1/1.0.0/model.joblib",
+        "predictor_id": "super_lig_v1",
+        "version": "1.0.0",
+        "drift_reason": "sidecar_missing",
+    },
+    # Phase 8 §8.13.3 — spool entry aging
+    "spool_entry_aged_out": {
+        "kind": "spool_entry_aged_out",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T06:00:00Z",
+        "target": "maint.scaler.v1",
+        "request_id": "deadbeef-0001",
+        "age_h": 200.0,
+        "entry_kind": "scale_decision",
+        "spool": "agent",
+    },
+    # Phase 8 §8.13.3 — spool entry retired (unknown_kind / schema_outdated).
+    "spool_entry_retired_kind": {
+        "kind": "spool_entry_retired_kind",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T06:01:00Z",
+        "target": "maint.scaler.v1",
+        "request_id": "deadbeef-0002",
+        "entry_kind": "legacy_op",
+        "reason": "unknown_kind",
+    },
+    # Phase 8 §8.14.2 — dump lacks per-file SHA-256 manifest (pre-8.14.2).
+    "backup_legacy_no_file_manifest": {
+        "kind": "backup_legacy_no_file_manifest",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T01:55:00Z",
+        "dump_date": "2025-01-15",
+        "fallback_action": "outer_checksum_only",
+    },
+    # Phase 8 §8.13.7 — legacy manifest fall-back.
+    "backup_legacy_manifest": {
+        "kind": "backup_legacy_manifest",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T02:00:00Z",
+        "dump_date": "2025-01-15",
+        "fallback_action": "verify_only",
+    },
+    # Phase 8 §8.13.7 — backup-role PG password age hard cap exceeded.
+    "backup_pg_secret_expired": {
+        "kind": "backup_pg_secret_expired",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T02:01:00Z",
+        "secret_age_days": 95,
+        "hard_cap_days": 90,
+    },
+    # Phase 8 §8.13.7 — DR-key compromise acknowledged (audit trail).
+    "backup_key_compromise_acknowledged": {
+        "kind": "backup_key_compromise_acknowledged",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T02:02:00Z",
+        "scope": "dr",
+        "recipient_fingerprint": "ABCD1234EFGH5678",
+        "action": "revoke",
+    },
+    # Phase 8 §8.14.10 — spool-flush partial drain (drain budget exhausted).
+    "spool_flush_partial": {
+        "kind": "spool_flush_partial",
+        "kind_schema_version": 1,
+        "target": "opsctl",
+        "produced_at": "2025-01-20T02:10:00Z",
+        "flush_run_id": "550e8400-e29b-41d4-a716-446655440000",
+        "drained": 100,
+        "remaining": 47,
+    },
+    # Phase 8 §8.15.4 — HMAC key lifecycle audit events.
+    "opsctl_key_revoked": {
+        "kind": "opsctl_key_revoked",
+        "kind_schema_version": 1,
+        "target": "operator-departure",
+        "produced_at": "2025-06-01T10:00:00Z",
+        "key_id": "abcd1234ef567890",
+        "revoked_by": "admin@example.com",
+        "reason": "employee departure",
+    },
+    "opsctl_key_rotated": {
+        "kind": "opsctl_key_rotated",
+        "kind_schema_version": 1,
+        "target": "scheduled-rotation-Q2",
+        "produced_at": "2025-06-01T10:00:00Z",
+        "prev_key_id": "abcd1234ef567890",
+        "new_key_id": "1234abcd56ef7890",
+        "operator_email": "ops@example.com",
+    },
+    # Phase 8 §8.16.2 — spool-flush ack reconciliation summary.
+    "spool_flush_acks_reconciled": {
+        "kind": "spool_flush_acks_reconciled",
+        "kind_schema_version": 1,
+        "target": "opsctl",
+        "produced_at": "2025-06-01T12:00:00Z",
+        "flush_invocation_id": "550e8400-e29b-41d4-a716-446655440001",
+        "request_id": "req-abc123",
+        "expected_ack_count": 3,
+        "received_ack_count": 3,
+        "complete": True,
     },
 }
 

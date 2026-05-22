@@ -1,4 +1,4 @@
-"""``ops.restore`` — Phase 8 §8.1 / §8.3 / §8.12.
+"""``ops.restore`` — Phase 8 §8.1 / §8.3 / §8.12 / §8.14.3.
 
 Operator-driven restore from a stored backup. ALWAYS_DESTRUCTIVE
 (see :data:`xops.opsctl._classify.ALWAYS_DESTRUCTIVE`): the
@@ -17,11 +17,21 @@ overwritten unless the operator passes BOTH ``--destination-conn``
 pointing at it AND ``--confirm-overwrite-live``. The consumer
 refuses with surface code ``live_overwrite_requires_confirm`` if
 the second flag is missing.
+
+§8.14.3 binding: at startup this subcommand checks that the
+operator's local ``age`` binary matches
+``cfg.maint_backup_age_binary_version``.  Mismatch →
+``fail_safe_age_version_mismatch_local`` error + exit 1.
+Mock profile (``cfg.profile == "mock"``) relaxes the assertion to
+a ``severity=warn`` log line.
 """
 from __future__ import annotations
 
 import argparse
+import logging
 import re
+import subprocess
+import sys
 from typing import Any, Optional
 
 from .._runner import SubcommandSpec, add_common_publish_args, run_publish
@@ -30,6 +40,97 @@ NAME = "restore"
 KIND = "restore"
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_log = logging.getLogger("xops.opsctl.restore")
+
+_AGE_VERSION_RUNBOOK = (
+    "https://github.com/FiloSottile/age/releases — "
+    "install the version matching cfg.maint_backup_age_binary_version "
+    "(default 1.2.0) and ensure it is on your PATH"
+)
+
+
+def _check_local_age_version() -> int:
+    """Enforce §8.14.3 restore-side parity.
+
+    Reads ``cfg.maint_backup_age_binary_version``, calls
+    ``age --version``, and:
+
+    * On mock profile: logs ``severity=warn`` and returns 0.
+    * On any other profile with a version mismatch: prints
+      ``fail_safe_age_version_mismatch_local`` to stderr and returns 1.
+    * When ``age`` is not found on PATH: prints
+      ``age_binary_not_found`` + runbook link and returns 1.
+    """
+    from common.config import cfg as _cfg  # pylint: disable=import-outside-toplevel
+
+    expected = str(_cfg.maint_backup_age_binary_version)
+    is_mock = str(_cfg.profile) == "mock"
+
+    installed: str | None = None
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["age", "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        # age --version prints e.g. "age v1.2.0" or "1.2.0" on stdout/stderr.
+        raw = (result.stdout or result.stderr or "").strip()
+        # Extract bare semver from the output (strip leading "v", "age ", etc.)
+        parts = raw.split()
+        for part in parts:
+            stripped = part.lstrip("v")
+            if stripped and stripped[0].isdigit():
+                installed = stripped
+                break
+        if installed is None:
+            installed = raw
+    except FileNotFoundError:
+        if is_mock:
+            _log.warning(
+                "ops.restore: age binary not found (mock profile — warn only); "
+                "install age to match cfg.maint_backup_age_binary_version=%r. "
+                "Runbook: %s",
+                expected,
+                _AGE_VERSION_RUNBOOK,
+            )
+            return 0
+        sys.stderr.write(
+            f"ops.restore: age_binary_not_found — "
+            f"the `age` binary is not on PATH.\n"
+            f"Install the canonical version ({expected!r}) before restoring.\n"
+            f"Runbook: {_AGE_VERSION_RUNBOOK}\n"
+        )
+        return 1
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(
+            f"ops.restore: age_binary_not_found — "
+            f"`age --version` exited {exc.returncode}.\n"
+            f"Runbook: {_AGE_VERSION_RUNBOOK}\n"
+        )
+        return 1
+
+    if installed != expected:
+        if is_mock:
+            _log.warning(
+                "ops.restore: fail_safe_age_version_mismatch_local "
+                "(mock profile — warn only); installed=%r expected=%r. "
+                "Runbook: %s",
+                installed,
+                expected,
+                _AGE_VERSION_RUNBOOK,
+            )
+            return 0
+        sys.stderr.write(
+            f"ops.restore: fail_safe_age_version_mismatch_local — "
+            f"installed age version {installed!r} != "
+            f"cfg.maint_backup_age_binary_version={expected!r}.\n"
+            f"Install the canonical version before restoring.\n"
+            f"Runbook: {_AGE_VERSION_RUNBOOK}\n"
+        )
+        return 1
+
+    return 0
 
 
 def add_parser(
@@ -85,6 +186,13 @@ def add_parser(
 
 
 def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
+    # §8.14.3 restore-side parity: enforce local age version before
+    # publishing the restore event so an operator with the wrong binary
+    # cannot even enqueue the request.
+    age_rc = _check_local_age_version()
+    if age_rc != 0:
+        return age_rc
+
     target = str(args.target)
     if not _DATE_RE.match(target):
         import sys

@@ -36,6 +36,9 @@ ALWAYS_DESTRUCTIVE: FrozenSet[str] = frozenset({
     "quarantine-erase",
     "restore",
     "backup-rotate-key",
+    # Phase 8 §8.15.4 — key lifecycle (revocation / rotation are irreversible).
+    "revoke-key",
+    "rotate-key",
 })
 
 
@@ -90,9 +93,38 @@ def classify(req: ClassifyRequest) -> Action:
         return Action.CONFIRM
     if name == "dlq-replay" and "drop" in req.flags:
         return Action.CONFIRM
+    # §8.14.5 escalation path: --confirm-destructive is the operator
+    # attestation for control-plane DLQ replay (e.g. maint.event.v1.dlq).
+    # CONFIRM (not REFUSE) because the operator has explicitly attested
+    # they understand the destructive nature of the operation.
+    if name == "dlq-replay" and "confirm_destructive" in req.flags:
+        return Action.CONFIRM
     if name == "dlq-replay" and "topic_sec" in req.flags and "confirm_pii" not in req.flags:
         return Action.REFUSE
     return Action.SAFE
 
 
-__all__ = ["Action", "ClassifyRequest", "classify", "ALWAYS_DESTRUCTIVE", "ALWAYS_SAFE"]
+# ── Exit-code → human label mapping ──────────────────────────────────────
+# Mirrors ExitCode in _exit_codes.py. Used by runbooks, the dead-man's-switch
+# alerter, and boundary tests to assert the range 5..9 is fully covered.
+_EXIT_CODE_LABELS: dict[int, str] = {
+    5: "no_consumer_for_kind",
+    6: "unknown_kind",
+    7: "requires_resume_first",
+    8: "spool_flush_already_running",
+    9: "opsctl_key_revoked",
+}
+
+
+def exit_code_to_label(code: int) -> str | None:
+    """Return the stable label string for an opsctl exit code, or ``None``
+    if the code is not in the operator-recoverable range (5..9).
+
+    This is the machine-readable counterpart to the runbook; CI tests
+    enumerate :data:`_EXIT_CODE_LABELS` to assert a continuous 5..9 range.
+    """
+    return _EXIT_CODE_LABELS.get(code)
+
+
+__all__ = ["Action", "ClassifyRequest", "classify", "exit_code_to_label",
+           "ALWAYS_DESTRUCTIVE", "ALWAYS_SAFE"]

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/maint_clock_source_changed",
+  "title": "maint.event.v1{kind=maint_clock_source_changed}",
+  "description": "Phase 8 §8.15.1 — emitted at agent boot (resolved clock source) and on each detected container-suspend event. `action` distinguishes the two cases: omitted/null means boot validation; 'suspend_detected' means a suspend gap was observed between heartbeat ticks.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "produced_at"
+  ],
+  "properties": {
+    "kind": {
+      "const": "maint_clock_source_changed"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Agent ID reporting the clock source (e.g. 'maint.scaler.v1')."
+    },
+    "action": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "suspend_detected"
+      ],
+      "description": "Null (or absent) = boot validation event. 'suspend_detected' = suspend gap detected during heartbeat."
+    },
+    "prev": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Clock source in previous process lifetime (null on first boot or unknown)."
+    },
+    "current": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "boottime",
+        "monotonic"
+      ],
+      "description": "Resolved clock source for this process lifetime."
+    },
+    "suspend_resilient": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "True if CLOCK_BOOTTIME is active (windows survive container suspend)."
+    },
+    "gap_s": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Suspend gap in seconds (present only when action=suspend_detected)."
+    },
+    "recovered_at_utc": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ISO-8601 UTC timestamp when the suspend gap was detected."
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    }
+  },
+  "additionalProperties": false
+}

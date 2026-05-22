@@ -130,6 +130,9 @@ class MaintStorageWarden:
         self._last_warn_at: float = float("-inf")
         self._last_error_at: float = float("-inf")
         self._blocking: bool = False
+        # Telemetry cache: updated on every check() so metrics_snapshot()
+        # can serve the last-seen values without a second filesystem walk.
+        self._last_decision: MaintStorageDecision | None = None
 
     # ── Public API ────────────────────────────────────────────────
 
@@ -158,6 +161,7 @@ class MaintStorageWarden:
         )
         if cap <= 0:
             decision.blocking = False
+            self._last_decision = decision
             return decision
 
         usage_pct = (total / cap) * 100.0
@@ -195,7 +199,33 @@ class MaintStorageWarden:
                 self._last_warn_at = now
         # Below warn → no alert; debounces are NOT reset (operators
         # don't need a "we're ok now" page).
+        self._last_decision = decision
         return decision
+
+    def metrics_snapshot(self) -> dict[str, float]:
+        """Return a flat Prometheus-style snapshot of storage usage.
+
+        Key shapes:
+
+        * ``maint_storage_used_bytes{subdir=<name>}`` — per-subdir
+          byte count observed during the last :meth:`check` call.
+        * ``maint_storage_total_bytes`` — rollup across all subdirs.
+
+        Returns an empty dict until the first :meth:`check` call has
+        run (callers must call ``check()`` at least once per heartbeat
+        before registering this as a metrics source).
+        """
+        d = self._last_decision
+        if d is None:
+            return {}
+        out: dict[str, float] = {}
+        for subdir, size_bytes in d.per_subdir_bytes.items():
+            # Sanitise the subdir name for use as a label value: replace
+            # characters that are invalid in Prometheus label values.
+            safe = subdir.replace('"', '').replace('\\', '')
+            out[f'maint_storage_used_bytes{{subdir="{safe}"}}'] = float(size_bytes)
+        out["maint_storage_total_bytes"] = float(d.total_bytes)
+        return out
 
     # ── Helpers ───────────────────────────────────────────────────
 

@@ -4,13 +4,36 @@
   "title": "maint.event.v1{kind=maint_scaler_default_applied}",
   "description": "Phase 8 §8.16.1 — emitted once per process lifetime per unconfigured target by maint.scaler.v1 when an agent has no entry in cfg.maint_scaler_max_replicas_overrides_csv and the default-policy fallback (cfg.maint_scaler_default_max_replicas) is enabled (>0). Audit pair to sec.alert.v1{kind=maint_scaler_unconfigured_agent}. Notification-only — no consumer acks.",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "applied", "default_max_replicas"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "applied",
+    "default_max_replicas"
+  ],
   "properties": {
-    "kind":                 { "const": "maint_scaler_default_applied" },
-    "target":               { "type": "string", "minLength": 1 },
-    "produced_at":          { "type": "string" },
-    "applied":              { "type": "integer", "minimum": 1 },
-    "default_max_replicas": { "type": "integer", "minimum": 2 }
+    "kind": {
+      "const": "maint_scaler_default_applied"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "applied": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "default_max_replicas": {
+      "type": "integer",
+      "minimum": 2
+    }
   },
   "additionalProperties": false
 }

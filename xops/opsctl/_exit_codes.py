@@ -57,6 +57,12 @@ class ExitCode(IntEnum):
     # Phase 8 §8.13.6 reserved (backup state-machine forbids prune-only).
     PRUNE_ONLY_FORBIDDEN = 10
 
+    # Phase 8 §8.14.4 — opsctl ACL user mismatch (boot-time safety gate).
+    # The opsctl process authenticated to Redis with a user other than
+    # ``negelir_opsctl``.  Using the application user's full-access
+    # credentials would defeat the per-subcommand ACL restriction.
+    FAIL_SAFE_WRONG_REDIS_USER = 12
+
     BAD_USAGE = 64
     """argparse / required-arg-missing failures."""
 

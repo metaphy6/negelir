@@ -122,12 +122,15 @@ def build_backup_drivers(cfg: "Config") -> BackupDrivers:
         pg_dsn=dsn,
         pg_jobs=int(cfg.maint_backup_pg_jobs),
         age_recipients_file=recipients,
+        nice_level=int(cfg.maint_backup_pg_dump_nice_level),
+        ionice_enabled=bool(cfg.maint_backup_pg_dump_ionice),
     )
     verifier = LocalSubprocessVerifier(
         backup_dir=cfg.maint_backup_dir,
         pg_image=image,
         age_identity_file=identity,
         pg_jobs=int(cfg.maint_backup_pg_jobs),
+        max_version_gap=int(cfg.maint_backup_max_version_gap),
     )
     pruner = LocalPgPruner(
         pg_dsn=dsn,

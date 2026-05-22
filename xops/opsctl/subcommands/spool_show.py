@@ -46,6 +46,15 @@ def add_parser(
         action="store_true",
         help="Emit a JSON array on stdout (deterministic).",
     )
+    parser.add_argument(
+        "--retired",
+        action="store_true",
+        help=(
+            "Show entries quarantined in the .retired/ subdir "
+            "(unknown-kind or schema-outdated envelopes moved there by spool-flush). "
+            "Each entry's sidecar .retired.json is included when present."
+        ),
+    )
     parser.set_defaults(func=run)
     return parser
 
@@ -54,6 +63,10 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
     cfg = Config()
     spool_dir = Path(cfg.opsctl_spool_dir_resolved)
     limit = max(1, int(getattr(args, "limit", 100) or 100))
+    show_retired = bool(getattr(args, "retired", False))
+
+    if show_retired:
+        return _run_retired(spool_dir, limit=limit, json_output=bool(getattr(args, "json", False)))
 
     entries: list[dict[str, Any]] = []
     if spool_dir.exists():
@@ -89,4 +102,59 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
     return int(ExitCode.OK)
 
 
-__all__ = ["NAME", "add_parser", "run"]
+def _run_retired(spool_dir: Path, *, limit: int, json_output: bool) -> int:
+    """List entries in the .retired/ quarantine subdir."""
+    retired_dir = spool_dir / ".retired"
+    entries: list[dict[str, Any]] = []
+    if retired_dir.exists():
+        for p in sorted(retired_dir.glob("*.envelope.json"))[:limit]:
+            row: dict[str, Any] = {"file": p.name}
+            try:
+                doc = json.loads(p.read_text())
+                payload = doc.get("payload") or {}
+                env = doc.get("envelope") or {}
+                row["kind"] = payload.get("kind", "")
+                row["target"] = payload.get("target", "")
+                row["produced_at"] = payload.get("produced_at", "")
+                row["request_id"] = payload.get("request_id", "")
+                row["topic"] = env.get("topic", "")
+            except (OSError, json.JSONDecodeError) as exc:
+                row["error"] = f"unreadable: {exc.__class__.__name__}"
+            # Include sidecar if present
+            request_id = row.get("request_id", "")
+            if request_id:
+                sidecar_path = retired_dir / f"{request_id}.retired.json"
+                if sidecar_path.exists():
+                    try:
+                        row["sidecar"] = json.loads(sidecar_path.read_text())
+                    except (OSError, json.JSONDecodeError):
+                        row["sidecar"] = None
+            entries.append(row)
+
+    if json_output:
+        sys.stdout.write(json.dumps(
+            {
+                "spool_dir": str(spool_dir),
+                "retired_dir": str(retired_dir),
+                "count": len(entries),
+                "entries": entries,
+            },
+            sort_keys=True, ensure_ascii=False,
+        ))
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write(
+            f"opsctl spool-show --retired dir={retired_dir} count={len(entries)}\n"
+        )
+        for row in entries:
+            sidecar = row.get("sidecar") or {}
+            reason = sidecar.get("reason", "?")
+            sys.stdout.write(
+                f"  {row.get('file', '?')}  kind={row.get('kind', '?')}  "
+                f"reason={reason}  "
+                f"quarantined_at={sidecar.get('quarantined_at', '?')}\n"
+            )
+    return int(ExitCode.OK)
+
+
+__all__ = ["NAME", "add_parser", "run", "_run_retired"]

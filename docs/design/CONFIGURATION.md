@@ -179,6 +179,7 @@ values abort boot with a descriptive error.
 | `maint_schema_pg_check_interval_s` | `3600` | ≥ 1 s | Interval for Postgres schema Detector B check. |
 | `maint_schema_snapshot_retention_days` | `90` | ≥ 1 d | Retention for schema snapshots [1–3650]. |
 | `maint_schema_auto_apply_enabled` | `false` | bool | If `true`, sentinel auto-applies additive migrations. **Dangerous; leave `false` in prod.** |
+| `maint_schema_validate_max_rps` | `50` | 1–500 | Hard per-process cross-topic validation-rate cap (§8.14.7). Exceeding 500 refuses boot (`fail_safe_validate_rps_cap_exceeded`). |
 
 ### Security maintenance (`maint.sec.v1`)
 

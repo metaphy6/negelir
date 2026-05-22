@@ -163,10 +163,9 @@ def test_decision_window_id_has_pod_instance_id_prefix() -> None:
 
 
 def test_retrain_request_warms_trainer_once(monkeypatch) -> None:
-    """A `retrain_request` envelope must produce a single
-    `scale_decision{source=retrain_request_warmup, target=trainer.v1}`."""
-    from common.config import cfg
-    monkeypatch.setattr(cfg, "maint_scaler_warmup_replicas", 2, raising=False)
+    """Phase 8 §8.14.8: A `retrain_request` must produce a single
+    `trainer_warmup_hint{target=trainer.v1}` (NOT scale_decision). The
+    trainer is the sole writer of its own replica count."""
     agent = MaintScaler()
     out = list(agent.handle(_wrap({
         "kind": "retrain_request",
@@ -174,17 +173,21 @@ def test_retrain_request_warms_trainer_once(monkeypatch) -> None:
         "produced_at": "2024-01-01T00:00:00+00:00",
         "reason": "drift",
     })))
-    decisions = [m.payload for m in out if m.payload.get("kind") == "scale_decision"]
-    assert len(decisions) == 1
-    assert decisions[0]["target"] == "trainer.v1"
-    assert decisions[0]["source"] == "retrain_request_warmup"
+    hints = [m.payload for m in out if m.payload.get("kind") == "trainer_warmup_hint"]
+    assert len(hints) == 1, f"expected 1 trainer_warmup_hint, got {len(hints)}"
+    assert hints[0]["target"] == "trainer.v1"
+    assert "retrain_request_id" in hints[0]
+    assert hints[0]["projected_window_s"] > 0
+    # scale_decision must NOT be emitted for trainer.v1
+    bad = [m.payload for m in out if m.payload.get("kind") == "scale_decision"
+           and m.payload.get("target") == "trainer.v1"]
+    assert not bad, "scale_decision must not be emitted for self-scaling trainer.v1"
 
 
 def test_retrain_request_dedup_skips_duplicate(monkeypatch) -> None:
-    """Re-handling the SAME envelope (same message_id) must not
-    re-warm — the dedup LRU keys on envelope.message_id × target."""
-    from common.config import cfg
-    monkeypatch.setattr(cfg, "maint_scaler_warmup_replicas", 2, raising=False)
+    """Phase 8 §8.14.8: Re-handling the SAME envelope (same message_id)
+    must not re-emit trainer_warmup_hint — the dedup LRU keys on
+    envelope.message_id × target."""
     agent = MaintScaler()
     msg = _wrap({
         "kind": "retrain_request",
@@ -194,8 +197,8 @@ def test_retrain_request_dedup_skips_duplicate(monkeypatch) -> None:
     })
     first = list(agent.handle(msg))
     second = list(agent.handle(msg))
-    assert any(m.payload.get("kind") == "scale_decision" for m in first)
-    assert not any(m.payload.get("kind") == "scale_decision" for m in second)
+    assert any(m.payload.get("kind") == "trainer_warmup_hint" for m in first)
+    assert not any(m.payload.get("kind") == "trainer_warmup_hint" for m in second)
 
 
 # ── §8.2 final gap-fill: payload shape, runtime, hysteresis, VRAM, counters ──
@@ -215,7 +218,7 @@ def test_scale_decision_payload_includes_prev_next_reason_observed(monkeypatch) 
         assert k in p, f"missing {k!r} in {p!r}"
     assert p["next"] == p["replicas"]  # additive, not replacement
     assert p["reason"] in {"queue_depth_high", "head_age_high", "queue_depth_low",
-                           "manual_pin", "retrain_request_warmup"}
+                           "manual_pin"}
 
 
 def test_min_decision_interval_throttles_back_to_back(monkeypatch) -> None:
@@ -663,3 +666,126 @@ def test_decision_history_default_cap_is_1024() -> None:
     """Default ``maint_scaler_history_max`` in config must be 1024."""
     from common.config import cfg
     assert cfg.maint_scaler_history_max == 1024
+
+
+# ── Phase 8 §8.14.8 proof tests ───────────────────────────────────
+
+def test_self_scaling_target_tick_emits_throttled_and_alert(monkeypatch) -> None:
+    """Phase 8 §8.14.8 proof (a): auto-scaler tick on a self-scaling target
+    must emit scale_throttled{reason=self_scaling_target} + a debounced
+    sec.alert{kind=scaler_target_forbidden} and must NOT invoke the
+    runtime controller or emit scale_decision."""
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "trainer.v1", raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    controller = NoopController()
+    agent = MaintScaler(controller=controller)
+    out = agent.tick({"trainer.v1": {"queue_depth": 999, "in_flight": 0, "head_age_s": 0}})
+    # scale_throttled{reason=self_scaling_target} must be emitted
+    throttled = [m.payload for m in out if m.payload.get("kind") == "scale_throttled"]
+    assert any(p.get("reason") == "self_scaling_target" for p in throttled), (
+        f"expected scale_throttled{{reason=self_scaling_target}}, got throttle reasons: "
+        f"{[p.get('reason') for p in throttled]}"
+    )
+    # sec.alert{kind=scaler_target_forbidden} must be emitted (debounced)
+    alerts = [m.payload for m in out if m.envelope.topic == SEC_ALERT]
+    assert any(a.get("kind") == "scaler_target_forbidden" for a in alerts), (
+        f"expected scaler_target_forbidden alert, got: {[a.get('kind') for a in alerts]}"
+    )
+    # runtime must NOT have been called
+    assert controller.applied == [], (
+        f"runtime must not be invoked for self-scaling targets, got: {controller.applied}"
+    )
+    # scale_decision must NOT be emitted for trainer.v1
+    decisions = [m.payload for m in out if m.payload.get("kind") == "scale_decision"
+                 and m.payload.get("target") == "trainer.v1"]
+    assert not decisions, "scale_decision must not be emitted for self-scaling target"
+
+
+def test_self_scaling_target_alert_debounced_across_ticks(monkeypatch) -> None:
+    """Phase 8 §8.14.8 proof (a, cont): debounce — the sec.alert fires only
+    on the FIRST tick per target per process lifetime. Subsequent ticks
+    must emit scale_throttled but no additional sec.alert."""
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+    monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "trainer.v1", raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    agent = MaintScaler()
+    out1 = agent.tick({"trainer.v1": {"queue_depth": 999, "in_flight": 0, "head_age_s": 0}})
+    out2 = agent.tick({"trainer.v1": {"queue_depth": 999, "in_flight": 0, "head_age_s": 0}})
+    first_alerts = [m.payload for m in out1 if m.envelope.topic == SEC_ALERT
+                    and m.payload.get("kind") == "scaler_target_forbidden"]
+    second_alerts = [m.payload for m in out2 if m.envelope.topic == SEC_ALERT
+                     and m.payload.get("kind") == "scaler_target_forbidden"]
+    assert len(first_alerts) == 1, "first tick must emit exactly one scaler_target_forbidden alert"
+    assert len(second_alerts) == 0, "subsequent ticks must not re-emit the alert (debounced)"
+    # scale_throttled must still be emitted every tick
+    assert any(m.payload.get("kind") == "scale_throttled" for m in out2), (
+        "scale_throttled must be emitted every tick even after debounce"
+    )
+
+
+def test_retrain_request_emits_trainer_warmup_hint(monkeypatch) -> None:
+    """Phase 8 §8.14.8 proof (b): retrain_request must emit
+    trainer_warmup_hint carrying retrain_request_id and projected_window_s.
+    scale_decision must NOT be emitted for trainer.v1."""
+    agent = MaintScaler()
+    out = list(agent.handle(_wrap({
+        "kind": "retrain_request",
+        "target": "predictor.elo",
+        "request_id": "req-drift-001",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+        "reason": "drift",
+    })))
+    # Must emit exactly one trainer_warmup_hint
+    hints = [m.payload for m in out if m.payload.get("kind") == "trainer_warmup_hint"]
+    assert len(hints) == 1, f"expected 1 trainer_warmup_hint, got {len(hints)}"
+    assert hints[0]["target"] == "trainer.v1"
+    assert hints[0]["retrain_request_id"] == "req-drift-001"
+    assert hints[0]["projected_window_s"] > 0
+    # Must NOT emit scale_decision for trainer
+    bad = [m for m in out if m.payload.get("kind") == "scale_decision"
+           and m.payload.get("target") == "trainer.v1"]
+    assert not bad, "scale_decision must not be emitted for self-scaling target trainer.v1"
+
+
+def test_self_scaling_targets_orphan_check_both_ways(monkeypatch) -> None:
+    """Phase 8 §8.14.8 proof (c): orphan check both ways via
+    report_registered_agents.
+    - Forward: every member of self_scaling_targets that is NOT in the
+      registered set emits scaler_target_forbidden alert.
+    - Backward (positive): members of self_scaling_targets that ARE
+      registered must NOT trigger an alert.
+    """
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+    monkeypatch.setattr(
+        cfg, "maint_scaler_self_scaling_targets", "trainer.v1,orphan.v1",
+        raising=False
+    )
+    agent = MaintScaler()
+    # trainer.v1 IS registered; orphan.v1 IS NOT registered
+    out = agent.report_registered_agents({"predictor.elo", "trainer.v1"})
+    alerts = [
+        m.payload for m in out
+        if m.envelope.topic == SEC_ALERT
+        and m.payload.get("kind") == "scaler_target_forbidden"
+    ]
+    subjects = {a.get("subject") for a in alerts}
+    # Forward check: orphan.v1 must be flagged
+    assert "orphan.v1" in subjects, (
+        f"orphan.v1 should be flagged as unregistered self_scaling_target, got {subjects}"
+    )
+    # Backward check: trainer.v1 must NOT be flagged (it IS registered)
+    assert "trainer.v1" not in subjects, (
+        f"trainer.v1 is registered and must not trigger orphan alert, got {subjects}"
+    )
+    # Second call must be a no-op (debounced per target per process)
+    out2 = agent.report_registered_agents({"predictor.elo", "trainer.v1"})
+    alerts2 = [
+        m.payload for m in out2
+        if m.envelope.topic == SEC_ALERT
+        and m.payload.get("kind") == "scaler_target_forbidden"
+    ]
+    assert not alerts2, "duplicate report call must not re-emit the orphan alert"

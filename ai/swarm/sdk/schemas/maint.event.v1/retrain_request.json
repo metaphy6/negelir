@@ -4,20 +4,70 @@
   "title": "maint.event.v1{kind=retrain_request}",
   "description": "Phase 6.3 drift agent → trainer + scaler. Existing kind, formalized as a per-kind sub-schema in Phase 8 §8.0 to satisfy the oneOf-on-kind discipline. Drift agent fires when a predictor's rolling Brier/log-loss window breaches `cfg.drift_accuracy_floor` OR a KS-test on input features rejects stationarity at `cfg.drift_pvalue`. The scaler consumes the same kind to pre-warm capacity (does NOT pull the trigger on weights — trainer is action-of-record).",
   "type": "object",
-  "required": ["kind", "target", "reason", "request_id"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "reason",
+    "request_id"
+  ],
   "properties": {
-    "kind":         { "const": "retrain_request" },
-    "target":       { "type": "string", "minLength": 1, "description": "Predictor id (e.g. 'pred.elo.v1')." },
-    "reason":       { "type": "string", "enum": ["brier_floor", "logloss_floor", "feature_ks"] },
-    "request_id":   { "type": "string", "minLength": 1, "description": "UUID — drift correlation handle." },
-    "client_id":    { "type": "string", "description": "Producer-as-client id (e.g. 'drift.v1@<host>')." },
-    "produced_at":  { "type": "string" },
-    "league_id":    { "type": ["string", "null"] },
-    "market":       { "type": ["string", "null"] },
-    "metric":       { "type": "string" },
-    "metric_value": { "type": "number" },
-    "threshold":    { "type": "number" },
-    "sample_size":  { "type": "integer", "minimum": 0 }
+    "kind": {
+      "const": "retrain_request"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Predictor id (e.g. 'pred.elo.v1')."
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "brier_floor",
+        "logloss_floor",
+        "feature_ks"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "UUID — drift correlation handle."
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Producer-as-client id (e.g. 'drift.v1@<host>')."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "league_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "market": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metric": {
+      "type": "string"
+    },
+    "metric_value": {
+      "type": "number"
+    },
+    "threshold": {
+      "type": "number"
+    },
+    "sample_size": {
+      "type": "integer",
+      "minimum": 0
+    }
   },
   "additionalProperties": false
 }

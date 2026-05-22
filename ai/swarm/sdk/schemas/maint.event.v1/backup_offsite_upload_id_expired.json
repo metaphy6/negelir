@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_offsite_upload_id_expired",
+  "title": "maint.event.v1{kind=backup_offsite_upload_id_expired}",
+  "description": "Phase 8 §8.16.5 — emitted by MultipartResumeManager when the persisted upload_id is stale (NoSuchUpload from ListParts, or state file age > maint_backup_offsite_state_max_age_h). The agent deletes the state file and restarts the upload from scratch. Notification-only.",
+  "type": "object",
+  "required": ["kind", "produced_at", "kind_schema_version", "bucket", "key"],
+  "properties": {
+    "kind":                { "const": "backup_offsite_upload_id_expired" },
+    "kind_schema_version": { "const": 1 },
+    "produced_at":         { "type": "string" },
+    "bucket":              { "type": "string", "minLength": 1, "description": "S3 bucket name." },
+    "key":                 { "type": "string", "minLength": 1, "description": "S3 object key." },
+    "original_upload_id":  { "type": "string", "description": "The stale upload_id that was discarded." },
+    "dump_date":           { "type": "string", "description": "ISO date of the backup dump being uploaded." },
+    "age_h":               { "type": "number", "description": "Age of the state file in hours at expiry time." },
+    "expiry_reason":       { "type": "string", "enum": ["no_such_upload", "state_file_stale"], "description": "Whether expiry was detected via ListParts or mtime check." }
+  },
+  "additionalProperties": false
+}

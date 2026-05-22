@@ -222,3 +222,90 @@ def test_config_validator_rejects_negative() -> None:
     from common.config import Config
     issues = Config(maint_storage_total_max_mb=-1).validate()
     assert any("maint_storage_total_max_mb" in s for s in issues)
+
+
+# ── metrics_snapshot telemetry ───────────────────────────────────────
+
+
+def test_metrics_snapshot_empty_before_check(tmp_path) -> None:
+    """metrics_snapshot returns {} until check() has been called at least once."""
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    assert w.metrics_snapshot() == {}
+
+
+def test_metrics_snapshot_total_bytes_after_check(tmp_path) -> None:
+    """maint_storage_total_bytes rollup gauge matches total_bytes from check()."""
+    _write(str(tmp_path / "spool" / "x"), 1024)
+    _write(str(tmp_path / "spool" / "y"), 2048)
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    d = w.check()
+    snap = w.metrics_snapshot()
+    assert snap["maint_storage_total_bytes"] == float(d.total_bytes)
+    assert snap["maint_storage_total_bytes"] == 3072.0
+
+
+def test_metrics_snapshot_per_subdir_gauge(tmp_path) -> None:
+    """maint_storage_used_bytes{subdir=X} gauge present for each subdir."""
+    _write(str(tmp_path / "spool_a" / "f"), 1000)
+    _write(str(tmp_path / "spool_b" / "f"), 2000)
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    w.check()
+    snap = w.metrics_snapshot()
+    assert snap['maint_storage_used_bytes{subdir="spool_a"}'] == 1000.0
+    assert snap['maint_storage_used_bytes{subdir="spool_b"}'] == 2000.0
+
+
+def test_metrics_snapshot_root_files_bucket(tmp_path) -> None:
+    """Files directly under root land under the <root> synthetic subdir."""
+    _write(str(tmp_path / "meta.bin"), 512)
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    w.check()
+    snap = w.metrics_snapshot()
+    assert snap['maint_storage_used_bytes{subdir="<root>"}'] == 512.0
+
+
+def test_metrics_snapshot_updated_each_check(tmp_path) -> None:
+    """snapshot reflects the *latest* check(), not a stale earlier one."""
+    p = str(tmp_path / "spool" / "x")
+    _write(p, 1024)
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    w.check()
+    snap1 = w.metrics_snapshot()
+    _write(p, 4096)  # overwrite with larger file
+    w.check()
+    snap2 = w.metrics_snapshot()
+    assert snap2["maint_storage_total_bytes"] > snap1["maint_storage_total_bytes"]
+
+
+def test_metrics_snapshot_zero_usage_when_empty(tmp_path) -> None:
+    """An empty root produces total=0 with no subdir keys."""
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    w.check()
+    snap = w.metrics_snapshot()
+    assert snap["maint_storage_total_bytes"] == 0.0
+    # No subdir keys when the directory is empty.
+    subdir_keys = [k for k in snap if k.startswith("maint_storage_used_bytes")]
+    assert subdir_keys == []
+
+
+def test_metrics_snapshot_disabled_cap_still_emits_usage(tmp_path) -> None:
+    """Even when cap=0 (disabled), snapshot still reports raw usage."""
+    _write(str(tmp_path / "spool" / "x"), 1024)
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=0)
+    w.check()
+    snap = w.metrics_snapshot()
+    assert snap["maint_storage_total_bytes"] == 1024.0
+    assert snap['maint_storage_used_bytes{subdir="spool"}'] == 1024.0
+
+
+def test_metrics_snapshot_label_sanitises_quotes(tmp_path) -> None:
+    """Subdir names with double-quotes are stripped so the metric key is valid."""
+    # Create a subdir whose name has a quote-like pattern via a synthetic decision.
+    # We do this by monkey-patching _du_per_subdir on a real warden instance.
+    w = MaintStorageWarden(root=str(tmp_path), cap_mb=10)
+    w._du_per_subdir = lambda: {'evil"subdir': 100}  # type: ignore[assignment]
+    w.check()
+    snap = w.metrics_snapshot()
+    # The key must not contain a raw double-quote inside the label value.
+    assert any("evilsubdir" in k for k in snap)
+    assert not any('evil"subdir' in k for k in snap)

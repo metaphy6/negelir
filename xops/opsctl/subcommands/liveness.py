@@ -37,7 +37,7 @@ from ai.swarm.agents.maint._ack_routing import (
     KINDS_PENDING_CONSUMER_LANDING,
     KNOWN_MAINT_EVENT_KINDS,
 )
-from ai.swarm.sdk.registry import DEAD_BEAT_MULTIPLIER
+from ai.swarm.sdk.registry import DEAD_BEAT_MULTIPLIER, poll_heartbeats_from_host
 
 from .._audit import append_audit_row, make_row
 from .._exit_codes import ExitCode
@@ -66,32 +66,19 @@ def _poll_registry_heartbeats(cfg: Config) -> dict[str, Any]:
         "agents": [],
         "stale_names": [],
     }
-    try:
-        import redis as _redis  # optional; not in base deps
-    except ImportError:
-        return result
-
-    try:
-        client = _redis.Redis(
-            host=cfg.redis_host,
-            port=cfg.redis_port,
-            socket_connect_timeout=2,
-            socket_timeout=2,
-        )
-        client.ping()
-    except Exception:
+    available, beats = poll_heartbeats_from_host(
+        host=cfg.redis_host,
+        port=cfg.redis_port,
+        timeout=2.0,
+    )
+    if not available:
         return result
 
     result["available"] = True
-    from ai.swarm.sdk.registry import HEARTBEAT_KEY
-
-    raw: dict[bytes, bytes] = client.hgetall(HEARTBEAT_KEY) or {}
     threshold_sec = int(cfg.swarm_heartbeat_sec) * DEAD_BEAT_MULTIPLIER
     now = _utc_now()
 
-    for raw_iid, raw_ts in raw.items():
-        iid = raw_iid.decode() if isinstance(raw_iid, bytes) else raw_iid
-        ts_str = raw_ts.decode() if isinstance(raw_ts, bytes) else raw_ts
+    for iid, ts_str in beats.items():
         stale = True
         age_s: float = -1.0
         try:

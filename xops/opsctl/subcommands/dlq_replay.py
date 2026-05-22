@@ -78,6 +78,18 @@ def add_parser(
         ),
     )
     parser.add_argument(
+        "--confirm-destructive",
+        default="",
+        metavar="TOKEN",
+        help=(
+            "Destructive-operation token required for control-plane "
+            "DLQ replay (e.g. maint.event.v1.dlq). The token is "
+            "passed through to the supervisor for validation. "
+            "Use this instead of --confirm-pii for control-plane "
+            "topics that are not PII-bearing."
+        ),
+    )
+    parser.add_argument(
         "--reason",
         default="",
         help="Free-text justification carried in the envelope.",
@@ -125,15 +137,23 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
     max_msgs = int(getattr(args, "max_msgs", 0) or 0)
     drop = bool(getattr(args, "drop", False))
     confirm_pii = bool(getattr(args, "confirm_pii", False))
+    confirm_destructive = str(getattr(args, "confirm_destructive", "") or "")
     reason = str(getattr(args, "reason", "") or "")
 
     flags: set[str] = set()
     if drop:
         flags.add("drop")
-    if _topic_is_pii(target):
+    # maint.event.v1.dlq is a control-plane topic, NOT a PII topic.
+    # It uses --confirm-destructive, not --confirm-pii. Explicitly
+    # exclude it from the topic_sec flag to avoid a REFUSE in the
+    # classifier when the operator provides --confirm-destructive.
+    _control_plane_dlq = (target == "maint.event.v1.dlq")
+    if _topic_is_pii(target) and not _control_plane_dlq:
         flags.add("topic_sec")
     if confirm_pii:
         flags.add("confirm_pii")
+    if confirm_destructive:
+        flags.add("confirm_destructive")
 
     extra_payload: dict[str, Any] = {}
     if max_msgs > 0:
@@ -147,6 +167,10 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
         # ``reason`` field as the carrier for now to satisfy the
         # additionalProperties=false sub-schema.
         extra_payload["reason"] = (reason or "drop")
+    if confirm_destructive:
+        # Forwarded so the supervisor can validate the token on the
+        # control-plane escalation path (§8.14.5).
+        extra_payload["confirm_destructive"] = confirm_destructive
 
     salient = {"max_msgs": max_msgs, "drop": drop}
 

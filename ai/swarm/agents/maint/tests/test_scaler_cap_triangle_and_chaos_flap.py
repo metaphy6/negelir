@@ -114,6 +114,10 @@ class TestTriangleCornerA:
         monkeypatch.setattr(cfg, "maint_scaler_global_max_replicas", 9999, raising=False)
         monkeypatch.setattr(cfg, "maint_scaler_max_changes_per_window", 99, raising=False)
         monkeypatch.setattr(cfg, "maint_scaler_scale_down_grace_windows", 999, raising=False)
+        # Phase 8 §8.14.8: trainer.v1 is now the default self_scaling_target;
+        # disable that guard so the cap test can exercise trainer.v1 as a
+        # normal auto-scaled target for max_replicas_cap enforcement.
+        monkeypatch.setattr(cfg, "maint_scaler_self_scaling_targets", "", raising=False)
 
         agent = MaintScaler()
         target = "trainer.v1"

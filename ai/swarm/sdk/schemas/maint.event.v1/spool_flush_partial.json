@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/spool_flush_partial",
+  "title": "maint.event.v1{kind=spool_flush_partial}",
+  "description": "Phase 8 §8.14.10 — emitted when a spool-flush invocation exhausts its drain budget (cfg.opsctl_spool_flush_max_per_run) without emptying the spool directory. Carries the drained + remaining counts so the operator knows when to re-run. No ack expected.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "flush_run_id",
+    "drained",
+    "remaining"
+  ],
+  "properties": {
+    "kind": {
+      "const": "spool_flush_partial"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Agent or subsystem whose spool directory was flushed (e.g. 'opsctl' or 'agent_spool/<agent>')."
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when this notification was emitted."
+    },
+    "flush_run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique ID for this flush invocation (UUID4). Correlates with audit rows and the directory-level flock."
+    },
+    "drained": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of spool entries re-published in this flush run."
+    },
+    "remaining": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of spool entries still on disk after this flush run. 0 means the spool is fully empty."
+    }
+  },
+  "additionalProperties": false
+}

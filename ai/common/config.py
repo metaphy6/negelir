@@ -317,6 +317,17 @@ class Config:
     telemetry_metrics_bind: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_TELEMETRY_METRICS_BIND", "127.0.0.1"
     ))
+    # Phase 8.16.4 — cardinality-safe ack metrics debug gate.
+    # When False (default, prod), only the low-cardinality metric family
+    # maint_ack_total{accepted_by, accepted} is emitted.  When True (dev /
+    # incident triage), the per-kind debug family
+    # maint_ack_total_debug{kind, accepted_by, accepted} is also enabled via
+    # the /metrics-debug endpoint (Phase 9).
+    telemetry_debug_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_TELEMETRY_DEBUG_ENABLED", "false").lower() == "true")
+    # Hard ceiling for debug-mode series count projected at boot.  Raising
+    # telemetry_debug_enabled=true is refused if
+    # len(kinds) × len(consumers) × 2 > telemetry_debug_max_series.
+    telemetry_debug_max_series: int = field(default_factory=lambda: int(os.getenv("NEGELIR_TELEMETRY_DEBUG_MAX_SERIES", "5000")))
     reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
     # Cap on the per-reactor in-memory idempotency ledger. The ledger
     # keys events by `(reactor_name, event_id)`; with no bound a long-
@@ -594,9 +605,60 @@ class Config:
     # ``received_acks < expected_acks``, alerts when the row's age
     # exceeds this threshold. Default: 24h (one operator-day).
     opsctl_spool_ack_max_wait_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_SPOOL_ACK_MAX_WAIT_H", "24")))
+    # §8.14.10 spool-flush drain budget: max envelopes per flush invocation.
+    # 0 = unlimited (operator override via --max-entries=0). Default 100
+    # bounds wall-clock cost against a wedged bus. Partial flushes emit a
+    # kind=spool_flush_partial audit row; operator re-runs to drain further.
+    opsctl_spool_flush_max_per_run: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_SPOOL_FLUSH_MAX_PER_RUN", "100")))
     maint_ack_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES", "4096")))
     maint_ack_reason_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_REASON_MAX_BYTES", "512")))
     maint_ack_details_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES", "2048")))
+    # Phase 8 §8.14.4 — opsctl Redis ACL + signed envelopes.
+    # ``opsctl_redis_expected_user`` is the ACL username opsctl must
+    # authenticate as; ``negelir_opsctl`` is provisioned by the §2 mock
+    # setup and the Phase 14 K8s Secret manifest.
+    opsctl_redis_expected_user: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_REDIS_EXPECTED_USER", "negelir_opsctl"))
+    # ``opsctl_require_signature`` gates envelope signing and consumer-side
+    # verification. Default ``true`` in prod; set ``false`` in mock via env var.
+    opsctl_require_signature: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_OPSCTL_REQUIRE_SIGNATURE", "true"
+    ).lower() in ("true", "1", "yes"))
+    # ``opsctl_key_path`` — path to the 32-byte operator key file (mode 0600).
+    # Empty string resolves to ``~/.negelir/opsctl_key`` at call time.
+    opsctl_key_path: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_KEY_PATH", ""))
+    # ``opsctl_operators_file`` — path to the operator registry JSON.
+    # Empty string resolves to ``infra/maint/opsctl_operators.json``.
+    opsctl_operators_file: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_OPERATORS_FILE", ""))
+    # ``opsctl_authz_file`` — path to the per-subcommand authz YAML.
+    # Empty string resolves to ``infra/maint/opsctl_authz.yaml``.
+    opsctl_authz_file: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_AUTHZ_FILE", ""))
+
+    # ── Phase 8 §8.15.4 — HMAC key lifecycle ──────────────────────────
+    # Revocation grace window: envelopes published up to this many seconds
+    # BEFORE a revocation are still accepted (allows in-flight ops to land).
+    # After the grace window, revoked-key envelopes are hard-rejected with
+    # reason="key_revoked" + critical sec.alert.v1.
+    opsctl_key_revocation_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_KEY_REVOCATION_GRACE_S", "60")))
+    # Maximum key age in days before rotation is overdue. A heartbeat alert
+    # (sec.alert.v1{kind=opsctl_key_rotation_overdue, severity=warn}) is
+    # emitted daily (debounced) per key that has exceeded this threshold.
+    opsctl_key_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_KEY_MAX_AGE_DAYS", "365")))
+    # Days past max_age before auto-revocation fires at the consumer side.
+    # Consumer rejects with reason="key_age_exceeded" regardless of revoked_at.
+    opsctl_key_revocation_grace_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_KEY_REVOCATION_GRACE_DAYS", "30")))
+    # operators.json hot-reload poll interval in seconds (cache coherency).
+    # Reload failure flips the consumer to fail-safe: all signatures fail.
+    opsctl_operators_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_OPERATORS_RELOAD_S", "60")))
+    # Emergency kill-switch file path. When the file exists and its mtime is
+    # within kill_switch_max_age_h hours, ALL opsctl envelopes are rejected.
+    # Empty string resolves to ``infra/maint/opsctl_kill_switch`` under the
+    # repo root at call time.
+    opsctl_kill_switch_path: str = field(default_factory=lambda: os.getenv("NEGELIR_OPSCTL_KILL_SWITCH_PATH", ""))
+    # Kill-switch becomes stale (treated as absent) after this many hours.
+    opsctl_kill_switch_max_age_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_KILL_SWITCH_MAX_AGE_H", "24")))
+    # Per-key token-bucket rate limit: max envelopes per minute per key_id.
+    # Caps stolen-key blast radius even when signature + authz pass.
+    opsctl_key_rate_limit_per_min: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_KEY_RATE_LIMIT_PER_MIN", "30")))
 
     # ── Phase 8 §8.2 — `maint.scaler.v1` agent ────────────────────────
     # Decision window in ms: one scale_decision per target per window.
@@ -605,6 +667,11 @@ class Config:
     # collapse two windows into one.
     maint_scaler_decision_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_DECISION_WINDOW_MS", "30000")))
     maint_scaler_clock_source: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_CLOCK_SOURCE", "auto"))
+    # Phase 8 §8.15.1 — suspend-detection alert threshold in seconds.
+    # Heartbeat agents compute delta_s = (boottime_ns - monotonic_ns) / 1e9;
+    # a step-up larger than this value within one heartbeat interval indicates
+    # a container suspend just happened.  Set to 0 to disable the probe.
+    maint_clock_suspend_alert_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_CLOCK_SUSPEND_ALERT_S", "30")))
     maint_scaler_max_targets: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_TARGETS", "256")))
     maint_scaler_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_MAX_REPLICAS", "16")))
     # Phase 8 §8.16.1 — default-policy fallback applied to any
@@ -640,6 +707,31 @@ class Config:
     # ``retrain_request`` warm-up. Kept tiny by default — the trainer
     # is the action-of-record; the scaler only ensures one warm pod.
     maint_scaler_warmup_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_WARMUP_REPLICAS", "1")))
+    # Phase 8 §8.14.8 — comma-separated set of agent names that manage
+    # their own replica counts (self-scaling targets). The auto-scaler
+    # refuses to emit ``scale_decision`` for these targets; instead it
+    # emits ``scale_throttled{reason=self_scaling_target}`` every tick
+    # AND a one-shot ``sec.alert.v1{kind=scaler_target_forbidden,
+    # severity=warn}`` (debounced per target per process). On
+    # ``retrain_request``, the scaler emits the softer
+    # ``trainer_warmup_hint`` advisory instead of ``scale_decision``.
+    # Default: ``trainer.v1`` — the trainer pod is the sole writer of
+    # its own replica count; the scaler must not race it.
+    maint_scaler_self_scaling_targets: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_SELF_SCALING_TARGETS", "trainer.v1"))
+    # Phase 8 §8.15.9 — scheduler noise-window suppression.
+    # JSON-encoded list of 5-field UTC cron expressions (minute hour dom
+    # month dow) that mark known high-load periods where the §8.3 backup
+    # agent inflates PG / IO / network signals. During an active window the
+    # scaler suppresses load-driven scale decisions (lag_high, cpu_high,
+    # p95_high, dlq_depth_high) and emits scale_throttled{reason=
+    # noise_window_active}. Emergency decisions (vram_budget_exceeded,
+    # manual_pin, retrain_request_warmup) always fire. Empty list disables
+    # suppression entirely. Uses the §8.3 stdlib cron evaluator; the active
+    # check tests whether the current UTC hour matches the cron's hour set
+    # (the minute field is ignored — the full hour block is suppressed).
+    # Default covers the §8.3 nightly backup window (03:00-05:59) and
+    # Sunday cold-verify (05:00 on DOW=0).
+    maint_scaler_noise_windows: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCALER_NOISE_WINDOWS", '["0 3-5 * * *","0 5 * * 0"]'))
     # Runtime selector for the scaler's ``RuntimeController``. ``none``
     # makes the scaler a pure observer (decisions emit; runtime calls
     # are skipped). ``compose`` invokes ``docker compose --scale`` via
@@ -729,6 +821,19 @@ class Config:
     # never automatically replayable; this is the operator surface
     # for the rest.
     maint_dlq_replay_topics_allow_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_DLQ_REPLAY_TOPICS_ALLOW_CSV", ""))
+    # Phase 8.16.7 — operator-attested exceptions to replay-policy
+    # sensitive-prefix denial. CSV of full DLQ topic names.
+    _maint_dlq_replay_allow_overrides_raw: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_DLQ_REPLAY_ALLOW_OVERRIDES", ""))
+
+    @property
+    def maint_dlq_replay_allow_overrides(self) -> list[str]:
+        """Attested replay exceptions as an ordered list."""
+        return [
+            tok.strip()
+            for tok in self._maint_dlq_replay_allow_overrides_raw.split(",")
+            if tok.strip()
+        ]
+
     # Operator-driven replays a single ``(topic, request_id)`` may
     # incur before escalation. Default 2 → 1st + 2nd visit replay,
     # 3rd visit emits ``dlq_escalated`` and refuses further replays
@@ -799,6 +904,15 @@ class Config:
     # ``ai/swarm/agents/maint/tests/test_schema_auto_apply_boundary.py``
     # locks this so a future patch wiring auto-apply gets caught.
     maint_schema_auto_apply_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_SCHEMA_AUTO_APPLY_ENABLED", "false").lower() in ("1", "true", "yes"))
+    # Phase 8 §8.14.7 — hard per-process cross-topic cap on the total
+    # validation rate.  Prevents a sample_rate=1.0 misconfig from
+    # burning CPU and starving the agent heartbeat (self-DoS guard).
+    # Over-budget validates are silently dropped and counted in the
+    # per-topic drop tracker; a debounced sec.alert is emitted when
+    # the drop rate exceeds 10 % of attempted over a 60 s window.
+    # Boundary cap: value MUST be ≤ 500 (boot-validated;
+    # fail_safe_validate_rps_cap_exceeded on larger values).
+    maint_schema_validate_max_rps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCHEMA_VALIDATE_MAX_RPS", "50")))
 
     # ── Phase 8 §8.7 + §8.8 — `maint.sec.v1` agent ───────────────────
     maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SEC_PATTERN_TTL_S", "604800")))
@@ -898,6 +1012,22 @@ class Config:
     # (single hysteresis band, prevents thrash). 0 = disabled.
     maint_storage_total_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_STORAGE_TOTAL_MAX_MB", "512")))
 
+    # ── Phase 8 §8.13.3 — spool entry max age ───────────────────────
+    # Spool entries (both opsctl_spool and agent_spool) older than
+    # this many hours are pruned on every flush attempt. Pruned entries
+    # emit maint.event.v1{kind=spool_entry_aged_out} (audit) and
+    # sec.alert.v1{kind=spool_entry_aged_out, severity=warn} (debounced
+    # per agent). Default 168h = 7d. 0 = disabled (no pruning).
+    maint_spool_entry_max_age_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SPOOL_ENTRY_MAX_AGE_H", "168")))
+
+    # ── Phase 8 §8.13.3 — spool retired-kind floor ───────────────────
+    # Spool entries whose envelope schema_version is below this value
+    # are quarantined to spool_dir/.retired/ on flush (same path as
+    # entries with a kind no longer in KNOWN_MAINT_EVENT_KINDS). 1 =
+    # accept all current schema versions; bump only when a breaking
+    # schema change is deployed.
+    swarm_min_supported_schema_version: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_MIN_SUPPORTED_SCHEMA_VERSION", "1")))
+
     # ── Phase 8 §8.15.3 — advisory-lock hold-time guard ──────────────
     # Wall-clock cap on how long a Postgres advisory lock taken via
     # ``xops.maint.advisory_lock.BoundLock`` may stay acquired before
@@ -910,6 +1040,37 @@ class Config:
     # ── Phase 8 §8.14 — audit log ────────────────────────────────────
     maint_audit_hmac_key_b64: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_AUDIT_HMAC_KEY_B64", ""))
     maint_audit_partition_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS", "365")))
+
+    # ── Phase 8 §8.15.7 — opsctl_audit.csv hash-chain HMAC ─────────────
+    # Path to the 32-byte HMAC-SHA256 key file used by the opsctl_audit.csv
+    # integrity chain.  Mode 0400, owned by the agent process user.
+    # Empty → no HMAC chain (test/dev only — set in prod).
+    audit_chain_hmac_key_path: str = field(default_factory=lambda: os.getenv("NEGELIR_AUDIT_CHAIN_HMAC_KEY_PATH", "/var/lib/negelir/secrets/audit_chain.key"))
+    # Maximum size of opsctl_audit.csv before rotation (bytes).
+    # When the active file grows past this, it is renamed to
+    # opsctl_audit.csv.1 (et seq.) and a fresh file is started.
+    # The chain continues across rotation: the new file's genesis
+    # prev_hmac = last rotated file's row_hmac.  Default 10 MB.
+    opsctl_audit_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_AUDIT_MAX_BYTES", str(10 * 1024 * 1024))))
+
+    # ── Phase 8 §8.15.5 — per-row size cap + per-kind details budget ─
+    # Hard per-row cap for the maint_audit_log ``payload`` JSONB column
+    # (UTF-8 JSON bytes).  Enforced by the §8.14.1 BEFORE INSERT trigger
+    # backstop AND by the producer-side helper in swarm.sdk.maint_audit.
+    # Default 16384 (16 KB) keeps rows toast-friendly and autovacuum-safe.
+    maint_audit_row_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_AUDIT_ROW_MAX_BYTES", "16384")))
+    # Per-kind soft fence (JSON dict, kind → int bytes).  Producer-side
+    # cap applied BEFORE emit by MaintEvent._make().  Keys are
+    # maint.event.v1 kind strings; "default" key is the fallback for
+    # unlisted kinds.  Values must be ≤ maint_audit_row_max_bytes.
+    # Example override: '{"dlq_escalated": 4096}'.
+    maint_audit_per_kind_details_max_bytes: str = field(
+        default_factory=lambda: os.getenv(
+            "NEGELIR_MAINT_AUDIT_PER_KIND_DETAILS_MAX_BYTES",
+            '{"dlq_escalated": 8192, "schema_drift_detected": 4096,'
+            ' "backup_dump_file_corrupted": 8192, "default": 2048}',
+        )
+    )
 
     # ── Phase 8 §8.3 — backup agent ──────────────────────────────────
     # Cron expression (5-field, UTC) that fires the nightly backup
@@ -962,6 +1123,13 @@ class Config:
     # workers + 1 coordinator connection).  Set an explicit positive value
     # to enforce a higher floor (e.g. pg_jobs + application pool headroom).
     maint_backup_pg_conn_limit: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_CONN_LIMIT", "0")))
+    # ROADMAP §8.16.3 binding (``fail_safe_prune_order_invalid``): boot
+    # validation in :class:`xops.maint.prune_order.PruneOrderValidator`
+    # asserts that the declared :data:`PRUNE_ORDER` is a valid topological
+    # sort of the live PG FK graph. Drift → refuse-to-start + critical alert.
+    # No runtime knob; presence here documents the doctrine name so the
+    # §7.7-style triangle test can assert it is referenced in config comments.
+
     # DELETE batch size for the destructive prune phase. Bounded so a
     # single cron run cannot hold a long-lived row-lock cascade.
     maint_backup_prune_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PRUNE_BATCH", "10000")))
@@ -1014,6 +1182,13 @@ class Config:
     # Pinned Postgres image for the restore-verifier scratch container.
     # Must NOT be `*-latest` (CLAUDE.md doctrine: pin specific tags).
     maint_backup_verify_pg_image: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE", "postgres:16-alpine"))
+    # §8.14.9 nice level for pg_dump subprocess. Default 10 (lower CPU
+    # priority than interactive queries). Set 0 to disable nice wrapping
+    # (mock profile; dedicated-PG deployments). Bounded 0–19 (UNIX nice).
+    maint_backup_pg_dump_nice_level: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_DUMP_NICE_LEVEL", "10")))
+    # §8.14.9 ionice wrapping for pg_dump on Linux: best-effort I/O class
+    # (-c 2) at lowest priority (-n 7). Default true. Ignored on non-Linux.
+    maint_backup_pg_dump_ionice: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_PG_DUMP_IONICE", "true").lower() not in ("false", "0", "no"))
     # Restore-verify mode (ROADMAP §8.3 escape hatch). `full` (default)
     # runs the complete `pg_restore` + verify.sql suite; `toc_only` runs
     # only `pg_restore --list` to validate the dump's table-of-contents
@@ -1022,6 +1197,13 @@ class Config:
     # weekly cold-verify still runs the full suite regardless. Boot
     # validation in `MaintBackupAgent` refuses any other value.
     maint_backup_verify_mode: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_MODE", "full"))
+    # ROADMAP §8.13.4 restore version-invariant: maximum schema-version gap
+    # (in_tree_max_version - manifest.max_version) before restore-verify
+    # refuses with backup_dump_too_old + sec.alert.v1{severity=error}.
+    # Default 5 covers ~quarterly migration cadence (≤5 migrations per
+    # quarter). Operator must escalate to a manual restore using the
+    # historical commit when the gap exceeds this.
+    maint_backup_max_version_gap: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MAX_VERSION_GAP", "5")))
     # ROADMAP §8.3 binding (weekly cold-verify — silent storage rot).
     # 5-field UTC cron expression that fires the cold-verify pass on
     # the oldest still-retained Sunday dump. Default `0 5 * * 0`
@@ -1030,6 +1212,13 @@ class Config:
     # dump is needed for real DR. Boot validation in
     # `MaintBackupAgent` refuses cron syntax errors loudly.
     maint_backup_cold_verify_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON", "0 5 * * 0"))
+    # ROADMAP §8.15.10 Fix A — restore-verify concurrency cap.
+    # Maximum seconds the second restore-verify caller waits to acquire
+    # the PG advisory lock `LOCK_MAINT_BACKUP_RESTORE_VERIFY` before
+    # yielding with kind=verify_concurrency_blocked.  Default 1800 s
+    # (30 min — generous; both cold-verify and nightly fire in the same
+    # early-Sunday window).  0 disables the wait (try-once, yield immediately).
+    maint_backup_verify_lock_timeout_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_VERIFY_LOCK_TIMEOUT_S", "1800")))
     # ROADMAP §8.3 crash-cleanup invariant: on agent restart, orphaned
     # `negelir-maint-verify/restore-verify-*` K8s Jobs + ephemeral PVCs older
     # than this many hours are swept at boot and emit
@@ -1059,6 +1248,18 @@ class Config:
         "NEGELIR_MAINT_BACKUP_PG_ROLE",
         "negelir_backup",
     ))
+    # ROADMAP §8.13.6 binding (fail_safe_pg_secret_expired): hard cap on the
+    # backup-role PG password age in days.  The agent refuses to start when
+    # the age reported by PgSecretAgeChecker exceeds this value, forcing the
+    # operator to rotate.  Default 120d = alert threshold (100d) + 20d grace.
+    maint_backup_pg_secret_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_PG_SECRET_MAX_AGE_DAYS", "120")))
+    # ROADMAP §8.14.3 supply-chain pin: the `age` encryption binary version
+    # that the `maint.backup.v1` agent and the `ops.restore` CLI require.
+    # Default "1.2.0" matches the upstream release pinned in the Dockerfile
+    # and recorded in infra/maint/age_binary_provenance.txt. Operators can
+    # override to roll forward without an image rebuild; the boot assertion
+    # still fires loud on mismatch (fail_safe_age_version_mismatch).
+    maint_backup_age_binary_version: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_AGE_BINARY_VERSION", "1.2.0"))
     # ROADMAP §8.9 two-class encryption: when True (default) each nightly
     # dump gets a freshly-generated ephemeral verify-class recipient keypair.
     # The verify key is included as a second recipient alongside the DR keys
@@ -1102,6 +1303,46 @@ class Config:
     # AWS / S3-compatible region used for SigV4 signing (e.g. "us-east-1",
     # "auto" for non-AWS services like R2 / B2 that don't enforce a region).
     maint_backup_offsite_s3_region: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_S3_REGION", "us-east-1"))
+    # ROADMAP §8.15.10 Fix B — offsite credential hot-reload.
+    # How often FileSecretProvider polls the secret file for mtime changes.
+    # 0 disables polling (credentials read once at agent boot — compose dev shortcut).
+    maint_backup_offsite_cred_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_CRED_RELOAD_S", "60")))
+    # Age threshold (days) beyond which the S3 access key is considered overdue
+    # for rotation.  Matches the §8.15.10 90-day cadence best practice.
+    # 0 disables the age check.
+    maint_backup_offsite_credential_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_CREDENTIAL_MAX_AGE_DAYS", "90")))
+    # Grace period (days) on top of maint_backup_offsite_credential_max_age_days.
+    # Past max_age the agent emits severity=warn daily.  Past max_age+grace the
+    # agent escalates to severity=critical AND refuses new uploads (keeps running
+    # to not affect the rest of the maint plane).
+    maint_backup_offsite_credential_grace_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_CREDENTIAL_GRACE_DAYS", "30")))
+    # Phase 8 §8.16.5 — multipart upload-id TTL + lifecycle assertion.
+    # Max age (hours) of .offsite_state.json before treating the persisted
+    # upload_id as expired without even probing AWS.  Headroom under AWS's
+    # 24 h default abort policy; default 18 h.  0 = always probe (no
+    # time-based short-circuit).
+    maint_backup_offsite_state_max_age_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_STATE_MAX_AGE_H", "18")))
+    # Minimum acceptable AbortIncompleteMultipartUpload.DaysAfterInitiation.
+    # If the bucket's lifecycle rule is more aggressive, a sec.alert is emitted.
+    # Default 2 — gives the agent a one-day recovery window even on aggressive
+    # cost-optimised bucket policies.
+    maint_backup_offsite_lifecycle_min_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_LIFECYCLE_MIN_DAYS", "2")))
+    # Phase 8 §8.16.6 — Object-Lock / WORM boot-time preflight probe.
+    # How often (hours) the preflight probe repeats after the initial boot run.
+    # 0 = run at boot only (disables recurring probe).
+    maint_backup_offsite_preflight_interval_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_PREFLIGHT_INTERVAL_H", "24")))
+    # When True (default) the agent refuses to start if the bucket's
+    # Object-Lock is disabled while maint_backup_offsite_object_lock_days > 0.
+    # Mock profile sets this to False via env to skip the hardware check.
+    maint_backup_offsite_object_lock_required: bool = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_REQUIRED", "true").lower() in ("true", "1", "yes"))
+    # ROADMAP §8.16.6 binding fail-safe flags (all default True — refuse-to-start
+    # / spool-mode on any preflight failure; operators may relax in non-prod).
+    # Bucket Object-Lock is not enabled and object_lock_days > 0.
+    fail_safe_offsite_object_lock_disabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_FAIL_SAFE_OFFSITE_OBJECT_LOCK_DISABLED", "true").lower() in ("true", "1", "yes"))
+    # Sentinel retention metadata did not round-trip (IAM policy gap).
+    fail_safe_offsite_retention_not_applied: bool = field(default_factory=lambda: os.getenv("NEGELIR_FAIL_SAFE_OFFSITE_RETENTION_NOT_APPLIED", "true").lower() in ("true", "1", "yes"))
+    # Sentinel was deleted during retention window (WORM not enforced).
+    fail_safe_offsite_lock_not_enforced: bool = field(default_factory=lambda: os.getenv("NEGELIR_FAIL_SAFE_OFFSITE_LOCK_NOT_ENFORCED", "true").lower() in ("true", "1", "yes"))
     # RsyncSshTarget: SSH host (or user@host) for the DR replica.
     maint_backup_offsite_rsync_host: str = field(default_factory=lambda: os.getenv("NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_HOST", ""))
     # RsyncSshTarget: absolute destination path on the remote SSH host.
@@ -1115,6 +1356,27 @@ class Config:
     # Days threshold for the cadence-overdue alert (default 100 — one quarter
     # is ~91 d; the extra 9 d absorbs scheduling slippage before paging).
     maint_backup_dr_drill_alert_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_DR_DRILL_ALERT_DAYS", "100")))
+    # ROADMAP §8.15.10 Fix C — restore-verify forensic capture.
+    # Maximum total bytes written to <date>.failed/verify_forensic.json.
+    # Default 256 KiB (262144).  When the computed JSON exceeds this budget,
+    # the largest field is truncated first (pg_restore_stderr → pg_restore_stdout
+    # → verify_sql_results) until the serialised size fits.
+    # 0 disables the cap (unbounded; use only in dev/test).
+    maint_backup_forensic_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_FORENSIC_MAX_BYTES", "262144")))
+    # Phase 8 §8.13.1 — model-artifact backup discipline.
+    # After a worst-case restore, the trainer can re-derive a byte-equivalent
+    # artifact from the calibration/outcome rows referenced in the lineage
+    # sidecar within this many hours of latency.  Used by the ops runbook
+    # to set the SLA expectation; not enforced in-process today.
+    maint_backup_model_reproducibility_window_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MODEL_REPRODUCIBILITY_WINDOW_H", "24")))
+    # Retention days for model tarballs in the offsite bucket (shorter than
+    # the PG retention because models are reproducible from Postgres rows).
+    maint_backup_model_offsite_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MODEL_OFFSITE_RETENTION_DAYS", "30")))
+    # Debounce window (hours) for sec.alert.v1{kind=backup_model_lineage_missing}
+    # per predictor_id.  A predictor whose artifacts are persistently sidecar-free
+    # re-alerts at most once per window so a misconfigured trainer does not flood
+    # the bus.  Set to 0 to disable debounce (useful in tests).
+    maint_backup_model_lineage_missing_debounce_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_BACKUP_MODEL_LINEAGE_MISSING_DEBOUNCE_H", "24")))
     # Phase 8 §8.4 — source-watcher summarizer graduation gate.
     # The summarizer may only enable when a pinned model id is
     # configured AND a startup reachability probe can contact the
@@ -1273,6 +1535,47 @@ class Config:
         if self.opsctl_lock_dir:
             return self.opsctl_lock_dir
         return os.path.join(self.data_dir, "maint", "opsctl_locks")
+
+    @property
+    def maint_audit_per_kind_details_max_bytes_parsed(self) -> "dict[str, int]":
+        """Parse ``maint_audit_per_kind_details_max_bytes`` (JSON str) → dict.
+
+        Keys are ``maint.event.v1`` kind strings; values are byte caps.
+        The ``"default"`` key provides the fallback for unlisted kinds.
+        Falls back to the ROADMAP §8.15.5 defaults on parse failure (malformed
+        values are caught by ``validate()`` at boot).
+        """
+        import json as _json
+        _defaults = {
+            "dlq_escalated": 8192,
+            "schema_drift_detected": 4096,
+            "backup_dump_file_corrupted": 8192,
+            "default": 2048,
+        }
+        try:
+            parsed = {k: int(v) for k, v in _json.loads(
+                self.maint_audit_per_kind_details_max_bytes
+            ).items()}
+            return parsed
+        except (ValueError, TypeError, AttributeError):
+            return _defaults
+
+    @property
+    def maint_audit_retention_overrides_parsed(self) -> "dict[str, int]":
+        """Parse ``maint_audit_retention_days_overrides`` (JSON str) → dict.
+
+        Used by the partition prune / pre-creation jobs to apply per-kind
+        retention cutoffs.  Falls back to the §8.9 default (``pii_erased:
+        2555``) when the env var is absent or malformed — validated at boot
+        by ``validate()`` so malformed values only reach this path in tests.
+        """
+        import json as _json
+        try:
+            return {k: int(v) for k, v in _json.loads(
+                self.maint_audit_retention_days_overrides
+            ).items()}
+        except (ValueError, TypeError, AttributeError):
+            return {"pii_erased": 2555}
 
     def validate(self, *, strict: bool = False) -> list[str]:
         """
@@ -1471,6 +1774,7 @@ class Config:
         # Phase 8 §8.1 — ops console budgets + ack payload caps.
         _bounded("opsctl_ack_timeout_ms", self.opsctl_ack_timeout_ms, 1, 600_000)
         _bounded("opsctl_spool_max_entries", self.opsctl_spool_max_entries, 1, 1_000_000)
+        _bounded("opsctl_spool_flush_max_per_run", self.opsctl_spool_flush_max_per_run, 0, 1_000_000)
         _bounded("maint_ack_payload_max_bytes", self.maint_ack_payload_max_bytes, 64, 1_048_576)
         _bounded("maint_ack_reason_max_bytes", self.maint_ack_reason_max_bytes, 16, 65_536)
         _bounded("maint_ack_details_max_bytes", self.maint_ack_details_max_bytes, 64, 1_048_576)
@@ -1558,6 +1862,11 @@ class Config:
                 f"maint_scaler_clock_source={self.maint_scaler_clock_source!r} "
                 "must be one of: auto, boottime, monotonic"
             )
+        if self.maint_clock_suspend_alert_s < 0:
+            issues.append(
+                f"maint_clock_suspend_alert_s={self.maint_clock_suspend_alert_s!r} "
+                "must be >= 0 (0 = disabled)"
+            )
         # Per-agent overrides parse-validation: each non-empty entry
         # MUST be ``name=int`` with int in [min, max-replicas-cap].
         if self.maint_scaler_max_replicas_overrides_csv.strip():
@@ -1612,6 +1921,12 @@ class Config:
                         f"maint_dlq_replay_topics_allow_csv entry "
                         f"{tok!r} must end in '.dlq'"
                     )
+        for tok in self.maint_dlq_replay_allow_overrides:
+            if not tok.endswith(".dlq"):
+                issues.append(
+                    f"maint_dlq_replay_allow_overrides entry "
+                    f"{tok!r} must end in '.dlq'"
+                )
 
         # Phase 8 §8.6 — schema sentinel.
         _bounded("maint_schema_sample_rate_per_s", self.maint_schema_sample_rate_per_s, 0.0, 10_000.0)
@@ -1619,6 +1934,16 @@ class Config:
         _bounded("maint_schema_drift_debounce_s", self.maint_schema_drift_debounce_s, 1, 86_400)
         _bounded("maint_schema_drift_lru", self.maint_schema_drift_lru, 1, 1_000_000)
         _bounded("maint_schema_pg_check_interval_s", self.maint_schema_pg_check_interval_s, 60, 86_400)
+        # Phase 8 §8.14.7 — hard per-process validation-rate cap.
+        # Positive lower bound (≥ 1); hard ceiling 500 is the safety knob
+        # itself — exceeding it means a finger-fumble in the safety config.
+        _bounded("maint_schema_validate_max_rps", self.maint_schema_validate_max_rps, 1, 500)
+        if self.maint_schema_validate_max_rps > 500:
+            issues.append(
+                f"fail_safe_validate_rps_cap_exceeded: "
+                f"maint_schema_validate_max_rps={self.maint_schema_validate_max_rps} "
+                f"exceeds the safety ceiling of 500 — reduce to ≤ 500"
+            )
 
         # Phase 8 §8.7 + §8.8 — sec maint.
         _bounded("maint_sec_pattern_ttl_s", self.maint_sec_pattern_ttl_s, 1, 31_536_000)
@@ -1713,11 +2038,39 @@ class Config:
         _bounded("maint_backup_clock_step_back_alert_s", self.maint_backup_clock_step_back_alert_s, 1, 86_400)
         _bounded("maint_backup_pg_jobs", self.maint_backup_pg_jobs, 1, 64)
         _bounded("maint_backup_pg_conn_limit", self.maint_backup_pg_conn_limit, 0, 10_000)
+        _bounded("maint_backup_pg_secret_max_age_days", self.maint_backup_pg_secret_max_age_days, 1, 3650)
         _bounded("maint_backup_prune_batch", self.maint_backup_prune_batch, 1, 1_000_000)
         _bounded("maint_backup_prune_max_lock_ms", self.maint_backup_prune_max_lock_ms, 1, 300_000)
         _bounded("maint_schema_snapshot_retention_days", self.maint_schema_snapshot_retention_days, 1, 3650)
         _bounded("swarm_dlq_pg_retention_days", self.swarm_dlq_pg_retention_days, 1, 3650)
         _bounded("maint_audit_retention_days", self.maint_audit_retention_days, 1, 3650)
+        _bounded("opsctl_audit_max_bytes", self.opsctl_audit_max_bytes, 65536, 1_073_741_824)
+        _bounded("maint_audit_row_max_bytes", self.maint_audit_row_max_bytes, 1024, 1_048_576)
+        try:
+            import json as _json
+            kind_budgets = _json.loads(self.maint_audit_per_kind_details_max_bytes)
+            if not isinstance(kind_budgets, dict):
+                issues.append(
+                    "maint_audit_per_kind_details_max_bytes must be a JSON object "
+                    f"(got {self.maint_audit_per_kind_details_max_bytes!r})"
+                )
+            else:
+                for k, v in kind_budgets.items():
+                    if not isinstance(v, int) or v < 1:
+                        issues.append(
+                            f"maint_audit_per_kind_details_max_bytes[{k!r}]={v!r} "
+                            "must be a positive integer"
+                        )
+                    elif v > self.maint_audit_row_max_bytes:
+                        issues.append(
+                            f"maint_audit_per_kind_details_max_bytes[{k!r}]={v} "
+                            f"exceeds maint_audit_row_max_bytes={self.maint_audit_row_max_bytes}"
+                        )
+        except (ValueError, TypeError) as _perr:
+            issues.append(
+                "maint_audit_per_kind_details_max_bytes must be a valid JSON object "
+                f"(got {self.maint_audit_per_kind_details_max_bytes!r}): {_perr}"
+            )
         try:
             import json as _json
             _json.loads(self.maint_audit_retention_days_overrides)
@@ -1728,12 +2081,29 @@ class Config:
             )
         _bounded("maint_backup_min_dr_recipients", self.maint_backup_min_dr_recipients, 1, 64)
         _bounded("maint_backup_pvc_size_gb", self.maint_backup_pvc_size_gb, 1, 65_536)
+        _bounded("maint_backup_max_version_gap", self.maint_backup_max_version_gap, 1, 1000)
         # Refuse `*-latest` style verify-image tags — CLAUDE.md doctrine.
         if str(self.maint_backup_verify_pg_image).endswith(":latest") or self.maint_backup_verify_pg_image.endswith("-latest"):
             issues.append(
                 f"maint_backup_verify_pg_image={self.maint_backup_verify_pg_image!r} "
                 f"must pin a specific tag (no *-latest)"
             )
+        _bounded("maint_backup_pg_dump_nice_level", self.maint_backup_pg_dump_nice_level, 0, 19)
+        # §8.15.10 new knobs — allow 0 (disabled) for all three.
+        if self.maint_backup_verify_lock_timeout_s != 0:
+            _bounded("maint_backup_verify_lock_timeout_s", self.maint_backup_verify_lock_timeout_s, 1, 86_400)
+        if self.maint_backup_offsite_cred_reload_s != 0:
+            _bounded("maint_backup_offsite_cred_reload_s", self.maint_backup_offsite_cred_reload_s, 1, 86_400)
+        if self.maint_backup_offsite_credential_max_age_days != 0:
+            _bounded("maint_backup_offsite_credential_max_age_days", self.maint_backup_offsite_credential_max_age_days, 1, 3650)
+        if self.maint_backup_offsite_credential_grace_days != 0:
+            _bounded("maint_backup_offsite_credential_grace_days", self.maint_backup_offsite_credential_grace_days, 1, 365)
+        if self.maint_backup_offsite_state_max_age_h != 0:
+            _bounded("maint_backup_offsite_state_max_age_h", self.maint_backup_offsite_state_max_age_h, 1, 168)
+        if self.maint_backup_offsite_lifecycle_min_days != 0:
+            _bounded("maint_backup_offsite_lifecycle_min_days", self.maint_backup_offsite_lifecycle_min_days, 1, 365)
+        if self.maint_backup_forensic_max_bytes != 0:
+            _bounded("maint_backup_forensic_max_bytes", self.maint_backup_forensic_max_bytes, 1024, 10_485_760)
         _bounded(
             "source_watcher_summarizer_probe_timeout_sec",
             self.source_watcher_summarizer_probe_timeout_sec,

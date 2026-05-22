@@ -29,6 +29,7 @@ real subprocesses.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -43,6 +44,8 @@ from typing import Callable, Mapping, Optional, Protocol, Sequence
 
 
 _log = logging.getLogger("xops.backup.executors")
+
+from xops.backup.migration_state import build_migrations_at_dump_time as _build_migrations_at_dump_time  # noqa: E402
 
 
 class TableResolutionError(RuntimeError):
@@ -66,6 +69,11 @@ DUMP_FILE_NAME: str = "negelir.dump"
 ENCRYPTED_NAME: str = "dump.tar.age"
 CHECKSUM_NAME: str = "negelir.checksum.txt"
 MANIFEST_NAME: str = "manifest.json"
+# §8.14.2 inner per-file manifest: written inside the dump artefact BEFORE
+# the tar+age pipeline so it is part of the encrypted tarball.  The outer
+# ``negelir.checksum.txt`` covers the ``.tar.age`` blob; this manifest
+# covers each individual file in the dump before the tar step.
+FILE_CHECKSUM_MANIFEST_NAME: str = "negelir.files.sha256.txt"
 # PII-aware sanitized projection of ``quarantine_samples`` (§8.3
 # binding contract). Written alongside the encrypted dump as
 # **operator-only forensic evidence** — it is NOT a ``pg_restore``
@@ -167,6 +175,89 @@ def _sha256_file(path: Path, *, chunk_size: int = 1 << 20) -> str:
     return h.hexdigest()
 
 
+def _write_file_checksum_manifest(
+    dump_target: Path,
+    manifest_out: Path,
+    *,
+    chunk_size: int = 1 << 20,
+) -> None:
+    """Write SHA-256 per-file manifest for ``dump_target`` (§8.14.2).
+
+    For a directory dump (``-Fd``): walks every file under
+    ``dump_target`` (excluding the manifest output file itself to
+    avoid a self-referential hash), computes SHA-256, and writes
+    ``<hex>  <relpath>`` lines (POSIX separators) relative to
+    ``dump_target``.  Lines are sorted for deterministic output.
+
+    For a single-file dump (``-Fc``): writes one line with the
+    file's hash and the bare filename.
+
+    Output is chmod 0o600 + fsynced.
+    """
+    lines: list[str] = []
+    manifest_resolved = manifest_out.resolve()
+    if dump_target.is_dir():
+        for root, _dirs, files in os.walk(dump_target):
+            for fname in sorted(files):
+                fpath = Path(root) / fname
+                # Skip the manifest file itself to avoid self-reference.
+                if fpath.resolve() == manifest_resolved:
+                    continue
+                rel = fpath.relative_to(dump_target).as_posix()
+                digest = _sha256_file(fpath, chunk_size=chunk_size)
+                lines.append(f"{digest}  {rel}")
+        # Sort for determinism across OS / filesystem ordering.
+        lines.sort()
+    else:
+        # Single-file custom format (``-Fc``).
+        digest = _sha256_file(dump_target, chunk_size=chunk_size)
+        lines.append(f"{digest}  {dump_target.name}")
+    manifest_out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _chmod_secure(manifest_out)
+    _fsync_path(manifest_out)
+
+
+def _wrap_nice_ionice(
+    argv: list[str],
+    nice_level: int,
+    ionice_enabled: bool,
+    *,
+    _is_linux: Optional[bool] = None,
+) -> list[str]:
+    """Prepend ``nice`` / ``ionice`` to *argv* for lower-priority pg_dump.
+
+    §8.14.9 binding: pg_dump must not starve interactive queries on the
+    same host. nice_level=0 disables niceing (mock / dedicated-PG).
+    ionice_enabled=True (Linux only) adds ``ionice -c 2 -n 7`` (best-effort
+    I/O at the lowest priority). Non-Linux: ionice silently skipped.
+
+    Args:
+        argv: original pg_dump argv list (mutated copy is returned).
+        nice_level: 0 = disabled; 1–19 = UNIX nice increment.
+        ionice_enabled: whether to prepend ``ionice -c 2 -n 7``.
+        _is_linux: injectable for tests (None = autodetect via sys.platform).
+
+    Returns a new list; the input list is not mutated.
+    """
+    import sys as _sys
+
+    if _is_linux is None:
+        _is_linux = _sys.platform.startswith("linux")
+
+    if nice_level <= 0 and not (ionice_enabled and _is_linux):
+        return argv
+
+    prefix: list[str] = []
+    if nice_level > 0:
+        prefix = ["nice", "-n", str(nice_level)]
+    if ionice_enabled and _is_linux:
+        ionice_part = ["ionice", "-c", "2", "-n", "7"]
+        if prefix:
+            return prefix + ionice_part + argv
+        return ionice_part + argv
+    return prefix + argv
+
+
 @dataclass
 class LocalPgDumpExecutor:
     """``pg_dump -Fd`` + ``age`` recipients-file encryption.
@@ -207,6 +298,18 @@ class LocalPgDumpExecutor:
     # schema is still dumped — restore-verify can re-create the table
     # without rows.
     exclude_quarantine_data: bool = True
+    # §8.13.4 migration state: override scan root (None = repo default).
+    # Injected in tests to point at a synthetic migrations directory.
+    migrations_dir: Optional[Path] = None
+    # §8.13.4 migration state: override build_metadata.json path (None = repo default).
+    # Injected in tests to supply or suppress a synthetic commit SHA.
+    build_metadata_path: Optional[Path] = None
+    # §8.14.9 process priority knobs. nice_level=0 disables niceing;
+    # 1–19 is the UNIX nice increment. ionice_enabled adds Linux-only
+    # ``ionice -c 2 -n 7`` wrapping (best-effort, lowest priority).
+    # Both are injected from ``build_backup_drivers`` via config.
+    nice_level: int = 10
+    ionice_enabled: bool = True
 
     def dump(self, *, fire_window_id: str, dry_run: bool, pii_excluded: tuple[str, ...] = ()) -> tuple[int, int]:  # noqa: ARG002 — pii_excluded honours the Protocol; real exclusion via exclude_quarantine_data field
         """Run ``pg_dump`` then encrypt with ``age``.
@@ -287,6 +390,8 @@ class LocalPgDumpExecutor:
             # PII-aware policy — schema is still dumped, only the row
             # data is excluded. Restore-verify gets an empty table.
             argv.append("--exclude-table-data=quarantine_samples")
+        # §8.14.9 lower process priority so pg_dump does not starve queries.
+        argv = _wrap_nice_ionice(argv, self.nice_level, self.ionice_enabled)
         _log.info(
             "pg_dump window=%s argv=%s",
             fire_window_id, shlex.join(argv[:-1] + ["<dsn-redacted>"]),
@@ -323,12 +428,51 @@ class LocalPgDumpExecutor:
         if self.exclude_quarantine_data:
             self._write_quarantine_meta_csv(window_dir)
 
+        # §8.14.9 capture source server version for verify-PG invariant.
+        # Stored in the manifest so the verifier can refuse to restore a
+        # PG-17 dump into a PG-16 image. Failure is non-fatal (logs a
+        # warning and stores 0 — the verifier skips the check for 0).
+        server_version_num: int = 0
+        psql = self.psql_binary or shutil.which("psql") or "psql"
+        try:
+            _sv_result = self.runner([
+                psql, "--no-psqlrc", "--tuples-only", "--no-align",
+                "--dbname", self.pg_dsn,
+                "-c", "SHOW server_version_num",
+            ])
+            server_version_num = int(
+                (_sv_result.stdout or b"").decode(errors="replace").strip()
+            )
+        except Exception as _sv_exc:  # noqa: BLE001
+            _log.warning(
+                "pg_dump window=%s could not read server_version_num: %s "
+                "(manifest will record 0; verify-PG version check will be skipped)",
+                fire_window_id, _sv_exc,
+            )
+
+        # ── Per-file checksum manifest (§8.14.2 silent-corruption gate) ─
+        # Written BEFORE the tar+age pipeline so it covers what pg_dump
+        # actually wrote to disk. For -Fd: placed inside the dump dir so
+        # it is tarred automatically. For -Fc: placed adjacent to the dump
+        # file and added to the tar explicitly below. The manifest excludes
+        # itself to avoid a self-referential hash.
+        if use_directory:
+            file_manifest_path = dump_target / FILE_CHECKSUM_MANIFEST_NAME
+        else:
+            file_manifest_path = window_dir / FILE_CHECKSUM_MANIFEST_NAME
+        _write_file_checksum_manifest(dump_target, file_manifest_path)
+
         # ── tar + age encrypt ─────────────────────────────────────────
         encrypted_path = window_dir / ENCRYPTED_NAME
         tar_path = window_dir / "_dump.tar"
         try:
             with tarfile.open(tar_path, "w") as tar:
                 tar.add(dump_target, arcname=tar_arcname)
+                if not use_directory:
+                    # For -Fc: manifest sits adjacent to the dump file;
+                    # add it explicitly so it is part of the encrypted
+                    # tarball (§8.14.2 binding).
+                    tar.add(file_manifest_path, arcname=FILE_CHECKSUM_MANIFEST_NAME)
             _chmod_secure(tar_path)
             _fsync_path(tar_path)
 
@@ -375,18 +519,23 @@ class LocalPgDumpExecutor:
         _fsync_path(checksum_path)
 
         # ── manifest ──────────────────────────────────────────────────
+        migrations_meta = _build_migrations_at_dump_time(
+            migrations_dir=self.migrations_dir,
+            build_metadata_path=self.build_metadata_path,
+        )
+        manifest_data = {
+            "fire_window_id": fire_window_id,
+            "dump_bytes": dump_bytes,
+            "encrypted_bytes": encrypted_bytes,
+            "sha256": digest,
+            "pg_jobs": int(self.pg_jobs),
+            "format": format_label,
+            "migrations_at_dump_time": migrations_meta,
+            "server_version_num": server_version_num,
+        }
         manifest_path = window_dir / MANIFEST_NAME
         manifest_path.write_text(
-            (
-                "{"
-                f'"fire_window_id":"{fire_window_id}",'
-                f'"dump_bytes":{dump_bytes},'
-                f'"encrypted_bytes":{encrypted_bytes},'
-                f'"sha256":"{digest}",'
-                f'"pg_jobs":{int(self.pg_jobs)},'
-                f'"format":"{format_label}"'
-                "}\n"
-            ),
+            json.dumps(manifest_data) + "\n",
             encoding="utf-8",
         )
         _chmod_secure(manifest_path)
@@ -395,12 +544,14 @@ class LocalPgDumpExecutor:
         # Drop the intermediate Postgres dump artefact now that the
         # encrypted blob is durable on disk; it would otherwise double
         # the storage cost of every backup. Directory format → rmtree;
-        # custom (-Fc) format → unlink.
+        # custom (-Fc) format → unlink. The per-file manifest for -Fc is
+        # also removed (it was included in the encrypted tarball above).
         try:
             if use_directory:
                 shutil.rmtree(dump_target)
             else:
                 dump_target.unlink(missing_ok=True)
+                file_manifest_path.unlink(missing_ok=True)
         except OSError as exc:  # pragma: no cover
             _log.warning("cleanup %s failed: %s", dump_target, exc)
 
@@ -738,6 +889,7 @@ __all__ = [
     "DUMP_FILE_NAME",
     "ENCRYPTED_NAME",
     "FAILED_DIR_SUFFIX",
+    "FILE_CHECKSUM_MANIFEST_NAME",
     "LocalPgDumpExecutor",
     "LocalPgPruner",
     "MANIFEST_NAME",

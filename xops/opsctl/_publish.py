@@ -42,7 +42,8 @@ from ai.swarm.agents.maint._ack_routing import (
     KNOWN_MAINT_EVENT_KINDS,
     expected_ack_set,
 )
-from ai.swarm.agents.topics import MAINT_ACK, MAINT_EVENT
+from ai.swarm.agents.payloads import SecAlert
+from ai.swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ai.swarm.sdk.bus import Bus
 from ai.swarm.sdk.schemas import validate_kind
 from ai.swarm.sdk.types import Envelope, Message
@@ -52,6 +53,13 @@ from ._exit_codes import ExitCode
 MAINT_EVENT_TOPIC = MAINT_EVENT
 MAINT_ACK_TOPIC = MAINT_ACK
 OPS_CONSOLE_PRODUCER = "ops_console"
+
+# §8.14.6 — once-per-accepted_by per process lifetime legacy-schema tracker.
+# When an incoming maint.ack.v1 carries schema_version=1 (pre-§8.14.6
+# producer), the ops_console emits a single sec.alert.v1{kind=
+# maint_ack_legacy_schema, severity=info} and records the accepted_by here
+# so subsequent acks from the same agent do not re-fire the alert.
+_LEGACY_SCHEMA_NOTIFIED: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -85,6 +93,7 @@ def build_envelope(
     rid = request_id or _new_request_id()
     payload: dict[str, Any] = {
         "kind": kind,
+        "kind_schema_version": 1,
         "target": target,
         "request_id": rid,
         "client_id": client_id,
@@ -138,6 +147,38 @@ def _validate_payload(kind: str, message: Message) -> Optional[str]:
     if errs:
         return "; ".join(errs)
     return None
+
+
+def _emit_legacy_schema_alert(bus: Bus, accepted_by: str) -> None:
+    """§8.14.6 — Publish sec.alert.v1{kind=maint_ack_legacy_schema} to nudge
+    the *accepted_by* producer to upgrade to maint.ack.v1 schema_version=2.
+    Fire-and-forget: bus errors are silently swallowed since the alert is
+    informational and must not break the ack-wait loop.
+    """
+    try:
+        alert = SecAlert(
+            alert_id=str(uuid.uuid4()),
+            kind="maint_ack_legacy_schema",
+            severity="info",
+            source=OPS_CONSOLE_PRODUCER,
+            reason=(
+                f"producer {accepted_by!r} emitted maint.ack.v1 with "
+                "schema_version=1 (pre-§8.14.6); upgrade to emit "
+                "schema_version=2 with trace_id field"
+            ),
+            subject=accepted_by,
+            produced_at=_utc_now_iso(),
+        )
+        env = Envelope(
+            topic=SEC_ALERT,
+            producer=OPS_CONSOLE_PRODUCER,
+            created_at=_utc_now_iso(),
+            schema_version=1,
+            attempt=1,
+        )
+        bus.publish(Message(envelope=env, payload=alert.as_dict()))
+    except Exception:  # noqa: BLE001 — informational nudge; must not disrupt ack loop
+        pass
 
 
 def publish_event(
@@ -237,12 +278,13 @@ def publish_event(
         )
 
     received: set[str] = set()
+    rejected: dict[str, str] = {}  # accepted_by → reason
     consumer = consumer_name or f"opsctl.{os.getpid()}"
     group = f"opsctl.ack.{request_id}"
     bus.ensure_group(MAINT_ACK_TOPIC, group)
     deadline = time.monotonic() + (cfg.opsctl_ack_timeout_ms / 1000.0)
 
-    while time.monotonic() < deadline and received != expected:
+    while time.monotonic() < deadline and (received | rejected.keys()) != expected:
         # Read in small batches so a noisy ack stream does not starve
         # the deadline check. block_ms=0 → InMemoryBus returns
         # immediately; RedisStreamsBus would honour the value.
@@ -259,9 +301,36 @@ def publish_event(
                 bus.ack(MAINT_ACK_TOPIC, group, d.handle)
                 continue
             accepted_by = payload.get("accepted_by")
+            # §8.14.6 — legacy-schema nudge: emit sec.alert.v1 once per
+            # accepted_by per process lifetime when schema_version < 2.
+            if (
+                isinstance(accepted_by, str)
+                and int(payload.get("schema_version", 1)) < 2
+                and accepted_by not in _LEGACY_SCHEMA_NOTIFIED
+            ):
+                _LEGACY_SCHEMA_NOTIFIED.add(accepted_by)
+                _emit_legacy_schema_alert(bus, accepted_by)
             if isinstance(accepted_by, str) and accepted_by in expected:
-                received.add(accepted_by)
+                if payload.get("accepted") is False:
+                    rejected[accepted_by] = str(payload.get("reason", ""))
+                else:
+                    received.add(accepted_by)
             bus.ack(MAINT_ACK_TOPIC, group, d.handle)
+
+    # Rejection acks surface as a distinct exit code rather than a timeout.
+    # requires_resume_first maps to ExitCode.REQUIRES_RESUME_FIRST (7).
+    if rejected:
+        rejecting = sorted(
+            k for k, r in rejected.items() if r == "requires_resume_first"
+        )
+        if rejecting:
+            return PublishResult(
+                exit_code=ExitCode.REQUIRES_RESUME_FIRST,
+                request_id=request_id,
+                expected_acks=expected,
+                received_acks=frozenset(received),
+                note=f"requires_resume_first from: {','.join(rejecting)}",
+            )
 
     if received == expected:
         return PublishResult(
@@ -294,6 +363,7 @@ __all__ = [
     "MAINT_EVENT_TOPIC",
     "OPS_CONSOLE_PRODUCER",
     "PublishResult",
+    "_LEGACY_SCHEMA_NOTIFIED",
     "build_envelope",
     "publish_event",
 ]

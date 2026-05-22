@@ -2,16 +2,83 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/maint.event.v1/dlq_dropped",
   "title": "maint.event.v1{kind=dlq_dropped}",
-  "description": "Phase 8 §8.5 — notification emitted by maint.dlq.v1 when a replay request is refused for a non-deny / non-escalation reason (rate-limited, malformed, etc.). Operator surface for diagnostic visibility distinct from `dlq_escalated` (which is request-level) and `dlq_topic_disabled_drained` (which is topic-level).",
+  "description": "Phase 8 §8.5 / §8.15.9 — notification emitted by maint.dlq.v1 when a replay request is refused for a non-deny / non-escalation reason (rate-limited, malformed, etc.) OR when an operator explicitly drops a DLQ entry via ops.dlq-replay --drop (reason=operator_drop). Operator surface for diagnostic visibility distinct from `dlq_escalated` (request-level) and `dlq_topic_disabled_drained` (topic-level).",
   "type": "object",
-  "required": ["kind", "target", "produced_at", "reason"],
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "produced_at",
+    "reason"
+  ],
   "properties": {
-    "kind":        { "const": "dlq_dropped" },
-    "target":      { "type": "string", "minLength": 1 },
-    "produced_at": { "type": "string" },
-    "reason":      { "type": "string", "enum": ["rate_limited", "backoff_dedup", "malformed_payload", "topic_frozen"] },
-    "request_id":  { "type": "string", "description": "Originating operator request_id (if any)." },
-    "scheduler":   { "type": "string", "enum": ["operator", "round_robin"], "description": "Phase 8 §8.5 C1: emitter context." }
+    "kind": {
+      "const": "dlq_dropped"
+    },
+    "kind_schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The DLQ topic the entry was dropped from (e.g. predict.vote.dlq)."
+    },
+    "produced_at": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "rate_limited",
+        "backoff_dedup",
+        "malformed_payload",
+        "topic_frozen",
+        "operator_drop"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Originating operator request_id (if any)."
+    },
+    "scheduler": {
+      "type": "string",
+      "enum": [
+        "operator",
+        "round_robin"
+      ],
+      "description": "Phase 8 §8.5 C1: emitter context."
+    },
+    "topic": {
+      "type": "string",
+      "description": "Phase 8 §8.15.9: origin topic (the non-.dlq topic the entry originated from). Present when reason=operator_drop."
+    },
+    "dlq_entry_id": {
+      "type": "string",
+      "description": "Phase 8 §8.15.9: stable identifier of the DLQ entry that was dropped. Present when reason=operator_drop."
+    },
+    "original_request_id": {
+      "type": "string",
+      "description": "Phase 8 §8.15.9: request_id of the envelope that originally failed and landed in the DLQ. Present when reason=operator_drop."
+    },
+    "original_envelope_summary": {
+      "type": "object",
+      "description": "Phase 8 §8.15.9 / §8.15.5: operator-supplied §8.15.5-capped summary of the original envelope. NOT the full envelope (which already lives in the DLQ). Present when reason=operator_drop.",
+      "properties": {
+        "topic": { "type": "string" },
+        "producer": { "type": "string" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "last_error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "dropped_by": {
+      "type": "string",
+      "description": "Phase 8 §8.15.9: operator key fingerprint / identity that initiated the drop. Present when reason=operator_drop."
+    },
+    "drop_reason": {
+      "type": "string",
+      "description": "Phase 8 §8.15.9: operator-supplied free-text reason for the explicit drop. Present when reason=operator_drop."
+    }
   },
   "additionalProperties": false
 }

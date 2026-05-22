@@ -110,6 +110,10 @@ class _StubCfg:
     swarm_dlq_pg_retention_days: int = 14
     maint_audit_retention_days: int = 365
     maint_runtime: str = "none"
+    maint_backup_max_version_gap: int = 5
+    # §8.14.9 nice-level + ionice knobs
+    maint_backup_pg_dump_nice_level: int = 10
+    maint_backup_pg_dump_ionice: bool = True
 
 
 def test_wiring_returns_shim_when_dsn_empty() -> None:
@@ -229,6 +233,8 @@ def test_dump_argv_includes_exclude_quarantine_data(tmp_path: Path) -> None:
         runner=runner,
         pg_dump_binary="pg_dump",
         age_binary="age",
+        nice_level=0,
+        ionice_enabled=False,
     )
     ex.dump(fire_window_id="w1", dry_run=False)
     pg_call = next(c for c in runner.calls if os.path.basename(c[0]) == "pg_dump")
@@ -269,6 +275,8 @@ def test_dump_argv_omits_exclude_when_disabled(tmp_path: Path) -> None:
         pg_dump_binary="pg_dump",
         age_binary="age",
         exclude_quarantine_data=False,
+        nice_level=0,
+        ionice_enabled=False,
     )
     ex.dump(fire_window_id="w2", dry_run=False)
     pg_call = next(c for c in runner.calls if os.path.basename(c[0]) == "pg_dump")
