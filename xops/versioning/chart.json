@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.4.1",
-    "build": 159,
+    "build": 163,
     "released": null
   },
   "components": {
@@ -22,14 +22,14 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.35.0",
+      "version": "3.37.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-25T09:42:18+00:00"
+      "last_changed": "2026-05-25T10:25:07+00:00"
     },
     "docs": {
-      "version": "1.68.0",
+      "version": "1.68.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-25T10:00:48+00:00"
+      "last_changed": "2026-05-25T10:25:07+00:00"
     },
     "infra_mock": {
       "version": "1.4.5",
@@ -6413,6 +6413,42 @@
       "from": "1.67.0",
       "to": "1.68.0",
       "build": 159
+    },
+    {
+      "timestamp": "2026-05-25T10:17:56+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "weekly rate-limit fallback to auto model + new model options",
+      "from": "3.35.0",
+      "to": "3.36.0",
+      "build": 160
+    },
+    {
+      "timestamp": "2026-05-25T10:17:56+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "orchestrate-ci guide: model table + weekly cap + resume-still-blocked behaviour",
+      "from": "1.68.0",
+      "to": "1.68.1",
+      "build": 161
+    },
+    {
+      "timestamp": "2026-05-25T10:25:07+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "resume scheduler: clock-skew grace + wake-attempts retry budget",
+      "from": "3.36.0",
+      "to": "3.37.0",
+      "build": 162
+    },
+    {
+      "timestamp": "2026-05-25T10:25:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "orchestrate-ci: document grace buffer + wake_attempts",
+      "from": "1.68.1",
+      "to": "1.68.2",
+      "build": 163
     }
   ]
 }

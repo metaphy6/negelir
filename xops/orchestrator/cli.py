@@ -261,18 +261,32 @@ def cmd_resume_save(tree: RoadmapTree, args: argparse.Namespace) -> int:
         args.retry_after or None,
         retry_count=args.retry_count,
     )
+    # Weekly-cap fallback: if the upstream is telling us to wait >= 24h,
+    # the next run won't get the originally-picked model either — switch
+    # to ``auto`` so the resume can keep going via provider routing.
+    model = args.model
+    reason = args.reason
+    if ci_resume.is_weekly_rate_limit(args.retry_after or None):
+        if model != ci_resume.FALLBACK_MODEL_ON_WEEKLY_LIMIT:
+            reason = (reason + " | " if reason else "") + (
+                f"weekly cap detected (retry_after={args.retry_after}); "
+                f"switching model {model!r} -> "
+                f"{ci_resume.FALLBACK_MODEL_ON_WEEKLY_LIMIT!r}"
+            )
+            model = ci_resume.FALLBACK_MODEL_ON_WEEKLY_LIMIT
     cursor = ci_resume.ResumeCursor(
         run_id=args.run_id,
         workflow_id=args.workflow_id,
         include=_split_csv(args.include),
         exclude=_split_csv(args.exclude),
-        model=args.model,
+        model=model,
         branch=args.branch,
         last_completed_phase=args.last_completed_phase,
         next_phase=args.next_phase,
         not_before=not_before,
-        reason=args.reason,
+        reason=reason,
         retry_count=args.retry_count,
+        wake_attempts=args.wake_attempts,
     )
     try:
         path = ci_resume.save_cursor(cursor)
@@ -393,6 +407,9 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="HTTP Retry-After value (seconds-as-int or HTTP-date)")
     s.add_argument("--reason", default="")
     s.add_argument("--retry-count", type=int, default=0)
+    s.add_argument("--wake-attempts", type=int, default=0,
+                   help="how many times the resume scheduler has woken this cursor; "
+                        "separate from --retry-count, capped at MAX_WAKE_ATTEMPTS")
 
     s = sub.add_parser("resume-list", parents=[json_parent],
                        help="list all resume cursors with their not_before times")

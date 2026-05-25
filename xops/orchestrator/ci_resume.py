@@ -93,6 +93,7 @@ class ResumeCursor:
     not_before: float = 0.0
     reason: str = ""
     retry_count: int = 0
+    wake_attempts: int = 0
     created_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict:
@@ -128,6 +129,12 @@ def save_cursor(cursor: ResumeCursor) -> Path:
         raise RuntimeError(
             f"resume cursor for run {cursor.run_id!r} exceeded MAX_RETRIES "
             f"({MAX_RETRIES}); refusing to arm another retry — escalate to human"
+        )
+    if cursor.wake_attempts > MAX_WAKE_ATTEMPTS:
+        raise RuntimeError(
+            f"resume cursor for run {cursor.run_id!r} exceeded MAX_WAKE_ATTEMPTS "
+            f"({MAX_WAKE_ATTEMPTS}); wake-up retry budget exhausted — likely a "
+            f"persistent clock skew or scheduler bug, escalate to human"
         )
     if not cursor.run_id:
         raise ValueError("cursor.run_id is required")
@@ -192,6 +199,57 @@ def drop_cursor(path: Path) -> None:
 DEFAULT_BACKOFF_SECONDS = 30 * 60         # 30 minutes
 MAX_BACKOFF_SECONDS = 6 * 60 * 60         # 6 hours (matches GH Actions job cap)
 
+# Grace buffer added on top of every computed ``not_before`` so the
+# scheduler doesn't wake the cursor *just* before the upstream window
+# actually clears. Absorbs clock drift between the GH Actions runner,
+# our scheduler, and the upstream provider (Copilot / Anthropic /
+# OpenAI). 2 minutes is small enough to be invisible against a 30-min
+# baseline, large enough to swallow normal NTP skew.
+CLOCK_SKEW_GRACE_SECONDS = 120            # 2 minutes
+
+# Bounded "wake-up" retries, separate from upstream ``retry_count``.
+# Use cases: scheduler fires, dispatches the workflow, the runner
+# boots, the upstream still says rate-limited (clock skew, transient
+# 503, etc.) — we count that as a *wake* failure rather than a fresh
+# upstream retry. Keeps real per-upstream retries (``MAX_RETRIES``)
+# uninflated.
+MAX_WAKE_ATTEMPTS = 5
+
+# Above this threshold we treat the rate-limit as a *weekly* cap from
+# upstream (Copilot, Anthropic, OpenAI all advertise multi-day windows
+# on hard caps). When that fires, the workflow rewrites the cursor's
+# model to ``auto`` so the resume run can keep going via whatever
+# capacity the provider is still willing to route us to.
+WEEKLY_LIMIT_THRESHOLD_SECONDS = 24 * 60 * 60   # 24h
+FALLBACK_MODEL_ON_WEEKLY_LIMIT = "auto"
+
+
+def is_weekly_rate_limit(retry_after_header: Optional[str]) -> bool:
+    """Return True if ``Retry-After`` indicates a multi-day cap.
+
+    Heuristic: any explicit integer-seconds value >= 24h, or an
+    HTTP-date that resolves >= 24h in the future, is treated as a
+    weekly cap. Below that we assume a short-term per-minute / hourly
+    bucket that will clear on its own.
+    """
+    if not retry_after_header:
+        return False
+    raw = retry_after_header.strip()
+    if raw.isdigit():
+        return int(raw) >= WEEKLY_LIMIT_THRESHOLD_SECONDS
+    try:
+        from email.utils import parsedate_to_datetime
+        import datetime as _dt
+        when = parsedate_to_datetime(raw)
+        if when is None:
+            return False
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=_dt.timezone.utc)
+        delta = (when - _dt.datetime.now(tz=_dt.timezone.utc)).total_seconds()
+        return delta >= WEEKLY_LIMIT_THRESHOLD_SECONDS
+    except (TypeError, ValueError):
+        return False
+
 
 def compute_not_before(
     retry_after_header: Optional[str],
@@ -206,13 +264,18 @@ def compute_not_before(
     we fall back to an exponential backoff capped at
     ``MAX_BACKOFF_SECONDS``. We never return a value beyond that cap;
     the safety net is `MAX_RETRIES` in ``save_cursor``.
+
+    ``CLOCK_SKEW_GRACE_SECONDS`` is always added on top so the resume
+    scheduler doesn't fire the very second the upstream window is
+    expected to clear. Total wait is still bounded by
+    ``MAX_BACKOFF_SECONDS + CLOCK_SKEW_GRACE_SECONDS``.
     """
     base = now if now is not None else time.time()
 
     # 1) Integer-seconds form.
     if retry_after_header and retry_after_header.strip().isdigit():
         delta = min(int(retry_after_header.strip()), MAX_BACKOFF_SECONDS)
-        return base + max(delta, 60)        # never < 1 minute
+        return base + max(delta, 60) + CLOCK_SKEW_GRACE_SECONDS
 
     # 2) HTTP-date form.
     if retry_after_header:
@@ -220,20 +283,24 @@ def compute_not_before(
             from email.utils import parsedate_to_datetime
             when = parsedate_to_datetime(retry_after_header).timestamp()
             if when - base > MAX_BACKOFF_SECONDS:
-                return base + MAX_BACKOFF_SECONDS
-            return max(when, base + 60)
+                return base + MAX_BACKOFF_SECONDS + CLOCK_SKEW_GRACE_SECONDS
+            return max(when, base + 60) + CLOCK_SKEW_GRACE_SECONDS
         except (TypeError, ValueError):
             pass
 
     # 3) Exponential backoff fallback.
     delta = min(DEFAULT_BACKOFF_SECONDS * (2 ** retry_count), MAX_BACKOFF_SECONDS)
-    return base + delta
+    return base + delta + CLOCK_SKEW_GRACE_SECONDS
 
 
 __all__ = [
     "ResumeCursor",
     "CURSOR_SCHEMA_VERSION",
     "MAX_RETRIES",
+    "MAX_WAKE_ATTEMPTS",
+    "CLOCK_SKEW_GRACE_SECONDS",
+    "WEEKLY_LIMIT_THRESHOLD_SECONDS",
+    "FALLBACK_MODEL_ON_WEEKLY_LIMIT",
     "RESUME_DIR",
     "cursor_path",
     "save_cursor",
@@ -242,4 +309,5 @@ __all__ = [
     "list_pending",
     "drop_cursor",
     "compute_not_before",
+    "is_weekly_rate_limit",
 ]

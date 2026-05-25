@@ -25,10 +25,12 @@ set -euo pipefail
 : "${AGENT_BACKEND:=copilot-issue}"
 
 ALLOWED_MODELS=(
+  auto
   claude-sonnet-4-5
   claude-opus-4-5
   gpt-5
   gpt-5-mini
+  gpt-5-codex
 )
 
 model_ok=0

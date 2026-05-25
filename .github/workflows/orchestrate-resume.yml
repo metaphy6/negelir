@@ -67,7 +67,13 @@ jobs:
               include = ",".join(c.get("include", []))
               exclude = ",".join(c.get("exclude", []))
               model = c.get("model", "claude-sonnet-4-5")
-              print(f"re-dispatch: run_id={run_id} include={include!r} model={model}")
+              # Forward an incremented wake-attempts counter so that if
+              # the upstream still says rate-limited (clock skew /
+              # transient 503), the new cursor accounts for it without
+              # inflating the real per-upstream retry_count.
+              wake_attempts = int(c.get("wake_attempts", 0)) + 1
+              print(f"re-dispatch: run_id={run_id} include={include!r} "
+                    f"model={model} wake_attempts={wake_attempts}")
               subprocess.run([
                   "gh", "workflow", "run", "orchestrate-roadmap.yml",
                   "--ref", "main",
@@ -75,6 +81,7 @@ jobs:
                   "-f", f"exclude={exclude}",
                   "-f", f"model={model}",
                   "-f", f"resume_run_id={run_id}",
+                  "-f", f"resume_wake_attempts={wake_attempts}",
               ], check=True)
               subprocess.run([
                   "python3", "-m", "xops.orchestrator.cli",

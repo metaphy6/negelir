@@ -28,10 +28,12 @@ on:
         type: choice
         default: claude-sonnet-4-5
         options:
+          - auto
           - claude-sonnet-4-5
           - claude-opus-4-5
           - gpt-5
           - gpt-5-mini
+          - gpt-5-codex
       agent_backend:
         description: "Which backend run_phase_agent.sh should call."
         type: choice
@@ -43,6 +45,10 @@ on:
         description: "If set, load this resume cursor instead of starting fresh."
         type: string
         default: ""
+      resume_wake_attempts:
+        description: "Wake-attempt counter forwarded by orchestrate-resume.yml (clock-skew retry budget)."
+        type: string
+        default: "0"
 
 permissions:
   contents: write
@@ -182,7 +188,8 @@ jobs:
                   --next-phase "$NEXT" \
                   --retry-after "${RETRY_AFTER:-1800}" \
                   --reason "rate-limit on phase $PHASE" \
-                  --retry-count "${RETRY_COUNT:-0}"
+                  --retry-count "${RETRY_COUNT:-0}" \
+                  --wake-attempts "${{ inputs.resume_wake_attempts || '0' }}"
                 RC_FINAL=10
                 break
                 ;;
