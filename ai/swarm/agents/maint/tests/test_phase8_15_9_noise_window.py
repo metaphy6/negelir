@@ -134,6 +134,11 @@ def test_vram_budget_exceeded_fires_despite_noise_window(monkeypatch) -> None:
         vram_used_mb=7800,   # 7800 used + 512 headroom > 8192 total
         vram_per_replica_mb=2000,
     )
+    # §8.16.8: register a per-target footprint hint so the VRAM budget
+    # arithmetic uses the correct per-replica draw (not predictor_max_vram_mb).
+    agent.register_model_vram_hint(
+        "predictor.elo", vram_footprint_mb=2000.0, device_class="gpu_inference"
+    )
     # Put the clock inside the noise window (hour=3).
     _patch_now(monkeypatch, datetime(2025, 4, 7, 3, 30, tzinfo=timezone.utc))
 

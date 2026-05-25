@@ -226,3 +226,114 @@ authz file for the requested subcommand it:
   stub per new kind.
 * **Chaos coverage:** `P12-8-Z` (`chaos-revoked-key-replay`) in
   [`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).
+
+---
+
+## 8. key_id derivation and self-verification (§8.16.14)
+
+### 8.1 Why key_id exists
+
+`opsctl_operators.json` maps `key_id → {email, added_at, revoked_at}`.
+The `key_id` lets consumers validate an envelope's provenance without
+ever reading the operator's private key. Two operators reviewing each
+other's PRs can **mechanically confirm** the mapping is correct — no
+Slack screenshots or trust-based review.
+
+### 8.2 Canonical derivation
+
+```
+key_id = sha256(f"negelir-opsctl-key-v1|{operator_email}|{base64(key_bytes)}")[:16]
+```
+
+(Result is a 16-character lowercase hex string.)
+
+Three invariants this derivation provides:
+
+1. **Email binding** — a key holder cannot impersonate another operator
+   by re-using their `key_id`.  Changing the email in the derivation
+   input changes the `key_id`.
+2. **Key-bytes binding** — collision attacks require finding two keys
+   with the same 64-bit SHA truncation for the same email. Infeasible
+   in practice.
+3. **Domain separator** (`negelir-opsctl-key-v1`) — future derivation
+   schemes roll forward (e.g. `-v2`) without colliding with v1 ids.
+
+The single implementation is `xops/maint/key_id.py::derive(email, key_bytes) -> str`.
+An AST scan asserts this is the **only** place in the codebase that
+derives a `key_id`; ad-hoc derivations fail CI.
+
+### 8.3 Bootstrapping a new operator key
+
+`make ops.bootstrap-key` generates 32 cryptographically random bytes,
+writes them to `~/.negelir/opsctl_key` (mode 0600), computes the
+canonical `key_id`, and prints the line the operator copies into their
+PR:
+
+```json
+"<key_id>": {"email": "<operator-email>", "added_at": "<iso>", "revoked_at": null}
+```
+
+Steps:
+
+1. Run `make ops.bootstrap-key` on the operator's workstation.
+2. Copy the printed JSON line into `infra/maint/opsctl_operators.json`.
+3. Open a PR.  A second reviewer runs `make ops.verify-key-id OPERATOR=<email>`
+   on a machine where they have imported the operator's **public key**
+   (not the private bytes) — the verify command computes the expected
+   `key_id` from the public material and asserts it matches the operators
+   file.
+
+### 8.4 Self-verification after pulling main
+
+After a `make git` (or equivalent) that touched `opsctl_operators.json`,
+each operator should confirm their own entry is intact:
+
+```bash
+make ops.verify-key-id OPERATOR=<your-email>
+```
+
+The command:
+1. Reads the local key at `~/.negelir/opsctl_key` (or `OPSCTL_KEY_FILE`).
+2. Computes `key_id` via `xops/maint/key_id.py::derive`.
+3. Looks up the entry for `<your-email>` in `infra/maint/opsctl_operators.json`.
+4. Asserts the derived `key_id` matches the stored one.
+
+On success: exits 0, prints `key_id OK: <key_id>`.
+On mismatch: exits with `key_id_drift` (see §8.5 below).
+
+### 8.5 `key_id_drift` — diagnosis and recovery
+
+`key_id_drift` means the locally derived `key_id` does not match
+`opsctl_operators.json`.  Causes:
+
+| Cause | Diagnosis | Fix |
+|---|---|---|
+| Operators file updated in a merge without regenerating the local key | Derived `key_id` != stored `key_id` for your email | Re-run `make ops.bootstrap-key`, update operators file, reopen PR. |
+| Wrong email passed to `make ops.verify-key-id` | Lookup fails or finds a different entry | Re-run with your exact email (case-sensitive). |
+| Local key file corrupted or replaced | `key_id` derived from wrong bytes | Re-generate the key; update operators file. Treat old key as revoked (§7.1). |
+| Entry manually edited in operators file | Stored `key_id` does not match the key bytes | Restore the entry from the correct derivation output. |
+
+The `key_id_drift` alert also fires on the `sec.alert.v1` bus when the
+**consumer** detects that an incoming envelope's signer key yields a
+different `key_id` than the one recorded for that operator in the active
+operators file (e.g. after a key rotation where the operators file was
+not yet updated).
+
+### 8.6 Config knobs
+
+| Knob | Default | Purpose |
+|---|---|---|
+| `OPSCTL_KEY_FILE` | `infra/maint/opsctl_key.bin` | Path to the 32-byte binary operator key (host) or `~/.negelir/opsctl_key` (workstation). |
+| `OPSCTL_OPERATORS_FILE` | `infra/maint/opsctl_operators.json` | Operators registry read by consumers and by `make ops.verify-key-id`. |
+
+### 8.7 Cross-references
+
+* **Derivation function:** [`xops/maint/key_id.py`](../../xops/maint/key_id.py).
+* **CLI commands:** `make ops.bootstrap-key`, `make ops.verify-key-id OPERATOR=<email>`.
+* **Alert kind:** `key_id_drift` in `KNOWN_SEC_ALERT_KINDS`
+  ([`ai/swarm/agents/payloads.py`](../../ai/swarm/agents/payloads.py)).
+* **AST scan:** boundary test asserts `key_id.py::derive` is the single
+  derivation site.
+* **Chaos coverage:** `P12-8-AF` (TBD) in
+  [`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).
+

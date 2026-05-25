@@ -52,6 +52,7 @@ KIND_SCHEMA_VERSIONS: dict[str, int] = {
     "backup_model_cold_verify_completed": 1,
     "backup_model_cold_verify_failed": 1,
     "backup_model_lineage_drift": 1,
+    "backup_model_lineage_legacy": 1,
     "backup_model_offsite_failed": 1,
     "backup_model_uploaded": 1,
     "backup_now": 1,

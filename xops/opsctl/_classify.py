@@ -106,22 +106,26 @@ def classify(req: ClassifyRequest) -> Action:
 
 # ── Exit-code → human label mapping ──────────────────────────────────────
 # Mirrors ExitCode in _exit_codes.py. Used by runbooks, the dead-man's-switch
-# alerter, and boundary tests to assert the range 5..9 is fully covered.
+# alerter, and boundary tests to assert the range 5..10 is fully covered.
 _EXIT_CODE_LABELS: dict[int, str] = {
     5: "no_consumer_for_kind",
     6: "unknown_kind",
     7: "requires_resume_first",
     8: "spool_flush_already_running",
     9: "opsctl_key_revoked",
+    # Phase 8 §8.16.16 — operator passed --prune-only to ops.backup-now
+    # but the backup state-machine forbids prune-only runs in the current
+    # state (e.g. no prior full backup exists for the target store).
+    10: "prune_only_forbidden",
 }
 
 
 def exit_code_to_label(code: int) -> str | None:
     """Return the stable label string for an opsctl exit code, or ``None``
-    if the code is not in the operator-recoverable range (5..9).
+    if the code is not in the operator-recoverable range (5..10).
 
     This is the machine-readable counterpart to the runbook; CI tests
-    enumerate :data:`_EXIT_CODE_LABELS` to assert a continuous 5..9 range.
+    enumerate :data:`_EXIT_CODE_LABELS` to assert a continuous 5..10 range.
     """
     return _EXIT_CODE_LABELS.get(code)
 

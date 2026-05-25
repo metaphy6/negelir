@@ -137,6 +137,12 @@ class TestVramBudgetRefusal:
             vram_per_replica_mb=4000.0,
             observed_at_ns=_T0_NS,
         )
+        # §8.16.8: per-target footprint hint is required for the VRAM
+        # budget arithmetic; without it the fallback uses predictor_max_vram_mb
+        # (1024 MB) which would NOT trigger the budget exceeded condition here.
+        agent.register_model_vram_hint(
+            _TARGET, vram_footprint_mb=4000.0, device_class="gpu_inference"
+        )
 
         msgs = agent.tick({_TARGET: _SCALE_UP_SIG})
 

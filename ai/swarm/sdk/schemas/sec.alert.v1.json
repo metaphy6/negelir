@@ -13,6 +13,7 @@
     "produced_at"
   ],
   "properties": {
+    "schema_version": { "type": "integer", "enum": [1, 2], "description": "Payload schema version. 1 = pre-§8.16.16 (no event_correlation_id field). 2 = §8.16.16+ (event_correlation_id added as an optional nullable join key for dual-emit kinds). When absent, consumers treat the payload as version 1 for backward compatibility." },
     "alert_id":     { "type": "string", "minLength": 1 },
     "kind":         { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "x-enum-open": true, "description": "Open enum (ROADMAP §7.4). The hand-rolled validator in `ai/swarm/sdk/schemas/__init__.py` checks pattern only; the producer-side AST scan in `test_open_enum_producers_emit_only_known_kinds` enforces that emission sites use only `KNOWN_SEC_ALERT_KINDS`." },
     "severity":     { "type": "string", "enum": ["info", "warn", "error", "critical"] },

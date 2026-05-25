@@ -254,7 +254,9 @@ def test_vram_budget_gauge_refreshed_by_check(monkeypatch) -> None:
     )
     monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 2048, raising=False)
     # Direct call so we don't depend on the tick path.
-    assert agent._check_vram_budget("predictor.elo", 2) is None
+    # _check_vram_budget returns (reason, unknown_footprint_seen) since §8.16.8.
+    throttle_reason, _unknown = agent._check_vram_budget("predictor.elo", 2)
+    assert throttle_reason is None
     assert agent._m_vram_budget.value(("predictor.elo",)) == 8192 - 2048
 
 

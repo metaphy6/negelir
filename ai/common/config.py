@@ -773,6 +773,19 @@ class Config:
     # scaler computes its budget. Stops the scaler from packing pods
     # so densely that any one pod's transient spike OOMs the host.
     maint_scaler_vram_headroom_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB", "1024")))
+    # Phase 8 §8.16.8 — VRAM-budget pessimism factor for unknown-footprint
+    # agents. When GPU is the active device and the fraction of VRAM already
+    # committed exceeds this value, scale-up for an agent that has never
+    # emitted model_registered is refused with reason=vram_footprint_unknown.
+    # Below the threshold the unknown agent is admitted on the legacy
+    # predictor_max_vram_mb default.
+    maint_scaler_vram_pessimistic_threshold_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCALER_VRAM_PESSIMISTIC_THRESHOLD_PCT", "0.6")))
+    # Phase 8 §8.16.8 — CPU-class scale-up budget: fraction of total detected
+    # cores per host that CPU-class (device_class=cpu) replicas may collectively
+    # consume. Each CPU-class replica counts as 1 core. Scale-up that would push
+    # aggregate CPU-class replicas past budget×cores is refused.
+    # No-op pre-Phase 14 (single-host compose mode); active under K8s.
+    maint_scaler_cpu_budget_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_MAINT_SCALER_CPU_BUDGET_PCT", "0.8")))
     # Phase 8 §8.2 A1 — scale-down grace: number of consecutive
     # decision windows whose smoothed signals must remain below the
     # scale-down threshold before the supervisor emits a scale-down.
@@ -1845,6 +1858,8 @@ class Config:
         _bounded("maint_scaler_min_decision_interval_s", self.maint_scaler_min_decision_interval_s, 0.0, 86_400.0)
         _bounded("maint_scaler_runtime_timeout_s", self.maint_scaler_runtime_timeout_s, 1.0, 3_600.0)
         _bounded("maint_scaler_vram_headroom_mb", self.maint_scaler_vram_headroom_mb, 0, 1_048_576)
+        _bounded("maint_scaler_vram_pessimistic_threshold_pct", self.maint_scaler_vram_pessimistic_threshold_pct, 0.0, 1.0)
+        _bounded("maint_scaler_cpu_budget_pct", self.maint_scaler_cpu_budget_pct, 0.0, 1.0)
         _bounded("maint_scaler_scale_down_grace_windows", self.maint_scaler_scale_down_grace_windows, 0, 1_000)
         _bounded("maint_scaler_signal_window_samples", self.maint_scaler_signal_window_samples, 0, 10_000)
         _bounded("maint_scaler_target_load_per_replica", self.maint_scaler_target_load_per_replica, 0, 10_000_000)

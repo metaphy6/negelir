@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from swarm.agents.maint.scaler import MaintScaler, NoopController
-from swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT, MODEL_TRAINED, SEC_ALERT
 from swarm.sdk.leader import SingleProcessLeader
 from swarm.sdk.types import Envelope, Message
 
@@ -318,11 +318,21 @@ def test_global_max_replicas_throttles_aggregate(monkeypatch) -> None:
 
 def test_vram_budget_exceeded_blocks_scale_up(monkeypatch) -> None:
     """A device probe that reports near-full VRAM must throttle the
-    scale-up with ``vram_budget_exceeded``."""
+    scale-up with ``vram_budget_exceeded``.
+
+    §8.16.8 Fallback policy: the registered footprint hint (not the
+    device-probe's ``vram_per_replica_mb``) drives the projection.
+    """
     from common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
     monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 512, raising=False)
     agent = MaintScaler()
+    # Register a 2000 MB footprint so the projection is exact (§8.16.8).
+    agent.register_model_vram_hint(
+        "predictor.elo",
+        vram_footprint_mb=2000,
+        device_class="gpu_inference",
+    )
     agent.update_device_probe(
         "predictor.elo",
         vram_total_mb=8192,
@@ -483,6 +493,226 @@ def test_phase8_16_8_unknown_footprint_plentiful_budget_admits_with_info_alert(
         and m.payload.get("kind") == "vram_footprint_unknown"
     ]
     assert len(info_alerts) == 1
+    assert info_alerts[0].get("severity") == "info"
+
+
+def _wrap_models_event(payload: dict) -> Message:
+    """Wrap a ``models.events.v1`` payload into a bus Message."""
+    env = Envelope(
+        message_id="me-1",
+        trace_id="me-trace-1",
+        topic=MODEL_TRAINED,
+        producer="trainer.v1",
+        created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        schema_version=1,
+        attempt=1,
+    )
+    return Message(envelope=env, payload=payload)
+
+
+def test_phase8_16_8_doctrine_bus_model_registered_updates_footprint_map(
+    monkeypatch,
+) -> None:
+    """§8.16.8 Doctrine: a ``models.events.v1{kind=model_registered}``
+    bus message arriving at ``handle()`` must populate the per-agent
+    footprint map and be used by the subsequent VRAM projection.
+
+    Scenario: budget = 8000MB, used = 5000MB.  Without the registration,
+    the global fallback (1024MB) would admit 1→2 (budget allows it).
+    WITH a 4000MB registration the projection is
+    5000 + 4000×2 − 4000×1 = 9000 > 8000 → refused.
+    This proves the bus path is wired end-to-end, not just the direct
+    ``register_model_vram_hint`` call.
+    """
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 16, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_global_max_replicas", 16, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_changes_per_window", 10, raising=False)
+    monkeypatch.setattr(cfg, "predictor_max_vram_mb", 1024, raising=False)
+
+    agent = MaintScaler()
+    agent.update_device_probe(
+        "pred.bus.large.v1",
+        vram_total_mb=8000,
+        vram_used_mb=5000,
+        vram_per_replica_mb=0,  # no probe-level hint — forces footprint path
+    )
+    agent._evict_and_get("pred.bus.large.v1").last_replicas = 1
+
+    # Send model_registered via the bus.
+    reg_msg = _wrap_models_event({
+        "kind": "model_registered",
+        "agent_id": "pred.bus.large.v1",
+        "version": "v2",
+        "vram_footprint_mb": 4000,
+        "device_class": "gpu_inference",
+    })
+    result = list(agent.handle(reg_msg))
+    assert result == [], "model_registered must produce no output messages"
+
+    # Verify footprint map is populated.
+    assert "pred.bus.large.v1" in agent._model_vram_hints
+    assert agent._model_vram_hints["pred.bus.large.v1"]["vram_footprint_mb"] == 4000.0
+
+    # Verify the per-version registry.
+    assert agent._footprint_versions["pred.bus.large.v1"]["v2"]["vram_footprint_mb"] == 4000.0
+
+    # Tick: budget 8000, used 5000, next=2 replicas, footprint 4000 each.
+    # Projection: (5000 - 4000×1) + 4000×2 = 1000 + 8000 = 9000 > 8000 → refused.
+    out = agent.tick(
+        {"pred.bus.large.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    throttled = [
+        m.payload for m in out if m.payload.get("kind") == "scale_throttled"
+    ]
+    assert any(p.get("reason") == "vram_budget_exceeded" for p in throttled), (
+        "expected vram_budget_exceeded after bus-registered 4000MB footprint"
+    )
+
+
+def test_phase8_16_8_doctrine_set_active_model_version(monkeypatch) -> None:
+    """§8.16.8 Doctrine: ``set_active_model_version`` switches the active
+    hint to a previously-registered version.
+
+    Register v1 (50MB) and v2 (4000MB) via bus; activate v1 via
+    ``set_active_model_version``; assert scale-up is admitted on the
+    50MB footprint despite the 4000MB v2 being registered.
+    """
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 16, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_global_max_replicas", 16, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_changes_per_window", 10, raising=False)
+
+    agent = MaintScaler()
+    agent.update_device_probe(
+        "pred.ver.v1",
+        vram_total_mb=8000,
+        vram_used_mb=1000,
+        vram_per_replica_mb=0,
+    )
+    agent._evict_and_get("pred.ver.v1").last_replicas = 1
+
+    # Register both versions via bus.
+    agent.handle(_wrap_models_event({
+        "kind": "model_registered",
+        "agent_id": "pred.ver.v1",
+        "version": "v1",
+        "vram_footprint_mb": 50,
+        "device_class": "gpu_inference",
+    }))
+    agent.handle(_wrap_models_event({
+        "kind": "model_registered",
+        "agent_id": "pred.ver.v1",
+        "version": "v2",
+        "vram_footprint_mb": 4000,
+        "device_class": "gpu_inference",
+    }))
+    # Latest registration (v2=4000MB) is now the active hint.
+    assert agent._model_vram_hints["pred.ver.v1"]["vram_footprint_mb"] == 4000.0
+
+    # Activate v1 (50MB) — simulates heartbeat saying "I'm running v1".
+    swapped = agent.set_active_model_version("pred.ver.v1", "v1")
+    assert swapped is True
+    assert agent._model_vram_hints["pred.ver.v1"]["vram_footprint_mb"] == 50.0
+
+    # Tick: with 50MB footprint and 7000MB remaining budget, 1→2 must admit.
+    out = agent.tick(
+        {"pred.ver.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    decisions = [m.payload for m in out if m.payload.get("kind") == "scale_decision"]
+    assert any(p.get("next") == 2 for p in decisions), (
+        "expected scale_decision next=2 after activating 50MB version"
+    )
+
+
+def test_phase8_16_8_fallback_probe_draw_not_used_when_no_hint(
+    monkeypatch,
+) -> None:
+    """§8.16.8 Fallback policy (adversarial): when no model_registered hint is
+    present, the device-probe's ``vram_per_replica_mb`` is NOT used as a silent
+    footprint estimate.
+
+    With a tight budget (used > threshold) the scaler must refuse with
+    ``vram_footprint_unknown``, NOT ``vram_budget_exceeded``.  The probe's
+    4000 MB per-replica field, if used, would produce a much larger
+    projection and a different throttle reason — this asserts it is ignored.
+    """
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6, raising=False)
+    monkeypatch.setattr(cfg, "predictor_max_vram_mb", 100, raising=False)
+
+    agent = MaintScaler()
+    # probe_draw=4000 present but NO model hint — tight budget triggers threshold.
+    agent.update_device_probe(
+        "pred.no.hint.tight.v1",
+        vram_total_mb=8000,
+        vram_used_mb=7000,  # > 0.6 × 8000 = 4800 → tight
+        vram_per_replica_mb=4000,  # must NOT be used as footprint estimate
+    )
+    agent._evict_and_get("pred.no.hint.tight.v1").last_replicas = 1
+
+    out = agent.tick(
+        {"pred.no.hint.tight.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    throttled = [m.payload for m in out if m.payload.get("kind") == "scale_throttled"]
+    reasons = {p.get("reason") for p in throttled}
+    assert "vram_footprint_unknown" in reasons, (
+        f"expected vram_footprint_unknown (probe_draw must be ignored), got {reasons}"
+    )
+    assert "vram_budget_exceeded" not in reasons
+
+
+def test_phase8_16_8_fallback_probe_draw_plentiful_emits_alert(
+    monkeypatch,
+) -> None:
+    """§8.16.8 Fallback policy: unknown footprint + probe_draw > 0 + plentiful
+    budget admits the scale-up AND still emits the one-shot info alert.
+
+    The probe's per-replica field must NOT suppress the vram_footprint_unknown
+    alert — the alert fires whenever model_registered has not been received.
+    """
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6, raising=False)
+    monkeypatch.setattr(cfg, "predictor_max_vram_mb", 100, raising=False)
+
+    agent = MaintScaler()
+    # Plentiful budget (1000 << 0.6 × 8000 = 4800); probe_draw present but NO hint.
+    agent.update_device_probe(
+        "pred.no.hint.loose.v1",
+        vram_total_mb=8000,
+        vram_used_mb=1000,
+        vram_per_replica_mb=500,  # must NOT suppress the vram_footprint_unknown alert
+    )
+    agent._evict_and_get("pred.no.hint.loose.v1").last_replicas = 1
+
+    out = agent.tick(
+        {"pred.no.hint.loose.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    decisions = [m.payload for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions, "expected scale_decision under plentiful budget"
+
+    info_alerts = [
+        m.payload
+        for m in out
+        if m.envelope.topic == SEC_ALERT
+        and m.payload.get("kind") == "vram_footprint_unknown"
+    ]
+    assert len(info_alerts) == 1, (
+        "expected exactly one vram_footprint_unknown info alert even when probe_draw > 0"
+    )
     assert info_alerts[0].get("severity") == "info"
 
 

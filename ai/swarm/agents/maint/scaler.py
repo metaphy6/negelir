@@ -33,6 +33,24 @@ Decision discipline (binding):
   process's active window.  This is an accepted v1 limitation;
   the Postgres audit ledger at Phase 9 absorbs collisions via
   ``(agent, decision_window_id)`` dedup on ingest.
+* VRAM footprint arithmetic (§8.16.8 gap acknowledgement): the
+  original §8.2 doctrine projected scale-up cost as
+  ``(next - prev) × cfg.predictor_max_vram_mb`` (default 1024 MB) for
+  every target agent, regardless of the actual model loaded. This is
+  wrong in both directions: XGBoost / LightGBM predictors draw ~50 MB
+  so the global cap refuses scale-ups that would fit; a 1B-parameter
+  LLM draws ~4 000 MB so the global cap admits scale-ups that OOM.
+  The corrected arithmetic in :meth:`_check_vram_budget` uses a
+  per-target hint registered via :meth:`register_model_vram_hint` (or
+  via a ``models.events.v1{kind=model_registered}`` bus event handled
+  by :meth:`_handle_models_event`). Targets without a registered hint fall back to
+  ``cfg.predictor_max_vram_mb`` **and** emit a one-shot
+  ``sec.alert.v1{kind=vram_footprint_unknown, severity=info}``; when
+  total used VRAM already exceeds
+  ``cfg.maint_scaler_vram_pessimistic_threshold_pct × budget`` (default
+  0.6) the scale-up is refused outright with
+  ``scale_throttled{reason=vram_footprint_unknown}`` so an unknown
+  footprint cannot silently OOM a nearly-full device.
 """
 from __future__ import annotations
 
@@ -51,7 +69,7 @@ from ...sdk.clock import window_anchor_ns
 from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic
 from ..payloads import MaintAck
-from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from ..topics import MAINT_ACK, MAINT_EVENT, MODEL_TRAINED, SEC_ALERT
 from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 from ._liveness import LivenessMixin
 from ._op_signature import gate_op_envelope
@@ -236,6 +254,10 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     # suppressed; emergency decisions (vram_budget_exceeded, manual_pin,
     # retrain_request_warmup, sec_rate_burst) bypass the check.
     "noise_window_active",
+    # Phase 8 §8.16.8 — cpu-class agent scale-up would push aggregate
+    # CPU-class replicas × 1 core above cfg.maint_scaler_cpu_budget_pct
+    # × detected_cores.  No-op pre-Phase 14 (single-host compose mode).
+    "cpu_budget_exceeded",
 })
 
 
@@ -467,7 +489,7 @@ class MaintScaler(LivenessMixin):
     """
 
     name = "maint.scaler.v1"
-    subscribes: tuple[Topic, ...] = (MAINT_EVENT, SEC_ALERT)
+    subscribes: tuple[Topic, ...] = (MAINT_EVENT, MODEL_TRAINED, SEC_ALERT)
     publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
@@ -521,6 +543,18 @@ class MaintScaler(LivenessMixin):
         # keyed by agent id. When present and device_class != "cpu",
         # the hint overrides the legacy probe draw estimate.
         self._model_vram_hints: dict[str, dict[str, float | str]] = {}
+        # Phase 8 §8.16.8 CPU-class — tracks the last applied replica
+        # count for every cpu-class agent so the CPU budget check can
+        # compute the aggregate across all cpu-class agents in O(n).
+        # Populated whenever a scale decision is applied to a cpu-class
+        # target; not populated for gpu-class targets (VRAM path).
+        self._cpu_replica_counts: dict[str, int] = {}
+        # Phase 8 §8.16.8 Doctrine — per-agent, per-version footprint
+        # registry populated from ``models.events.v1{kind=model_registered}``
+        # bus messages.  Structure: {agent_id → {version → {vram_footprint_mb,
+        # device_class}}}.  ``set_active_model_version`` uses this registry to
+        # swap the active hint when a heartbeat advertises a new version.
+        self._footprint_versions: dict[str, dict[str, dict]] = {}
         # One-shot info-alert debounce per target for
         # ``vram_footprint_unknown``.
         self._unknown_footprint_alerted: set[str] = set()
@@ -618,6 +652,8 @@ class MaintScaler(LivenessMixin):
     def handle(self, msg: Message) -> Iterable[Message]:
         if msg.envelope.topic == SEC_ALERT:
             return list(self._handle_sec_alert(msg))
+        if msg.envelope.topic == MODEL_TRAINED:
+            return list(self._handle_models_event(msg))
         if msg.envelope.topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
@@ -1152,6 +1188,12 @@ class MaintScaler(LivenessMixin):
             prev_replicas = st.last_replicas
             roster_total = roster_total - (st.last_replicas or 0) + decision
             st.last_replicas = decision
+            # Phase 8 §8.16.8 — keep cpu_replica_counts in sync for
+            # cpu-class agents so the CPU-budget check has fresh totals.
+            if str((self._model_vram_hints.get(target) or {}).get(
+                "device_class", ""
+            )).lower() == "cpu":
+                self._cpu_replica_counts[target] = decision
             st.history.append(decision)
             st.last_window_ns = window_anchor
             st.last_decision_at_ns = now_ns
@@ -1668,13 +1710,85 @@ class MaintScaler(LivenessMixin):
     ) -> None:
         """Register an optional per-target VRAM footprint hint.
 
-        Phase 8 §8.16.8 proof path: tests can seed model-level hints
-        without requiring the full ``models.events.v1`` wiring.
+        Direct call path used by tests and for static-model agents (e.g.
+        categorizer, sec.input) that register at boot without emitting
+        a ``models.events.v1`` bus message.  The bus path
+        (``_handle_models_event``) is the runtime path for Phase 5
+        trainer-reactor events.
         """
         self._model_vram_hints[target] = {
             "vram_footprint_mb": max(0.0, float(vram_footprint_mb)),
             "device_class": str(device_class),
         }
+        self._unknown_footprint_alerted.discard(target)
+
+    def _handle_models_event(self, msg: Message) -> Iterable[Message]:
+        """Handle ``models.events.v1`` bus messages.
+
+        Phase 8 §8.16.8 Doctrine: processes
+        ``kind=model_registered{agent_id, version, vram_footprint_mb,
+        device_class}`` by storing the per-version footprint in
+        ``_footprint_versions`` and updating the active hint in
+        ``_model_vram_hints``.  All scaler replicas update their map
+        (no leader guard) so VRAM projection is accurate across leader
+        flips within a process.
+
+        Other kinds on ``models.events.v1`` are silently forwarded
+        (forward-compat with future schema versions).
+        """
+        payload = msg.payload or {}
+        if payload.get("kind") != "model_registered":
+            return ()
+        agent_id = str(payload.get("agent_id") or "").strip()
+        version = str(payload.get("version") or "").strip()
+        try:
+            footprint_mb = float(payload["vram_footprint_mb"])
+        except (KeyError, TypeError, ValueError):
+            return ()
+        device_class = str(payload.get("device_class") or "gpu_inference").strip()
+        if not agent_id or not version:
+            return ()
+        # Store per-version footprint registry.
+        if agent_id not in self._footprint_versions:
+            self._footprint_versions[agent_id] = {}
+        self._footprint_versions[agent_id][version] = {
+            "vram_footprint_mb": max(0.0, footprint_mb),
+            "device_class": device_class,
+        }
+        # Apply as the active hint.  When the heartbeat path (§8.16.8
+        # active-version reconciliation) calls ``set_active_model_version``
+        # it will switch to whichever version the agent currently runs.
+        # Until that call arrives, the most-recently-registered version is
+        # used — correct for boot-time registration and rolling upgrades
+        # where model_registered arrives before the first heartbeat.
+        self._model_vram_hints[agent_id] = {
+            "vram_footprint_mb": max(0.0, footprint_mb),
+            "device_class": device_class,
+        }
+        # Clear the one-shot debounce so a previously-unknown agent that
+        # now registers no longer triggers the unknown-footprint info alert.
+        self._unknown_footprint_alerted.discard(agent_id)
+        return ()
+
+    def set_active_model_version(self, agent_id: str, version: str) -> bool:
+        """Switch the active VRAM footprint hint to ``version`` for ``agent_id``.
+
+        Phase 8 §8.16.8 heartbeat reconciliation path: called when an
+        agent's heartbeat advertises a different active model version so
+        the VRAM projection uses the footprint for the version actually
+        running, not the most-recently-registered one.
+
+        Returns ``True`` if the version was known and the hint was
+        updated; ``False`` if the version has not been registered yet
+        (no-op — the caller may log a warning and retry after the
+        corresponding ``model_registered`` event arrives).
+        """
+        entry = self._footprint_versions.get(agent_id, {}).get(version)
+        if entry is None:
+            return False
+        self._model_vram_hints[agent_id] = dict(entry)
+        self._unknown_footprint_alerted.discard(agent_id)
+        return True
 
     def _check_vram_budget(
         self,
@@ -1691,12 +1805,40 @@ class MaintScaler(LivenessMixin):
           for. The min/min_replicas floor is unaffected.
         * ``"vram_budget_exceeded"`` — projected utilisation would
           cross ``vram_total_mb - vram_headroom_mb``.
+        * ``"cpu_budget_exceeded"`` — cpu-class agent; aggregate
+          cpu-class replicas after scale-up would exceed
+          ``cfg.maint_scaler_cpu_budget_pct × os.cpu_count()``.
 
         Returns ``(reason, unknown_footprint_seen)`` where
         ``unknown_footprint_seen`` tracks whether the target fell back
         to the legacy draw estimate because no per-target footprint
         hint was registered.
         """
+        # Phase 8 §8.16.8 CPU-class: evaluate BEFORE the probe check so
+        # that agents without device probes still receive CPU-budget
+        # enforcement.  VRAM path is entirely skipped for cpu-class agents.
+        hint = self._model_vram_hints.get(target)
+        if hint is not None and str(hint.get("device_class", "")).lower() == "cpu":
+            # CPU-class: bypass VRAM check entirely.  Apply CPU-budget
+            # check instead: refuse if aggregate cpu-class replicas after
+            # the scale-up would exceed cfg.maint_scaler_cpu_budget_pct
+            # × os.cpu_count().  Pre-Phase 14 this is a no-op on
+            # single-host compose (cpu_count typically ≫ replica count).
+            import os as _os
+            detected_cores: float = float(_os.cpu_count() or 1)
+            budget_replicas: float = float(_cfg.maint_scaler_cpu_budget_pct) * detected_cores
+            cpu_total: float = float(projected_replicas)
+            for _a, _st in self._targets.items():
+                if _a == target:
+                    continue
+                _a_hint = self._model_vram_hints.get(_a)
+                if _a_hint and str(_a_hint.get("device_class", "")).lower() == "cpu":
+                    cpu_total += float(
+                        self._cpu_replica_counts.get(_a, _st.last_replicas)
+                    )
+            if cpu_total > budget_replicas:
+                return "cpu_budget_exceeded", False
+            return None, False
         probe = self._device_probes.get(target)
         if probe is None:
             return None, False  # no probe yet → opt-in, no enforcement
@@ -1713,24 +1855,23 @@ class MaintScaler(LivenessMixin):
         host_label = str(probe.get("host", target))
         self._m_vram_budget.set((host_label,), budget)
         hint = self._model_vram_hints.get(target)
-        unknown_footprint = hint is None
-        if hint is not None and str(hint.get("device_class", "")).lower() == "cpu":
-            return None, False
         if hint is not None:
             per_replica = float(hint["vram_footprint_mb"])
+            unknown_footprint = False
         else:
-            probe_draw = float(probe.get("vram_per_replica_mb", 0.0))
-            if probe_draw > 0.0:
-                per_replica = probe_draw
-                unknown_footprint = False
-            else:
-                per_replica = float(getattr(_cfg, "predictor_max_vram_mb", 1024.0))
-                threshold = float(
-                    getattr(_cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6)
-                )
-                used = float(probe["vram_used_mb"])
-                if budget > 0.0 and used > (threshold * budget):
-                    return "vram_footprint_unknown", True
+            # No model_registered event received — always fall back to the legacy
+            # global.  The device-probe's ``vram_per_replica_mb`` field is a
+            # telemetry measurement, NOT a declared per-model footprint; it must
+            # not suppress the unknown-footprint alert or bypass the threshold
+            # guard.  §8.16.8 Fallback policy (binding).
+            per_replica = float(getattr(_cfg, "predictor_max_vram_mb", 1024.0))
+            unknown_footprint = True
+            threshold = float(
+                getattr(_cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6)
+            )
+            used = float(probe["vram_used_mb"])
+            if budget > 0.0 and used > (threshold * budget):
+                return "vram_footprint_unknown", True
         # Baseline: keep currently-used VRAM minus what the existing
         # replicas account for, then add the projected count's draw.
         current_replicas = max(1, self._targets.get(target, _TargetState()).last_replicas)

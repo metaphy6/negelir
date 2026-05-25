@@ -267,9 +267,68 @@ def cmd_bump(args: argparse.Namespace) -> int:
     return 0
 
 
+def check_top_level_compatibility(chart: Dict[str, Any]) -> List[str]:
+    """Check the top-level ``compatibility`` block; return list of violation messages.
+
+    Reads ``chart.compatibility`` (a dict of ``{component: {min_compatible_with:
+    {other: version}}}``), compares each pinned floor against the current version
+    from ``chart.components``, and returns a list of human-readable violation
+    strings (empty list = all constraints satisfied).
+    """
+    compat = chart.get("compatibility")
+    if compat is None:
+        return []
+    if not isinstance(compat, dict):
+        raise VersionChartError("chart.compatibility must be an object")
+
+    components = chart.get("components", {})
+    violations: List[str] = []
+
+    for component_name, data in compat.items():
+        if not isinstance(data, dict):
+            raise VersionChartError(
+                f"compatibility[{component_name!r}] must be an object"
+            )
+        min_map = data.get("min_compatible_with", {})
+        if not isinstance(min_map, dict):
+            raise VersionChartError(
+                f"compatibility[{component_name!r}].min_compatible_with must be an object"
+            )
+        for other_component, required_version in min_map.items():
+            if other_component not in components:
+                violations.append(
+                    f"compatibility[{component_name!r}] references unknown "
+                    f"component {other_component!r}"
+                )
+                continue
+            required_parts = parse_semver(str(required_version))
+            other_version = str(components[other_component].get("version", ""))
+            other_parts = parse_semver(other_version)
+            if other_parts < required_parts:
+                violations.append(
+                    f"compatibility[{component_name!r}] requires "
+                    f"{other_component!r} >= {required_version}, "
+                    f"found {other_version}"
+                )
+
+    return violations
+
+
+def cmd_compatibility_check(_args: argparse.Namespace) -> int:
+    """Exit 0 if all top-level compatibility constraints are satisfied, 1 otherwise."""
+    chart = load_chart()
+    violations = check_top_level_compatibility(chart)
+    if violations:
+        for msg in violations:
+            print(f"\u274c {msg}", file=sys.stderr)
+        return 1
+    print("\u2705 all compatibility constraints satisfied")
+    return 0
+
+
 def cmd_validate(_args: argparse.Namespace) -> int:
     load_chart()  # raises on bad
-    print("✅ chart.json is valid")
+    print("\u2705 chart.json is valid")
     return 0
 
 
@@ -321,6 +380,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     comps = sub.add_parser("components", help="List component keys.")
     comps.set_defaults(func=cmd_components)
+
+    compat_check = sub.add_parser(
+        "compatibility-check",
+        help="Validate top-level compatibility constraints in chart.json.",
+    )
+    compat_check.set_defaults(func=cmd_compatibility_check)
 
     return parser
 

@@ -325,3 +325,110 @@ Cross-references:
   [`ai/swarm/sdk/kind_schema_version.py`](../../ai/swarm/sdk/kind_schema_version.py).
 * Chaos coverage: `P12-8-AD` (`chaos-verify-concurrency-deadlock`) in
   [`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).
+
+---
+
+## 7. Offsite upload troubleshooting (§8.16.5 + §8.16.6)
+
+### 7.1 Multipart upload resume — expired upload-id (§8.16.5)
+
+S3-compatible providers abort incomplete multipart uploads after a
+bucket-configured window (`AbortIncompleteMultipartUpload.DaysAfterInitiation`).
+If the backup agent crashes or is paused for longer than that window, the
+persisted `upload_id` in `.offsite_state.json` references an aborted
+server-side upload — `UploadPart` calls return `NoSuchUpload`.
+
+#### How the agent detects and handles this
+
+1. On resume the agent reads `.offsite_state.json` and checks file mtime
+   against `cfg.maint_backup_offsite_state_max_age_h` (default 18 h).
+   If the state is older than the threshold, it is treated as expired
+   **without probing** (saves an API call).
+2. If the state is fresh, the agent calls `ListParts` against the bucket.
+   A `NoSuchUpload` response confirms the upload-id has been aborted.
+3. In either expired case the agent:
+   a. Emits `maint.event.v1{kind=backup_offsite_upload_id_expired, dump_date, original_upload_id, age_h}`.
+   b. Deletes `.offsite_state.json`.
+   c. Restarts the upload from scratch, bounded by
+      `cfg.maint_backup_offsite_upload_timeout_h` (default 6 h).
+4. If the restart cannot complete within the timeout, the normal
+   `backup_offsite_failed` path fires.
+
+#### Operator checks
+
+| Symptom | Action |
+|---|---|
+| `backup_offsite_upload_id_expired` in `maint.event.v1` | Informational — the agent has already restarted. Verify the next `backup_offsite_uploaded` appears within 6 h. |
+| `backup_offsite_failed` after an `upload_id_expired` | Dump too large to complete within the timeout window; check bucket throughput and `cfg.maint_backup_offsite_upload_timeout_h`. |
+| Repeated `upload_id_expired` events for the same `dump_date` | Bucket lifecycle too aggressive (see §7.2 / `backup_offsite_lifecycle_too_aggressive` alert). |
+
+#### Config knobs
+
+| Knob | Default | Purpose |
+|---|---|---|
+| `MAINT_BACKUP_OFFSITE_STATE_MAX_AGE_H` | `18` | Age threshold (hours) above which `.offsite_state.json` is treated as expired without probing. Must be < bucket's abort window. |
+| `MAINT_BACKUP_OFFSITE_UPLOAD_TIMEOUT_H` | `6` | Hard deadline for a single offsite upload (initial or restart). |
+| `MAINT_BACKUP_OFFSITE_LIFECYCLE_MIN_DAYS` | `2` | Minimum acceptable `AbortIncompleteMultipartUpload.DaysAfterInitiation`. Below this the agent emits a warn alert. |
+
+#### Chaos coverage
+
+`P12-8-AC` (`chaos-s3-multipart-id-expired`) in
+[`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).
+
+---
+
+### 7.2 Object-Lock preflight troubleshooting (§8.16.6)
+
+The backup agent runs a boot-time (and periodic, every
+`cfg.maint_backup_offsite_preflight_interval_h` hours) preflight probe to
+confirm the offsite bucket truly enforces Object-Lock WORM semantics.
+A bucket that **silently accepts** a delete of a retention-locked object
+means our WORM guarantee is performative. The probe catches this before
+real backup data is involved.
+
+#### Probe sequence (`S3CompatibleTarget.preflight()`)
+
+1. `GetBucketObjectLockConfiguration` — if `ObjectLockEnabled != "Enabled"`
+   AND `cfg.maint_backup_offsite_object_lock_days > 0`, the agent refuses
+   to start with `fail_safe_offsite_object_lock_disabled`.
+2. Writes a 1 KB sentinel object with 60-second COMPLIANCE retention.
+3. Reads back retention metadata (`GetObjectRetention`) — asserts mode and
+   `retain-until` match. Mismatch → `fail_safe_offsite_retention_not_applied`.
+4. Attempts `DeleteObject` during retention — asserts 403. If the delete
+   succeeds → `fail_safe_offsite_lock_not_enforced` (catastrophic: WORM is
+   performative on this bucket; stop all offsite uploads immediately).
+5. Waits 60 s (+ slack) for retention to lapse, then GC the sentinel.
+
+When the recurring probe fails, the agent enters **spool-mode**: dumps are
+spooled locally; no offsite upload is attempted until the next successful
+probe. Alert: `sec.alert.v1{kind=backup_offsite_preflight_failed, severity=critical}`.
+
+#### Troubleshooting by surface code
+
+| Surface code | Meaning | Remediation |
+|---|---|---|
+| `fail_safe_offsite_object_lock_disabled` | Bucket does not have Object-Lock enabled at the bucket level. AWS Object-Lock must be enabled at **bucket-creation time** — it cannot be added to an existing bucket. | Create a new bucket with Object-Lock enabled; migrate offsite uploads to the new bucket. |
+| `fail_safe_offsite_retention_not_applied` | Credentials lack `s3:PutObjectRetention` (common IAM oversight when adopting Object-Lock after the bucket exists). | Update the IAM policy to grant `s3:PutObjectRetention` to the backup agent's principal; confirm with `aws s3api put-object-retention --dry-run`. |
+| `fail_safe_offsite_lock_not_enforced` | The bucket accepted a delete of a retention-locked sentinel. WORM is not enforced. | **Stop using this bucket for compliance-grade backups immediately.** Check bucket governance mode (COMPLIANCE vs. GOVERNANCE + MFA-delete settings). |
+| `backup_offsite_lifecycle_too_aggressive` (warn) | Bucket `AbortIncompleteMultipartUpload` window < `cfg.maint_backup_offsite_lifecycle_min_days`. Does not stop uploads, but may cause multipart upload-id expiry (§7.1). | Extend the lifecycle rule's `DaysAfterInitiation` to ≥ 2 (default minimum) via the bucket's console or IaC. |
+
+#### Relaxing the probe in dev/mock environments
+
+Set `MAINT_BACKUP_OFFSITE_OBJECT_LOCK_REQUIRED=false` in `xops/env/.env`
+to skip the Object-Lock assertion (step 1). The sentinel write-read-delete
+sub-probe still runs (it validates credential connectivity); only the
+Object-Lock mode check is bypassed. **Never set this to `false` in production.**
+
+#### Config knobs
+
+| Knob | Default | Purpose |
+|---|---|---|
+| `MAINT_BACKUP_OFFSITE_OBJECT_LOCK_DAYS` | `30` | COMPLIANCE retention window (days) applied to every real offsite upload. `0` disables Object-Lock (not recommended). |
+| `MAINT_BACKUP_OFFSITE_OBJECT_LOCK_REQUIRED` | `true` | If `true`, refuse to start if bucket does not have Object-Lock enabled. Set `false` only in dev/mock. |
+| `MAINT_BACKUP_OFFSITE_PREFLIGHT_INTERVAL_H` | `24` | Interval between recurring preflight probe runs. |
+
+#### Chaos coverage
+
+* `P12-8-AE` (`chaos-object-lock-permission-loss`) in
+  [`docs/testing/phase12_catalogue.md`](../testing/phase12_catalogue.md).
+

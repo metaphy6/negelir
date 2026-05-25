@@ -352,6 +352,8 @@ phase8:
   maint_scaler_global_max_replicas: 64             # NEGELIR_MAINT_SCALER_GLOBAL_MAX_REPLICAS
   maint_scaler_min_decision_interval_s: 90         # NEGELIR_MAINT_SCALER_MIN_DECISION_INTERVAL_S
   maint_scaler_vram_headroom_mb: 1024              # NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB
+  maint_scaler_vram_pessimistic_threshold_pct: 0.6  # NEGELIR_MAINT_SCALER_VRAM_PESSIMISTIC_THRESHOLD_PCT
+  maint_scaler_cpu_budget_pct: 0.8                  # NEGELIR_MAINT_SCALER_CPU_BUDGET_PCT
   maint_scaler_runtime_histogram_buckets: "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"  # NEGELIR_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS
   maint_scaler_history_max: 1024                   # NEGELIR_MAINT_SCALER_HISTORY_MAX
   maint_leader_lease_duration_s: 15               # NEGELIR_MAINT_LEADER_LEASE_DURATION_S

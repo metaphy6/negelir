@@ -514,6 +514,10 @@ version.bump: ## Bump COMPONENT=<key> LEVEL=<major|minor|patch> [NOTE="..."]
 version.validate: ## Validate chart.json schema
 	@$(XOPS)/version.py validate
 
+.PHONY: version.compatibility-check
+version.compatibility-check: ## Validate top-level compatibility constraints in chart.json
+	@$(XOPS)/version.py compatibility-check
+
 # ══════════════════════════════════════════════════════════════
 #                CODEGRAPH (dev MCP index)
 # ══════════════════════════════════════════════════════════════

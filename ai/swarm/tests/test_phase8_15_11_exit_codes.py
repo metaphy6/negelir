@@ -74,8 +74,12 @@ def test_exit_code_9_constant_value() -> None:
 
 
 def test_exit_code_to_label_returns_none_for_out_of_range() -> None:
-    """exit_code_to_label() must return None for codes outside 5..9."""
+    """exit_code_to_label() must return None for codes outside 5..10.
+
+    Phase 8.16.16 extended the range to include 10 (prune_only_forbidden).
+    """
     assert exit_code_to_label(0) is None
     assert exit_code_to_label(1) is None
-    assert exit_code_to_label(10) is None
+    assert exit_code_to_label(10) == "prune_only_forbidden"
+    assert exit_code_to_label(11) is None
     assert exit_code_to_label(99) is None

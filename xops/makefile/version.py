@@ -50,10 +50,15 @@ def cmd_validate(_argv: List[str]) -> int:
     return v.main(["validate"])
 
 
+def cmd_compatibility_check(_argv: List[str]) -> int:
+    return v.main(["compatibility-check"])
+
+
 COMMANDS = {
     "show": cmd_show,
     "bump": cmd_bump,
     "validate": cmd_validate,
+    "compatibility-check": cmd_compatibility_check,
 }
 
 

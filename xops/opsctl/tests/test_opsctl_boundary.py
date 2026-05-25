@@ -218,5 +218,61 @@ class TestOpsctlBoundary(unittest.TestCase):
         )
 
 
+    # ── §8.16.16 boundary: exit-code range 5..10 continuous ─────────────────
+
+    def test_exit_code_runbook_range_continuous_5_to_10(self) -> None:
+        """ExitCode enum and _EXIT_CODE_LABELS must BOTH cover exactly {5..10}.
+
+        This guards the runbook / dead-man's-switch alerter: if a code is
+        added to _exit_codes.py without a matching entry in _classify.py
+        (or vice-versa), operators see un-routable integers in their
+        runbook branches.
+        """
+        from xops.opsctl._classify import _EXIT_CODE_LABELS
+        from xops.opsctl._exit_codes import ExitCode
+
+        EXPECTED = frozenset(range(5, 11))  # 5, 6, 7, 8, 9, 10
+
+        # ExitCode enum must define all codes 5..10.
+        enum_codes_in_range = frozenset(
+            e.value for e in ExitCode if 5 <= e.value <= 10
+        )
+        self.assertEqual(
+            enum_codes_in_range,
+            EXPECTED,
+            msg=(
+                "ExitCode enum is missing codes in the 5..10 runbook range "
+                f"or has unexpected entries. Got: {sorted(enum_codes_in_range)}"
+            ),
+        )
+
+        # _EXIT_CODE_LABELS must cover exactly the same 5..10 range.
+        label_keys = frozenset(_EXIT_CODE_LABELS.keys())
+        self.assertEqual(
+            label_keys,
+            EXPECTED,
+            msg=(
+                "_EXIT_CODE_LABELS in _classify.py must cover exactly {5..10}. "
+                f"Got: {sorted(label_keys)}"
+            ),
+        )
+
+        # Every label must be a non-empty string.
+        for code, label in _EXIT_CODE_LABELS.items():
+            self.assertIsInstance(label, str, msg=f"Label for code {code} must be str")
+            self.assertTrue(label, msg=f"Label for code {code} must be non-empty")
+
+        # exit_code_to_label must return the label for each code.
+        from xops.opsctl._classify import exit_code_to_label
+        for code in EXPECTED:
+            self.assertIsNotNone(
+                exit_code_to_label(code),
+                msg=f"exit_code_to_label({code}) must not return None",
+            )
+        # And must return None for codes outside the runbook range.
+        self.assertIsNone(exit_code_to_label(4))
+        self.assertIsNone(exit_code_to_label(11))
+
+
 if __name__ == "__main__":
     unittest.main()

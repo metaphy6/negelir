@@ -45,6 +45,23 @@ from swarm.sdk._dual_emit_helper import (
 
 logger = logging.getLogger(__name__)
 
+
+def dual_emit_correlation_id(*, kind: str, target: str | None, produced_at: str) -> str:
+    """Canonical single source for maint/sec dual-emit correlation IDs.
+
+    Returns the 16-character lowercase hex join key shared by a ``maint.event.v1``
+    and a ``sec.alert.v1`` emitted for the same underlying event.
+
+    This is the **only** sanctioned derivation site.  An AST scan in
+    ``ai/swarm/tests/test_phase8_16_16_correlation_id.py`` rejects any
+    code outside this module that builds ``event_correlation_id`` by hand
+    (sha256 slicing, f-strings, etc.).
+
+    Delegates to :func:`swarm.sdk._dual_emit_helper.derive_event_correlation_id`.
+    """
+    return derive_event_correlation_id(kind=kind, target=target, produced_at=produced_at)
+
+
 # ── Known envelope-level fields ─────────────────────────────────────────
 # These are the fields present on the *envelope* layer of maint.event.v1
 # that every kind may carry.  Kind-specific fields land in ``_extra``.
@@ -287,7 +304,7 @@ class MaintEvent:
             and SEC_ALERT_TOPIC in topics
             and "event_correlation_id" not in fields
         ):
-            fields["event_correlation_id"] = derive_event_correlation_id(
+            fields["event_correlation_id"] = dual_emit_correlation_id(
                 kind=kind,
                 target=(str(fields.get("target")) if fields.get("target") is not None else None),
                 produced_at=str(fields.get("produced_at", "")),

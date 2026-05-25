@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.4.1",
-    "build": 139,
+    "build": 156,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.34.25",
+      "version": "1.36.2",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-24T20:30:19+00:00",
+      "last_changed": "2026-05-25T08:42:30+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       }
@@ -22,14 +22,14 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.34.3",
+      "version": "3.34.7",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-24T20:30:19+00:00"
+      "last_changed": "2026-05-25T08:57:59+00:00"
     },
     "docs": {
-      "version": "1.64.9",
+      "version": "1.66.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-24T20:48:16+00:00"
+      "last_changed": "2026-05-25T08:58:05+00:00"
     },
     "infra_mock": {
       "version": "1.4.5",
@@ -75,9 +75,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.50.9",
+      "version": "0.50.10",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-24T20:48:11+00:00",
+      "last_changed": "2026-05-25T08:57:53+00:00",
       "min_compatible_with": {
         "ai": "1.5.0"
       }
@@ -126,6 +126,18 @@
       "version": "0.1.0",
       "description": "Dev tooling — local CodeGraph MCP server (semantic code index). Host npx invocation; not a runtime dep. See docs/guides/CODEGRAPH.md.",
       "last_changed": "2026-05-21T13:16:00+00:00"
+    }
+  },
+  "compatibility": {
+    "ai": {
+      "min_compatible_with": {
+        "server": "1.6.3"
+      }
+    },
+    "server": {
+      "min_compatible_with": {
+        "ai": "1.36.2"
+      }
     }
   },
   "changelog": [
@@ -6221,6 +6233,159 @@
       "from": "1.64.8",
       "to": "1.64.9",
       "build": 139
+    },
+    {
+      "timestamp": "2026-05-25T06:54:01+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.8 Real gap: document VRAM footprint arithmetic gap in scaler module docstring; fix observability test tuple assertion",
+      "from": "1.34.25",
+      "to": "1.34.26",
+      "build": 140
+    },
+    {
+      "timestamp": "2026-05-25T06:59:23+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.16 bullet 1: 8 chaos catalogue stubs (P12-8-AE..AL) added to phase12_catalogue.md",
+      "from": "1.64.9",
+      "to": "1.64.10",
+      "build": 141
+    },
+    {
+      "timestamp": "2026-05-25T07:10:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.8 doctrine: per-agent vram footprint map in scaler",
+      "from": "1.34.26",
+      "to": "1.34.27",
+      "build": 142
+    },
+    {
+      "timestamp": "2026-05-25T07:20:24+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.16.16: maint_scaler_vram_pessimistic_threshold_pct + maint_scaler_cpu_budget_pct new cfg knobs for triangle test",
+      "from": "1.34.27",
+      "to": "1.35.0",
+      "build": 143
+    },
+    {
+      "timestamp": "2026-05-25T07:35:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.8 fallback: refuse scale-up for unknown vram footprint on tight gpu budget; remove probe_draw silent bypass",
+      "from": "1.35.0",
+      "to": "1.35.1",
+      "build": 144
+    },
+    {
+      "timestamp": "2026-05-25T07:39:02+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.16: exit code 10=prune_only_forbidden in _classify._EXIT_CODE_LABELS + boundary test",
+      "from": "3.34.3",
+      "to": "3.34.4",
+      "build": 145
+    },
+    {
+      "timestamp": "2026-05-25T07:50:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.8: cpu-class agents bypass vram, cpu budget tracking via _cpu_replica_counts",
+      "from": "1.35.1",
+      "to": "1.35.2",
+      "build": 146
+    },
+    {
+      "timestamp": "2026-05-25T08:00:54+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "8.16.16: event_correlation_id in maint/sec schemas, dual_emit_correlation_id public helper",
+      "from": "1.35.2",
+      "to": "1.36.0",
+      "build": 147
+    },
+    {
+      "timestamp": "2026-05-25T08:10:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.8: proof tests for per-model vram footprint hints",
+      "from": "1.36.0",
+      "to": "1.36.1",
+      "build": 148
+    },
+    {
+      "timestamp": "2026-05-25T08:28:44+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.16.16: maint_topic_routing extended (dual-emit table); security_exceptions.md expanded; backup_runbook §7 (multipart + object-lock); opsctl_security §8 (key_id derivation)",
+      "from": "1.64.10",
+      "to": "1.65.0",
+      "build": 149
+    },
+    {
+      "timestamp": "2026-05-25T08:42:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.16: fix backup_model_lineage_legacy in KIND_SCHEMA_VERSIONS",
+      "from": "1.36.1",
+      "to": "1.36.2",
+      "build": 150
+    },
+    {
+      "timestamp": "2026-05-25T08:42:30+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.16: fix exit code 10 boundary test",
+      "from": "3.34.4",
+      "to": "3.34.5",
+      "build": 151
+    },
+    {
+      "timestamp": "2026-05-25T08:50:10+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.16: migration 010 gains fingerprint_alg column",
+      "from": "1.65.0",
+      "to": "1.65.1",
+      "build": 152
+    },
+    {
+      "timestamp": "2026-05-25T08:56:14+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.16: compatibility block in chart.json + make version.compatibility-check",
+      "from": "3.34.5",
+      "to": "3.34.6",
+      "build": 153
+    },
+    {
+      "timestamp": "2026-05-25T08:57:53+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.16.16: §8.16 doctrine addendum — per-model VRAM hints, dual-emit correlation_id, compatibility-check",
+      "from": "0.50.9",
+      "to": "0.50.10",
+      "build": 154
+    },
+    {
+      "timestamp": "2026-05-25T08:57:59+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.16: prune_order.py + key_id.py + dual_emit_correlation_id + version.compatibility-check + swarm.demo.live + ops.*key targets + verify.dlq-replay-policy",
+      "from": "3.34.6",
+      "to": "3.34.7",
+      "build": 155
+    },
+    {
+      "timestamp": "2026-05-25T08:58:05+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "8.16.16: maint_topic_routing.md + security_exceptions.md + extended runbooks (backup §7, opsctl_security §8)",
+      "from": "1.65.1",
+      "to": "1.66.0",
+      "build": 156
     }
   ]
 }

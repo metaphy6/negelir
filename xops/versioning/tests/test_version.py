@@ -157,3 +157,73 @@ def test_save_then_load_round_trip(tmp_path: Path) -> None:
     reloaded = v.load_chart(path=out)
     assert reloaded["components"]["ai"]["version"] == "1.1.0"
     assert reloaded["changelog"][-1]["note"] == "round trip test"
+
+
+# ── Top-level compatibility block ─────────────────────────────
+
+
+def test_top_level_compatibility_block_present_and_valid() -> None:
+    """live chart.json must have a structurally valid top-level compatibility block."""
+    chart = v.load_chart()
+    compat = chart.get("compatibility")
+    assert compat is not None, "chart.json missing top-level 'compatibility' block"
+    assert isinstance(compat, dict), "'compatibility' must be an object"
+    for component, data in compat.items():
+        assert isinstance(data, dict), f"compatibility[{component!r}] must be an object"
+        mcw = data.get("min_compatible_with")
+        assert isinstance(mcw, dict), (
+            f"compatibility[{component!r}].min_compatible_with must be an object"
+        )
+        for other, ver in mcw.items():
+            v.parse_semver(ver)  # must be a valid SemVer triple
+
+
+def test_top_level_compatibility_check_exits_zero() -> None:
+    """check_top_level_compatibility returns no violations for the current chart."""
+    chart = v.load_chart()
+    violations = v.check_top_level_compatibility(chart)
+    assert violations == [], f"unexpected violations: {violations}"
+
+
+def test_top_level_compatibility_check_detects_violation() -> None:
+    """check_top_level_compatibility catches a version-floor violation."""
+    chart = _fresh_chart()
+    chart["compatibility"] = {
+        "ai": {"min_compatible_with": {"server": "2.0.0"}},
+    }
+    violations = v.check_top_level_compatibility(chart)
+    assert any("server" in msg for msg in violations), (
+        f"expected a server violation; got: {violations}"
+    )
+
+
+def test_top_level_compatibility_no_violations_when_floor_met() -> None:
+    """check_top_level_compatibility is silent when floor is exactly met."""
+    chart = _fresh_chart()
+    chart["compatibility"] = {
+        "ai": {"min_compatible_with": {"server": "1.0.0"}},
+    }
+    violations = v.check_top_level_compatibility(chart)
+    assert violations == []
+
+
+def test_top_level_compatibility_unknown_component() -> None:
+    """Unknown component reference is flagged as a violation (not a crash)."""
+    chart = _fresh_chart()
+    chart["compatibility"] = {
+        "ai": {"min_compatible_with": {"no_such_component": "1.0.0"}},
+    }
+    violations = v.check_top_level_compatibility(chart)
+    assert any("no_such_component" in msg for msg in violations)
+
+
+def test_compatibility_block_round_trip() -> None:
+    """chart.json with the compatibility block is still in canonical JSON form."""
+    original = v.CHART_PATH.read_text(encoding="utf-8")
+    chart = json.loads(original)
+    assert "compatibility" in chart, "compatibility block missing from chart.json"
+    rewritten = json.dumps(chart, indent=2, ensure_ascii=False) + "\n"
+    assert original == rewritten, (
+        "chart.json with compatibility block is not in canonical form; "
+        "only edit through `make version.bump`."
+    )
