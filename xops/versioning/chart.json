@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.4.1",
-    "build": 163,
+    "build": 165,
     "released": null
   },
   "components": {
@@ -22,9 +22,9 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.37.0",
+      "version": "3.37.2",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-25T10:25:07+00:00"
+      "last_changed": "2026-05-25T10:52:15+00:00"
     },
     "docs": {
       "version": "1.68.2",
@@ -6449,6 +6449,24 @@
       "from": "1.68.1",
       "to": "1.68.2",
       "build": 163
+    },
+    {
+      "timestamp": "2026-05-25T10:45:12+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "orchestrate workflows: github.token fallback on all MASTER_TOKEN refs",
+      "from": "3.37.0",
+      "to": "3.37.1",
+      "build": 164
+    },
+    {
+      "timestamp": "2026-05-25T10:52:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "orchestrate-roadmap: fix plan JSON schema mismatch (phase_ids vs selected)",
+      "from": "3.37.1",
+      "to": "3.37.2",
+      "build": 165
     }
   ]
 }

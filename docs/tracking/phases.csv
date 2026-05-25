@@ -713,3 +713,5 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-05-25T10:00:48+00:00,0,,adapted,note,"extracted Phase 11 (46 secs) + Phase 13 (69 secs) to docs/design/phase{11,13}/; ROADMAP 4706→2947 lines; renamed GITHUB_MASTER_TOKEN→MASTER_TOKEN in workflows+instructions",
 2026-05-25T10:17:56+00:00,0,,adapted,note,orchestrate-roadmap: added auto+gpt-5-codex model choices; weekly-cap (Retry-After>=24h) now auto-switches cursor model to 'auto' so resume keeps progressing,
 2026-05-25T10:25:07+00:00,0,,adapted,note,"resume cursor: 2-min clock-skew grace buffer + wake_attempts counter (cap=5, distinct from retry_count) plumbed through scheduler->roadmap workflow",
+2026-05-25T10:45:12+00:00,0,,adapted,note,ci: add github.token fallback to all MASTER_TOKEN usages (GH_TOKEN env + checkout tokens in both orchestrate workflows),
+2026-05-25T10:52:15+00:00,0,,adapted,note,"ci: fix orchestrate-roadmap plan-output schema mismatch (use count + phase_ids, not selected[].id) — caused workflow to silently skip dispatch step",

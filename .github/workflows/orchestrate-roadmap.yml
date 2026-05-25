@@ -130,7 +130,7 @@ jobs:
               ${{ steps.resolve.outputs.exclude && format('--exclude "{0}"', steps.resolve.outputs.exclude) || '' }} \
               --json)
           echo "$OUT"
-          COUNT=$(echo "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("selected", [])))')
+          COUNT=$(echo "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("count", len(d.get("phase_ids", []))))')
           echo "count=$COUNT" >>"$GITHUB_OUTPUT"
           echo "$OUT" >planned.json
 
@@ -153,7 +153,7 @@ jobs:
           BRANCH: ${{ steps.resolve.outputs.branch }}
         run: |
           set -euo pipefail
-          PHASES=$(python3 -c 'import json; print("\n".join(p["id"] for p in json.load(open("planned.json"))["selected"]))')
+          PHASES=$(python3 -c 'import json; print("\n".join(json.load(open("planned.json"))["phase_ids"]))')
           RC_FINAL=0
           LAST_OK=""
           NEXT=""
