@@ -715,3 +715,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-05-25T10:25:07+00:00,0,,adapted,note,"resume cursor: 2-min clock-skew grace buffer + wake_attempts counter (cap=5, distinct from retry_count) plumbed through scheduler->roadmap workflow",
 2026-05-25T10:45:12+00:00,0,,adapted,note,ci: add github.token fallback to all MASTER_TOKEN usages (GH_TOKEN env + checkout tokens in both orchestrate workflows),
 2026-05-25T10:52:15+00:00,0,,adapted,note,"ci: fix orchestrate-roadmap plan-output schema mismatch (use count + phase_ids, not selected[].id) — caused workflow to silently skip dispatch step",
+2026-05-25T10:58:50+00:00,0,,adapted,note,ci: run_phase_agent ensure labels exist before gh issue create (agent-task + phase-N were missing),

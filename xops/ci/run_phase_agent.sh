@@ -77,6 +77,9 @@ case "$AGENT_BACKEND" in
       echo "run_phase_agent: gh CLI not available; cannot dispatch issue" >&2
       exit 40
     fi
+    # Ensure required labels exist (no-op if already present).
+    gh label create "agent-task"  --description "Dispatched to Copilot Coding Agent" --color "0075ca" --force 2>/dev/null || true
+    gh label create "phase-$PHASE_ID" --description "Phase $PHASE_ID work item"       --color "e4e669" --force 2>/dev/null || true
     gh issue create \
       --title "$TITLE" \
       --body-file "$BODY_FILE" \
