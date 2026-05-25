@@ -13,7 +13,16 @@
    scraper-patcher harness, its scope contracts, or the gates that
    enforce them. Otherwise informational.
 3. The matching `docs/design/*.md` for the area you are about to
-   edit (see `AGENTS.md` §1.7 for anchors).
+   edit (see `AGENTS.md` §1.7 for anchors). Long phases have been
+   modularised — start at their per-phase folder when relevant:
+   [`docs/design/phase8/README.md`](../docs/design/phase8/README.md)
+   (ops console & maint agents),
+   [`docs/design/phase9/README.md`](../docs/design/phase9/README.md)
+   (Go REST API & identity),
+   [`docs/design/phase10/sections/`](../docs/design/nlp/sections/)
+   (NLP — uses `docs/design/nlp/sections/`),
+   [`docs/design/phase16/README.md`](../docs/design/phase16/README.md)
+   (emitter & feed contract, Pivot v3).
 4. [`docs/coding/ai/automation.md`](../docs/coding/ai/automation.md)
    — the Copilot roadmap (this surface). Refer to it when a new
    prompt / mode / MCP wrapper is being added.

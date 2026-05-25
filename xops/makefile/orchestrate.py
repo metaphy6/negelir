@@ -133,6 +133,21 @@ def cmd_unlock(_argv: List[str]) -> int:
     return orch_cli.main([*_maybe_json(), "release", phase, "--force"])
 
 
+def cmd_resume_list(_argv: List[str]) -> int:
+    args = [*_maybe_json(), "resume-list"]
+    if _env("READY") in ("1", "true", "yes"):
+        args.append("--ready-only")
+    return orch_cli.main(args)
+
+
+def cmd_resume_drop(_argv: List[str]) -> int:
+    run_id = _env("RUN_ID")
+    if not run_id:
+        err("usage: make orchestrate.resume-drop RUN_ID=<id>")
+        return 64
+    return orch_cli.main([*_maybe_json(), "resume-drop", "--run-id", run_id])
+
+
 COMMANDS = {
     "list": cmd_list,
     "plan": cmd_plan,
@@ -144,6 +159,8 @@ COMMANDS = {
     "state": cmd_state,
     "advance": cmd_advance,
     "unlock": cmd_unlock,
+    "resume-list": cmd_resume_list,
+    "resume-drop": cmd_resume_drop,
 }
 
 

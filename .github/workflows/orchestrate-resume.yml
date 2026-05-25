@@ -1,0 +1,93 @@
+name: orchestrate-resume
+
+# Scheduler that wakes up every 15 minutes, reads any resume cursors
+# from .orchestrator/resume/ on main, and re-dispatches
+# orchestrate-roadmap.yml for every cursor whose not_before has
+# elapsed. Cursors are dropped from main after successful re-dispatch.
+#
+# See .github/instructions/ci-pipeline.instructions.md §5 for the
+# rate-limit handling contract.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: orchestrate-resume-scheduler
+  cancel-in-progress: false
+
+jobs:
+  scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.MASTER_TOKEN }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.MASTER_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "negelir-orchestrator[bot]"
+          git config user.email "negelir-orchestrator[bot]@users.noreply.github.com"
+
+      - name: List ready cursors
+        id: ready
+        run: |
+          set -euo pipefail
+          OUT=$(python3 -m xops.orchestrator.cli resume-list --ready-only --json)
+          echo "$OUT" >ready.json
+          COUNT=$(python3 -c 'import json; print(len(json.load(open("ready.json"))))')
+          echo "count=$COUNT" >>"$GITHUB_OUTPUT"
+          echo "ready cursors: $COUNT"
+
+      - name: Re-dispatch ready cursors
+        if: steps.ready.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          python3 -c '
+          import json, subprocess, sys
+          cursors = json.load(open("ready.json"))
+          for c in cursors:
+              run_id = c["run_id"]
+              include = ",".join(c.get("include", []))
+              exclude = ",".join(c.get("exclude", []))
+              model = c.get("model", "claude-sonnet-4-5")
+              print(f"re-dispatch: run_id={run_id} include={include!r} model={model}")
+              subprocess.run([
+                  "gh", "workflow", "run", "orchestrate-roadmap.yml",
+                  "--ref", "main",
+                  "-f", f"include={include}",
+                  "-f", f"exclude={exclude}",
+                  "-f", f"model={model}",
+                  "-f", f"resume_run_id={run_id}",
+              ], check=True)
+              subprocess.run([
+                  "python3", "-m", "xops.orchestrator.cli",
+                  "resume-drop", "--run-id", run_id,
+              ], check=True)
+          '
+
+      - name: Commit dropped cursors
+        if: steps.ready.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          git add .orchestrator/resume
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: drop ${{ steps.ready.outputs.count }} re-dispatched resume cursor(s)"
+            git push origin main
+          fi

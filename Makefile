@@ -592,6 +592,19 @@ orchestrate.advance: ## Record a review pass — PHASE=<id> [STATUS=…] [ROLE=�
 orchestrate.unlock: ## [OPERATOR] Force-clear a stale lock — PHASE=<id>
 	@$(XOPS)/orchestrate.py unlock
 
+.PHONY: orchestrate.resume-list
+orchestrate.resume-list: ## List CI resume cursors (READY=1 for cursors past not_before)
+	@$(XOPS)/orchestrate.py resume-list
+
+.PHONY: orchestrate.resume-drop
+orchestrate.resume-drop: ## Drop a CI resume cursor — RUN_ID=<id>
+	@$(XOPS)/orchestrate.py resume-drop
+
+.PHONY: roadmap.split
+roadmap.split: ## Extract a long ROADMAP phase into docs/design/phase<N>/ — PHASE=<id> [FORCE=1] [DRY=1]
+	@PHASE=$(PHASE) FORCE=$(FORCE) DRY=$(DRY) python3 $(XOPS)/roadmap_split.py extract \
+	    --phase $(PHASE) $(if $(filter 1 true yes,$(FORCE)),--force,) $(if $(filter 1 true yes,$(DRY)),--dry-run,)
+
 # ══════════════════════════════════════════════════════════════
 #                  GIT (HUMAN-ONLY)
 # ══════════════════════════════════════════════════════════════

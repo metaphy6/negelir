@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.4.1",
-    "build": 156,
+    "build": 159,
     "released": null
   },
   "components": {
@@ -22,14 +22,14 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.34.7",
+      "version": "3.35.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-25T08:57:59+00:00"
+      "last_changed": "2026-05-25T09:42:18+00:00"
     },
     "docs": {
-      "version": "1.66.0",
+      "version": "1.68.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-25T08:58:05+00:00"
+      "last_changed": "2026-05-25T10:00:48+00:00"
     },
     "infra_mock": {
       "version": "1.4.5",
@@ -6386,6 +6386,33 @@
       "from": "1.65.1",
       "to": "1.66.0",
       "build": 156
+    },
+    {
+      "timestamp": "2026-05-25T09:42:18+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 8/9/16 modular split + Rule 9 CI carve-out + ci-pipeline.instructions.md",
+      "from": "1.66.0",
+      "to": "1.67.0",
+      "build": 157
+    },
+    {
+      "timestamp": "2026-05-25T09:42:18+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "roadmap_split CLI + orchestrator CI resume cursor + xops/ci git_guard & run_phase_agent + orchestrate-{roadmap,resume} workflows",
+      "from": "3.34.7",
+      "to": "3.35.0",
+      "build": 158
+    },
+    {
+      "timestamp": "2026-05-25T10:00:48+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11/13 modular split; token rename to MASTER_TOKEN",
+      "from": "1.67.0",
+      "to": "1.68.0",
+      "build": 159
     }
   ]
 }

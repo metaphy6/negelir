@@ -1,0 +1,222 @@
+name: orchestrate-roadmap
+
+# Manually-dispatchable mirror of `make orchestrate.roadmap INCLUDE=$PHASE`,
+# adapted for GitHub Actions. See:
+#   - .github/instructions/ci-pipeline.instructions.md (binding rules)
+#   - xops/orchestrator/README.md                     (how the loop works)
+#   - AGENTS.md Rule 9                                (CI git carve-out)
+#
+# This workflow plans the phase set, then for each phase: opens an
+# agent branch, dispatches an LLM agent via xops/ci/run_phase_agent.sh,
+# and lets the auto-merge job land the resulting PR after the gauntlet
+# is green. On rate-limit, it writes a resume cursor and exits 0; the
+# orchestrate-resume.yml cron picks the cursor up and re-dispatches.
+
+on:
+  workflow_dispatch:
+    inputs:
+      include:
+        description: "Phase ids to include (comma-separated, e.g. '8,9,16'). Empty = all eligible."
+        type: string
+        default: ""
+      exclude:
+        description: "Phase ids to exclude (comma-separated). Empty = none."
+        type: string
+        default: ""
+      model:
+        description: "LLM model id for the agent loop."
+        type: choice
+        default: claude-sonnet-4-5
+        options:
+          - claude-sonnet-4-5
+          - claude-opus-4-5
+          - gpt-5
+          - gpt-5-mini
+      agent_backend:
+        description: "Which backend run_phase_agent.sh should call."
+        type: choice
+        default: copilot-issue
+        options:
+          - copilot-issue
+          - noop
+      resume_run_id:
+        description: "If set, load this resume cursor instead of starting fresh."
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: orchestrate-roadmap-${{ inputs.resume_run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      MODEL: ${{ inputs.model }}
+      AGENT_BACKEND: ${{ inputs.agent_backend }}
+      GH_TOKEN: ${{ secrets.MASTER_TOKEN }}
+      # The agent backend may also read these (e.g. anthropic key for
+      # future direct-API backends). Add new secrets here as backends grow.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MASTER_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "negelir-orchestrator[bot]"
+          git config user.email "negelir-orchestrator[bot]@users.noreply.github.com"
+
+      - name: Resolve inputs (resume vs fresh)
+        id: resolve
+        run: |
+          set -euo pipefail
+          INCLUDE="${{ inputs.include }}"
+          EXCLUDE="${{ inputs.exclude }}"
+          BRANCH=""
+          RUN_TAG="${{ github.run_id }}"
+          RESUME_ID="${{ inputs.resume_run_id }}"
+          if [[ -n "$RESUME_ID" ]]; then
+            CURSOR=".orchestrator/resume/${RESUME_ID}.json"
+            if [[ ! -f "$CURSOR" ]]; then
+              echo "::error::resume cursor $CURSOR not found on default branch"
+              exit 1
+            fi
+            INCLUDE=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("include", [])))' "$CURSOR")
+            EXCLUDE=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("exclude", [])))' "$CURSOR")
+            BRANCH=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("branch",""))' "$CURSOR")
+            RUN_TAG="$RESUME_ID"
+            echo "resumed=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "resumed=false" >>"$GITHUB_OUTPUT"
+          fi
+          if [[ -z "$BRANCH" ]]; then
+            BRANCH="agent/orchestrate-${RUN_TAG}"
+          fi
+          echo "include=$INCLUDE" >>"$GITHUB_OUTPUT"
+          echo "exclude=$EXCLUDE" >>"$GITHUB_OUTPUT"
+          echo "branch=$BRANCH"   >>"$GITHUB_OUTPUT"
+          echo "run_tag=$RUN_TAG" >>"$GITHUB_OUTPUT"
+          echo "Resolved: include='$INCLUDE' exclude='$EXCLUDE' branch='$BRANCH'"
+
+      - name: Plan phases
+        id: plan
+        run: |
+          set -euo pipefail
+          OUT=$(python3 -m xops.orchestrator.cli plan \
+              ${{ steps.resolve.outputs.include && format('--include "{0}"', steps.resolve.outputs.include) || '' }} \
+              ${{ steps.resolve.outputs.exclude && format('--exclude "{0}"', steps.resolve.outputs.exclude) || '' }} \
+              --json)
+          echo "$OUT"
+          COUNT=$(echo "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d.get("selected", [])))')
+          echo "count=$COUNT" >>"$GITHUB_OUTPUT"
+          echo "$OUT" >planned.json
+
+      - name: Prepare agent branch
+        if: steps.plan.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          BRANCH="${{ steps.resolve.outputs.branch }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+          else
+            git checkout -b "$BRANCH"
+            git push -u origin "$BRANCH"
+          fi
+
+      - name: Dispatch agent per phase
+        if: steps.plan.outputs.count != '0'
+        env:
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+        run: |
+          set -euo pipefail
+          PHASES=$(python3 -c 'import json; print("\n".join(p["id"] for p in json.load(open("planned.json"))["selected"]))')
+          RC_FINAL=0
+          LAST_OK=""
+          NEXT=""
+          while IFS= read -r PHASE; do
+            [[ -z "$PHASE" ]] && continue
+            NEXT="$PHASE"
+            echo "::group::phase $PHASE"
+            set +e
+            PHASE_ID="$PHASE" \
+            MODEL="$MODEL" \
+            BRANCH="$BRANCH" \
+            AGENT_BACKEND="$AGENT_BACKEND" \
+              bash xops/ci/run_phase_agent.sh
+            RC=$?
+            set -e
+            echo "phase $PHASE exited $RC"
+            echo "::endgroup::"
+            case "$RC" in
+              0)
+                LAST_OK="$PHASE"
+                ;;
+              10)
+                echo "::warning::rate-limit on phase $PHASE — saving resume cursor"
+                python3 -m xops.orchestrator.cli resume-save \
+                  --run-id  "${{ steps.resolve.outputs.run_tag }}" \
+                  --workflow-id "orchestrate-roadmap.yml" \
+                  --include "${{ steps.resolve.outputs.include }}" \
+                  --exclude "${{ steps.resolve.outputs.exclude }}" \
+                  --model   "$MODEL" \
+                  --branch  "$BRANCH" \
+                  --last-completed-phase "$LAST_OK" \
+                  --next-phase "$NEXT" \
+                  --retry-after "${RETRY_AFTER:-1800}" \
+                  --reason "rate-limit on phase $PHASE" \
+                  --retry-count "${RETRY_COUNT:-0}"
+                RC_FINAL=10
+                break
+                ;;
+              20|30|40)
+                echo "::error::phase $PHASE failed with exit $RC; halting loop"
+                RC_FINAL="$RC"
+                break
+                ;;
+              *)
+                echo "::error::phase $PHASE returned unexpected exit $RC"
+                RC_FINAL="$RC"
+                break
+                ;;
+            esac
+          done <<<"$PHASES"
+          echo "loop exit: $RC_FINAL  last_ok=$LAST_OK  next=$NEXT"
+          if [[ "$RC_FINAL" == "10" ]]; then
+            # Commit the cursor on main via the helper job (separate PR).
+            # The resume scheduler reads it from main.
+            exit 0
+          fi
+          exit "$RC_FINAL"
+
+      - name: Commit resume cursor (if any)
+        if: always()
+        run: |
+          set -euo pipefail
+          CURSOR_DIR=".orchestrator/resume"
+          if [[ -d "$CURSOR_DIR" ]] && ls "$CURSOR_DIR"/*.json >/dev/null 2>&1; then
+            git checkout main
+            git pull --ff-only origin main
+            git add "$CURSOR_DIR"
+            if ! git diff --cached --quiet; then
+              git commit -m "ci: resume cursor for run ${{ steps.resolve.outputs.run_tag }}"
+              git push origin main
+            fi
+          fi

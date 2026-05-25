@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from . import locks, state
+from . import ci_resume, locks, state
 from .roadmap import RoadmapTree, parse_roadmap
 from .selector import parse_filter, select_phase_ids
 
@@ -250,6 +250,80 @@ def cmd_next(tree: RoadmapTree, args: argparse.Namespace) -> int:
 # ── Argument parser ───────────────────────────────────────────
 
 
+def _split_csv(raw: str) -> List[str]:
+    return [t.strip() for t in (raw or "").split(",") if t.strip()]
+
+
+def cmd_resume_save(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Persist a CI resume cursor. Called by orchestrate-roadmap.yml on
+    rate-limit. ``tree`` is unused here but kept for dispatch uniformity."""
+    not_before = ci_resume.compute_not_before(
+        args.retry_after or None,
+        retry_count=args.retry_count,
+    )
+    cursor = ci_resume.ResumeCursor(
+        run_id=args.run_id,
+        workflow_id=args.workflow_id,
+        include=_split_csv(args.include),
+        exclude=_split_csv(args.exclude),
+        model=args.model,
+        branch=args.branch,
+        last_completed_phase=args.last_completed_phase,
+        next_phase=args.next_phase,
+        not_before=not_before,
+        reason=args.reason,
+        retry_count=args.retry_count,
+    )
+    try:
+        path = ci_resume.save_cursor(cursor)
+    except (RuntimeError, ValueError) as exc:
+        _err(str(exc), 10)
+        return 10
+    _emit(
+        {
+            "run_id": cursor.run_id,
+            "cursor_path": str(path.relative_to(ci_resume.REPO_ROOT)),
+            "not_before": cursor.not_before,
+            "retry_count": cursor.retry_count,
+        },
+        as_json=args.json,
+    )
+    return 0
+
+
+def cmd_resume_list(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    if args.ready_only:
+        cursors = ci_resume.list_pending()
+    else:
+        cursors = []
+        for p in ci_resume.list_cursors():
+            try:
+                cursors.append(ci_resume.load_cursor(p))
+            except (ValueError, json.JSONDecodeError) as exc:
+                print(f"orchestrator: skip malformed cursor {p}: {exc}",
+                      file=sys.stderr)
+    if args.json:
+        print(json.dumps([c.to_dict() for c in cursors], indent=2, sort_keys=True))
+        return 0
+    if not cursors:
+        print("(no resume cursors)")
+        return 0
+    now = __import__("time").time()
+    for c in cursors:
+        delta = c.not_before - now
+        ready = "READY" if delta <= 0 else f"in {int(delta)}s"
+        print(f"  {c.run_id:<20} branch={c.branch} next={c.next_phase or '-'} "
+              f"retries={c.retry_count} {ready}")
+    return 0
+
+
+def cmd_resume_drop(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    path = ci_resume.cursor_path(args.run_id)
+    ci_resume.drop_cursor(path)
+    _emit({"run_id": args.run_id, "dropped": str(path)}, as_json=args.json)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="orchestrator", description=__doc__)
     p.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -304,6 +378,31 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--diff-summary", default="")
     s.add_argument("--last-error", default="")
 
+    # ── CI resume cursor commands (see xops/orchestrator/ci_resume.py) ──
+    s = sub.add_parser("resume-save", parents=[json_parent],
+                       help="write a CI resume cursor (used by orchestrate-roadmap.yml on rate-limit)")
+    s.add_argument("--run-id", required=True, help="GitHub Actions run id")
+    s.add_argument("--workflow-id", default="", help="source workflow file basename")
+    s.add_argument("--include", default="", help="original INCLUDE filter (comma-sep)")
+    s.add_argument("--exclude", default="", help="original EXCLUDE filter (comma-sep)")
+    s.add_argument("--model", default="")
+    s.add_argument("--branch", default="")
+    s.add_argument("--last-completed-phase", default="")
+    s.add_argument("--next-phase", default="")
+    s.add_argument("--retry-after", default="",
+                   help="HTTP Retry-After value (seconds-as-int or HTTP-date)")
+    s.add_argument("--reason", default="")
+    s.add_argument("--retry-count", type=int, default=0)
+
+    s = sub.add_parser("resume-list", parents=[json_parent],
+                       help="list all resume cursors with their not_before times")
+    s.add_argument("--ready-only", action="store_true",
+                   help="emit only cursors whose not_before <= now")
+
+    s = sub.add_parser("resume-drop", parents=[json_parent],
+                       help="delete a resume cursor (called by scheduler after re-dispatch)")
+    s.add_argument("--run-id", required=True)
+
     return p
 
 
@@ -320,6 +419,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "locks": cmd_locks,
         "state": cmd_state,
         "advance": cmd_advance,
+        "resume-save": cmd_resume_save,
+        "resume-list": cmd_resume_list,
+        "resume-drop": cmd_resume_drop,
     }
     if args.cmd == "slice":
         return cmd_slice(tree, args, source)
