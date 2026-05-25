@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/allowlist_rehash",
+  "title": "maint.event.v1{kind=allowlist_rehash}",
+  "description": "Phase 8 S8.16.10 - operator-triggered request to migrate legacy SHA allowlist rows to HMAC fingerprints.",
+  "type": "object",
+  "required": ["kind", "request_id", "target", "client_id", "produced_at", "kind_schema_version"],
+  "properties": {
+    "kind": { "const": "allowlist_rehash" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "client_id": { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" },
+    "kind_schema_version": { "const": 1 },
+    "batch_size": { "type": "integer", "minimum": 1 },
+    "reason": { "type": "string" }
+  },
+  "additionalProperties": true
+}

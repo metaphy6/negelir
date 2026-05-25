@@ -52,6 +52,8 @@ from swarm.agents.maint.model_lineage import (
     BACKUP_MODEL_OFFSITE_FAILED,
     BACKUP_MODEL_UPLOADED,
     LineageMissingDebouncer,
+    LineagePrerequisiteError,
+    RegistryAuditor,
     SEC_ALERT_BACKUP_MODEL_LINEAGE_MISSING,
     audit_model_artifacts,
     build_model_tarball,
@@ -738,3 +740,48 @@ def test_is_lineage_writer_available_true_when_sidecar_exists(tmp_path: Path) ->
     write_model_lineage_sidecar(artifact, SAMPLE_LINEAGE)
 
     assert is_lineage_writer_available(models_dir) is True
+
+
+def test_registry_auditor_preflight_passes_when_swarm_floor_met() -> None:
+    """§8.16.15: preflight passes when swarm meets the declared floor."""
+    chart = {
+        "components": {
+            "ai": {
+                "version": "1.5.0",
+                "description": "ai",
+                "last_changed": "2030-01-01T00:00:00+00:00",
+            },
+            "swarm": {
+                "version": "0.50.8",
+                "description": "swarm",
+                "last_changed": "2030-01-01T00:00:00+00:00",
+                "min_compatible_with": {"ai": "1.5.0"},
+            },
+        }
+    }
+
+    auditor = RegistryAuditor(chart_loader=lambda: chart)
+    auditor.preflight()
+
+
+def test_registry_auditor_preflight_refuses_when_swarm_floor_missing() -> None:
+    """§8.16.15: preflight raises fail_safe_lineage_writer_missing on mismatch."""
+    chart = {
+        "components": {
+            "ai": {
+                "version": "1.4.9",
+                "description": "ai",
+                "last_changed": "2030-01-01T00:00:00+00:00",
+            },
+            "swarm": {
+                "version": "0.50.8",
+                "description": "swarm",
+                "last_changed": "2030-01-01T00:00:00+00:00",
+                "min_compatible_with": {"ai": "1.5.0"},
+            },
+        }
+    }
+
+    auditor = RegistryAuditor(chart_loader=lambda: chart)
+    with pytest.raises(LineagePrerequisiteError, match="fail_safe_lineage_writer_missing"):
+        auditor.preflight()

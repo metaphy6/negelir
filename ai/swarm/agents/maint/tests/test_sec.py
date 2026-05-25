@@ -9,6 +9,7 @@ from swarm.agents.maint.sec import (
     InMemoryDecimator,
     InMemoryPatternStore,
     MaintSecAgent,
+    _cross_plane_sec_emission_policy,
 )
 from swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from swarm.sdk.types import Envelope, Message
@@ -106,13 +107,16 @@ def test_unrelated_kind_ignored() -> None:
 
 
 # ── Phase 8 §8.8 hysteresis + decile-boundary + alert path ──────────
-def _alert_msg(payload: dict) -> Message:
+def _alert_msg(payload: dict, *, created_at: str | None = None) -> Message:
     env = Envelope(
         message_id="ma1",
         trace_id="ta1",
         topic=SEC_ALERT,
         producer="sec.rate.v1",
-        created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        created_at=(
+            created_at
+            or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        ),
         schema_version=1,
         attempt=1,
     )
@@ -336,6 +340,218 @@ def test_sec_alert_non_critical_is_ignored() -> None:
         "produced_at": "2024-01-01T00:00:00+00:00",
     })))
     assert drv.calls == 0
+
+
+def test_sec_plane_tier3_sheds_non_emergency_consume(monkeypatch) -> None:
+    """At sec-plane tier-3, non-emergency sec.alert consumes are shed."""
+    monkeypatch.setattr(_cfg, "sec_plane_lag_alert_ms", 5000, raising=False)
+    monkeypatch.setattr(_cfg, "sec_plane_lag_alert_window_s", 1, raising=False)
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {
+                "evicted_count": 1,
+                "decile_size": 1,
+                "new_zcard": 99,
+                "cap_cleared": False,
+            }
+
+    now_ms = 1_700_000_100_000
+    now_s = now_ms / 1000.0
+    stale = datetime.fromtimestamp(now_s - 70.0, tz=timezone.utc).isoformat(timespec="seconds")
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: now_ms)
+
+    out = list(agent.handle(_alert_msg({
+        "alert_id": "lag-shed-1",
+        "kind": "consumer_likely_broken",
+        "severity": "error",
+        "source": "maint.dlq.v1",
+        "subject": "predict.request.v1",
+        "reason": "probe",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    }, created_at=stale)))
+
+    assert drv.calls == 0
+    throttled = [
+        m for m in out
+        if m.envelope.topic == MAINT_EVENT
+        and m.payload.get("kind") == "maint_plane_throttled"
+    ]
+    assert throttled, "sec-plane tier transition should emit maint_plane_throttled"
+    assert any(m.payload.get("tier") == 3 for m in throttled)
+
+
+def test_sec_plane_tier3_keeps_emergency_decimate(monkeypatch) -> None:
+    """Tier-3 sec-plane shedding must not suppress emergency denylist decimate."""
+    monkeypatch.setattr(_cfg, "sec_plane_lag_alert_ms", 5000, raising=False)
+    monkeypatch.setattr(_cfg, "sec_plane_lag_alert_window_s", 1, raising=False)
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {
+                "evicted_count": 5,
+                "decile_size": 5,
+                "new_zcard": 95,
+                "cap_cleared": False,
+            }
+
+    now_ms = 1_700_000_200_000
+    now_s = now_ms / 1000.0
+    stale = datetime.fromtimestamp(now_s - 70.0, tz=timezone.utc).isoformat(timespec="seconds")
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: now_ms)
+
+    out = list(agent.handle(_alert_msg({
+        "alert_id": "lag-emergency-1",
+        "kind": "denylist_growth_anomaly",
+        "severity": "critical",
+        "source": "sec.rate.v1",
+        "subject": "10.0.0.0/24",
+        "reason": "rejected_capped",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    }, created_at=stale)))
+
+    assert drv.calls == 1
+    kinds = [m.payload.get("kind") for m in out if m.envelope.topic == MAINT_EVENT]
+    assert "denylist_decimate" in kinds
+
+
+def test_sec_plane_tier1_lag_alert_keeps_emergency_decimate(monkeypatch) -> None:
+    """§8.16.11 proof: 6s sec-plane lag enters tier-1 and emergency decimate still fires."""
+    monkeypatch.setattr(_cfg, "sec_plane_lag_alert_ms", 5000, raising=False)
+    monkeypatch.setattr(_cfg, "sec_plane_lag_alert_window_s", 1, raising=False)
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {
+                "evicted_count": 3,
+                "decile_size": 3,
+                "new_zcard": 97,
+                "cap_cleared": False,
+            }
+
+    now_ms = 1_700_000_250_000
+    now_s = now_ms / 1000.0
+    stale = datetime.fromtimestamp(now_s - 6.0, tz=timezone.utc).isoformat(timespec="seconds")
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: now_ms)
+
+    out = list(agent.handle(_alert_msg({
+        "alert_id": "lag-emergency-tier1",
+        "kind": "denylist_growth_anomaly",
+        "severity": "critical",
+        "source": "sec.rate.v1",
+        "subject": "10.10.0.0/24",
+        "reason": "rejected_capped",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    }, created_at=stale)))
+
+    throttled = [
+        m
+        for m in out
+        if m.envelope.topic == MAINT_EVENT
+        and m.payload.get("kind") == "maint_plane_throttled"
+        and m.payload.get("tier") == 1
+    ]
+    assert throttled, "6s lag should enter sec-plane tier-1"
+    assert drv.calls == 1
+    kinds = [m.payload.get("kind") for m in out if m.envelope.topic == MAINT_EVENT]
+    assert "denylist_decimate" in kinds
+
+
+def test_cross_plane_policy_enumerates_4x4_tier_product_independently() -> None:
+    """§8.16.11 Cross-plane independence boundary: 4x4 tier product.
+
+    Maint-plane tier MUST NOT alter sec-plane consume policy.
+    """
+    matrix: dict[tuple[int, int], tuple[bool, bool]] = {}
+    for maint_tier in range(4):
+        for sec_tier in range(4):
+            policy = _cross_plane_sec_emission_policy(
+                maint_tier=maint_tier,
+                sec_tier=sec_tier,
+            )
+            matrix[(maint_tier, sec_tier)] = (
+                policy.consume_non_emergency_sec_alert,
+                policy.consume_emergency_sec_alert,
+            )
+
+    assert len(matrix) == 16
+    for sec_tier in range(4):
+        expected = (sec_tier < 3, True)
+        assert matrix[(0, sec_tier)] == expected
+        assert matrix[(1, sec_tier)] == expected
+        assert matrix[(2, sec_tier)] == expected
+        assert matrix[(3, sec_tier)] == expected
+
+
+def test_cross_plane_maint_tier3_sec_tier0_keeps_sec_consumer_normal() -> None:
+    """§8.16.11 proof: maint tier-3 does not suppress sec-tier-0 decimate path."""
+
+    class _CountingDecimator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def cardinality(self) -> int:
+            return 100
+
+        def decimate(self, *, now_ms: int, cap: int) -> dict:
+            self.calls += 1
+            return {
+                "evicted_count": 4,
+                "decile_size": 4,
+                "new_zcard": 96,
+                "cap_cleared": False,
+            }
+
+    policy = _cross_plane_sec_emission_policy(maint_tier=3, sec_tier=0)
+    assert policy.consume_non_emergency_sec_alert is True
+    assert policy.consume_emergency_sec_alert is True
+
+    now_ms = 1_700_000_260_000
+    drv = _CountingDecimator()
+    agent = MaintSecAgent(decimator=drv, clock_ms=lambda: now_ms)
+
+    out = list(agent.handle(_alert_msg({
+        "alert_id": "maint3-sec0",
+        "kind": "denylist_growth_anomaly",
+        "severity": "critical",
+        "source": "sec.rate.v1",
+        "subject": "172.16.0.0/16",
+        "reason": "rejected_capped",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    }, created_at=datetime.fromtimestamp(now_ms / 1000.0, tz=timezone.utc).isoformat(timespec="seconds"))))
+
+    assert drv.calls == 1
+    assert all(
+        not (
+            m.envelope.topic == MAINT_EVENT
+            and m.payload.get("kind") == "maint_plane_throttled"
+        )
+        for m in out
+    )
 
 
 # ── §8.9 idempotency/hysteresis: parallel triggers collapse to one call ──

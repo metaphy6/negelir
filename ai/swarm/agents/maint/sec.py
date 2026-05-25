@@ -31,7 +31,9 @@ from __future__ import annotations
 
 import logging
 import threading
+import time as _time
 from collections import OrderedDict
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Protocol
@@ -49,6 +51,9 @@ from ._pause_state import PauseState
 
 _log = logging.getLogger("swarm.agents.maint.sec")
 
+_SEC_TIER2_LAG_S: float = 15.0
+_SEC_TIER3_LAG_S: float = 60.0
+
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -56,6 +61,108 @@ def _utc_iso() -> str:
 
 def _new_id() -> str:
     return uuid4().hex
+
+
+def _created_at_to_epoch_s(created_at: str) -> float | None:
+    raw = (created_at or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+@dataclass
+class _SecPlaneLagWatchdog:
+    """Lag watchdog for sec.alert.v1 consumer-side shedding (§8.16.11)."""
+
+    _samples: deque = field(default_factory=deque)
+    _current_tier: int = 0
+    _emitted_tiers: set[int] = field(default_factory=set)
+
+    @property
+    def tier(self) -> int:
+        return self._current_tier
+
+    def note_lag(self, lag_s: float, now_s: float | None = None) -> None:
+        t = _time.time() if now_s is None else now_s
+        self._samples.append((t, lag_s))
+        window_s = int(_cfg.sec_plane_lag_alert_window_s)
+        while self._samples and t - self._samples[0][0] > window_s * 2 + 1:
+            self._samples.popleft()
+
+    def tick(self, now_s: float | None = None) -> list[int]:
+        if not self._samples:
+            return []
+        t = _time.time() if now_s is None else now_s
+        threshold_s = int(_cfg.sec_plane_lag_alert_ms) / 1000.0
+        window_s = int(_cfg.sec_plane_lag_alert_window_s)
+        latest_lag = float(self._samples[-1][1])
+        if not self._lag_sustained_for(threshold_s, window_s, t):
+            return []
+
+        if latest_lag > _SEC_TIER3_LAG_S:
+            new_tier = 3
+        elif latest_lag > _SEC_TIER2_LAG_S:
+            new_tier = 2
+        elif latest_lag > threshold_s:
+            new_tier = 1
+        else:
+            new_tier = 0
+
+        entered: list[int] = []
+        if new_tier <= 0:
+            self._current_tier = 0
+            self._emitted_tiers.clear()
+            return entered
+
+        if new_tier > self._current_tier:
+            for tier in range(self._current_tier + 1, new_tier + 1):
+                if tier in self._emitted_tiers:
+                    continue
+                self._emitted_tiers.add(tier)
+                entered.append(tier)
+            self._current_tier = new_tier
+        return entered
+
+    def _lag_sustained_for(
+        self, threshold_s: float, window_s: float, now_s: float
+    ) -> bool:
+        window_start = now_s - window_s
+        recent = [lag for ts, lag in self._samples if ts >= window_start]
+        if not recent:
+            return float(self._samples[-1][1]) > threshold_s
+        return all(float(lag) > threshold_s for lag in recent)
+
+
+@dataclass(frozen=True)
+class _CrossPlaneSecEmissionPolicy:
+    """Per §8.16.11, sec-plane consumption policy by shed tiers.
+
+    Maint-plane and sec-plane shedding are independent state machines.
+    The sec-plane policy is keyed by sec tier; maint tier is accepted
+    for explicit 4x4 boundary coverage and intentionally has no effect.
+    """
+
+    consume_non_emergency_sec_alert: bool
+    consume_emergency_sec_alert: bool
+
+
+def _cross_plane_sec_emission_policy(
+    *, maint_tier: int, sec_tier: int
+) -> _CrossPlaneSecEmissionPolicy:
+    _ = maint_tier  # Cross-plane independence: maint tier does not gate sec policy.
+    normalized_sec_tier = max(0, int(sec_tier))
+    return _CrossPlaneSecEmissionPolicy(
+        consume_non_emergency_sec_alert=normalized_sec_tier < 3,
+        consume_emergency_sec_alert=True,
+    )
 
 
 # Allowed states for pattern_allowlist.state codec — see
@@ -274,6 +381,7 @@ class MaintSecAgent(LivenessMixin):
         # SecAlert ``alert_id`` values so the sweeper does not double-
         # fire on bus redeliveries.
         self._alert_lru: "OrderedDict[str, None]" = OrderedDict()
+        self._sec_plane_watchdog = _SecPlaneLagWatchdog()
         self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract ──────────────────────────────────────────────
@@ -470,10 +578,23 @@ class MaintSecAgent(LivenessMixin):
         the ``denylist_decimate`` / ``denylist_decimate_throttled``
         notification on ``maint.event.v1``.
         """
+        sec_lag_events, lag_tier = self._sec_plane_lag_events(msg)
+        for event in sec_lag_events:
+            yield event
+
         payload = msg.payload or {}
-        if payload.get("kind") != "denylist_growth_anomaly":
+        emergency = (
+            payload.get("kind") == "denylist_growth_anomaly"
+            and str(payload.get("severity") or "") == "critical"
+        )
+        # §8.16.11: sec-plane and maint-plane shedding are independent.
+        # This consumer policy is keyed by sec tier only.
+        policy = _cross_plane_sec_emission_policy(maint_tier=0, sec_tier=lag_tier)
+        if emergency and not policy.consume_emergency_sec_alert:
             return
-        if str(payload.get("severity") or "") != "critical":
+        if not emergency and not policy.consume_non_emergency_sec_alert:
+            return
+        if not emergency:
             return
         alert_id = str(payload.get("alert_id") or "")
         if alert_id:
@@ -513,6 +634,27 @@ class MaintSecAgent(LivenessMixin):
             yield self._notify("denylist_cap_cleared",
                                target=target,
                                extra={"new_zcard": result.get("new_zcard")})
+
+    def _sec_plane_lag_events(self, msg: Message) -> tuple[list[Message], int]:
+        now_s = self._now_ms() / 1000.0
+        created_s = _created_at_to_epoch_s(str(msg.envelope.created_at or ""))
+        lag_s = max(0.0, now_s - created_s) if created_s is not None else 0.0
+        self._sec_plane_watchdog.note_lag(lag_s=lag_s, now_s=now_s)
+        entered = self._sec_plane_watchdog.tick(now_s=now_s)
+        events: list[Message] = []
+        for tier in entered:
+            events.append(
+                self._notify(
+                    "maint_plane_throttled",
+                    target="sec.alert.v1",
+                    extra={
+                        "tier": tier,
+                        "lag_s": lag_s,
+                        "action": "sec_plane_shed",
+                    },
+                )
+            )
+        return events, self._sec_plane_watchdog.tier
 
     # ── Periodic expiry tick ────────────────────────────────────
     def expire_tick(self) -> list[Message]:

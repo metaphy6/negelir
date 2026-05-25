@@ -60,6 +60,9 @@ MAINT_EVENT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
     "maint.sec.v1",
     "maint.backup.v1",
     "source.watcher.v1",
+    # Phase 8 §8.16.10 — sec.input.v1 emits notification-only
+    # pattern_allowlist_legacy_hit on legacy SHA row matches.
+    "sec.input.v1",
     # Phase 8 §8.9: dead-man relay — telemetry.v1 may publish
     # maint.event.v1 audit rows; its sec.alert.v1 kind is further
     # constrained by SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER below.

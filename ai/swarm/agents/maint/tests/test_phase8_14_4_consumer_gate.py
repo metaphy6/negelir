@@ -65,13 +65,14 @@ def _write_key_and_ops(
     key_file.write_bytes(raw_key)
     key_file.chmod(0o600)
 
-    kid = key_id_from_bytes(raw_key)
+    operator_email = "operator@test.example"
+    kid = key_id_from_bytes(raw_key, operator_email=operator_email)
     ops_file = tmp_path / "opsctl_operators.json"
     ops_file.write_text(
         json.dumps({
             "operators": {
                 kid: {
-                    "email": "operator@test.example",
+                    "email": operator_email,
                     "added_at": _utc_iso(),  # use now() so age check never fires
                     "revoked_at": None,
                 }
@@ -215,6 +216,7 @@ def test_consumer_tampered_sig_yields_ack_and_critical_alert(
         "kind": "maint_pause",
         "target": "all",
         "produced_at": _utc_iso(),
+        "client_id": "operator@test.example",
     }
     inject_signature(payload, sign_cfg)
     assert "op_signature" in payload, "inject_signature must add op_signature"
@@ -275,6 +277,7 @@ def test_consumer_unauthorized_key_yields_ack_and_critical_alert(
         "kind": "maint_pause",
         "target": "all",
         "produced_at": _utc_iso(),
+        "client_id": "operator@test.example",
     }
     inject_signature(payload, sign_cfg)
     assert "op_signature" in payload

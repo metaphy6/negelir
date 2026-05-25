@@ -36,6 +36,12 @@ from pathlib import Path
 from typing import Any
 
 from swarm.sdk import kind_schema_version as _ksv
+from swarm.sdk._dual_emit_helper import (
+    MAINT_EVENT_TOPIC,
+    SEC_ALERT_TOPIC,
+    derive_event_correlation_id,
+    route_topics_for_kind,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +224,11 @@ class MaintEvent:
     # Producer factory helpers — checked against KIND_SCHEMA_VERSIONS
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def publish_topics(*, kind: str, severity: str, target: str | None) -> tuple[str, ...]:
+        """Return the canonical publish-topic tuple for the given event shape."""
+        return route_topics_for_kind(kind=kind, severity=severity, target=target)
+
     @classmethod
     def _make(cls, kind: str, **fields: Any) -> dict[str, Any]:
         """Internal helper: build a raw dict for ``kind``, injecting
@@ -261,6 +272,25 @@ class MaintEvent:
                 row_id=audit_row_id,
                 oversize_dir=oversize_dir,
                 cap_bytes=cap,
+            )
+
+        try:
+            topics = route_topics_for_kind(
+                kind=kind,
+                severity=str(fields.get("severity", "")),
+                target=(str(fields.get("target")) if fields.get("target") is not None else None),
+            )
+        except ValueError:
+            topics = ()
+        if (
+            MAINT_EVENT_TOPIC in topics
+            and SEC_ALERT_TOPIC in topics
+            and "event_correlation_id" not in fields
+        ):
+            fields["event_correlation_id"] = derive_event_correlation_id(
+                kind=kind,
+                target=(str(fields.get("target")) if fields.get("target") is not None else None),
+                produced_at=str(fields.get("produced_at", "")),
             )
 
         return {"kind": kind, "kind_schema_version": code_version, **fields}

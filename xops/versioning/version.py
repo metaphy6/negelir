@@ -113,9 +113,57 @@ def validate_chart(chart: Dict[str, Any]) -> None:
             raise VersionChartError(
                 f"component {name!r} missing description/last_changed"
             )
+    validate_compatibility(chart)
     changelog = chart.get("changelog")
     if not isinstance(changelog, list):
         raise VersionChartError("chart.changelog must be a list")
+
+
+def validate_compatibility(chart: Dict[str, Any]) -> None:
+    """Validate per-component compatibility floors.
+
+    Optional shape on each component entry::
+
+        {
+            "min_compatible_with": {
+                "other_component": "X.Y.Z"
+            }
+        }
+
+    For every declared floor, the referenced component must exist and its
+    current version must be greater-than-or-equal to the pinned minimum.
+    """
+    components = chart.get("components")
+    if not isinstance(components, dict):
+        raise VersionChartError("chart.components must be a non-empty object")
+
+    for component_name, data in components.items():
+        if not isinstance(data, dict):
+            raise VersionChartError(f"component {component_name!r} must be an object")
+
+        min_map = data.get("min_compatible_with")
+        if min_map is None:
+            continue
+        if not isinstance(min_map, dict):
+            raise VersionChartError(
+                f"component {component_name!r} min_compatible_with must be an object"
+            )
+
+        for other_component, required_version in min_map.items():
+            if other_component not in components:
+                raise VersionChartError(
+                    f"component {component_name!r} requires unknown component "
+                    f"{other_component!r}"
+                )
+            required = str(required_version)
+            required_parts = parse_semver(required)
+            other_version = str(components[other_component].get("version", ""))
+            other_parts = parse_semver(other_version)
+            if other_parts < required_parts:
+                raise VersionChartError(
+                    f"component {component_name!r} requires {other_component!r} "
+                    f">= {required}, found {other_version}"
+                )
 
 
 # ── Bump operation ────────────────────────────────────────────

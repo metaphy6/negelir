@@ -5,9 +5,8 @@ Every opsctl-published envelope carries
                                msg=f"{request_id}|{kind}|{target}|{produced_at}")
 
 The per-operator key lives at ``~/.negelir/opsctl_key`` (mode 0600,
-32 random bytes).  The key_id (first 16 hex chars of SHA-256 of the key
-bytes) is the public identifier committed to
-``infra/maint/opsctl_operators.json`` alongside the operator email.
+32 random bytes). Canonical key_id derivation is defined in
+``xops.maint.key_id`` (Phase 8 §8.16.14).
 
 ``make ops.bootstrap-key`` generates the key file on first run via
 :func:`bootstrap_key`.
@@ -22,22 +21,24 @@ import os
 import secrets
 import stat
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from ai.common.config import Config
+from xops.maint.key_id import derive
 
 _KEY_LEN = 32  # bytes
 _DEFAULT_KEY_PATH = Path.home() / ".negelir" / "opsctl_key"
 
 
-def key_id_from_bytes(raw_key: bytes) -> str:
-    """Derive the public key-id: first 16 hex chars of SHA-256(raw_key).
+def key_id_from_bytes(raw_key: bytes, operator_email: str) -> str:
+        """Derive the public key-id via the canonical Phase 8 §8.16.14 formula.
 
-    8 bytes of entropy = 2^64 collision resistance, more than sufficient
-    for an operator registry expected to hold tens of keys at most.
-    """
-    return hashlib.sha256(raw_key).hexdigest()[:16]
+        Canonical formula:
+            ``sha256("negelir-opsctl-key-v1|<operator_email>|<base64(key_bytes)>")[:16]``
+        """
+        return derive(operator_email=operator_email, key_bytes=raw_key)
 
 
 def _resolve_key_path(cfg: Config) -> Path:
@@ -103,7 +104,8 @@ def inject_signature(payload: dict, cfg: Config) -> Optional[str]:
     if not cfg.opsctl_require_signature:
         return None
     key = load_operator_key(cfg)
-    kid = key_id_from_bytes(key)
+    operator_email = str(payload.get("client_id", "opsctl"))
+    kid = key_id_from_bytes(key, operator_email=operator_email)
     sig = compute_signature(
         key,
         request_id=str(payload.get("request_id", "")),
@@ -116,7 +118,7 @@ def inject_signature(payload: dict, cfg: Config) -> Optional[str]:
     return kid
 
 
-def bootstrap_key(cfg: Config) -> str:
+def bootstrap_key(cfg: Config, operator_email: str) -> str:
     """Generate a fresh 32-byte key and write it to the key path (mode 0600).
 
     Prints the key_id to stdout and instructions to add it to
@@ -124,13 +126,27 @@ def bootstrap_key(cfg: Config) -> str:
 
     Returns the key_id string.
     """
+    normalized_email = operator_email.strip().lower()
+    if not normalized_email:
+        raise ValueError("operator_email is required")
+
+    added_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
     path = _resolve_key_path(cfg)
     if path.exists():
+        mode = stat.S_IMODE(path.stat().st_mode)
+        if mode != 0o600:
+            raise PermissionError(
+                f"opsctl_key has unsafe mode {oct(mode)} at {path}; expected 0o600"
+            )
         existing_key = path.read_bytes()
-        kid = key_id_from_bytes(existing_key[:_KEY_LEN])
+        kid = key_id_from_bytes(existing_key[:_KEY_LEN], operator_email=normalized_email)
         sys.stdout.write(
             f"opsctl: key already exists at {path} (key_id={kid})\n"
             "  To regenerate, delete the file and re-run.\n"
+            "  Add to infra/maint/opsctl_operators.json:\n"
+            f'    "{kid}": {{"email": "{normalized_email}", "added_at": "{added_at}", "revoked_at": null}}\n'
         )
         return kid
     path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -140,11 +156,11 @@ def bootstrap_key(cfg: Config) -> str:
         os.write(fd, raw)
     finally:
         os.close(fd)
-    kid = key_id_from_bytes(raw)
+    kid = key_id_from_bytes(raw, operator_email=normalized_email)
     sys.stdout.write(
         f"opsctl: key generated at {path} (key_id={kid})\n"
         "  Add to infra/maint/opsctl_operators.json:\n"
-        f"    \"{kid}\": {{\"email\": \"<your-email>\", \"added_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"revoked_at\": null, \"revocation_reason\": null}}\n"
+        f'    "{kid}": {{"email": "{normalized_email}", "added_at": "{added_at}", "revoked_at": null}}\n'
         "  Then commit infra/maint/opsctl_operators.json.\n"
     )
     return kid

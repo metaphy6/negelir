@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/sec.alert.v1/allowlist_hmac_key_rotation_overdue",
+  "title": "sec.alert.v1{kind=allowlist_hmac_key_rotation_overdue}",
+  "description": "Phase 8 S8.16.10 - allowlist HMAC key age exceeded cfg.sec_input_allowlist_hmac_key_max_age_days; warn and debounced daily.",
+  "type": "object",
+  "required": ["alert_id", "kind", "severity", "source", "reason", "produced_at"],
+  "properties": {
+    "kind": { "const": "allowlist_hmac_key_rotation_overdue" },
+    "severity": { "const": "warn" },
+    "source": { "const": "sec.input.v1" },
+    "subject": { "type": ["string", "null"] },
+    "reason": { "type": "string" },
+    "alert_id": { "type": "string" },
+    "produced_at": { "type": "string" }
+  },
+  "additionalProperties": true
+}

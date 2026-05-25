@@ -4,6 +4,11 @@ Operator-driven DLQ replay request. Publishes
 ``maint.event.v1{kind=dlq_replay, target, max_msgs}`` and waits for
 the ack from ``maint.dlq.v1`` (the DLQ supervisor).
 
+When ``--qa-correlation-id`` is provided for ``predict.request.dlq``,
+the replay request targets the full fanout batch that originated from
+one QA request. The value is only the copied ``qa.request`` envelope id;
+it is not a transport for QA text or other PII.
+
 Per ROADMAP §8.5 + :mod:`xops.opsctl._classify`:
 
 * ``--target`` MUST end in ``.dlq``. The supervisor refuses topics
@@ -46,7 +51,8 @@ def add_parser(
             "drains up to --max-msgs entries from the named DLQ and "
             "re-publishes them on the live topic. PII-bearing topics "
             "(qa.*, sec.*, auth.*, payment.*) are denied unless an "
-            "operator-attested override is in cfg."
+            "operator-attested override is in cfg. --qa-correlation-id "
+            "matches only the copied QA envelope id, never request text."
         ),
     )
     parser.add_argument(
@@ -59,6 +65,15 @@ def add_parser(
         type=int,
         default=0,
         help="Cap on messages replayed; 0 uses cfg.maint_dlq_max_replays_per_tick.",
+    )
+    parser.add_argument(
+        "--qa-correlation-id",
+        default="",
+        help=(
+            "Replay the predict.request.dlq entries for one QA fanout batch. "
+            "Supported only with --target predict.request.dlq. The value is "
+            "the copied QA envelope id only, not QA text."
+        ),
     )
     parser.add_argument(
         "--drop",
@@ -136,9 +151,21 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
 
     max_msgs = int(getattr(args, "max_msgs", 0) or 0)
     drop = bool(getattr(args, "drop", False))
+    qa_correlation_id = str(getattr(args, "qa_correlation_id", "") or "")
     confirm_pii = bool(getattr(args, "confirm_pii", False))
     confirm_destructive = str(getattr(args, "confirm_destructive", "") or "")
     reason = str(getattr(args, "reason", "") or "")
+
+    if qa_correlation_id and target != "predict.request.dlq":
+        import sys
+
+        sys.stderr.write(
+            "opsctl dlq-replay: --qa-correlation-id is supported only for "
+            "--target predict.request.dlq\n"
+        )
+        from .._exit_codes import ExitCode
+
+        return int(ExitCode.BAD_USAGE)
 
     flags: set[str] = set()
     if drop:
@@ -160,6 +187,8 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
         extra_payload["max_msgs"] = max_msgs
     if reason:
         extra_payload["reason"] = reason
+    if qa_correlation_id:
+        extra_payload["qa_correlation_id"] = qa_correlation_id
     if drop:
         # The supervisor differentiates replay vs drop on this flag in
         # the payload; the schema accepts unknown bool fields only via
@@ -172,7 +201,11 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
         # control-plane escalation path (§8.14.5).
         extra_payload["confirm_destructive"] = confirm_destructive
 
-    salient = {"max_msgs": max_msgs, "drop": drop}
+    salient = {
+        "max_msgs": max_msgs,
+        "drop": drop,
+        "qa_correlation_id": qa_correlation_id,
+    }
 
     spec = SubcommandSpec(
         name=NAME,

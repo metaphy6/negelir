@@ -488,6 +488,14 @@ class Config:
     # Mirrors the §7.4 sec.config fan-out cadence (mtime-style polling
     # against `pattern_allowlist_meta.version` under REPEATABLE READ).
     sec_input_allowlist_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_ALLOWLIST_RELOAD_S", "60")))
+    # Phase 8 §8.16.10 — dedicated key file for allowlist fingerprint
+    # HMAC (separate from the audit-log chain key). In mock profile,
+    # the allowlist codec uses an in-memory fallback key when this path
+    # is missing; prod requires a readable key file.
+    sec_input_allowlist_hmac_key_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_PATH", "/var/lib/negelir/secrets/allowlist_hmac.key"))
+    # Max key age (days) used by rotation-policy checks in the sec
+    # maintenance surface.
+    sec_input_allowlist_hmac_key_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_MAX_AGE_DAYS", "365")))
 
     # sec.quarantine.v1 envelope + storage backpressure (§7.1 + §7.5)
     sec_quarantine_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_QUARANTINE_TTL_DAYS", "30")))
@@ -588,6 +596,10 @@ class Config:
     #     ``<data_dir>/maint/opsctl_spool/`` respectively (see the
     #     properties of the same name).
     opsctl_ack_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_ACK_TIMEOUT_MS", "5000")))
+    # Phase 8 §8.16.13 — realistic local Redis Streams latency budget used
+    # by `make swarm.demo.live`. This must stay strictly below the hard
+    # operator-facing ack timeout above.
+    opsctl_ack_timeout_ms_live_demo: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_ACK_TIMEOUT_MS_LIVE_DEMO", "1000")))
     opsctl_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES", "1024")))
     opsctl_critical_agents: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_OPSCTL_CRITICAL_AGENTS", "consensus.v1,sec.rate.v1,maint.backup.v1"
@@ -969,6 +981,9 @@ class Config:
     maint_plane_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PLANE_LAG_ALERT_MS", "5000")))
     # Lag must exceed the threshold for this many seconds before tier-1 fires.
     maint_plane_lag_alert_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PLANE_LAG_ALERT_WINDOW_S", "60")))
+    # Symmetric sec-plane lag watchdog (§8.16.11) for sec.alert.v1 consumers.
+    sec_plane_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_PLANE_LAG_ALERT_MS", "5000")))
+    sec_plane_lag_alert_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SEC_PLANE_LAG_ALERT_WINDOW_S", "60")))
     # Lag must be below 1s for this many seconds before recovery fires.
     maint_plane_recovery_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MAINT_PLANE_RECOVERY_WINDOW_S", "120")))
 
@@ -1715,6 +1730,12 @@ class Config:
         _bounded("sec_input_breaker_open_s", self.sec_input_breaker_open_s, 1, 86_400)
         _bounded("sec_input_pattern_reload_s", self.sec_input_pattern_reload_s, 1, 86_400)
         _bounded("sec_input_allowlist_reload_s", self.sec_input_allowlist_reload_s, 1, 86_400)
+        _bounded(
+            "sec_input_allowlist_hmac_key_max_age_days",
+            self.sec_input_allowlist_hmac_key_max_age_days,
+            1,
+            3650,
+        )
         _SEC_DEVICES = {"auto", "cpu", "cuda", "rocm", "npu"}
         if self.sec_input_classifier_device not in _SEC_DEVICES:
             issues.append(
@@ -1773,6 +1794,12 @@ class Config:
 
         # Phase 8 §8.1 — ops console budgets + ack payload caps.
         _bounded("opsctl_ack_timeout_ms", self.opsctl_ack_timeout_ms, 1, 600_000)
+        _bounded("opsctl_ack_timeout_ms_live_demo", self.opsctl_ack_timeout_ms_live_demo, 1, 60_000)
+        if self.opsctl_ack_timeout_ms_live_demo >= self.opsctl_ack_timeout_ms:
+            issues.append(
+                "opsctl_ack_timeout_ms_live_demo must be lower than "
+                "opsctl_ack_timeout_ms"
+            )
         _bounded("opsctl_spool_max_entries", self.opsctl_spool_max_entries, 1, 1_000_000)
         _bounded("opsctl_spool_flush_max_per_run", self.opsctl_spool_flush_max_per_run, 0, 1_000_000)
         _bounded("maint_ack_payload_max_bytes", self.maint_ack_payload_max_bytes, 64, 1_048_576)
@@ -1966,6 +1993,8 @@ class Config:
         _bounded("maint_self_dlq_throttle_recovery_s", self.maint_self_dlq_throttle_recovery_s, 1, 3_600)
         _bounded("maint_plane_lag_alert_ms", self.maint_plane_lag_alert_ms, 100, 300_000)
         _bounded("maint_plane_lag_alert_window_s", self.maint_plane_lag_alert_window_s, 1, 3_600)
+        _bounded("sec_plane_lag_alert_ms", self.sec_plane_lag_alert_ms, 100, 300_000)
+        _bounded("sec_plane_lag_alert_window_s", self.sec_plane_lag_alert_window_s, 1, 3_600)
         _bounded("maint_plane_recovery_window_s", self.maint_plane_recovery_window_s, 1, 3_600)
         # Phase 8 §8.9 — bus circuit-breaker.
         _bounded("maint_bus_fail_threshold", self.maint_bus_fail_threshold, 1, 100)

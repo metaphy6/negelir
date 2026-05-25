@@ -33,6 +33,7 @@ except ImportError:
     _YAML_AVAILABLE = False
 
 from ai.common.config import Config
+from xops.maint.key_id import derive
 from ._key_lifecycle import (
     OperatorsCache,
     check_kill_switch,
@@ -263,7 +264,8 @@ def verify_envelope_signature(
         return False, "op_key_file_missing"
 
     raw_key = key_path.read_bytes()[:32]
-    if key_id_from_bytes(raw_key) != key_id_str:
+    operator_email = str(op_entry.get("email", ""))
+    if key_id_from_bytes(raw_key, operator_email=operator_email) != key_id_str:
         return False, "op_key_id_unknown"
 
     expected_sig = _compute_signature(
@@ -280,9 +282,9 @@ def verify_envelope_signature(
     return True, grace_reason
 
 
-def key_id_from_bytes(raw_key: bytes) -> str:
-    """Derive the public key-id: first 16 hex chars of SHA-256(raw_key)."""
-    return hashlib.sha256(raw_key).hexdigest()[:16]
+def key_id_from_bytes(raw_key: bytes, operator_email: str) -> str:
+    """Derive canonical public key-id bound to operator identity + key bytes."""
+    return derive(operator_email=operator_email, key_bytes=raw_key)
 
 
 def check_authz(

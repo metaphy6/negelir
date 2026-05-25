@@ -99,12 +99,20 @@ ops.backup-bump-age: ## §8.14.3 — upgrade the age binary pin (VERSION=<v>) �
 	@$(XOPS)/backup_pin.py backup-bump-age
 
 .PHONY: ops.bootstrap-key
-ops.bootstrap-key: ## §8.14.4 — generate per-operator HMAC key at ~/.negelir/opsctl_key (mode 0600)
+ops.bootstrap-key: ## §8.14.4 — generate per-operator HMAC key (OPERATOR=<email>) at ~/.negelir/opsctl_key (mode 0600)
 	@$(XOPS)/opsctl.py bootstrap-key
 
 .PHONY: ops.bootstrap-audit-key
 ops.bootstrap-audit-key: ## §8.15.7 — generate audit chain HMAC key at cfg.audit_chain_hmac_key_path (mode 0400)
 	@$(XOPS)/opsctl.py bootstrap-audit-key
+
+.PHONY: ops.bootstrap-allowlist-key
+ops.bootstrap-allowlist-key: ## §8.16.10 — generate allowlist HMAC key at cfg.sec_input_allowlist_hmac_key_path (mode 0400)
+	@$(XOPS)/opsctl.py bootstrap-allowlist-key
+
+.PHONY: ops.verify-key-id
+ops.verify-key-id: ## §8.16.14 — self-verify local key_id matches opsctl_operators.json (OPERATOR=<email>)
+	@$(XOPS)/opsctl.py verify-key-id
 
 .PHONY: fix.lua
 fix.lua: ## Phase 7 §7.3 — rewrite Lua SHA headers after intended edits
@@ -350,6 +358,10 @@ test.integration: env ## Full-pipeline integration test (skips cleanly if real d
 swarm.demo: ## Phase 4.8 DoD — end-to-end scrape→categorize→process→store
 	@$(XOPS)/swarm.py demo $(if $(LEAGUE),--league $(LEAGUE),)
 
+.PHONY: swarm.demo.live
+swarm.demo.live: ## Phase 8.16.13 — live Redis ops.denylist-clear demo with realistic ack budget
+	@$(XOPS)/swarm.py demo-live
+
 .PHONY: reactor.replay
 reactor.replay: ## Replay freshness events for one reactor (REACTOR=name SINCE=ts)
 	@$(XOPS)/reactor.py replay --reactor $(REACTOR) --since $(SINCE)
@@ -454,6 +466,14 @@ ops.allowlist-approve: ## §8.1/§8.7 — promote allowlist row pending→active
 .PHONY: ops.allowlist-show
 ops.allowlist-show: ## §8.1/§8.7 — read-only allowlist query (TARGET=all|<source>|<source>:<rule> [INCLUDE_EXPIRED=1])
 	@$(XOPS)/opsctl.py allowlist-show
+
+.PHONY: ops.allowlist-rehash
+ops.allowlist-rehash: ## §8.16.10 — trigger legacy SHA→HMAC allowlist rehash ([TARGET=all|<source>] [BATCH_SIZE=<n>])
+	@$(XOPS)/opsctl.py allowlist-rehash
+
+.PHONY: ops.rotate-allowlist-key
+ops.rotate-allowlist-key: ## §8.16.10 — trigger allowlist HMAC key rotation ([TARGET=<label>] [NO_REHASH=1])
+	@$(XOPS)/opsctl.py rotate-allowlist-key
 
 # ══════════════════════════════════════════════════════════════
 #                       PHASE TRACKING

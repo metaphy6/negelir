@@ -30,6 +30,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from typing import Iterable
+from uuid import uuid4
 
 import pytest
 
@@ -43,12 +44,24 @@ from ai.swarm.agents.maint.backup import (
     MaintBackupAgent,
     NoopDumpExecutor,
     NoopVerifier,
+    SEC_ALERT_BACKUP_COMMIT_SHA_UNAVAILABLE,
     StaticDiskGauge,
 )
 from ai.swarm.agents.topics import MAINT_ACK, MAINT_EVENT
 from ai.swarm.sdk import schemas
 from ai.swarm.sdk.types import Envelope, Message
 from xops.maint.prune_order import PRUNE_ORDER
+from xops.backup import migration_state as _migration_state
+
+
+class _AlwaysLeader:
+    name = "test-always-leader"
+
+    def is_leader(self) -> bool:
+        return True
+
+    def shed(self) -> None:
+        return None
 
 
 UTC = timezone.utc
@@ -84,14 +97,15 @@ def _build_agent(
     disk_free_bytes: int = 64 * 1024 ** 3,
     disk_last_dump_bytes: int = 0,
     quarantine_seed: dict[str, int] | None = None,
-    backup_dir: str = "/nonexistent/negelir_test_backup",
+    backup_dir: str | None = None,
 ) -> MaintBackupAgent:
     # Temporarily override maint_backup_dir during construction so the
     # agent never seeds _last_completed_wall from a real audit.csv.
     # Tests that need a real audit.csv pass backup_dir=str(tmp_path).
     # _record_audit is best-effort and silently ignores write failures.
     _prior_backup_dir = _cfg.maint_backup_dir
-    _cfg.maint_backup_dir = backup_dir  # type: ignore[attr-defined]
+    _effective_backup_dir = backup_dir or f"/tmp/negelir_test_backup_{uuid4().hex}"
+    _cfg.maint_backup_dir = _effective_backup_dir  # type: ignore[attr-defined]
     try:
         agent = MaintBackupAgent(
             dump=dump or NoopDumpExecutor(bytes_written=4096),
@@ -104,6 +118,7 @@ def _build_agent(
                 free_bytes=disk_free_bytes,
                 last_dump_bytes=disk_last_dump_bytes,
             ),
+            leader=_AlwaysLeader(),
             clock_iso=lambda: clock.wall().isoformat(timespec="seconds"),
             clock_wall=clock.wall,
             clock_mono_ns=clock.mono_ns,
@@ -119,6 +134,25 @@ def _kinds(msgs: Iterable[Message]) -> list[str]:
     return [(m.payload or {}).get("kind") for m in msgs]
 
 
+def _without_commit_sha_info_alert(msgs: Iterable[Message]) -> list[Message]:
+    """Ignore only the one-shot boot info alert in tests that assert silence.
+
+    This keeps deterministic empty-flush assertions stable without globally
+    suppressing sec.alert emissions for the whole module.
+    """
+    out: list[Message] = []
+    for msg in msgs:
+        payload = msg.payload or {}
+        if (
+            msg.envelope.topic == "sec.alert.v1"
+            and payload.get("kind") == SEC_ALERT_BACKUP_COMMIT_SHA_UNAVAILABLE
+            and payload.get("severity") == "info"
+        ):
+            continue
+        out.append(msg)
+    return out
+
+
 # ── Module-level fixture: force live-fire mode ───────────────────────────
 # §8.9 introduced mock-profile dry-run defaulting to True; this module
 # tests the *live-fire* path so we force dry_run=False for every test
@@ -128,18 +162,36 @@ def _kinds(msgs: Iterable[Message]) -> list[str]:
 
 
 @pytest.fixture(autouse=True)
-def _force_dry_run_false(monkeypatch: pytest.MonkeyPatch) -> None:
+def _force_dry_run_false(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
     """Force cfg.maint_backup_dry_run=False for all tests in this module.
 
     Also set a dummy encryption_key_dir so the §8.9 backup_unencrypted
     debounced-daily warn does not pollute tests that assert on empty
-    flush_expired() output. Tests that specifically exercise the
-    unencrypted path override this via their own monkeypatch.setattr.
+    flush_expired() output. Tests that assert silence filter the
+    one-shot backup_commit_sha_unavailable info alert locally.
     """
     monkeypatch.setattr(_cfg, "maint_backup_dry_run", False)
+    monkeypatch.setattr(_cfg, "profile", "mock", raising=False)
+    monkeypatch.setattr(_cfg, "maint_runtime", "compose", raising=False)
+    monkeypatch.setattr(_cfg, "maint_backup_cron", "0 3 * * *")
+    monkeypatch.setattr(_cfg, "maint_backup_cold_verify_cron", "0 5 * * 0")
+    monkeypatch.setattr(_cfg, "maint_backup_verify_mode", "full", raising=False)
+    monkeypatch.setattr(
+        _cfg,
+        "maint_backup_pii_excluded_columns",
+        "quarantine_samples.raw_bytes_b64",
+        raising=False,
+    )
     monkeypatch.setattr(
         _cfg, "maint_backup_encryption_key_dir", "/test/keys", raising=False,
     )
+    monkeypatch.setattr(
+        _cfg, "maint_backup_age_recipients_file", "", raising=False,
+    )
+    monkeypatch.setattr(_cfg, "model_dir", str(tmp_path / "models"), raising=False)
+    monkeypatch.setattr(_migration_state, "_COMMIT_SHA_ALERT_EMITTED", False)
 
 
 # ── Static surface contracts ────────────────────────────────────────────
@@ -160,10 +212,101 @@ def test_first_flush_arms_next_fire_and_emits_nothing() -> None:
     clock = _StubClock(_t(2025, 1, 1, 2, 30))  # 2:30 AM, before 3 AM cron
     agent = _build_agent(clock=clock)
     out = list(agent.flush_expired())
-    assert out == []
+    assert _without_commit_sha_info_alert(out) == []
     # Move clock forward but still before fire — must stay silent.
     clock.set(_t(2025, 1, 1, 2, 59))
     assert list(agent.flush_expired()) == []
+
+
+def test_lineage_gate_emits_legacy_backfill_once_when_writer_unavailable(
+    tmp_path,
+) -> None:
+    """§8.16.15: sidecarless legacy artifacts emit one info maint event once.
+
+    When no lineage sidecar exists anywhere under model_dir, the backup
+    agent must emit backup_model_lineage_legacy for pre-existing artifacts
+    instead of warn-level backup_model_lineage_missing sec.alert floods.
+    """
+    models_dir = tmp_path / "models"
+    artifact = models_dir / "pred.elo.v1" / "1.0.0" / "model.joblib"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"model-bytes")
+
+    clock = _StubClock(_t(2025, 1, 1, 2, 30))
+    agent = _build_agent(clock=clock)
+
+    first = _without_commit_sha_info_alert(list(agent.flush_expired()))
+    first_payloads = [m.payload for m in first]
+    legacy = [
+        p for p in first_payloads
+        if p and p.get("kind") == "backup_model_lineage_legacy"
+    ]
+    missing_warn = [
+        p for p in first_payloads
+        if p and p.get("kind") == "backup_model_lineage_missing"
+    ]
+
+    assert len(legacy) == 1
+    assert legacy[0]["target"].endswith("model.joblib")
+    assert legacy[0]["predictor_id"] == "pred.elo.v1"
+    assert legacy[0]["version"] == "1.0.0"
+    assert missing_warn == []
+
+    # One-time backfill: same sidecarless artifact should not re-emit
+    # on the next heartbeat tick.
+    second = _without_commit_sha_info_alert(list(agent.flush_expired()))
+    second_kinds = _kinds(second)
+    assert "backup_model_lineage_legacy" not in second_kinds
+
+
+def test_boot_with_lineage_floor_met_emits_legacy_backfill_without_warn_flood(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
+    """§8.16.15 proof: floor-met boot succeeds and emits legacy info only."""
+    from ai.swarm.agents.maint import backup as backup_module
+    from ai.swarm.agents.maint import model_lineage as lineage_module
+
+    chart = {
+        "components": {
+            "ai": {
+                "version": "1.5.0",
+                "description": "ai",
+                "last_changed": "2030-01-01T00:00:00+00:00",
+            },
+            "swarm": {
+                "version": "0.50.8",
+                "description": "swarm",
+                "last_changed": "2030-01-01T00:00:00+00:00",
+                "min_compatible_with": {"ai": "1.5.0"},
+            },
+        }
+    }
+
+    monkeypatch.setattr(
+        backup_module,
+        "RegistryAuditor",
+        lambda: lineage_module.RegistryAuditor(chart_loader=lambda: chart),
+    )
+
+    models_dir = tmp_path / "models"
+    artifact = models_dir / "pred.elo.v1" / "1.0.0" / "model.joblib"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"model-bytes")
+
+    clock = _StubClock(_t(2025, 1, 1, 2, 30))
+    agent = _build_agent(clock=clock)
+    msgs = _without_commit_sha_info_alert(list(agent.flush_expired()))
+    payloads = [m.payload for m in msgs]
+
+    legacy = [p for p in payloads if p and p.get("kind") == "backup_model_lineage_legacy"]
+    warn_flood = [
+        p for p in payloads
+        if p and p.get("kind") == "backup_model_lineage_missing"
+    ]
+
+    assert agent.name == "maint.backup.v1"
+    assert len(legacy) == 1
+    assert warn_flood == []
 
 
 def test_fire_at_cron_moment_runs_full_state_machine() -> None:
@@ -211,7 +354,7 @@ def test_missed_daily_window_triggers_single_startup_catch_up() -> None:
     # Coalesced policy: once the make-up run fired, subsequent
     # heartbeats on the same day stay silent.
     clock.set(_t(2025, 1, 1, 12, 1))
-    assert list(agent.flush_expired()) == []
+    assert _without_commit_sha_info_alert(list(agent.flush_expired())) == []
 
 
 def test_duplicate_same_day_fire_is_noop(
@@ -254,7 +397,7 @@ def test_duplicate_same_day_fire_is_noop(
     agent._next_fire_at = _t(2025, 1, 1, 3, 1)  # noqa: SLF001 — test
     clock.set(_t(2025, 1, 1, 3, 2))
     second = list(agent.flush_expired())
-    assert second == []
+    assert _without_commit_sha_info_alert(second) == []
     assert dump.calls == 1
 
 
@@ -413,7 +556,11 @@ def test_verify_failure_quarantines_existing_dump_dir(
 
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
     clock = _StubClock(_t(2025, 1, 1, 2, 30))
-    agent = _build_agent(clock=clock, verifier=NoopVerifier(fail=True))
+    agent = _build_agent(
+        clock=clock,
+        verifier=NoopVerifier(fail=True),
+        backup_dir=str(tmp_path),
+    )
     list(agent.flush_expired())  # arm
     clock.set(_t(2025, 1, 1, 3, 0))
 
@@ -944,6 +1091,22 @@ def test_bootstrap_includes_backup_agent(monkeypatch: pytest.MonkeyPatch) -> Non
 # ── §8.3 fail_safe_no_encryption_in_prod ────────────────────────────────
 
 
+def test_boot_refuses_when_lineage_writer_prerequisite_not_met(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§8.16.15: startup refuses when RegistryAuditor preflight fails."""
+    from ai.swarm.agents.maint.backup import BackupConfigError, RegistryAuditor
+    from ai.swarm.agents.maint.model_lineage import LineagePrerequisiteError
+
+    def _raise_preflight(_self: RegistryAuditor) -> None:
+        raise LineagePrerequisiteError("fail_safe_lineage_writer_missing")
+
+    monkeypatch.setattr(RegistryAuditor, "preflight", _raise_preflight)
+
+    with pytest.raises(BackupConfigError, match="fail_safe_lineage_writer_missing"):
+        _build_agent(clock=_StubClock(_t(2025, 1, 1, 2, 30)))
+
+
 def test_prod_profile_with_runtime_refuses_unencrypted_backup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1056,7 +1219,11 @@ def test_retention_keeps_recent_and_weekly_sundays(
     (tmp_path / "audit.csv").write_text("header\n")
 
     clock = _StubClock(_t(2025, 4, 30, 2, 30))
-    agent = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 0})
+    agent = _build_agent(
+        clock=clock,
+        pruner_counts={"opsctl_audit": 0},
+        backup_dir=str(tmp_path),
+    )
     list(agent.flush_expired())  # arm
     clock.set(_t(2025, 4, 30, 3, 0))
     msgs = list(agent.flush_expired())
@@ -1101,7 +1268,11 @@ def test_retention_dry_run_reports_but_does_not_delete(
     _seed_dump_dir(tmp_path, "pod_2025-04-15T03_00_00+00_00")  # would prune
 
     clock = _StubClock(_t(2025, 4, 30, 2, 30))
-    agent = _build_agent(clock=clock, pruner_counts={"opsctl_audit": 0})
+    agent = _build_agent(
+        clock=clock,
+        pruner_counts={"opsctl_audit": 0},
+        backup_dir=str(tmp_path),
+    )
     list(agent.flush_expired())
     clock.set(_t(2025, 4, 30, 3, 0))
     msgs = list(agent.flush_expired())
@@ -1182,7 +1353,11 @@ def test_cold_verify_emits_completed_for_oldest_sunday_dump(
     # Saturday boot, Sunday morning fire.
     clock = _StubClock(_t(2025, 5, 3, 12, 0))
     verifier = NoopVerifier()
-    agent = _build_agent(clock=clock, verifier=verifier)
+    agent = _build_agent(
+        clock=clock,
+        verifier=verifier,
+        backup_dir=str(tmp_path),
+    )
     list(agent.flush_expired())  # arm
     clock.set(_t(2025, 5, 4, 5, 1))  # Sun 05:01 UTC — cold-verify due
     msgs = list(agent.flush_expired())
@@ -1214,7 +1389,11 @@ def test_cold_verify_failed_emits_event_and_critical_sec_alert_no_prune(
     assert target.exists()
     clock = _StubClock(_t(2025, 5, 3, 12, 0))
     verifier = NoopVerifier(fail=True)
-    agent = _build_agent(clock=clock, verifier=verifier)
+    agent = _build_agent(
+        clock=clock,
+        verifier=verifier,
+        backup_dir=str(tmp_path),
+    )
     list(agent.flush_expired())  # arm
     clock.set(_t(2025, 5, 4, 5, 1))
     msgs = list(agent.flush_expired())
@@ -1255,7 +1434,7 @@ def test_cold_verify_kinds_validate_against_subschemas(
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(tmp_path))
     _mk_dump_dir(tmp_path, "pod_2025-04-13")
     clock = _StubClock(_t(2025, 5, 3, 12, 0))
-    agent = _build_agent(clock=clock)  # NoopVerifier success
+    agent = _build_agent(clock=clock, backup_dir=str(tmp_path))  # NoopVerifier success
     list(agent.flush_expired())
     clock.set(_t(2025, 5, 4, 5, 1))
     msgs = list(agent.flush_expired())

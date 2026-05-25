@@ -84,9 +84,13 @@ from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 from ._liveness import LivenessMixin
 from ._op_signature import gate_op_envelope
 from .model_lineage import (
+    BACKUP_MODEL_LINEAGE_LEGACY,
     LineageMissingDebouncer,
+    LineagePrerequisiteError,
+    RegistryAuditor,
     SEC_ALERT_BACKUP_MODEL_LINEAGE_MISSING,
     audit_model_artifacts,
+    is_lineage_writer_available,
     iter_lineage_missing_alerts,
 )
 
@@ -1334,12 +1338,20 @@ class MaintBackupAgent(LivenessMixin):
             audit_logger if audit_logger is not None
             else InMemoryMaintAuditLogger()
         )
+        self._backup_dir: Path = Path(str(_cfg.maint_backup_dir))
         self._clock_iso = clock_iso or _utc_iso
         self._clock_wall = clock_wall or utc_now
         self._clock_mono_ns = clock_mono_ns or (
             lambda: int(self._clock_wall().timestamp() * 1e9)
         )
         self._new_id = new_id or _new_id
+        try:
+            RegistryAuditor().preflight()
+        except LineagePrerequisiteError as exc:
+            raise BackupConfigError(
+                "maint.backup.v1: refusing to start; "
+                f"{exc}"
+            ) from exc
         self._pg_role_checker: PgRoleChecker = (
             pg_role_checker if pg_role_checker is not None
             else NoopPgRoleChecker()
@@ -1527,7 +1539,7 @@ class MaintBackupAgent(LivenessMixin):
         # (idempotency on `(job_id, backup_date_utc)`). Failures
         # are silent — a missing / unreadable file just means
         # "first run today", which is the same as a fresh install.
-        self._audit_path: Path = Path(_cfg.maint_backup_dir) / "audit.csv"
+        self._audit_path: Path = self._backup_dir / "audit.csv"
         try:
             now_wall = self._clock_wall()
             seeded_completed = last_completed_today(
@@ -1570,6 +1582,11 @@ class MaintBackupAgent(LivenessMixin):
         self._lineage_missing_debouncer = LineageMissingDebouncer(
             window_h=float(_cfg.maint_backup_model_lineage_missing_debounce_h)
         )
+        # §8.16.15 startup-time legacy backfill ledger. When the lineage
+        # writer is unavailable (no sidecar exists anywhere yet), emit a
+        # one-time info maint.event per sidecarless legacy artifact instead
+        # of warn-level lineage-missing sec.alert floods.
+        self._lineage_legacy_reported: set[str] = set()
         # §8.13.4 restore version-invariant: emit once-at-boot alert when
         # build_metadata.json is absent (repo_commit_sha unavailable).
         # The module-level sentinel ensures at most one emission per
@@ -2177,10 +2194,28 @@ class MaintBackupAgent(LivenessMixin):
         # so it does not page on-call but is visible on dashboards.
         models_dir = Path(str(_cfg.model_dir))
         _audit_entries = audit_model_artifacts(models_dir)
+        _writer_available = is_lineage_writer_available(models_dir)
+        if not _writer_available:
+            for _entry in _audit_entries:
+                if _entry.has_sidecar:
+                    continue
+                _target = str(_entry.artifact_path)
+                if _target in self._lineage_legacy_reported:
+                    continue
+                self._lineage_legacy_reported.add(_target)
+                out.append(self._notify(
+                    BACKUP_MODEL_LINEAGE_LEGACY,
+                    extra={
+                        "target": _target,
+                        "predictor_id": _entry.predictor_id,
+                        "version": _entry.version,
+                    },
+                ))
         for _pid, _reason in iter_lineage_missing_alerts(
             _audit_entries,
             self._lineage_missing_debouncer,
             now=now_wall,
+            writer_available=_writer_available,
         ):
             out.append(self._sec_alert(
                 kind=SEC_ALERT_BACKUP_MODEL_LINEAGE_MISSING,
@@ -2524,7 +2559,7 @@ class MaintBackupAgent(LivenessMixin):
             # Best-effort — a missing source dir (the in-memory shim
             # path) is the dominant case and a no-op.
             quarantined: Path | None = quarantine_failed_dump_dir(
-                backup_dir=str(_cfg.maint_backup_dir),
+                backup_dir=str(self._backup_dir),
                 fire_window_id=fire_window_id,
             )
             yield self._notify(
@@ -2677,7 +2712,7 @@ class MaintBackupAgent(LivenessMixin):
         # the retention pruner too: dry-run reports the same
         # partition without removing anything from disk.
         retention = prune_retained_dumps(
-            backup_dir=str(_cfg.maint_backup_dir),
+            backup_dir=str(self._backup_dir),
             keep_days=int(_cfg.maint_backup_retention_days),
             keep_weeks=int(_cfg.maint_backup_retention_weeks),
             now=now_wall,
@@ -2833,7 +2868,7 @@ class MaintBackupAgent(LivenessMixin):
         """
 
         candidate = oldest_retained_sunday_dump(
-            backup_dir=str(_cfg.maint_backup_dir),
+            backup_dir=str(self._backup_dir),
         )
         if candidate is None:
             # No retained Sunday dump yet — nothing to cold-verify.
@@ -2991,7 +3026,7 @@ class MaintBackupAgent(LivenessMixin):
         Windows/CIFS where mode bits are meaningless.
         """
 
-        backup_dir = Path(_cfg.maint_backup_dir)
+        backup_dir = self._backup_dir
         if not backup_dir.exists():
             # Nothing to audit yet — first run will create it.
             return []

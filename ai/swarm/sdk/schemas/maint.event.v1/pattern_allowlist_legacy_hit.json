@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/pattern_allowlist_legacy_hit",
+  "title": "maint.event.v1{kind=pattern_allowlist_legacy_hit}",
+  "description": "Phase 8 S8.16.10 - emitted when sec.input.v1 suppresses a hit via a legacy SHA allowlist row. Debounced once per legacy row id per process to prompt operator rehash.",
+  "type": "object",
+  "required": ["kind", "kind_schema_version", "source", "rule_id", "row_id", "produced_at"],
+  "properties": {
+    "kind": { "const": "pattern_allowlist_legacy_hit" },
+    "kind_schema_version": { "const": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "rule_id": { "type": "string", "minLength": 1 },
+    "row_id": { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" }
+  },
+  "additionalProperties": false
+}

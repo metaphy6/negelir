@@ -50,6 +50,11 @@ from .replay_policy import (
 from .._liveness import LivenessMixin
 from .._op_signature import gate_op_envelope
 from .._spool_ack_reconciler import SpoolAckReconciler
+from ..sec import (
+    _SecPlaneLagWatchdog,
+    _created_at_to_epoch_s,
+    _cross_plane_sec_emission_policy,
+)
 
 _log = logging.getLogger("swarm.agents.maint.dlq")
 
@@ -170,14 +175,15 @@ class _RpsSecBucket:
 class MaintDlqSupervisor(LivenessMixin):
     """`maint.dlq.v1` reactor.
 
-    Subscribes ``maint.event.v1`` (kind=dlq_replay).
+    Subscribes ``maint.event.v1`` (kind=dlq_replay), ``maint.ack.v1``,
+    and ``sec.alert.v1`` (§8.16.11 consumer-lag watchdog).
     Publishes ``maint.event.v1`` (notifications: dlq_replayed,
     dlq_escalated, dlq_topic_disabled_drained, dlq_dropped) and
     ``maint.ack.v1`` (acks for the operator request).
     """
 
     name = "maint.dlq.v1"
-    subscribes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
+    subscribes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
     publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
@@ -255,6 +261,7 @@ class MaintDlqSupervisor(LivenessMixin):
             clock_iso=clock_iso,
             new_id=new_id,
         )
+        self._sec_plane_watchdog = _SecPlaneLagWatchdog()
 
     def _now_s(self) -> float:
         if self._clock_s is not None:
@@ -417,6 +424,8 @@ class MaintDlqSupervisor(LivenessMixin):
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
         topic = msg.envelope.topic
+        if topic == SEC_ALERT:
+            return list(self._handle_sec_alert(msg))
         # §8.16.2 — ack-only consumer of maint.ack.v1 spool-flush envelopes.
         # Sweep is called on every tick regardless of topic so deadline-
         # elapsed windows are closed even without incoming acks.
@@ -463,6 +472,58 @@ class MaintDlqSupervisor(LivenessMixin):
             return list(self._handle_pause(msg, payload, paused=False))
         return ()  # ignore other kinds
 
+    def _handle_sec_alert(self, msg: Message) -> Iterable[Message]:
+        if not self._leader.is_leader():
+            return ()
+        sec_lag_events, lag_tier = self._sec_plane_lag_events(msg)
+        for event in sec_lag_events:
+            yield event
+
+        payload = msg.payload or {}
+        kind = str(payload.get("kind") or "")
+        severity = str(payload.get("severity") or "")
+        if kind != "consumer_likely_broken" or severity not in {"error", "critical"}:
+            return
+
+        policy = _cross_plane_sec_emission_policy(maint_tier=0, sec_tier=lag_tier)
+        if not policy.consume_non_emergency_sec_alert:
+            return
+
+        target = str(payload.get("subject") or "").strip()
+        if not target or target in self._frozen_topics:
+            return
+        self._frozen_topics[target] = "sec_alert_consumer_broken"
+        alert_id = str(payload.get("alert_id") or "").strip()
+        yield self._notify(
+            "dlq_consumer_broken",
+            target=target,
+            extra={
+                "reason": "sec_alert_consume",
+                "alert_id": alert_id,
+            },
+        )
+
+    def _sec_plane_lag_events(self, msg: Message) -> tuple[list[Message], int]:
+        now_s = self._now_s()
+        created_s = _created_at_to_epoch_s(str(msg.envelope.created_at or ""))
+        lag_s = max(0.0, now_s - created_s) if created_s is not None else 0.0
+        self._sec_plane_watchdog.note_lag(lag_s=lag_s, now_s=now_s)
+        entered = self._sec_plane_watchdog.tick(now_s=now_s)
+        events: list[Message] = []
+        for tier in entered:
+            events.append(
+                self._notify(
+                    "maint_plane_throttled",
+                    target="sec.alert.v1",
+                    extra={
+                        "tier": tier,
+                        "lag_s": lag_s,
+                        "action": "sec_plane_shed",
+                    },
+                )
+            )
+        return events, self._sec_plane_watchdog.tier
+
     # §8.16.2 — spool-flush ack reconciliation ────────────────────
     def _handle_spool_ack(self, msg: Message) -> Iterable[Message]:
         """Consume a ``maint.ack.v1`` emitted by a spool-flush consumer.
@@ -506,6 +567,7 @@ class MaintDlqSupervisor(LivenessMixin):
     def _handle_replay(self, msg: Message, payload: dict) -> Iterable[Message]:
         request_id = str(payload.get("request_id") or "")
         target_dlq = str(payload.get("target") or "")
+        qa_correlation_id = str(payload.get("qa_correlation_id") or "")
         if not request_id or not target_dlq:
             return  # malformed — silently drop (the schema validator
                     # at the producer side is the contract)
@@ -622,6 +684,17 @@ class MaintDlqSupervisor(LivenessMixin):
         max_msgs = int(payload.get("max_msgs") or 0) or max_msgs_default
         max_msgs = min(max_msgs, max_msgs_default * 10)  # hard ceiling
 
+        replay_details = {"replayed_count": 0, "visit_count": visit_count}
+        replay_notify_extra = {
+            "replayed_count": 0,
+            "max_msgs": max_msgs,
+            "request_id": request_id,
+            "visit_count": visit_count,
+        }
+        if qa_correlation_id:
+            replay_notify_extra["qa_correlation_id"] = qa_correlation_id
+            replay_details["qa_correlation_id"] = qa_correlation_id
+
         # v1 does not actually drain Redis Streams here — the bus
         # adapter exposes no public replay primitive yet. The
         # supervisor records the request, emits a `dlq_replayed`
@@ -643,14 +716,10 @@ class MaintDlqSupervisor(LivenessMixin):
         yield from iter(pressure_alerts)
         yield self._notify("dlq_replayed",
                            target=target_dlq,
-                           extra={"replayed_count": replayed,
-                                  "max_msgs": max_msgs,
-                                  "request_id": request_id,
-                                  "visit_count": visit_count})
+                           extra=replay_notify_extra)
         yield self._ack(msg, request_id, accepted=True,
                         reason="replayed",
-                        details={"replayed_count": replayed,
-                                 "visit_count": visit_count})
+                        details=replay_details)
 
     # ── Periodic round-robin tick (Phase 8 §8.5 C1) ──────────────
     def tick(self, active_topics: list[str],

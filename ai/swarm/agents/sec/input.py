@@ -67,6 +67,7 @@ from ..payloads import (
     SecConfigEvent,
 )
 from ..topics import (
+    MAINT_EVENT,
     QA_REQUEST,
     QA_REQUEST_V1,
     SEC_ALERT,
@@ -79,6 +80,8 @@ from ._allowlist import (
     AllowlistCache,
     InMemoryAllowlistReader,
     PatternAllowlistReader,
+    allowlist_hmac_key_age_days,
+    compute_pattern_key_legacy_sha,
     compute_pattern_key,
 )
 from ..maint.scaler import _LabelCounter
@@ -184,7 +187,13 @@ class SecInputAgent:
 
     name = "sec.input.v1"
     subscribes: tuple[Topic, ...] = (QA_REQUEST, SEC_CONFIG)
-    publishes: tuple[Topic, ...] = (QA_REQUEST_V1, SEC_QUARANTINE, SEC_ALERT, SEC_CONFIG)
+    publishes: tuple[Topic, ...] = (
+        QA_REQUEST_V1,
+        SEC_QUARANTINE,
+        SEC_ALERT,
+        SEC_CONFIG,
+        MAINT_EVENT,
+    )
 
     def __init__(
         self,
@@ -286,6 +295,13 @@ class SecInputAgent:
         self._m_allowlist_hits = _LabelCounter(
             "sec_input_allowlist_hits_total", ("rule_id",)
         )
+        # Phase 8 §8.16.10 — legacy SHA compatibility path emits one
+        # maint.event.v1 signal per legacy row key to avoid event spam.
+        self._legacy_allowlist_hit_rows: set[str] = set()
+        # Phase 8 §8.16.10 — overdue allowlist key rotation alert is
+        # debounced daily per process.
+        self._allowlist_rotation_overdue_last_mono = float("-inf")
+        self._allowlist_rotation_overdue_interval_s = 86400.0
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
@@ -390,6 +406,7 @@ class SecInputAgent:
         # contract: the v1 envelope and the classifier input are
         # consistent — no slip-through between detection and forward).
         clean_text, sanitize_steps, mutated = sanitize_text(req.raw_text)
+        yield from self._emit_allowlist_key_rotation_overdue(req)
 
         # Deterministic injection-rule sweep BEFORE the (possibly
         # absent / load-shed) classifier. Quarantines the request
@@ -402,7 +419,7 @@ class SecInputAgent:
                 # Phase 8 §8.7 — pattern_allowlist suppression. Operator-
                 # confirmed false positives shadow the rule for this
                 # exact (source, rule_id, hit_substring) triple. The
-                # raw substring is hashed (NFC + sha256[:16]) so the
+                # raw substring is hashed (NFC + HMAC-SHA256[:16]) so the
                 # cache never holds the unredacted text. Suppression
                 # is counted, not silently dropped.
                 m = hit.pattern.search(clean_text)
@@ -410,8 +427,31 @@ class SecInputAgent:
                 allow_key = compute_pattern_key(
                     "qa", hit.rule_id, hit_substring,
                 )
-                if self._allowlist_cache.is_allowlisted(allow_key):
+                allow_key_legacy = compute_pattern_key_legacy_sha(
+                    "qa", hit.rule_id, hit_substring,
+                )
+                matched_key = self._allowlist_cache.first_match(
+                    (allow_key, allow_key_legacy)
+                )
+                if matched_key is not None:
                     self._m_allowlist_hits.inc((hit.rule_id,))
+                    if (
+                        matched_key == allow_key_legacy
+                        and self._mark_legacy_allowlist_row_seen(allow_key_legacy)
+                    ):
+                        yield Message.new(
+                            MAINT_EVENT,
+                            {
+                                "kind": "pattern_allowlist_legacy_hit",
+                                "kind_schema_version": 1,
+                                "target": f"qa:{hit.rule_id}",
+                                "source": "qa",
+                                "rule_id": hit.rule_id,
+                                "row_id": allow_key_legacy,
+                                "produced_at": self._clock_iso(),
+                            },
+                            producer=self.name,
+                        )
                     _log.debug(
                         "%s: pattern hit suppressed by allowlist "
                         "(rule_id=%s)", self.name, hit.rule_id,
@@ -454,6 +494,47 @@ class SecInputAgent:
             mutated=mutated,
             classifier_reason=reason,
         )
+
+    def _mark_legacy_allowlist_row_seen(self, row_id: str) -> bool:
+        """Return True only on the first legacy-row hit in this process."""
+        with self._lock:
+            if row_id in self._legacy_allowlist_hit_rows:
+                return False
+            self._legacy_allowlist_hit_rows.add(row_id)
+            return True
+
+    def _emit_allowlist_key_rotation_overdue(self, req: QaRequest) -> Iterable[Message]:
+        """Emit daily warn alert when allowlist HMAC key age exceeds policy."""
+        age_days = allowlist_hmac_key_age_days()
+        if age_days is None:
+            return
+        max_age_days = int(getattr(_cfg, "sec_input_allowlist_hmac_key_max_age_days", 365))
+        if age_days <= max_age_days:
+            return
+        now = self._clock_mono()
+        with self._lock:
+            if (
+                now - self._allowlist_rotation_overdue_last_mono
+                < self._allowlist_rotation_overdue_interval_s
+            ):
+                return
+            self._allowlist_rotation_overdue_last_mono = now
+        alert = SecAlert(
+            alert_id=self._new_id(),
+            kind="allowlist_hmac_key_rotation_overdue",
+            severity="warn",
+            source=self.name,
+            reason=(
+                "allowlist HMAC key age exceeded max age "
+                f"({age_days:.1f}d > {max_age_days}d)"
+            ),
+            produced_at=self._clock_iso(),
+            subject="allowlist_hmac_key",
+            request_id=req.request_id,
+            client_id=req.client_id,
+            ip=req.ip,
+        )
+        yield Message.new(SEC_ALERT, alert.as_dict(), producer=self.name)
 
     def _classify(self, text: str) -> tuple[str, str]:
         """Run the escalation-tier classifier and return

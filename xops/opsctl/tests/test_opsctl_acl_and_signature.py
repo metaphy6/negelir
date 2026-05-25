@@ -70,7 +70,8 @@ def test_tampered_payload_fails_verification(tmp_path: Path) -> None:
     key_file.chmod(0o600)
 
     # Derive the key_id the inject/verify functions would use.
-    kid = key_id_from_bytes(raw_key)
+    operator_email = "test@example.com"
+    kid = key_id_from_bytes(raw_key, operator_email=operator_email)
 
     # Register the key_id in a temp operators.json so verify can look it up.
     operators_file = tmp_path / "opsctl_operators.json"
@@ -78,7 +79,7 @@ def test_tampered_payload_fails_verification(tmp_path: Path) -> None:
         json.dumps({
             "operators": {
                 kid: {
-                    "email": "test@example.com",
+                    "email": operator_email,
                     "added_at": "2025-01-01T00:00:00Z",
                     "revoked_at": None,
                 }
@@ -90,6 +91,7 @@ def test_tampered_payload_fails_verification(tmp_path: Path) -> None:
         opsctl_require_signature=True,
         opsctl_key_path=str(key_file),
         opsctl_operators_file=str(operators_file),
+        opsctl_key_max_age_days=9999,
     )
 
     payload: dict = {
@@ -97,6 +99,7 @@ def test_tampered_payload_fails_verification(tmp_path: Path) -> None:
         "kind": "liveness",
         "target": "all",
         "produced_at": "2025-01-01T00:00:00Z",
+        "client_id": operator_email,
     }
     inject_signature(payload, cfg)
     assert "op_signature" in payload, "inject_signature must add op_signature"

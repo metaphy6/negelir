@@ -1,6 +1,6 @@
 {
-  "_comment": "Phase 8 §8.14.4 — per-operator key registry. key_id = sha256(key_bytes)[:16].",
+  "_comment": "Phase 8 §8.14.4 + §8.16.14 — per-operator key registry.",
   "_schema": "key_id (16 hex chars) → {email, added_at, revoked_at, revocation_reason}",
-  "key_id_derivation": "sha256(raw_key_bytes).hexdigest()[:16]",
+  "key_id_derivation": "sha256('negelir-opsctl-key-v1|<operator_email>|<base64(raw_key_bytes)>')[:16]",
   "operators": {}
 }

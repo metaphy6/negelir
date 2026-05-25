@@ -70,6 +70,30 @@ def test_chart_is_canonical(tmp_path: Path) -> None:
     )
 
 
+def test_validate_compatibility_accepts_floor_met() -> None:
+    chart = _fresh_chart()
+    chart["components"]["ai"]["min_compatible_with"] = {"server": "1.0.0"}
+
+    # Does not raise when the floor is met.
+    v.validate_compatibility(chart)
+
+
+def test_validate_compatibility_raises_on_floor_violation() -> None:
+    chart = _fresh_chart()
+    chart["components"]["ai"]["min_compatible_with"] = {"server": "1.0.1"}
+
+    with pytest.raises(v.VersionChartError, match="requires 'server' >= 1.0.1"):
+        v.validate_compatibility(chart)
+
+
+def test_validate_compatibility_raises_on_synthesized_chart_violation() -> None:
+    chart = _fresh_chart()
+    chart["components"]["infra_mock"]["min_compatible_with"] = {"server": "1.0.1"}
+
+    with pytest.raises(v.VersionChartError, match="requires 'server' >= 1.0.1"):
+        v.validate_compatibility(chart)
+
+
 # ── Bump operation ────────────────────────────────────────────
 
 

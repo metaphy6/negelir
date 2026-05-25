@@ -24,9 +24,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from ai.swarm.sdk.bus import InMemoryBus
+from ai.swarm.sdk.types import Message
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl import spool_reconciler
-from xops.opsctl.subcommands import scale_pin, scale_unpin, spool_show
+from xops.opsctl.subcommands import dlq_replay, dlq_show, scale_pin, scale_unpin, spool_show
 
 
 class _Env:
@@ -67,6 +69,34 @@ def _run(module, **fields) -> tuple[int, dict, str]:
         except json.JSONDecodeError:
             parsed = {}
     return rc, parsed, raw
+
+
+def _publish_predict_request_dlq(
+    bus: InMemoryBus,
+    request_id: str,
+    *,
+    qa_correlation_id: str | None,
+    match_id: str,
+    market: str,
+    producer: str = "predictor.elo.v1",
+) -> None:
+    payload = {
+        "request_id": request_id,
+        "match_id": match_id,
+        "market": market,
+    }
+    if qa_correlation_id is not None:
+        payload["metadata"] = {"qa_correlation_id": qa_correlation_id}
+    bus.publish(Message.new(
+        "predict.request.dlq",
+        {
+            "original_topic": "predict.request",
+            "reason": "retry_budget_exhausted",
+            "attempts": 2,
+            "payload": payload,
+        },
+        producer=producer,
+    ))
 
 
 class TestScalePin(unittest.TestCase):
@@ -159,6 +189,307 @@ class TestSpoolShow(unittest.TestCase):
             self.assertEqual(row["kind"], "denylist_clear")
             self.assertEqual(row["target"], "subj-1")
             self.assertEqual(row["request_id"], "req-abc")
+
+
+class TestDlqShow(unittest.TestCase):
+    def test_filters_entries_by_qa_correlation_id(self) -> None:
+        bus = InMemoryBus()
+        qa_id = "qa-corr-123"
+        for request_id in ("req-1", "req-2", "req-3"):
+            _publish_predict_request_dlq(
+                bus,
+                request_id,
+                qa_correlation_id=qa_id,
+                match_id="m-1",
+                market="1x2",
+            )
+        _publish_predict_request_dlq(
+            bus,
+            "req-other",
+            qa_correlation_id="qa-other",
+            match_id="m-2",
+            market="ah",
+            producer="predictor.xgb.v1",
+        )
+        _publish_predict_request_dlq(
+            bus,
+            "req-legacy",
+            qa_correlation_id=None,
+            match_id="m-3",
+            market="btts",
+        )
+
+        args = argparse.Namespace(
+            topic="predict.request.dlq",
+            limit=100,
+            qa_correlation_id=qa_id,
+            json=True,
+        )
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = dlq_show.run(args, bus=bus)
+
+        self.assertEqual(rc, int(ExitCode.OK))
+        doc = json.loads(buf.getvalue().strip())
+        self.assertEqual(doc["op"], "dlq-show")
+        self.assertEqual(doc["topic"], "predict.request.dlq")
+        self.assertEqual(doc["qa_correlation_id"], qa_id)
+        self.assertEqual(doc["count"], 3)
+        self.assertEqual(
+            sorted(row["request_id"] for row in doc["entries"]),
+            ["req-1", "req-2", "req-3"],
+        )
+
+    def test_proof_qa_fanout_show_returns_exact_three_predict_dlqs(self) -> None:
+        bus = InMemoryBus()
+        qa_id = "qa-fanout-msg-001"
+        expected_request_ids = ["pred-req-1", "pred-req-2", "pred-req-3"]
+        for offset, request_id in enumerate(expected_request_ids, start=1):
+            _publish_predict_request_dlq(
+                bus,
+                request_id,
+                qa_correlation_id=qa_id,
+                match_id=f"match-{offset}",
+                market="1x2",
+            )
+        _publish_predict_request_dlq(
+            bus,
+            "pred-req-other",
+            qa_correlation_id="qa-other-msg",
+            match_id="match-other",
+            market="ah",
+        )
+        _publish_predict_request_dlq(
+            bus,
+            "pred-req-legacy",
+            qa_correlation_id=None,
+            match_id="match-legacy",
+            market="btts",
+        )
+
+        args = argparse.Namespace(
+            topic="predict.request.dlq",
+            limit=100,
+            qa_correlation_id=qa_id,
+            json=True,
+        )
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = dlq_show.run(args, bus=bus)
+
+        self.assertEqual(rc, int(ExitCode.OK))
+        doc = json.loads(buf.getvalue().strip())
+        self.assertEqual(doc["count"], 3)
+        self.assertEqual(
+            sorted(row["request_id"] for row in doc["entries"]),
+            expected_request_ids,
+        )
+        self.assertTrue(all(row["qa_correlation_id"] == qa_id for row in doc["entries"]))
+
+    def test_ignores_non_string_qa_correlation_values_to_avoid_pii_bridging(self) -> None:
+        bus = InMemoryBus()
+        bus.publish(Message.new(
+            "predict.request.dlq",
+            {
+                "original_topic": "predict.request",
+                "reason": "retry_budget_exhausted",
+                "attempts": 2,
+                "payload": {
+                    "request_id": "req-malformed",
+                    "match_id": "m-1",
+                    "market": "1x2",
+                    "qa_correlation_id": {"question": "Ali'nin kuponu ne oldu?"},
+                    "metadata": {
+                        "qa_correlation_id": ["Ayse", "555-0100"],
+                    },
+                    "sanitized_text": "Ali'nin kuponu ne oldu?",
+                },
+            },
+            producer="predictor.elo.v1",
+        ))
+
+        args = argparse.Namespace(
+            topic="predict.request.dlq",
+            limit=100,
+            qa_correlation_id="Ali'nin kuponu ne oldu?",
+            json=True,
+        )
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = dlq_show.run(args, bus=bus)
+
+        self.assertEqual(rc, int(ExitCode.OK))
+        doc = json.loads(buf.getvalue().strip())
+        self.assertEqual(doc["count"], 0)
+        self.assertEqual(doc["entries"], [])
+
+    def test_bad_usage_when_topic_is_not_a_dlq(self) -> None:
+        rc, out, raw = _run(
+            dlq_show,
+            topic="predict.request",
+            limit=10,
+            qa_correlation_id="",
+            json=True,
+        )
+        self.assertEqual(rc, int(ExitCode.BAD_USAGE))
+        self.assertEqual(out, {})
+        self.assertEqual(raw, "")
+
+    def test_proof_legacy_entries_stay_in_no_correlation_bucket(self) -> None:
+        bus = InMemoryBus()
+        _publish_predict_request_dlq(
+            bus,
+            "legacy-1",
+            qa_correlation_id=None,
+            match_id="legacy-match-1",
+            market="1x2",
+        )
+        _publish_predict_request_dlq(
+            bus,
+            "legacy-2",
+            qa_correlation_id=None,
+            match_id="legacy-match-2",
+            market="ah",
+        )
+        _publish_predict_request_dlq(
+            bus,
+            "corr-1",
+            qa_correlation_id="qa-corr-keep",
+            match_id="corr-match-1",
+            market="btts",
+        )
+
+        json_args = argparse.Namespace(
+            topic="predict.request.dlq",
+            limit=100,
+            qa_correlation_id="",
+            json=True,
+        )
+        json_buf = io.StringIO()
+        with redirect_stdout(json_buf):
+            rc = dlq_show.run(json_args, bus=bus)
+
+        self.assertEqual(rc, int(ExitCode.OK))
+        doc = json.loads(json_buf.getvalue().strip())
+        legacy_rows = [row for row in doc["entries"] if not row["qa_correlation_id"]]
+        self.assertEqual(
+            sorted(row["request_id"] for row in legacy_rows),
+            ["legacy-1", "legacy-2"],
+        )
+
+        plain_args = argparse.Namespace(
+            topic="predict.request.dlq",
+            limit=100,
+            qa_correlation_id="",
+            json=False,
+        )
+        plain_buf = io.StringIO()
+        with redirect_stdout(plain_buf):
+            rc = dlq_show.run(plain_args, bus=bus)
+
+        self.assertEqual(rc, int(ExitCode.OK))
+        plain = plain_buf.getvalue()
+        self.assertIn("request_id=legacy-1", plain)
+        self.assertIn("request_id=legacy-2", plain)
+        self.assertIn("qa_correlation_id=-", plain)
+
+
+class TestDlqReplay(unittest.TestCase):
+    def test_predict_request_batch_replay_accepts_qa_correlation_id(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            rc, out, _ = _run(
+                dlq_replay,
+                target="predict.request.dlq",
+                max_msgs=25,
+                qa_correlation_id="qa-corr-123",
+                drop=False,
+                confirm_pii=False,
+                confirm_destructive="",
+                reason="replay qa batch",
+                client_id="opsctl-test",
+                confirm="",
+                dry_run=True,
+                json=True,
+            )
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertEqual(out["payload"]["qa_correlation_id"], "qa-corr-123")
+
+    def test_proof_replay_by_correlation_id_targets_same_original_request_ids(self) -> None:
+        bus = InMemoryBus()
+        qa_id = "qa-fanout-msg-777"
+        expected_request_ids = ["pred-a", "pred-b", "pred-c"]
+        for idx, request_id in enumerate(expected_request_ids, start=1):
+            _publish_predict_request_dlq(
+                bus,
+                request_id,
+                qa_correlation_id=qa_id,
+                match_id=f"match-{idx}",
+                market="1x2",
+            )
+        _publish_predict_request_dlq(
+            bus,
+            "pred-other",
+            qa_correlation_id="qa-other",
+            match_id="match-other",
+            market="ou_2_5",
+        )
+
+        show_args = argparse.Namespace(
+            topic="predict.request.dlq",
+            limit=100,
+            qa_correlation_id=qa_id,
+            json=True,
+        )
+        show_buf = io.StringIO()
+        with redirect_stdout(show_buf):
+            show_rc = dlq_show.run(show_args, bus=bus)
+
+        self.assertEqual(show_rc, int(ExitCode.OK))
+        show_doc = json.loads(show_buf.getvalue().strip())
+        self.assertEqual(
+            sorted(row["request_id"] for row in show_doc["entries"]),
+            expected_request_ids,
+        )
+
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            rc, out, _ = _run(
+                dlq_replay,
+                target="predict.request.dlq",
+                max_msgs=25,
+                qa_correlation_id=qa_id,
+                drop=False,
+                confirm_pii=False,
+                confirm_destructive="",
+                reason="replay qa fanout batch",
+                client_id="opsctl-test",
+                confirm="",
+                dry_run=True,
+                json=True,
+            )
+
+        self.assertEqual(rc, int(ExitCode.OK))
+        self.assertEqual(out["payload"]["qa_correlation_id"], qa_id)
+        self.assertEqual(show_doc["count"], 3)
+
+    def test_qa_correlation_id_filter_is_restricted_to_predict_request_dlq(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            rc, out, raw = _run(
+                dlq_replay,
+                target="predict.vote.dlq",
+                max_msgs=25,
+                qa_correlation_id="qa-corr-123",
+                drop=False,
+                confirm_pii=False,
+                confirm_destructive="",
+                reason="replay qa batch",
+                client_id="opsctl-test",
+                confirm="",
+                dry_run=True,
+                json=True,
+            )
+            self.assertEqual(rc, int(ExitCode.BAD_USAGE))
+            self.assertEqual(out, {})
+            self.assertEqual(raw, "")
 
 
 # ── §8.16.2 spool-flush ack reconciler ───────────────────────────
@@ -277,7 +608,7 @@ class TestRegistryWiring(unittest.TestCase):
     def test_new_subcommands_registered(self) -> None:
         from xops.opsctl import subcommands
         names = {m.NAME for m in subcommands.SUBCOMMANDS}
-        for required in ("scale-pin", "scale-unpin", "spool-show"):
+        for required in ("scale-pin", "scale-unpin", "spool-show", "dlq-show"):
             self.assertIn(required, names)
 
 

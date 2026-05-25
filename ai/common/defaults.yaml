@@ -234,6 +234,8 @@ phase7:
   sec_input_breaker_open_s: 30                     # NEGELIR_SEC_INPUT_BREAKER_OPEN_S
   sec_input_pattern_reload_s: 30                   # NEGELIR_SEC_INPUT_PATTERN_RELOAD_S
   sec_input_allowlist_reload_s: 60                 # NEGELIR_SEC_INPUT_ALLOWLIST_RELOAD_S — §8.7 cache poll
+  sec_input_allowlist_hmac_key_path: /var/lib/negelir/secrets/allowlist_hmac.key  # NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_PATH
+  sec_input_allowlist_hmac_key_max_age_days: 365   # NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_MAX_AGE_DAYS
   # sec.quarantine.v1 + storage backpressure (§7.1 + §7.5)
   sec_quarantine_ttl_days: 30                      # NEGELIR_SEC_QUARANTINE_TTL_DAYS
   sec_quarantine_payload_max_bytes: 65536          # NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES — pre-base64 cap
@@ -288,6 +290,7 @@ phase7:
 # audit/spool paths resolve to <data_dir>/maint/opsctl_*.
 phase8:
   opsctl_ack_timeout_ms: 5000                      # NEGELIR_OPSCTL_ACK_TIMEOUT_MS
+  opsctl_ack_timeout_ms_live_demo: 1000            # NEGELIR_OPSCTL_ACK_TIMEOUT_MS_LIVE_DEMO
   opsctl_spool_max_entries: 1024                   # NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES
   opsctl_critical_agents: "consensus.v1,sec.rate.v1,maint.backup.v1"  # NEGELIR_OPSCTL_CRITICAL_AGENTS
   opsctl_audit_path: ""                           # NEGELIR_OPSCTL_AUDIT_PATH
@@ -401,6 +404,8 @@ phase8:
   # ── §8.11 consumer-lag watchdog ──
   maint_plane_lag_alert_ms: 5000                   # NEGELIR_MAINT_PLANE_LAG_ALERT_MS
   maint_plane_lag_alert_window_s: 60               # NEGELIR_MAINT_PLANE_LAG_ALERT_WINDOW_S
+  sec_plane_lag_alert_ms: 5000                     # NEGELIR_SEC_PLANE_LAG_ALERT_MS
+  sec_plane_lag_alert_window_s: 60                 # NEGELIR_SEC_PLANE_LAG_ALERT_WINDOW_S
   maint_plane_recovery_window_s: 120               # NEGELIR_MAINT_PLANE_RECOVERY_WINDOW_S
   # ── §8.9 per-agent bus circuit-breaker ──
   maint_bus_fail_threshold: 3                      # NEGELIR_MAINT_BUS_FAIL_THRESHOLD

@@ -19,6 +19,7 @@
 CREATE TABLE IF NOT EXISTS pattern_allowlist (
     id              BIGSERIAL PRIMARY KEY,
     pattern         TEXT          NOT NULL UNIQUE,
+    fingerprint_alg CHAR(1)       NOT NULL DEFAULT 'h',
     state           CHAR(1)       NOT NULL,
     parent_rule     TEXT          NOT NULL DEFAULT '',
     qids            TEXT[]        NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -26,7 +27,8 @@ CREATE TABLE IF NOT EXISTS pattern_allowlist (
     expires_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    CONSTRAINT pattern_allowlist_state_chk CHECK (state IN ('p', 'a', 'e'))
+    CONSTRAINT pattern_allowlist_state_chk CHECK (state IN ('p', 'a', 'e')),
+    CONSTRAINT pattern_allowlist_alg_chk CHECK (fingerprint_alg IN ('h', 's'))
 );
 
 -- Hot read path: only active patterns suppress the parent rule.

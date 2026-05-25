@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from swarm.agents.maint.scaler import MaintScaler, NoopController
-from swarm.agents.topics import MAINT_ACK, MAINT_EVENT
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from swarm.sdk.leader import SingleProcessLeader
 from swarm.sdk.types import Envelope, Message
 
@@ -22,12 +22,74 @@ def _wrap(payload: dict) -> Message:
     return Message(envelope=env, payload=payload)
 
 
+def _wrap_sec_alert(payload: dict, *, created_at: str | None = None) -> Message:
+    env = Envelope(
+        message_id="sec-1",
+        trace_id="sec-1",
+        topic=SEC_ALERT,
+        producer=str(payload.get("source") or "maint.scaler.v1"),
+        created_at=created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        schema_version=1,
+        attempt=1,
+    )
+    return Message(envelope=env, payload=payload)
+
+
 def test_subscribes_publishes_set() -> None:
     a = MaintScaler()
     assert a.name == "maint.scaler.v1"
     assert MAINT_EVENT in a.subscribes
+    assert SEC_ALERT in a.subscribes
     assert MAINT_EVENT in a.publishes
     assert MAINT_ACK in a.publishes
+    assert SEC_ALERT in a.publishes
+
+
+def test_sec_alert_scale_throttled_records_feedback_subject() -> None:
+    agent = MaintScaler()
+
+    out = list(agent.handle(_wrap_sec_alert({
+        "alert_id": "scale-throttle-1",
+        "kind": "scale_throttled",
+        "severity": "warn",
+        "source": "maint.scaler.v1",
+        "subject": "predictor.elo",
+        "reason": "manual_pin_active",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    })))
+
+    assert out == []
+    assert "predictor.elo" in agent._sec_feedback_lru
+
+
+def test_sec_plane_tier3_sheds_scaler_sec_feedback(monkeypatch) -> None:
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "sec_plane_lag_alert_ms", 5_000, raising=False)
+    monkeypatch.setattr(cfg, "sec_plane_lag_alert_window_s", 1, raising=False)
+
+    now_ns = 1_700_000_300_000_000_000
+    stale = datetime.fromtimestamp(now_ns / 1_000_000_000 - 70.0, tz=timezone.utc).isoformat(timespec="seconds")
+    agent = MaintScaler(clock_ns=lambda: now_ns)
+
+    out = list(agent.handle(_wrap_sec_alert({
+        "alert_id": "scale-throttle-stale",
+        "kind": "scale_throttled",
+        "severity": "warn",
+        "source": "maint.scaler.v1",
+        "subject": "predictor.elo",
+        "reason": "manual_pin_active",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    }, created_at=stale)))
+
+    assert "predictor.elo" not in agent._sec_feedback_lru
+    throttled = [
+        m for m in out
+        if m.envelope.topic == MAINT_EVENT
+        and m.payload.get("kind") == "maint_plane_throttled"
+        and m.payload.get("tier") == 3
+    ]
+    assert throttled, "expected sec-plane tier-3 shed event for scaler consumer"
 
 
 def test_manual_scale_pin_emits_decision_and_ack() -> None:
@@ -291,6 +353,137 @@ def test_vram_telemetry_stale_fail_safe(monkeypatch) -> None:
     out = agent.tick({"predictor.elo": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}})
     throttled = [m.payload for m in out if m.payload.get("kind") == "scale_throttled"]
     assert any(p.get("reason") == "vram_telemetry_stale" for p in throttled)
+
+
+def test_phase8_16_8_per_model_footprint_admit_small_refuse_large(monkeypatch) -> None:
+    """§8.16.8 proof (a): per-model hints drive VRAM decisions.
+
+    With an 8GB budget, a 50MB model can grow from 99→100, while a
+    4000MB model must refuse 1→2.
+    """
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_replicas", 256, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_global_max_replicas", 256, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_max_changes_per_window", 10, raising=False)
+
+    agent = MaintScaler()
+
+    # Small-footprint target: should admit 99 -> 100.
+    agent.register_model_vram_hint(
+        "pred.small.v1",
+        vram_footprint_mb=50,
+        device_class="gpu_inference",
+    )
+    agent.update_device_probe(
+        "pred.small.v1",
+        vram_total_mb=8000,
+        vram_used_mb=1000,
+        vram_per_replica_mb=1024,
+    )
+    agent._evict_and_get("pred.small.v1").last_replicas = 99
+    out_small = agent.tick(
+        {"pred.small.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    decisions_small = [
+        m.payload
+        for m in out_small
+        if m.payload.get("kind") == "scale_decision"
+    ]
+    assert any(p.get("next") == 100 for p in decisions_small)
+
+    # Large-footprint target: should refuse 1 -> 2.
+    agent.register_model_vram_hint(
+        "pred.large.v1",
+        vram_footprint_mb=4000,
+        device_class="gpu_inference",
+    )
+    agent.update_device_probe(
+        "pred.large.v1",
+        vram_total_mb=8000,
+        vram_used_mb=5000,
+        vram_per_replica_mb=1024,
+    )
+    agent._evict_and_get("pred.large.v1").last_replicas = 1
+    out_large = agent.tick(
+        {"pred.large.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    throttled_large = [
+        m.payload
+        for m in out_large
+        if m.payload.get("kind") == "scale_throttled"
+    ]
+    assert any(p.get("reason") == "vram_budget_exceeded" for p in throttled_large)
+
+
+def test_phase8_16_8_unknown_footprint_tight_budget_refuses(monkeypatch) -> None:
+    """§8.16.8 proof (b): unknown footprint + tight budget refuses."""
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6, raising=False)
+    monkeypatch.setattr(cfg, "predictor_max_vram_mb", 1024, raising=False)
+
+    agent = MaintScaler()
+    agent.update_device_probe(
+        "pred.unknown.tight.v1",
+        vram_total_mb=8000,
+        vram_used_mb=7000,
+        vram_per_replica_mb=0,
+    )
+    agent._evict_and_get("pred.unknown.tight.v1").last_replicas = 1
+
+    out = agent.tick(
+        {"pred.unknown.tight.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    throttled = [
+        m.payload
+        for m in out
+        if m.payload.get("kind") == "scale_throttled"
+    ]
+    assert any(p.get("reason") == "vram_footprint_unknown" for p in throttled)
+
+
+def test_phase8_16_8_unknown_footprint_plentiful_budget_admits_with_info_alert(
+    monkeypatch,
+) -> None:
+    """§8.16.8 proof (c): unknown footprint can admit under low pressure,
+    but emits one-shot info alert.
+    """
+    from common.config import cfg
+    from swarm.agents.topics import SEC_ALERT
+
+    monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 0, raising=False)
+    monkeypatch.setattr(cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6, raising=False)
+    monkeypatch.setattr(cfg, "predictor_max_vram_mb", 1024, raising=False)
+
+    agent = MaintScaler()
+    agent.update_device_probe(
+        "pred.unknown.loose.v1",
+        vram_total_mb=8000,
+        vram_used_mb=1000,
+        vram_per_replica_mb=0,
+    )
+    agent._evict_and_get("pred.unknown.loose.v1").last_replicas = 1
+
+    out = agent.tick(
+        {"pred.unknown.loose.v1": {"queue_depth": 99, "in_flight": 0, "head_age_s": 0}}
+    )
+    decisions = [m.payload for m in out if m.payload.get("kind") == "scale_decision"]
+    assert decisions, "expected scale_decision under plentiful budget"
+
+    info_alerts = [
+        m.payload
+        for m in out
+        if m.envelope.topic == SEC_ALERT
+        and m.payload.get("kind") == "vram_footprint_unknown"
+    ]
+    assert len(info_alerts) == 1
+    assert info_alerts[0].get("severity") == "info"
 
 
 def test_metrics_snapshot_increments_on_decision(monkeypatch) -> None:

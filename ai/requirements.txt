@@ -13,3 +13,4 @@ psycopg2-binary>=2.9.0
 redis>=5.0.0
 apscheduler>=3.10.0
 pytest>=7.4.0
+jsonschema>=4.0.0

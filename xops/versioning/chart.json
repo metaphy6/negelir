@@ -4,14 +4,17 @@
   "project": {
     "name": "negelir",
     "version": "1.4.1",
-    "build": 83,
+    "build": 139,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.34.1",
+      "version": "1.34.25",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-22T06:23:28+00:00"
+      "last_changed": "2026-05-24T20:30:19+00:00",
+      "min_compatible_with": {
+        "swarm": "0.50.8"
+      }
     },
     "server": {
       "version": "1.6.3",
@@ -19,19 +22,22 @@
       "last_changed": "2026-05-20T19:35:11+00:00"
     },
     "xops": {
-      "version": "3.33.0",
+      "version": "3.34.3",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-22T06:16:55+00:00"
+      "last_changed": "2026-05-24T20:30:19+00:00"
     },
     "docs": {
-      "version": "1.64.0",
+      "version": "1.64.9",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-22T06:16:55+00:00"
+      "last_changed": "2026-05-24T20:48:16+00:00"
     },
     "infra_mock": {
       "version": "1.4.5",
       "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
-      "last_changed": "2026-05-21T22:23:48+00:00"
+      "last_changed": "2026-05-21T22:23:48+00:00",
+      "min_compatible_with": {
+        "swarm": "0.22.0"
+      }
     },
     "source_watcher": {
       "version": "3.0.3",
@@ -69,9 +75,12 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.50.2",
+      "version": "0.50.9",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-22T00:44:57+00:00"
+      "last_changed": "2026-05-24T20:48:11+00:00",
+      "min_compatible_with": {
+        "ai": "1.5.0"
+      }
     },
     "common": {
       "version": "0.2.0",
@@ -5708,6 +5717,510 @@
       "from": "1.34.0",
       "to": "1.34.1",
       "build": 83
+    },
+    {
+      "timestamp": "2026-05-22T06:35:58+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase 8.16.9 real-gap bullet tick",
+      "from": "1.64.0",
+      "to": "1.64.1",
+      "build": 84
+    },
+    {
+      "timestamp": "2026-05-22T06:40:00+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase 8.16.9 crossover doctrine bullet",
+      "from": "1.64.1",
+      "to": "1.64.2",
+      "build": 85
+    },
+    {
+      "timestamp": "2026-05-22T06:44:39+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.16.9 producer-side dual-emit helper + factory routing surface",
+      "from": "0.50.2",
+      "to": "0.50.3",
+      "build": 86
+    },
+    {
+      "timestamp": "2026-05-22T06:48:14+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase 8.16.9 maint topic routing operator guide",
+      "from": "1.64.2",
+      "to": "1.64.3",
+      "build": 87
+    },
+    {
+      "timestamp": "2026-05-22T06:54:39+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.16.9 proof tests for dual-emit routing",
+      "from": "0.50.3",
+      "to": "0.50.4",
+      "build": 88
+    },
+    {
+      "timestamp": "2026-05-22T07:08:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.9 reviewer fixes for dual-emit correlation id",
+      "from": "1.34.1",
+      "to": "1.34.2",
+      "build": 89
+    },
+    {
+      "timestamp": "2026-05-22T07:19:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add jsonschema dependency for Phase 8.16.9 test gate",
+      "from": "1.34.2",
+      "to": "1.34.3",
+      "build": 90
+    },
+    {
+      "timestamp": "2026-05-22T07:35:08+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Force compose run --build in xops test runner to avoid stale ai deps",
+      "from": "3.33.0",
+      "to": "3.33.1",
+      "build": 91
+    },
+    {
+      "timestamp": "2026-05-22T07:50:41+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.16.9 gate-fix for boundary/backup tests",
+      "from": "1.34.3",
+      "to": "1.34.4",
+      "build": 92
+    },
+    {
+      "timestamp": "2026-05-22T07:56:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.9 reviewer-fix cleanup and backup/boundary stabilization validation",
+      "from": "1.34.4",
+      "to": "1.34.5",
+      "build": 93
+    },
+    {
+      "timestamp": "2026-05-22T08:14:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.16.9 gate remediation: scheduler shutdown idempotent",
+      "from": "1.34.5",
+      "to": "1.34.6",
+      "build": 94
+    },
+    {
+      "timestamp": "2026-05-22T08:39:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.16.9 backup determinism fix (state leakage/order dependency)",
+      "from": "1.34.6",
+      "to": "1.34.7",
+      "build": 95
+    },
+    {
+      "timestamp": "2026-05-22T08:44:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.16.9 follow-up fixture hardening for full-suite determinism",
+      "from": "1.34.7",
+      "to": "1.34.8",
+      "build": 96
+    },
+    {
+      "timestamp": "2026-05-22T08:56:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.16.9 reviewer fixes for backup alert suppression and artifact cleanup",
+      "from": "1.34.8",
+      "to": "1.34.9",
+      "build": 97
+    },
+    {
+      "timestamp": "2026-05-22T09:32:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "maint.backup test isolation for shared-state leakage",
+      "from": "1.34.9",
+      "to": "1.34.10",
+      "build": 98
+    },
+    {
+      "timestamp": "2026-05-22T09:51:47+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "phase 8.16.10 real-gap: HMAC allowlist fingerprinting",
+      "from": "0.50.4",
+      "to": "0.50.5",
+      "build": 99
+    },
+    {
+      "timestamp": "2026-05-22T10:00:59+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.16.10 allowlist HMAC doctrine implementation",
+      "from": "0.50.5",
+      "to": "0.50.6",
+      "build": 100
+    },
+    {
+      "timestamp": "2026-05-22T10:05:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.16.10 proof tests for allowlist HMAC/legacy, rehash, and key rotation",
+      "from": "1.34.10",
+      "to": "1.34.11",
+      "build": 101
+    },
+    {
+      "timestamp": "2026-05-22T10:28:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase8.16.10 runtime emits for legacy-hit and allowlist-key overdue",
+      "from": "1.34.11",
+      "to": "1.34.12",
+      "build": 102
+    },
+    {
+      "timestamp": "2026-05-22T10:28:36+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase8.16.10 add allowlist key bootstrap/rehash/rotate ops surfaces",
+      "from": "3.33.1",
+      "to": "3.33.2",
+      "build": 103
+    },
+    {
+      "timestamp": "2026-05-22T10:47:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.10 verifier fix: maint producer-set doc lock + missing kind schema mappings",
+      "from": "1.34.12",
+      "to": "1.34.13",
+      "build": 104
+    },
+    {
+      "timestamp": "2026-05-22T10:47:16+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.10 SWARM producer-set doctrine lock update + roadmap checkbox sync",
+      "from": "1.64.3",
+      "to": "1.64.4",
+      "build": 105
+    },
+    {
+      "timestamp": "2026-05-22T11:03:52+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.11 real-gap checkbox tick",
+      "from": "1.64.4",
+      "to": "1.64.5",
+      "build": 106
+    },
+    {
+      "timestamp": "2026-05-22T11:10:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.16.11 sec-plane lag watchdog symmetry",
+      "from": "1.34.13",
+      "to": "1.34.14",
+      "build": 107
+    },
+    {
+      "timestamp": "2026-05-22T11:15:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.11 cross-plane independence policy+boundary",
+      "from": "1.34.14",
+      "to": "1.34.15",
+      "build": 108
+    },
+    {
+      "timestamp": "2026-05-22T11:21:26+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.16.11 proof tests: sec-plane lag injection and state-product independence",
+      "from": "0.50.6",
+      "to": "0.50.7",
+      "build": 109
+    },
+    {
+      "timestamp": "2026-05-22T11:34:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.11 sec-plane watchdog symmetry for scaler and dlq",
+      "from": "1.34.15",
+      "to": "1.34.16",
+      "build": 110
+    },
+    {
+      "timestamp": "2026-05-22T11:54:48+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.12 dlq-show QA correlation inspection",
+      "from": "3.33.2",
+      "to": "3.33.3",
+      "build": 111
+    },
+    {
+      "timestamp": "2026-05-22T12:03:50+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.12 qa_correlation_id predict.request replay wiring",
+      "from": "1.34.16",
+      "to": "1.34.17",
+      "build": 112
+    },
+    {
+      "timestamp": "2026-05-22T12:03:50+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.12 ops dlq replay qa correlation filter",
+      "from": "3.33.3",
+      "to": "3.33.4",
+      "build": 113
+    },
+    {
+      "timestamp": "2026-05-22T12:08:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.12 predict.request schema version bump",
+      "from": "1.34.17",
+      "to": "1.34.18",
+      "build": 114
+    },
+    {
+      "timestamp": "2026-05-22T12:12:58+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.12 audit linkage for dlq_replayed qa correlation",
+      "from": "1.34.18",
+      "to": "1.34.19",
+      "build": 115
+    },
+    {
+      "timestamp": "2026-05-22T12:16:11+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.12 no PII bridging for qa_correlation_id",
+      "from": "3.33.4",
+      "to": "3.33.5",
+      "build": 116
+    },
+    {
+      "timestamp": "2026-05-22T12:22:00+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.12 proof tests for qa correlation dlq show/replay",
+      "from": "3.33.5",
+      "to": "3.33.6",
+      "build": 117
+    },
+    {
+      "timestamp": "2026-05-22T12:40:00+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase 8.16.13 real-gap: remove in-memory ack latency budget check",
+      "from": "3.33.6",
+      "to": "3.33.7",
+      "build": 118
+    },
+    {
+      "timestamp": "2026-05-22T12:45:04+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.13 doctrine split: add swarm.demo.live and live ack budget knob",
+      "from": "3.33.7",
+      "to": "3.33.8",
+      "build": 119
+    },
+    {
+      "timestamp": "2026-05-22T12:57:57+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.13 CI integration: wire swarm.demo into test.ai and swarm.demo.live into test.integration",
+      "from": "3.33.8",
+      "to": "3.33.9",
+      "build": 120
+    },
+    {
+      "timestamp": "2026-05-22T13:03:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.13 proof tests: swarm.demo InMemory no-latency and swarm.demo.live Redis latency+cleanup",
+      "from": "1.34.19",
+      "to": "1.34.20",
+      "build": 121
+    },
+    {
+      "timestamp": "2026-05-22T13:17:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "8.16.13 completed tracker row",
+      "from": "1.64.5",
+      "to": "1.64.6",
+      "build": 122
+    },
+    {
+      "timestamp": "2026-05-22T13:42:34+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase 8.16.14 key_id derivation helper + tests",
+      "from": "3.33.9",
+      "to": "3.33.10",
+      "build": 123
+    },
+    {
+      "timestamp": "2026-05-22T13:52:47+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase 8.16.14 doctrine canonical key_id derivation",
+      "from": "3.33.10",
+      "to": "3.33.11",
+      "build": 124
+    },
+    {
+      "timestamp": "2026-05-22T14:03:05+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "8.16.14 bootstrap-key CLI output format",
+      "from": "3.33.11",
+      "to": "3.33.12",
+      "build": 125
+    },
+    {
+      "timestamp": "2026-05-22T14:13:17+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "8.16.14: ops.verify-key-id self-verification command + KEY_ID_DRIFT(13) exit code",
+      "from": "3.33.12",
+      "to": "3.34.0",
+      "build": 126
+    },
+    {
+      "timestamp": "2026-05-24T19:45:12+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase 8.16.14 boundary key_id derive AST guard",
+      "from": "3.34.0",
+      "to": "3.34.1",
+      "build": 127
+    },
+    {
+      "timestamp": "2026-05-24T19:45:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase 8.16.14 consume canonical key_id derive helper",
+      "from": "1.34.20",
+      "to": "1.34.21",
+      "build": 128
+    },
+    {
+      "timestamp": "2026-05-24T19:48:14+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "phase 8.16.14 proof tests key_id invariants",
+      "from": "3.34.1",
+      "to": "3.34.2",
+      "build": 129
+    },
+    {
+      "timestamp": "2026-05-24T20:00:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix full-pipeline data prerequisite by providing super_lig cache dataset",
+      "from": "1.34.21",
+      "to": "1.34.22",
+      "build": 130
+    },
+    {
+      "timestamp": "2026-05-24T20:13:17+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 8.16.15 real gap checkbox ticked (lineage dormant gate verified)",
+      "from": "1.64.6",
+      "to": "1.64.7",
+      "build": 131
+    },
+    {
+      "timestamp": "2026-05-24T20:19:37+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "8.16.15 lineage writer gate + legacy backfill event",
+      "from": "0.50.7",
+      "to": "0.50.8",
+      "build": 132
+    },
+    {
+      "timestamp": "2026-05-24T20:25:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "8.16.15 hard prerequisite assertion",
+      "from": "1.34.22",
+      "to": "1.34.23",
+      "build": 133
+    },
+    {
+      "timestamp": "2026-05-24T20:27:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.16.15 min_compatible_with guard alignment (swarm->ai)",
+      "from": "1.34.23",
+      "to": "1.34.24",
+      "build": 134
+    },
+    {
+      "timestamp": "2026-05-24T20:30:19+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 8.16.15 proof tests for lineage gate and legacy backfill",
+      "from": "1.34.24",
+      "to": "1.34.25",
+      "build": 135
+    },
+    {
+      "timestamp": "2026-05-24T20:30:19+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 8.16.15 synthesized compatibility-violation proof test",
+      "from": "3.34.2",
+      "to": "3.34.3",
+      "build": 136
+    },
+    {
+      "timestamp": "2026-05-24T20:30:19+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Tick Phase 8.16.15 proof-tests checklist bullet",
+      "from": "1.64.7",
+      "to": "1.64.8",
+      "build": 137
+    },
+    {
+      "timestamp": "2026-05-24T20:48:11+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 8.16.16 proof tests landed (incl 8.16.8)",
+      "from": "0.50.8",
+      "to": "0.50.9",
+      "build": 138
+    },
+    {
+      "timestamp": "2026-05-24T20:48:16+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Tick 8.16.16 proof-tests bullet after landing missing coverage",
+      "from": "1.64.8",
+      "to": "1.64.9",
+      "build": 139
     }
   ]
 }

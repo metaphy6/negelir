@@ -29,6 +29,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -41,6 +42,7 @@ from ai.swarm.agents.maint.backup import (
     NoopVerifier,
     StaticDiskGauge,
 )
+from xops.backup import migration_state as _migration_state
 
 UTC = timezone.utc
 
@@ -63,6 +65,45 @@ class _StubClock:
         self.now = when
 
 
+class _AlwaysLeader:
+    name = "test-always-leader"
+
+    def is_leader(self) -> bool:
+        return True
+
+    def shed(self) -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _reset_backup_test_baseline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Reset mutable backup config + one-shot sentinels per test.
+
+    These tests rely on deterministic backup-agent behavior and can be
+    affected by prior modules mutating the shared cfg singleton.
+    """
+    monkeypatch.setattr(_cfg, "profile", "mock", raising=False)
+    monkeypatch.setattr(_cfg, "maint_runtime", "compose", raising=False)
+    monkeypatch.setattr(_cfg, "maint_backup_cron", "0 3 * * *", raising=False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_cold_verify_cron", "0 5 * * 0", raising=False,
+    )
+    monkeypatch.setattr(_cfg, "maint_backup_verify_mode", "full", raising=False)
+    monkeypatch.setattr(
+        _cfg,
+        "maint_backup_pii_excluded_columns",
+        "quarantine_samples.raw_bytes_b64",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        _cfg, "maint_backup_encryption_key_dir", "/test/keys", raising=False,
+    )
+    monkeypatch.setattr(_cfg, "model_dir", str(tmp_path / "models"), raising=False)
+    monkeypatch.setattr(_migration_state, "_COMMIT_SHA_ALERT_EMITTED", False)
+
+
 def _build_agent_nodry(
     *,
     clock: _StubClock,
@@ -72,7 +113,11 @@ def _build_agent_nodry(
     construction time). Callers are responsible for patching dry_run
     around the entire fire sequence."""
     prior_dir = _cfg.maint_backup_dir
-    _cfg.maint_backup_dir = "/nonexistent/negelir_test_backup"  # type: ignore[attr-defined]
+    prior_cron = _cfg.maint_backup_cron
+    prior_cold_cron = _cfg.maint_backup_cold_verify_cron
+    _cfg.maint_backup_dir = f"/tmp/negelir_test_backup_{uuid4().hex}"  # type: ignore[attr-defined]
+    _cfg.maint_backup_cron = "0 3 * * *"  # type: ignore[attr-defined]
+    _cfg.maint_backup_cold_verify_cron = "0 5 * * 0"  # type: ignore[attr-defined]
     try:
         return MaintBackupAgent(
             dump=dump or NoopDumpExecutor(bytes_written=4096),
@@ -80,6 +125,7 @@ def _build_agent_nodry(
             pruner=InMemoryPrunerStorage(),
             quarantine=InMemoryQuarantineStore(),
             disk=StaticDiskGauge(free_bytes=64 * 1024 ** 3),
+            leader=_AlwaysLeader(),
             clock_iso=lambda: clock.wall().isoformat(timespec="seconds"),
             clock_wall=clock.wall,
             clock_mono_ns=clock.mono_ns,
@@ -88,6 +134,8 @@ def _build_agent_nodry(
         )
     finally:
         _cfg.maint_backup_dir = prior_dir  # type: ignore[attr-defined]
+        _cfg.maint_backup_cron = prior_cron  # type: ignore[attr-defined]
+        _cfg.maint_backup_cold_verify_cron = prior_cold_cron  # type: ignore[attr-defined]
 
 
 # ── Mock-profile dry-run default ────────────────────────────────────────

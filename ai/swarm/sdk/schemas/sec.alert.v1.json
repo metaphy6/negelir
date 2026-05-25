@@ -23,6 +23,7 @@
     "client_id":    { "type": ["string", "null"] },
     "ip":           { "type": ["string", "null"] },
     "evidence_ref": { "type": ["string", "null"], "description": "sha256 of the offending payload (joins `sec.quarantine.v1.bytes_sha256`)." },
+    "event_correlation_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{16}$", "description": "Join key for maint/sec dual emits (sha256(kind|target|produced_at)[:16]); null for sec-only events." },
     "produced_at":  { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": false

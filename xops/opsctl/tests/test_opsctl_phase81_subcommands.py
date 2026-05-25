@@ -42,11 +42,13 @@ from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl.subcommands import (
     allowlist_approve,
     allowlist_extend,
+    allowlist_rehash,
     allowlist_show,
     backup_now,
     backup_rotate_key,
     restore,
     retrain_approve,
+    rotate_allowlist_key,
 )
 
 
@@ -391,6 +393,54 @@ class TestAllowlistShow(unittest.TestCase):
                 0,
                 msg="envelope must not be published to maint.event.v1 before ack set resolved",
             )
+
+
+class TestAllowlistRehash(unittest.TestCase):
+    def test_dry_run_payload(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="all",
+                batch_size=250,
+                reason="phase-8-16-10-migration",
+                dry_run=True,
+            )
+            rc, out = _capture(allowlist_rehash, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertEqual(out["payload"]["kind"], "allowlist_rehash")
+            self.assertEqual(out["payload"]["batch_size"], 250)
+
+    def test_bad_target_rejected(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(target="bad target", batch_size=0, reason="", dry_run=False)
+            rc, _ = _capture(allowlist_rehash, args)
+            self.assertEqual(rc, 64)
+
+
+class TestRotateAllowlistKey(unittest.TestCase):
+    def test_dry_run_payload_default_rehash(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="allowlist_hmac",
+                no_rehash=False,
+                reason="scheduled-rotation",
+                dry_run=True,
+            )
+            rc, out = _capture(rotate_allowlist_key, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertEqual(out["payload"]["kind"], "allowlist_rotate_key")
+            self.assertTrue(out["payload"]["rehash"])
+
+    def test_dry_run_payload_no_rehash(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="allowlist_hmac",
+                no_rehash=True,
+                reason="emergency-rotate-first",
+                dry_run=True,
+            )
+            rc, out = _capture(rotate_allowlist_key, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertFalse(out["payload"]["rehash"])
 
 
 # ────────────────────────────────────────────────────────────────────

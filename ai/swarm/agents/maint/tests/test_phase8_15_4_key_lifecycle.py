@@ -61,7 +61,7 @@ def _make_key_and_ops(
     key_file.write_bytes(raw)
     key_file.chmod(0o600)
 
-    kid = key_id_from_bytes(raw)
+    kid = key_id_from_bytes(raw, operator_email="op@test.example")
     added_at = _utc_iso(-added_days_ago * 86400)
     entry: dict[str, Any] = {
         "email": "op@test.example",
@@ -245,7 +245,7 @@ class TestCacheCoherency:
         key_file = tmp_path / "opsctl_key"
         key_file.write_bytes(raw)
         key_file.chmod(0o600)
-        kid = key_id_from_bytes(raw)
+        kid = key_id_from_bytes(raw, operator_email="op@test.example")
 
         ops_file = tmp_path / "opsctl_operators.json"
         # Initially empty
@@ -398,7 +398,7 @@ class TestRotationOverdue:
     def test_overdue_key_flagged(self, tmp_path):
         """Key added 400 days ago (max_age=365) → flagged as overdue."""
         raw = secrets.token_bytes(32)
-        kid = key_id_from_bytes(raw)
+        kid = key_id_from_bytes(raw, operator_email="op@test.example")
         added_at = _utc_iso(-400 * 86400)
         operators = {
             kid: {
@@ -419,7 +419,7 @@ class TestRotationOverdue:
 
     def test_recent_key_not_flagged(self, tmp_path):
         raw = secrets.token_bytes(32)
-        kid = key_id_from_bytes(raw)
+        kid = key_id_from_bytes(raw, operator_email="op@test.example")
         operators = {
             kid: {
                 "email": "op@test.example",
@@ -435,7 +435,7 @@ class TestRotationOverdue:
 
     def test_already_revoked_key_not_flagged(self, tmp_path):
         raw = secrets.token_bytes(32)
-        kid = key_id_from_bytes(raw)
+        kid = key_id_from_bytes(raw, operator_email="op@test.example")
         operators = {
             kid: {
                 "email": "op@test.example",

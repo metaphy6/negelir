@@ -37,6 +37,8 @@ _SCHEMA_DIR = Path(__file__).parent / "schemas" / "maint.event.v1"
 KIND_SCHEMA_VERSIONS: dict[str, int] = {
     "allowlist_approve": 1,
     "allowlist_extend": 1,
+    "allowlist_rehash": 1,
+    "allowlist_rotate_key": 1,
     "allowlist_show": 1,
     "audit_chain_verify": 1,
     "backup_age_alert": 1,
@@ -92,6 +94,7 @@ KIND_SCHEMA_VERSIONS: dict[str, int] = {
     "manual_scale_pin_expired": 1,
     "pattern_allowlist_added": 1,
     "pattern_allowlist_expired": 1,
+    "pattern_allowlist_legacy_hit": 1,
     "pattern_allowlist_pending": 1,
     "pattern_allowlist_promoted": 1,
     "pii_erased": 1,

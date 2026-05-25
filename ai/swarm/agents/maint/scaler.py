@@ -55,6 +55,11 @@ from ..topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from ._ack_routing import KNOWN_MAINT_EVENT_KINDS
 from ._liveness import LivenessMixin
 from ._op_signature import gate_op_envelope
+from .sec import (
+    _SecPlaneLagWatchdog,
+    _created_at_to_epoch_s,
+    _cross_plane_sec_emission_policy,
+)
 from .runtime import NoopController, RuntimeController  # re-exported
 
 # Phase 8 §8.15.9 — stdlib cron evaluator reused from §8.3.
@@ -214,6 +219,7 @@ THROTTLE_REASONS: frozenset[str] = frozenset({
     "global_max_replicas",
     "vram_budget_exceeded",
     "vram_telemetry_stale",
+    "vram_footprint_unknown",
     "runtime_failed",
     # Phase 8 §8.2 A1 — down-scale grace gate (smoothed signals are
     # below the down-scale threshold but the consecutive-low-windows
@@ -454,14 +460,15 @@ class MaintScaler(LivenessMixin):
     """`maint.scaler.v1` reactor.
 
     Subscribes ``maint.event.v1`` (kind=manual_scale_pin / maint_pause /
-    maint_resume).
+    maint_resume) and ``sec.alert.v1`` (§8.16.11 self-feedback path).
     Publishes ``maint.event.v1`` (notifications: scale_decision,
-    scale_throttled, manual_scale_pin_expired) and ``maint.ack.v1``.
+    scale_throttled, manual_scale_pin_expired), ``maint.ack.v1``, and
+    ``sec.alert.v1``.
     """
 
     name = "maint.scaler.v1"
-    subscribes: tuple[Topic, ...] = (MAINT_EVENT,)
-    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK)
+    subscribes: tuple[Topic, ...] = (MAINT_EVENT, SEC_ALERT)
+    publishes: tuple[Topic, ...] = (MAINT_EVENT, MAINT_ACK, SEC_ALERT)
 
     def __init__(
         self,
@@ -510,6 +517,13 @@ class MaintScaler(LivenessMixin):
         # and the scaler refuses to scale up that target until fresh
         # data arrives — fail-safe over fail-amnesia.
         self._device_probes: dict[str, dict[str, float]] = {}
+        # Phase 8 §8.16.8 — optional per-target VRAM footprint hints
+        # keyed by agent id. When present and device_class != "cpu",
+        # the hint overrides the legacy probe draw estimate.
+        self._model_vram_hints: dict[str, dict[str, float | str]] = {}
+        # One-shot info-alert debounce per target for
+        # ``vram_footprint_unknown``.
+        self._unknown_footprint_alerted: set[str] = set()
         # §8.2 telemetry counters keyed on (agent, kind, reason). Used
         # by ``metrics_snapshot()`` and the Phase 8.9 surface coverage
         # test that proves every reason in DECISION_REASONS ∪
@@ -594,10 +608,16 @@ class MaintScaler(LivenessMixin):
         # only once per target per window-entry.  Reset when the active
         # cron string changes (entry or exit edge).
         self._noise_window_target_notified: "dict[str, str]" = {}
+        # §8.16.11 — bounded self-feedback ledger for consumed
+        # ``sec.alert.v1{kind=scale_throttled}`` subjects.
+        self._sec_feedback_lru: "OrderedDict[str, None]" = OrderedDict()
+        self._sec_plane_watchdog = _SecPlaneLagWatchdog()
         self._liveness_init(liveness_clock=liveness_clock)
 
     # ── Bus contract ──────────────────────────────────────────────
     def handle(self, msg: Message) -> Iterable[Message]:
+        if msg.envelope.topic == SEC_ALERT:
+            return list(self._handle_sec_alert(msg))
         if msg.envelope.topic != MAINT_EVENT:
             return ()
         payload = msg.payload or {}
@@ -631,6 +651,52 @@ class MaintScaler(LivenessMixin):
                 self._unknown_kinds_seen.add(kind)
                 return (self._notify_unknown_kind(str(kind)),)
         return ()
+
+    def _handle_sec_alert(self, msg: Message) -> Iterable[Message]:
+        if not self._leader.is_leader():
+            return ()
+        sec_lag_events, lag_tier = self._sec_plane_lag_events(msg)
+        for event in sec_lag_events:
+            yield event
+
+        payload = msg.payload or {}
+        kind = str(payload.get("kind") or "")
+        severity = str(payload.get("severity") or "")
+        if kind != "scale_throttled" or severity not in {"warn", "error", "critical"}:
+            return
+
+        policy = _cross_plane_sec_emission_policy(maint_tier=0, sec_tier=lag_tier)
+        if not policy.consume_non_emergency_sec_alert:
+            return
+
+        subject = str(payload.get("subject") or "").strip()
+        if not subject:
+            return
+        self._sec_feedback_lru[subject] = None
+        self._sec_feedback_lru.move_to_end(subject)
+        while len(self._sec_feedback_lru) > self._max_targets:
+            self._sec_feedback_lru.popitem(last=False)
+
+    def _sec_plane_lag_events(self, msg: Message) -> tuple[list[Message], int]:
+        now_s = self._now_ns() / 1_000_000_000.0
+        created_s = _created_at_to_epoch_s(str(msg.envelope.created_at or ""))
+        lag_s = max(0.0, now_s - created_s) if created_s is not None else 0.0
+        self._sec_plane_watchdog.note_lag(lag_s=lag_s, now_s=now_s)
+        entered = self._sec_plane_watchdog.tick(now_s=now_s)
+        events: list[Message] = []
+        for tier in entered:
+            events.append(
+                self._notify(
+                    "maint_plane_throttled",
+                    target="sec.alert.v1",
+                    extra={
+                        "tier": tier,
+                        "lag_s": lag_s,
+                        "action": "sec_plane_shed",
+                    },
+                )
+            )
+        return events, self._sec_plane_watchdog.tier
 
     # ── manual_scale_pin ──────────────────────────────────────────
     def _handle_pin(self, msg: Message, payload: dict) -> Iterable[Message]:
@@ -986,7 +1052,24 @@ class MaintScaler(LivenessMixin):
                 continue
             # VRAM budget guard — only on scale-up.
             if decision > st.last_replicas:
-                vram_throttle = self._check_vram_budget(target, decision)
+                vram_throttle, unknown_hint_seen = self._check_vram_budget(
+                    target,
+                    decision,
+                )
+                if (
+                    unknown_hint_seen
+                    and target not in self._unknown_footprint_alerted
+                ):
+                    self._unknown_footprint_alerted.add(target)
+                    out.append(self._sec_alert(
+                        kind="vram_footprint_unknown",
+                        severity="info",
+                        subject=target,
+                        reason=(
+                            "no model_registered footprint; using legacy "
+                            "predictor_max_vram_mb projection"
+                        ),
+                    ))
                 if vram_throttle is not None:
                     self._bump_counter("scale_throttled", vram_throttle)
                     self._record_decision_metric(
@@ -1576,7 +1659,28 @@ class MaintScaler(LivenessMixin):
         budget = max(0.0, float(vram_total_mb) - headroom)
         self._m_vram_budget.set((str(host_label),), budget)
 
-    def _check_vram_budget(self, target: str, projected_replicas: int) -> str | None:
+    def register_model_vram_hint(
+        self,
+        target: str,
+        *,
+        vram_footprint_mb: float,
+        device_class: str = "gpu_inference",
+    ) -> None:
+        """Register an optional per-target VRAM footprint hint.
+
+        Phase 8 §8.16.8 proof path: tests can seed model-level hints
+        without requiring the full ``models.events.v1`` wiring.
+        """
+        self._model_vram_hints[target] = {
+            "vram_footprint_mb": max(0.0, float(vram_footprint_mb)),
+            "device_class": str(device_class),
+        }
+
+    def _check_vram_budget(
+        self,
+        target: str,
+        projected_replicas: int,
+    ) -> tuple[str | None, bool]:
         """Return throttle reason if the projected replica count would
         breach the per-host VRAM budget; else ``None``.
 
@@ -1587,14 +1691,19 @@ class MaintScaler(LivenessMixin):
           for. The min/min_replicas floor is unaffected.
         * ``"vram_budget_exceeded"`` — projected utilisation would
           cross ``vram_total_mb - vram_headroom_mb``.
+
+        Returns ``(reason, unknown_footprint_seen)`` where
+        ``unknown_footprint_seen`` tracks whether the target fell back
+        to the legacy draw estimate because no per-target footprint
+        hint was registered.
         """
         probe = self._device_probes.get(target)
         if probe is None:
-            return None  # no probe yet → opt-in, no enforcement
+            return None, False  # no probe yet → opt-in, no enforcement
         window_ms = max(1, int(_cfg.maint_scaler_decision_window_ms))
         max_age_ns = 5 * window_ms * 1_000_000
         if (self._now_ns() - int(probe["observed_at_ns"])) > max_age_ns:
-            return "vram_telemetry_stale"
+            return "vram_telemetry_stale", False
         headroom = float(_cfg.maint_scaler_vram_headroom_mb)
         budget = max(0.0, float(probe["vram_total_mb"]) - headroom)
         # Phase 8.2 observability — keep the gauge fresh on every
@@ -1603,15 +1712,33 @@ class MaintScaler(LivenessMixin):
         # the host-aware ``update_device_probe`` field.
         host_label = str(probe.get("host", target))
         self._m_vram_budget.set((host_label,), budget)
-        per_replica = float(probe["vram_per_replica_mb"])
+        hint = self._model_vram_hints.get(target)
+        unknown_footprint = hint is None
+        if hint is not None and str(hint.get("device_class", "")).lower() == "cpu":
+            return None, False
+        if hint is not None:
+            per_replica = float(hint["vram_footprint_mb"])
+        else:
+            probe_draw = float(probe.get("vram_per_replica_mb", 0.0))
+            if probe_draw > 0.0:
+                per_replica = probe_draw
+                unknown_footprint = False
+            else:
+                per_replica = float(getattr(_cfg, "predictor_max_vram_mb", 1024.0))
+                threshold = float(
+                    getattr(_cfg, "maint_scaler_vram_pessimistic_threshold_pct", 0.6)
+                )
+                used = float(probe["vram_used_mb"])
+                if budget > 0.0 and used > (threshold * budget):
+                    return "vram_footprint_unknown", True
         # Baseline: keep currently-used VRAM minus what the existing
         # replicas account for, then add the projected count's draw.
         current_replicas = max(1, self._targets.get(target, _TargetState()).last_replicas)
         baseline = max(0.0, float(probe["vram_used_mb"]) - per_replica * current_replicas)
         projected_used = baseline + per_replica * projected_replicas
         if projected_used > budget:
-            return "vram_budget_exceeded"
-        return None
+            return "vram_budget_exceeded", unknown_footprint
+        return None, unknown_footprint
 
     # ── Emission helpers ─────────────────────────────────────────
     def _ack(self, msg: Message, request_id: str, *, accepted: bool,

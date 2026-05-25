@@ -20,7 +20,7 @@ The next poll tick catches the new state. The proof test is in §8.9.
 
 **Codec.** The lookup key is::
 
-    sha256(NFC(f"{source}|{rule_id}|{hit_substring}").encode("utf-8")).hexdigest()[:16]
+    hmac_sha256(k, NFC(f"{source}|{rule_id}|{hit_substring}")).hexdigest()[:16]
 
 — deterministic, NFC-normalized, language-stable, and the raw
 ``hit_substring`` is never persisted (§8.7 SQL-injection guard line:
@@ -30,15 +30,54 @@ fingerprint hash is").
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import threading
 import time
 import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Iterable, Protocol
+
+from common.config import cfg as _cfg
 
 
 _log = logging.getLogger("swarm.agents.sec.allowlist")
+
+_MOCK_ALLOWLIST_HMAC_KEY = b"negelir:mock:allowlist:hmac:v1"
+
+
+def allowlist_hmac_key_age_days() -> float | None:
+    """Return key-file age in days, or ``None`` when unknown.
+
+    Unknown means the key path is unset or the file is unreadable.
+    """
+    key_path = str(getattr(_cfg, "sec_input_allowlist_hmac_key_path", "") or "").strip()
+    if not key_path:
+        return None
+    try:
+        mtime = Path(key_path).stat().st_mtime
+    except OSError:
+        return None
+    age_s = max(0.0, time.time() - float(mtime))
+    return age_s / 86400.0
+
+
+def _load_allowlist_hmac_key() -> bytes:
+    """Return the secret key used for allowlist fingerprint HMACs."""
+    key_path = str(getattr(_cfg, "sec_input_allowlist_hmac_key_path", "") or "").strip()
+    if key_path:
+        try:
+            key = Path(key_path).read_bytes()
+        except OSError:
+            key = b""
+        if key:
+            return key
+    if str(getattr(_cfg, "profile", "mock")).lower() == "mock":
+        return _MOCK_ALLOWLIST_HMAC_KEY
+    raise RuntimeError(
+        "allowlist HMAC key is missing; set NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_PATH"
+    )
 
 
 # ── Codec ────────────────────────────────────────────────────────────
@@ -48,6 +87,23 @@ def compute_pattern_key(source: str, rule_id: str, hit_substring: str) -> str:
     Single source of truth for both reader and writer. Stable across
     locales: NFC normalize the composite string before hashing so a
     pre/post-NFC payload never produces two different keys.
+    """
+    composite = f"{source}|{rule_id}|{hit_substring}"
+    nfc = unicodedata.normalize("NFC", composite)
+    key = _load_allowlist_hmac_key()
+    digest = hmac.new(key, nfc.encode("utf-8"), hashlib.sha256).hexdigest()
+    return digest[:16]
+
+
+def compute_pattern_key_legacy_sha(
+    source: str,
+    rule_id: str,
+    hit_substring: str,
+) -> str:
+    """Legacy pre-8.16.10 fingerprint (plain SHA-256[:16]).
+
+    Keep this helper for backward-compatible reads while older
+    allowlist rows are re-fingerprinted under HMAC.
     """
     composite = f"{source}|{rule_id}|{hit_substring}"
     nfc = unicodedata.normalize("NFC", composite)
@@ -138,6 +194,14 @@ class AllowlistCache:
     def is_allowlisted(self, key: str) -> bool:
         self._maybe_reload()
         return key in self._keys
+
+    def first_match(self, keys: Iterable[str]) -> str | None:
+        """Return the first key present in the cached active set."""
+        self._maybe_reload()
+        for key in keys:
+            if key in self._keys:
+                return key
+        return None
 
     def force_reload(self) -> None:
         """Bypass the throttle and re-read the snapshot now.

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "negelir/swarm/predict.request",
   "title": "predict.request",
-  "description": "Phase 5.1: API/reactor → predictors. Control-plane topic — unversioned by design (ROADMAP §3.7) because it is internal swarm traffic, never persisted, and never consumed across release boundaries. The requester (Phase 9 API or LivePredictorReactor) generates `request_id`; it round-trips unchanged through `predict.vote` and `predict.final`. Mirrors `ai/swarm/agents/payloads.py::PredictRequest`.",
+  "description": "Phase 5.1: API/reactor → predictors. Control-plane topic — unversioned by design (ROADMAP §3.7) because it is internal swarm traffic, never persisted, and never consumed across release boundaries. The requester (Phase 9 API or LivePredictorReactor) generates `request_id`; it round-trips unchanged through `predict.vote` and `predict.final`. Phase 8 §8.16.12 adds the optional payload field `kind_schema_version`: legacy payloads omit it (treated as version 1), current producers emit version 2 for the additive `qa_correlation_id` shape. Mirrors `ai/swarm/agents/payloads.py::PredictRequest`.",
   "type": "object",
   "required": ["request_id", "match_id", "market"],
   "properties": {
@@ -12,6 +12,8 @@
     "league_id":    { "type": ["string", "null"] },
     "profile_id":   { "type": ["string", "null"], "description": "Phase 13a CalibrationProfile id; defaults to league_id until then." },
     "requested_at": { "type": "string", "description": "ISO-8601 UTC." },
+    "kind_schema_version": { "type": "integer", "enum": [1, 2], "description": "Optional payload schema marker. 1 = legacy payload without qa_correlation_id. 2 = current additive shape. When absent, consumers must treat the payload as version 1 for backward compatibility." },
+    "qa_correlation_id": { "type": ["string", "null"], "description": "Optional QA fanout correlation id copied from qa.request.v1.envelope.message_id when one QA request spawns multiple predict.request payloads." },
     "features":     { "type": "object", "description": "Optional pre-computed feature snapshot supplied by the requester." },
     "metadata":     { "type": "object" }
   },

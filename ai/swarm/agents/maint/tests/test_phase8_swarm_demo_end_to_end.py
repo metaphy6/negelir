@@ -13,6 +13,10 @@ in-memory shims.
 """
 from __future__ import annotations
 
+import sys
+import socket
+import uuid
+from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -306,18 +310,14 @@ def test_demo_denylist_clear_dry_run_publishes_nothing() -> None:
     )
 
 
-def test_demo_denylist_clear_round_trip_ack_within_budget() -> None:
+def test_demo_denylist_clear_round_trip_ack_matches_expected_set() -> None:
     """``make swarm.demo`` (extended) live round-trip: publish
-    ``maint.event.v1{kind=denylist_clear}`` through an ``InMemoryBus``,
-    a stub ``sec.rate.v1`` consumer emits ``maint.ack.v1``, and the
-    measured ack latency is asserted ``< cfg.opsctl_ack_timeout_ms``
-    (ROADMAP §8.9 DoD bullet).
+    ``maint.event.v1{kind=denylist_clear}`` through an ``InMemoryBus``
+    and assert the expected consumer ack-set is observed.
     """
-    import time
     import uuid
     from datetime import datetime, timezone
 
-    from common.config import cfg as _cfg
     from swarm.agents.maint._ack_routing import expected_ack_set
     from swarm.sdk.bus import InMemoryBus
     from swarm.sdk.types import Envelope, Message
@@ -340,7 +340,6 @@ def test_demo_denylist_clear_round_trip_ack_within_budget() -> None:
     stub_group = "sec.rate.v1.demo"
     bus.ensure_group(MAINT_EVENT, stub_group)
 
-    t0 = time.monotonic()
     bus.publish(live_msg)
 
     # sec.rate.v1 stub: reads denylist_clear and emits maint.ack.v1.
@@ -377,15 +376,10 @@ def test_demo_denylist_clear_round_trip_ack_within_budget() -> None:
                 received.add(ab)
         bus.ack(MAINT_ACK, ack_group, d.handle)
 
-    latency_ms = (time.monotonic() - t0) * 1000.0
     expected = expected_ack_set("denylist_clear")
 
     assert received == expected, (
         f"ack set mismatch: got {received!r}, expected {expected!r}"
-    )
-    budget = _cfg.opsctl_ack_timeout_ms
-    assert latency_ms < budget, (
-        f"ack latency {latency_ms:.1f}ms >= budget {budget}ms"
     )
     # Validate the emitted ack payload against the registered schema.
     ack_messages = [
@@ -393,3 +387,77 @@ def test_demo_denylist_clear_round_trip_ack_within_budget() -> None:
         if str(d.message.payload.get("request_id")) == rid
     ]
     _validate_all(ack_messages)
+
+
+def test_phase8_16_13_swarm_demo_inmemory_success_without_latency_assertion() -> None:
+    """ROADMAP §8.16.13 proof (a): InMemory demo succeeds without latency gate."""
+    from swarm.sdk.bus import InMemoryBus
+
+    bus = InMemoryBus()
+    swarm_make = _load_swarm_makefile_module()
+
+    swarm_make._run_phase8_opsctl_demo(bus, max_ack_latency_ms=None)
+
+
+def _redis_available_live_demo(host: str = "localhost", port: int = 6379) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def _scan_prefixed_keys(client, prefix: str) -> list[bytes | str]:
+    pattern = f"{prefix}*"
+    cursor = 0
+    out: list[bytes | str] = []
+    while True:
+        cursor, batch = client.scan(cursor=cursor, match=pattern, count=100)
+        if batch:
+            out.extend(batch)
+        if cursor == 0:
+            break
+    return out
+
+
+def _load_swarm_makefile_module():
+    """Import xops/makefile/swarm.py with sibling _common resolution."""
+    repo_root = Path(__file__).resolve().parents[5]
+    makefile_dir = str(repo_root / "xops" / "makefile")
+    if makefile_dir not in sys.path:
+        sys.path.insert(0, makefile_dir)
+    from xops.makefile import swarm as swarm_make
+
+    return swarm_make
+
+
+@pytest.mark.skipif(
+    not _redis_available_live_demo(),
+    reason="Phase 8.16.13 live demo proof test requires Redis on localhost:6379",
+)
+def test_phase8_16_13_swarm_demo_live_redis_latency_and_cleanup() -> None:
+    """ROADMAP §8.16.13 proof (b): live Redis demo meets <1000ms and cleans keys."""
+    redis = pytest.importorskip("redis")
+    from swarm.sdk.bus import RedisStreamsBus
+    swarm_make = _load_swarm_makefile_module()
+
+    client = redis.Redis(host="localhost", port=6379, decode_responses=False)
+    client.ping()
+
+    bus = RedisStreamsBus(host="localhost", port=6379, client=client)
+    topic_prefix = f"phase8.16.13.demo.live.{uuid.uuid4().hex[:10]}"
+
+    try:
+        swarm_make._run_phase8_opsctl_demo(
+            bus,
+            max_ack_latency_ms=1000,
+            topic_prefix=topic_prefix,
+        )
+
+        touched = _scan_prefixed_keys(client, topic_prefix)
+        assert touched, "live demo did not create prefixed Redis keys to clean"
+    finally:
+        swarm_make._redis_demo_cleanup(bus, topic_prefix=topic_prefix)
+
+    leftovers = _scan_prefixed_keys(client, topic_prefix)
+    assert leftovers == [], f"expected zero leftover keys, got {leftovers!r}"

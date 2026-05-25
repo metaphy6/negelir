@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/backup_model_lineage_legacy",
+  "title": "maint.event.v1{kind=backup_model_lineage_legacy}",
+  "description": "Phase 8 S8.16.15 startup-time backfill: emitted once per legacy model artifact that has no lineage sidecar while lineage writer is unavailable.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "predictor_id",
+    "version",
+    "produced_at"
+  ],
+  "properties": {
+    "kind": { "const": "backup_model_lineage_legacy" },
+    "kind_schema_version": { "const": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "predictor_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" }
+  },
+  "additionalProperties": false
+}

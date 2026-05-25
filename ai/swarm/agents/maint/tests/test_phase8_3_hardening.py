@@ -23,6 +23,7 @@ import pytest
 
 from common.config import cfg as _cfg
 from ai.swarm.agents.maint.backup import MaintBackupAgent
+from ai.swarm.sdk.leader import SingleProcessLeader
 
 
 @pytest.fixture(autouse=True)
@@ -38,10 +39,17 @@ def _isolate_backup_dir(tmp_path_factory, monkeypatch):
     that assert on specific sec.alert.v1 kinds.
     """
     isolated = tmp_path_factory.mktemp("backup_dir_iso")
+    isolated_models = tmp_path_factory.mktemp("backup_models_iso")
     monkeypatch.setattr(_cfg, "maint_backup_dir", str(isolated), raising=False)
+    monkeypatch.setattr(_cfg, "model_dir", str(isolated_models), raising=False)
+    monkeypatch.setattr(_cfg, "maint_backup_cron", "0 3 * * *", raising=False)
+    monkeypatch.setattr(
+        _cfg, "maint_backup_cold_verify_cron", "0 5 * * 0", raising=False,
+    )
     monkeypatch.setattr(
         _cfg, "maint_backup_encryption_key_dir", "/test/keys", raising=False,
     )
+    monkeypatch.setattr(SingleProcessLeader, "is_leader", lambda self: True)
 
 
 @pytest.fixture

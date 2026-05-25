@@ -56,7 +56,14 @@ import tarfile as _tarfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
+
+from xops.versioning.version import (
+    VersionChartError,
+    load_chart as load_version_chart,
+    parse_semver,
+    validate_compatibility,
+)
 
 _log = logging.getLogger("swarm.agents.maint.model_lineage")
 
@@ -79,6 +86,7 @@ SIDECAR_SUFFIX = ".lineage.json"
 # ── maint.event.v1 kind constants (§8.13.1) ───────────────────────────
 # Single-source definitions — callers emit these strings rather than
 # repeating the literals, so a rename is a one-file change.
+BACKUP_MODEL_LINEAGE_LEGACY = "backup_model_lineage_legacy"
 BACKUP_MODEL_UPLOADED = "backup_model_uploaded"
 BACKUP_MODEL_OFFSITE_FAILED = "backup_model_offsite_failed"
 BACKUP_MODEL_COLD_VERIFY_COMPLETED = "backup_model_cold_verify_completed"
@@ -91,6 +99,71 @@ BACKUP_MODEL_LINEAGE_DRIFT = "backup_model_lineage_drift"
 # trainer reactor MUST write one on every training run; this alert
 # surfaces post-hoc when it did not.
 SEC_ALERT_BACKUP_MODEL_LINEAGE_MISSING = "backup_model_lineage_missing"
+
+
+class LineagePrerequisiteError(RuntimeError):
+    """Raised when the Phase 5 lineage-writer prerequisite is not met."""
+
+
+class RegistryAuditor:
+    """Boot-time guard for model-lineage prerequisites (§8.16.15).
+
+    Reads ``xops/versioning/chart.json`` and enforces the floor declared in
+    ``components.swarm.min_compatible_with.ai`` when present.
+    """
+
+    def __init__(
+        self,
+        *,
+        chart_loader: Callable[[], Dict[str, Any]] = load_version_chart,
+    ) -> None:
+        self._chart_loader = chart_loader
+
+    def preflight(self) -> None:
+        """Refuse startup when swarm is below the lineage-writer floor."""
+        try:
+            chart = self._chart_loader()
+            validate_compatibility(chart)
+
+            components = chart.get("components", {})
+            swarm_component = components.get("swarm", {})
+            if not isinstance(swarm_component, dict):
+                raise LineagePrerequisiteError(
+                    "fail_safe_lineage_writer_missing — swarm component missing from "
+                    "xops/versioning/chart.json"
+                )
+
+            min_map = swarm_component.get("min_compatible_with", {})
+            if not isinstance(min_map, dict):
+                raise LineagePrerequisiteError(
+                    "fail_safe_lineage_writer_missing — swarm.min_compatible_with "
+                    "must be an object"
+                )
+
+            required_ai = min_map.get("ai")
+            if required_ai is None:
+                return
+
+            ai_component = components.get("ai", {})
+            if not isinstance(ai_component, dict):
+                raise LineagePrerequisiteError(
+                    "fail_safe_lineage_writer_missing — ai component missing from "
+                    "xops/versioning/chart.json"
+                )
+
+            current_ai = str(ai_component.get("version", ""))
+            required_ai_s = str(required_ai)
+            if parse_semver(current_ai) < parse_semver(required_ai_s):
+                raise LineagePrerequisiteError(
+                    "fail_safe_lineage_writer_missing — "
+                    f"ai version {current_ai} is below required "
+                    f"{required_ai_s} for lineage sidecar writer support"
+                )
+        except VersionChartError as exc:
+            raise LineagePrerequisiteError(
+                "fail_safe_lineage_writer_missing — compatibility chart invalid: "
+                f"{exc}"
+            ) from exc
 
 
 # ── Lineage-missing debouncer ──────────────────────────────────────────

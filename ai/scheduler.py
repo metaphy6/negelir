@@ -61,7 +61,13 @@ class NegelirScheduler:
     def shutdown(self):
         """Gracefully stop the scheduler."""
         if self._use_apscheduler and self._scheduler:
-            self._scheduler.shutdown(wait=False)
+            from apscheduler.schedulers.base import SchedulerNotRunningError
+
+            try:
+                self._scheduler.shutdown(wait=False)
+            except SchedulerNotRunningError:
+                # Keep shutdown idempotent when scheduler has not been started.
+                pass
         log.info("Scheduler shut down")
 
     @property

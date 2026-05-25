@@ -63,6 +63,11 @@ class ExitCode(IntEnum):
     # credentials would defeat the per-subcommand ACL restriction.
     FAIL_SAFE_WRONG_REDIS_USER = 12
 
+    # Phase 8 §8.16.14 — key_id in opsctl_operators.json does not match
+    # the local key + email combination. Operator must re-bootstrap or
+    # update the registry.
+    KEY_ID_DRIFT = 13
+
     BAD_USAGE = 64
     """argparse / required-arg-missing failures."""
 

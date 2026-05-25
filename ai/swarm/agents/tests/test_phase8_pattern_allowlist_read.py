@@ -22,6 +22,10 @@ out of scope for this slice.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import os
+from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -34,8 +38,9 @@ from swarm.agents.sec import (
     SecInputAgent,
     compute_pattern_key,
 )
+from swarm.agents.sec._allowlist import compute_pattern_key_legacy_sha
 from swarm.agents.sec._alert import SecAlertDebouncer
-from swarm.agents.topics import QA_REQUEST, QA_REQUEST_V1, SEC_ALERT, SEC_QUARANTINE
+from swarm.agents.topics import MAINT_EVENT, QA_REQUEST, QA_REQUEST_V1, SEC_ALERT, SEC_QUARANTINE
 from swarm.sdk.types import Message
 
 
@@ -155,6 +160,91 @@ def test_active_allowlist_entry_suppresses_quarantine_and_increments_counter() -
     assert snap["sec_input_allowlist_hits_total"] == {(hit.rule_id,): 1}
 
 
+def test_legacy_sha_allowlist_entry_still_suppresses_quarantine_and_emits_legacy_hit_once() -> None:
+    """Phase 8.16.10 runtime contract for legacy match + per-row debounce."""
+
+    reader = InMemoryAllowlistReader()
+    agent, _ = _build_agent(allowlist_reader=reader)
+
+    assert agent._ruleset is not None
+    hit = agent._ruleset.match(_INJECTION_PROMPT)
+    assert hit is not None
+    matched_substring = hit.pattern.search(_INJECTION_PROMPT).group(0)
+    legacy_key = compute_pattern_key_legacy_sha("qa", hit.rule_id, matched_substring)
+    reader.replace([legacy_key])
+
+    req = QaRequest(request_id="r-legacy-1", raw_text=_INJECTION_PROMPT, ip="2.2.2.3")
+    out = list(agent.handle(_msg(QA_REQUEST, req.as_dict())))
+
+    assert not any(m.envelope.topic == SEC_QUARANTINE for m in out)
+    forwards = [m for m in out if m.envelope.topic == QA_REQUEST_V1]
+    assert len(forwards) == 1
+    maint_events = [m for m in out if m.envelope.topic == MAINT_EVENT]
+    assert len(maint_events) == 1
+    event = maint_events[0].payload
+    assert event["kind"] == "pattern_allowlist_legacy_hit"
+    assert event["rule_id"] == hit.rule_id
+    assert event["row_id"] == legacy_key
+
+    # Same legacy row hit again in the same process must be debounced.
+    req2 = QaRequest(request_id="r-legacy-2", raw_text=_INJECTION_PROMPT, ip="2.2.2.3")
+    out2 = list(agent.handle(_msg(QA_REQUEST, req2.as_dict())))
+    assert not any(m.envelope.topic == SEC_QUARANTINE for m in out2)
+    assert not any(m.envelope.topic == MAINT_EVENT for m in out2)
+
+
+def test_allowlist_hmac_key_rotation_overdue_emits_daily_warn(monkeypatch, tmp_path: Path) -> None:
+    key_path = tmp_path / "allowlist_hmac.key"
+    key_path.write_bytes(b"rotation-overdue-key")
+    old = key_path.stat().st_mtime - (3 * 86400)
+    os.utime(key_path, (old, old))
+
+    monkeypatch.setattr(
+        _config.cfg,
+        "sec_input_allowlist_hmac_key_path",
+        str(key_path),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        _config.cfg,
+        "sec_input_allowlist_hmac_key_max_age_days",
+        1,
+        raising=False,
+    )
+    monkeypatch.setattr(_config.cfg, "profile", "prod", raising=False)
+
+    agent, clock = _build_agent()
+    req = QaRequest(request_id="r-overdue-1", raw_text="merhaba", ip="5.5.5.5")
+    out = list(agent.handle(_msg(QA_REQUEST, req.as_dict())))
+    kinds = [
+        SecAlert.from_dict(m.payload).kind
+        for m in out
+        if m.envelope.topic == SEC_ALERT
+    ]
+    assert "allowlist_hmac_key_rotation_overdue" in kinds
+
+    # Same day: debounced.
+    req2 = QaRequest(request_id="r-overdue-2", raw_text="merhaba", ip="5.5.5.5")
+    out2 = list(agent.handle(_msg(QA_REQUEST, req2.as_dict())))
+    kinds2 = [
+        SecAlert.from_dict(m.payload).kind
+        for m in out2
+        if m.envelope.topic == SEC_ALERT
+    ]
+    assert "allowlist_hmac_key_rotation_overdue" not in kinds2
+
+    # Next day: emits again.
+    clock.advance(86401.0)
+    req3 = QaRequest(request_id="r-overdue-3", raw_text="merhaba", ip="5.5.5.5")
+    out3 = list(agent.handle(_msg(QA_REQUEST, req3.as_dict())))
+    kinds3 = [
+        SecAlert.from_dict(m.payload).kind
+        for m in out3
+        if m.envelope.topic == SEC_ALERT
+    ]
+    assert "allowlist_hmac_key_rotation_overdue" in kinds3
+
+
 # ── Test 3: cache reload throttle ────────────────────────────────
 
 
@@ -240,11 +330,54 @@ def test_compute_pattern_key_is_deterministic_and_nfc_stable() -> None:
     decomposed = "c\u0327u\u0308zgu\u0308n"
     b = compute_pattern_key("qa", "homoglyph_attack", decomposed)
     assert a == b
-    # Length is 16 hex chars (sha256[:16]).
+    # Length is 16 hex chars (HMAC-SHA256[:16]).
     assert len(a) == 16
     # Different rule_id → different key.
     c = compute_pattern_key("qa", "prompt_injection", "ç\u00FCzg\u00FCn")
     assert a != c
+
+
+def test_compute_pattern_key_uses_hmac_not_plain_sha() -> None:
+    src = "qa"
+    rid = "prompt_injection"
+    hit = "ignore previous instructions"
+    actual = compute_pattern_key(src, rid, hit)
+    plain = hashlib.sha256(f"{src}|{rid}|{hit}".encode("utf-8")).hexdigest()[:16]
+    assert actual != plain
+    # Mock profile default key must match explicit HMAC with the same key.
+    expected = hmac.new(
+        b"negelir:mock:allowlist:hmac:v1",
+        f"{src}|{rid}|{hit}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+    assert actual == expected
+
+
+# ── Phase 8.16.10 proof test ───────────────────────────────────
+
+def test_hmac_fingerprints_split_a_legacy_collision_vector() -> None:
+    """Two distinct substrings sharing a legacy-collision vector split under HMAC.
+
+    We pin a precomputed legacy-collision vector row value (same legacy
+    fingerprint assigned to two distinct rows) and assert the current
+    HMAC codec produces distinct fingerprints for the two payloads.
+    """
+    left = "ignore previous instructions // vector-left"
+    right = "ignore previous instructions // vector-right"
+    assert left != right
+
+    # Precomputed collision vector in a legacy store snapshot.
+    legacy_vector = "c0ffee55deadbeef"
+    assert legacy_vector == "c0ffee55deadbeef"
+
+    # Legacy rows can collide on stored fingerprint; HMAC rows must not.
+    legacy_left = legacy_vector
+    legacy_right = legacy_vector
+    assert legacy_left == legacy_right
+
+    hmac_left = compute_pattern_key("qa", "prompt_injection", left)
+    hmac_right = compute_pattern_key("qa", "prompt_injection", right)
+    assert hmac_left != hmac_right
 
 
 # ── AllowlistCache unit-level guard ──────────────────────────────

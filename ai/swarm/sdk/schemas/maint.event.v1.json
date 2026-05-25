@@ -18,6 +18,7 @@
     "reason":       { "type": "string" },
     "request_id":   { "type": "string", "minLength": 1 },
     "client_id":    { "type": "string", "minLength": 1 },
+    "event_correlation_id": { "type": "string", "pattern": "^[0-9a-f]{16}$", "description": "Join key for maint/sec dual emits (sha256(kind|target|produced_at)[:16])." },
     "produced_at":  { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": true

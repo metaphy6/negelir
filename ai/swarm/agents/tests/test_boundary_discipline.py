@@ -650,8 +650,8 @@ def test_maint_ack_v1_producers_are_maint_event_consumers() -> None:
 
 
 def test_maint_ack_v1_no_in_process_consumer() -> None:
-    """§8.9 boundary discipline: no in-process *business-logic* agent in
-    the swarm registry may subscribe to ``maint.ack.v1``.
+    """§8.9/§8.16 boundary discipline: only explicitly-audited in-process
+    exceptions may subscribe to ``maint.ack.v1``.
 
     Only ``ops_console`` (an out-of-process CLI tool, not an agent
     in ``build_agents()``) is allowed to wait for acks.  Agents
@@ -659,13 +659,13 @@ def test_maint_ack_v1_no_in_process_consumer() -> None:
     implicit coupling between reactors and break the single-reader
     ops-console contract.
 
-    ``telemetry.v1`` is the one allowed exception: it is a meta-consumer
+    ``telemetry.v1`` is an allowed exception because it is a meta-consumer
     (counter-only, per §4.6) that watches every topic for Prometheus
-    metrics — it does not react to ack semantics, so it does not create
-    reactor coupling.  This mirrors the ``_TELEMETRY_LABEL`` allow-list
-    pattern used for every other consumer-set check in this file.
+    metrics.  ``maint.dlq.v1`` is the other allowed exception (Phase
+    §8.16.2), where it acts as the ack-only spool-flush reconciler.
+    Any additional subscriber remains a boundary violation.
     """
-    allowed = {_TELEMETRY_LABEL}
+    allowed = {_TELEMETRY_LABEL, "maint.dlq.v1"}
     offenders: list[str] = []
     for agent in _registry_agents():
         label = _agent_label(agent)
@@ -675,9 +675,10 @@ def test_maint_ack_v1_no_in_process_consumer() -> None:
         if MAINT_ACK in subs:
             offenders.append(label)
     assert offenders == [], (
-        "maint.ack.v1 must have no in-process business-logic consumer "
+        "maint.ack.v1 must have no in-process consumer beyond the "
+        "documented exceptions (telemetry.v1 and maint.dlq.v1). "
         "(only the out-of-process ops_console CLI waits for acks; "
-        "telemetry.v1 is the one counter-only exception). "
+        "all other in-process subscribers are forbidden). "
         f"In-registry subscribers found: {offenders}. "
         "Agents must not consume each others' acks."
     )

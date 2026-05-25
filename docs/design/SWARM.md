@@ -96,6 +96,7 @@ The producer set, locked here for cross-agent review:
 - `maint.schema.v1`
 - `maint.sec.v1`
 - `ops_console`
+- `sec.input.v1`
 - `source.watcher.v1`
 - `telemetry.v1`
 <!-- MAINT_EVENT_V1_ALLOWED_PRODUCERS:end -->

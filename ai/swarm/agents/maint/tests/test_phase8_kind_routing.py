@@ -386,6 +386,15 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "count": 4,
         "reason": "ttl",
     },
+    "pattern_allowlist_legacy_hit": {
+        "kind": "pattern_allowlist_legacy_hit",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:50Z",
+        "target": "qa:prompt_injection",
+        "source": "qa",
+        "rule_id": "prompt_injection",
+        "row_id": "deadbeefcafebabe",
+    },
     "pii_erased": {
         "kind": "pii_erased",
         "kind_schema_version": 1,
@@ -492,6 +501,26 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "request_id": "req-al3",
         "client_id": "ops@host",
         "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "allowlist_rehash": {
+        "kind": "allowlist_rehash",
+        "kind_schema_version": 1,
+        "target": "all",
+        "request_id": "req-al4",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "batch_size": 200,
+        "reason": "phase-8-16-10 migration",
+    },
+    "allowlist_rotate_key": {
+        "kind": "allowlist_rotate_key",
+        "kind_schema_version": 1,
+        "target": "allowlist_hmac",
+        "request_id": "req-al5",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "rehash": True,
+        "reason": "scheduled rotation",
     },
     # ── §8.9 second-pass notification-only kinds ─────────────────────────────
     "audit_chain_verify": {
@@ -687,6 +716,14 @@ _GOOD_PAYLOADS: dict[str, dict[str, object]] = {
         "total_artifacts": 4,
         "loaded_ok": 3,
         "load_error_count": 1,
+    },
+    "backup_model_lineage_legacy": {
+        "kind": "backup_model_lineage_legacy",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:12:00Z",
+        "target": "super_lig_v1/1.0.0/model.joblib",
+        "predictor_id": "super_lig_v1",
+        "version": "1.0.0",
     },
     "backup_model_lineage_drift": {
         "kind": "backup_model_lineage_drift",

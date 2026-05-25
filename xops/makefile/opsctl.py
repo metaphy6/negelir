@@ -398,15 +398,44 @@ def cmd_allowlist_show(_argv: List[str]) -> int:
     return _run_opsctl(args)
 
 
-def cmd_bootstrap_key(_argv: List[str]) -> int:
-    """`make ops.bootstrap-key` — generate a per-operator HMAC key (Phase 8 §8.14.4).
+def cmd_bootstrap_allowlist_key(_argv: List[str]) -> int:
+    """make ops.bootstrap-allowlist-key - create allowlist HMAC key file."""
+    return _run_opsctl(["bootstrap-allowlist-key"])
 
-    Writes 32 random bytes to ``~/.negelir/opsctl_key`` (mode 0600) and
-    prints the key_id to stdout.  If a key already exists, prints its
-    key_id without overwriting.  The operator must then add the key_id
-    to ``infra/maint/opsctl_operators.json`` and commit.
+
+def cmd_allowlist_rehash(_argv: List[str]) -> int:
+    """make ops.allowlist-rehash [TARGET=all|<source>] [BATCH_SIZE=<n>] [REASON=<text>]"""
+    target = _env("TARGET", "all")
+    args = ["allowlist-rehash", "--target", target]
+    batch_size = _env("BATCH_SIZE")
+    if batch_size:
+        args.extend(["--batch-size", batch_size])
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_rotate_allowlist_key(_argv: List[str]) -> int:
+    """make ops.rotate-allowlist-key [TARGET=<label>] [NO_REHASH=1] [REASON=<text>]"""
+    target = _env("TARGET", "allowlist_hmac")
+    args = ["rotate-allowlist-key", "--target", target]
+    if _env("NO_REHASH", "0") == "1":
+        args.append("--no-rehash")
+    _append_common_flags(args)
+    return _run_opsctl(args)
+
+
+def cmd_bootstrap_key(_argv: List[str]) -> int:
+    """`make ops.bootstrap-key OPERATOR=<email>` — generate per-operator HMAC key.
+
+    Writes 32 random bytes to ``~/.negelir/opsctl_key`` (mode 0600),
+    derives canonical key_id from ``OPERATOR`` email + key bytes, and
+    prints the exact operators.json line to copy into the repo.
     """
-    return _run_opsctl(["bootstrap-key"])
+    operator = _env("OPERATOR")
+    if not operator:
+        err("ops.bootstrap-key: OPERATOR=<email> is required")
+        return 64
+    return _run_opsctl(["bootstrap-key", "--operator-email", operator])
 
 
 def cmd_bootstrap_audit_key(_argv: List[str]) -> int:
@@ -420,6 +449,22 @@ def cmd_bootstrap_audit_key(_argv: List[str]) -> int:
     """
     return _run_opsctl(["bootstrap-audit-key"])
 
+def cmd_verify_key_id(_argv: List[str]) -> int:
+    """`make ops.verify-key-id OPERATOR=<email>` -- §8.16.14 self-verification.
+
+    Reads the local operator key + email, recomputes key_id, and asserts it
+    matches the entry in ``infra/maint/opsctl_operators.json``.
+    Exits KEY_ID_DRIFT (13) on mismatch.
+    """
+    operator = _env("OPERATOR")
+    if not operator:
+        err("ops.verify-key-id: OPERATOR=<email> is required")
+        return 64
+    args = ["verify-key-id", "--operator-email", operator]
+    operators_json = _env("OPERATORS_JSON")
+    if operators_json:
+        args.extend(["--operators-json", operators_json])
+    return _run_opsctl(args)
 
 COMMANDS = {
     "liveness": cmd_liveness,
@@ -445,10 +490,14 @@ COMMANDS = {
     "allowlist-extend": cmd_allowlist_extend,
     "allowlist-approve": cmd_allowlist_approve,
     "allowlist-show": cmd_allowlist_show,
+    "bootstrap-allowlist-key": cmd_bootstrap_allowlist_key,
+    "allowlist-rehash": cmd_allowlist_rehash,
+    "rotate-allowlist-key": cmd_rotate_allowlist_key,
     "bootstrap-key": cmd_bootstrap_key,
     "bootstrap-audit-key": cmd_bootstrap_audit_key,
+    "verify-key-id": cmd_verify_key_id,
 }
 
 
 if __name__ == "__main__":
-    sys.exit(dispatch(sys.argv[1:], COMMANDS, "opsctl"))
+    sys.exit(dispatch(sys.argv[1:], COMMANDS, script_name="opsctl"))

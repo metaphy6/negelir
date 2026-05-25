@@ -102,6 +102,10 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "allowlist_extend":  frozenset(),
     "allowlist_approve": frozenset(),
     "allowlist_show":    frozenset(),
+    # Phase 8 §8.16.10 — operator-triggered legacy-row migration and
+    # allowlist HMAC key rotation surfaces.
+    "allowlist_rehash":  frozenset(),
+    "allowlist_rotate_key": frozenset(),
     # ── Notification-only kinds (Phase 8.2 + 8.5) ────────────────────
     # These are emitted BY maint reactors as side-effect telemetry.
     # They carry NO ``request_id`` (or carry one but expect no acks)
@@ -184,6 +188,9 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "pattern_allowlist_pending":    frozenset(),
     "pattern_allowlist_added":      frozenset(),
     "pattern_allowlist_promoted":   frozenset(),
+    # Phase 8 §8.16.10 — sec.input.v1 emits once-per-legacy-row
+    # compatibility hits to prompt operator rehash flow.
+    "pattern_allowlist_legacy_hit": frozenset(),
     # Phase 8.6 schema-sentinel / source-watcher drift notification.
     "schema_drift_detected":        frozenset(),
     # ── Phase 8 §8.13.1 model-artifact backup discipline ─────────────
@@ -194,6 +201,7 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     "backup_model_offsite_failed":       frozenset(),
     "backup_model_cold_verify_completed": frozenset(),
     "backup_model_cold_verify_failed":   frozenset(),
+    "backup_model_lineage_legacy":       frozenset(),
     # Emitted when a live artifact under data/models/ is missing its
     # lineage sidecar or the sidecar's predictor_id/version does not
     # match the enclosing directory structure (lineage drift).
@@ -272,6 +280,8 @@ KINDS_PENDING_CONSUMER_LANDING: Final[Mapping[str, str]] = {
     "allowlist_extend":  "Phase 8.7 (maint.sec.v1 allowlist surface)",
     "allowlist_approve": "Phase 8.7 (maint.sec.v1 allowlist surface)",
     "allowlist_show":    "Phase 8.7 (maint.sec.v1 allowlist surface)",
+    "allowlist_rehash":  "Phase 8.16.10 (maint.sec.v1 rehash consumer)",
+    "allowlist_rotate_key": "Phase 8.16.10 (maint.sec.v1 rotation consumer)",
     # Phase 8 §8.14.8 — trainer_warmup_hint has an optional consumer
     # (the trainer pre-warm logic) that lands with Phase 5.x trainer-as-agent.
     "trainer_warmup_hint": "Phase 5.x (trainer-as-agent) pre-warm consumer",
@@ -304,6 +314,7 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "prune_skipped",
     "quarantine_pruned",
     "pattern_allowlist_expired",
+    "pattern_allowlist_legacy_hit",
     "pii_erased",
     # ROADMAP §8.3 weekly cold-verify (silent storage rot detector).
     "backup_cold_verify_completed",
@@ -335,6 +346,7 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "backup_model_offsite_failed",
     "backup_model_cold_verify_completed",
     "backup_model_cold_verify_failed",
+    "backup_model_lineage_legacy",
     "backup_model_lineage_drift",
     # Phase 8 §8.13.3 spool entry aging + retired-kind quarantine.
     "spool_entry_aged_out",

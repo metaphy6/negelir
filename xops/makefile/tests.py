@@ -5,20 +5,26 @@ from __future__ import annotations
 
 import sys
 
-from _common import REPO_ROOT, compose_exec, dispatch
+from _common import REPO_ROOT, compose_exec, dispatch, run
 
 WORKSPACE_DIR = "/workspace"
 TEST_PYTHONPATH = f"{WORKSPACE_DIR}/ai"
+SWARM_DISPATCHER = REPO_ROOT / "xops" / "makefile" / "swarm.py"
 
 
 def _pytest(*targets: str) -> None:
     compose_exec(
-        "run", "--rm",
+        "run", "--build", "--rm",
         "-v", f"{REPO_ROOT}:{WORKSPACE_DIR}",
         "-w", WORKSPACE_DIR,
         "-e", f"PYTHONPATH={TEST_PYTHONPATH}",
         "ai", "python", "-m", "pytest", *targets, "-v",
     )
+
+
+def _swarm_demo(*, live: bool = False) -> None:
+    cmd = [sys.executable, str(SWARM_DISPATCHER), "demo-live" if live else "demo"]
+    run(cmd)
 
 
 def cmd_test(_argv):
@@ -31,8 +37,14 @@ def cmd_test(_argv):
     )
 
 
-def cmd_test_ai(_argv):          _pytest("ai/tests")
-def cmd_test_integration(_argv): _pytest("ai/tests/test_full_pipeline.py", "-s")
+def cmd_test_ai(_argv):
+    _swarm_demo()
+    _pytest("ai/tests")
+
+
+def cmd_test_integration(_argv):
+    _swarm_demo(live=True)
+    _pytest("ai/tests/test_full_pipeline.py", "-s")
 
 
 def cmd_test_fast(_argv):

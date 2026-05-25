@@ -120,6 +120,7 @@ def _example_predict_request() -> dict:
         league_id="tr_super_lig",
         profile_id="tr_super_lig",
         requested_at="2026-04-28T12:00:00+00:00",
+        qa_correlation_id="qa-corr-1",
         features={"home_elo": 1650.0, "away_elo": 1580.0},
         metadata={"source": "live_predictor_reactor"},
     ).as_dict()

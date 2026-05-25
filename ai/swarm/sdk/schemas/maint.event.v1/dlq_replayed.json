@@ -40,6 +40,11 @@
       "type": "string",
       "minLength": 1
     },
+    "qa_correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional QA fanout correlation id copied through replayed predict.request.dlq entries so operators can join one QA session's replay audit trail."
+    },
     "visit_count": {
       "type": "integer",
       "minimum": 1,

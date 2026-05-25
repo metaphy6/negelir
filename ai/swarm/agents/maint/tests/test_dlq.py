@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from swarm.agents.maint.dlq import RECURSION_DENY_SET, MaintDlqSupervisor
-from swarm.agents.topics import MAINT_ACK, MAINT_EVENT
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
 from swarm.sdk.leader import SingleProcessLeader
 from swarm.sdk.types import Envelope, Message
 
@@ -22,10 +22,75 @@ def _wrap(payload: dict) -> Message:
     return Message(envelope=env, payload=payload)
 
 
+def _wrap_sec_alert(payload: dict, *, created_at: str | None = None) -> Message:
+    env = Envelope(
+        message_id="sec-1",
+        trace_id="sec-1",
+        topic=SEC_ALERT,
+        producer=str(payload.get("source") or "maint.dlq.v1"),
+        created_at=created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        schema_version=1,
+        attempt=1,
+    )
+    return Message(envelope=env, payload=payload)
+
+
 def test_subscribes_publishes() -> None:
     a = MaintDlqSupervisor()
     assert a.name == "maint.dlq.v1"
     assert MAINT_EVENT in a.subscribes
+    assert SEC_ALERT in a.subscribes
+
+
+def test_consumer_likely_broken_sec_alert_freezes_topic() -> None:
+    agent = MaintDlqSupervisor()
+
+    out = list(agent.handle(_wrap_sec_alert({
+        "alert_id": "consumer-broken-1",
+        "kind": "consumer_likely_broken",
+        "severity": "error",
+        "source": "maint.dlq.v1",
+        "subject": "predict.vote.dlq",
+        "reason": "poison_pattern",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    })))
+
+    assert agent._frozen_topics.get("predict.vote.dlq") == "sec_alert_consumer_broken"
+    notifications = [
+        m for m in out
+        if m.envelope.topic == MAINT_EVENT and m.payload.get("kind") == "dlq_consumer_broken"
+    ]
+    assert notifications
+
+
+def test_sec_plane_tier3_sheds_dlq_sec_alert_consume(monkeypatch) -> None:
+    from common.config import cfg
+
+    monkeypatch.setattr(cfg, "sec_plane_lag_alert_ms", 5_000, raising=False)
+    monkeypatch.setattr(cfg, "sec_plane_lag_alert_window_s", 1, raising=False)
+
+    now_s = 1_700_000_400.0
+    stale = datetime.fromtimestamp(now_s - 70.0, tz=timezone.utc).isoformat(timespec="seconds")
+    agent = MaintDlqSupervisor(clock_s=lambda: now_s)
+
+    out = list(agent.handle(_wrap_sec_alert({
+        "alert_id": "consumer-broken-stale",
+        "kind": "consumer_likely_broken",
+        "severity": "error",
+        "source": "maint.dlq.v1",
+        "subject": "predict.vote.dlq",
+        "reason": "poison_pattern",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+    }, created_at=stale)))
+
+    assert "predict.vote.dlq" not in agent._frozen_topics
+    throttled = [
+        m for m in out
+        if m.envelope.topic == MAINT_EVENT
+        and m.payload.get("kind") == "maint_plane_throttled"
+        and m.payload.get("tier") == 3
+    ]
+    assert throttled, "expected sec-plane tier-3 shed event for DLQ consumer"
 
 
 def test_replay_emits_notification_and_ack() -> None:
@@ -42,6 +107,43 @@ def test_replay_emits_notification_and_ack() -> None:
     kinds = [m.payload.get("kind") for m in out]
     assert "dlq_replayed" in kinds
     assert any(m.envelope.topic == MAINT_ACK for m in out)
+
+
+def test_replay_accepts_predict_request_batch_by_qa_correlation_id() -> None:
+    agent = MaintDlqSupervisor()
+    out = list(agent.handle(_wrap({
+        "kind": "dlq_replay",
+        "request_id": "req-qa-batch-1",
+        "client_id": "ops",
+        "target": "predict.request.dlq",
+        "max_msgs": 10,
+        "qa_correlation_id": "qa-corr-123",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+        "reason": "qa batch replay",
+    })))
+    acks = [m.payload for m in out if m.envelope.topic == MAINT_ACK]
+    assert acks and acks[0]["accepted"] is True
+    assert acks[0]["details"]["qa_correlation_id"] == "qa-corr-123"
+
+
+def test_replay_audit_row_includes_qa_correlation_id_when_present() -> None:
+    agent = MaintDlqSupervisor()
+    out = list(agent.handle(_wrap({
+        "kind": "dlq_replay",
+        "request_id": "req-qa-audit-1",
+        "client_id": "ops",
+        "target": "predict.request.dlq",
+        "max_msgs": 10,
+        "qa_correlation_id": "qa-corr-audit-123",
+        "produced_at": "2024-01-01T00:00:00+00:00",
+        "reason": "qa audit replay",
+    })))
+    replayed = [
+        m.payload for m in out
+        if m.envelope.topic == MAINT_EVENT and m.payload.get("kind") == "dlq_replayed"
+    ]
+    assert replayed, "expected a dlq_replayed audit notification"
+    assert replayed[0]["qa_correlation_id"] == "qa-corr-audit-123"
 
 
 def test_recursion_deny_for_maint_event_dlq() -> None:

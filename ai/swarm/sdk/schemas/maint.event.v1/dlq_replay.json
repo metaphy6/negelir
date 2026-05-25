@@ -41,6 +41,11 @@
     "produced_at": {
       "type": "string"
     },
+    "qa_correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional QA fanout correlation id used to replay the related predict.request.dlq entries as one operator batch. Supported only for predict.request.dlq."
+    },
     "reason": {
       "type": "string"
     }
