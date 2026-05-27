@@ -12,7 +12,7 @@ from tqu.sanitizer import sanitize
 from tqu.patterns import INTENT_PATTERNS, IntentPattern
 from tqu.entities import extract_entities, ExtractedEntities
 from tqu.normalizer import (
-    normalize, asciify, stem_text, asciify_keywords,
+    normalize, asciify, stem_text, asciify_keywords, offer_predictive_overshoot,
 )
 
 log = get_logger("tqu.classifier")
@@ -100,6 +100,14 @@ def classify(raw_input: str) -> ClassificationResult:
 
     # Step 1b: Normalize (dedup chars, resolve team typos)
     cleaned = normalize(cleaned, team_names=_TEAM_NAMES)
+
+    # Step 1c: Predictive-text overshoot offers (did-you-mean suggestions)
+    predictive_offers = offer_predictive_overshoot(cleaned)
+    if predictive_offers:
+        log.debug(
+            "Predictive overshoot offers=%s",
+            [f"{item.original_token}->{item.offered_token}" for item in predictive_offers],
+        )
 
     # Step 2: Football domain gate
     if not _has_football_context(cleaned):

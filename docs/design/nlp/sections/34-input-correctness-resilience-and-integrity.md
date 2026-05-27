@@ -87,7 +87,7 @@ not enumerate, the empirical counter-example, the binding correction,
 and the proof test. Tests live in
 `ai/swarm/agents/nlp/tests/generic_broken_turkish/`.
 
-- [ ] **Predictive-text overshoot.** iOS/Android keyboards aggressively
+- [x] **Predictive-text overshoot.** iOS/Android keyboards aggressively
       auto-complete partial Turkish words to nearest dictionary entry,
       often producing a syntactically-valid but semantically-wrong
       sentence (`Galatasaray onları yendi mi` ⇒ keyboard auto-finishes

@@ -12,6 +12,13 @@ patterns work on noisy real-world input without hardcoding every variant.
 """
 
 import re
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+
+from common.config import cfg
 
 # ── Turkish ↔ ASCII folding ─────────────────────────────
 
@@ -34,6 +41,75 @@ _REPEAT_RE = re.compile(r"(.)\1{2,}")
 def dedup_chars(text: str) -> str:
     """Collapse excessively repeated characters: 'gooool' → 'gol'."""
     return _REPEAT_RE.sub(r"\1", text)
+
+
+@dataclass(frozen=True)
+class PredictiveOvershootOffer:
+    """Known predictive-text overshoot correction offer."""
+
+    original_token: str
+    offered_token: str
+    predictive_overshoot_audit: str
+    telemetry_kind: str = "predictive_overshoot_offered"
+
+
+_PREDICTIVE_OVERSHOOT_TABLE = (
+    Path(__file__).resolve().parent
+    / "data"
+    / "predictive_text_known_overshoot.tr.yaml"
+)
+_TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşü]+")
+
+
+@lru_cache(maxsize=1)
+def _load_predictive_overshoot_table() -> dict[str, str]:
+    """Load known predictive overshoot token replacements."""
+    with _PREDICTIVE_OVERSHOOT_TABLE.open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh) or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(source).strip().lower(): str(target).strip().lower()
+        for source, target in raw.items()
+        if str(source).strip() and str(target).strip()
+    }
+
+
+def predictive_overshoot_pairs() -> dict[str, str]:
+    """Return the known overshoot table as {original: offered} pairs."""
+    return dict(_load_predictive_overshoot_table())
+
+
+def offer_predictive_overshoot(
+    text: str,
+    *,
+    max_per_query: int | None = None,
+) -> list[PredictiveOvershootOffer]:
+    """Offer did-you-mean replacements for known predictive overshoot tokens."""
+    limit = cfg.nlp_predictive_overshoot_max_per_query if max_per_query is None else max_per_query
+    if limit <= 0:
+        return []
+
+    offers: list[PredictiveOvershootOffer] = []
+    seen: set[str] = set()
+    table = _load_predictive_overshoot_table()
+
+    for token in _TOKEN_RE.findall(text.lower()):
+        offered = table.get(token)
+        if offered is None or offered == token or token in seen:
+            continue
+        offers.append(
+            PredictiveOvershootOffer(
+                original_token=token,
+                offered_token=offered,
+                predictive_overshoot_audit=token,
+            )
+        )
+        seen.add(token)
+        if len(offers) >= limit:
+            break
+
+    return offers
 
 
 # ── Basic Turkish suffix stripping ──────────────────────

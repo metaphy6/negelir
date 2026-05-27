@@ -60,6 +60,9 @@ class Config:
     # AI
     device: str = field(default_factory=lambda: os.getenv("AI_DEVICE", "auto"))
     log_level: str = field(default_factory=lambda: os.getenv("AI_LOG_LEVEL", "DEBUG"))
+    nlp_predictive_overshoot_max_per_query: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_PREDICTIVE_OVERSHOOT_MAX_PER_QUERY", "2"
+    )))
 
     # Runtime defaults
     default_league_id: str = field(default_factory=lambda: os.getenv("NEGELIR_DEFAULT_LEAGUE_ID", "super_lig"))
