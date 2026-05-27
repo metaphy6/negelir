@@ -1,0 +1,32 @@
+# oapi-codegen v2 configuration for server/api/openapi.yaml
+# Run: make api.gen
+# Generates: server/internal/api/api.gen.go
+#
+# Phase 9 §9.4: generate Go type definitions from the OpenAPI spec.
+# The actual handler implementations are hand-written (Gin closures in
+# cmd/api/main.go + internal/handlers/). This generated file provides
+# the canonical Go type system for request/response bodies so that
+# handler tests can import verified types instead of ad-hoc structs.
+#
+# Codegen strategy: "models" only.
+# - Does NOT generate a ServerInterface or RegisterHandlers — those are
+#   handwritten to keep the Gin closure pattern intact.
+# - Does NOT embed the raw spec bytes at runtime — spec_loader.go (§9.4
+#   bullet 4) reads the file directly via go:embed.
+# - Generated file must be committed; make api.gen-check diffs it in CI.
+
+package: apigen
+output: ../internal/apigen/api.gen.go
+generate:
+  models: true
+  embedded-spec: false
+  strict-server: false
+  chi-server: false
+  gin-server: false
+  gorilla-server: false
+  client: false
+  echo-server: false
+
+output-options:
+  skip-fmt: false
+  skip-prune: false

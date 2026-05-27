@@ -248,6 +248,29 @@ func errorCode(s RateStatus) string {
 	return "rate_limited"
 }
 
+// BuildSecondaryThrottleResponse returns the wire response for a
+// secondary (in-process) bucket throttle. Unlike BuildThrottleResponse
+// (which returns 429 for the Lua bucket), the secondary tier uses 503
+// Service Unavailable with a fixed Retry-After of 1 second, signalling
+// a transient per-pod brownout hint — not a real rate limit. This lets
+// client telemetry distinguish a Redis-brownout fallback (503) from a
+// genuine Lua-bucket limit (429).
+//
+// Precondition: d.Status must be RateThrottle and d.UsedFallback must
+// be true. Any other combination returns (0, nil, nil) so callers can
+// short-circuit cleanly.
+func BuildSecondaryThrottleResponse(d RateDecision) (status int, headers map[string]string, body []byte) {
+	if d.Status != RateThrottle || !d.UsedFallback {
+		return 0, nil, nil
+	}
+	headers = map[string]string{
+		"Content-Type": "application/json; charset=utf-8",
+		"Retry-After":  "1",
+	}
+	body = []byte(`{"error":"rate_limited","retry_after_ms":1000,"reason":"brownout"}`)
+	return 503, headers, body
+}
+
 // jsonEscape escapes the small subset of characters that can appear
 // in operator-supplied reason strings. Keeps us off the
 // encoding/json critical path for the hot middleware response.

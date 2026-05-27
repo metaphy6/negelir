@@ -46,6 +46,16 @@ _PYTHON_UNUSED_ENV_KEYS = frozenset({
     "CACHE_MATCHES_TTL_SEC",
     "CACHE_TEAMS_TTL_SEC",
     "SERVER_PORT",
+    # Go server-only Phase 9 knobs not in the §9.12 shared inventory
+    "NEGELIR_AUTH_LOGIN_MAX_BYTES",
+    "NEGELIR_COMPUTE_CLASS",
+    "NEGELIR_API_JWT_KEY_DIR",
+    # Go server-only Phase 9 §9.2 mTLS/TLS — not in the shared inventory
+    "NEGELIR_API_MTLS_ENABLED",
+    "NEGELIR_API_TLS_DIR",
+    # Go server-only telemetry knobs — not in the shared inventory
+    "NEGELIR_TELEMETRY_MAX_SERIES",
+    "NEGELIR_TELEMETRY_OTLP_ENDPOINT",
 })
 
 # Env vars consumed by the Python layer but not surfaced in .env.example
@@ -298,6 +308,16 @@ def test_shared_marker_only_on_actually_shared_keys() -> None:
 # though they're documented in .env.example. Keep tight; add only with reason.
 _DEFAULTS_YAML_OPTIONAL: frozenset[str] = frozenset({
     "NEGELIR_FEATURE_RANGES_JSON",  # default values are listed under feature_ranges:
+    # Go-server-only Phase 9 tunables not in the §9.12 shared inventory
+    "NEGELIR_AUTH_LOGIN_MAX_BYTES",
+    "NEGELIR_COMPUTE_CLASS",
+    "NEGELIR_API_JWT_KEY_DIR",
+    # Go server-only Phase 9 §9.2 mTLS/TLS
+    "NEGELIR_API_MTLS_ENABLED",
+    "NEGELIR_API_TLS_DIR",
+    # Go server-only telemetry knobs
+    "NEGELIR_TELEMETRY_MAX_SERIES",
+    "NEGELIR_TELEMETRY_OTLP_ENDPOINT",
 })
 
 
@@ -357,6 +377,7 @@ _VALUE_DRIFT_ALLOWED: dict[str, str] = {
     "SERVER_URL": "container hostname vs host-dev fallback",
     "POSTGRES_PASSWORD": ".env.example holds a placeholder; code default is empty",
     "NEGELIR_STRICT": "code treats empty == off; .env.example shows '0' as a hint",
+    "NEGELIR_TELEMETRY_METRICS_PORT": "AI pipeline binds :9101 to avoid collision with Go API :9091 in single-host dev",
 }
 
 # Capture `os.getenv("KEY", "literal default")` (only string-literal defaults).

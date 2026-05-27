@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/api.response.v1",
+  "title": "api.response.v1",
+  "description": "Phase 9 — emitted by the API gateway after the response is written. Carries outcome, timing, and cache state. bytes_out is computed on the actual response writer (gzipped if applicable) so the audit row is truthful. request_id round-trips from api.request.v1.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "status",
+    "latency_ms",
+    "bytes_out",
+    "cache",
+    "degraded"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique id minted at gateway ingress; round-trips from api.request.v1."
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599,
+      "description": "HTTP response status code written to the client."
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock milliseconds from accepted_at (api.request.v1) to final byte written."
+    },
+    "bytes_out": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Compressed bytes written to the client (post-gzip when applicable). Sourced from the response writer, not a Content-Length header estimate."
+    },
+    "cache": {
+      "type": "string",
+      "enum": ["hit", "miss", "bypass", "stale"],
+      "description": "Cache disposition for this response."
+    },
+    "degraded": {
+      "type": "boolean",
+      "description": "True when the response was served from a fallback or partial data path due to an upstream failure."
+    },
+    "prediction_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ID of the prediction record returned in this response. Absent when the route does not produce a prediction."
+    },
+    "calibration_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Calibration model version used to post-process the prediction. Absent when no calibration was applied."
+    },
+    "error_code": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Machine-readable error code when status >= 400. Absent on success."
+    }
+  },
+  "additionalProperties": false
+}

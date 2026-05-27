@@ -71,6 +71,18 @@ services:
       - mocknet
       - default
 
+  # Phase 9 API container — when mock overlay is active, also wait for
+  # mocksrv and join mocknet so the scraper vhosts resolve correctly.
+  api:
+    depends_on:
+      mocksrv:
+        condition: service_healthy
+    volumes:
+      - ./infra/mock/ca/root.crt:/etc/ssl/negelir-ca.crt:ro
+    networks:
+      - mocknet
+      - default
+
 networks:
   mocknet:
     driver: bridge

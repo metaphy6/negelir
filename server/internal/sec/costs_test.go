@@ -113,6 +113,31 @@ costs:
 	}
 }
 
+// Phase 9 §9.7 — burst budget: verify the embedded endpoint_costs.yaml
+// carries the expected values for cost-aware endpoints.
+
+func TestEndpointCost_QA_IsFive(t *testing.T) {
+	m, err := LoadEndpointCosts(EmbeddedEndpointCostsYAML)
+	if err != nil {
+		t.Fatalf("load embedded: %v", err)
+	}
+	cost, ok := m.CostFor("/v1/qa")
+	if !ok || cost != 5 {
+		t.Fatalf("/v1/qa cost = %d ok=%v, want cost=5 ok=true", cost, ok)
+	}
+}
+
+func TestEndpointCost_Healthz_IsZero(t *testing.T) {
+	m, err := LoadEndpointCosts(EmbeddedEndpointCostsYAML)
+	if err != nil {
+		t.Fatalf("load embedded: %v", err)
+	}
+	cost, ok := m.CostFor("/v1/healthz")
+	if !ok || cost != 0 {
+		t.Fatalf("/v1/healthz cost = %d ok=%v, want cost=0 ok=true", cost, ok)
+	}
+}
+
 // TestCheckTotalityHappyPath — every router pattern explicitly mapped.
 func TestCheckTotalityHappyPath(t *testing.T) {
 	m, _ := LoadEndpointCosts([]byte(`version: 1

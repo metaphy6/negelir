@@ -282,7 +282,103 @@ phase7:
   # qa.request.v1 — NLP-side dedup window (§7.5 binding).
   qa_request_v1_dedup_window_s: 300                # NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S
 
-# ── Phase 8 — Self-maintenance plane (ops console + maint.event/ack) ────────
+# ── Phase 9 §9.12 — Full API knob inventory (shared: Python AI + Go API) ────
+# Every key below is also in ai/common/config.py, server/internal/config/config.go,
+# and xops/env/.env.example (# shared). test_config_sync covers all three sides.
+phase9:
+  api_burst_capacity: 60                                        # NEGELIR_API_BURST_CAPACITY
+  api_burst_refill_per_s: 2.0                                   # NEGELIR_API_BURST_REFILL_PER_S
+  api_request_timeout_ms: 2500                                  # NEGELIR_API_REQUEST_TIMEOUT_MS
+  api_consensus_overhead_ms: 200                                # NEGELIR_API_CONSENSUS_OVERHEAD_MS
+  api_transit_jitter_ms: 100                                    # NEGELIR_API_TRANSIT_JITTER_MS
+  api_request_max_bytes: 65536                                  # NEGELIR_API_REQUEST_MAX_BYTES
+  qa_input_max_bytes: 4096                                      # NEGELIR_QA_INPUT_MAX_BYTES
+  api_fixture_window_max_days: 14                               # NEGELIR_API_FIXTURE_WINDOW_MAX_DAYS
+  api_allowed_markets: "ms,au_2.5,btts,ah_home,modal_score"    # NEGELIR_API_ALLOWED_MARKETS
+  api_cursor_ttl_s: 1800                                        # NEGELIR_API_CURSOR_TTL_S
+  api_idempotency_ttl_s: 86400                                  # NEGELIR_API_IDEMPOTENCY_TTL_S
+  api_idempotency_inflight_wait_ms: 1500                        # NEGELIR_API_IDEMPOTENCY_INFLIGHT_WAIT_MS
+  api_swr_inflight_max: 64                                      # NEGELIR_API_SWR_INFLIGHT_MAX
+  api_cache_stale_after_s: 30                                   # NEGELIR_API_CACHE_STALE_AFTER_S
+  api_cache_max_age_s: 300                                      # NEGELIR_API_CACHE_MAX_AGE_S
+  api_reply_reaper_s: 60                                        # NEGELIR_API_REPLY_REAPER_S
+  api_predict_request_backlog_high: 5000                        # NEGELIR_API_PREDICT_REQUEST_BACKLOG_HIGH
+  api_max_concurrent_requests: 5000                             # NEGELIR_API_MAX_CONCURRENT_REQUESTS
+  api_response_write_timeout_ms: 5000                           # NEGELIR_API_RESPONSE_WRITE_TIMEOUT_MS
+  api_bcrypt_cost: 12                                           # NEGELIR_API_BCRYPT_COST
+  api_access_ttl_s: 900                                         # NEGELIR_API_ACCESS_TTL_S
+  api_refresh_ttl_s: 2592000                                    # NEGELIR_API_REFRESH_TTL_S
+  api_refresh_replay_grace_s: 30                                # NEGELIR_API_REFRESH_REPLAY_GRACE_S
+  api_revocation_set_max: 10000                                 # NEGELIR_API_REVOCATION_SET_MAX
+  api_jwt_key_poll_s: 10                                        # NEGELIR_API_JWT_KEY_POLL_S
+  api_jwt_retired_grace_s: 960                                  # NEGELIR_API_JWT_RETIRED_GRACE_S
+  api_jwt_clock_skew_s: 30                                      # NEGELIR_API_JWT_CLOCK_SKEW_S
+  api_self_registration_enabled: false                          # NEGELIR_API_SELF_REGISTRATION_ENABLED
+  api_register_cap_per_subnet_per_h: 20                         # NEGELIR_API_REGISTER_CAP_PER_SUBNET_PER_H
+  api_trusted_proxies: ""                                       # NEGELIR_API_TRUSTED_PROXIES
+  api_log_sample_pct: 10                                        # NEGELIR_API_LOG_SAMPLE_PCT
+  api_tier_enforcement_enabled: false                           # NEGELIR_API_TIER_ENFORCEMENT_ENABLED
+  api_deprecation_window_days: 90                               # NEGELIR_API_DEPRECATION_WINDOW_DAYS
+  api_schema_version: 1                                         # NEGELIR_API_SCHEMA_VERSION
+  api_slo_burn_window_s: 3600                                   # NEGELIR_API_SLO_BURN_WINDOW_S
+  api_slo_burn_threshold: 2.0                                   # NEGELIR_API_SLO_BURN_THRESHOLD
+  api_time_format: "iso8601_utc"                                # NEGELIR_API_TIME_FORMAT
+  # §9.13 smoke-test base URL for `make swarm.demo.live` API extension.
+  api_demo_base_url: "http://localhost:8080"                    # NEGELIR_API_DEMO_BASE_URL
+  # §9.17.1 — Go runtime tuning (documented mirrors; code path is Go-only).
+  api_go_mem_limit_mib: 0                                       # NEGELIR_API_GO_MEM_LIMIT_MIB
+  api_go_gc_percent: 50                                         # NEGELIR_API_GO_GC_PERCENT
+  api_read_header_timeout_ms: 5000                              # NEGELIR_API_READ_HEADER_TIMEOUT_MS
+  api_read_timeout_ms: 10000                                    # NEGELIR_API_READ_TIMEOUT_MS
+  api_write_timeout_ms: 15000                                   # NEGELIR_API_WRITE_TIMEOUT_MS
+  api_idle_timeout_ms: 60000                                    # NEGELIR_API_IDLE_TIMEOUT_MS
+  api_shutdown_grace_s: 30                                      # NEGELIR_API_SHUTDOWN_GRACE_S
+  api_in_mesh_port: "8082"                                      # NEGELIR_API_IN_MESH_PORT
+  # §9.17.3 — Connection pool sizing (documented mirrors; code path is Go-only).
+  api_pg_pool_max_conns: 25                                     # NEGELIR_API_PG_POOL_MAX_CONNS
+  api_pg_replica_url: ""                                        # NEGELIR_API_PG_REPLICA_URL
+  api_pg_replica_lag_check_s: 10                                # NEGELIR_API_PG_REPLICA_LAG_CHECK_S
+  api_pg_replica_lag_max_ms: 500                                # NEGELIR_API_PG_REPLICA_LAG_MAX_MS
+  api_redis_cache_pool_size: 50                                 # NEGELIR_API_REDIS_CACHE_POOL_SIZE
+  api_redis_bus_pool_size: 20                                   # NEGELIR_API_REDIS_BUS_POOL_SIZE
+  # §9.17.4 — Resilience (documented mirrors; code path is Go-only).
+  api_breaker_fail_ratio: 0.5                                   # NEGELIR_API_BREAKER_FAIL_RATIO
+  api_breaker_window_s: 10                                      # NEGELIR_API_BREAKER_WINDOW_S
+  api_breaker_min_requests: 20                                  # NEGELIR_API_BREAKER_MIN_REQUESTS
+  api_breaker_open_s: 15                                        # NEGELIR_API_BREAKER_OPEN_S
+  api_hedge_after_ms: 200                                       # NEGELIR_API_HEDGE_AFTER_MS
+  api_hedging_enabled: true                                     # NEGELIR_API_HEDGING_ENABLED
+  api_hedge_budget_pct: 10                                      # NEGELIR_API_HEDGE_BUDGET_PCT
+  api_retry_budget_per_s: 10                                    # NEGELIR_API_RETRY_BUDGET_PER_S
+  api_retry_budget_capacity: 50                                 # NEGELIR_API_RETRY_BUDGET_CAPACITY
+  api_bench_target_rps: 200                                     # NEGELIR_API_BENCH_TARGET_RPS
+
+  # §9.17.6 — In-process L0 LRU cache (documented mirrors; code path is Go-only).
+  api_l0_cache_max_entries: 10000                               # NEGELIR_API_L0_CACHE_MAX_ENTRIES
+  api_l0_cache_max_bytes: 67108864                              # NEGELIR_API_L0_CACHE_MAX_BYTES
+  api_l0_max_ttl_s: 5                                           # NEGELIR_API_L0_MAX_TTL_S
+  api_negative_cache_s: 10                                      # NEGELIR_API_NEGATIVE_CACHE_S
+  api_l0_refresh_max_wait_ms: 200                               # NEGELIR_API_L0_REFRESH_MAX_WAIT_MS
+  api_l0_invalidation_lag_max_ms: 500                           # NEGELIR_API_L0_INVALIDATION_LAG_MAX_MS
+  # §9.17.7 — Audit pipeline performance (documented mirrors; code path is Go-only).
+  api_audit_batch_max: 64                                       # NEGELIR_API_AUDIT_BATCH_MAX
+  api_audit_batch_max_ms: 10                                    # NEGELIR_API_AUDIT_BATCH_MAX_MS
+  api_audit_chan_cap: 4096                                      # NEGELIR_API_AUDIT_CHAN_CAP
+  api_audit_sample_pct_under_pressure: 10                      # NEGELIR_API_AUDIT_SAMPLE_PCT_UNDER_PRESSURE
+  # §9.17.8 — TLS/TCP (documented mirror; code path is Go-only).
+  api_tcp_user_timeout_ms: 20000                                # NEGELIR_API_TCP_USER_TIMEOUT_MS
+  # §9.17.9 — Backpressure feedback loops (documented mirrors; code path is Go-only).
+  api_adaptive_error_rate_threshold: 0.02                      # NEGELIR_API_ADAPTIVE_ERROR_RATE_THRESHOLD
+  api_adaptive_shed_factor: 0.5                                 # NEGELIR_API_ADAPTIVE_SHED_FACTOR
+  api_adaptive_shed_duration_s: 60                              # NEGELIR_API_ADAPTIVE_SHED_DURATION_S
+  api_priority_tier_floor: 0                                    # NEGELIR_API_PRIORITY_TIER_FLOOR
+  # §9.17.10 — Observability for performance (documented mirrors; code path is Go-only).
+  api_pprof_enabled_dev: true                                   # NEGELIR_API_PPROF_ENABLED_DEV
+  api_pprof_enabled_prod: false                                 # NEGELIR_API_PPROF_ENABLED_PROD
+  api_alloc_sample_rate: 0.001                                  # NEGELIR_API_ALLOC_SAMPLE_RATE
+  api_pprof_dir: "data/api/profiles"                            # NEGELIR_API_PPROF_DIR
+
+
 # §8.1 ops console baseline. CLI publishes maint.event.v1 and waits for
 # maint.ack.v1 per expected consumer (kind→consumer-set map at
 # ai/swarm/agents/maint/_ack_routing.py). Bus-down envelopes land in

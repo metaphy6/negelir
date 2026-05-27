@@ -68,6 +68,8 @@ var allowedKinds = map[string]struct{}{
 	"subject_map_churn":        {},
 	"quarantine_overflow":      {},
 	"quarantine_storage_slow":  {},
+	"refresh_token_replay":              {},
+	"jti_revocation_set_pressure":       {},
 }
 
 var snakeCaseID = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)

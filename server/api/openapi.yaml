@@ -1,0 +1,781 @@
+openapi: "3.0.3"
+
+info:
+  title: Negelir REST API
+  description: |
+    Negelir Go REST API — Phase 9.
+    This file is the **binding source of truth** for all route definitions.
+    Go handler stubs are generated from it via `make api.gen` (oapi-codegen v2).
+    The CI gate `make api.gen-check` fails on any drift between this spec and the
+    committed generated file.
+  version: "1.0.0"
+  contact:
+    name: Negelir Platform Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Extension vocabulary (binding — see §9.4 spec_loader.go):
+#
+#   x-rate-cost         integer  Token cost charged to the GCRA bucket.
+#                                Must be present on every route; boot fails if absent.
+#                                0 = free (health probes only).
+#   x-tier-required     string   Dormant until Phase 20. Accepted values: none, free, pro, elite.
+#                                All routes default to "none" in Phase 9.
+#   x-idempotent-mutation bool   True on state-changing POST/PUT/PATCH/DELETE routes.
+#                                Presence drives the Idempotency-Key requirement check.
+#   x-deprecated-on     string   ISO-8601 date when the route entered deprecation.
+#   x-sunset-on         string   ISO-8601 date after which the route will be removed.
+#                                Both drive the Sunset header emitter (§9.11).
+# ──────────────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Legacy /api/v1 group ──────────────────────────────────────────────────
+
+  /api/v1/health:
+    get:
+      operationId: legacyHealth
+      summary: Health check (legacy prefix)
+      tags: [health]
+      x-rate-cost: 0
+      x-tier-required: none
+      x-idempotent-mutation: false
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/matches:
+    get:
+      operationId: legacyListMatches
+      summary: List matches (legacy prefix)
+      tags: [matches]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - $ref: "#/components/parameters/LeagueParam"
+        - $ref: "#/components/parameters/DateParam"
+      responses:
+        "200":
+          description: Match list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchListResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/matches/{id}:
+    get:
+      operationId: legacyGetMatch
+      summary: Match detail (legacy prefix)
+      tags: [matches]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - $ref: "#/components/parameters/MatchIDPath"
+      responses:
+        "200":
+          description: Match detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchDetailResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/teams:
+    get:
+      operationId: legacyListTeams
+      summary: List teams (legacy prefix)
+      tags: [teams]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      responses:
+        "200":
+          description: Team list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamListResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/teams/{id}:
+    get:
+      operationId: legacyGetTeam
+      summary: Team detail (legacy prefix)
+      tags: [teams]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - $ref: "#/components/parameters/TeamIDPath"
+      responses:
+        "200":
+          description: Team detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamDetailResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/scrape/trigger:
+    post:
+      operationId: legacyScrapeTrigger
+      summary: Trigger scrape (legacy prefix)
+      tags: [scraper]
+      x-rate-cost: 3
+      x-tier-required: none
+      x-idempotent-mutation: true
+      responses:
+        "202":
+          description: Scrape accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/features/{match_id}:
+    get:
+      operationId: legacyGetFeatures
+      summary: Match feature vector (legacy prefix)
+      tags: [features]
+      x-rate-cost: 2
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feature vector
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturesResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # ── /v1 group ─────────────────────────────────────────────────────────────
+
+  /v1/healthz:
+    get:
+      operationId: liveness
+      summary: K8s liveness probe — process-up only, no dependency checks
+      tags: [health]
+      x-rate-cost: 0
+      x-tier-required: none
+      x-idempotent-mutation: false
+      responses:
+        "200":
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/readyz:
+    get:
+      operationId: readiness
+      summary: K8s readiness probe — checks PostgreSQL + Redis
+      tags: [health]
+      x-rate-cost: 0
+      x-tier-required: none
+      x-idempotent-mutation: false
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/matches/{id}:
+    get:
+      operationId: getMatch
+      summary: Match detail
+      tags: [matches]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - $ref: "#/components/parameters/MatchIDPath"
+      responses:
+        "200":
+          description: Match detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchDetailResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/matches/{id}/predictions:
+    get:
+      operationId: getPredictions
+      summary: Prediction calibration for a match
+      tags: [predictions]
+      x-rate-cost: 2
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - $ref: "#/components/parameters/MatchIDPath"
+        - name: market
+          in: query
+          description: Comma-separated market identifiers (default 1x2)
+          schema:
+            type: string
+            example: "1x2,btts"
+      responses:
+        "200":
+          description: Prediction data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictionsResponse"
+        "204":
+          description: No calibration available yet
+        "425":
+          $ref: "#/components/responses/TooEarly"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/qa:
+    post:
+      operationId: qa
+      summary: Natural language Q&A (Turkish NLP — Phase 10)
+      tags: [qa]
+      x-rate-cost: 5
+      x-tier-required: none
+      x-idempotent-mutation: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QARequest"
+      responses:
+        "200":
+          description: Answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QAResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "425":
+          $ref: "#/components/responses/TooEarly"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/leagues:
+    get:
+      operationId: listLeagues
+      summary: List supported leagues
+      tags: [leagues]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      responses:
+        "200":
+          description: League list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeagueListResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/leagues/{id}/fixtures:
+    get:
+      operationId: getLeagueFixtures
+      summary: Fixtures for a league
+      tags: [leagues]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fixture list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixtureListResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/me:
+    get:
+      operationId: getProfile
+      summary: Authenticated user profile
+      tags: [identity]
+      x-rate-cost: 1
+      x-tier-required: none
+      x-idempotent-mutation: false
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/login:
+    post:
+      operationId: authLogin
+      summary: Obtain JWT access + refresh token pair
+      tags: [auth]
+      x-rate-cost: 3
+      x-tier-required: none
+      x-idempotent-mutation: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/register:
+    post:
+      operationId: authRegister
+      summary: Self-registration (disabled by default; cfg.api_self_registration_enabled)
+      tags: [auth]
+      x-rate-cost: 3
+      x-tier-required: none
+      x-idempotent-mutation: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/refresh:
+    post:
+      operationId: authRefresh
+      summary: Exchange refresh token for a new access token
+      tags: [auth]
+      x-rate-cost: 3
+      x-tier-required: none
+      x-idempotent-mutation: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+# ── Components ────────────────────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    MatchIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        description: Match identifier
+    TeamIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        description: Team identifier
+    LeagueParam:
+      name: league
+      in: query
+      schema:
+        type: string
+    DateParam:
+      name: date
+      in: query
+      schema:
+        type: string
+        format: date
+
+  responses:
+    BadRequest:
+      description: Bad request — validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    TooEarly:
+      description: Backpressure — prediction stream overloaded
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ServiceUnavailable:
+      description: Service unavailable
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        request_id:
+          type: string
+      additionalProperties: false
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        db:
+          type: string
+        redis:
+          type: string
+
+    AcceptedResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    MatchListResponse:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchSummary"
+
+    MatchSummary:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        home_team:
+          type: string
+        away_team:
+          type: string
+        kickoff:
+          type: string
+          format: date-time
+        league:
+          type: string
+
+    MatchDetailResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        home_team:
+          type: string
+        away_team:
+          type: string
+        kickoff:
+          type: string
+          format: date-time
+        league:
+          type: string
+        status:
+          type: string
+
+    TeamListResponse:
+      type: object
+      required: [teams]
+      properties:
+        teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamSummary"
+
+    TeamSummary:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        league:
+          type: string
+
+    TeamDetailResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        league:
+          type: string
+
+    FeaturesResponse:
+      type: object
+      required: [match_id, features]
+      properties:
+        match_id:
+          type: string
+        features:
+          type: object
+          additionalProperties: true
+
+    PredictionsResponse:
+      type: object
+      required: [match_id, markets]
+      properties:
+        match_id:
+          type: string
+        calibration_version:
+          type: integer
+        markets:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+
+    QARequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: Turkish natural language query
+          maxLength: 2048
+      additionalProperties: false
+
+    QAResponse:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+        confidence:
+          type: number
+          format: float
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          maxLength: 128
+      additionalProperties: false
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          maxLength: 128
+      additionalProperties: false
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+      additionalProperties: false
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+
+    LeagueListResponse:
+      type: object
+      required: [leagues]
+      properties:
+        leagues:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeagueSummary"
+
+    LeagueSummary:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        country:
+          type: string
+
+    FixtureListResponse:
+      type: object
+      required: [fixtures]
+      properties:
+        fixtures:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchSummary"
+
+    UserProfileResponse:
+      type: object
+      required: [user_id, email]
+      properties:
+        user_id:
+          type: string
+        email:
+          type: string
+          format: email
+        tier:
+          type: string
+          description: Dormant until Phase 20

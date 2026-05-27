@@ -94,6 +94,14 @@ verify.age-pin: ## Phase 8 §8.14.3 — verify age binary SHA-256 vs provenance 
 verify.dlq-replay-policy: ## Phase 8 §8.16.7 — verify DLQ replay overrides vs security exception registry
 	@$(XOPS)/verify.py dlq-replay-policy
 
+.PHONY: audit.verify-api
+audit.verify-api: ## §9.8 — walk api_audit_log HMAC chain; Phase 1 linkage check + Phase 2 HMAC recomputation (exit 1 on any break)
+	@$(XOPS)/audit_api.py verify-api
+
+.PHONY: audit.repair-api
+audit.repair-api: ## §9.17.7 — drain api_audit_log_quarantine back to api_audit_log after chain-integrity break (operator runbook)
+	@$(XOPS)/audit_api.py repair-api
+
 .PHONY: ops.backup-bump-age
 ops.backup-bump-age: ## §8.14.3 — upgrade the age binary pin (VERSION=<v>) — sanctioned operator path
 	@$(XOPS)/backup_pin.py backup-bump-age
@@ -213,6 +221,78 @@ cache.shell: env ## Open Redis CLI
 .PHONY: api
 api: ## Call a Go server endpoint (ENDPOINT=health|matches|teams|scrape  METHOD=GET|POST)
 	@$(XOPS)/server_api.py call --endpoint $(ENDPOINT) --method $(METHOD)
+
+.PHONY: api.up
+api.up: ## Bring up the API compose service
+	@$(XOPS)/api.py up
+
+.PHONY: api.down
+api.down: ## Stop the API compose service
+	@$(XOPS)/api.py down
+
+.PHONY: api.build
+api.build: ## Build the Go server binary (cpu_only build tag)
+	@$(XOPS)/api.py build
+
+.PHONY: api.gen
+api.gen: ## Regenerate Go handlers from server/api/openapi.yaml (oapi-codegen)
+	@$(XOPS)/api.py gen
+
+.PHONY: api.gen-check
+api.gen-check: ## CI gate: regenerate into tmpdir, assert no handler drift
+	@$(XOPS)/api.py gen-check
+
+.PHONY: api.docs
+api.docs: ## Serve Swagger UI on localhost:8081 (compose profile=docs)
+	@$(XOPS)/api.py docs
+
+.PHONY: api.init
+api.init: ## §9.10 First-run bootstrap: JWT keypair kid_001, cursor seal key, optional mTLS (WITH_TLS=--with-tls)
+	@$(XOPS)/api.py init $(WITH_TLS)
+
+.PHONY: api.rotate-jwt-key
+api.rotate-jwt-key: ## Rotate JWT keypair (pending→active, old→retired, grace purge)
+	@$(XOPS)/api.py rotate-jwt-key
+
+.PHONY: api.revoke-jti
+api.revoke-jti: ## Add JTI to Redis revocation deny-set (JTI=<uuid>)
+	@$(XOPS)/api.py revoke-jti --jti $(JTI)
+
+.PHONY: api.tls-rotate
+api.tls-rotate: ## Renew mTLS service certs from Phase 2 internal CA
+	@$(XOPS)/api.py tls-rotate
+
+.PHONY: api.rotate-cursor-key
+api.rotate-cursor-key: ## Rotate the AES-GCM cursor seal key
+	@$(XOPS)/api.py rotate-cursor-key
+
+.PHONY: api.rotate-tls-session-key
+api.rotate-tls-session-key: ## §9.17.8 — Rotate TLS session ticket key in Redis (api:tls:session_ticket_key); roll API replicas after
+	@$(XOPS)/api.py rotate-tls-session-key
+
+.PHONY: api.bump-bcrypt-cost
+api.bump-bcrypt-cost: ## Bump NEGELIR_API_BCRYPT_COST and trigger rolling re-hash
+	@$(XOPS)/api.py bump-bcrypt-cost
+
+.PHONY: api.erase-user
+api.erase-user: ## §9.8 GDPR right-to-erasure: null-stamp api_audit_log.user_id + purge users row + pii_erased emit (USER=<uuid-or-email>)
+	@$(XOPS)/audit_api.py erase-user --user $(USER)
+
+.PHONY: api.slo-report
+api.slo-report: ## 28-day rolling SLO summary (Phase 19 GA gate input)
+	@$(XOPS)/api.py slo-report
+
+.PHONY: api.bench
+api.bench: ## §9.17.5 per-endpoint latency benchmark (k6, 200 RPS, 60s); asserts §9.17.5 latency table
+	@$(XOPS)/bench.py api.bench
+
+.PHONY: api.pprof-enable
+api.pprof-enable: ## §9.17.10 enable pprof on the metrics port for POD (1h TTL); usage: make api.pprof-enable POD=<pod-name>
+	@$(XOPS)/api.py pprof-enable --pod $(POD)
+
+.PHONY: api.profile-show
+api.profile-show: ## §9.17.10 print the latest continuous CPU profile path (or open it); LATEST=1 for the most recent file
+	@$(XOPS)/api.py profile-show $(if $(LATEST),--latest,)
 
 # ══════════════════════════════════════════════════════════════
 #                          STATUS

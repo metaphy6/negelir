@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/api.request.v1",
+  "title": "api.request.v1",
+  "description": "Phase 9 — emitted by the API gateway on every inbound request, before the response is written. Carries request identification and timing of the security and auth gates. Per §8.16.9 dual-emit doctrine, when a Phase 7 quarantine fires for the same request, the matching sec.alert.v1 carries event_correlation_id = request_id.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "anon_subject_key",
+    "route",
+    "method",
+    "accepted_at"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique id for this request, minted at gateway ingress. Rounds-trips through api.response.v1 and predict.cancel.v1."
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Authenticated user id. Absent for anonymous/public requests."
+    },
+    "anon_subject_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Rate-limit subject key (masked IP or user id hash). Never raw IP — see §7.6 SubjectKey contract."
+    },
+    "route": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenAPI route pattern (e.g. /v1/matches/:id), NEVER the substituted path."
+    },
+    "method": {
+      "type": "string",
+      "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+      "description": "HTTP method in upper-case."
+    },
+    "status_anticipated": {
+      "type": ["integer", "null"],
+      "description": "Expected response status if known at emit time (e.g. early 429 from rate-limiter); null when unknown."
+    },
+    "accepted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when the gateway accepted the connection."
+    },
+    "sec_gate_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock milliseconds spent in the Phase 7 security gate (denylist + rate-limit check). Absent when gate was skipped."
+    },
+    "auth_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock milliseconds spent in JWT verification + session lookup. Absent for unauthenticated routes."
+    }
+  },
+  "additionalProperties": false
+}

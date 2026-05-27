@@ -1,3 +1,5 @@
+//go:build cpu_only
+
 /*
 Negelir Go Middleware Server
 Fetches data from external sources, stores to PostgreSQL, caches in Redis.
@@ -7,12 +9,16 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof" // §9.17.10: registers /debug/pprof/* handlers on http.DefaultServeMux (unused here — we register on metricsMux selectively)
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,9 +26,27 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/net/http2/h2c"
+	_ "go.uber.org/automaxprocs" // Phase 9 §9.17.1: sets GOMAXPROCS from cgroup CPU quota at init time.
 
+	"github.com/metaphy6/negelir/server/internal/api"
+	"github.com/metaphy6/negelir/server/internal/auth"
+	"github.com/metaphy6/negelir/server/internal/bootstrap"
+	"github.com/metaphy6/negelir/server/internal/calibration"
 	"github.com/metaphy6/negelir/server/internal/config"
+	aperrors "github.com/metaphy6/negelir/server/internal/errors"
+	"github.com/metaphy6/negelir/server/internal/handlers"
+	"github.com/metaphy6/negelir/server/internal/metrics"
+	"github.com/metaphy6/negelir/server/internal/middleware"
+	"github.com/metaphy6/negelir/server/internal/mtls"
+	"github.com/metaphy6/negelir/server/internal/profiling"
+	runtimetuning "github.com/metaphy6/negelir/server/internal/runtime"
+	"github.com/metaphy6/negelir/server/internal/sec"
+	apitcp "github.com/metaphy6/negelir/server/internal/tcp"
+	"github.com/metaphy6/negelir/server/internal/telemetry"
 )
 
 func main() {
@@ -32,22 +56,99 @@ func main() {
 		log.Fatalf("\xe2\x9d\x8c Config error: %v", err)
 	}
 
+	// Phase 9 §9.17.1 — Go runtime tuning (refuse-to-start gates).
+	// automaxprocs already fired at package init (see import side-effect above).
+	// Log the effective GOMAXPROCS so operators can verify cgroup-based tuning.
+	log.Printf("runtime.gomaxprocs=%d source=cgroup|env|default", runtime.GOMAXPROCS(0))
+
+	// §9.17.1 — GOMEMLIMIT: derive from cgroup when cfg.APIGoMemLimitMiB == 0.
+	{
+		var memLimitBytes int64
+		if cfg.APIGoMemLimitMiB > 0 {
+			memLimitBytes = int64(cfg.APIGoMemLimitMiB) << 20
+		} else {
+			var probeErr error
+			memLimitBytes, probeErr = runtimetuning.DefaultGoMemLimitBytes()
+			if probeErr != nil {
+				// Refuse boot: unbounded heap is forbidden.
+				log.Fatalf("\xe2\x9d\x8c §9.17.1 GOMEMLIMIT: cgroup unreadable AND api_go_mem_limit_mib=0 (unbounded heap forbidden): %v", probeErr)
+			}
+		}
+		debug.SetMemoryLimit(memLimitBytes)
+		log.Printf("runtime.gomemlimit=%d bytes (%.1f MiB)", memLimitBytes, float64(memLimitBytes)/(1<<20))
+	}
+
+	// §9.17.1 — GOGC: use configured value (default 50; Go default 100 is too lazy
+	// for our JSON encode + Redis pipeline allocation pattern).
+	debug.SetGCPercent(cfg.APIGoGCPercent)
+	log.Printf("runtime.gogc=%d", cfg.APIGoGCPercent)
+
+	// §9.17.1 — heap baseline boot probe. Asserts < 32 MiB before any request.
+	{
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+		heapMiB := ms.HeapInuse >> 20
+		if heapMiB > 32 {
+			log.Fatalf("\xe2\x9d\x8c §9.17.1 heap baseline %d MiB exceeds 32 MiB limit (check for large init-time allocations)", heapMiB)
+		}
+		log.Printf("runtime.heap_baseline=%d MiB (OK, limit=32 MiB)", heapMiB)
+	}
+
+	// Phase 9 §9.4 — OpenAPI extensions boot gate. Refuses to start if any
+	// operation in the embedded spec is missing a required Phase 9 extension
+	// (x-rate-cost, x-tier-required, x-idempotent-mutation). This catches
+	// spec drift before any request is served.
+	if err := api.BootValidateSpec(); err != nil {
+		log.Fatalf("❌ OpenAPI spec validation: %v", err)
+	}
+
+	// Phase 9 §9.2 — bcrypt startup probe. Refuses boot if cost=cfg.APIBcryptCost
+	// produces a hash in under auth.MinBcryptDuration (100 ms), which would
+	// indicate the deployment target is too fast for the configured cost.
+	if _, probeErr := auth.ProbeBcryptCost(cfg.APIBcryptCost); probeErr != nil {
+		log.Fatalf("\xe2\x9d\x8c bcrypt probe failed: %v", probeErr)
+	}
+
+	// Phase 9 §9.17.8 — HTTP/2 boot assert.
+	// Refuses to start when GODEBUG=http2server=0 would silently disable
+	// HTTP/2 on TLS listeners, violating the §9.17.8 contract.
+	if err := mtls.AssertHTTP2NotDisabled(); err != nil {
+		log.Fatalf("\xe2\x9d\x8c %v", err)
+	}
+	log.Printf("runtime.http2=enabled (GODEBUG check passed)")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Database
-	dbConfig, err := pgxpool.ParseConfig(cfg.EffectiveDatabaseURL())
-	if err != nil {
-		log.Fatalf("\xe2\x9d\x8c PostgreSQL URL error: %v", err)
+	// Phase 9 §9.8 — OTLP trace export.  When cfg.TelemetryOTLPEndpoint is
+	// empty, Init is a deliberate no-op (no goroutines, no connections).
+	// When set, spans are exported to the configured OTLP gRPC collector.
+	// NEGELIR_SERVICE_VERSION is an optional env var for the service.version
+	// resource attribute; defaults to "unknown" when unset.
+	svcVersion := os.Getenv("NEGELIR_SERVICE_VERSION")
+	if svcVersion == "" {
+		svcVersion = "unknown"
 	}
-	dbConfig.MaxConns = int32(cfg.DBMaxConns)
-	dbConfig.ConnConfig.ConnectTimeout = cfg.DBConnectTimeout()
+	traceShutdown, traceErr := telemetry.Init(ctx, cfg.TelemetryOTLPEndpoint, svcVersion)
+	if traceErr != nil {
+		log.Fatalf("\xe2\x9d\x8c Telemetry init: %v", traceErr)
+	}
+	defer func() {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		if err := traceShutdown(shutCtx); err != nil {
+			log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Trace provider shutdown: %v", err)
+		}
+	}()
 
-	pool, err := pgxpool.NewWithConfig(ctx, dbConfig)
+	// Database — §9.17.3: pgxpool with full pool settings via bootstrap.
+	pgPools, err := bootstrap.NewPGPools(ctx, cfg)
 	if err != nil {
-		log.Fatalf("\xe2\x9d\x8c PostgreSQL connection error: %v", err)
+		log.Fatalf("\xe2\x9d\x8c PostgreSQL pool error: %v", err)
 	}
-	defer pool.Close()
+	defer pgPools.Close()
+	pool := pgPools.Primary // convenience alias; handlers receive *pgxpool.Pool directly.
 
 	pingCtx, pingCancel := context.WithTimeout(ctx, cfg.DBPingTimeout())
 	if err := pool.Ping(pingCtx); err != nil {
@@ -65,24 +166,104 @@ func main() {
 	}
 	fmt.Println("\xe2\x9c\x85 PostgreSQL connection successful")
 
-	// Redis
-	rdb := redis.NewClient(&redis.Options{Addr: cfg.EffectiveRedisURL()})
-	if err := rdb.Ping(ctx).Err(); err != nil {
+	// Redis — §9.17.3: two distinct clients (cacheClient, busClient) via bootstrap.
+	redisClients := bootstrap.NewRedisClients(cfg)
+	defer func() {
+		if err := redisClients.Close(); err != nil {
+			log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Redis close error: %v", err)
+		}
+	}()
+	// rdb is the cacheClient alias used by existing handlers.
+	// busClient is initialised and ready for §9.17.7 (XREAD audit pipelines).
+	rdb := redisClients.CacheClient
+	if err := redisClients.Ping(ctx); err != nil {
 		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Redis not ready yet, retrying...")
 		time.Sleep(cfg.RedisRetryDelay())
-		if err := rdb.Ping(ctx).Err(); err != nil {
+		if err := redisClients.Ping(ctx); err != nil {
 			log.Fatalf("\xe2\x9d\x8c Could not connect to Redis: %v", err)
 		}
 	}
 	fmt.Println("\xe2\x9c\x85 Redis connection successful")
+
+	// Phase 9 §9.13 — register api.gateway.v1 shim heartbeat so `swarmctl ps`
+	// shows this process in its output. The static manifest in swarmctl reads
+	// this Redis string key (SET, RFC3339) for the LAST_HEARTBEAT column.
+	// TTL=0 (no expiry): the timestamp stays until overwritten on restart; it
+	// becomes stale-marked after SwarmHeartbeatSec*3 seconds without refresh.
+	if herr := rdb.Set(ctx, "agent:api.gateway.v1:heartbeat",
+		time.Now().UTC().Format(time.RFC3339), 0).Err(); herr != nil {
+		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  agent heartbeat write: %v", herr)
+	}
+
+	// Phase 9.6: boot-time Lua deploy-skew gate — refuses to start on SHA
+	// drift or EVALSHA mismatch between the embedded body and Redis.
+	bootLuaGates(ctx, rdb)
+
+	// Phase 9.6: boot-time XFF trusted-proxy parse — refuses to start on
+	// malformed CIDR in cfg.SecRateTrustedProxies.
+	trustedProxies, err := sec.ParseTrustedProxies(cfg.SecRateTrustedProxies)
+	if err != nil {
+		log.Fatalf("\xe2\x9d\x8c Trusted-proxies parse: %v", err)
+	}
+
+	// Phase 9 §9.7 — burst budget: load endpoint cost map once at boot so
+	// both the rate limiter and the totality gate share the same compiled map.
+	endpointCosts, err := sec.LoadEndpointCosts(sec.EmbeddedEndpointCostsYAML)
+	if err != nil {
+		log.Fatalf("❌ Endpoint-cost load: %v", err)
+	}
+	// Construct the in-process GCRA secondary bucket using the Phase 9 §9.7
+	// burst-budget config knobs (cfg.APIBurstCapacity / APIBurstRefillPerS).
+	// MaxKeys=50000 accommodates a large number of distinct IP subjects before
+	// LRU eviction is triggered.
+	secondaryBucket := sec.NewSecondaryBucket(cfg.APIBurstCapacity, cfg.APIBurstRefillPerS, 50000)
+
+	// Phase 7 §7.1: QA input gate (sec.QAInputGate for /v1/qa body).
+	rules, err := sec.LoadInjectionPatterns(sec.EmbeddedInjectionPatternsYAML)
+	if err != nil {
+		log.Fatalf("\xe2\x9d\x8c Injection-pattern load: %v", err)
+	}
+	qaGate := sec.NewQAInputGate(rules, cfg.SecInputMaxLen)
+
+	// Phase 16 forward contract: CalibrationStore Protocol seam.
+	// Phase 9 uses the in-memory backend; Phase 16 swaps in the feed-plane
+	// backend by replacing this constructor arg — 0 handler lines change.
+	calibStore := calibration.NewInMemoryCalibrationStore()
 
 	// Router
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	r.Use(gin.Recovery())
+	// Phase 9 §9.17.4 — custom panic recovery: catches panics, emits
+	// sec.alert.v1{kind=api_panic, severity=critical} with SHA-256 of stack trace,
+	// writes HTTP 500, and keeps the process alive. alertFn=nil is safe — the
+	// middleware still recovers and returns 500; alert publishing will be wired
+	// once the sec.alert.v1 bus publisher is injected (Phase 9 §9.17 follow-up).
+	r.Use(middleware.PanicRecovery(nil))
+	// Phase 9.5: W3C trace propagation — MUST be first so every downstream
+	// handler and bus publisher sees a populated ContextKeyTraceID. Mints a
+	// fresh traceparent if absent; reuses incoming trace_id if present.
+	// X-Request-ID response header is the client-side alias (32-hex trace_id).
+	r.Use(middleware.TraceParent())
+	// Phase 9 §9.8 — OTLP span middleware. Wraps each request in an OTEL
+	// server span seeded from the trace_id minted by TraceParent above.
+	// When TelemetryOTLPEndpoint is empty, the global TracerProvider is no-op
+	// and this middleware costs nothing.
+	r.Use(middleware.OTelSpan())
 	r.Use(requestLogger())
+	// Phase 9.6: XFF derivation — derives real client IP per request and
+	// stores sec.rate_subject in Gin context for the rate limiter.
+	r.Use(middleware.XFF(trustedProxies, cfg.SecRateIPv4Prefix, cfg.SecRateIPv6Prefix))
+	// Phase 9 §9.1 — global body-size cap (bcrypt-bomb / RAM-exhaustion defense).
+	// Applied before every handler dispatch; route-specific sub-caps below
+	// override for /v1/qa and /v1/auth/login.
+	r.Use(middleware.BodySizeCap(int64(cfg.APIRequestMaxBytes)))
+	// Phase 9 §9.9 — concurrency semaphore.
+	// ConcurrencyLimit enforces cfg.APIMaxConcurrentRequests in-flight requests
+	// per pod via a buffered-channel semaphore. Overflow → 503 immediately.
+	// Applied after body-size cap so malformed-size requests are shed first.
+	r.Use(middleware.ConcurrencyLimit(cfg.APIMaxConcurrentRequests))
 
 	// Routes
 	api := r.Group("/api/v1")
@@ -96,6 +277,159 @@ func main() {
 		api.GET("/features/:match_id", featuresHandler(pool, rdb))
 	}
 
+	// /v1 group — Phase 9/10 routes (QA, identity, etc.)
+	// CONTRACT (/v1 public contract -- Phase 9 §9.11):
+	//   /v1 is the stable public API. Breaking changes (field removal, semantic
+	//   changes, parameter renames) MUST cut a /v2 group -- never break /v1 in
+	//   place. Additive changes (new optional fields, new endpoints) are allowed
+	//   in /v1 without a version bump. Deprecated /v1 routes must carry
+	//   x-deprecated-on + x-sunset-on in openapi.yaml and are automatically
+	//   served with Sunset / Link headers (or 410 past sunset) by the
+	//   DeprecationHeaders middleware wired below.
+	v1 := r.Group("/v1")
+	// Phase 9 §9.7 — burst budget rate limiter applied to all /v1 routes.
+	// Primary checker is Noop for now (Redis GCRA wired in a later bullet);
+	// the in-process SecondaryBucket is the active guard here.
+	v1.Use(middleware.RateLimiterSimple(
+		secondaryBucket,
+		middleware.NoopRateChecker(),
+		endpointCosts,
+		cfg.APIBurstCapacity,
+		cfg.APIBurstRefillPerS,
+		cfg.SecRateRedisTimeoutMs,
+	))
+	{
+		// Phase 9 §9.1 — K8s probes.
+		// healthz = liveness; never depends on PG/Redis/bus (process-up only).
+		// readyz  = readiness; checks PG + Redis.
+		// Phase 14 (K8s) forward contract: readyz tolerates consensus.v1 not
+		// being co-located on this pod. consensus.v1 runs at replicas:1 (§5.3
+		// single-publication guarantee) and is NOT a co-location requirement
+		// for the API pod. This probe checks only the API's own dependencies.
+		v1.GET("/healthz", livezHandler())
+		v1.GET("/readyz", readyzHandler(pool, rdb))
+		// Phase 9 §9.1 — /v1/qa sub-cap (cfg.QAInputMaxBytes; tightens the global cap).
+		// Phase 9 §9.9 — BackpressureCheck reads api:backpressure:on (set by §8.x scaler);
+		// returns 425 for POST when the predict.request.v1 stream is overloaded.
+		v1.POST("/qa",
+			middleware.BodySizeCap(int64(cfg.QAInputMaxBytes)),
+			middleware.BackpressureCheck(&middleware.RedisBackpressure{C: rdb}),
+			qaHandler(qaGate),
+		)
+		// Phase 9.6: password-field bypass — password routed through
+		// sec.PasswordPasses (length-cap only; no NFC; no patterns).
+		// Full auth logic (bcrypt, JWT) wired in Phase 9.2.
+		// Phase 9 §9.1 — /v1/auth/login sub-cap (cfg.AuthLoginMaxBytes; blocks bcrypt-bomb).
+		v1.POST("/auth/login", middleware.BodySizeCap(int64(cfg.AuthLoginMaxBytes)), authLoginHandler(qaGate))
+			v1.POST("/auth/register", authRegisterHandler(qaGate, cfg.APISelfRegistrationEnabled, cfg.APIRegisterCapPerSubnetPerH, rdb))
+		// Phase 9 §9.1 Predictions — CalibrationStore Protocol seam (Phase 16
+		// forward contract): handler reads only through the interface; backend
+		// is swapped in cmd/api/main.go, never in the handler.
+		// Phase 9 §9.3 SWR cache: PredictionSWR wires the stale-while-revalidate
+		// cache reads; InflightMax caps pod-level concurrent SWR goroutines.
+		predSWR := &middleware.PredictionSWR{
+			Store:       &middleware.RedisPredictionSWR{C: rdb},
+			StaleAfterS: cfg.APICacheStaleAfterS,
+			MaxAgeS:     cfg.APICacheMaxAgeS,
+			InflightMax: cfg.APISWRInflightMax,
+		}
+		v1.GET("/matches/:id/predictions", handlers.PredictionsHandler(calibStore, predSWR))
+
+		// §9.14 stub routes — openapi.yaml declares these; full implementation
+		// is deferred to the phases noted inline. Stubs return 501 until wired.
+		v1.GET("/matches/:id", func(c *gin.Context) {
+			aperrors.Respond(c, aperrors.CodeServiceUnavailable, "not implemented yet")
+		})
+		v1.GET("/leagues", func(c *gin.Context) {
+			aperrors.Respond(c, aperrors.CodeServiceUnavailable, "not implemented yet")
+		})
+		v1.GET("/leagues/:id/fixtures", func(c *gin.Context) {
+			aperrors.Respond(c, aperrors.CodeServiceUnavailable, "not implemented yet")
+		})
+		v1.GET("/me", func(c *gin.Context) {
+			aperrors.Respond(c, aperrors.CodeServiceUnavailable, "not implemented yet")
+		})
+		v1.POST("/auth/refresh", func(c *gin.Context) {
+			aperrors.Respond(c, aperrors.CodeServiceUnavailable, "not implemented yet")
+		})
+	}
+
+	// Phase 9.6: boot-time endpoint-cost totality gate — refuses to start
+	// if any registered route lacks an explicit cost entry in
+	// endpoint_costs.yaml (sec.CheckTotality, allowFallback=nil).
+	bootCostTotalityGate(r, endpointCosts)
+
+	// Phase 9 §9.8 — RED metrics boot gate and server startup.
+	// 1. Create an isolated Prometheus registry (no Go runtime metrics so the
+	//    operator controls exactly what is exposed on :9091).
+	// 2. Run the cardinality estimate against cfg.TelemetryMaxSeries — refuses
+	//    to start if worst-case series count would be exceeded.
+	// 3. Wire the Observe middleware onto the router.
+	// 4. Expose /metrics on the dedicated internal port (cfg.TelemetryMetricsPort).
+	metricsReg := prometheus.NewRegistry()
+	apiMetrics := metrics.New(metricsReg)
+	routeCount := len(r.Routes())
+	if err := metrics.ValidateCardinality(routeCount, cfg.TelemetryMaxSeries); err != nil {
+		log.Fatalf("\xe2\x9d\x8c Metrics cardinality gate: %v", err)
+	}
+	// Add the Observe middleware globally. It runs after routing so
+	// c.FullPath() always returns the matched OpenAPI pattern.
+	r.Use(metrics.Observe(apiMetrics))
+
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.HandlerFor(metricsReg, promhttp.HandlerOpts{}))
+
+	// §9.17.10 — pprof on the metrics port (:9091/debug/pprof/*).
+	// Enabled when cfg.APIPprofEnabledDev OR cfg.APIPprofEnabledProd is true,
+	// OR when the Redis key api:pprof:<hostname> exists (short-lived TTL 1h, set
+	// by `make api.pprof-enable POD=...`). NEVER registered on the public listener.
+	{
+		hostname, _ := os.Hostname()
+		pprofRedisKey := "api:pprof:" + hostname
+		pprofEnabled := cfg.APIPprofEnabledDev || cfg.APIPprofEnabledProd
+		if !pprofEnabled {
+			// Check the short-lived Redis operator-enable key.
+			if val := rdb.Exists(ctx, pprofRedisKey).Val(); val > 0 {
+				pprofEnabled = true
+			}
+		}
+		if pprofEnabled {
+			// net/http/pprof registers its handlers on http.DefaultServeMux at
+			// import time. Copy them onto our isolated metricsMux so the public
+			// listener is never affected.
+			for _, path := range []string{
+				"/debug/pprof/",
+				"/debug/pprof/cmdline",
+				"/debug/pprof/profile",
+				"/debug/pprof/symbol",
+				"/debug/pprof/trace",
+			} {
+				metricsMux.Handle(path, http.DefaultServeMux)
+			}
+			log.Printf("pprof.enabled=true port=%s (metrics-port only; redis_key=%s)",
+				cfg.TelemetryMetricsPort, pprofRedisKey)
+		} else {
+			log.Printf("pprof.enabled=false (set NEGELIR_API_PPROF_ENABLED_DEV=true or run make api.pprof-enable POD=%s)", hostname)
+		}
+	}
+
+	// §9.17.10 — continuous CPU profiling sampler (10 s profile every 10 min).
+	profiling.StartSampler(ctx, cfg.APIPprofDir)
+	log.Printf("profiling.sampler=started dir=%s", cfg.APIPprofDir)
+
+	metricsSrv := &http.Server{
+		Addr:         ":" + cfg.TelemetryMetricsPort,
+		Handler:      metricsMux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	go func() {
+		fmt.Printf("\xf0\x9f\x93\x8a Metrics listening on :%s/metrics (internal only)\n", cfg.TelemetryMetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Metrics server error: %v", err)
+		}
+	}()
+
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		// Pre-Phase-6 audit round-3 G2: cap per-request handler
@@ -104,15 +438,73 @@ func main() {
 		// can produce slow concurrent queries; without this cap a
 		// runaway handler holds a `pgx` connection until the
 		// client TCP timeout fires.
-		Handler:      http.TimeoutHandler(r, cfg.HTTPHandlerTimeout(), `{"error":"handler timeout"}`),
-		ReadTimeout:  cfg.HTTPReadTimeout(),
-		WriteTimeout: cfg.HTTPWriteTimeout(),
+		// §9.17.10 — wrap with allocation-tracking middleware (sampled at
+		// cfg.APIAllocSampleRate; negligible overhead at the default 0.001).
+		Handler: metrics.ObserveAlloc(
+			apiMetrics,
+			cfg.APIAllocSampleRate,
+			nil, // alertFn: nil until sec.alert.v1 bus publisher is injected
+		)(http.TimeoutHandler(r, cfg.HTTPHandlerTimeout(), `{"error":"handler timeout"}`)),
+		// Phase 9 §9.17.1 — timeout knobs (Slowloris / idle-fd defense).
+		// These supersede the legacy HTTP_READ/WRITE_TIMEOUT_SEC values for
+		// the public listener; both sets of knobs are kept for backward compat
+		// but the §9.17.1 ms-granularity knobs take precedence here.
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout(),
+		ReadTimeout:       cfg.ReadTimeout(),
+		WriteTimeout:      cfg.WriteTimeout(),
+		IdleTimeout:       cfg.IdleTimeout(),
+		// MaxHeaderBytes = 32 KiB (§9.9 / §9.17.1 — caps header memory exhaustion).
+		MaxHeaderBytes: 32 << 10,
+	}
+
+	// Phase 9 §9.17.1 — H2C in-mesh listener.
+	// H2C (HTTP/2 cleartext) is ONLY exposed on the in-cluster sidecar port
+	// (cfg.APIInMeshPort, default 8082), never on the public API port.
+	// This port sits behind mTLS in-cluster and is intended for gRPC-over-HTTP/2
+	// future-compat (no plain cleartext to the internet).
+	if cfg.APIInMeshPort != "" && cfg.APIInMeshPort != "0" {
+		inMeshSrv := &http.Server{
+			Addr:              ":" + cfg.APIInMeshPort,
+			Handler:           h2c.NewHandler(r, nil),
+			ReadHeaderTimeout: cfg.ReadHeaderTimeout(),
+			ReadTimeout:       cfg.ReadTimeout(),
+			WriteTimeout:      cfg.WriteTimeout(),
+			IdleTimeout:       cfg.IdleTimeout(),
+			MaxHeaderBytes:    32 << 10,
+		}
+		go func() {
+			fmt.Printf("\xf0\x9f\x94\x97 In-mesh H2C listener on :%s (in-cluster only)\n", cfg.APIInMeshPort)
+			if err := inMeshSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  In-mesh H2C server error: %v", err)
+			}
+		}()
+		defer func() {
+			shutCtx, shutCancel := context.WithTimeout(context.Background(), cfg.ShutdownGrace())
+			defer shutCancel()
+			if err := inMeshSrv.Shutdown(shutCtx); err != nil {
+				log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  In-mesh H2C shutdown: %v", err)
+			}
+		}()
 	}
 
 	// Graceful shutdown
+	// Phase 9 §9.17.8 — SO_REUSEPORT listener + TCP_USER_TIMEOUT.
+	// NewReusePortListener enables SO_REUSEPORT on Linux so multiple acceptor
+	// goroutines can share the same port (one per GOMAXPROCS).  On non-Linux
+	// platforms it falls back to a plain net.Listen.
+	// WrapListener applies TCP_USER_TIMEOUT to every accepted connection so
+	// the kernel abandons stale connections after cfg.APITCPUserTimeoutMs ms.
+	pubListener, listenErr := apitcp.NewReusePortListener("tcp", ":"+cfg.Port)
+	if listenErr != nil {
+		log.Fatalf("\xe2\x9d\x8c §9.17.8 SO_REUSEPORT listen :%s: %v", cfg.Port, listenErr)
+	}
+	pubListener = apitcp.WrapListener(pubListener, cfg.APITCPUserTimeoutMs)
+	log.Printf("listener.reuseport=enabled addr=:%s tcp_user_timeout_ms=%d",
+		cfg.Port, cfg.APITCPUserTimeoutMs)
+
 	go func() {
 		fmt.Printf("\xf0\x9f\x93\xa1 Server listening on :%s\n", cfg.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(pubListener); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("\xe2\x9d\x8c Server error: %v", err)
 		}
 	}()
@@ -122,14 +514,17 @@ func main() {
 	<-quit
 
 	fmt.Println("\n\xf0\x9f\x9b\x91 Server shutting down...")
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout())
+	// §9.17.1 — use APIShutdownGraceS (default 30s) for the SIGTERM drain window.
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownGrace())
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("\xe2\x9d\x8c Server shutdown error: %v", err)
 	}
-	if err := rdb.Close(); err != nil {
-		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Redis close error: %v", err)
+	// Also shut down the metrics server gracefully.
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("\xe2\x9a\xa0\xef\xb8\x8f  Metrics server shutdown error: %v", err)
 	}
+	// Redis and PG pools are closed via defer (redisClients.Close / pgPools.Close).
 	fmt.Println("\xe2\x9c\x85 Server shut down successfully")
 }
 
@@ -164,6 +559,45 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			"database": dbOk,
 			"redis":    redisOk,
 			"version":  "0.1.0",
+		})
+	}
+}
+
+// livezHandler — GET /v1/healthz (K8s liveness probe).
+// Returns 200 unconditionally: the process is alive.
+// MUST NOT depend on PG, Redis, or the bus (per §9.1 route table).
+func livezHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"alive": true})
+	}
+}
+
+// readyzHandler — GET /v1/readyz (K8s readiness probe).
+// Returns 200 when PG and Redis are reachable; 503 otherwise.
+//
+// Phase 14 (K8s) forward contract: this probe MUST NOT check whether
+// consensus.v1 is co-located. consensus.v1 runs at replicas:1 (§5.3
+// single-publication guarantee) and is never a co-location requirement
+// for an API pod. The API pod is ready when its own dependencies
+// (PG + Redis) are healthy — consensus.v1 absence is tolerated.
+func readyzHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		dbOk := pool.Ping(ctx) == nil
+		redisOk := rdb.Ping(ctx).Err() == nil
+
+		if !dbOk || !redisOk {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"ready":    false,
+				"database": dbOk,
+				"redis":    redisOk,
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"ready":    true,
+			"database": true,
+			"redis":    true,
 		})
 	}
 }
@@ -205,7 +639,7 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duratio
 		`
 		rows, err := pool.Query(ctx, query, leagueID, season, limit)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch data"})
+			aperrors.Respond(c, aperrors.CodeInternal, "could not fetch data")
 			return
 		}
 		defer rows.Close()
@@ -245,7 +679,7 @@ func matchesHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duratio
 		}
 
 		if err := rows.Err(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "row iteration error"})
+			aperrors.Respond(c, aperrors.CodeInternal, "row iteration error")
 			return
 		}
 
@@ -286,7 +720,7 @@ func matchDetailHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			&homeScore, &awayScore, &matchWeek, &statsJSON)
 
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "match not found"})
+			aperrors.Respond(c, aperrors.CodeNotFound, "match not found")
 			return
 		}
 
@@ -320,7 +754,7 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duration)
 			ORDER BY display_name
 		`)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch data"})
+			aperrors.Respond(c, aperrors.CodeInternal, "could not fetch data")
 			return
 		}
 		defer rows.Close()
@@ -346,7 +780,7 @@ func teamsHandler(pool *pgxpool.Pool, rdb *redis.Client, cacheTTL time.Duration)
 		}
 
 		if err := rows.Err(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "row iteration error"})
+			aperrors.Respond(c, aperrors.CodeInternal, "row iteration error")
 			return
 		}
 
@@ -378,7 +812,7 @@ func teamDetailHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 			SELECT display_name, league_id, internal_code FROM teams WHERE uuid = $1
 		`, id).Scan(&displayName, &leagueID, &internalCode)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "team not found"})
+			aperrors.Respond(c, aperrors.CodeNotFound, "team not found")
 			return
 		}
 
@@ -403,7 +837,7 @@ func scrapeTriggerHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 		`, taskID)
 
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create scrape task"})
+			aperrors.Respond(c, aperrors.CodeInternal, "could not create scrape task")
 			return
 		}
 
@@ -429,7 +863,7 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			ORDER BY team_uuid
 		`, matchID)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "feature data not found"})
+			aperrors.Respond(c, aperrors.CodeNotFound, "feature data not found")
 			return
 		}
 		defer rows.Close()
@@ -462,7 +896,7 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 			})
 		}
 		if err := rows.Err(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "row iteration error"})
+			aperrors.Respond(c, aperrors.CodeInternal, "row iteration error")
 			return
 		}
 
@@ -478,3 +912,103 @@ func featuresHandler(pool *pgxpool.Pool, rdb *redis.Client) gin.HandlerFunc {
 // All env-binding/defaulting logic now lives in
 // `server/internal/config` (Phase 1.2). Handlers and middleware-only
 // helpers stay here.
+
+// bootLuaGates runs sec.ScriptLoader.Verify for the two embedded Lua scripts
+// (sec_rate_check.lua, sec_denylist_mutate.lua). It must be called after Redis
+// is confirmed up; it calls log.Fatalf on header-SHA256 drift or EVALSHA
+// mismatch (Phase 9.6 §7.7 deferred wiring).
+func bootLuaGates(ctx context.Context, rdb *redis.Client) {
+	type entry struct {
+		name string
+		body string
+	}
+	scripts := []entry{
+		{"sec_rate_check.lua", sec.EmbeddedRateCheckLua},
+		{"sec_denylist_mutate.lua", sec.EmbeddedDenylistMutateLua},
+	}
+	for _, s := range scripts {
+		loader := sec.NewScriptLoader(s.name, s.body)
+		body := s.body // capture by value for loadFn closure
+		loadFn := func(_ string) (string, error) {
+			return rdb.ScriptLoad(ctx, body).Result()
+		}
+		if err := loader.Verify(loadFn); err != nil {
+			log.Fatalf("\xe2\x9d\x8c Lua deploy-skew gate [%s]: %v", s.name, err)
+		}
+		fmt.Printf("\xe2\x9c\x85 Lua deploy-skew gate OK: %s\n", s.name)
+	}
+}
+
+// bootCostTotalityGate verifies that every registered route in r has an
+// explicit entry in the pre-loaded EndpointCostMap.
+// It calls log.Fatalf if any route lacks an explicit cost entry, making
+// it structurally impossible to forget to update endpoint_costs.yaml
+// when adding a new route (Phase 9.6 §7.6 totality gate).
+//
+// Must be called after all routes are registered and before the HTTP
+// server starts listening.
+func bootCostTotalityGate(r *gin.Engine, m *sec.EndpointCostMap) {
+	// Collect unique path patterns from the router (same path can appear
+	// with multiple HTTP methods — cost is per-path, not per-method).
+	seen := make(map[string]struct{})
+	var patterns []string
+	for _, info := range r.Routes() {
+		if _, ok := seen[info.Path]; !ok {
+			seen[info.Path] = struct{}{}
+			patterns = append(patterns, info.Path)
+		}
+	}
+	missing := m.CheckTotality(patterns, nil)
+	if len(missing) > 0 {
+		log.Fatalf("\xe2\x9d\x8c Endpoint-cost totality gate: routes with no explicit cost entry — add them to endpoint_costs.yaml: %v", missing)
+	}
+	fmt.Println("\xe2\x9c\x85 Endpoint-cost totality gate OK")
+}
+
+// qaHandler applies sec.QAInputGate to the request body before the Phase 10
+// NLP layer processes it. Quarantined payloads are rejected with 422; passing
+// payloads receive 202 Accepted with a qa_correlation_id (per §8.16.12).
+//
+// v1 body contract (closed for v1 per §9.15): { "q": str, "locale": str }.
+// Phase 10 humanizer will add "humanize": bool as an additive minor bump.
+// The qa_correlation_id returned here WILL be stamped on every
+// predict.request.v1 spawned by the Phase 10 NLP fan-out.
+func qaHandler(gate *sec.QAInputGate) gin.HandlerFunc {
+        return func(c *gin.Context) {
+                var req struct {
+                        Q      string `json:"q"`
+                        Locale string `json:"locale"`
+                }
+                if err := c.ShouldBindJSON(&req); err != nil || req.Q == "" {
+                        aperrors.Respond(c, aperrors.CodeInvalidRequest, "q is required")
+                        return
+                }
+                decision := gate.Inspect(req.Q)
+                if decision.Verdict == sec.VerdictQuarantine {
+                        aperrors.Respond(c, aperrors.CodeQAQuarantined, "input rejected by security gate")
+                        return
+                }
+                // Phase 10 NLP fan-out wired here; qa_correlation_id will be
+                // stamped on every predict.request.v1 envelope (§8.16.12).
+                corrID := newQACorrelationID()
+                c.JSON(http.StatusAccepted, gin.H{
+                        "status":           "accepted",
+                        "qa_correlation_id": corrID,
+                })
+        }
+}
+
+// newQACorrelationID returns a random UUIDv4 used as the qa_correlation_id
+// stamped on predict.request.v1 envelopes spawned by the Phase 10 NLP fan-out
+// (§8.16.12). UUIDv4 is used here (not v7) because qa correlation IDs are
+// content-correlated, not time-sorted — the timestamp prefix is meaningless.
+func newQACorrelationID() string {
+        var b [16]byte
+        if _, err := rand.Read(b[:]); err != nil {
+                panic("cmd/api: crypto/rand.Read failed: " + err.Error())
+        }
+        b[6] = (b[6] & 0x0f) | 0x40 // version 4
+        b[8] = (b[8] & 0x3f) | 0x80 // variant 10 (RFC 4122)
+        return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+                b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}

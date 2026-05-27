@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/predict.cancel.v1",
+  "title": "predict.cancel.v1",
+  "description": "Phase 9.5 — emitted when a prediction request is cancelled before a response is written. Producer set bounded to api.gateway.v1. Carries the original request_id so downstream consumers can correlate with api.request.v1 and api.response.v1 events.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "cancelled_at",
+    "reason"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The request id minted at gateway ingress; matches request_id in the corresponding api.request.v1 event."
+    },
+    "cancelled_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when the cancellation was detected at the gateway."
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["client_disconnect", "deadline_exceeded", "operator_kill"],
+      "description": "Cause of cancellation. client_disconnect: client closed the connection before the response was written. deadline_exceeded: request exceeded its configured timeout. operator_kill: manually cancelled by an operator action."
+    }
+  },
+  "additionalProperties": false
+}

@@ -86,6 +86,33 @@ type agentRow struct {
 	Publishes   []any  `json:"publishes"`
 }
 
+// staticAgentSpec describes a well-known agent shim that always appears in
+// `swarmctl ps` whether or not a live dynamic registry entry exists in Redis.
+// hbKey is a Redis string (SET, RFC3339) written by the agent process on
+// startup; swarmctl reads it for the LAST_HEARTBEAT column.
+type staticAgentSpec struct {
+	id    string
+	row   agentRow
+	hbKey string
+}
+
+// staticAgentManifest is the authoritative list of agents that must always
+// appear in `swarmctl ps`. Phase 9 §9.13: api.gateway.v1 is wired here so
+// the gateway shim is visible regardless of Redis dynamic-registry state.
+// Adding an entry here requires a tracker row + server patch bump (AGENTS.md §6.1).
+var staticAgentManifest = []staticAgentSpec{
+	{
+		id: "api.gateway.v1",
+		row: agentRow{
+			Name:       "api.gateway.v1",
+			InstanceID: "api.gateway.v1",
+			Subscribes: []any{"predict.request.v1"},
+			Publishes:  []any{"api.request.v1", "api.response.v1", "predict.cancel.v1"},
+		},
+		hbKey: "agent:api.gateway.v1:heartbeat",
+	},
+}
+
 func cmdPs(ctx context.Context, rdb *redis.Client, cfg *config.Config) error {
 	specs, err := rdb.HGetAll(ctx, registryKey).Result()
 	if err != nil {
@@ -95,6 +122,24 @@ func cmdPs(ctx context.Context, rdb *redis.Client, cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("hgetall %s: %w", heartbeatKey, err)
 	}
+
+	// Merge static agent shims that are not already registered dynamically.
+	// Phase 9 §9.13: api.gateway.v1 must always appear in ps output.
+	for _, sa := range staticAgentManifest {
+		if _, ok := specs[sa.id]; ok {
+			continue // live dynamic registration wins
+		}
+		enc, merr := json.Marshal(sa.row)
+		if merr != nil {
+			continue
+		}
+		specs[sa.id] = string(enc)
+		// Per-agent heartbeat: a simple Redis string (SET, RFC3339).
+		if hb, herr := rdb.Get(ctx, sa.hbKey).Result(); herr == nil {
+			beats[sa.id] = hb
+		}
+	}
+
 	if len(specs) == 0 {
 		fmt.Println("(no registered agents)")
 		return nil
@@ -129,6 +174,36 @@ func cmdPs(ctx context.Context, rdb *redis.Client, cfg *config.Config) error {
 	return nil
 }
 
+// ── wire-authority (static; Go side of ai/swarm/sdk/wire_contracts.py) ──
+//
+// Maps topic name → sole/declared producer. This is the Go-side mirror of
+// the Python `API_TOPIC_V1_ALLOWED_PRODUCERS` and
+// `PREDICT_CANCEL_V1_ALLOWED_PRODUCERS` constants in
+// `ai/swarm/sdk/wire_contracts.py`. The `topics` command reads this map so
+// it can show a PRODUCER column alongside XLEN/PENDING/GROUPS for every
+// known gateway-owned stream, whether or not the stream already exists in
+// Redis (streams are created on first publish).
+//
+// Phase 9 §9.5 wire-authority delta: three topics owned by api.gateway.v1.
+// Adding a producer here requires a corresponding update to wire_contracts.py
+// and a tracker row + minor version bump (AGENTS.md §6.1).
+var wireAuthorityProducers = map[string]string{
+	"api.request.v1":    "api.gateway.v1",
+	"api.response.v1":   "api.gateway.v1",
+	"predict.cancel.v1": "api.gateway.v1",
+}
+
+// wireAuthorityConsumers maps topic name → the declared consumer component.
+// The API gateway must consume predict.approved.v1 (the proofreader-approved
+// reply) and must NEVER subscribe to raw predict.final, which is a
+// swarm-internal topic (§9.3 forward contract).
+//
+// Phase 9 §9.14 wire-authority delta: predict.approved.v1 consumed by api.gateway.v1.
+// Adding a consumer here requires a tracker row + server patch bump (AGENTS.md §6.1).
+var wireAuthorityConsumers = map[string]string{
+	"predict.approved.v1": "api.gateway.v1",
+}
+
 // ── topics ─────────────────────────────────────────────────────────────
 
 func cmdTopics(ctx context.Context, rdb *redis.Client) error {
@@ -138,22 +213,46 @@ func cmdTopics(ctx context.Context, rdb *redis.Client) error {
 	if err != nil {
 		return err
 	}
+
+	// Merge wire-authority topics that may not yet have a live Redis stream.
+	// This ensures the command always lists the three Phase 9 topics with
+	// their declared producer, even before the Go gateway has published its
+	// first message (streams are created lazily on first XADD).
+	knownWA := make(map[string]struct{}, len(wireAuthorityProducers))
+	for t := range wireAuthorityProducers {
+		knownWA[t] = struct{}{}
+	}
+	streamSet := make(map[string]struct{}, len(streams))
+	for _, s := range streams {
+		streamSet[s] = struct{}{}
+	}
+	for t := range knownWA {
+		if _, ok := streamSet[t]; !ok {
+			streams = append(streams, t)
+		}
+	}
+
 	if len(streams) == 0 {
 		fmt.Println("(no streams)")
 		return nil
 	}
 	sort.Strings(streams)
-	fmt.Printf("%-40s %-10s %-12s %s\n", "TOPIC", "XLEN", "PENDING", "GROUPS")
+	fmt.Printf("%-40s %-10s %-12s %-30s %s\n", "TOPIC", "XLEN", "PENDING", "GROUPS", "PRODUCER")
 	for _, s := range streams {
-		xlen, _ := rdb.XLen(ctx, s).Result()
-		groups, _ := rdb.XInfoGroups(ctx, s).Result()
+		var xlen int64
 		var totalPending int64
-		names := make([]string, 0, len(groups))
-		for _, g := range groups {
-			totalPending += g.Pending
-			names = append(names, g.Name)
+		var names []string
+		if _, live := streamSet[s]; live {
+			xlen, _ = rdb.XLen(ctx, s).Result()
+			groups, _ := rdb.XInfoGroups(ctx, s).Result()
+			names = make([]string, 0, len(groups))
+			for _, g := range groups {
+				totalPending += g.Pending
+				names = append(names, g.Name)
+			}
 		}
-		fmt.Printf("%-40s %-10d %-12d %s\n", s, xlen, totalPending, strings.Join(names, ","))
+		producer := wireAuthorityProducers[s]
+		fmt.Printf("%-40s %-10d %-12d %-30s %s\n", s, xlen, totalPending, strings.Join(names, ","), producer)
 	}
 	return nil
 }

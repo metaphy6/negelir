@@ -127,8 +127,40 @@ SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER: Mapping[str, FrozenSet[str]] = {
 }
 
 
+# `api.request.v1` + `api.response.v1` producers (Phase 9 §9.0
+# wire-authority delta).
+#
+# The Go API gateway (``api.gateway.v1``) is the SOLE producer for
+# both topics.  No Python swarm agent may ever publish to the
+# api.request/response audit stream.  The constant lives here so the
+# boundary test can import it and assert the invariant.
+#
+# Consumers (open enum per §9.0): ``telemetry.v1``, ``audit.v1``
+# (Phase 8 §8.13.2 hash-chain mirror, not yet in the Python swarm
+# registry), future Phase 19 SLO consumers.  The consumer set is NOT
+# pinned here — consumers are free to grow; only the producer set is
+# locked.
+API_TOPIC_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "api.gateway.v1",
+})
+
+
+# `predict.cancel.v1` producers (Phase 9 §9.5 wire-authority delta).
+#
+# The Go API gateway (``api.gateway.v1``) is the SOLE producer.
+# No Python swarm agent may ever publish to this topic.  The constant
+# lives here so the boundary test can import it and assert the
+# invariant alongside the sibling ``API_TOPIC_V1_ALLOWED_PRODUCERS``
+# constant above.
+PREDICT_CANCEL_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "api.gateway.v1",
+})
+
+
 __all__ = [
+    "API_TOPIC_V1_ALLOWED_PRODUCERS",
     "MAINT_EVENT_V1_ALLOWED_PRODUCERS",
+    "PREDICT_CANCEL_V1_ALLOWED_PRODUCERS",
     "SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER",
     "SEC_ALERT_V1_ALLOWED_PRODUCERS",
     "SEC_CONFIG_V1_ALLOWED_PRODUCERS",

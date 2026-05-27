@@ -23,6 +23,8 @@ from typing import Callable, Iterable
 from ..sdk.types import Message
 from common.config import cfg
 from .topics import (
+    API_REQUEST_V1,
+    API_RESPONSE_V1,
     FRESHNESS_EVENTS,
     MAINT_ACK,
     MAINT_EVENT,
@@ -98,6 +100,12 @@ _WATCHED_TOPICS = (
     # accepted/rejected ratios and ack latency per consumer so the
     # ops console can surface degraded consumers (§8.9 visibility).
     MAINT_ACK,
+    # Phase 9 §9.0 — API gateway audit topics.  Telemetry watches both
+    # from day-1 so the Prometheus page sees gateway audit-trail counters
+    # as soon as the Go gateway lands, without a separate telemetry
+    # config change.
+    API_REQUEST_V1,
+    API_RESPONSE_V1,
 )
 
 

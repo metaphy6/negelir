@@ -358,7 +358,7 @@ class Config:
     backtest_swarm_floor_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_BACKTEST_SWARM_FLOOR_PCT", "0.01")))
     backtest_window_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_WINDOW_WEEKS", "12")))
     backtest_min_n: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_MIN_N", "20")))
-    api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CONSENSUS_OVERHEAD_MS", "250")))
+    api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CONSENSUS_OVERHEAD_MS", "200")))
 
     # ── Phase 6 — Proofreader & drift swarm ─────────────────
     # The proofreader replica roster is *not* a config knob — it lives
@@ -572,6 +572,123 @@ class Config:
     # qa.request.v1 — NLP-side dedup window (§7.5 binding).
     qa_request_v1_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S", "300")))
 
+    # ── Phase 9 §9.7 — Burst budget (shared with Go API gateway) ───────────
+    # Per-subject token-bucket capacity: maximum tokens a subject can
+    # accumulate while idle. Default 60. The in-process SecondaryBucket
+    # (GCRA fallback tier) is constructed with these values at boot.
+    api_burst_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_BURST_CAPACITY", "60")))
+    # Tokens added to the bucket per second of idle time. Default 2.0.
+    api_burst_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_BURST_REFILL_PER_S", "2.0")))
+
+    # ── Phase 9 §9.12 — Full API knob inventory (shared with Go API gateway) ──
+    # Every key below is also in server/internal/config/config.go, ai/common/defaults.yaml,
+    # and xops/env/.env.example with `# shared`. test_config_sync covers all three sides.
+    api_request_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REQUEST_TIMEOUT_MS", "2500")))
+    api_transit_jitter_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_TRANSIT_JITTER_MS", "100")))
+    api_request_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REQUEST_MAX_BYTES", "65536")))
+    qa_input_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_QA_INPUT_MAX_BYTES", "4096")))
+    api_fixture_window_max_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_FIXTURE_WINDOW_MAX_DAYS", "14")))
+    api_allowed_markets: str = field(default_factory=lambda: os.getenv("NEGELIR_API_ALLOWED_MARKETS", "ms,au_2.5,btts,ah_home,modal_score"))
+    api_cursor_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CURSOR_TTL_S", "1800")))
+    api_idempotency_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_IDEMPOTENCY_TTL_S", "86400")))
+    api_idempotency_inflight_wait_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_IDEMPOTENCY_INFLIGHT_WAIT_MS", "1500")))
+    api_swr_inflight_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_SWR_INFLIGHT_MAX", "64")))
+    api_cache_stale_after_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CACHE_STALE_AFTER_S", "30")))
+    api_cache_max_age_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CACHE_MAX_AGE_S", "300")))
+    api_reply_reaper_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REPLY_REAPER_S", "60")))
+    api_predict_request_backlog_high: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_PREDICT_REQUEST_BACKLOG_HIGH", "5000")))
+    api_max_concurrent_requests: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_MAX_CONCURRENT_REQUESTS", "5000")))
+    api_response_write_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_RESPONSE_WRITE_TIMEOUT_MS", "5000")))
+    api_bcrypt_cost: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_BCRYPT_COST", "12")))
+    api_access_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_ACCESS_TTL_S", "900")))
+    api_refresh_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REFRESH_TTL_S", "2592000")))
+    api_refresh_replay_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REFRESH_REPLAY_GRACE_S", "30")))
+    api_revocation_set_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REVOCATION_SET_MAX", "10000")))
+    api_jwt_key_poll_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_JWT_KEY_POLL_S", "10")))
+    api_jwt_retired_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_JWT_RETIRED_GRACE_S", "960")))
+    api_jwt_clock_skew_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_JWT_CLOCK_SKEW_S", "30")))
+    api_self_registration_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_API_SELF_REGISTRATION_ENABLED", "false").lower() in ("true", "1", "yes"))
+    api_register_cap_per_subnet_per_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REGISTER_CAP_PER_SUBNET_PER_H", "20")))
+    api_trusted_proxies: str = field(default_factory=lambda: os.getenv("NEGELIR_API_TRUSTED_PROXIES", ""))
+    api_log_sample_pct: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_LOG_SAMPLE_PCT", "10")))
+    api_tier_enforcement_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_API_TIER_ENFORCEMENT_ENABLED", "false").lower() in ("true", "1", "yes"))
+    api_deprecation_window_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_DEPRECATION_WINDOW_DAYS", "90")))
+    api_schema_version: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_SCHEMA_VERSION", "1")))
+    api_slo_burn_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_SLO_BURN_WINDOW_S", "3600")))
+    api_slo_burn_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_SLO_BURN_THRESHOLD", "2.0")))
+    api_time_format: str = field(default_factory=lambda: os.getenv("NEGELIR_API_TIME_FORMAT", "iso8601_utc"))
+
+    # ── Phase 9 §9.17.1 — Go runtime tuning knobs (documented mirrors) ──
+    # These env vars drive the Go API server's runtime tuning (GOMEMLIMIT,
+    # GOGC, HTTP timeouts, H2C listener). The Python AI layer does not use
+    # them at runtime; they are mirrored here so the single-source config
+    # doctrine is intact and the triangle test (test_config_sync) covers them.
+    api_go_mem_limit_mib: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_GO_MEM_LIMIT_MIB", "0")))
+    api_go_gc_percent: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_GO_GC_PERCENT", "50")))
+    api_read_header_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_READ_HEADER_TIMEOUT_MS", "5000")))
+    api_read_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_READ_TIMEOUT_MS", "10000")))
+    api_write_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_WRITE_TIMEOUT_MS", "15000")))
+    api_idle_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_IDLE_TIMEOUT_MS", "60000")))
+    api_shutdown_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_SHUTDOWN_GRACE_S", "30")))
+    api_in_mesh_port: str = field(default_factory=lambda: os.getenv("NEGELIR_API_IN_MESH_PORT", "8082"))
+
+    # ── Phase 9 §9.17.3 — Connection pool sizing (documented mirrors) ──
+    # These mirror the Go-server pgxpool and go-redis/v9 knobs.  The Python
+    # pipeline does not use these pools directly; the fields exist so that
+    # the single-source-config doctrine (AGENTS.md Rule 1) is satisfied and
+    # ``sync_test.go`` can verify every env key has a Python counterpart.
+    api_pg_pool_max_conns: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_PG_POOL_MAX_CONNS", "25")))
+    api_pg_replica_url: str = field(default_factory=lambda: os.getenv("NEGELIR_API_PG_REPLICA_URL", ""))
+    api_pg_replica_lag_check_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_PG_REPLICA_LAG_CHECK_S", "10")))
+    api_pg_replica_lag_max_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_PG_REPLICA_LAG_MAX_MS", "500")))
+    api_redis_cache_pool_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REDIS_CACHE_POOL_SIZE", "50")))
+    api_redis_bus_pool_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_REDIS_BUS_POOL_SIZE", "20")))
+
+    # ── Phase 9 §9.17.4 — Resilience: circuit breakers, bulkheads, hedging, retry budgets ──
+    # Documented mirrors of the Go-side knobs; code paths are Go-only.
+    api_breaker_fail_ratio: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_BREAKER_FAIL_RATIO", "0.5")))
+    api_breaker_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_BREAKER_WINDOW_S", "10")))
+    api_breaker_min_requests: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_BREAKER_MIN_REQUESTS", "20")))
+    api_breaker_open_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_BREAKER_OPEN_S", "15")))
+    api_hedge_after_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_HEDGE_AFTER_MS", "200")))
+    api_hedging_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_API_HEDGING_ENABLED", "true").lower() in ("1", "true", "yes"))
+    api_hedge_budget_pct: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_HEDGE_BUDGET_PCT", "10")))
+    api_retry_budget_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_RETRY_BUDGET_PER_S", "10")))
+    api_retry_budget_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_RETRY_BUDGET_CAPACITY", "50")))
+
+    # ── Phase 9 §9.17.5 — k6 bench target (documented mirror) ──
+    # The k6 script reads this env var directly. The Python field mirrors
+    # it here so the triangle test (test_config_sync) covers it.
+    api_bench_target_rps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_BENCH_TARGET_RPS", "200")))
+
+    # ── Phase 9 §9.17.6 — In-process L0 LRU cache (documented mirrors;
+    #    implementation is Go-only; Python mirrors exist so test_config_sync
+    #    and the .env.example parity check cover these env vars end-to-end).
+    api_l0_cache_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_L0_CACHE_MAX_ENTRIES", "10000")))
+    api_l0_cache_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_L0_CACHE_MAX_BYTES", "67108864")))
+    api_l0_max_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_L0_MAX_TTL_S", "5")))
+    api_negative_cache_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_NEGATIVE_CACHE_S", "10")))
+    api_l0_refresh_max_wait_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_L0_REFRESH_MAX_WAIT_MS", "200")))
+    api_l0_invalidation_lag_max_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_L0_INVALIDATION_LAG_MAX_MS", "500")))
+
+    # ── Phase 9 §9.17.7/§9.17.8/§9.17.9 — Audit, TCP, Adaptive shedding
+    #    (documented mirrors; implementation is Go-only; Python mirrors exist
+    #    so test_config_sync covers these env vars end-to-end).
+    api_audit_batch_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_AUDIT_BATCH_MAX", "64")))
+    api_audit_batch_max_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_AUDIT_BATCH_MAX_MS", "10")))
+    api_audit_chan_cap: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_AUDIT_CHAN_CAP", "4096")))
+    api_audit_sample_pct_under_pressure: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_AUDIT_SAMPLE_PCT_UNDER_PRESSURE", "10")))
+    api_tcp_user_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_TCP_USER_TIMEOUT_MS", "20000")))
+    api_adaptive_error_rate_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_ADAPTIVE_ERROR_RATE_THRESHOLD", "0.02")))
+    api_adaptive_shed_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_ADAPTIVE_SHED_FACTOR", "0.5")))
+    api_adaptive_shed_duration_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_ADAPTIVE_SHED_DURATION_S", "60")))
+    api_priority_tier_floor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_PRIORITY_TIER_FLOOR", "0")))
+    # §9.17.10 — Observability for performance (documented mirrors; code path is Go-only).
+    api_pprof_enabled_dev: bool = field(default_factory=lambda: os.getenv("NEGELIR_API_PPROF_ENABLED_DEV", "true").lower() in ("1", "true", "yes"))
+    api_pprof_enabled_prod: bool = field(default_factory=lambda: os.getenv("NEGELIR_API_PPROF_ENABLED_PROD", "false").lower() in ("1", "true", "yes"))
+    api_alloc_sample_rate: float = field(default_factory=lambda: float(os.getenv("NEGELIR_API_ALLOC_SAMPLE_RATE", "0.001")))
+    api_pprof_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_API_PPROF_DIR", "data/api/profiles"))
+
     # ── Phase 8 — Self-maintenance plane (ops console + maint.event/ack) ──
     #
     # §8.1 ops console baseline knobs. The ops console is a stateless CLI
@@ -600,6 +717,10 @@ class Config:
     # by `make swarm.demo.live`. This must stay strictly below the hard
     # operator-facing ack timeout above.
     opsctl_ack_timeout_ms_live_demo: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_ACK_TIMEOUT_MS_LIVE_DEMO", "1000")))
+    # Phase 9 §9.13 — base URL for the `make swarm.demo.live` API smoke test
+    # (register → login → POST /v1/qa end-to-end check). Override when the
+    # API runs on a non-default port or host in the local dev environment.
+    api_demo_base_url: str = field(default_factory=lambda: os.getenv("NEGELIR_API_DEMO_BASE_URL", "http://localhost:8080"))
     opsctl_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES", "1024")))
     opsctl_critical_agents: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_OPSCTL_CRITICAL_AGENTS", "consensus.v1,sec.rate.v1,maint.backup.v1"
@@ -1804,6 +1925,19 @@ class Config:
         _bounded("sec_alert_debounce_ttl_s", self.sec_alert_debounce_ttl_s, 0, 86_400)
         _bounded("sec_alert_debouncer_max_buckets", self.sec_alert_debouncer_max_buckets, 1, 10_000_000)
         _bounded("qa_request_v1_dedup_window_s", self.qa_request_v1_dedup_window_s, 1, 86_400)
+
+        # Phase 9 §9.7 — burst budget.
+        _bounded("api_burst_capacity", self.api_burst_capacity, 1, 10_000_000)
+        _bounded("api_burst_refill_per_s", self.api_burst_refill_per_s, 0.001, 1e6)
+
+        # Phase 9 §9.13 — demo API base URL must be http:// or https://.
+        if not (
+            self.api_demo_base_url.startswith("http://")
+            or self.api_demo_base_url.startswith("https://")
+        ):
+            issues.append(
+                "api_demo_base_url must start with http:// or https://"
+            )
 
         # Phase 8 §8.1 — ops console budgets + ack payload caps.
         _bounded("opsctl_ack_timeout_ms", self.opsctl_ack_timeout_ms, 1, 600_000)

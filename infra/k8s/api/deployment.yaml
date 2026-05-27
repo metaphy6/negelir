@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: negelir-api
+  labels:
+    app: negelir-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: negelir-api
+  template:
+    metadata:
+      labels:
+        app: negelir-api
+    spec:
+      containers:
+        - name: api
+          image: negelir/api:latest
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9091
+          envFrom:
+            - configMapRef:
+                name: negelir-api-config
+            - secretRef:
+                name: negelir-api-secrets
+          livenessProbe:
+            httpGet:
+              path: /v1/healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /v1/readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

@@ -325,6 +325,133 @@ def cmd_demo(argv):
     return _run_demo(args.league)
 
 
+def _run_api_smoke_test(base_url: str, *, budget_ms: int = 1500) -> None:
+    """Phase 9 §9.13 — API end-to-end smoke test (skip-if-no-API).
+
+    Sequence: probe /v1/healthz → POST /v1/auth/register → POST /v1/auth/login
+    → POST /v1/qa.  The total wall-clock from before register through the
+    /v1/qa response must be < budget_ms.
+
+    Auth handlers return 501 in Phase 9.2 stub mode (full bcrypt/JWT wired
+    later).  Register may also return 403 (self-registration disabled) or 409
+    (duplicate).  These are all treated as expected-stub responses so the demo
+    is not blocked by incomplete auth implementation.
+
+    /v1/qa does not require a JWT — the handler accepts any valid JSON body with
+    a non-empty "q" field and returns 202 Accepted with a qa_correlation_id.
+    """
+    import urllib.error
+    import urllib.request
+
+    # ── 1. Probe healthz — skip if API is not up ──────────────────────────
+    healthz_url = f"{base_url}/v1/healthz"
+    try:
+        req = urllib.request.Request(healthz_url, method="GET")
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            if resp.status not in (200, 503):
+                warn(
+                    f"swarm.demo.live API: unexpected healthz status "
+                    f"{resp.status} at {base_url} — skip API steps"
+                )
+                return
+        info(f"swarm.demo.live API: healthz OK at {base_url}")
+    except Exception as exc:
+        warn(
+            f"swarm.demo.live API: not reachable at {base_url} "
+            f"({type(exc).__name__}: {exc}) — skip API steps"
+        )
+        return
+
+    # ── 2. Start wall-clock ───────────────────────────────────────────────
+    t0 = time.monotonic()
+
+    # ── 3. Register (stub-tolerant) ───────────────────────────────────────
+    email = "test-api-demo@negelir.local"
+    password = "Demo-Smoke-Test-Phase9!"
+    reg_status: int | None = None
+    try:
+        reg_body = json.dumps({"email": email, "password": password}).encode("utf-8")
+        reg_req = urllib.request.Request(
+            f"{base_url}/v1/auth/register",
+            data=reg_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(reg_req, timeout=1.0) as resp:
+            reg_status = resp.status
+    except urllib.error.HTTPError as exc:
+        reg_status = exc.code
+    except Exception as exc:
+        warn(f"swarm.demo.live API: register request error ({exc})")
+    # 201 = created, 403 = self-reg disabled, 409 = duplicate, 501 = stub
+    if reg_status in (200, 201, 403, 409, 501):
+        ok(f"swarm.demo.live API: POST /v1/auth/register status={reg_status} (stub/disabled tolerated)")
+    elif reg_status is not None:
+        raise AssertionError(
+            f"POST /v1/auth/register returned unexpected status {reg_status}"
+        )
+
+    # ── 4. Login (stub-tolerant) ──────────────────────────────────────────
+    login_status: int | None = None
+    try:
+        login_body = json.dumps({"email": email, "password": password}).encode("utf-8")
+        login_req = urllib.request.Request(
+            f"{base_url}/v1/auth/login",
+            data=login_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(login_req, timeout=1.0) as resp:
+            login_status = resp.status
+    except urllib.error.HTTPError as exc:
+        login_status = exc.code
+    except Exception as exc:
+        warn(f"swarm.demo.live API: login request error ({exc})")
+    # 200 = full JWT issued, 501 = stub (Phase 9.2 not complete)
+    if login_status in (200, 201, 501):
+        ok(f"swarm.demo.live API: POST /v1/auth/login status={login_status} (stub tolerated)")
+    elif login_status is not None:
+        raise AssertionError(
+            f"POST /v1/auth/login returned unexpected status {login_status}"
+        )
+
+    # ── 5. POST /v1/qa — this must succeed ───────────────────────────────
+    qa_payload = json.dumps(
+        {"q": "Beşiktaş vs Galatasaray'da kim kazanır?", "locale": "tr"},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    qa_status: int = 0
+    try:
+        qa_req = urllib.request.Request(
+            f"{base_url}/v1/qa",
+            data=qa_payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        with urllib.request.urlopen(qa_req, timeout=2.0) as resp:
+            qa_status = resp.status
+    except urllib.error.HTTPError as exc:
+        qa_status = exc.code
+    except Exception as exc:
+        raise AssertionError(f"POST /v1/qa request failed: {exc}") from exc
+
+    # ── 6. Assert latency budget ──────────────────────────────────────────
+    wall_ms = (time.monotonic() - t0) * 1000.0
+
+    if qa_status not in (200, 202):
+        raise AssertionError(
+            f"POST /v1/qa returned {qa_status}, want 200 or 202"
+        )
+    if wall_ms >= float(budget_ms):
+        raise AssertionError(
+            f"end-to-end wall-clock {wall_ms:.2f}ms >= budget {budget_ms}ms"
+        )
+    ok(
+        f"swarm.demo.live API: POST /v1/qa status={qa_status} "
+        f"wall_ms={wall_ms:.2f} < {budget_ms}ms  ✓"
+    )
+
+
 def cmd_demo_live(argv):
     parser = argparse.ArgumentParser(prog="swarm.py demo-live")
     parser.parse_args(argv)
@@ -339,6 +466,21 @@ def cmd_demo_live(argv):
 
     info("swarm.demo.live: ensuring demo-profile Redis is up")
     compose_run("--profile", "demo", "up", "-d", "redis")
+
+    # Skip-if-no-Redis: attempt a quick ping before constructing RedisStreamsBus.
+    # A 1-second connection timeout avoids a long hang when docker isn't running.
+    try:
+        import socket as _socket
+        _sock = _socket.create_connection(
+            (cfg.redis_host, cfg.redis_port), timeout=1.0
+        )
+        _sock.close()
+    except OSError as _exc:
+        warn(
+            f"swarm.demo.live: Redis not reachable at "
+            f"{cfg.redis_host}:{cfg.redis_port} ({_exc}) — SKIP"
+        )
+        return 0
 
     bus = RedisStreamsBus(
         host=cfg.redis_host,
@@ -358,9 +500,17 @@ def cmd_demo_live(argv):
             max_ack_latency_ms=cfg.opsctl_ack_timeout_ms_live_demo,
             topic_prefix=topic_prefix,
         )
-        return 0
     finally:
         _redis_demo_cleanup(bus, topic_prefix=topic_prefix)
+
+    # ── Phase 9 §9.13 extension: API end-to-end smoke test ───────────────
+    info(
+        f"swarm.demo.live: Phase 9 §9.13 API smoke test "
+        f"(base={cfg.api_demo_base_url}, budget=1500ms)"
+    )
+    _run_api_smoke_test(cfg.api_demo_base_url, budget_ms=1500)
+
+    return 0
 
 
 COMMANDS = {

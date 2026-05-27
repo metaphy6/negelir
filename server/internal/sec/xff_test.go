@@ -139,3 +139,27 @@ func TestSubjectKeyNilIP(t *testing.T) {
 		t.Fatal("nil IP must return empty string")
 	}
 }
+
+// TestSubjectKeyIPv6_64Collapse is the proof test for §9.14
+// test_subject_key_ipv6_64_collapse: two IPv6 addresses that share
+// the same /64 prefix must collapse to ONE rate bucket; two addresses
+// in different /64 prefixes must produce distinct bucket keys.
+func TestSubjectKeyIPv6_64Collapse(t *testing.T) {
+	// Same /64: 2001:db8:aabb:ccdd::/64 — host parts differ.
+	sameA := SubjectKey(net.ParseIP("2001:db8:aabb:ccdd:1111:2222:3333:4444"), 32, 64)
+	sameB := SubjectKey(net.ParseIP("2001:db8:aabb:ccdd:eeee:ffff:0000:0001"), 32, 64)
+	if sameA != sameB {
+		t.Fatalf("same /64 must collapse to one bucket: %s != %s", sameA, sameB)
+	}
+	want := "2001:db8:aabb:ccdd::/64"
+	if sameA != want {
+		t.Fatalf("unexpected canonical bucket key: got %s, want %s", sameA, want)
+	}
+
+	// Different /64: third quad differs (ccdd vs eeff).
+	diffA := SubjectKey(net.ParseIP("2001:db8:aabb:ccdd::1"), 32, 64)
+	diffB := SubjectKey(net.ParseIP("2001:db8:aabb:eeff::1"), 32, 64)
+	if diffA == diffB {
+		t.Fatalf("different /64 prefixes must not share a bucket: both gave %s", diffA)
+	}
+}

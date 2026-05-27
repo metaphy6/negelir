@@ -43,6 +43,11 @@
    enrichment overlays on the five base data planes),
    [`MONETIZATION.md`](docs/design/MONETIZATION.md) (Phase 20 tier
    model, built-but-dormant — edge-only enforcement at the Go API).
+   **Go REST API anchor docs** (binding for Phase 9 surfaces):
+   [`API.md`](docs/design/API.md) (binding contract for all Phase 9 routes,
+   auth, rate limits, cache, and swarm shim; Phase 9 §9.13),
+   [`docs/guides/api_runbook.md`](docs/guides/api_runbook.md) (operator
+   surfaces: key rotation, cert renewal, token revocation).
    Other per-area docs: `SWARM.md`, `CONFIGURATION.md`,
    `MOCK_DATA_SERVER.md`, `SECURITY.md`, `COMPUTE_DEVICES.md`,
    `LANGUAGE_CHOICES.md`, `TURKISH_NLP.md`, `TESTING_STRATEGY.md`,

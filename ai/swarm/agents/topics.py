@@ -142,8 +142,34 @@ SEC_DENYLIST = Topic("sec.denylist.v1")
 # the disk re-read (idempotent).
 SEC_CONFIG = Topic("sec.config.v1")
 
+# Phase 9 §9.0 — API gateway audit topics.
+# The Go process ``api.gateway.v1`` is the SOLE producer for both;
+# no Python swarm agent may publish here (boundary test enforces).
+#
+# `api.request.v1`  — fan-in audit per accepted request (post-auth,
+#                     post-sec gate, pre-RPC). Consumers: telemetry.v1,
+#                     audit.v1 (Phase 8 §8.13.2 hash-chain mirror) —
+#                     open enum so future Phase 19 SLO consumers can
+#                     subscribe.
+# `api.response.v1` — fan-out audit per sent response (status,
+#                     latency_ms, bytes, cache_hit, degraded,
+#                     request_id). Same producer/consumer set.
+API_REQUEST_V1 = Topic("api.request.v1")
+API_RESPONSE_V1 = Topic("api.response.v1")
+
+# Phase 9 §9.5 — cancellation audit topic.
+# Emitted by ``api.gateway.v1`` when a prediction request is cancelled
+# before a response is written (client disconnect, deadline exceeded, or
+# operator kill). Producer set bounded to ``api.gateway.v1``; the
+# wire-authority constant is in ``swarm.sdk.wire_contracts``.
+# Schema: ``ai/swarm/sdk/schemas/predict.cancel.v1.json``.
+PREDICT_CANCEL_V1 = Topic("predict.cancel.v1")
+
 
 __all__ = [
+    "API_REQUEST_V1",
+    "API_RESPONSE_V1",
+    "PREDICT_CANCEL_V1",
     "FRESHNESS_EVENTS",
     "MAINT_ACK",
     "MAINT_EVENT",

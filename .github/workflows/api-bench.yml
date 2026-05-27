@@ -1,0 +1,40 @@
+# §9.17.11 CI gate — `make api.bench` on PRs touching server/internal/api/** or
+# server/internal/handlers/**. Also runs nightly to catch regressions early.
+name: api-bench
+
+on:
+  pull_request:
+    paths:
+      - 'server/internal/api/**'
+      - 'server/internal/handlers/**'
+  schedule:
+    - cron: '0 2 * * *'   # nightly at 02:00 UTC
+  workflow_dispatch:        # manual trigger
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap env
+        run: make env
+
+      - name: Bring compose stack up
+        run: make api.up
+        env:
+          NEGELIR_ENV: test
+
+      - name: Wait for API healthy
+        run: |
+          for i in $(seq 1 30); do
+            make health && break || sleep 2
+          done
+
+      - name: Run api.bench (§9.17.5 latency SLOs)
+        run: make api.bench
+
+      - name: Tear down stack
+        if: always()
+        run: make down

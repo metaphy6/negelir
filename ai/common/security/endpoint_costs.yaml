@@ -42,6 +42,10 @@ costs:
   # Trivial / health probes — free.
   - pattern: "/v1/healthz"
     cost: 0
+  # Phase 14 K8s readiness probe — free; checks PG+Redis only, tolerates
+  # consensus.v1 not being co-located (§9.15 Phase 14 forward contract).
+  - pattern: "/v1/readyz"
+    cost: 0
 
   # Auth — bcrypt CPU heavy; intentionally pricier than read endpoints
   # to slow down credential-stuffing.
@@ -69,3 +73,19 @@ costs:
     cost: 1
   - pattern: "/v1/me"
     cost: 1
+
+  # Legacy /api/v1 group (Phase 9 routes still under /api/v1 prefix).
+  - pattern: "/api/v1/health"
+    cost: 0
+  - pattern: "/api/v1/matches"
+    cost: 1
+  - pattern: "/api/v1/matches/:id"
+    cost: 1
+  - pattern: "/api/v1/teams"
+    cost: 1
+  - pattern: "/api/v1/teams/:id"
+    cost: 1
+  - pattern: "/api/v1/scrape/trigger"
+    cost: 3
+  - pattern: "/api/v1/features/:match_id"
+    cost: 2

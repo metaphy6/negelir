@@ -2943,3 +2943,158 @@ class TestSelfHealing:
 # Phase 9: Real Network Transport
 # ═══════════════════════════════════════════════════════════════════
 
+
+class TestPhase9Migrations:
+    """Phase 9 §9.0 — migration delta (012, 013, 014).
+
+    Binding contract: the three migration files must exist, be
+    idempotent (IF NOT EXISTS throughout), carry the correct table
+    names / column constraints, and mirror the §8.14.1 partitioning
+    doctrine for the audit table.
+    """
+
+    def _migration_path(self, filename):
+        return os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "migrations", filename,
+        )
+
+    # ── 012_users_and_sessions.sql ────────────────────────────────
+
+    def test_012_exists(self):
+        assert os.path.isfile(self._migration_path("012_users_and_sessions.sql")), \
+            "migrations/012_users_and_sessions.sql not found"
+
+    def test_012_idempotent(self):
+        with open(self._migration_path("012_users_and_sessions.sql")) as f:
+            sql = f.read()
+        # Every CREATE TABLE must use IF NOT EXISTS.
+        import re
+        # Match CREATE TABLE NOT followed by IF NOT EXISTS.
+        bare = re.findall(r"CREATE TABLE(?!\s+IF\s+NOT\s+EXISTS)", sql, re.IGNORECASE)
+        assert bare == [], (
+            "CREATE TABLE without IF NOT EXISTS found in 012"
+        )
+
+    def test_012_has_tiers_table(self):
+        with open(self._migration_path("012_users_and_sessions.sql")) as f:
+            sql = f.read()
+        assert "CREATE TABLE IF NOT EXISTS tiers" in sql
+        assert "REFERENCES tiers(id)" in sql, \
+            "users.tier_id FK reference to tiers missing"
+
+    def test_012_has_users_table_with_required_columns(self):
+        with open(self._migration_path("012_users_and_sessions.sql")) as f:
+            sql = f.read()
+        assert "CREATE TABLE IF NOT EXISTS users" in sql
+        assert "email_lower" in sql, "email_lower column missing"
+        assert "CITEXT" in sql.upper(), "CITEXT type missing (§9.2 case-insensitive uniqueness)"
+        assert "password_alg" in sql, "password_alg column missing"
+        assert "tier_id" in sql, "tier_id column missing"
+        assert "status" in sql, "status column missing"
+        # No PII stored in jwt — the constraint lives here as a column absence
+        # check; `sub` is uuid only.
+        assert "password_alg IN ('b', 'a')" in sql, \
+            "password_alg CHECK constraint missing"
+
+    def test_012_has_user_sessions_table(self):
+        with open(self._migration_path("012_users_and_sessions.sql")) as f:
+            sql = f.read()
+        assert "CREATE TABLE IF NOT EXISTS user_sessions" in sql
+        assert "jti" in sql, "jti column missing from user_sessions"
+        assert "refresh_hash" in sql, "refresh_hash column missing"
+        assert "revoked_at" in sql, "revoked_at column missing"
+
+    def test_012_citext_extension(self):
+        with open(self._migration_path("012_users_and_sessions.sql")) as f:
+            sql = f.read()
+        assert "CREATE EXTENSION IF NOT EXISTS citext" in sql, \
+            "citext extension not created"
+
+    # ── 013_api_audit_partitions.sql ──────────────────────────────
+
+    def test_013_exists(self):
+        assert os.path.isfile(self._migration_path("013_api_audit_partitions.sql")), \
+            "migrations/013_api_audit_partitions.sql not found"
+
+    def test_013_partition_by_range(self):
+        with open(self._migration_path("013_api_audit_partitions.sql")) as f:
+            sql = f.read()
+        assert "PARTITION BY RANGE (created_at)" in sql, \
+            "api_audit_log must be range-partitioned by created_at (§8.14.1 doctrine)"
+
+    def test_013_has_default_partition(self):
+        with open(self._migration_path("013_api_audit_partitions.sql")) as f:
+            sql = f.read()
+        assert "api_audit_log_default" in sql, \
+            "Default catch-all partition missing"
+
+    def test_013_kind_check_constraint(self):
+        with open(self._migration_path("013_api_audit_partitions.sql")) as f:
+            sql = f.read()
+        assert "'request'" in sql and "'response'" in sql, \
+            "kind CHECK constraint must enumerate 'request' and 'response'"
+
+    def test_013_hash_chain_columns(self):
+        """AC: prev_hmac and row_hmac columns present (§8.13.2 mirror)."""
+        with open(self._migration_path("013_api_audit_partitions.sql")) as f:
+            sql = f.read()
+        assert "prev_hmac" in sql, "prev_hmac column missing"
+        assert "row_hmac" in sql, "row_hmac column missing"
+        assert "GENESIS" in sql, "hash-chain genesis sentinel missing"
+        assert "api_audit_stamp_row_hmac" in sql, \
+            "hash-chain trigger function missing"
+
+    def test_013_revoke_update_delete(self):
+        with open(self._migration_path("013_api_audit_partitions.sql")) as f:
+            sql = f.read()
+        assert "REVOKE UPDATE, DELETE ON api_audit_log FROM PUBLIC" in sql, \
+            "INSERT-only enforcement missing"
+
+    def test_013_idempotent(self):
+        import re
+        with open(self._migration_path("013_api_audit_partitions.sql")) as f:
+            sql = f.read()
+        bare = re.findall(r"CREATE TABLE(?!\s+IF\s+NOT\s+EXISTS)", sql, re.IGNORECASE)
+        assert bare == [], "CREATE TABLE without IF NOT EXISTS in 013"
+
+    # ── 014_jwt_keys.sql ──────────────────────────────────────────
+
+    def test_014_exists(self):
+        assert os.path.isfile(self._migration_path("014_jwt_keys.sql")), \
+            "migrations/014_jwt_keys.sql not found"
+
+    def test_014_has_jwt_keys_table(self):
+        with open(self._migration_path("014_jwt_keys.sql")) as f:
+            sql = f.read()
+        assert "CREATE TABLE IF NOT EXISTS jwt_keys" in sql
+
+    def test_014_status_check_constraint(self):
+        """AC: status must be one of pending/active/retired/purged (§9.2)."""
+        with open(self._migration_path("014_jwt_keys.sql")) as f:
+            sql = f.read()
+        for state in ("pending", "active", "retired", "purged"):
+            assert f"'{state}'" in sql, f"status value '{state}' missing from CHECK"
+
+    def test_014_single_active_partial_index(self):
+        """AC: unique partial index prevents more than one active key."""
+        with open(self._migration_path("014_jwt_keys.sql")) as f:
+            sql = f.read()
+        assert "idx_jwt_keys_single_active" in sql, \
+            "Unique partial index for single-active enforcement missing"
+        assert "WHERE status = 'active'" in sql, \
+            "Partial index must filter on status = 'active'"
+
+    def test_014_alg_check_constraint(self):
+        with open(self._migration_path("014_jwt_keys.sql")) as f:
+            sql = f.read()
+        assert "'RS256'" in sql, "RS256 not in alg CHECK"
+        assert "'ES256'" in sql, "ES256 not in alg CHECK (reserved)"
+
+    def test_014_idempotent(self):
+        import re
+        with open(self._migration_path("014_jwt_keys.sql")) as f:
+            sql = f.read()
+        bare = re.findall(r"CREATE TABLE(?!\s+IF\s+NOT\s+EXISTS)", sql, re.IGNORECASE)
+        assert bare == [], "CREATE TABLE without IF NOT EXISTS in 014"
+

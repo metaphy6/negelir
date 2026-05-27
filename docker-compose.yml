@@ -115,6 +115,54 @@ services:
     volumes:
       - ./data:/data
 
+  # ── Phase 9 REST API ─────────────────────────────────
+  #  Default profile (no `profiles:` key — always active).
+  #  Run in isolation: `make api.up` / `make api.down`.
+  #  Dev mTLS CA is mounted from infra/mock/ca/; prod-like runs
+  #  override this volume with ./data/api/tls:/certs:ro.
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "9091:9091"
+    env_file:
+      - ./xops/env/.env
+    environment:
+      # Container-internal hostnames.
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      SERVER_PORT: "8080"
+      NEGELIR_TELEMETRY_METRICS_PORT: "9091"
+      GIN_MODE: release
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in xops/env/.env (no default; see xops/env/.env.example)}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./infra/mock/ca:/certs:ro
+      - ./data:/data
+
+  # ── Swagger UI (docs profile only — NOT in production) ─
+  api-docs:
+    image: swaggerapi/swagger-ui:v5.17.14
+    profiles:
+      - docs
+    ports:
+      - "8081:8080"
+    environment:
+      SWAGGER_JSON: /openapi/openapi.yaml
+      # Disable the default petstore URL so only the mounted spec is shown.
+      BASE_URL: /
+    volumes:
+      - ./server/api/openapi.yaml:/openapi/openapi.yaml:ro
+    # No network dependencies — purely static UI.
+    restart: "no"
+
   # ── AI Engine ─────────────────────────────────────────
   ai:
     build:

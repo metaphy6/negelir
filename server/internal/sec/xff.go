@@ -93,6 +93,12 @@ func DeriveClientIP(xff string, peer string, trusted *TrustedProxies) net.IP {
 	if strings.TrimSpace(xff) == "" {
 		return peerIP
 	}
+	// §7.3 anti-spoofing: if the immediate TCP peer is not inside the
+	// trusted-proxy CIDR list, it can inject arbitrary XFF entries.
+	// Ignore the header entirely and use the peer address.
+	if !trusted.Contains(peerIP) {
+		return peerIP
+	}
 	// Walk hops right-to-left.
 	hops := strings.Split(xff, ",")
 	for i := len(hops) - 1; i >= 0; i-- {

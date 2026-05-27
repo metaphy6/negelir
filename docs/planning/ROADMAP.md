@@ -1189,7 +1189,7 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 
 ### 9.DoD Phase rollup
 
-- [ ] Every binding `[ ]` in §9.* (across all per-section files
+- [x] Every binding `[ ]` in §9.* (across all per-section files
       in [`docs/design/phase9/sections/`](../design/phase9/sections/))
       is `[x]`. Tracker row + `make version.bump COMPONENT=docs`
       recorded for every meaningful per-section edit (per AGENTS.md

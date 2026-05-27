@@ -3,38 +3,46 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.4.1",
-    "build": 166,
+    "version": "1.5.1",
+    "build": 45,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.36.2",
+      "version": "1.40.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-25T08:42:30+00:00",
+      "last_changed": "2026-05-26T07:56:17+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       }
     },
     "server": {
-      "version": "1.6.3",
+      "version": "1.45.0",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-05-20T19:35:11+00:00"
+      "last_changed": "2026-05-26T13:24:52+00:00",
+      "go_min_versions": {
+        "github.com/sony/gobreaker": "1.0.0",
+        "go.uber.org/automaxprocs": "1.6.0",
+        "github.com/hashicorp/golang-lru/v2": "2.0.7",
+        "github.com/jackc/pgx/v5": "5.5.1",
+        "github.com/redis/go-redis/v9": "9.4.0",
+        "golang.org/x/sync": "0.20.0"
+      }
     },
     "xops": {
-      "version": "3.37.3",
+      "version": "3.40.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-25T10:58:50+00:00"
+      "last_changed": "2026-05-26T08:01:04+00:00"
     },
     "docs": {
-      "version": "1.68.2",
+      "version": "1.73.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-25T10:25:07+00:00"
+      "last_changed": "2026-05-26T13:24:52+00:00"
     },
     "infra_mock": {
-      "version": "1.4.5",
+      "version": "1.5.1",
       "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
-      "last_changed": "2026-05-21T22:23:48+00:00",
+      "last_changed": "2026-05-26T06:20:11+00:00",
       "min_compatible_with": {
         "swarm": "0.22.0"
       }
@@ -136,7 +144,8 @@
     },
     "server": {
       "min_compatible_with": {
-        "ai": "1.36.2"
+        "ai": "1.36.2",
+        "swarm": "0.50.0"
       }
     }
   },
@@ -6476,6 +6485,1086 @@
       "from": "3.37.2",
       "to": "3.37.3",
       "build": 166
+    },
+    {
+      "timestamp": "2026-05-25T15:36:33+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 9.0: Pivot v3 home scaffold — api,auth,rpc,handlers,middleware,authz,errors packages created",
+      "from": "1.6.3",
+      "to": "1.7.0",
+      "build": 167
+    },
+    {
+      "timestamp": "2026-05-25T15:44:30+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 9 §9.0: api.request.v1 + api.response.v1 topics + API_TOPIC_V1_ALLOWED_PRODUCERS wire contract + boundary tests",
+      "from": "1.36.2",
+      "to": "1.37.0",
+      "build": 168
+    },
+    {
+      "timestamp": "2026-05-25T15:54:31+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 9 §9.0 migration delta: 012 users/sessions, 013 api_audit_log (partitioned), 014 jwt_keys",
+      "from": "1.7.0",
+      "to": "1.7.1",
+      "build": 169
+    },
+    {
+      "timestamp": "2026-05-25T15:54:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 9 §9.0 migration bullet ticked",
+      "from": "1.68.2",
+      "to": "1.68.3",
+      "build": 170
+    },
+    {
+      "timestamp": "2026-05-25T15:58:47+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "9.1: EnforceContentType middleware — content-type discipline",
+      "from": "1.7.1",
+      "to": "1.8.0",
+      "build": 171
+    },
+    {
+      "timestamp": "2026-05-25T16:08:48+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 9 §9.0: API.md + api_runbook.md scaffolds",
+      "from": "1.68.3",
+      "to": "1.69.0",
+      "build": 172
+    },
+    {
+      "timestamp": "2026-05-25T16:08:54+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 9 §9.0: api.* Make targets dispatcher (api.py) scaffolded",
+      "from": "3.37.3",
+      "to": "3.37.4",
+      "build": 173
+    },
+    {
+      "timestamp": "2026-05-25T16:09:00+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 9 §9.0: compatibility.server.min_compatible_with.swarm=0.50.0 added",
+      "from": "1.8.0",
+      "to": "1.8.1",
+      "build": 174
+    },
+    {
+      "timestamp": "2026-05-25T16:20:18+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 9 §9.0: add Phase 9 SLA config fields + §3.3 Validate constraint",
+      "from": "1.8.1",
+      "to": "1.8.2",
+      "build": 175
+    },
+    {
+      "timestamp": "2026-05-25T16:20:18+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 9 §9.0: tick cross-phase contracts bullet",
+      "from": "1.69.0",
+      "to": "1.69.1",
+      "build": 176
+    },
+    {
+      "timestamp": "2026-05-25T16:27:05+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.6 bootLuaGates + QAInputGate /v1/qa route wired",
+      "from": "1.8.2",
+      "to": "1.9.0",
+      "build": 177
+    },
+    {
+      "timestamp": "2026-05-25T16:32:05+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.6 bootCostTotalityGate: endpoint-cost totality at boot",
+      "from": "1.9.0",
+      "to": "1.10.0",
+      "build": 178
+    },
+    {
+      "timestamp": "2026-05-25T16:37:33+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 9.6: XFF derivation middleware wired (ParseTrustedProxies boot + DeriveClientIP per-request)",
+      "from": "1.10.0",
+      "to": "1.11.0",
+      "build": 179
+    },
+    {
+      "timestamp": "2026-05-25T16:44:27+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "9.6 auth handlers: password-field bypass via sec.PasswordPasses",
+      "from": "1.11.0",
+      "to": "1.11.1",
+      "build": 180
+    },
+    {
+      "timestamp": "2026-05-25T16:49:24+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "9.6 two-tier rate middleware: SecondaryBucket→503 ahead of Lua→429",
+      "from": "1.11.1",
+      "to": "1.12.0",
+      "build": 181
+    },
+    {
+      "timestamp": "2026-05-25T16:53:19+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.1 APITimeFormat config knob + validator",
+      "from": "1.12.0",
+      "to": "1.12.1",
+      "build": 182
+    },
+    {
+      "timestamp": "2026-05-25T16:59:14+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 9.1: opaque AES-256-GCM cursor package + APICursorTTLSec config knob",
+      "from": "1.12.1",
+      "to": "1.13.0",
+      "build": 183
+    },
+    {
+      "timestamp": "2026-05-25T17:04:23+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "9.1 header-inventory: RequestID middleware with UUIDv7 mint",
+      "from": "1.13.0",
+      "to": "1.13.1",
+      "build": 184
+    },
+    {
+      "timestamp": "2026-05-25T17:12:21+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "9.1 HTTP error taxonomy closed enum + RFC7807 Respond + boundary AST scan",
+      "from": "1.13.1",
+      "to": "1.14.0",
+      "build": 185
+    },
+    {
+      "timestamp": "2026-05-25T17:20:29+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "body-size cap middleware (§9.1): BodySizeCap + config knobs",
+      "from": "1.14.0",
+      "to": "1.14.1",
+      "build": 186
+    },
+    {
+      "timestamp": "2026-05-25T17:23:42+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "9.2 user-store bullet ticked",
+      "from": "1.69.1",
+      "to": "1.69.2",
+      "build": 187
+    },
+    {
+      "timestamp": "2026-05-25T17:30:03+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.15 qa handler body locked to {q,locale}; qa_correlation_id returned in 202; boundary tests",
+      "from": "1.14.1",
+      "to": "1.14.2",
+      "build": 188
+    },
+    {
+      "timestamp": "2026-05-25T17:30:03+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "§9.15 Phase10 forward contract closed",
+      "from": "1.4.1",
+      "to": "1.4.2",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-25T17:37:14+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.15 Phase 11 compute boundary: ComputeClass config field + cpu_only build tag on cmd/api/main.go",
+      "from": "1.14.2",
+      "to": "1.15.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-25T17:39:57+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.15 Phase 12 chaos catalogue stubs added to server/internal/api",
+      "from": "1.15.0",
+      "to": "1.15.1",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-25T17:42:02+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.15 Phase13a forward contract: ResolveProfileID + AST boundary test",
+      "from": "1.15.1",
+      "to": "1.15.2",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-05-25T17:47:50+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.15 Phase14 K8s: /v1/healthz + /v1/readyz probes; readyz tolerates consensus.v1 not co-located",
+      "from": "1.15.2",
+      "to": "1.16.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-05-25T18:03:32+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 16 CalibrationStore Protocol seam: predictions handler + interface package",
+      "from": "1.16.0",
+      "to": "1.17.0",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-05-25T18:12:10+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.2 password hashing: bcrypt HashPassword/VerifyAndRehash/ProbeBcryptCost + startup probe",
+      "from": "1.17.0",
+      "to": "1.18.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-05-25T18:27:05+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.2 JWT RS256 keystore with KID rotation runbook (InitOrLoad/Sign/Verify/RotateKey)",
+      "from": "1.18.0",
+      "to": "1.19.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-05-25T18:37:38+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.2 token shape: RefreshStore + 3 config knobs + refresh_token_replay alert kind",
+      "from": "1.19.0",
+      "to": "1.20.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-05-25T18:52:14+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.2 server-driven access-token revocation deny-set (RevocationStore)",
+      "from": "1.20.0",
+      "to": "1.21.0",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-05-25T18:52:14+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "implement api.py revoke-jti operator tool",
+      "from": "3.37.4",
+      "to": "3.37.5",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-05-25T19:01:51+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 9 §9.2: mtls package with LoadClientTLSConfig, ProbeAddr, CheckKeyModes; APIMTLSEnabled+APITLSDir config knobs",
+      "from": "1.21.0",
+      "to": "1.22.0",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-05-25T19:05:57+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.2 OIDC plug-point: Provider interface + NoopProvider + LoadProvider",
+      "from": "1.22.0",
+      "to": "1.23.0",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-05-25T19:15:20+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.2 self-registration default OFF: flag + per-subnet cap",
+      "from": "1.23.0",
+      "to": "1.24.0",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-05-25T19:22:06+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.3 per-pod reply_to topic + Reaper; APIReplyReaperSec config field",
+      "from": "1.24.0",
+      "to": "1.24.1",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-05-25T19:33:58+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.9 backpressure-on-bus middleware: BackpressureCheck + APIPredictRequestBacklogHigh config",
+      "from": "1.24.1",
+      "to": "1.25.0",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-05-25T19:40:05+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.3 APITransitJitterMs field + timeout-budget validation updated",
+      "from": "1.25.0",
+      "to": "1.25.1",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-05-25T19:45:33+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.3 cancellation propagation: predict.cancel.v1 + WatchAndCancel",
+      "from": "1.25.1",
+      "to": "1.25.2",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-05-25T19:53:36+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.9 CacheGenCheck middleware: generation-aware GET cache reads",
+      "from": "1.25.2",
+      "to": "1.25.3",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-05-25T20:05:03+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.3 idempotency-key cache middleware with Redis pubsub inflight guard",
+      "from": "1.25.3",
+      "to": "1.26.0",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-05-25T20:20:32+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.3 cache-first SWR predictions endpoint (PredictionSWR + PredictionCacheChecker + config knobs)",
+      "from": "1.26.0",
+      "to": "1.27.0",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-05-25T20:24:05+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "503+Retry-After contract: RespondWithRetryAfter, RetryAfterForTimeout, constants",
+      "from": "1.27.0",
+      "to": "1.27.1",
+      "build": 21
+    },
+    {
+      "timestamp": "2026-05-25T20:34:23+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.4 server/api/openapi.yaml binding spec + oapi-codegen gen + gen-check CI gate",
+      "from": "1.27.1",
+      "to": "1.28.0",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-05-25T20:53:42+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.7: dual-subject rate limit + X-RateLimit headers",
+      "from": "1.28.0",
+      "to": "1.29.0",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-05-25T21:08:14+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.7 burst budget: APIBurstCapacity/APIBurstRefillPerS config keys + SecondaryBucket wired in main.go + cost tests",
+      "from": "1.29.0",
+      "to": "1.29.1",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-05-25T21:14:05+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.4 kin-openapi response schema validation tests",
+      "from": "1.29.1",
+      "to": "1.29.2",
+      "build": 25
+    },
+    {
+      "timestamp": "2026-05-25T21:18:07+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.4 Swagger UI compose service + cmd_docs + no-docs-route boundary test",
+      "from": "1.29.2",
+      "to": "1.29.3",
+      "build": 26
+    },
+    {
+      "timestamp": "2026-05-25T21:18:07+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§9.4 api.docs target implemented in xops/makefile/api.py",
+      "from": "3.37.5",
+      "to": "3.37.6",
+      "build": 27
+    },
+    {
+      "timestamp": "2026-05-25T21:26:01+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.4 spec_loader.go boot gate: ValidateSpecExtensions checks required OpenAPI extensions at startup",
+      "from": "1.29.3",
+      "to": "1.29.4",
+      "build": 28
+    },
+    {
+      "timestamp": "2026-05-25T21:29:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§9.5 api.request.v1 schema added",
+      "from": "1.37.0",
+      "to": "1.37.1",
+      "build": 29
+    },
+    {
+      "timestamp": "2026-05-26T04:34:33+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§9.5 api.response.v1 schema",
+      "from": "1.37.1",
+      "to": "1.38.0",
+      "build": 30
+    },
+    {
+      "timestamp": "2026-05-26T04:35:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§9.5 predict.cancel.v1 schema",
+      "from": "1.38.0",
+      "to": "1.38.1",
+      "build": 31
+    },
+    {
+      "timestamp": "2026-05-26T04:45:44+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.5 envelope discipline: bus.Envelope, bus.ClientID, boundary test",
+      "from": "1.29.4",
+      "to": "1.30.0",
+      "build": 32
+    },
+    {
+      "timestamp": "2026-05-26T04:51:41+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.5 trace propagation: TraceParent middleware, Envelope.TraceID field",
+      "from": "1.30.0",
+      "to": "1.30.1",
+      "build": 33
+    },
+    {
+      "timestamp": "2026-05-26T04:56:07+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.7 denylist short-circuit",
+      "from": "1.30.1",
+      "to": "1.30.2",
+      "build": 34
+    },
+    {
+      "timestamp": "2026-05-26T04:59:25+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.7 subnet-mode escape",
+      "from": "1.30.2",
+      "to": "1.30.3",
+      "build": 35
+    },
+    {
+      "timestamp": "2026-05-26T05:05:31+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.7 tier quota middleware",
+      "from": "1.30.3",
+      "to": "1.30.4",
+      "build": 36
+    },
+    {
+      "timestamp": "2026-05-26T05:17:17+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.8 RED metrics: Prometheus :9091, 7 metric families, cardinality boot gate",
+      "from": "1.30.4",
+      "to": "1.31.0",
+      "build": 37
+    },
+    {
+      "timestamp": "2026-05-26T05:24:26+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.8 structured JSON access logs",
+      "from": "1.31.0",
+      "to": "1.31.1",
+      "build": 38
+    },
+    {
+      "timestamp": "2026-05-26T05:40:24+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "§9.8 audit.verify-api + api.erase-user — Phase 9 audit hash-chain operator tools",
+      "from": "3.37.6",
+      "to": "3.38.0",
+      "build": 39
+    },
+    {
+      "timestamp": "2026-05-26T05:51:36+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.8 OTLP trace export — telemetry.Init, OTelSpan middleware, TelemetryOTLPEndpoint config",
+      "from": "1.31.1",
+      "to": "1.32.0",
+      "build": 40
+    },
+    {
+      "timestamp": "2026-05-26T05:59:12+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.8 SLO definition: slo package + burn-rate alerting",
+      "from": "1.32.0",
+      "to": "1.33.0",
+      "build": 41
+    },
+    {
+      "timestamp": "2026-05-26T06:06:48+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.9 response-side backpressure: SlowClientAbort middleware + APIResponseWriteTimeoutMs config",
+      "from": "1.33.0",
+      "to": "1.33.1",
+      "build": 42
+    },
+    {
+      "timestamp": "2026-05-26T06:13:18+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.9 connection caps: MaxHeaderBytes, IdleTimeout, ConcurrencyLimit middleware",
+      "from": "1.33.1",
+      "to": "1.33.2",
+      "build": 43
+    },
+    {
+      "timestamp": "2026-05-26T06:18:40+00:00",
+      "component": "infra_mock",
+      "level": "minor",
+      "note": "§9.10 api compose service added to docker-compose.yml + mock overlay",
+      "from": "1.4.5",
+      "to": "1.5.0",
+      "build": 44
+    },
+    {
+      "timestamp": "2026-05-26T06:20:11+00:00",
+      "component": "infra_mock",
+      "level": "patch",
+      "note": "§9.10 K8s manifest stubs",
+      "from": "1.5.0",
+      "to": "1.5.1",
+      "build": 45
+    },
+    {
+      "timestamp": "2026-05-26T06:29:03+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "§9.10 secret rotation make targets implemented in xops/makefile/api.py",
+      "from": "3.38.0",
+      "to": "3.39.0",
+      "build": 46
+    },
+    {
+      "timestamp": "2026-05-26T06:29:09+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "§9.10 api_runbook.md — full operator runbook with 5 rotation procedures",
+      "from": "1.69.2",
+      "to": "1.70.0",
+      "build": 47
+    },
+    {
+      "timestamp": "2026-05-26T06:32:37+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§9.10 api.init implementation",
+      "from": "3.39.0",
+      "to": "3.39.1",
+      "build": 48
+    },
+    {
+      "timestamp": "2026-05-26T06:40:57+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.11 DeprecationHeaders middleware — RFC 8594 Sunset + 410 Gone enforcement",
+      "from": "1.33.2",
+      "to": "1.34.0",
+      "build": 49
+    },
+    {
+      "timestamp": "2026-05-26T06:40:57+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "§9.11 versioning and deprecation sunset policy shipped",
+      "from": "1.4.2",
+      "to": "1.5.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-26T06:50:34+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.11: SchemaVersionMiddleware + WithDeprecatedSibling + APISchemaVersion config field",
+      "from": "1.34.0",
+      "to": "1.34.1",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-26T06:50:34+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "§9.11 fully closed — all four bullets shipped",
+      "from": "1.5.0",
+      "to": "1.5.1",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-05-26T07:06:32+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§9.12 full API knob inventory shared with Go (33 new fields, 3 defaults corrected)",
+      "from": "1.38.1",
+      "to": "1.39.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-05-26T07:06:39+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.12 config knob defaults corrected (4 fixes) and 3 new knobs added (fixture_window, allowed_markets, trusted_proxies)",
+      "from": "1.34.1",
+      "to": "1.34.2",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-05-26T07:13:32+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.12 boot validator — ValidateBoot with 5 checks (c,d,e) + 11 tests",
+      "from": "1.34.2",
+      "to": "1.34.3",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-05-26T07:22:19+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.13 migrations idempotency verified + api.gen-check extension validation added",
+      "from": "1.34.3",
+      "to": "1.34.4",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-05-26T07:30:42+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.13: swarmctl topics PRODUCER column + wireAuthorityProducers + TestWireAuthorityPhase9Topics",
+      "from": "1.34.4",
+      "to": "1.34.5",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-05-26T07:30:48+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§9.13: PREDICT_CANCEL_V1 topic + PREDICT_CANCEL_V1_ALLOWED_PRODUCERS + test_phase9_visibility.py (10 tests)",
+      "from": "1.39.0",
+      "to": "1.40.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-05-26T07:42:05+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "§9.13: docs/design/API.md + AGENTS.md §1.7 anchor list update",
+      "from": "1.70.0",
+      "to": "1.71.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-05-26T07:42:05+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.13: swarmctl ps static agent manifest for api.gateway.v1; gateway heartbeat write on startup; cancel boundary test allowlist",
+      "from": "1.34.5",
+      "to": "1.34.6",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-05-26T07:56:11+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "§9.13 swarm.demo.live API extension (Phase 9 §9.13 DoD bullets 1+8 ticked)",
+      "from": "3.39.1",
+      "to": "3.40.0",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-05-26T07:56:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§9.13 api_demo_base_url config field added",
+      "from": "1.40.0",
+      "to": "1.40.1",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-05-26T08:01:04+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§9.15 api.slo-report + billing boundary test",
+      "from": "3.40.0",
+      "to": "3.40.1",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-05-26T08:04:48+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§9.16 versioning addendum ticked — all 4 bullets verified and closed",
+      "from": "1.71.0",
+      "to": "1.71.1",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-05-26T08:33:00+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 proof tests batch 1: 17 tests (routing+contract, identity+sessions); fix zeroizeAndRemove on 0o400 files",
+      "from": "1.34.6",
+      "to": "1.34.7",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-05-26T08:59:37+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 proof tests batch 2",
+      "from": "1.34.7",
+      "to": "1.34.8",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-05-26T09:14:06+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 proof tests batch 3: 15 tests (rate/backpressure/mtls/observability)",
+      "from": "1.34.8",
+      "to": "1.34.9",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-05-26T09:18:49+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_password_field_skips_normalize",
+      "from": "1.34.9",
+      "to": "1.34.10",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-05-26T09:22:30+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_xff_spoofed_untrusted_ignored",
+      "from": "1.34.10",
+      "to": "1.34.11",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-05-26T09:24:06+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_subject_key_ipv6_64_collapse",
+      "from": "1.34.11",
+      "to": "1.34.12",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-05-26T09:26:24+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_lua_loader_refuses_boot_on_drift",
+      "from": "1.34.12",
+      "to": "1.34.13",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-05-26T09:32:32+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_api_gateway_sole_writer_api_request_v1",
+      "from": "1.34.13",
+      "to": "1.34.14",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-05-26T09:35:42+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 wire-authority boundary tests",
+      "from": "1.34.14",
+      "to": "1.34.15",
+      "build": 21
+    },
+    {
+      "timestamp": "2026-05-26T09:39:49+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_api_consumes_predict_approved_not_predict_final",
+      "from": "1.34.15",
+      "to": "1.34.16",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-05-26T09:50:31+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 test_event_correlation_id_dual_emit: api.NewQAInputHandler + QAQuarantineAlertFunc",
+      "from": "1.34.16",
+      "to": "1.34.17",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-05-26T09:57:27+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 JWT adversarial tests (alg_none, kid_path, hs256_confusion, clock_skew)",
+      "from": "1.34.17",
+      "to": "1.34.18",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-05-26T10:20:45+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 adversarial idempotency isolation, cursor oracle, QA injection corpus tests",
+      "from": "1.34.18",
+      "to": "1.34.19",
+      "build": 25
+    },
+    {
+      "timestamp": "2026-05-26T10:33:52+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 adversarial QA oversize, homoglyph, unicode-norm, double-submit",
+      "from": "1.34.19",
+      "to": "1.34.20",
+      "build": 26
+    },
+    {
+      "timestamp": "2026-05-26T10:43:39+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.14 final adversarial tests: SWR, cancellation race, open redirect, PII log",
+      "from": "1.34.20",
+      "to": "1.34.21",
+      "build": 27
+    },
+    {
+      "timestamp": "2026-05-26T10:57:42+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.1 Go runtime tuning: automaxprocs, GOMEMLIMIT, GOGC, HTTP timeouts, H2C in-mesh",
+      "from": "1.34.21",
+      "to": "1.35.0",
+      "build": 28
+    },
+    {
+      "timestamp": "2026-05-26T10:57:48+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§9.17.1 checkboxes ticked, JWT clock skew gap closed",
+      "from": "1.71.1",
+      "to": "1.71.2",
+      "build": 29
+    },
+    {
+      "timestamp": "2026-05-26T11:05:17+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.2 zero-allocation hot path discipline",
+      "from": "1.35.0",
+      "to": "1.36.0",
+      "build": 30
+    },
+    {
+      "timestamp": "2026-05-26T11:18:39+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.3 connection pool: bootstrap.NewPGPools (pgxpool), bootstrap.NewRedisClients (go-redis/v9 two clients), no-pool-per-request lint",
+      "from": "1.36.0",
+      "to": "1.37.0",
+      "build": 31
+    },
+    {
+      "timestamp": "2026-05-26T11:35:27+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.4 resilience: breakers, bulkheads, hedge tracker, singleflight, retry budget, panic recovery, deadline lint",
+      "from": "1.37.0",
+      "to": "1.38.0",
+      "build": 32
+    },
+    {
+      "timestamp": "2026-05-26T11:43:18+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.5 latency histogram buckets 1ms-2500ms, api.bench k6 target",
+      "from": "1.38.0",
+      "to": "1.39.0",
+      "build": 33
+    },
+    {
+      "timestamp": "2026-05-26T12:05:58+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.6 L0 cache: hashicorp/golang-lru/v2 LRU, negative cache (404/410), sync.Cond stampede guard, Redis keyspace invalidation. TestL0InvalidationWithin500ms proof test.",
+      "from": "1.39.0",
+      "to": "1.40.0",
+      "build": 34
+    },
+    {
+      "timestamp": "2026-05-26T12:24:29+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.7 audit pipeline performance: bounded-channel shipper, backpressure sampling, quarantine recovery",
+      "from": "1.40.0",
+      "to": "1.41.0",
+      "build": 35
+    },
+    {
+      "timestamp": "2026-05-26T12:24:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§9.17.7 design doc checkboxes ticked; migration 015 quarantine",
+      "from": "1.71.2",
+      "to": "1.71.3",
+      "build": 36
+    },
+    {
+      "timestamp": "2026-05-26T12:35:43+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.8 TLS/TCP performance hardening",
+      "from": "1.41.0",
+      "to": "1.42.0",
+      "build": 37
+    },
+    {
+      "timestamp": "2026-05-26T12:54:31+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.9 backpressure feedback loops: adaptive shedding, inflight pressure shed, bus-feedback degraded mode",
+      "from": "1.42.0",
+      "to": "1.43.0",
+      "build": 38
+    },
+    {
+      "timestamp": "2026-05-26T13:03:46+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "§9.17.10 performance observability: pprof, profiling, alloc tracking",
+      "from": "1.43.0",
+      "to": "1.44.0",
+      "build": 39
+    },
+    {
+      "timestamp": "2026-05-26T13:14:28+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "§9.17.11 api_runbook.md: §6 breaker/bulkhead runbook entries for all 4 breakers + bulkhead sizing",
+      "from": "1.71.3",
+      "to": "1.72.0",
+      "build": 40
+    },
+    {
+      "timestamp": "2026-05-26T13:14:28+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "§9.17.11 DoD: chart.json go_min_versions compatibility block (gobreaker/automaxprocs/golang-lru/pgx/go-redis/sync)",
+      "from": "1.44.0",
+      "to": "1.44.1",
+      "build": 41
+    },
+    {
+      "timestamp": "2026-05-26T13:15:22+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 9 §9.14 + §9.17 complete — all 73 bullets closed",
+      "from": "1.72.0",
+      "to": "1.73.0",
+      "build": 42
+    },
+    {
+      "timestamp": "2026-05-26T13:22:00+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "fix TestBoundary_CancelTopicSolePublisher regression in wire_authority_test",
+      "from": "1.44.1",
+      "to": "1.44.2",
+      "build": 43
+    },
+    {
+      "timestamp": "2026-05-26T13:24:52+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 9 complete: Go REST API & Identity fully verified",
+      "from": "1.44.2",
+      "to": "1.45.0",
+      "build": 44
+    },
+    {
+      "timestamp": "2026-05-26T13:24:52+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 9 DoD verified and marked completed",
+      "from": "1.73.0",
+      "to": "1.73.1",
+      "build": 45
     }
   ]
 }

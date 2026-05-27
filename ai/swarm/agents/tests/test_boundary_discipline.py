@@ -40,6 +40,8 @@ from swarm.agents.proofreader.replicas import (
 from swarm.agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from swarm.agents.storage import StorageAgent
 from swarm.agents.topics import (
+    API_REQUEST_V1,
+    API_RESPONSE_V1,
     MAINT_ACK,
     MAINT_EVENT,
     MATCH_OUTCOME,
@@ -53,6 +55,7 @@ from swarm.agents.topics import (
     SEC_DENYLIST,
     SEC_QUARANTINE,
 )
+from swarm.sdk.wire_contracts import API_TOPIC_V1_ALLOWED_PRODUCERS
 from swarm.sdk.wire_contracts import MAINT_EVENT_V1_ALLOWED_PRODUCERS
 from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER
 from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_PRODUCERS
@@ -731,4 +734,107 @@ def test_telemetry_sec_alert_kind_pin() -> None:
     assert not leaked, (
         "telemetry.v1 kind-pin contains kinds that should be off-limits: "
         f"{sorted(leaked)}.  Only maint_silence_alert is permitted."
+    )
+
+
+# ── Rule 10 (Phase 9 §9.0): api.request.v1 + api.response.v1 ────
+#   sole producer = api.gateway.v1 (Go gateway, never a swarm agent)
+
+
+def test_api_topic_v1_allowed_producers_constant() -> None:
+    """§9.0 wire-authority delta: the allowed-producers set for the
+    api.* audit topics must be exactly ``{"api.gateway.v1"}``.
+
+    The Go gateway is the *only* process that may write audit events
+    onto these topics.  No Python swarm agent belongs here.  This
+    test pins the constant so a future phase cannot silently add an
+    in-process producer without a doctrine change + tracker row.
+    """
+    assert API_TOPIC_V1_ALLOWED_PRODUCERS == frozenset({"api.gateway.v1"}), (
+        "API_TOPIC_V1_ALLOWED_PRODUCERS must be exactly "
+        "{'api.gateway.v1'} — the api.* audit topics are a "
+        "Go-gateway-only production surface (Phase 9 §9.0). "
+        f"Actual: {sorted(API_TOPIC_V1_ALLOWED_PRODUCERS)}"
+    )
+
+
+def test_no_swarm_agent_publishes_api_request_v1() -> None:
+    """§9.0: no in-process swarm agent may publish ``api.request.v1``.
+
+    The sole producer is ``api.gateway.v1`` (the Go gateway process).
+    This enumerative registry scan catches any future agent class that
+    accidentally wires the audit topic into its publish set.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        if API_REQUEST_V1 in tuple(getattr(agent, "publishes", ())):
+            offenders.append(_agent_label(agent))
+    assert offenders == [], (
+        "api.request.v1 may only be produced by api.gateway.v1 (Go). "
+        "No Python swarm agent may publish here. "
+        f"In-registry violators: {offenders}."
+    )
+
+
+def test_no_swarm_agent_publishes_api_response_v1() -> None:
+    """§9.0: no in-process swarm agent may publish ``api.response.v1``.
+
+    The sole producer is ``api.gateway.v1`` (the Go gateway process).
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        if API_RESPONSE_V1 in tuple(getattr(agent, "publishes", ())):
+            offenders.append(_agent_label(agent))
+    assert offenders == [], (
+        "api.response.v1 may only be produced by api.gateway.v1 (Go). "
+        "No Python swarm agent may publish here. "
+        f"In-registry violators: {offenders}."
+    )
+
+
+def test_api_audit_consumer_set_is_bounded() -> None:
+    """§9.0: consumer set for both api.* audit topics is bounded today.
+
+    Allowed: ``telemetry.v1`` (counter-only Prometheus watch, §4.6).
+    ``audit.v1`` (Phase 8 §8.13.2 hash-chain mirror) is not yet in the
+    Python swarm registry; when it lands it must be added to the
+    allow-list here with a tracker row.
+
+    This test locks the current non-telemetry consumer set to zero so a
+    future phase cannot silently route a predictor or NLP agent onto the
+    raw gateway audit stream.
+    """
+    allowed = {_TELEMETRY_LABEL}
+    for topic, name in (
+        (API_REQUEST_V1, "api.request.v1"),
+        (API_RESPONSE_V1, "api.response.v1"),
+    ):
+        offenders: list[str] = []
+        for agent in _registry_agents():
+            label = _agent_label(agent)
+            if label in allowed:
+                continue
+            if topic in tuple(getattr(agent, "subscribes", ())):
+                offenders.append(label)
+        assert offenders == [], (
+            f"{name} consumer set must be empty today (telemetry.v1 "
+            "is allowed as a counter-only watcher). When audit.v1 "
+            "lands (Phase 8 §8.13.2), add it to the allow-list here. "
+            f"Unexpected consumers: {offenders}."
+        )
+
+
+def test_telemetry_watches_phase9_api_audit_topics() -> None:
+    """§9.0 positive: telemetry must include both Phase 9 api.* audit
+    topics so the Prometheus page sees the gateway audit-trail counters
+    from day-1, before the Go gateway is fully wired.
+    """
+    from swarm.agents.telemetry import WATCHED_TOPICS  # noqa: PLC0415
+
+    required = {API_REQUEST_V1, API_RESPONSE_V1}
+    missing = required - set(WATCHED_TOPICS)
+    assert not missing, (
+        "telemetry._WATCHED_TOPICS is missing Phase 9 api.* topic(s): "
+        f"{sorted(missing)}. The §9.0 cross-phase alignment requires "
+        "both api audit topics on the Prometheus page."
     )

@@ -105,3 +105,45 @@ func TestScriptLoaderRejectsNilLoadFn(t *testing.T) {
 		t.Fatal("expected error on nil LoadFn")
 	}
 }
+
+// TestLuaLoaderRefusesBootOnDrift tampers the `-- SHA256:` header line of
+// sec_rate_check.lua (simulating an attacker or deploy-skew modifying the
+// embedded script's header) and verifies that ScriptLoader.Verify — the
+// boot validator — returns an explicit "drift" error before ever reaching
+// the LoadFn (i.e. the boot is refused at header-integrity stage).
+func TestLuaLoaderRefusesBootOnDrift(t *testing.T) {
+	// Locate the real claimed digest so we can swap it for a fake one.
+	realClaimed := HeaderClaimedSHA256(EmbeddedRateCheckLua)
+	if realClaimed == "" {
+		t.Fatal("EmbeddedRateCheckLua has no SHA256 header — test precondition failed")
+	}
+
+	// Replace the real SHA256 with an all-zeros digest of the same length.
+	// This models an attacker modifying the header field in the .lua file
+	// (distinct from modifying the script body, which changes the claimed
+	// hash indirectly — here we directly forge the header line).
+	fakeDigest := strings.Repeat("0", len(realClaimed))
+	tampered := strings.Replace(
+		EmbeddedRateCheckLua,
+		"-- SHA256: "+realClaimed,
+		"-- SHA256: "+fakeDigest,
+		1,
+	)
+
+	loader := NewScriptLoader("sec_rate_check.lua", tampered)
+
+	// The LoadFn must NOT be called: VerifyHeader runs first and must
+	// short-circuit with a drift error before any Redis I/O.
+	load := func(body string) (string, error) {
+		t.Error("LoadFn must not be invoked when header is tampered")
+		return "", nil
+	}
+
+	err := loader.Verify(load)
+	if err == nil {
+		t.Fatal("Verify must return an error on header drift, got nil")
+	}
+	if !strings.Contains(err.Error(), "drift") {
+		t.Fatalf("error must contain 'drift' to be explicit, got: %v", err)
+	}
+}
