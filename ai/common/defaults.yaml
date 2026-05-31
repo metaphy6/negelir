@@ -121,6 +121,11 @@ nlp:
   # §10.19 sampled answer audit
   answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
   answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP
+  # §10.21.9 boot-time readiness budget and liveness restart grace
+  boot_budget_s: 30              # NEGELIR_NLP_BOOT_BUDGET_S
+  boot_liveness_grace_s: 60      # NEGELIR_NLP_BOOT_LIVENESS_GRACE_S
+  # §10.21 graceful SIGTERM drain budget
+  shutdown_grace_s: 20           # NEGELIR_NLP_SHUTDOWN_GRACE_S
   # §10.21.7 log redaction long-string heuristic threshold
   log_max_unredacted_str_len: 64  # NEGELIR_NLP_LOG_MAX_UNREDACTED_STR_LEN
   # §10.21.8 citation-signature HMAC key file
@@ -373,6 +378,9 @@ phase10:
   # Swap policy: "all_or_nothing" (default) or "per_file" (§10.21.3 Atomic swap policy).
   # Under "all_or_nothing", cross-file referential validator runs before swap.
   nlp_lexicon_swap_atomicity: all_or_nothing  # NEGELIR_NLP_LEXICON_SWAP_ATOMICITY
+  # Maximum lexicon feed schema this NLP build supports; higher feed versions
+  # are refused at reload time and prior generation stays active.
+  nlp_lexicon_feed_max_supported_schema_version: 1  # NEGELIR_NLP_LEXICON_FEED_MAX_SUPPORTED_SCHEMA_VERSION
   # RSS budget for CRF entity tagger model (§10.21.2 RSS ceiling).
   nlp_crf_max_rss_mb: 5                   # NEGELIR_NLP_CRF_MAX_RSS_MB
   # RSS budget for SymSpell edit-distance index (§10.21.2 RSS ceiling).
@@ -434,7 +442,9 @@ phase10:
   nlp_default_fixture_window_h: 48        # NEGELIR_NLP_DEFAULT_FIXTURE_WINDOW_H
   nlp_summary_max_fixtures: 10            # NEGELIR_NLP_SUMMARY_MAX_FIXTURES
   nlp_summary_aggregation_timeout_ms: 1500  # NEGELIR_NLP_SUMMARY_AGGREGATION_TIMEOUT_MS
+  nlp_summary_calibration_mismatch_policy: note  # NEGELIR_NLP_SUMMARY_CALIBRATION_MISMATCH_POLICY
   nlp_dispatch_dedup_window_s: 600  # NEGELIR_NLP_DISPATCH_DEDUP_WINDOW_S
+  nlp_intent_tier_map: "{}"  # NEGELIR_NLP_INTENT_TIER_MAP
   # §10.7 confidence bands: JSON list of [lower, upper, label] triples (§10.7 Confidence rendering).
   # Default: 3-band table matching the §10.7 design.
   nlp_confidence_bands: '[[0.0,0.55,"düşük"],[0.55,0.75,"orta"],[0.75,1.01,"yüksek"]]'  # NEGELIR_NLP_CONFIDENCE_BANDS

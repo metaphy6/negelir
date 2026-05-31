@@ -63,6 +63,10 @@ class LexiconSchemaError(ValueError):
     or when the _meta block is missing / malformed."""
 
 
+class LexiconFeedSchemaTooNewError(LexiconSchemaError):
+    """Raised when feed schema_version is higher than this NLP build allows."""
+
+
 @dataclass(frozen=True)
 class LexiconMeta:
     """Validated contents of the ``_meta`` block in a lexicon YAML file."""
@@ -99,7 +103,10 @@ def _compute_sha256(data: bytes) -> str:
 
 
 def _parse_lexicon_raw(
-    name: str, raw_text: str
+    name: str,
+    raw_text: str,
+    *,
+    max_supported_schema_version: int = LEXICON_SCHEMA_VERSION,
 ) -> tuple[LexiconMeta, list[dict[str, Any]]]:
     """Parse and validate a lexicon from already-read text.
 
@@ -156,6 +163,12 @@ def _parse_lexicon_raw(
             f"{name}: '_meta.schema_version' must be an integer, "
             f"got {type(declared).__name__!r} ({declared!r})."
         )
+    if declared > int(max_supported_schema_version):
+        raise LexiconFeedSchemaTooNewError(
+            f"{name}: lexicon schema_version={declared} exceeds max supported "
+            f"version {int(max_supported_schema_version)} for this NLP build. "
+            "Refusing swap; upgrade NLP before switching emitter schema."
+        )
     if declared != LEXICON_SCHEMA_VERSION:
         raise LexiconSchemaError(
             f"{name}: lexicon schema_version={declared} does not match "
@@ -208,7 +221,11 @@ def load_lexicon_file(path: Path) -> tuple[LexiconMeta, list[dict[str, Any]]]:
     """
     raw_text = path.read_text(encoding="utf-8")
     # Delegate to the shared parser (avoids duplicating validation logic).
-    return _parse_lexicon_raw(path.name, raw_text)
+    return _parse_lexicon_raw(
+        path.name,
+        raw_text,
+        max_supported_schema_version=LEXICON_SCHEMA_VERSION,
+    )
 
 
 # ── Helpers used by LexiconStore ───────────────────────────────────────────
@@ -508,8 +525,10 @@ class LexiconStore:
         # Read each file's bytes once: compute SHA256 and decode to text in a
         # single pass. This avoids a second read_text() call inside
         # load_lexicon_file and prevents TOCTOU races for the SHA capture.
+        cfg = Config()
         shadow: dict[str, _LoadedFile] = {}
         load_errors: list[str] = []
+        schema_too_new_errors: list[str] = []
 
         for yaml_file in yaml_files:
             try:
@@ -517,7 +536,11 @@ class LexiconStore:
                 raw_bytes = yaml_file.read_bytes()
                 sha256 = _compute_sha256(raw_bytes)
                 raw_text = raw_bytes.decode("utf-8")
-                meta, entries = _parse_lexicon_raw(yaml_file.name, raw_text)
+                meta, entries = _parse_lexicon_raw(
+                    yaml_file.name,
+                    raw_text,
+                    max_supported_schema_version=cfg.nlp_lexicon_feed_max_supported_schema_version,
+                )
                 kind = _KIND_FOR_FILE.get(yaml_file.name, "unknown")
                 alias_index = _build_alias_index(
                     entries, meta.lexicon_version, kind
@@ -529,6 +552,8 @@ class LexiconStore:
                     sha256=sha256,
                     alias_index=alias_index,
                 )
+            except LexiconFeedSchemaTooNewError as exc:
+                schema_too_new_errors.append(f"{yaml_file.name}: {exc}")
             except LexiconSchemaError as exc:
                 load_errors.append(f"{yaml_file.name}: {exc}")
             except yaml.YAMLError as exc:
@@ -537,6 +562,20 @@ class LexiconStore:
                 load_errors.append(f"{yaml_file.name}: UTF-8 decode error: {exc}")
             except OSError as exc:
                 load_errors.append(f"{yaml_file.name}: I/O error: {exc}")
+
+        if schema_too_new_errors:
+            alert = self._maybe_emit_alert(
+                kind="nlp_lexicon_feed_schema_too_new",
+                severity="warn",
+                subject=",".join(
+                    sorted({e.split(":")[0] for e in schema_too_new_errors})
+                ),
+                reason="lexicon feed schema too new: "
+                + "; ".join(schema_too_new_errors[:5]),
+            )
+            if alert:
+                alerts.append(alert)
+            return alerts
 
         if load_errors:
             alert = self._maybe_emit_alert(
@@ -614,7 +653,6 @@ class LexiconStore:
         # Under all_or_nothing swap mode, validate cross-file references
         # (player→team, team→league, competition→parent, dialects→entities,
         # entities_negative→all) before committing the shadow snapshot.
-        cfg = Config()
         if cfg.nlp_lexicon_swap_atomicity == "all_or_nothing":
             from nlp.lexicon._xref import validate_xref  # noqa: PLC0415
             xref_errors = validate_xref(shadow)

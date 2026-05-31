@@ -52,6 +52,7 @@ class AgentRunner:
         instance_id: str | None = None,
         tick_sec: float = 0.1,
         flush_interval_sec: float = 0.1,
+        shutdown_grace_s: float | None = None,
         clock: Any = None,
     ) -> None:
         self.agent = agent
@@ -66,8 +67,19 @@ class AgentRunner:
         self.instance_id = instance_id or f"{agent.name}.{uuid.uuid4().hex[:8]}"
         self.tick_sec = tick_sec
         self.flush_interval_sec = max(0.0, float(flush_interval_sec))
+        if shutdown_grace_s is None:
+            try:
+                from common.config import cfg as _cfg
+                shutdown_grace_s = float(_cfg.nlp_shutdown_grace_s)
+            except Exception:  # noqa: BLE001 - keep runner import-safe in minimal environments
+                shutdown_grace_s = 20.0
+        self.shutdown_grace_s = max(0.0, float(shutdown_grace_s))
         self.metrics = Metrics(agent.name)
         self._stop_event = threading.Event()
+        self._inflight = 0
+        self._inflight_lock = threading.Lock()
+        self._inflight_zero = threading.Event()
+        self._inflight_zero.set()
         self._last_heartbeat = 0.0
         self._registered = False
         self._clock = clock or time
@@ -134,13 +146,18 @@ class AgentRunner:
                 if not did_work:
                     self._stop_event.wait(self.tick_sec)
         finally:
+            self._drain_on_shutdown()
             self.deregister()
 
     def step(self) -> bool:
         """One iteration of the loop. Returns True if any message was processed."""
+        if self._stop_event.is_set():
+            return False
         did_work = False
         now = self._monotonic()
         for topic in self.agent.subscribes:
+            if self._stop_event.is_set():
+                break
             # First: try to reclaim any long-pending messages from dead peers,
             # but throttled so we don't scan the pending set every tick.
             topic_key = str(topic)
@@ -157,6 +174,10 @@ class AgentRunner:
                 for delivery in reclaimed:
                     self._process(delivery)
                     did_work = True
+                    if self._stop_event.is_set():
+                        break
+            if self._stop_event.is_set():
+                break
             # Then: read fresh messages.
             new_msgs = self.bus.read(
                 topic,
@@ -167,6 +188,8 @@ class AgentRunner:
             for delivery in new_msgs:
                 self._process(delivery)
                 did_work = True
+                if self._stop_event.is_set():
+                    break
         # Phase-6 audit (F-2): drive `flush_expired` for aggregator-
         # style agents on a steady cadence regardless of inbound
         # traffic, so windows actually close.
@@ -188,42 +211,83 @@ class AgentRunner:
 
     # ── Per-message processing ──────────────────────────────────────────
     def _process(self, delivery: Delivery) -> None:
-        msg = delivery.message
-        env = msg.envelope
-        self.metrics.inc("msg_consumed")
-
-        # Schema-version refusal: send straight to DLQ, do NOT retry.
-        if env.schema_version > self.max_supported_schema_version:
-            _log.error(
-                "agent=%s refusing message schema_version=%d > supported=%d",
-                self.agent.name, env.schema_version, self.max_supported_schema_version,
-            )
-            self._to_dlq(delivery, reason="schema_version_unsupported")
-            self.bus.ack(delivery.topic, self._group_name(), delivery.handle)
-            return
-
-        start = self._clock.monotonic() if hasattr(self._clock, "monotonic") else time.monotonic()
+        with self._inflight_lock:
+            self._inflight += 1
+            self._inflight_zero.clear()
         try:
-            outputs = list(self.agent.handle(msg) or ())
-        except Exception as exc:  # noqa: BLE001 — handler errors are bus-level
-            self.metrics.inc("msg_failed")
-            _log.warning(
-                "agent=%s handler raised on trace=%s: %s",
-                self.agent.name, env.trace_id, exc,
-            )
-            self._handle_failure(delivery)
-            return
-        finally:
-            elapsed_ms = (
-                (self._clock.monotonic() if hasattr(self._clock, "monotonic") else time.monotonic())
-                - start
-            ) * 1000.0
-            self.metrics.observe_ms(elapsed_ms)
+            msg = delivery.message
+            env = msg.envelope
+            self.metrics.inc("msg_consumed")
 
-        for out in outputs:
-            self.bus.publish(out)
-            self.metrics.inc("msg_published")
-        self.bus.ack(delivery.topic, self._group_name(), delivery.handle)
+            # Schema-version refusal: send straight to DLQ, do NOT retry.
+            if env.schema_version > self.max_supported_schema_version:
+                _log.error(
+                    "agent=%s refusing message schema_version=%d > supported=%d",
+                    self.agent.name, env.schema_version, self.max_supported_schema_version,
+                )
+                self._to_dlq(delivery, reason="schema_version_unsupported")
+                self.bus.ack(delivery.topic, self._group_name(), delivery.handle)
+                return
+
+            start = self._clock.monotonic() if hasattr(self._clock, "monotonic") else time.monotonic()
+            try:
+                outputs = list(self.agent.handle(msg) or ())
+            except Exception as exc:  # noqa: BLE001 — handler errors are bus-level
+                self.metrics.inc("msg_failed")
+                _log.warning(
+                    "agent=%s handler raised on trace=%s: %s",
+                    self.agent.name, env.trace_id, exc,
+                )
+                self._handle_failure(delivery)
+                return
+            finally:
+                elapsed_ms = (
+                    (self._clock.monotonic() if hasattr(self._clock, "monotonic") else time.monotonic())
+                    - start
+                ) * 1000.0
+                self.metrics.observe_ms(elapsed_ms)
+
+            for out in outputs:
+                self.bus.publish(out)
+                self.metrics.inc("msg_published")
+            self.bus.ack(delivery.topic, self._group_name(), delivery.handle)
+        finally:
+            with self._inflight_lock:
+                self._inflight = max(0, self._inflight - 1)
+                if self._inflight == 0:
+                    self._inflight_zero.set()
+
+    def _drain_on_shutdown(self) -> None:
+        """Best-effort graceful shutdown: drain in-flight then run hooks."""
+        if self.shutdown_grace_s > 0:
+            self._inflight_zero.wait(timeout=self.shutdown_grace_s)
+        if callable(getattr(self.agent, "flush_on_shutdown", None)):
+            try:
+                outputs = list(self.agent.flush_on_shutdown() or ())  # type: ignore[attr-defined]
+                for out in outputs:
+                    self.bus.publish(out)
+                    self.metrics.inc("msg_published")
+            except Exception as exc:  # noqa: BLE001 - shutdown is best-effort
+                self.metrics.inc("shutdown_flush_failed")
+                _log.warning("agent=%s flush_on_shutdown raised: %s", self.agent.name, exc)
+        if callable(getattr(self.agent, "release_gpu_lease", None)):
+            try:
+                self.agent.release_gpu_lease()  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001 - shutdown is best-effort
+                self.metrics.inc("shutdown_gpu_release_failed")
+                _log.warning("agent=%s release_gpu_lease raised: %s", self.agent.name, exc)
+        release_consumer = getattr(self.bus, "release_consumer", None)
+        if callable(release_consumer):
+            for topic in self.agent.subscribes:
+                try:
+                    release_consumer(topic, self._group_name(), self.instance_id)
+                except Exception as exc:  # noqa: BLE001 - bus-specific best-effort
+                    _log.warning(
+                        "agent=%s release_consumer topic=%s failed: %s",
+                        self.agent.name,
+                        topic,
+                        exc,
+                    )
 
     def _handle_failure(self, delivery: Delivery) -> None:
         env = delivery.message.envelope

@@ -16,7 +16,10 @@ Covers:
 """
 from __future__ import annotations
 
+import ast
 import datetime as dt
+import inspect
+import math
 import sys
 import pathlib
 
@@ -90,6 +93,115 @@ def test_env_kickoff_time_global():
 ])
 def test_confidence_band_default_bands(prob, expected):
     assert confidence_band(prob) == expected
+
+
+def test_confidence_band_boundary_semantics_regression():
+    """Half-open default intervals must stay stable at 0.55 and 0.75 boundaries."""
+    lower = 0.55
+    upper = 0.75
+    assert confidence_band(math.nextafter(lower, 0.0)) == "d\u00fc\u015fük"
+    assert confidence_band(lower) == "orta"
+    assert confidence_band(math.nextafter(lower, 1.0)) == "orta"
+    assert confidence_band(math.nextafter(upper, 0.0)) == "orta"
+    assert confidence_band(upper) == "yüksek"
+    assert confidence_band(math.nextafter(upper, 1.0)) == "yüksek"
+
+
+def test_nlp_band_boundary_intervals():
+    """§10.21.10: canonical 8-point probe for half-open [low, mid, high] intervals."""
+    probes = [
+        (0.0, "düşük"),
+        (0.5499, "düşük"),
+        (0.55, "orta"),
+        (0.5501, "orta"),
+        (0.7499, "orta"),
+        (0.75, "yüksek"),
+        (0.7501, "yüksek"),
+        (1.0, "yüksek"),
+    ]
+    for prob, expected in probes:
+        assert confidence_band(prob) == expected, (
+            f"confidence_band({prob}) -> {confidence_band(prob)!r}, expected {expected!r}"
+        )
+
+
+def test_nlp_confidence_band_default_comparator_ast():
+    """Default confidence-band branch must use strict upper-bound `<` checks."""
+    source = inspect.getsource(confidence_band)
+    tree = ast.parse(source)
+
+    func = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "confidence_band"
+    )
+    if_none = next(
+        node
+        for node in func.body
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "bands"
+    )
+
+    first_cmp = if_none.body[0].test
+    second_cmp = if_none.body[1].test
+
+    assert isinstance(first_cmp, ast.Compare)
+    assert isinstance(second_cmp, ast.Compare)
+    assert isinstance(first_cmp.ops[0], ast.Lt)
+    assert isinstance(second_cmp.ops[0], ast.Lt)
+    assert isinstance(first_cmp.left, ast.Name) and first_cmp.left.id == "prob"
+    assert isinstance(second_cmp.left, ast.Name) and second_cmp.left.id == "prob"
+
+
+def test_nlp_band_signature_is_float():
+    """Reject explicit numpy.float32 call sites for confidence_band in NLP runtime code."""
+    nlp_root = _REPO_ROOT / "ai" / "nlp"
+    runtime_files = sorted(
+        path
+        for path in nlp_root.rglob("*.py")
+        if "tests" not in path.parts
+    )
+
+    offenders: list[str] = []
+
+    def _is_np_float32(expr: ast.AST) -> bool:
+        if not isinstance(expr, ast.Call):
+            return False
+        func = expr.func
+        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            return func.value.id in {"np", "numpy"} and func.attr == "float32"
+        return False
+
+    for file_path in runtime_files:
+        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+
+            func = node.func
+            called_confidence_band = (
+                isinstance(func, ast.Name) and func.id == "confidence_band"
+            ) or (
+                isinstance(func, ast.Attribute) and func.attr == "confidence_band"
+            )
+            if not called_confidence_band:
+                continue
+
+            if node.args and _is_np_float32(node.args[0]):
+                offenders.append(f"{file_path}:{node.lineno}")
+                continue
+
+            for keyword in node.keywords:
+                if keyword.arg == "prob" and _is_np_float32(keyword.value):
+                    offenders.append(f"{file_path}:{node.lineno}")
+                    break
+
+    assert not offenders, (
+        "confidence_band must not receive numpy.float32; use float64 flow instead. "
+        f"Offenders: {offenders}"
+    )
 
 
 def test_confidence_band_custom_bands():

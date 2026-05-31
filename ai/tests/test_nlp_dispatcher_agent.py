@@ -12,8 +12,10 @@ Per AGENTS.md Rule 10: new public surface -> happy + adversarial tests.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import hmac
+import inspect
 from pathlib import Path
 
 import pytest
@@ -720,10 +722,10 @@ class TestNlpAnswerAgentSummaryAggregation:
         assert out[1].payload["kind"] == "nlp_citation_signature_verify_failed"
         assert out[1].payload["severity"] == "warn"
 
-    def test_nlp_citation_rotation_prev_key_accepted_within_grace_window(
+    def test_nlp_citation_key_rotation_dual_window_accepts_both(
         self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """§10.21.8 rotation: previous key remains valid inside grace window."""
+        """§10.21.8 rotation: both previous and current keys are accepted inside grace window."""
         monkeypatch.setattr(
             _cfg,
             "nlp_predict_citation_hmac_required",
@@ -740,16 +742,32 @@ class TestNlpAnswerAgentSummaryAggregation:
         monkeypatch.setattr(_cfg, "predict_citation_hmac_key_path", str(key_file), raising=False)
         monkeypatch.setattr(_cfg, "predict_citation_hmac_key_grace_s", 3600, raising=False)
 
-        corr = "agg-prev-key-ok-001"
-        msg = _make_approved_msg(corr, expected_count=1, prediction_id="p-prev")
-        key_id = hashlib.sha256(prev_key).hexdigest()[:16]
-        blob = "p-prev|2026-05-27T10:00:00+00:00|model-1|1"
-        msg.payload["citation_key_id"] = key_id
-        msg.payload["citation_signature"] = hmac.new(prev_key, blob.encode("utf-8"), hashlib.sha256).hexdigest()
+        prev_msg = _make_approved_msg("agg-prev-key-ok-001", expected_count=1, prediction_id="p-prev")
+        prev_key_id = hashlib.sha256(prev_key).hexdigest()[:16]
+        prev_blob = "p-prev|2026-05-27T10:00:00+00:00|model-1|1"
+        prev_msg.payload["citation_key_id"] = prev_key_id
+        prev_msg.payload["citation_signature"] = hmac.new(
+            prev_key,
+            prev_blob.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
 
-        out = list(agent.handle(msg))
-        assert len(out) == 1
-        assert out[0].envelope.topic == QA_ANSWER_V1
+        new_msg = _make_approved_msg("agg-new-key-ok-001", expected_count=1, prediction_id="p-new")
+        new_key_id = hashlib.sha256(new_key).hexdigest()[:16]
+        new_blob = "p-new|2026-05-27T10:00:00+00:00|model-1|1"
+        new_msg.payload["citation_key_id"] = new_key_id
+        new_msg.payload["citation_signature"] = hmac.new(
+            new_key,
+            new_blob.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        prev_out = list(agent.handle(prev_msg))
+        new_out = list(agent.handle(new_msg))
+        assert len(prev_out) == 1
+        assert prev_out[0].envelope.topic == QA_ANSWER_V1
+        assert len(new_out) == 1
+        assert new_out[0].envelope.topic == QA_ANSWER_V1
 
 
 # ── §10.6 qa_correlation_id invariant tests ──────────────────────────────────
@@ -1408,5 +1426,107 @@ class TestCalibrationVersionStamping:
         for c in citations:
             assert "note" in c
             assert "kalibrasyon güncellendi" in c["note"]
+
+
+def test_nlp_summary_calibration_mismatch_note_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """§10.21.10: note mode keeps summary available with explicit disclosure."""
+    monkeypatch.setattr(_cfg, "nlp_summary_calibration_mismatch_policy", "note")
+    agent = NlpAnswerAgent(
+        clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+        new_id=lambda: "test-ans-id",
+    )
+    corr = "agg-cal-note-001"
+    msg1 = _make_approved_msg(corr, expected_count=2, prediction_id="note-p1")
+    msg2 = _make_approved_msg(corr, expected_count=2, prediction_id="note-p2")
+    msg2.payload["calibration_version"] = 2
+    msg2.payload["final"]["calibration_version"] = 2
+
+    list(agent.handle(msg1))
+    out = list(agent.handle(msg2))
+    qa_answers = [m for m in out if m.envelope.topic == QA_ANSWER_V1]
+    assert len(qa_answers) == 1
+    payload = qa_answers[0].payload
+    assert payload["degraded"] is False
+    assert "farklı kalibrasyon sürümleri" in payload["answer_text"]
+    assert len(payload["citations"]) == 2
+
+
+def test_nlp_summary_calibration_mismatch_refuse_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """§10.21.10: refuse mode degrades summary and emits per-fixture links."""
+    monkeypatch.setattr(_cfg, "nlp_summary_calibration_mismatch_policy", "refuse")
+    agent = NlpAnswerAgent(
+        clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+        new_id=lambda: "test-ans-id",
+    )
+    corr = "agg-cal-refuse-001"
+    msg1 = _make_approved_msg(corr, expected_count=2, prediction_id="refuse-p1")
+    msg2 = _make_approved_msg(corr, expected_count=2, prediction_id="refuse-p2")
+    msg2.payload["calibration_version"] = 2
+    msg2.payload["final"]["calibration_version"] = 2
+
+    list(agent.handle(msg1))
+    out = list(agent.handle(msg2))
+    qa_answers = [m for m in out if m.envelope.topic == QA_ANSWER_V1]
+    assert len(qa_answers) == 1
+    payload = qa_answers[0].payload
+    assert payload["degraded"] is True
+    assert (
+        payload["answer_text"].startswith(
+            "Bu hafta için tahminler farklı kalibrasyon sürümleriyle üretildiği için birleşik özet sunulamıyor."
+        )
+    )
+    assert "/tahmin/refuse-p1" in payload["answer_text"]
+    assert "/tahmin/refuse-p2" in payload["answer_text"]
+    assert payload["degraded_reason"] is not None
+    assert "summary calibration mismatch" in payload["degraded_reason"]
+
+
+def test_dispatcher_tier_is_per_intent_not_humanizer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """§10.21.11: tier_id_required depends on intent map, not humanizer_used."""
+    monkeypatch.setattr(
+        _cfg,
+        "_nlp_intent_tier_map_raw",
+        '{"predict.match_outcome":"pro"}',
+        raising=False,
+    )
+    agent_templated = NlpDispatcherAgent(
+        clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+        new_id=lambda: "tier-templated-corr",
+    )
+    msg_templated = _make_intent_msg(
+        {
+            "request_id": "req-tier-001",
+            "entities": [],
+            "humanizer_used": False,
+        }
+    )
+    out_templated = list(agent_templated.handle(msg_templated))
+    assert len(out_templated) == 1
+    assert out_templated[0].payload["tier_id_required"] == "pro"
+
+    agent_humanized = NlpDispatcherAgent(
+        clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+        new_id=lambda: "tier-humanized-corr",
+    )
+    msg_humanized = _make_intent_msg(
+        {
+            "request_id": "req-tier-002",
+            "entities": [],
+            "humanizer_used": True,
+        }
+    )
+    out_humanized = list(agent_humanized.handle(msg_humanized))
+    assert len(out_humanized) == 1
+    assert out_humanized[0].payload["tier_id_required"] == "pro"
+
+
+def test_nlp_dispatcher_tier_lookup_does_not_branch_on_humanizer_ast() -> None:
+    """§10.21.11 AST guard: dispatcher branch conditions must not use humanizer_used."""
+    source = inspect.getsource(NlpDispatcherAgent)
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If):
+            test_expr = ast.get_source_segment(source, node.test) or ""
+            assert "humanizer_used" not in test_expr
 
 

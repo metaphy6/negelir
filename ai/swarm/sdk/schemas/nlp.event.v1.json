@@ -14,7 +14,7 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]{0,63}$",
       "x-enum-open": true,
-      "description": "Open enum (§8.16.2 doctrine). Known kinds: lexicon_reloaded, lexicon_unreadable, humanizer_disabled, humanizer_breaker_open, proofreader_blocked, pii_in_answer_redacted, intent_classifier_degraded, dictionary_overflow, slot_resolution_failed, did_you_mean_offered. Per-kind sub-schemas validate the full shape."
+      "description": "Open enum (§8.16.2 doctrine). Known kinds: lexicon_reloaded, lexicon_unreadable, humanizer_disabled, humanizer_breaker_open, proofreader_blocked, pii_in_answer_redacted, intent_classifier_degraded, dictionary_overflow, slot_resolution_failed, did_you_mean_offered, cold_start_stage, confusables_resolved, singleflight_event_swept, lexicon_old_generation_evicted. Per-kind sub-schemas validate the full shape."
     },
     "producer": {
       "type": "string",

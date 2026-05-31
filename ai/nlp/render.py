@@ -21,6 +21,7 @@ Design choices (\u00a710.7 binding):
 from __future__ import annotations
 
 import hashlib
+import json
 import pathlib
 import re
 from typing import Any
@@ -112,6 +113,94 @@ CITATION_DELIMITER: str = "\n---\n"
 # before passing text to the LLM and :func:`reinsert_degraded_disclaimer` after.
 DEGRADED_DISCLAIMER_PREFIX: str = "Tahmin sınırlı veriyle üretildi:"
 _DEFAULT_TEMPLATE_DIR = pathlib.Path(__file__).parent / "templates"
+_INTENT_ENUM_PATH = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "swarm"
+    / "sdk"
+    / "schemas"
+    / "_intent_enum.json"
+)
+
+
+def _load_closed_intent_enum() -> list[str]:
+    """Load the closed intent enum used by template warm-up."""
+    data = json.loads(_INTENT_ENUM_PATH.read_text(encoding="utf-8"))
+    enum_values = data.get("enum", [])
+    if not isinstance(enum_values, list):
+        raise ValueError("invalid _intent_enum.json: enum must be a list")
+    intents = [str(intent) for intent in enum_values]
+    if not intents:
+        raise ValueError("closed intent enum is empty")
+    return intents
+
+
+def _warm_fixture_context() -> dict[str, Any]:
+    """Return a deterministic slot fixture used for Jinja warm-up renders."""
+    return {
+        "league_name": "Süper Lig",
+        "season": "2025/26",
+        "home_team": "Galatasaray",
+        "away_team": "Fenerbahçe",
+        "kickoff_utc": "2026-05-31T18:00:00Z",
+        "venue": "RAMS Park",
+        "matchday": 34,
+        "h2h_rows": [
+            {
+                "date": "2026-04-10",
+                "home": "Galatasaray",
+                "home_goals": 2,
+                "away_goals": 1,
+                "away": "Fenerbahçe",
+            }
+        ],
+        "player_name": "Mauro Icardi",
+        "probability": 0.67,
+        "risk_label": "orta",
+        "degraded": False,
+        "degraded_reason": "",
+        "prediction_id": "warm-prediction-id",
+        "produced_at_utc": "2026-05-31T18:00:00Z",
+        "model_versions": ["predictor-v1@1.0.0"],
+        "calibration_version": "cal-v1",
+        "standings_rows": [
+            {"team": "Galatasaray", "points": 90, "wins": 28, "draws": 6, "losses": 1}
+        ],
+        "suggestions": ["Galatasaray - Fenerbahçe tahmini"],
+        "btts_label": "Evet",
+        "citation_block": "[tahmin:warm-prediction-id]",
+        "handicap_line": "-0.5",
+        "outcome_label": "Ev sahibi",
+        "threshold": "2.5",
+        "direction_label": "Üst",
+        "score_rows": [{"home_goals": 2, "away_goals": 1, "probability_pct": "34"}],
+        "fixtures": [{"home": "Galatasaray", "away": "Fenerbahçe", "kickoff_utc": "2026-05-31T18:00:00Z"}],
+        "collected_count": 1,
+        "total_count": 1,
+    }
+
+
+def warm_closed_intent_templates(
+    *,
+    env: "jinja2.Environment | None" = None,
+    intents: "list[str] | None" = None,
+    context: "dict[str, Any] | None" = None,
+) -> list[str]:
+    """Render every closed-enum intent template once to warm bytecode cache.
+
+    Returns the list of warmed template filenames.
+    """
+    if env is None:
+        env = build_environment()
+    warm_intents = intents or _load_closed_intent_enum()
+    warm_context = context or _warm_fixture_context()
+
+    warmed_templates: list[str] = []
+    for intent in sorted(warm_intents):
+        template_name = f"{intent}.tr.j2"
+        template = env.get_template(template_name)
+        template.render(**warm_context)
+        warmed_templates.append(template_name)
+    return warmed_templates
 
 
 def build_environment(

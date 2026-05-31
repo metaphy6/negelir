@@ -1,6 +1,8 @@
 """AgentRunner: happy path, retry budget → DLQ, schema-version refusal."""
 from __future__ import annotations
 
+import threading
+import time
 from typing import Iterable
 
 import pytest
@@ -260,3 +262,97 @@ def test_crash_recovery_reclaims_pending_to_surviving_consumer() -> None:
     assert len(outs) == 1, "survivor must reclaim and process the orphaned message"
     assert outs[0].payload == {"k": 1, "echoed": True}
     assert bus.pending_count(ECHO_IN, runner_b._group_name()) == 0
+
+
+def test_stop_signal_stops_accepting_new_consumes() -> None:
+    """SIGTERM path should stop accepting new reads and drain only in-flight work."""
+
+    started = threading.Event()
+    calls = {"n": 0}
+
+    def slow(_msg: Message) -> Iterable[Message]:
+        calls["n"] += 1
+        started.set()
+        time.sleep(0.05)
+        return []
+
+    agent = FunctionAgent(name="nlp.answer.v1", subscribes=[ECHO_IN], publishes=[], fn=slow)
+    bus = InMemoryBus()
+    runner = AgentRunner(
+        agent=agent,
+        bus=bus,
+        registry=AgentRegistry(),
+        max_in_flight=8,
+        retry_budget=3,
+        pending_claim_sec=3600,
+        shutdown_grace_s=1.0,
+    )
+
+    for i in range(20):
+        bus.publish(Message.new(ECHO_IN, {"i": i}, producer="prod"))
+
+    t = threading.Thread(target=runner.run, daemon=True)
+    t.start()
+    assert started.wait(timeout=1.0)
+    runner.stop()
+    t.join(timeout=2.0)
+    assert not t.is_alive(), "runner should exit after graceful drain"
+    # Should not keep consuming after shutdown starts.
+    assert calls["n"] < 20
+
+
+def test_shutdown_runs_hooks_and_releases_consumer_group() -> None:
+    """Shutdown invokes flush/gpu-release hooks and releases stream consumer."""
+
+    class _BusWithRelease(InMemoryBus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.releases: list[tuple[str, str, str]] = []
+
+        def release_consumer(self, topic: Topic | str, group: str, consumer: str) -> None:
+            self.releases.append((str(topic), group, consumer))
+
+    class _AgentWithHooks:
+        name = "nlp.intent.v1"
+        subscribes = [ECHO_IN]
+        publishes = [ECHO_OUT]
+
+        def __init__(self) -> None:
+            self.gpu_released = False
+
+        def handle(self, _msg: Message) -> Iterable[Message]:
+            return []
+
+        def flush_on_shutdown(self) -> Iterable[Message]:
+            return [Message.new(ECHO_OUT, {"kind": "shutdown_flush"}, producer=self.name)]
+
+        def release_gpu_lease(self) -> None:
+            self.gpu_released = True
+
+    bus = _BusWithRelease()
+    agent = _AgentWithHooks()
+    runner = AgentRunner(
+        agent=agent,
+        bus=bus,
+        registry=AgentRegistry(),
+        max_in_flight=8,
+        retry_budget=3,
+        pending_claim_sec=3600,
+        shutdown_grace_s=1.0,
+    )
+
+    t = threading.Thread(target=runner.run, daemon=True)
+    t.start()
+    time.sleep(0.05)
+    runner.stop()
+    t.join(timeout=2.0)
+
+    assert not t.is_alive()
+    assert agent.gpu_released is True
+    flushed = bus.drain_topic(ECHO_OUT)
+    assert len(flushed) == 1
+    assert flushed[0].payload == {"kind": "shutdown_flush"}
+    assert len(bus.releases) == 1
+    topic, group, _consumer = bus.releases[0]
+    assert topic == str(ECHO_IN)
+    assert group == "swarm:nlp.intent.v1"

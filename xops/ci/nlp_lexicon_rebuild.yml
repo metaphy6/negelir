@@ -1,0 +1,48 @@
+name: nlp-lexicon-rebuild
+
+on:
+  repository_dispatch:
+    types:
+      - catalog.publish
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ai/requirements.txt
+
+      - name: Rebuild lexicons
+        run: make nlp.lexicon-build
+
+      - name: Capture lexicon diff
+        id: diff
+        run: |
+          if git diff --quiet -- ai/nlp/lexicon; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No lexicon changes after rebuild"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git diff -- ai/nlp/lexicon > nlp_lexicon.diff
+          echo "Lexicon diff captured. Human operator should run make git to commit."
+
+      - name: Upload lexicon diff
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlp-lexicon-diff
+          path: nlp_lexicon.diff

@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 191,
+    "build": 213,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.60.11",
+      "version": "1.60.28",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-31T18:29:30+00:00",
+      "last_changed": "2026-05-31T19:44:54+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -21,9 +21,9 @@
       }
     },
     "server": {
-      "version": "1.45.0",
+      "version": "1.45.1",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-05-26T13:24:52+00:00",
+      "last_changed": "2026-05-31T19:32:01+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -39,9 +39,9 @@
       "last_changed": "2026-05-31T17:59:39+00:00"
     },
     "docs": {
-      "version": "1.77.2",
+      "version": "1.77.6",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-31T18:17:29+00:00"
+      "last_changed": "2026-05-31T19:32:04+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -8916,6 +8916,204 @@
       "from": "1.60.10",
       "to": "1.60.11",
       "build": 191
+    },
+    {
+      "timestamp": "2026-05-31T18:57:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10-10.21.8 citation HMAC proof test alignment",
+      "from": "1.60.11",
+      "to": "1.60.12",
+      "build": 192
+    },
+    {
+      "timestamp": "2026-05-31T18:57:32+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase10-10.21.8 proof checkbox tick",
+      "from": "1.77.2",
+      "to": "1.77.3",
+      "build": 193
+    },
+    {
+      "timestamp": "2026-05-31T19:00:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10-10.21.9 readiness miss liveness/readiness split",
+      "from": "1.60.12",
+      "to": "1.60.13",
+      "build": 194
+    },
+    {
+      "timestamp": "2026-05-31T19:00:15+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase10-10.21.9 first bullet tick",
+      "from": "1.77.3",
+      "to": "1.77.4",
+      "build": 195
+    },
+    {
+      "timestamp": "2026-05-31T19:02:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.9 nlp.ready boot stages",
+      "from": "1.60.13",
+      "to": "1.60.14",
+      "build": 196
+    },
+    {
+      "timestamp": "2026-05-31T19:05:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.9 boot budget enforcement",
+      "from": "1.60.14",
+      "to": "1.60.15",
+      "build": 197
+    },
+    {
+      "timestamp": "2026-05-31T19:08:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.9 jinja warm stage",
+      "from": "1.60.15",
+      "to": "1.60.16",
+      "build": 198
+    },
+    {
+      "timestamp": "2026-05-31T19:13:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 drain on SIGTERM shutdown contract",
+      "from": "1.60.16",
+      "to": "1.60.17",
+      "build": 199
+    },
+    {
+      "timestamp": "2026-05-31T19:15:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.21.9 proof test coverage completed",
+      "from": "1.60.17",
+      "to": "1.60.18",
+      "build": 200
+    },
+    {
+      "timestamp": "2026-05-31T19:17:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "pin default confidence-band boundary semantics",
+      "from": "1.60.18",
+      "to": "1.60.19",
+      "build": 201
+    },
+    {
+      "timestamp": "2026-05-31T19:19:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10 nlp confidence band interval boundary+ast guard",
+      "from": "1.60.19",
+      "to": "1.60.20",
+      "build": 202
+    },
+    {
+      "timestamp": "2026-05-31T19:22:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.21.10 confidence-band float64 AST guard",
+      "from": "1.60.20",
+      "to": "1.60.21",
+      "build": 203
+    },
+    {
+      "timestamp": "2026-05-31T19:25:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "summary calibration mismatch policy for NLP summary fan-out",
+      "from": "1.60.21",
+      "to": "1.60.22",
+      "build": 204
+    },
+    {
+      "timestamp": "2026-05-31T19:26:25+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase10 10.21.10 proof checklist ticked",
+      "from": "1.77.4",
+      "to": "1.77.5",
+      "build": 205
+    },
+    {
+      "timestamp": "2026-05-31T19:29:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10 10.21.11 patcher scope boundary proof",
+      "from": "1.60.22",
+      "to": "1.60.23",
+      "build": 206
+    },
+    {
+      "timestamp": "2026-05-31T19:32:01+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "phase10 nlp rfc7807 mapping table",
+      "from": "1.45.0",
+      "to": "1.45.1",
+      "build": 207
+    },
+    {
+      "timestamp": "2026-05-31T19:32:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase10 section21 rfc7807 checklist tick",
+      "from": "1.77.5",
+      "to": "1.77.6",
+      "build": 208
+    },
+    {
+      "timestamp": "2026-05-31T19:34:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.11 probe contract thresholds and proofs",
+      "from": "1.60.23",
+      "to": "1.60.24",
+      "build": 209
+    },
+    {
+      "timestamp": "2026-05-31T19:38:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10 feed schema too-new reload guard",
+      "from": "1.60.24",
+      "to": "1.60.25",
+      "build": 210
+    },
+    {
+      "timestamp": "2026-05-31T19:41:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "nlp dispatcher tier mapping by intent only",
+      "from": "1.60.25",
+      "to": "1.60.26",
+      "build": 211
+    },
+    {
+      "timestamp": "2026-05-31T19:42:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "nlp lexicon rebuild CI + no league_catalog runtime import",
+      "from": "1.60.26",
+      "to": "1.60.27",
+      "build": 212
+    },
+    {
+      "timestamp": "2026-05-31T19:44:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "register cold_start/confusables/singleflight/lexicon-evicted nlp.event kinds",
+      "from": "1.60.27",
+      "to": "1.60.28",
+      "build": 213
     }
   ]
 }

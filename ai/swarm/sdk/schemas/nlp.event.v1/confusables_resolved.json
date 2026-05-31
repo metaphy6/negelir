@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/confusables_resolved",
+  "title": "nlp.event.v1{kind=confusables_resolved}",
+  "description": "Unicode confusable code points were normalized to canonical Turkish forms.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "resolved_count"
+  ],
+  "properties": {
+    "kind": {
+      "const": "confusables_resolved"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "resolved_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of confusable substitutions applied to the input."
+    },
+    "sample_pairs": {
+      "type": "array",
+      "maxItems": 5,
+      "description": "Optional examples in the form original->normalized for observability.",
+      "items": {
+        "type": "string",
+        "minLength": 3
+      }
+    }
+  },
+  "additionalProperties": false
+}

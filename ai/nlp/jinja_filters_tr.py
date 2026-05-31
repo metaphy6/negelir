@@ -60,6 +60,9 @@ _DEFAULT_BANDS: list[list] = [
     [0.75, 1.01, "yüksek"],
 ]
 
+_DEFAULT_BAND_LOWER: float = 0.55
+_DEFAULT_BAND_UPPER: float = 0.75
+
 
 # \u2500\u2500 Internal helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -210,7 +213,12 @@ def confidence_band(prob: float, bands: "list | None" = None) -> str:
         The first matching band wins.
     """
     if bands is None:
-        bands = _DEFAULT_BANDS
+        # Keep default-band boundary behavior stable at exact cut points.
+        if prob < _DEFAULT_BAND_LOWER:
+            return "d\u00fc\u015fük"
+        if prob < _DEFAULT_BAND_UPPER:
+            return "orta"
+        return "yüksek"
     for lower, upper, label in bands:
         if lower <= prob < upper:
             return label

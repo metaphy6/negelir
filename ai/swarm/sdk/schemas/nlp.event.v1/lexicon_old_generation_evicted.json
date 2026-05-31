@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/lexicon_old_generation_evicted",
+  "title": "nlp.event.v1{kind=lexicon_old_generation_evicted}",
+  "description": "An old lexicon generation snapshot was evicted from retention.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "generation_id",
+    "remaining_generations"
+  ],
+  "properties": {
+    "kind": {
+      "const": "lexicon_old_generation_evicted"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque identifier of the generation that was evicted."
+    },
+    "remaining_generations": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many retained generations remain after eviction."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/singleflight_event_swept",
+  "title": "nlp.event.v1{kind=singleflight_event_swept}",
+  "description": "Singleflight dedupe entries were evicted by age sweeper.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "swept_count",
+    "max_age_s"
+  ],
+  "properties": {
+    "kind": {
+      "const": "singleflight_event_swept"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "swept_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of stale dedupe entries removed in this sweep."
+    },
+    "max_age_s": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configured age threshold in seconds for stale entry eviction."
+    }
+  },
+  "additionalProperties": false
+}

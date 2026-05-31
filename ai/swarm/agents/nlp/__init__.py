@@ -253,6 +253,173 @@ class _SummaryAgg:
         self.predictions: list = []
 
 
+class NlpBootProbeState:
+    """Tracks probe state so liveness and readiness are not conflated.
+
+    Phase 10 §10.21.9 starts with the failure mode where a pod is alive but
+    still booting NLP assets. This state object makes that distinction
+    explicit: liveness can be true while readiness is still false.
+    """
+
+    _STAGE_NAMES = (
+        "starting",
+        "lexicons_loaded",
+        "intent_model_loaded",
+        "crf_loaded",
+        "symspell_built",
+        "jinja_warmed",
+        "gpu_lease_acquired_or_skipped",
+    )
+
+    __slots__ = (
+        "_lock",
+        "_stage",
+        "_clock_iso",
+        "_monotonic",
+        "_boot_started_s",
+        "_boot_budget_s",
+        "_boot_liveness_grace_s",
+        "_stage_caps_s",
+        "_timed_out",
+    )
+
+    def __init__(
+        self,
+        clock_iso: Callable[[], str] | None = None,
+        monotonic: Callable[[], float] | None = None,
+        boot_budget_s: float | None = None,
+        boot_liveness_grace_s: float | None = None,
+        stage_caps_s: dict[int, float] | None = None,
+    ) -> None:
+        self._lock = _threading.Lock()
+        self._stage = 0
+        self._clock_iso = clock_iso or (
+            lambda: _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+        )
+        self._monotonic = monotonic or _time.monotonic
+        self._boot_started_s = self._monotonic()
+        if boot_budget_s is None or boot_liveness_grace_s is None:
+            from common.config import cfg
+            if boot_budget_s is None:
+                boot_budget_s = float(cfg.nlp_boot_budget_s)
+            if boot_liveness_grace_s is None:
+                boot_liveness_grace_s = float(cfg.nlp_boot_liveness_grace_s)
+        self._boot_budget_s = float(boot_budget_s)
+        self._boot_liveness_grace_s = float(boot_liveness_grace_s)
+        self._stage_caps_s = stage_caps_s or {
+            1: 10.0,
+            2: 3.0,
+            3: 2.0,
+            4: 10.0,
+            5: 2.0,
+            6: 3.0,
+        }
+        self._timed_out = False
+
+    def liveness(self) -> bool:
+        """Process liveness with boot-timeout grace for K8s restart handoff."""
+        with self._lock:
+            ready = self._stage >= len(self._STAGE_NAMES) - 1 and not self._timed_out
+            timed_out = self._timed_out
+        if ready or not timed_out:
+            return True
+        elapsed_s = self._monotonic() - self._boot_started_s
+        return elapsed_s < self._boot_liveness_grace_s
+
+    def readiness(self) -> bool:
+        """Traffic readiness: false until boot stage 6 is reached."""
+        with self._lock:
+            return (not self._timed_out) and self._stage >= len(self._STAGE_NAMES) - 1
+
+    def startup_readiness(self) -> bool:
+        """Startup probe readiness: true once lexicons are loaded (stage >= 1)."""
+        with self._lock:
+            return self._stage >= 1
+
+    def _build_boot_timeout_alert(self, *, producer: str, reason: str, last_stage: int) -> Message:
+        return Message.new(
+            topic=NLP_ALERT_V1,
+            payload={
+                "schema_version": 1,
+                "alert_id": _new_id(),
+                "kind": "nlp_cold_start_timeout",
+                "severity": "critical",
+                "source": producer,
+                "reason": reason,
+                "request_id": None,
+                "qa_correlation_id": None,
+                "details": {
+                    "last_stage": last_stage,
+                    "last_stage_name": self._STAGE_NAMES[last_stage],
+                    "boot_budget_s": self._boot_budget_s,
+                },
+                "emitted_at": self._clock_iso(),
+            },
+            producer=producer,
+        )
+
+    def stage(self) -> int:
+        """Return the current monotonic boot stage index."""
+        with self._lock:
+            return self._stage
+
+    def mark_stage(self, stage: int, elapsed_ms: int, producer: str = "nlp.intent.v1") -> Message:
+        """Advance stage monotonically and emit ``nlp.event.v1{kind=cold_start_stage}``."""
+        if stage < 0 or stage >= len(self._STAGE_NAMES):
+            raise ValueError(f"invalid boot stage: {stage}")
+        if elapsed_ms < 0:
+            raise ValueError("elapsed_ms must be >= 0")
+
+        timeout_reason: str | None = None
+        last_stage = 0
+
+        with self._lock:
+            if stage < self._stage:
+                raise ValueError(
+                    f"boot stage regression: current={self._stage} attempted={stage}"
+                )
+            last_stage = self._stage
+            if self._timed_out:
+                timeout_reason = "boot_budget_already_breached"
+            else:
+                stage_cap_s = self._stage_caps_s.get(stage)
+                if stage_cap_s is not None and (elapsed_ms / 1000.0) > stage_cap_s:
+                    self._timed_out = True
+                    timeout_reason = "stage_cap_breached"
+                elif (self._monotonic() - self._boot_started_s) > self._boot_budget_s:
+                    self._timed_out = True
+                    timeout_reason = "total_boot_budget_breached"
+                else:
+                    self._stage = stage
+
+        if timeout_reason is not None:
+            return self._build_boot_timeout_alert(
+                producer=producer,
+                reason=timeout_reason,
+                last_stage=last_stage,
+            )
+
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "cold_start_stage",
+                "producer": producer,
+                "request_id": None,
+                "stage": stage,
+                "stage_name": self._STAGE_NAMES[stage],
+                "elapsed_ms": elapsed_ms,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=producer,
+        )
+
+    def mark_ready(self) -> None:
+        """Compatibility helper: mark probe as fully booted (stage 6)."""
+        with self._lock:
+            if not self._timed_out:
+                self._stage = len(self._STAGE_NAMES) - 1
+
+
 class NlpIntentAgent:
     """Phase 10 §10.0–§10.5 skeleton: normalize + classify + extract.
 
@@ -452,6 +619,7 @@ class NlpDispatcherAgent:
     ) -> list[Message]:
         """Emit qa.answer.v1{kind=disambiguation} (shared helper)."""
         qa_correlation_id = self._new_id()
+        tier_id_required = self._tier_id_required_for_intent(intent, cfg)
         window_h = getattr(cfg, "nlp_default_fixture_window_h", 48)
         answer_text = (
             f"Hangi maç için tahmin istiyorsunuz? "
@@ -468,13 +636,24 @@ class NlpDispatcherAgent:
                     "kind": "disambiguation",
                     "degraded": False,
                     "degraded_reason": None,
-                    "tier_id_required": None,
+                    "tier_id_required": tier_id_required,
                     "citations": [],
                     "emitted_at": self._clock_iso(),
                 },
                 producer=self.name,
             )
         ]
+
+    def _tier_id_required_for_intent(self, intent: str, cfg: object) -> str | None:
+        """Resolve tier label from cfg.nlp_intent_tier_map using intent only."""
+        tier_map = getattr(cfg, "nlp_intent_tier_map", {})
+        if not isinstance(tier_map, dict):
+            return None
+        tier_value = tier_map.get(intent)
+        if tier_value is None:
+            return None
+        normalized = str(tier_value).strip()
+        return normalized or None
 
     def _check_backpressure(self, queue_depth: int) -> bool:
         """§10.19 backpressure stub: returns True when pressure is active.
@@ -830,6 +1009,8 @@ class NlpAnswerAgent:
     def _build_summary_answer(
         self, agg: _SummaryAgg, summary_corr: str, received: int
     ) -> Message:
+        from common.config import cfg
+
         # §10.16 hard rule: preserve degraded flag from predict.approved.v1.
         # Check if ANY prediction in the aggregation has degraded=True in its
         # final payload (predict.approved.v1 embeds predict.final under "final").
@@ -841,6 +1022,7 @@ class NlpAnswerAgent:
         # §10.16 calibration version stamping: group predictions by
         # calibration_version; emit one citation entry per unique version.
         calibration_groups: dict[int, int] = {}
+        prediction_links: list[str] = []
         
         for pred in agg.predictions:
             final = pred.get("final", {})
@@ -853,6 +1035,9 @@ class NlpAnswerAgent:
             # Track calibration_version from predict.approved.v1 (top-level).
             cal_ver = int(pred.get("calibration_version", 1))
             calibration_groups[cal_ver] = calibration_groups.get(cal_ver, 0) + 1
+            prediction_id = str(pred.get("prediction_id") or "").strip()
+            if prediction_id:
+                prediction_links.append(f"/tahmin/{prediction_id}")
         
         degraded = timeout_degraded or prediction_degraded
         
@@ -868,6 +1053,23 @@ class NlpAnswerAgent:
             )
         else:
             answer_text = f"{received} maç tahmini hazır."
+
+        multiple_versions = len(calibration_groups) > 1
+        mismatch_policy = cfg.nlp_summary_calibration_mismatch_policy
+        if multiple_versions and mismatch_policy == "refuse":
+            degraded = True
+            degraded_reasons.append("summary calibration mismatch")
+            links = ", ".join(sorted(set(prediction_links)))
+            answer_text = (
+                "Bu hafta için tahminler farklı kalibrasyon sürümleriyle üretildiği için "
+                "birleşik özet sunulamıyor."
+            )
+            if links:
+                answer_text += f" Maç bağlantıları: {links}"
+        elif multiple_versions and mismatch_policy == "note":
+            answer_text += (
+                " Not: Bu özet farklı kalibrasyon sürümleri içeren tahminleri birlikte sunar."
+            )
         
         # Compute degraded_reason: join non-empty reasons or None if list is empty
         combined_reason = "; ".join(degraded_reasons) if degraded_reasons else None
@@ -875,7 +1077,6 @@ class NlpAnswerAgent:
         # Build citations: one entry per unique calibration_version.
         # If multiple versions exist, add explicit Turkish note to each.
         citations = []
-        multiple_versions = len(calibration_groups) > 1
         for cal_ver in sorted(calibration_groups.keys()):
             count = calibration_groups[cal_ver]
             entry: dict = {

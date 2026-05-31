@@ -74,6 +74,7 @@ class Bus(Protocol):
         idle_ms: int,
         count: int,
     ) -> list[Delivery]: ...
+    def release_consumer(self, topic: Topic | str, group: str, consumer: str) -> None: ...
     def length(self, topic: Topic | str) -> int: ...
     def pending_count(self, topic: Topic | str, group: str) -> int: ...
 
@@ -215,6 +216,11 @@ class InMemoryBus:
     def pending_count(self, topic: Topic | str, group: str) -> int:
         with self._lock:
             return len(self._pending[(Topic(str(topic)), group)])
+
+    def release_consumer(self, topic: Topic | str, group: str, consumer: str) -> None:  # noqa: ARG002
+        # In-memory groups are process-local structures; there is no
+        # server-side consumer entry to tear down.
+        return
 
     # ── Test / debug helpers ────────────────────────────────────────────
     def topics(self) -> Iterable[Topic]:
@@ -376,6 +382,12 @@ class RedisStreamsBus:
         if isinstance(info, (list, tuple)) and info:
             return int(info[0])
         return 0
+
+    def release_consumer(self, topic: Topic | str, group: str, consumer: str) -> None:
+        try:
+            self._client.xgroup_delconsumer(str(topic), group, consumer)
+        except Exception:  # noqa: BLE001 - no-op when unsupported/missing
+            return
 
     def get_redis_username(self) -> str | None:
         """Return the authenticated Redis ACL username (Phase 8 §8.14.4).

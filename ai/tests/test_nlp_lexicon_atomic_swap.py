@@ -193,6 +193,64 @@ entries:
         f"Expected old version 1.0.0, got {current_players[0].lexicon_version}"
 
 
+def test_nlp_refuses_lexicon_swap_on_feed_schema_too_new(
+    temp_lexicon_dir,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """§10.21.11: reject feed schema bump above configured compatibility max.
+
+    Scenario:
+      1. Load a valid baseline snapshot at schema_version=1.
+      2. Update one lexicon file to schema_version=2 (future emitter schema).
+      3. Trigger reload.
+      4. Assert warn alert kind and that previous generation remains active.
+    """
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_MAX_SUPPORTED_SCHEMA_VERSION", "1")
+
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=1,
+        max_rss_mb=0,
+    )
+    alerts = store.maybe_reload()
+    assert alerts == [], f"Initial schema=1 load should succeed, got: {alerts}"
+
+    old_players = store.get("players.tr.yaml")
+    assert old_players is not None
+    assert old_players[0].schema_version == 1
+    assert old_players[0].lexicon_version == "1.0.0"
+
+    time.sleep(0.1)
+    bumped_players_content = """_meta:
+  schema_version: 2
+  lexicon_version: "2.0.0"
+  generated_at_utc: "2026-05-31T13:00:00Z"
+  generator: "test"
+entries:
+  - canonical_id: "icardi"
+    team_canonical_id: "galatasaray"
+    names: ["Mauro Icardi"]
+"""
+    (temp_lexicon_dir / "players.tr.yaml").write_text(
+        bumped_players_content,
+        encoding="utf-8",
+    )
+
+    time.sleep(1.1)
+    alerts = store.maybe_reload()
+    assert len(alerts) == 1, f"Expected one schema-too-new alert, got: {alerts}"
+    alert = alerts[0]
+    assert alert["kind"] == "nlp_lexicon_feed_schema_too_new"
+    assert alert["severity"] == "warn"
+    assert "schema_version=2" in alert["reason"]
+    assert "max supported version 1" in alert["reason"]
+
+    current_players = store.get("players.tr.yaml")
+    assert current_players is not None
+    assert current_players[0].schema_version == 1
+    assert current_players[0].lexicon_version == "1.0.0"
+
+
 def test_nlp_lexicon_swap_atomicity_config_off_allows_per_file():
     """§10.21.3 config test: when swap_atomicity != all_or_nothing, xref is skipped.
     

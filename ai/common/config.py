@@ -136,6 +136,18 @@ class Config:
     nlp_answer_sample_daily_cap: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP", "5000"
     )))
+    # §10.21.9 cold-start total boot budget (seconds).
+    nlp_boot_budget_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_BOOT_BUDGET_S", "30"
+    )))
+    # §10.21.9 liveness grace after budget breach before restart handoff.
+    nlp_boot_liveness_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_BOOT_LIVENESS_GRACE_S", "60"
+    )))
+    # §10.21 drain budget for graceful SIGTERM shutdown.
+    nlp_shutdown_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_SHUTDOWN_GRACE_S", "20"
+    )))
     nlp_log_max_unredacted_str_len: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_LOG_MAX_UNREDACTED_STR_LEN", "64"
     )))
@@ -839,6 +851,10 @@ class Config:
     #   validator; if validation passes, the whole snapshot swaps atomically;
     #   else REVERT shadow + emit nlp.alert.v1{kind=nlp_lexicon_atomic_swap_failed}.
     nlp_lexicon_swap_atomicity: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_LEXICON_SWAP_ATOMICITY", "all_or_nothing"))
+    # nlp_lexicon_feed_max_supported_schema_version: highest lexicon feed
+    #   schema version this NLP build can consume. A higher feed schema is
+    #   refused during reload and prior generation stays live.
+    nlp_lexicon_feed_max_supported_schema_version: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_LEXICON_FEED_MAX_SUPPORTED_SCHEMA_VERSION", "1")))
     # nlp_crf_max_rss_mb: RSS budget for CRF model (§10.21.2 RSS ceiling).
     #   Estimated memory footprint for the python-crfsuite entity tagger model
     #   at runtime.  Default 5 MB.
@@ -1075,6 +1091,14 @@ class Config:
     nlp_summary_aggregation_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_SUMMARY_AGGREGATION_TIMEOUT_MS", "1500"
     )))
+    # nlp_summary_calibration_mismatch_policy: behavior when summary fan-out
+    #   collects predictions with multiple calibration versions.
+    #   - "note": render summary with explicit disclosure and per-version
+    #     citation notes (default).
+    #   - "refuse": return a degraded summary with fixture links only.
+    nlp_summary_calibration_mismatch_policy: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_SUMMARY_CALIBRATION_MISMATCH_POLICY", "note"
+    ).strip().lower())
     # nlp_dispatch_dedup_window_s: sliding dedup window for the dispatcher
     #   idempotency key `(qa_correlation_id, intent, entity_hash)` (§10.6).
     #   Replayed qa.intent.v1 messages whose composite key was already seen
@@ -1084,6 +1108,32 @@ class Config:
     nlp_dispatch_dedup_window_s: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_DISPATCH_DEDUP_WINDOW_S", "600"
     )))
+    # nlp_intent_tier_map: JSON object mapping intent -> tier id label (§10.21.11).
+    #   Dispatcher computes qa.answer.v1.tier_id_required from intent only
+    #   (humanizer usage must not affect entitlement labels).
+    #   Example: {"predict.match_outcome":"pro","summary.matchday":"pro"}
+    _nlp_intent_tier_map_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_INTENT_TIER_MAP", "{}"
+    ))
+
+    @property
+    def nlp_intent_tier_map(self) -> dict[str, str]:
+        raw = self._nlp_intent_tier_map_raw.strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("NEGELIR_NLP_INTENT_TIER_MAP must be valid JSON object") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("NEGELIR_NLP_INTENT_TIER_MAP must decode to a JSON object")
+        result: dict[str, str] = {}
+        for key, value in parsed.items():
+            norm_key = str(key).strip()
+            norm_value = str(value).strip()
+            if norm_key and norm_value:
+                result[norm_key] = norm_value
+        return result
 
     # ── Phase 10 §10.13 — Idempotency, dedup, replay safety (bus spool) ──
     #
@@ -2945,6 +2995,9 @@ class Config:
         _bounded("nlp_humanizer_top_p", self.nlp_humanizer_top_p, 0.0, 1.0)
         _bounded("nlp_humanizer_repetition_penalty", self.nlp_humanizer_repetition_penalty, 1.0, 2.0)
         _bounded("nlp_humanizer_max_edit_ratio", self.nlp_humanizer_max_edit_ratio, 0.0, 1.0)
+        _bounded("nlp_boot_budget_s", self.nlp_boot_budget_s, 1, 3_600)
+        _bounded("nlp_boot_liveness_grace_s", self.nlp_boot_liveness_grace_s, 1, 3_600)
+        _bounded("nlp_shutdown_grace_s", self.nlp_shutdown_grace_s, 1, 3_600)
         _bounded("nlp_bench_latency_p95_threshold_ms", self.nlp_bench_latency_p95_threshold_ms, 1, 10_000)
         _bounded("nlp_entity_bench_latency_p95_threshold_ms", self.nlp_entity_bench_latency_p95_threshold_ms, 1, 10_000)
         _bounded("nlp_default_fixture_window_h", self.nlp_default_fixture_window_h, 1, 720)
@@ -2955,6 +3008,11 @@ class Config:
                 f"nlp_summary_aggregation_timeout_ms={self.nlp_summary_aggregation_timeout_ms} "
                 f"must be <= nlp_pipeline_timeout_ms={self.nlp_pipeline_timeout_ms} "
                 "(Phase 10 §10.6 deadline-propagation)"
+            )
+        if self.nlp_summary_calibration_mismatch_policy not in ("note", "refuse"):
+            issues.append(
+                f"nlp_summary_calibration_mismatch_policy={self.nlp_summary_calibration_mismatch_policy!r} "
+                "must be 'note' or 'refuse' (Phase 10 §10.21.10)"
             )
         _bounded("nlp_dispatch_dedup_window_s", self.nlp_dispatch_dedup_window_s, 1, 86_400)
         if self.nlp_dispatch_dedup_window_s < self.nlp_request_dedup_window_s:
@@ -2969,6 +3027,12 @@ class Config:
                 "must be 1 or 2 (§10.3 SymSpellIndex constraint)"
             )
         _bounded("nlp_typo_max_lookups_per_query", self.nlp_typo_max_lookups_per_query, 1, 1_000)
+        _bounded(
+            "nlp_lexicon_feed_max_supported_schema_version",
+            self.nlp_lexicon_feed_max_supported_schema_version,
+            1,
+            100,
+        )
         if self.nlp_diacritic_tie_break_ratio < 1.0:
             issues.append(
                 f"nlp_diacritic_tie_break_ratio={self.nlp_diacritic_tie_break_ratio} "

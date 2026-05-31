@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/cold_start_stage",
+  "title": "nlp.event.v1{kind=cold_start_stage}",
+  "description": "NLP cold-start lifecycle stage transition emitted during bootstrap.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "stage_index",
+    "stage_total",
+    "stage_name",
+    "elapsed_ms"
+  ],
+  "properties": {
+    "kind": {
+      "const": "cold_start_stage"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "stage_index": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based stage index reached during cold start."
+    },
+    "stage_total": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of bootstrap stages in this build."
+    },
+    "stage_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable stage label for operator timelines."
+    },
+    "elapsed_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Milliseconds elapsed since process bootstrap started."
+    }
+  },
+  "additionalProperties": false
+}

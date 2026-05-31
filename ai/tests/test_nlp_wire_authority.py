@@ -32,6 +32,10 @@ _NLP_EVENT_V1_KNOWN_KINDS = frozenset({
     "dictionary_overflow",
     "slot_resolution_failed",
     "did_you_mean_offered",
+    "cold_start_stage",
+    "confusables_resolved",
+    "singleflight_event_swept",
+    "lexicon_old_generation_evicted",
 })
 
 
@@ -273,6 +277,40 @@ class TestNlpEventV1Schema:
         errors = bus_schemas.validate_kind(self.TOPIC, payload)
         assert errors == [], errors
 
+    def test_happy_cold_start_stage(self):
+        payload = _valid_nlp_event("cold_start_stage", {
+            "stage_index": 2,
+            "stage_total": 6,
+            "stage_name": "lexicon_ready",
+            "elapsed_ms": 430,
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_confusables_resolved(self):
+        payload = _valid_nlp_event("confusables_resolved", {
+            "resolved_count": 1,
+            "sample_pairs": ["galatasray->galatasaray"],
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_singleflight_event_swept(self):
+        payload = _valid_nlp_event("singleflight_event_swept", {
+            "swept_count": 17,
+            "max_age_s": 60,
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_lexicon_old_generation_evicted(self):
+        payload = _valid_nlp_event("lexicon_old_generation_evicted", {
+            "generation_id": "gen-20260531T095955Z",
+            "remaining_generations": 2,
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
     def test_missing_producer_rejected(self):
         payload = {
             "kind": "lexicon_reloaded",
@@ -299,6 +337,13 @@ class TestNlpEventV1Schema:
                    "emitted_at": "2026-05-27T10:00:00Z"}
         errors = bus_schemas.validate_kind(self.TOPIC, payload)
         assert errors, "unknown kind must return an error"
+
+    def test_confusables_resolved_missing_required_field_rejected(self):
+        payload = _valid_nlp_event("confusables_resolved", {
+            "sample_pairs": ["A->B"],
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors, "missing resolved_count must be rejected"
 
 
 # ── nlp.alert.v1 ────────────────────────────────────────────────────────
