@@ -1,0 +1,9 @@
+{{ league_name }} {{ matchday }}. hafta maçları:
+{% for fixture in fixtures %}
+{{ fixture.home }} - {{ fixture.away }} — {{ kickoff_time(fixture.kickoff_utc) }}
+{% else %}
+Bu haftaya ait maç bulunamadı.
+{% endfor %}
+{% if collected_count < total_count %}
+({{ collected_count }}/{{ total_count }} maç hazır)
+{% endif %}

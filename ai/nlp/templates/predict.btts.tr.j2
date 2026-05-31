@@ -1,0 +1,10 @@
+{{ home_team }} - {{ away_team }} maçı için tahminimiz:
+Her iki takım da gol atar: **{{ btts_label }}** ({{ confidence_band(probability) }} güven)
+
+Maç: {{ home_team }} - {{ away_team }}
+Tarih: {{ kickoff_time(kickoff_utc) }}
+{% if degraded %}
+Tahmin sınırlı veriyle üretildi: {{ degraded_reason }}
+{% endif %}
+---
+[tahmin:{{ prediction_id }} | üretim:{{ produced_at_utc }} | model:{{ model_versions | join(', ') }} | kalibrasyon:{{ calibration_version }} | olasılık:{{ probability }}]

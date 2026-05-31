@@ -14,7 +14,7 @@
   "properties": {
     "request_id":     { "type": "string", "minLength": 1 },
     "sanitized_text": { "type": "string", "description": "Post-NFC, post-control-strip text. Original raw bytes are NOT carried here; quarantine forensics live on `sec.quarantine.v1`." },
-    "locale":         { "type": "string" },
+    "locale":         { "type": "string", "enum": ["tr-TR"], "description": "Language locale (§10.17). v1 ships tr-TR only; designed to additively gain en-GB/en-US post-Phase-13a." },
     "sec_verdict":    { "type": "string", "enum": ["pass", "sanitized"], "description": "`pass` = no transform; `sanitized` = deterministic transform applied (NFC, strip control / zero-width / RTL, optional homoglyph fold)." },
     "sec_steps_run":  { "type": "array", "items": { "type": "string" }, "description": "Ordered audit trail of which deterministic / classifier steps fired." },
     "client_id":      { "type": ["string", "null"] },

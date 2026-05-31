@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/proofreader_blocked",
+  "title": "nlp.event.v1{kind=proofreader_blocked}",
+  "description": "nlp.proofreader.v1 blocked an answer (PII or policy violation); answer replaced with safe template.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "block_reason"
+  ],
+  "properties": {
+    "kind": {
+      "const": "proofreader_blocked"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "block_reason": {
+      "type": "string",
+      "enum": [
+        "pii_detected",
+        "policy_violation",
+        "hallucination_risk"
+      ],
+      "description": "Reason the proofreader blocked the answer."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,5 @@
+{{ league_name }} — {{ season }} Sezonu Puan Durumu:
+{% for row in standings_rows %}
+{{ loop.index }}. {{ row.team }} — {{ row.points }} puan ({{ row.wins }}G {{ row.draws }}B {{ row.losses }}M)
+{% endfor %}
+({{ produced_at_utc }} tarihi itibarıyla)

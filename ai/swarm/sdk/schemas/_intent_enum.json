@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/_intent_enum",
+  "schema_version": 1,
+  "title": "IntentLabel",
+  "description": "Phase 10 §10.4 — closed intent enum, schema_version=1. Single source of truth for all valid NLP intent labels. Other schemas MUST reference this file rather than duplicating the enum inline. `data.player_card_risk` is Phase 21 enrichment-bound; guarded by cfg.nlp_enable_player_card_risk at runtime.",
+  "type": "string",
+  "enum": [
+    "predict.match_outcome",
+    "predict.over_under",
+    "predict.btts",
+    "predict.handicap",
+    "predict.score_grid",
+    "data.fixture_lookup",
+    "data.kickoff_time",
+    "data.standings",
+    "data.head_to_head",
+    "data.player_card_risk",
+    "summary.next_week",
+    "summary.matchday",
+    "meta.help",
+    "meta.unsupported",
+    "meta.adversarial"
+  ],
+  "additionalProperties": false
+}

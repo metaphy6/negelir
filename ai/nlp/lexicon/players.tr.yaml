@@ -1,0 +1,93 @@
+# Negelir — NLP lexicon: Turkish football players
+# canonical_id references league_catalog player IDs (Phase 13a §13.x).
+# deprecated_after: ISO date after which this entry is excluded from active lookup.
+# Managed by: make nlp.lexicon-build
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - canonical_id: icardi_mauro
+    names:
+      - Mauro Icardi
+      - Icardi
+    aliases:
+      - maurito
+      - icardi mauro
+
+  - canonical_id: mertens_dries
+    names:
+      - Dries Mertens
+      - Mertens
+    aliases:
+      - ciro mertens
+
+  - canonical_id: dzeko_edin
+    names:
+      - Edin Džeko
+      - Džeko
+      - Dzeko
+    aliases:
+      - dzeko
+
+  - canonical_id: tadic_dusan
+    names:
+      - Dušan Tadić
+      - Tadić
+      - Tadic
+    aliases:
+      - tadic
+
+  - canonical_id: bakasetas_anastasios
+    names:
+      - Anastasios Bakasetas
+      - Bakasetas
+    aliases:
+      - bakasetas
+
+  - canonical_id: kerem_akturkoglu
+    names:
+      - Kerem Aktürkoğlu
+      - Kerem
+      - Aktürkoğlu
+    aliases:
+      - kerem aktürkoğlu
+
+  - canonical_id: irfan_can_kahveci
+    names:
+      - İrfan Can Kahveci
+      - İrfan Can
+    aliases:
+      - irfan can
+
+  - canonical_id: cengiz_under
+    names:
+      - Cengiz Ünder
+      - Ünder
+    aliases:
+      - cengiz under
+
+  - canonical_id: ugurcan_cakir
+    names:
+      - Uğurcan Çakır
+      - Çakır
+      - Uğurcan
+    aliases:
+      - ugurcan çakır
+
+  - canonical_id: szymanski_sebastian
+    names:
+      - Sebastian Szymański
+      - Szymanski
+    aliases:
+      - szymanski
+
+  - canonical_id: batshuayi_michy
+    names:
+      - Michy Batshuayi
+      - Batshuayi
+    aliases:
+      - batshuayi
+    deprecated_after: "2026-06-30"

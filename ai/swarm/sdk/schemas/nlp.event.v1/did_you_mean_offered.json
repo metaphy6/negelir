@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/did_you_mean_offered",
+  "title": "nlp.event.v1{kind=did_you_mean_offered}",
+  "description": "Typo/fuzzy match budget exhausted; 'Did you mean?' reformulation offered to user.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "original_tokens",
+    "suggestions"
+  ],
+  "properties": {
+    "kind": {
+      "const": "did_you_mean_offered"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "original_tokens": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Tokens that hit the typo budget.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "description": "Top-3 suggested corrections.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

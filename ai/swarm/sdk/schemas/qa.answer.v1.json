@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.answer.v1",
+  "title": "qa.answer.v1",
+  "description": "Phase 10 §10.0 wire authority: published by nlp.answer.v1 (direct path) or nlp.proofreader.v1 (post-block/PII-clean path). Consumer = API gateway response stream + cache.v1 + telemetry.v1. Carries the Turkish-language answer, Phase 5 degraded propagation (MUST NOT be silently dropped), tier label for Phase 9 middleware enforcement, and optional citations. Mirrors ai/swarm/agents/nlp/payloads.py::QaAnswerV1.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "qa_correlation_id",
+    "locale",
+    "intent",
+    "answer_text",
+    "answer_format",
+    "degraded",
+    "humanizer_used",
+    "proofreader_status",
+    "emitted_at_utc",
+    "nlp_pipeline_version"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original qa.request.v1.request_id."
+    },
+    "qa_correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Dispatch correlation id (§10.6); used for fan-out aggregation."
+    },
+    "locale": {
+      "type": "string",
+      "enum": ["tr-TR"],
+      "description": "Language locale (§10.17). v1 ships tr-TR only; designed to additively gain en-GB/en-US post-Phase-13a."
+    },
+    "intent": {
+      "type": "string",
+      "description": "Echoed intent for audit (matches §10.4 closed enum)."
+    },
+    "answer_text": {
+      "type": "string",
+      "description": "Turkish-language answer string (§10.7 templated + optional §10.8 humanizer)."
+    },
+    "answer_format": {
+      "type": "string",
+      "enum": [
+        "plain",
+        "markdown_safe"
+      ],
+      "description": "Output format (§10.7). markdown_safe = subset safe for rendering without HTML injection."
+    },
+    "degraded": {
+      "type": "boolean",
+      "description": "Propagated from predict.approved.v1{degraded} (§10.0 Phase 5 contract). MUST NOT be silently dropped."
+    },
+    "degraded_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Propagated from predict.approved.v1.degraded_reason; null when not degraded."
+    },
+    "humanizer_used": {
+      "type": "boolean",
+      "description": "Whether §10.8 humanizer LLM rephrased the template (false = template-only path)."
+    },
+    "proofreader_status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "blocked",
+        "redacted"
+      ],
+      "description": "§10.9 proofreader outcome. `pass` = clean; `blocked` = gate-fail surfaced; `redacted` = PII removed."
+    },
+    "tier_id_required": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Tier gate label from cfg.nlp_intent_tier_map (§10.0 Phase 20). NLP is tier-blind; enforcement is Phase 9 middleware."
+    },
+    "citations": {
+      "type": "array",
+      "description": "Optional citation block per §10.7 (mandatory for predict.* intents).",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "produced_at_utc"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "prediction",
+              "fact",
+              "fixture",
+              "source"
+            ],
+            "description": "Citation kind (§10.7)."
+          },
+          "prediction_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when kind=prediction; round-trips from predict.approved.v1."
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when kind=source; refers to a Phase 4 storage record id."
+          },
+          "produced_at_utc": {
+            "type": "string",
+            "description": "ISO-8601 UTC timestamp when cited artifact was produced."
+          },
+          "model_versions": {
+            "type": "array",
+            "description": "Model version array for kind=prediction (§10.7). Format: predictor_id@semver.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "calibration_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Calibration version semver for kind=prediction (§10.16)."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "emitted_at_utc": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when answer was emitted (§10.11)."
+    },
+    "nlp_pipeline_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Semver of the NLP pipeline (§10.11 audit trail)."
+    }
+  },
+  "additionalProperties": false
+}

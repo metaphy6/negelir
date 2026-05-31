@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/dictionary_overflow",
+  "title": "nlp.event.v1{kind=dictionary_overflow}",
+  "description": "Lexicon file exceeds cfg.nlp_lexicon_max_entries_per_file; load refused.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "lexicon_file",
+    "entry_count",
+    "cap"
+  ],
+  "properties": {
+    "kind": {
+      "const": "dictionary_overflow"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "lexicon_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entry_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of entries in the over-cap file."
+    },
+    "cap": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configured cap (cfg.nlp_lexicon_max_entries_per_file)."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/lexicon_unreadable",
+  "title": "nlp.event.v1{kind=lexicon_unreadable}",
+  "description": "Lexicon file could not be parsed or failed SHA integrity check; old lexicon retained.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "lexicon_file",
+    "error_summary"
+  ],
+  "properties": {
+    "kind": {
+      "const": "lexicon_unreadable"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "lexicon_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "error_summary": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Short diagnostic (never inline file bytes)."
+    }
+  },
+  "additionalProperties": false
+}

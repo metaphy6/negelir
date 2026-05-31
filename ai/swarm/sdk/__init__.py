@@ -12,10 +12,13 @@ Doctrine:
 
 Public exports:
   Agent, AgentSpec, Message, Envelope, Topic, Bus, InMemoryBus,
-  RedisStreamsBus, JsonCodec, Codec, AgentRegistry, AgentRunner, Metrics.
+  RedisStreamsBus, JsonCodec, Codec, AgentRegistry, AgentRunner, Metrics,
+  AlertDebouncer (Phase 10 §10.11).
 """
 from __future__ import annotations
 
+from ._alert_debouncer import _BaseAlertDebouncer as AlertDebouncer
+from ._alert_debouncer import DebounceDecision
 from .agent import Agent, AgentSpec
 from .bus import Bus, InMemoryBus, RedisStreamsBus
 from .codec import Codec, JsonCodec
@@ -23,6 +26,7 @@ from .dedup import RequestIdDeduper
 from .metrics import Metrics
 from .registry import AgentRegistry
 from .runner import AgentRunner
+from .singleflight import Singleflight
 from .types import Envelope, Message, Topic
 
 __all__ = [
@@ -30,8 +34,10 @@ __all__ = [
     "AgentRegistry",
     "AgentRunner",
     "AgentSpec",
+    "AlertDebouncer",
     "Bus",
     "Codec",
+    "DebounceDecision",
     "Envelope",
     "InMemoryBus",
     "JsonCodec",
@@ -39,5 +45,6 @@ __all__ = [
     "Metrics",
     "RedisStreamsBus",
     "RequestIdDeduper",
+    "Singleflight",
     "Topic",
 ]

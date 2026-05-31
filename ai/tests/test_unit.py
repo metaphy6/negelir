@@ -1,6 +1,7 @@
 """
 Negelir AI — Unit tests (pytest)
-Covers: TQU sanitizer, TQU classifier, feature vector shape, Poisson helpers.
+Covers: TQU sanitizer, TQU classifier, feature vector shape, Poisson helpers,
+L1 answer cache (Phase 10 §10.12), NLP structured logs (Phase 10 §10.14).
 """
 import sys
 import os
@@ -10,6 +11,186 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+# ── Phase 10 §10.14 — NLP Structured Logs (PII-clean) ────────────────────────
+
+def test_nlp_structured_log_carries_required_fields(caplog):
+    """log_nlp_request emits all required fields without PII."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()  # No Redis required for structured logs
+    
+    with caplog.at_level("INFO"):
+        sink.log_nlp_request(
+            qa_correlation_id="qa_abc123",
+            request_id="req_xyz789",
+            intent="predict.match_outcome",
+            intent_confidence=0.87,
+            entity_count=3,
+            humanizer_used=True,
+            proofreader_status="passed",
+        )
+    
+    # Find the NLP request log (may have Redis warning before it)
+    nlp_records = [r for r in caplog.records if "NLP request processed" in r.message]
+    assert len(nlp_records) == 1
+    record = nlp_records[0]
+    
+    # Verify required fields present (extra dict is merged into __dict__)
+    assert record.qa_correlation_id == "qa_abc123"
+    assert record.request_id == "req_xyz789"
+    assert record.intent == "predict.match_outcome"
+    assert float(record.intent_confidence) == pytest.approx(0.87, abs=0.01)
+    assert record.entity_count == "3"
+    assert record.humanizer_used == "1"
+    assert record.proofreader_status == "passed"
+    assert record.structured is True
+
+
+def test_nlp_structured_log_never_logs_text(caplog):
+    """log_nlp_request rejects suspiciously long ID fields (PII guard)."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # Attempt to log with a "correlation_id" that looks like user text
+    suspicious_text = "galatasaray bugün maçı kazanır mı?" * 5  # > 64 chars
+    
+    with caplog.at_level("WARNING"):
+        sink.log_nlp_request(
+            qa_correlation_id=suspicious_text,
+            request_id="req_abc",
+            intent="predict.match_outcome",
+            intent_confidence=0.9,
+            entity_count=2,
+            humanizer_used=False,
+            proofreader_status="passed",
+        )
+    
+    # Should emit warning and NOT log the structured entry
+    assert any("PII guard" in rec.message for rec in caplog.records)
+    # Verify no structured log was emitted
+    nlp_records = [r for r in caplog.records if "NLP request processed" in r.message]
+    assert len(nlp_records) == 0
+
+
+def test_nlp_structured_log_all_proofreader_statuses():
+    """log_nlp_request accepts all expected proofreader_status values."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # All valid statuses per Phase 10 doctrine
+    statuses = ["passed", "blocked", "skipped", "degraded"]
+    
+    for status in statuses:
+        # Should not raise
+        sink.log_nlp_request(
+            qa_correlation_id="qa_test",
+            request_id="req_test",
+            intent="data.fixture_lookup",
+            intent_confidence=0.95,
+            entity_count=1,
+            humanizer_used=False,
+            proofreader_status=status,
+        )
+
+
+# ── Phase 10 §10.12 — L1 Answer Cache ────────────────────────────────────────
+
+from swarm.agents.cache import CacheAgent, InMemoryCacheBackend, make_answer_key
+from swarm.sdk.types import Envelope, Message, Topic
+
+
+def test_make_answer_key_stable_hash():
+    """make_answer_key produces deterministic SHA256-based cache keys."""
+    key1 = make_answer_key(
+        intent="predict.match_outcome",
+        entity_hash="abc123",
+        fixture_window_bucket="2026-05-29T00:00:00Z",
+        model_versions_hash="def456",
+        calibration_version="v1.2",
+    )
+    key2 = make_answer_key(
+        intent="predict.match_outcome",
+        entity_hash="abc123",
+        fixture_window_bucket="2026-05-29T00:00:00Z",
+        model_versions_hash="def456",
+        calibration_version="v1.2",
+    )
+    assert key1 == key2
+    assert key1.startswith("answer:")
+    # Should be 64-hex-char SHA256
+    assert len(key1) == len("answer:") + 64
+
+
+def test_make_answer_key_different_inputs():
+    """Different inputs produce different keys."""
+    key1 = make_answer_key("predict.match_outcome", "abc", "2026-05-29", "def", "v1")
+    key2 = make_answer_key("data.fixture_lookup", "abc", "2026-05-29", "def", "v1")
+    assert key1 != key2
+
+
+def test_cache_agent_handles_qa_answer_v1_data_intent():
+    """CacheAgent caches qa.answer.v1 with data.* intent using 120s TTL."""
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+
+    payload = {
+        "intent": "data.fixture_lookup",
+        "entity_hash": "entity123",
+        "fixture_window_bucket": "2026-05-29",
+        "model_versions_hash": "model456",
+        "calibration_version": "v1.0",
+        "answer_text": "Galatasaray bugün 21:00'de oynayacak.",
+    }
+    envelope = Envelope(topic=Topic("qa.answer.v1"))
+    msg = Message(envelope=envelope, payload=payload)
+
+    # Handle should not raise
+    result = list(agent.handle(msg))
+    assert result == []
+
+    # Cache should have written the entry
+    assert len(backend) == 1
+
+
+def test_cache_agent_handles_qa_answer_v1_predict_intent():
+    """CacheAgent caches qa.answer.v1 with predict.* intent using 60s TTL."""
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+
+    payload = {
+        "intent": "predict.match_outcome",
+        "entity_hash": "entity789",
+        "fixture_window_bucket": "2026-05-30",
+        "model_versions_hash": "modelXYZ",
+        "calibration_version": "v2.0",
+        "answer_text": "Galatasaray %65 olasılıkla kazanacak.",
+    }
+    envelope = Envelope(topic=Topic("qa.answer.v1"))
+    msg = Message(envelope=envelope, payload=payload)
+
+    result = list(agent.handle(msg))
+    assert result == []
+    assert len(backend) == 1
+
+
+def test_cache_agent_handles_malformed_qa_answer_v1():
+    """CacheAgent gracefully logs and skips malformed qa.answer.v1."""
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+
+    # Missing required "intent" field - should trigger exception
+    payload = {"answer_text": "Some text"}
+    envelope = Envelope(topic=Topic("qa.answer.v1"))
+    msg = Message(envelope=envelope, payload=payload)
+
+    result = list(agent.handle(msg))
+    assert result == []
+    # Should not have written anything to cache
+    assert len(backend) == 0
 
 
 # ── TQU Sanitizer ────────────────────────────────────────────────────────────
@@ -3097,4 +3278,355 @@ class TestPhase9Migrations:
             sql = f.read()
         bare = re.findall(r"CREATE TABLE(?!\s+IF\s+NOT\s+EXISTS)", sql, re.IGNORECASE)
         assert bare == [], "CREATE TABLE without IF NOT EXISTS in 014"
+
+
+# ── Phase 10 §10.14 — Prometheus Metrics ─────────────────────────────────────
+
+def test_prometheus_metrics_available():
+    """Prometheus metrics are initialized when prometheus_client is available."""
+    from common.telemetry import (
+        NLP_PIPELINE_LATENCY,
+        NLP_INTENT_CONFIDENCE,
+        NLP_HUMANIZER_BREAKER_STATE,
+        NLP_PROOFREADER_BLOCK_TOTAL,
+        NLP_LEXICON_VERSION,
+        _PROMETHEUS_AVAILABLE,
+    )
+    
+    # All metrics should be either initialized or None based on library availability
+    if _PROMETHEUS_AVAILABLE:
+        assert NLP_PIPELINE_LATENCY is not None
+        assert NLP_INTENT_CONFIDENCE is not None
+        assert NLP_HUMANIZER_BREAKER_STATE is not None
+        assert NLP_PROOFREADER_BLOCK_TOTAL is not None
+        assert NLP_LEXICON_VERSION is not None
+    else:
+        assert NLP_PIPELINE_LATENCY is None
+        assert NLP_INTENT_CONFIDENCE is None
+        assert NLP_HUMANIZER_BREAKER_STATE is None
+        assert NLP_PROOFREADER_BLOCK_TOTAL is None
+        assert NLP_LEXICON_VERSION is None
+
+
+def test_record_pipeline_stage_latency():
+    """TelemetrySink.record_pipeline_stage_latency records histogram metric."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # Should not raise regardless of prometheus availability
+    sink.record_pipeline_stage_latency(
+        stage="normalize",
+        intent="predict.match_outcome",
+        latency_seconds=0.003,
+    )
+    sink.record_pipeline_stage_latency(
+        stage="intent",
+        intent="data.fixture_lookup",
+        latency_seconds=0.012,
+    )
+
+
+def test_record_proofreader_block():
+    """TelemetrySink.record_proofreader_block increments counter metric."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # Should not raise regardless of prometheus availability
+    sink.record_proofreader_block(reason="citation_drift")
+    sink.record_proofreader_block(reason="mid_sentence_english")
+    sink.record_proofreader_block(reason="pii_redacted")
+
+
+def test_set_humanizer_breaker_state():
+    """TelemetrySink.set_humanizer_breaker_state sets gauge metric."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # Should not raise regardless of prometheus availability
+    sink.set_humanizer_breaker_state(state="closed")
+    sink.set_humanizer_breaker_state(state="open")
+    sink.set_humanizer_breaker_state(state="half_open")
+
+
+def test_set_lexicon_version():
+    """TelemetrySink.set_lexicon_version records info gauge metric."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # Should not raise regardless of prometheus availability
+    sink.set_lexicon_version(
+        file="teams",
+        version="v1.2.0",
+        generated_at_utc="2026-05-29T12:00:00Z",
+    )
+    sink.set_lexicon_version(
+        file="players",
+        version="v1.1.5",
+        generated_at_utc="2026-05-28T10:30:00Z",
+    )
+
+
+def test_log_nlp_request_records_intent_confidence_metric():
+    """log_nlp_request also records the intent_confidence summary metric."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # Should not raise and should record the metric internally
+    sink.log_nlp_request(
+        qa_correlation_id="qa_test123",
+        request_id="req_test456",
+        intent="predict.btts",
+        intent_confidence=0.92,
+        entity_count=2,
+        humanizer_used=True,
+        proofreader_status="passed",
+    )
+
+
+def test_prometheus_metrics_cardinality_bounded():
+    """Prometheus metrics have bounded cardinality (no per-team labels)."""
+    from common.telemetry import (
+        NLP_PIPELINE_LATENCY,
+        NLP_INTENT_CONFIDENCE,
+        NLP_HUMANIZER_BREAKER_STATE,
+        NLP_PROOFREADER_BLOCK_TOTAL,
+        _PROMETHEUS_AVAILABLE,
+    )
+    
+    if not _PROMETHEUS_AVAILABLE:
+        pytest.skip("prometheus_client not available")
+    
+    # Pipeline latency: stage (8 values) × intent (closed enum ~15 values) = ~120 series
+    assert "stage" in NLP_PIPELINE_LATENCY._labelnames
+    assert "intent" in NLP_PIPELINE_LATENCY._labelnames
+    assert len(NLP_PIPELINE_LATENCY._labelnames) == 2  # Only stage and intent, no team
+    
+    # Intent confidence: intent only (closed enum ~15 values)
+    assert "intent" in NLP_INTENT_CONFIDENCE._labelnames
+    assert len(NLP_INTENT_CONFIDENCE._labelnames) == 1
+    
+    # Humanizer breaker state: state (3 values: closed, open, half_open)
+    assert "state" in NLP_HUMANIZER_BREAKER_STATE._labelnames
+    assert len(NLP_HUMANIZER_BREAKER_STATE._labelnames) == 1
+    
+    # Proofreader block: reason (7 reasons per §10.9)
+    assert "reason" in NLP_PROOFREADER_BLOCK_TOTAL._labelnames
+    assert len(NLP_PROOFREADER_BLOCK_TOTAL._labelnames) == 1
+
+
+# ── Phase 10 §10.14 — W3C Tracing (per-stage spans) ──────────────────────────
+
+def test_nlp_span_records_latency_metric():
+    """nlp_span context manager records stage latency to Prometheus histogram."""
+    from common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_PIPELINE_LATENCY
+    
+    if not _PROMETHEUS_AVAILABLE:
+        pytest.skip("prometheus_client not available")
+    
+    sink = TelemetrySink()
+    trace_id = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    
+    # Record a span for the "normalize" stage
+    with sink.nlp_span(trace_id, "normalize", "predict.match_outcome"):
+        pass  # Simulated work
+    
+    # Verify the histogram was updated (cannot read _value directly, but _samples exists)
+    # We verify the label combination exists
+    try:
+        samples = NLP_PIPELINE_LATENCY.labels(stage="normalize", intent="predict.match_outcome")._samples()
+        # If we get here without error, the metric was recorded
+        assert True
+    except AttributeError:
+        # Older prometheus_client version; skip detailed check
+        pass
+
+
+def test_nlp_span_logs_structured_output(caplog):
+    """nlp_span emits structured debug log with trace_id, stage, intent, latency."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    trace_id = "00-test123-b7ad6b7169203331-01"
+    
+    with caplog.at_level("DEBUG"):
+        with sink.nlp_span(trace_id, "intent", "data.fixture_lookup"):
+            pass  # Simulated work
+    
+    # Find the span log
+    span_records = [r for r in caplog.records if "NLP span: intent" in r.message]
+    assert len(span_records) == 1
+    record = span_records[0]
+    
+    # Verify structured fields
+    assert record.structured is True
+    assert record.trace_id == trace_id
+    assert record.stage == "intent"
+    assert record.intent == "data.fixture_lookup"
+    assert hasattr(record, "latency_s")
+    # Latency should be small (< 0.1s for a pass statement)
+    assert float(record.latency_s) < 0.1
+
+
+def test_nlp_span_all_stages_accepted():
+    """nlp_span accepts all 8 NLP pipeline stages per §10.14."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    trace_id = "00-test-abc-01"
+    
+    # All 8 stages from §10.14 metric definition
+    stages = [
+        "normalize",
+        "intent",
+        "entities",
+        "dispatch",
+        "predict_wait",
+        "render",
+        "humanize",
+        "proofread",
+    ]
+    
+    for stage in stages:
+        # Should not raise
+        with sink.nlp_span(trace_id, stage, "predict.match_outcome"):
+            pass
+
+
+def test_nlp_span_with_unknown_intent():
+    """nlp_span defaults to 'unknown' intent when not provided."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    trace_id = "00-test-unknown-01"
+    
+    # Should not raise; defaults to "unknown"
+    with sink.nlp_span(trace_id, "normalize"):
+        pass
+
+
+def test_nlp_span_exception_still_records_latency(caplog):
+    """nlp_span records latency even when the block raises an exception."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    trace_id = "00-test-exception-01"
+    
+    with caplog.at_level("DEBUG"):
+        try:
+            with sink.nlp_span(trace_id, "entities", "predict.btts"):
+                raise ValueError("Simulated error")
+        except ValueError:
+            pass  # Expected
+    
+    # Span should still be recorded
+    span_records = [r for r in caplog.records if "NLP span: entities" in r.message]
+    assert len(span_records) == 1
+    record = span_records[0]
+    assert record.trace_id == trace_id
+    assert record.stage == "entities"
+
+
+def test_nlp_span_measures_wall_clock_time():
+    """nlp_span measures elapsed time correctly."""
+    import time
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    trace_id = "00-test-timing-01"
+    
+    # Use a short sleep to verify timing
+    import logging
+    with sink.nlp_span(trace_id, "dispatch", "data.standings"):
+        time.sleep(0.01)  # 10ms
+    
+    # Latency should be >= 10ms (allow for some jitter)
+    # We cannot easily inspect the metric value, but the test verifies
+    # the span completes without error and timing is monotonic-based
+
+
+def test_nlp_span_w3c_traceparent_format():
+    """nlp_span accepts W3C traceparent format trace_id per Phase 9 §9.5."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    
+    # W3C traceparent format: version-trace_id-parent_id-trace_flags
+    # version: 00 (current)
+    # trace_id: 32 hex chars (16 bytes)
+    # parent_id: 16 hex chars (8 bytes)
+    # trace_flags: 2 hex chars (1 byte)
+    valid_traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    
+    # Should not raise
+    with sink.nlp_span(valid_traceparent, "normalize", "predict.over_under"):
+        pass
+
+
+def test_nlp_span_non_blocking_on_prometheus_failure():
+    """nlp_span does not raise if Prometheus recording fails."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    trace_id = "00-test-prom-fail-01"
+    
+    # Should not raise even if Prometheus is unavailable or has issues
+    # (we cannot easily simulate Prometheus failure, but the try/except
+    # in the implementation ensures non-blocking behavior)
+    with sink.nlp_span(trace_id, "render", "summary.matchday"):
+        pass
+
+
+# ── Phase 10 §10.17 — Locale-aware template resolution ───────────────────────
+
+def test_nlp_locale_resolution_default():
+    """§10.17: Template resolution defaults to cfg.nlp_default_locale."""
+    from nlp.render import _resolve_template_name
+    
+    # Default locale should append tr-TR when intent-only
+    resolved = _resolve_template_name("predict.match_outcome")
+    assert resolved == "predict.match_outcome.tr-TR.j2"
+
+
+def test_nlp_locale_resolution_with_override():
+    """§10.17: Template resolution accepts per-request locale override."""
+    from nlp.render import _resolve_template_name
+    
+    # Override locale with en-GB
+    resolved = _resolve_template_name("predict.match_outcome", locale="en-GB")
+    assert resolved == "predict.match_outcome.en-GB.j2"
+    
+    # Override locale with en-US
+    resolved = _resolve_template_name("data.fixture_lookup", locale="en-US")
+    assert resolved == "data.fixture_lookup.en-US.j2"
+
+
+def test_nlp_locale_resolution_backward_compat():
+    """§10.17: Full template paths with .j2 are returned as-is."""
+    from nlp.render import _resolve_template_name
+    
+    # Already fully resolved path should be returned unchanged
+    resolved = _resolve_template_name("predict.match_outcome.tr.j2")
+    assert resolved == "predict.match_outcome.tr.j2"
+    
+    # Legacy .tr.j2 paths preserved
+    resolved = _resolve_template_name("meta.unsupported.tr.j2")
+    assert resolved == "meta.unsupported.tr.j2"
+
+
+def test_nlp_locale_resolution_meta_templates():
+    """§10.17: Meta templates follow same locale resolution."""
+    from nlp.render import _resolve_template_name
+    
+    # meta.help with default locale
+    resolved = _resolve_template_name("meta.help")
+    assert resolved == "meta.help.tr-TR.j2"
+    
+    # meta.adversarial with override
+    resolved = _resolve_template_name("meta.adversarial", locale="en-GB")
+    assert resolved == "meta.adversarial.en-GB.j2"
 

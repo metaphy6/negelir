@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/intent_classifier_degraded",
+  "title": "nlp.event.v1{kind=intent_classifier_degraded}",
+  "description": "Rolling intent accuracy dropped below cfg.nlp_intent_accuracy_floor; switching to template-only fallback.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "accuracy",
+    "floor",
+    "window_queries"
+  ],
+  "properties": {
+    "kind": {
+      "const": "intent_classifier_degraded"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "accuracy": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Current rolling accuracy on the monitoring slice."
+    },
+    "floor": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Configured floor (cfg.nlp_intent_accuracy_floor)."
+    },
+    "window_queries": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Sample size of the rolling window."
+    }
+  },
+  "additionalProperties": false
+}

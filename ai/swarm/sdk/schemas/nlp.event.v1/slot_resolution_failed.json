@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/slot_resolution_failed",
+  "title": "nlp.event.v1{kind=slot_resolution_failed}",
+  "description": "Entity/slot resolver could not narrow to a single canonical; 'Did you mean?' path taken.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "intent",
+    "candidates"
+  ],
+  "properties": {
+    "kind": {
+      "const": "slot_resolution_failed"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "intent": {
+      "type": "string",
+      "description": "The classified intent that triggered dispatch."
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 2,
+      "description": "Top candidate canonical_ids that could not be disambiguated.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

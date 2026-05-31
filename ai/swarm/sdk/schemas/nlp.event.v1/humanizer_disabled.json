@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/humanizer_disabled",
+  "title": "nlp.event.v1{kind=humanizer_disabled}",
+  "description": "Humanizer LLM disabled; pipeline falling back to template-only mode.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "reason"
+  ],
+  "properties": {
+    "kind": {
+      "const": "humanizer_disabled"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "no_device",
+        "cfg_disabled",
+        "lease_unavailable",
+        "quota_exhausted"
+      ],
+      "description": "no_device = Phase 11 lease unattainable; cfg_disabled = cfg.nlp_humanize=false; lease_unavailable = round-robin scheduler returned none; quota_exhausted = monthly cost cap hit."
+    }
+  },
+  "additionalProperties": false
+}

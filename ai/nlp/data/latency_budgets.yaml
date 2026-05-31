@@ -1,0 +1,62 @@
+# NLP Latency Budget Table (Phase 10 §10.12)
+#
+# Binding p50 / p95 / p99 targets (in milliseconds) for end-to-end NLP pipeline paths.
+# These budgets cover only the NLP plane; gateway + sec budgets stack on top per Phase 9 §9.17.5.
+#
+# schema_version: 1
+# generated_for: Phase 10 §10.12 — Performance, caching, and backpressure
+# last_updated: 2026-05-29
+
+_meta:
+  schema_version: 1
+  description: "Binding NLP latency budgets for end-to-end pipeline paths"
+  notes: "Gateway + sec budgets add ~50-100ms on top; see Phase 9 §9.17.5"
+  
+# Path definitions:
+# - meta.help (cache hit): simplest path, L0 cache hit returns immediately
+# - data.fixture_lookup (storage hit): lexicon + entity + storage agent round-trip
+# - predict.* template-only: full pipeline without humanizer
+# - predict.* humanized: full pipeline with humanizer rephrasing
+# - summary.next_week (10 fixtures): fan-out aggregation over 10 predict requests
+
+budgets:
+  - path: "meta.help"
+    condition: "cache_hit"
+    p50_ms: 5
+    p95_ms: 25
+    p99_ms: 50
+    notes: "L0 intent cache hit; no downstream dispatch"
+    
+  - path: "data.fixture_lookup"
+    condition: "storage_hit"
+    p50_ms: 30
+    p95_ms: 100
+    p99_ms: 200
+    notes: "Normalize + intent + entity + storage agent round-trip"
+    
+  - path: "predict.*"
+    condition: "template_only"
+    p50_ms: 250
+    p95_ms: 800
+    p99_ms: 1500
+    notes: "Full pipeline: normalize + intent + entity + dispatch + predict.approved.v1 wait + template render (no humanizer)"
+    
+  - path: "predict.*"
+    condition: "humanized"
+    p50_ms: 350
+    p95_ms: 1200
+    p99_ms: 2000
+    notes: "Full pipeline with humanizer rephrasing + proofreader gate"
+    
+  - path: "summary.next_week"
+    condition: "10_fixtures"
+    p50_ms: 800
+    p95_ms: 2200
+    p99_ms: 3500
+    notes: "Fan-out over 10 fixtures with aggregation timeout; partial results allowed under deadline"
+
+# Usage:
+# - Loaded at boot time via ai/common/config.py or dedicated nlp.latency module
+# - Metrics instrumentation keys off path + condition for RED dashboards
+# - CI/bench gates compare measured p95/p99 against these targets
+# - Violation alerts emit nlp.alert.v1{kind=nlp_latency_budget_breach, severity=warn}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/humanizer_breaker_open",
+  "title": "nlp.event.v1{kind=humanizer_breaker_open}",
+  "description": "Humanizer circuit-breaker tripped; requests bypass LLM polish for cfg.nlp_humanizer_breaker_reset_s.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "failure_count",
+    "window_s"
+  ],
+  "properties": {
+    "kind": {
+      "const": "humanizer_breaker_open"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "failure_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Consecutive failures that tripped the breaker."
+    },
+    "window_s": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Reset window in seconds."
+    }
+  },
+  "additionalProperties": false
+}

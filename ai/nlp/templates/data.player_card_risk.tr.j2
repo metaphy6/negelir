@@ -1,0 +1,10 @@
+{{ player_name }} kart riski:
+Oran: {{ confidence_band(probability) }} ({{ risk_label }})
+
+Maç: {{ home_team }} - {{ away_team }}
+Tarih: {{ kickoff_time(kickoff_utc) }}
+{% if degraded %}
+Tahmin sınırlı veriyle üretildi: {{ degraded_reason }}
+{% endif %}
+---
+[tahmin:{{ prediction_id }} | üretim:{{ produced_at_utc }} | model:{{ model_versions | join(', ') }} | kalibrasyon:{{ calibration_version }}]

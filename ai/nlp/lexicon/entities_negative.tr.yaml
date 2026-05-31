@@ -1,0 +1,51 @@
+# Negelir — NLP lexicon: Negative entity rules (disambiguation blockers)
+# Entries specify tokens that are ambiguous WITHOUT additional co-token context.
+# requires_cotoken: a co-occurring token that disambiguates the match.
+# When the co-token is absent, the entity match is suppressed; this prevents
+# false-positive entity resolution (e.g., "fener" alone matching Fenerbahçe SK
+# when the query is about Fenerbahçe Beko basketball).
+# Managed by: make nlp.lexicon-build
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - token: fener
+    requires_cotoken: bahçe
+    ambiguous_between:
+      - fenerbahce_sk
+      - fenerbahce_beko
+    reason: "fener alone is ambiguous between Fenerbahçe SK (football) and Fenerbahçe Beko (basketball)"
+
+  - token: besiktas
+    requires_cotoken: jk
+    ambiguous_between:
+      - besiktas_jk
+      - besiktas_basketball
+    reason: "Beşiktaş has football and basketball clubs; jk suffix disambiguates to football"
+
+  - token: galata
+    requires_cotoken: saray
+    ambiguous_between:
+      - galatasaray_sk
+      - galata_bridge
+    reason: "galata alone can refer to the Istanbul district, not the club"
+
+  - token: istanbul
+    requires_cotoken: basaksehir
+    ambiguous_between:
+      - istanbul_basaksehir_fk
+      - istanbul_city
+    reason: "istanbul alone is not an entity; requires basaksehir to resolve to the club"
+
+  - token: kanarya
+    requires_cotoken: null
+    ambiguous_between:
+      - fenerbahce_sk
+    note: "kanarya is accepted as unambiguous alias for Fenerbahçe in football context; no co-token required"
+    suppress_if_context:
+      - kuş
+      - hayvan
+    reason: "kanarya (canary bird) context suppresses football entity resolution"

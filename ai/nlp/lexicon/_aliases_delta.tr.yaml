@@ -1,0 +1,46 @@
+# Negelir -- NLP lexicon: Hand-curated alias delta
+#
+# Purpose:
+#   This file contains ADDITIONAL aliases merged into generated lexicon files
+#   by `make nlp.lexicon-build`. Allows operators to add regional slang,
+#   newly coined nicknames, or cross-file clarifications WITHOUT editing the
+#   auto-generated baseline files directly.
+#
+# Format:
+#   file:         target lexicon filename (e.g. teams.tr.yaml)
+#   canonical_id: target canonical_id in that file
+#   add_aliases:  list of additional alias strings to merge in
+#   remove_aliases: (optional) list of alias strings to remove
+#
+# Rules enforced by `make verify.nlp-lexicons`:
+#   - Added aliases must pass §10.1 normalize round-trip
+#   - No alias collision without entities_negative coverage
+
+_meta:
+  schema_version: 1
+  description: "Hand-curated alias additions; applied by make nlp.lexicon-build"
+  generated_at_utc: "2026-05-27T00:00:00Z"
+
+deltas:
+  - file: teams.tr.yaml
+    canonical_id: galatasaray_sk
+    add_aliases:
+      - aslan
+      - cim bom
+
+  - file: teams.tr.yaml
+    canonical_id: fenerbahce_sk
+    add_aliases:
+      - fenerbahce
+      - sarı lacivert
+
+  - file: teams.tr.yaml
+    canonical_id: besiktas_jk
+    add_aliases:
+      - besiktas
+      - kartal
+
+  - file: leagues.tr.yaml
+    canonical_id: tr_super_lig
+    add_aliases:
+      - spor toto ligi

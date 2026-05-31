@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/lexicon_reloaded",
+  "title": "nlp.event.v1{kind=lexicon_reloaded}",
+  "description": "Lexicon hot-reload completed successfully.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "lexicon_file",
+    "lexicon_version",
+    "entries_loaded"
+  ],
+  "properties": {
+    "kind": {
+      "const": "lexicon_reloaded"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "lexicon_file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Basename of the reloaded lexicon file."
+    },
+    "lexicon_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Semver from the lexicon file's _meta block."
+    },
+    "entries_loaded": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of alias entries loaded into the shadow dict."
+    }
+  },
+  "additionalProperties": false
+}

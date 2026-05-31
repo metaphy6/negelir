@@ -34,7 +34,7 @@
 
 #### 10.23.1 Multi-tenant fairness & abuse isolation inside the NLP plane
 
-- [ ] **Real failure mode.** §10.12 cap "queue > 100 → disable
+- [x] **Real failure mode.** §10.12 cap "queue > 100 → disable
   humanizer" is global. A single noisy tenant (or compromised account)
   flooding `qa.request.v1` at 50 QPS can blow the queue → humanizer
   disabled for everyone → tier-paying users see degraded answers

@@ -1,0 +1,79 @@
+# Negelir — NLP lexicon: Football leagues
+# canonical_id references league_catalog league IDs (Phase 13a §13.x).
+# Managed by: make nlp.lexicon-build
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - canonical_id: tr_super_lig
+    names:
+      - Süper Lig
+      - Türkiye Süper Ligi
+    aliases:
+      - spor toto süper lig
+      - bein sports süper lig
+      - süper lig
+      - tsl
+
+  - canonical_id: tr_tff1_lig
+    names:
+      - TFF 1. Lig
+      - Türkiye 1. Ligi
+    aliases:
+      - 1. lig
+      - tff birinci lig
+
+  - canonical_id: tr_tff2_lig
+    names:
+      - TFF 2. Lig
+    aliases:
+      - tff ikinci lig
+      - 2. lig
+
+  - canonical_id: en_premier_league
+    names:
+      - Premier Lig
+      - Premier League
+      - İngiltere Premier Ligi
+    aliases:
+      - İngiltere ligi
+      - pl
+      - epl
+      - ingiliz ligi
+
+  - canonical_id: de_bundesliga
+    names:
+      - Bundesliga
+      - Almanya Bundesligası
+    aliases:
+      - bundesliga
+      - alman ligi
+      - bundesliga 1
+
+  - canonical_id: es_la_liga
+    names:
+      - La Liga
+      - İspanya La Ligası
+      - Primera Division
+    aliases:
+      - İspanya ligi
+      - laliga
+
+  - canonical_id: it_serie_a
+    names:
+      - Serie A
+      - İtalya Serie A
+    aliases:
+      - İtalya ligi
+      - seri a
+
+  - canonical_id: fr_ligue_1
+    names:
+      - Ligue 1
+      - Fransa Ligue 1
+    aliases:
+      - Fransa ligi
+      - lig 1

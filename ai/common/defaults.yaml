@@ -110,6 +110,22 @@ drift:
 bootstrap:
   min_matches: 100           # BOOTSTRAP_MIN_MATCHES (Makefile + proofreader)
 
+# ── NLP (Phase 10) ───────────────────────────────────────────────────────────
+nlp:
+  # Proofreader gate 3: length bounds (§10.9 bullet 2)
+  min_answer_chars: 20       # NEGELIR_NLP_MIN_ANSWER_CHARS
+  max_answer_chars: 600      # NEGELIR_NLP_MAX_ANSWER_CHARS
+  # §10.19 backpressure
+  queue_pressure_threshold: 100  # NEGELIR_NLP_QUEUE_PRESSURE_THRESHOLD
+  pressure_humanize_off_s: 60    # NEGELIR_NLP_PRESSURE_HUMANIZE_OFF_S
+  # §10.19 sampled answer audit
+  answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
+  answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP
+  # §10.21.2 Jinja2 bytecode cache directory
+  jinja_bcc_dir: "data/cache/jinja_bcc"  # NEGELIR_NLP_JINJA_BCC_DIR
+  # §10.21.6 runtime guard minimum substring length
+  template_finalize_min_user_text_len: 6  # NEGELIR_NLP_TEMPLATE_FINALIZE_MIN_USER_TEXT_LEN
+
 # ── Feature-vector firewall (roadmap §5.6.2) ─────────────────────────────────
 # Substring → (lo, hi). Override via NEGELIR_FEATURE_RANGES_JSON.
 feature_ranges:
@@ -281,6 +297,127 @@ phase7:
   sec_alert_debouncer_max_buckets: 4096            # NEGELIR_SEC_ALERT_DEBOUNCER_MAX_BUCKETS
   # qa.request.v1 — NLP-side dedup window (§7.5 binding).
   qa_request_v1_dedup_window_s: 300                # NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S
+
+# ── Phase 10 §10.0 — Turkish NLP pipeline (cross-phase contracts) ───────────
+phase10:
+  # §10.1 step 1: hard codepoint cap on raw user input (defense-in-depth).
+  nlp_input_max_codepoints: 512            # NEGELIR_NLP_INPUT_MAX_CODEPOINTS
+  # Dedup window lower bound: qa_request_v1_dedup_window_s(300) + 30 = 330.
+  nlp_request_dedup_window_s: 330          # NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S
+  # §10.21.1: Hypothesis profile max examples for property-based tests.
+  nlp_hypothesis_max_examples: 1000        # NEGELIR_NLP_HYPOTHESIS_MAX_EXAMPLES
+  # §10.21.2: Singleflight event-map sweeper (orphan cleanup).
+  nlp_singleflight_sweep_interval_s: 30    # NEGELIR_NLP_SINGLEFLIGHT_SWEEP_INTERVAL_S
+  nlp_singleflight_event_max_age_s: 60     # NEGELIR_NLP_SINGLEFLIGHT_EVENT_MAX_AGE_S
+  nlp_singleflight_max_inflight: 2048      # NEGELIR_NLP_SINGLEFLIGHT_MAX_INFLIGHT
+  # Bus circuit breaker: consecutive publish failures before spooling (§10.13).
+  nlp_bus_failure_circuit_threshold: 3     # NEGELIR_NLP_BUS_FAILURE_CIRCUIT_THRESHOLD
+  # Max spool entries per NLP agent before dropping oldest (§10.13).
+  nlp_spool_max_entries: 1000              # NEGELIR_NLP_SPOOL_MAX_ENTRIES
+  # Per-agent spool directory root (§10.13).
+  nlp_agent_spool_dir: "data/nlp/spool"   # NEGELIR_NLP_AGENT_SPOOL_DIR
+  # Timeout chain: api_request_timeout_ms(2500) ≥ pipeline(1800) + dispatch(200) = 2000 ✓
+  nlp_pipeline_timeout_ms: 1800            # NEGELIR_NLP_PIPELINE_TIMEOUT_MS
+  nlp_dispatch_overhead_ms: 200            # NEGELIR_NLP_DISPATCH_OVERHEAD_MS
+  nlp_consensus_overhead_ms: 100           # NEGELIR_NLP_CONSENSUS_OVERHEAD_MS
+  # Humanizer latency budget (applied only when nlp_humanize=true).
+  nlp_humanizer_max_latency_ms: 600        # NEGELIR_NLP_HUMANIZER_MAX_LATENCY_MS
+  # Circuit breaker open window (seconds) after humanizer latency breach.
+  nlp_humanizer_breaker_open_s: 60         # NEGELIR_NLP_HUMANIZER_BREAKER_OPEN_S
+  # Template-only mode by default; LLM polish is opt-in per Phase 11 probe.
+  nlp_humanize: false                      # NEGELIR_NLP_HUMANIZE
+  # Decoding constraints for humanizer LLM (§10.8).
+  nlp_humanizer_max_new_tokens: 120        # NEGELIR_NLP_HUMANIZER_MAX_NEW_TOKENS
+  nlp_humanizer_temperature: 0.3           # NEGELIR_NLP_HUMANIZER_TEMPERATURE
+  nlp_humanizer_top_p: 0.9                 # NEGELIR_NLP_HUMANIZER_TOP_P
+  nlp_humanizer_repetition_penalty: 1.05   # NEGELIR_NLP_HUMANIZER_REPETITION_PENALTY
+  # Drift guard: max edit_distance / len(template) ratio (§10.8).
+  nlp_humanizer_max_edit_ratio: 0.6        # NEGELIR_NLP_HUMANIZER_MAX_EDIT_RATIO
+  # Humanizer breaker scope: "pod" (default, in-memory) or "cluster" (Redis, cross-pod).
+  # Cluster-scope adds a Redis round-trip on every humanize call → only use after measuring
+  # per-pod breaker open-rate above 5% (§10.21.4 stampede-protection in dense deploys).
+  nlp_humanizer_breaker_scope: pod         # NEGELIR_NLP_HUMANIZER_BREAKER_SCOPE
+  # CI gate: normalize_input p95 must not exceed this (ms). Phase 10 §10.1 DoD = 5 ms.
+  nlp_bench_latency_p95_threshold_ms: 5   # NEGELIR_NLP_BENCH_LATENCY_P95_THRESHOLD_MS
+  # mtime-poll interval (seconds) for LexiconStore hot-reload (§10.2 Atomic swap).
+  nlp_lexicon_reload_s: 30                 # NEGELIR_NLP_LEXICON_RELOAD_S
+  # Max entries per lexicon file (§10.2 Cardinality cap). Over-cap → dictionary_overflow warn + refuse load.
+  nlp_lexicon_max_entries_per_file: 50000  # NEGELIR_NLP_LEXICON_MAX_ENTRIES_PER_FILE
+  # RSS budget for all lexicons (§10.2 Bounded memory). 0 = disable check.
+  nlp_lexicon_max_rss_mb: 128             # NEGELIR_NLP_LEXICON_MAX_RSS_MB
+  # Max retired snapshots retained for in-flight requests (§10.21.2 Old-gen eviction).
+  nlp_lexicon_max_old_generations: 2      # NEGELIR_NLP_LEXICON_MAX_OLD_GENERATIONS
+  # Swap policy: "all_or_nothing" (default) or "per_file" (§10.21.3 Atomic swap policy).
+  # Under "all_or_nothing", cross-file referential validator runs before swap.
+  nlp_lexicon_swap_atomicity: all_or_nothing  # NEGELIR_NLP_LEXICON_SWAP_ATOMICITY
+  # RSS budget for CRF entity tagger model (§10.21.2 RSS ceiling).
+  nlp_crf_max_rss_mb: 5                   # NEGELIR_NLP_CRF_MAX_RSS_MB
+  # RSS budget for SymSpell edit-distance index (§10.21.2 RSS ceiling).
+  nlp_symspell_max_rss_mb: 100            # NEGELIR_NLP_SYMSPELL_MAX_RSS_MB
+  # RSS budget for Jinja2 bytecode cache (§10.21.2 RSS ceiling).
+  nlp_jinja_cache_max_rss_mb: 50          # NEGELIR_NLP_JINJA_CACHE_MAX_RSS_MB
+  # RSS budget for Python runtime overhead (§10.21.2 RSS ceiling).
+  nlp_python_overhead_mb: 200             # NEGELIR_NLP_PYTHON_OVERHEAD_MB
+  # RSS budget for humanizer ONNX model (§10.21.2 RSS ceiling).
+  nlp_humanizer_max_rss_mb: 1024          # NEGELIR_NLP_HUMANIZER_MAX_RSS_MB
+  # Total RSS ceiling per NLP pod (§10.21.2 RSS ceiling). Boot validator refuses start if sub-knobs sum exceeds cap.
+  nlp_pod_rss_max_mb: 2048                # NEGELIR_NLP_POD_RSS_MAX_MB
+  # Global Levenshtein cap for tokens of length ≥ 5 in SymSpell typo correction (§10.3).
+  nlp_typo_max_edit_distance: 2           # NEGELIR_NLP_TYPO_MAX_EDIT_DISTANCE
+  # Per-query fuzzy-lookup budget; when exceeded pipeline emits did_you_mean_offered (§10.3).
+  nlp_typo_max_lookups_per_query: 8       # NEGELIR_NLP_TYPO_MAX_LOOKUPS_PER_QUERY
+  # Diacritic ambiguity tie-break ratio (§10.3 Ambiguity policy). When top-2
+  # candidates' frequencies are within this ratio, token is preserved unchanged.
+  nlp_diacritic_tie_break_ratio: 1.5      # NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO
+  # Normalize+typo+diacritic stage deadline; on timeout falls through to raw tokens (§10.3).
+  nlp_normalize_stage_timeout_ms: 20      # NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS
+  # §10.4 Intent classifier (fastText, ≤ 20 MB, CPU-only).
+  nlp_intent_model_path: "data/models/nlp/intent.tr.bin"  # NEGELIR_NLP_INTENT_MODEL_PATH
+  nlp_intent_model_sha256: ""             # NEGELIR_NLP_INTENT_MODEL_SHA256
+  nlp_intent_model_max_size_mb: 20        # NEGELIR_NLP_INTENT_MODEL_MAX_SIZE_MB
+  # Platt calibration JSON path; empty = auto-resolved from model dir (§10.4 Calibration).
+  nlp_intent_calibration_path: ""         # NEGELIR_NLP_INTENT_CALIBRATION_PATH
+  # Minimum calibrated confidence for a definite intent; below → abstention (§10.4).
+  nlp_min_intent_conf: 0.55               # NEGELIR_NLP_MIN_INTENT_CONF
+  # Rolling accuracy floor for the drift guard; below → degraded + template-only (§10.4).
+  nlp_intent_accuracy_floor: 0.92         # NEGELIR_NLP_INTENT_ACCURACY_FLOOR
+  # Sliding window size (number of predictions) for the drift guard (§10.4).
+  nlp_intent_drift_window: 1000           # NEGELIR_NLP_INTENT_DRIFT_WINDOW
+  # Entity extraction F1-score floor for §10.18 CI gate (must be ≥ this on golden corpus).
+  nlp_entity_f1_floor: 0.90               # NEGELIR_NLP_ENTITY_F1_FLOOR
+  # Human-readable semver for the deployed intent model file (§10.4 Versioning).
+  # Stamped on every qa.intent.v1 envelope as intent_model_version.
+  nlp_intent_model_version: ""            # NEGELIR_NLP_INTENT_MODEL_VERSION
+  # §10.21.1 Exact numpy version expected at runtime (numpy + fastText version pin).
+  # Boot probe asserts numpy.__version__ matches; refuse start on drift.
+  nlp_numpy_pin: ""                       # NEGELIR_NLP_NUMPY_PIN
+  # §10.21.1 Exact fasttext version expected at runtime (numpy + fastText version pin).
+  # Boot probe asserts fasttext.__version__ matches; refuse start on drift.
+  nlp_fasttext_pin: ""                    # NEGELIR_NLP_FASTTEXT_PIN
+
+  # §10.12 — L0 intent cache (in-process LRU with TTL).
+  nlp_intent_cache_max_entries: 10000     # NEGELIR_NLP_INTENT_CACHE_MAX_ENTRIES
+  nlp_intent_cache_ttl_s: 300             # NEGELIR_NLP_INTENT_CACHE_TTL_S
+  # Phase 10 §10.12 L1 answer cache
+  nlp_answer_cache_ttl_data_s: 120        # NEGELIR_NLP_ANSWER_CACHE_TTL_DATA_S
+  nlp_answer_cache_ttl_predict_s: 60      # NEGELIR_NLP_ANSWER_CACHE_TTL_PREDICT_S
+
+  # §10.5 — Entity extraction (gazetteer + CRF hybrid pipeline)
+  nlp_entity_kind_priority: "team,player,league,competition,market,date,time,weekday,ordinal,money_amount,score"  # NEGELIR_NLP_ENTITY_KIND_PRIORITY
+  nlp_entity_crf_model_path: ""           # NEGELIR_NLP_ENTITY_CRF_MODEL_PATH
+  nlp_entity_crf_model_sha256: ""         # NEGELIR_NLP_ENTITY_CRF_MODEL_SHA256
+  nlp_entity_crf_model_max_size_mb: 5     # NEGELIR_NLP_ENTITY_CRF_MODEL_MAX_SIZE_MB
+  nlp_entity_bench_latency_p95_threshold_ms: 8  # NEGELIR_NLP_ENTITY_BENCH_LATENCY_P95_THRESHOLD_MS
+  nlp_default_fixture_window_h: 48        # NEGELIR_NLP_DEFAULT_FIXTURE_WINDOW_H
+  nlp_summary_max_fixtures: 10            # NEGELIR_NLP_SUMMARY_MAX_FIXTURES
+  nlp_summary_aggregation_timeout_ms: 1500  # NEGELIR_NLP_SUMMARY_AGGREGATION_TIMEOUT_MS
+  nlp_dispatch_dedup_window_s: 600  # NEGELIR_NLP_DISPATCH_DEDUP_WINDOW_S
+  # §10.7 confidence bands: JSON list of [lower, upper, label] triples (§10.7 Confidence rendering).
+  # Default: 3-band table matching the §10.7 design.
+  nlp_confidence_bands: '[[0.0,0.55,"düşük"],[0.55,0.75,"orta"],[0.75,1.01,"yüksek"]]'  # NEGELIR_NLP_CONFIDENCE_BANDS
+  # §10.17 default locale: IETF BCP 47 language tag for template resolution.
+  # Template path: ai/nlp/templates/<intent>.<locale>.j2
+  nlp_default_locale: "tr-TR"             # NEGELIR_NLP_DEFAULT_LOCALE
 
 # ── Phase 9 §9.12 — Full API knob inventory (shared: Python AI + Go API) ────
 # Every key below is also in ai/common/config.py, server/internal/config/config.go,

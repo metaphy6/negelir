@@ -68,3 +68,25 @@ CI gates:
 - ≥ 95 % intent accuracy on clean + no-diacritics + typos.
 - 100 % "did-you-mean" for low-confidence cases (no silent guesses).
 - 100 % rejection on adversarial entries.
+
+## 🔄 Concurrency & Scalability
+
+### Singleflight (§10.12, §10.21.4)
+
+**Scope: per-pod only.** Cross-pod collapse is intentionally NOT implemented.
+
+- Concurrent identical queries arriving at the same pod collapse to a single
+  execution using in-process `threading.Event` (mirroring Go's `singleflight`).
+- Cross-pod coordination via Redis lock was evaluated and rejected: the cost
+  (one Redis round-trip per query) outweighs the benefit at v1 scale (< 1000 qps).
+- At higher scale (> 5000 qps sustained), revisit cluster-scope singleflight
+  as a circuit-breaker fallback, not the default path.
+
+**Implementation:** `ai/swarm/sdk/singleflight.py`  
+**AST guard:** `test_nlp_singleflight_does_not_use_redis` rejects `redis.lock`
+import in singleflight and NLP dispatcher modules.
+
+**Doctrine:** Each NLP pod independently collapses duplicate requests; no
+shared state across pods. This trades marginal redundant work (when the same
+query hits different pods simultaneously) for zero Redis dependency on the
+hot path.

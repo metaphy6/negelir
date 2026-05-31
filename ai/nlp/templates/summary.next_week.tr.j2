@@ -1,0 +1,9 @@
+Gelecek hafta {{ league_name }} maçları:
+{% for fixture in fixtures %}
+{{ fixture.home }} - {{ fixture.away }} — {{ kickoff_time(fixture.kickoff_utc) }}
+{% else %}
+Gelecek hafta için planlanmış maç bulunamadı.
+{% endfor %}
+{% if collected_count < total_count %}
+({{ collected_count }}/{{ total_count }} maç hazır)
+{% endif %}

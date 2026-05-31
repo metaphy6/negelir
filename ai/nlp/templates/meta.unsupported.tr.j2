@@ -1,0 +1,7 @@
+Üzgünüm, bu soruyu yanıtlayamıyorum.
+{% if suggestions %}
+Şunlardan birini sormak istediniz mi?
+{% for s in suggestions %}
+  - {{ s }}
+{% endfor %}
+{% endif %}

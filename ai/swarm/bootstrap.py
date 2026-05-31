@@ -51,6 +51,7 @@ from .agents.maint.dlq import MaintDlqSupervisor
 from .agents.maint.scaler import MaintScaler
 from .agents.maint.schema import MaintSchemaSentinel
 from .agents.maint.sec import MaintSecAgent
+from .agents.nlp import NlpAnswerAgent, NlpIntentAgent, NlpProofreaderAgent
 from .agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from .agents.telemetry import TelemetryAgent
 from .source_watcher.agent import SourceWatcherAgent
@@ -226,6 +227,11 @@ def build_agents() -> list[Agent]:
         maint_sec,
         maint_backup,
            source_watcher,
+        # Phase 10 §10.0 — NLP plane agents (boundary-discipline stubs).
+        # Full handler logic lands per-bullet in §10.1–§10.20.
+        NlpIntentAgent(),
+        NlpAnswerAgent(),
+        NlpProofreaderAgent(),
     ]
 
 

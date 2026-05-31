@@ -1,0 +1,113 @@
+# Negelir — NLP lexicon: Betting markets
+# canonical_id MUST be a member of the closed enum in ai/common/betting_markets.json.
+# Managed by: make nlp.lexicon-build
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - canonical_id: ms
+    names:
+      - Maç Sonucu
+      - Maç Tahmini
+    aliases:
+      - 1x2
+      - ms
+      - maç sonu
+      - kazanan
+
+  - canonical_id: au_25
+    names:
+      - Alt/Üst 2.5
+      - Toplam Gol 2.5
+    aliases:
+      - au 2.5
+      - 2.5 gol
+      - iki buçuk gol
+      - 2.5 üst
+      - 2.5 alt
+      - üst 2.5
+      - alt 2.5
+
+  - canonical_id: kg
+    names:
+      - Karşılıklı Gol
+    aliases:
+      - btts
+      - her iki takım gol atar
+      - kg var
+      - kg yok
+      - iki takım da gol
+
+  - canonical_id: iy_ms
+    names:
+      - İlk Yarı / Maç Sonucu
+      - İY/MS
+    aliases:
+      - ilk yarı maç sonucu
+      - iy ms
+      - hy ms
+
+  - canonical_id: asya_handikap
+    names:
+      - Asya Handikap
+      - Asya Hnd.
+    aliases:
+      - ah
+      - asya hnd
+      - handicap
+
+  - canonical_id: mac_skoru
+    names:
+      - Maç Skoru
+      - Kesin Skor
+    aliases:
+      - skor tahmini
+      - tam skor
+      - exact score
+
+  - canonical_id: iy_sonucu
+    names:
+      - İlk Yarı Sonucu
+      - İlk Yarı
+    aliases:
+      - iy
+      - ilk devre
+      - hy sonuç
+
+  - canonical_id: au_15
+    names:
+      - Alt/Üst 1.5
+    aliases:
+      - 1.5 gol
+      - au 1.5
+      - bir buçuk gol
+
+  - canonical_id: au_35
+    names:
+      - Alt/Üst 3.5
+    aliases:
+      - 3.5 gol
+      - au 3.5
+      - üç buçuk gol
+
+  - canonical_id: cs
+    names:
+      - Çifte Şans
+    aliases:
+      - double chance
+      - çifte şans
+      - 1x
+      - x2
+      - 12
+
+  - canonical_id: toplam_gol
+    names:
+      - Toplam Gol Sayısı
+      - Toplam Gol
+    aliases:
+      - kaç gol
+      - gol sayısı
+      - toplam gol

@@ -157,9 +157,48 @@ PREDICT_CANCEL_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
 })
 
 
+# `nlp.event.v1` producers (Phase 10 §10.0 wire-authority).
+#
+# Bounded to NLP-plane agents only. Additions require a tracker row +
+# minor bump on `ai`. NLP must NEVER widen this set to include sec.*,
+# maint.*, auth.*, payment.*, or patcher.* agents (§10.0 boundary
+# discipline, AST-asserted in §10.20 boundary test).
+#
+# Members:
+#   * ``nlp.intent.v1``      — normalizes + classifies intent + extracts
+#     entities; emits kinds: intent_classifier_degraded,
+#     did_you_mean_offered, dictionary_overflow, lexicon_reloaded,
+#     lexicon_unreadable.
+#   * ``nlp.dispatcher.v1``  — slot resolver + bus dispatch (§10.6);
+#     emits kinds: slot_resolution_failed.
+#   * ``nlp.answer.v1``      — assembles the Turkish-language answer;
+#     emits: humanizer_disabled, humanizer_breaker_open.
+#   * ``nlp.proofreader.v1`` — post-block PII-clean path;
+#     emits: proofreader_blocked, pii_in_answer_redacted.
+NLP_EVENT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "nlp.intent.v1",
+    "nlp.dispatcher.v1",
+    "nlp.answer.v1",
+    "nlp.proofreader.v1",
+})
+
+# `nlp.alert.v1` producers (Phase 10 §10.0 wire-authority).
+#
+# Same bounded set as nlp.event.v1 — the alert channel and the event
+# channel share the same producer tier (§10.0 boundary discipline).
+NLP_ALERT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "nlp.intent.v1",
+    "nlp.dispatcher.v1",
+    "nlp.answer.v1",
+    "nlp.proofreader.v1",
+})
+
+
 __all__ = [
     "API_TOPIC_V1_ALLOWED_PRODUCERS",
     "MAINT_EVENT_V1_ALLOWED_PRODUCERS",
+    "NLP_ALERT_V1_ALLOWED_PRODUCERS",
+    "NLP_EVENT_V1_ALLOWED_PRODUCERS",
     "PREDICT_CANCEL_V1_ALLOWED_PRODUCERS",
     "SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER",
     "SEC_ALERT_V1_ALLOWED_PRODUCERS",

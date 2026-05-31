@@ -1,0 +1,155 @@
+# Negelir — NLP lexicon: Turkish football teams
+# canonical_id references league_catalog team IDs (Phase 13a §13.x).
+# Managed by: make nlp.lexicon-build
+# DO NOT hand-edit canonical_id values — they must match LeagueCatalog.
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - canonical_id: galatasaray_sk
+    names:
+      - Galatasaray
+      - Galatasaray SK
+      - Galatasaray Spor Kulübü
+    aliases:
+      - GS
+      - Cimbom
+      - sarı kırmızılılar
+      - aslanlar
+      - galata
+
+  - canonical_id: fenerbahce_sk
+    names:
+      - Fenerbahçe
+      - Fenerbahçe SK
+      - Fenerbahçe Spor Kulübü
+    aliases:
+      - FB
+      - Fener
+      - sarı lacivertliler
+      - kanarya
+
+  - canonical_id: besiktas_jk
+    names:
+      - Beşiktaş
+      - Beşiktaş JK
+      - Beşiktaş Jimnastik Kulübü
+    aliases:
+      - BJK
+      - kartallar
+      - siyah beyazlılar
+      - çarşı
+
+  - canonical_id: trabzonspor
+    names:
+      - Trabzonspor
+    aliases:
+      - TS
+      - bordo maviler
+      - karadeniz fırtınası
+
+  - canonical_id: istanbul_basaksehir_fk
+    names:
+      - İstanbul Başakşehir
+      - Başakşehir
+      - Başakşehir FK
+    aliases:
+      - IBFK
+      - başakşehir
+
+  - canonical_id: bursaspor
+    names:
+      - Bursaspor
+    aliases:
+      - timsah
+      - yeşil beyazlılar
+
+  - canonical_id: sivasspor
+    names:
+      - Sivasspor
+    aliases:
+      - sivas
+
+  - canonical_id: kasimpasa_sk
+    names:
+      - Kasımpaşa
+      - Kasımpaşa SK
+    aliases:
+      - KSK
+
+  - canonical_id: konyaspor
+    names:
+      - Konyaspor
+    aliases:
+      - konya
+
+  - canonical_id: alanyaspor
+    names:
+      - Alanyaspor
+      - Aytemiz Alanyaspor
+    aliases:
+      - alanya
+
+  - canonical_id: kayserispor
+    names:
+      - Kayserispor
+    aliases:
+      - kayseri
+
+  - canonical_id: antalyaspor
+    names:
+      - Antalyaspor
+    aliases:
+      - akrepler
+      - antalya
+
+  - canonical_id: gaziantep_fk
+    names:
+      - Gaziantep FK
+      - Gaziantep
+    aliases:
+      - GFK
+      - gaziantep
+
+  - canonical_id: hatayspor
+    names:
+      - Hatayspor
+    aliases:
+      - hatay
+
+  - canonical_id: adana_demirspor
+    names:
+      - Adana Demirspor
+    aliases:
+      - ADS
+      - demirspor
+      - adana demir
+
+  - canonical_id: rizespor
+    names:
+      - Çaykur Rizespor
+      - Rizespor
+    aliases:
+      - rize
+      - çaykur
+
+  - canonical_id: giresunspor
+    names:
+      - Giresunspor
+    aliases:
+      - giresun
+
+  - canonical_id: umraniyespor
+    names:
+      - Ümraniyespor
+    aliases:
+      - ümraniye
+
+  - canonical_id: eyupspor
+    names:
+      - Eyüpspor
+    aliases:
+      - eyüp

@@ -12,17 +12,17 @@
 
 ### 10.0 Forward-phase alignment & doctrine
 
-- [ ] **Wire authority (Phase 3 §3.5 additions).** Phase 10 lands four new topics:
+- [x] **Wire authority (Phase 3 §3.5 additions).** Phase 10 lands four new topics:
   - `qa.intent.v1` (data) — published by `nlp.intent.v1` after sec-pass + normalize + classify; consumer = `nlp.dispatcher.v1`. Schema at `ai/swarm/sdk/schemas/qa.intent.v1.json` (`additionalProperties:false`).
   - `qa.answer.v1` (data) — published by `nlp.answer.v1` (or `nlp.proofreader.v1` post-block); consumer = API gateway response stream + `cache.v1` + `telemetry.v1`. Schema at `ai/swarm/sdk/schemas/qa.answer.v1.json`.
   - `nlp.event.v1` (control, kind-discriminated per §8.16.2 doctrine) — kinds: `lexicon_reloaded`, `lexicon_unreadable`, `humanizer_disabled`, `humanizer_breaker_open`, `proofreader_blocked`, `pii_in_answer_redacted`, `intent_classifier_degraded`, `dictionary_overflow`, `slot_resolution_failed`, `did_you_mean_offered`. Producer set bounded to `nlp.intent.v1`, `nlp.answer.v1`, `nlp.proofreader.v1`. Consumer = `telemetry.v1` + (operator console at Phase 8).
   - `nlp.alert.v1` (data) — narrow alert channel for NLP-class events that need operator visibility WITHOUT widening the §7.4 `sec.alert.v1` producer-set (which is bounded to `sec.*` + `maint.*`). Severity ∈ {info,warn,error,critical}; debounced via `swarm.sdk.AlertDebouncer` mirroring `SecAlertDebouncer`.
-- [ ] **Boundary discipline (binding, AST-asserted in §10.20).**
+- [x] **Boundary discipline (binding, AST-asserted in §10.20).**
   - NLP **never** subscribes to raw `qa.request` (control-plane). Only `qa.request.v1` (sanitized data-plane). Mirrors §7.5 doctrine.
   - NLP **never** subscribes to `predict.final` (Phase 5 candidate). Only `predict.approved.v1` (Phase 6 gated) — closes the "user got an unproofread prediction" hole.
   - NLP **never** publishes to `sec.*`, `maint.*`, `auth.*`, `payment.*`, `patcher.*`. Outbound topics are exactly `{qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1, predict.request.v1, data.request.v1}`. Boundary test enforces (registry-walk, mirrors `test_boundary_discipline.py::test_sec_alert_v1_producer_set_*`).
   - NLP **never** writes to Postgres directly. Reads canonical lexicons via Phase 16 emitter feeds; reads predictions via consensus consumer; reads facts via `data.request.v1` → Phase 4 storage agent. Single-source doctrine intact.
-- [ ] **Cross-phase contracts.**
+- [x] **Cross-phase contracts.**
   - Phase 7 `qa.request.v1` dedup window (`cfg.qa_request_v1_dedup_window_s`) is the lower bound for `cfg.nlp_request_dedup_window_s` (refuse-boot inequality validator: `nlp_request_dedup_window_s ≥ qa_request_v1_dedup_window_s + 30`).
   - Phase 9 timeout chain inequality extends to: `api_request_timeout_ms ≥ nlp_pipeline_timeout_ms + nlp_dispatch_overhead_ms`, and `nlp_pipeline_timeout_ms ≥ consensus_window_ms + nlp_consensus_overhead_ms + (humanizer_max_latency_ms IF cfg.nlp_humanize)`. Boot validator (Phase 9 §9.17.4 deadline-propagation guard) refuses start on violation.
   - Phase 5 `predict.approved.v1{degraded:true, degraded_reason}` MUST be carried through to `qa.answer.v1{degraded:true, degraded_reason}` — never silently dropped (else operators believe NLP is the source of an off-call). Boundary test enforces.
@@ -37,7 +37,7 @@
 
 ### 10.1 Input normalization (deterministic, ordered, idempotent)
 
-- [ ] **Binding step list** (any reordering breaks downstream tests):
+- [x] **Binding step list** (any reordering breaks downstream tests):
   1. Length cap (re-asserted from §7.6 — defense in depth; rejects oversize that escaped sec.input.v1 due to schema drift). Hard cap = `cfg.nlp_input_max_codepoints` (default 512; sec gate `cfg.sec_input_max_len` is bytes-cap floor).
   2. NFC normalize.
   3. Control-char + zero-width + RTL-override strip (mirrors `sanitize_text` from `ai/swarm/agents/sec/input.py`; deduplicated via shared helper `ai/common/text/normalize.py::canonical_normalize` to prevent Python/Go drift). The Go gateway sanitizer (`server/internal/sec/sanitize.go`) is the byte-for-byte reference — `test_nlp_sanitize_matches_go_reference` runs the same 200-payload corpus through both and asserts byte-equality.
@@ -46,14 +46,14 @@
   6. Diacritic restoration (table-driven, see §10.3). Bounded edit cost.
   7. Tokenization (whitespace + punctuation split + Turkish suffix-aware tokenizer rules from `zemberek-python`; vendored snapshot pinned in `ai/nlp/vendor/zemberek_rules.json`, version-stamped).
   8. Token-level typo correction (see §10.3). Bounded budget.
-- [ ] **Idempotency guarantee.** `normalize(normalize(x)) == normalize(x)` — property-tested with `hypothesis` (≥ 1000 examples; seed-pinned).
-- [ ] **Determinism guarantee.** Same input → byte-identical output across 1000 runs across CPython 3.11/3.12 (Python `hash()` randomization MUST NOT enter the path; AST guard `test_nlp_no_set_iteration_in_normalize` rejects iteration over `set()` / `dict.keys()` without explicit `sorted(...)`).
-- [ ] **Bounded latency.** p95 ≤ 5 ms on `cfg.nlp_input_max_codepoints` cap (CI gate via `make nlp.bench`).
+- [x] **Idempotency guarantee.** `normalize(normalize(x)) == normalize(x)` — property-tested with `hypothesis` (≥ 1000 examples; seed-pinned).
+- [x] **Determinism guarantee.** Same input → byte-identical output across 1000 runs across CPython 3.11/3.12 (Python `hash()` randomization MUST NOT enter the path; AST guard `test_nlp_no_set_iteration_in_normalize` rejects iteration over `set()` / `dict.keys()` without explicit `sorted(...)`).
+- [x] **Bounded latency.** p95 ≤ 5 ms on `cfg.nlp_input_max_codepoints` cap (CI gate via `make nlp.bench`).
 
 
 ### 10.2 Lexicon system (versioned, hot-reloadable, integrity-checked)
 
-- [ ] **Layout.** `ai/nlp/lexicon/`:
+- [x] **Layout.** `ai/nlp/lexicon/`:
   - `teams.tr.yaml` — `{canonical_id: <league_catalog_team_id>, names: [...], aliases: [...]}`
   - `players.tr.yaml` — `{canonical_id, names, aliases, deprecated_after?}`
   - `leagues.tr.yaml` — `{canonical_id: <league_catalog_id>, names, aliases}`
@@ -61,27 +61,27 @@
   - `markets.tr.yaml` — `{canonical_id ∈ closed enum: 1x2, ms, au_2.5, kg, btts, iy_ms, ah_home, ...; names, aliases}`
   - `dialects.tr.yaml` — slang / regionalisms / common abbreviations → canonical token sequence.
   - `entities_negative.tr.yaml` — known false-positives (e.g., "fener" alone is ambiguous; require `bahce` co-token).
-- [ ] **Versioning.** Each file carries `_meta: {schema_version: 1, lexicon_version: <semver>, generated_at_utc, generator: nlp.lexicon-build}`. Schema-version mismatch refuses load.
-- [ ] **Atomic swap.** Hot-reload via mtime poll (`cfg.nlp_lexicon_reload_s=30`); load into shadow, validate (every alias maps back to a canonical that exists in LeagueCatalog OR markets enum OR is explicitly marked `freeform: true`), swap under `threading.Lock`. Failure → keep old, debounced `nlp.alert.v1{kind=lexicon_unreadable, severity=error}`. Mirrors §7.5 SecInputAgent pattern reload doctrine.
-- [ ] **Build pipeline.** `make nlp.lexicon-build` regenerates from LeagueCatalog + per-league preset modules + a hand-curated alias delta file (`ai/nlp/lexicon/_aliases_delta.tr.yaml`). `make verify.nlp-lexicons` AST-asserts: (a) every canonical_id resolves; (b) no two canonical_ids share an alias without an `entities_negative` disambiguator; (c) all alias strings pass through §10.1 normalize and re-resolve to the same canonical (round-trip property).
-- [ ] **Integrity.** Each lexicon file SHA256 captured at load; mtime-poll skip-if-unchanged optimization keyed on the SHA (defends against editor-touch-without-change, and against truncated/partial writes — partial file → SHA mismatch with prior cached → refuse swap).
-- [ ] **Cardinality cap.** `cfg.nlp_lexicon_max_entries_per_file=50000`; over-cap → `nlp.alert.v1{kind=dictionary_overflow, severity=warn}` and refuse load (defends against Phase 19 long-tail explosion silently bloating memory).
-- [ ] **Bounded memory.** Aliases stored in a single `dict[str, AliasHit]` (frozen `AliasHit = (canonical_id, kind, lexicon_version)`) per file; total RSS budget `cfg.nlp_lexicon_max_rss_mb=128` validated at load.
+- [x] **Versioning.** Each file carries `_meta: {schema_version: 1, lexicon_version: <semver>, generated_at_utc, generator: nlp.lexicon-build}`. Schema-version mismatch refuses load.
+- [x] **Atomic swap.** Hot-reload via mtime poll (`cfg.nlp_lexicon_reload_s=30`); load into shadow, validate (every alias maps back to a canonical that exists in LeagueCatalog OR markets enum OR is explicitly marked `freeform: true`), swap under `threading.Lock`. Failure → keep old, debounced `nlp.alert.v1{kind=lexicon_unreadable, severity=error}`. Mirrors §7.5 SecInputAgent pattern reload doctrine.
+- [x] **Build pipeline.** `make nlp.lexicon-build` regenerates from LeagueCatalog + per-league preset modules + a hand-curated alias delta file (`ai/nlp/lexicon/_aliases_delta.tr.yaml`). `make verify.nlp-lexicons` AST-asserts: (a) every canonical_id resolves; (b) no two canonical_ids share an alias without an `entities_negative` disambiguator; (c) all alias strings pass through §10.1 normalize and re-resolve to the same canonical (round-trip property).
+- [x] **Integrity.** Each lexicon file SHA256 captured at load; mtime-poll skip-if-unchanged optimization keyed on the SHA (defends against editor-touch-without-change, and against truncated/partial writes — partial file → SHA mismatch with prior cached → refuse swap).
+- [x] **Cardinality cap.** `cfg.nlp_lexicon_max_entries_per_file=50000`; over-cap → `nlp.alert.v1{kind=dictionary_overflow, severity=warn}` and refuse load (defends against Phase 19 long-tail explosion silently bloating memory).
+- [x] **Bounded memory.** Aliases stored in a single `dict[str, AliasHit]` (frozen `AliasHit = (canonical_id, kind, lexicon_version)`) per file; total RSS budget `cfg.nlp_lexicon_max_rss_mb=128` validated at load.
 
 
 ### 10.3 Typo correction & diacritic restoration (bounded-cost)
 
-- [ ] **Symspell-style** structure (vendored in `ai/nlp/vendor/symspell.py`) over the union of team/player/league/competition aliases. Edit budget = `cfg.nlp_typo_max_edit_distance=2` for tokens of length ≥ 5, =1 for length 3-4, =0 for length ≤ 2 (single-char tokens like "gs" must hit the abbreviation table, not fuzzy-match).
-- [ ] **Per-query budget.** Total fuzzy lookups capped at `cfg.nlp_typo_max_lookups_per_query=8`. Beyond → emit `nlp.event.v1{kind=did_you_mean_offered}` and short-circuit to a "Did you mean?" reformulation (NEVER a guess).
-- [ ] **Diacritic restoration table.** `ai/nlp/lexicon/_diacritics.tr.yaml` — frequency-weighted mapping of ASCIIfied form → canonical form, generated from the union of lexicons + a corpus-derived word-frequency baseline (`ai/nlp/data/tr_word_freq.txt`, sourced from open Turkish Wikipedia dump SHA-pinned in `xops/versioning/chart.json` compatibility block). NO LLM in this path (per AGENTS.md Rule 4 + Rule 1).
-- [ ] **Ambiguity policy.** When two restorations are within `cfg.nlp_diacritic_tie_break_ratio=1.5x` frequency, do NOT auto-choose; preserve original token + flag for the entity resolver to disambiguate via context (e.g., co-occurring league name).
-- [ ] **Cost ceiling.** Total normalize+typo+diacritic stage capped at `cfg.nlp_normalize_stage_timeout_ms=20` (deadline propagation per Phase 9 §9.17.4); on timeout → fall through to raw token sequence + `nlp.event.v1{kind=normalize_timeout}`. Better degraded answer than no answer.
+- [x] **Symspell-style** structure (vendored in `ai/nlp/vendor/symspell.py`) over the union of team/player/league/competition aliases. Edit budget = `cfg.nlp_typo_max_edit_distance=2` for tokens of length ≥ 5, =1 for length 3-4, =0 for length ≤ 2 (single-char tokens like "gs" must hit the abbreviation table, not fuzzy-match).
+- [x] **Per-query budget.** Total fuzzy lookups capped at `cfg.nlp_typo_max_lookups_per_query=8`. Beyond → emit `nlp.event.v1{kind=did_you_mean_offered}` and short-circuit to a "Did you mean?" reformulation (NEVER a guess).
+- [x] **Diacritic restoration table.** `ai/nlp/lexicon/_diacritics.tr.yaml` — frequency-weighted mapping of ASCIIfied form → canonical form, generated from the union of lexicons + a corpus-derived word-frequency baseline (`ai/nlp/data/tr_word_freq.txt`, sourced from open Turkish Wikipedia dump SHA-pinned in `xops/versioning/chart.json` compatibility block). NO LLM in this path (per AGENTS.md Rule 4 + Rule 1).
+- [x] **Ambiguity policy.** When two restorations are within `cfg.nlp_diacritic_tie_break_ratio=1.5x` frequency, do NOT auto-choose; preserve original token + flag for the entity resolver to disambiguate via context (e.g., co-occurring league name).
+- [x] **Cost ceiling.** Total normalize+typo+diacritic stage capped at `cfg.nlp_normalize_stage_timeout_ms=20` (deadline propagation per Phase 9 §9.17.4); on timeout → fall through to raw token sequence + `nlp.event.v1{kind=normalize_timeout}`. Better degraded answer than no answer.
 
 
 ### 10.4 Intent classifier (fastText, calibrated, abstaining)
 
-- [ ] **Model.** fastText supervised, ≤ 20 MB on disk, `cfg.nlp_intent_model_path` (default `data/models/nlp/intent.tr.bin`). SHA-pinned via `make nlp.intent-pin`. CPU-only; <1 ms per query on RTX-4080m and <5 ms on AVX-2 desktop CPU (CI gate).
-- [ ] **Closed intent enum** (versioned in `ai/swarm/sdk/schemas/_intent_enum.json`, `additionalProperties:false`, schema_version=1):
+- [x] **Model.** fastText supervised, ≤ 20 MB on disk, `cfg.nlp_intent_model_path` (default `data/models/nlp/intent.tr.bin`). SHA-pinned via `make nlp.intent-pin`. CPU-only; <1 ms per query on RTX-4080m and <5 ms on AVX-2 desktop CPU (CI gate).
+- [x] **Closed intent enum** (versioned in `ai/swarm/sdk/schemas/_intent_enum.json`, `additionalProperties:false`, schema_version=1):
   - `predict.match_outcome` (1x2)
   - `predict.over_under` (au/under thresholds)
   - `predict.btts`
@@ -97,77 +97,76 @@
   - `meta.help`
   - `meta.unsupported` (sole graceful-bail intent)
   - `meta.adversarial` (any of: prompt-injection-like, off-topic, abuse — auto-routed to template `meta.adversarial.tr.j2`)
-- [ ] **Calibration.** Platt-scaling (per-intent) calibration on the held-out validation slice; `nlp.intent.v1` emits `predict.intent_distribution` (top-k softmax probabilities + calibrated confidence). Stored alongside `intent.tr.bin` as `intent.tr.calibration.json`.
-- [ ] **Abstention threshold.** `cfg.nlp_min_intent_conf=0.55` (pinned via §10.18 evaluation harness); below → "Did you mean?" with the top-3 intents + best-guess entity hooks (e.g., "Galatasaray maçı için: skor mu, tahmin mi, kadro mu?"). Never guess silently.
-- [ ] **Drift guard.** Rolling accuracy on a 1000-query slice tracked via `nlp.event.v1{kind=intent_classifier_degraded}` when accuracy drops below `cfg.nlp_intent_accuracy_floor=0.92`; auto-routes new traffic to template-only fallback (no LLM polish on degraded intent path).
-- [ ] **Versioning.** Model version + calibration version stamped on every `qa.intent.v1` envelope (`intent_model_version`, `intent_calibration_version`); allows post-hoc audit of "why did the system choose intent X for query Y on date Z".
+- [x] **Calibration.** Platt-scaling (per-intent) calibration on the held-out validation slice; `nlp.intent.v1` emits `predict.intent_distribution` (top-k softmax probabilities + calibrated confidence). Stored alongside `intent.tr.bin` as `intent.tr.calibration.json`.
+- [x] **Abstention threshold.** `cfg.nlp_min_intent_conf=0.55` (pinned via §10.18 evaluation harness); below → "Did you mean?" with the top-3 intents + best-guess entity hooks (e.g., "Galatasaray maçı için: skor mu, tahmin mi, kadro mu?"). Never guess silently.
+- [x] **Drift guard.** Rolling accuracy on a 1000-query slice tracked via `nlp.event.v1{kind=intent_classifier_degraded}` when accuracy drops below `cfg.nlp_intent_accuracy_floor=0.92`; auto-routes new traffic to template-only fallback (no LLM polish on degraded intent path).
+- [x] **Versioning.** Model version + calibration version stamped on every `qa.intent.v1` envelope (`intent_model_version`, `intent_calibration_version`); allows post-hoc audit of "why did the system choose intent X for query Y on date Z".
 
 
 ### 10.5 Entity extraction (gazetteer + small CRF, span-resolved)
 
-- [ ] **Hybrid pipeline.**
+- [x] **Hybrid pipeline.**
   1. Gazetteer pass: longest-non-overlapping match against the lexicons (§10.2). Each hit carries `(span_start, span_end, kind ∈ {team, player, league, competition, market}, canonical_id, confidence=1.0, lexicon_version)`.
   2. CRF pass: small linear-chain CRF over BIO tags for `{date, time, weekday, ordinal, money_amount, score}`. Vendored via `python-crfsuite`; model ≤ 5 MB; SHA-pinned.
   3. Conflict resolution: (a) gazetteer overrides CRF on token overlap; (b) within gazetteer, longest-match wins; (c) ties broken by `entities_negative.tr.yaml` rules then by `cfg.nlp_entity_kind_priority` ordered list.
-- [ ] **Date / time resolver** (`ai/nlp/dates_tr.py`): "bugün", "yarın", "cuma", "önümüzdeki hafta", "27 Nisan saat 21:30" → `(start_utc, end_utc, granularity)`. **All resolution against `cfg.nlp_clock_now()` injection point** (test-substitutable; mirrors §8.16.1 boottime/monotonic doctrine for clock discipline).
-- [ ] **Ambiguity policy.** Multi-canonical hits (e.g., "fenerli" ambiguous between "Fenerbahçe SK" and "Fenerbahçe Beko") → emit `nlp.event.v1{kind=slot_resolution_failed, candidates: [...]}`, fall through to "Did you mean?". Never silently pick.
-- [ ] **PII guard at extraction.** If CRF matches a span looking like phone-number / email / credit-card → drop span (do NOT publish in `qa.intent.v1`) AND emit `nlp.alert.v1{kind=pii_detected_in_input, severity=warn}` (operator visibility; user-facing answer is unaffected).
-- [ ] **Bounded latency.** p95 ≤ 8 ms on cap-length input; CI bench gate.
+- [x] **Date / time resolver** (`ai/nlp/dates_tr.py`): "bugün", "yarın", "cuma", "önümüzdeki hafta", "27 Nisan saat 21:30" → `(start_utc, end_utc, granularity)`. **All resolution against `cfg.nlp_clock_now()` injection point** (test-substitutable; mirrors §8.16.1 boottime/monotonic doctrine for clock discipline).
+- [x] **Ambiguity policy.** Multi-canonical hits (e.g., "fenerli" ambiguous between "Fenerbahçe SK" and "Fenerbahçe Beko") → emit `nlp.event.v1{kind=slot_resolution_failed, candidates: [...]}`, fall through to "Did you mean?". Never silently pick.
+- [x] **PII guard at extraction.** If CRF matches a span looking like phone-number / email / credit-card → drop span (do NOT publish in `qa.intent.v1`) AND emit `nlp.alert.v1{kind=pii_detected_in_input, severity=warn}` (operator visibility; user-facing answer is unaffected).
+- [x] **Bounded latency.** p95 ≤ 8 ms on cap-length input; CI bench gate.
 
 
 ### 10.6 Slot resolver & dispatch (intent + entities → bus action)
 
-- [ ] **`nlp.dispatcher.v1` agent.** Subscribes to `qa.intent.v1`. Translates `(intent, entities)` → exactly one of:
+- [x] **`nlp.dispatcher.v1` agent.** Subscribes to `qa.intent.v1`. Translates `(intent, entities)` → exactly one of:
   - `predict.request.v1{match_id, market, request_id, qa_correlation_id, league_id, profile_id}` — for any `predict.*` intent that fully resolves to a single fixture + market.
   - `data.request.v1{kind, params, request_id, qa_correlation_id}` — for `data.*` intents (Phase 4 storage agent answers).
   - `qa.answer.v1` directly — for `meta.*` intents (no compute needed).
   - `qa.answer.v1{kind=disambiguation}` — when slot resolution surfaces multiple plausible fixtures (top-3 with kickoff times).
-- [ ] **Deterministic backoff.** When intent is `predict.*` but a single fixture cannot be resolved (e.g., "tahmin" with no team mention), do NOT default to "today's headline match" — emit a `disambiguation` answer listing fixtures from `cfg.nlp_default_fixture_window_h=48`. Avoids silent guessing.
-- [ ] **Multi-fixture intents.** `summary.next_week` / `summary.matchday` resolve to a fan-out: dispatcher publishes N `predict.request.v1` (capped at `cfg.nlp_summary_max_fixtures=10`) with a shared `summary_correlation_id`; the answer agent (§10.7) aggregates on `predict.approved.v1` arrival within `cfg.nlp_summary_aggregation_timeout_ms=2500` (deadline-propagated from `nlp_pipeline_timeout_ms`); under-collected → degraded answer with explicit "X / Y maç hazır" note.
-- [ ] **`qa_correlation_id` invariant.** Generated at dispatch; round-tripped on `predict.request.v1` (Phase 9 §9.15 forward contract — already pinned), then on `predict.approved.v1` (additive field in Phase 5 schema). Boundary test: every `qa.answer.v1` carries the originating `qa.request.v1.request_id` AND the dispatch `qa_correlation_id`.
-- [ ] **Idempotency.** `(qa_correlation_id, intent, entity_hash)` is the dedup key; replay safe (mirrors Phase 7 `RequestIdDeduper` pattern). Window = `cfg.nlp_dispatch_dedup_window_s=600`.
+- [x] **Multi-fixture intents.** `summary.next_week` / `summary.matchday` resolve to a fan-out: dispatcher publishes N `predict.request.v1` (capped at `cfg.nlp_summary_max_fixtures=10`) with a shared `summary_correlation_id`; the answer agent (§10.7) aggregates on `predict.approved.v1` arrival within `cfg.nlp_summary_aggregation_timeout_ms=1500` (deadline-propagated from `nlp_pipeline_timeout_ms`); under-collected → degraded answer with explicit "X / Y maç hazır" note.
+- [x] **`qa_correlation_id` invariant.** Generated at dispatch; round-tripped on `predict.request.v1` (Phase 9 §9.15 forward contract — already pinned), then on `predict.approved.v1` (additive field in Phase 5 schema). Boundary test: every `qa.answer.v1` carries the originating `qa.request.v1.request_id` AND the dispatch `qa_correlation_id`.
+- [x] **Idempotency.** `(qa_correlation_id, intent, entity_hash)` is the dedup key; replay safe (mirrors Phase 7 `RequestIdDeduper` pattern). Window = `cfg.nlp_dispatch_dedup_window_s=600`.
 
 
 ### 10.7 Answer generation (template-first, Turkish-morphology-aware)
 
-- [ ] **Template registry.** `ai/nlp/templates/<intent>.tr.j2` — one template per intent in the closed enum (§10.4). Coverage gate: `test_nlp_template_per_intent` walks the enum and asserts a file exists.
-- [ ] **Jinja2 environment** (`ai/nlp/render.py`):
+- [x] **Template registry.** `ai/nlp/templates/<intent>.tr.j2` — one template per intent in the closed enum (§10.4). Coverage gate: `test_nlp_template_per_intent` walks the enum and asserts a file exists.
+- [x] **Jinja2 environment** (`ai/nlp/render.py`):
   - `autoescape=False` (output is Turkish text, not HTML; XSS guard at API serialization layer per Phase 9 §9.4).
   - `undefined=jinja2.StrictUndefined` — missing slot raises (caught and routed to `meta.unsupported` template; never empty string).
   - Custom filters (vendored at `ai/nlp/jinja_filters_tr.py`): `dative`, `accusative`, `locative`, `ablative`, `genitive`, `plural` (suffix-harmony aware via vowel-class tables); `kickoff_time` (locale-aware, "Cumartesi 21:30"); `match_label` ("Galatasaray–Fenerbahçe"); `confidence_band` (probability → "yüksek/orta/düşük güven" via `cfg.nlp_confidence_bands` thresholds).
-- [ ] **Suffix-harmony test harness.** `test_nlp_suffix_harmony` runs every filter against a 200-row pinned table of `(stem, expected_locative, expected_dative, ...)` covering: front/back vowels, rounded/unrounded, terminal-consonant assimilation (k→ğ, p→b), apostrophe handling for proper nouns ("Galatasaray'da" not "Galatasarayda"). Pinned via golden file; drift = test fail.
-- [ ] **Citation block (mandatory for `predict.*` intents).** Every templated answer ends with a structured citation block: `prediction_id`, `produced_at_utc`, `model_versions: [predictor_id@version, ...]`, `calibration_version`, and (when `degraded:true`) `degraded_reason`. The block is included BEFORE humanizer rephrasing and is invariant across humanizer output (the proofreader §10.9 enforces preservation byte-for-byte).
-- [ ] **Confidence rendering.** Probability → calibrated confidence band (default 3 bands: < 0.55 = "düşük", 0.55-0.75 = "orta", > 0.75 = "yüksek"), pinned via `cfg.nlp_confidence_bands`. Raw probability is included in the citation block; the user-facing prose uses the band.
-- [ ] **Degraded-mode rendering.** `predict.approved.v1{degraded:true}` → template gains an explicit Turkish disclaimer ("Tahmin sınırlı veriyle üretildi: <reason>") AND humanizer is bypassed for the disclaimer line (preserves operator-vetted phrasing under degraded conditions).
+- [x] **Suffix-harmony test harness.** `test_nlp_suffix_harmony` runs every filter against a 200-row pinned table of `(stem, expected_locative, expected_dative, ...)` covering: front/back vowels, rounded/unrounded, terminal-consonant assimilation (k→ğ, p→b), apostrophe handling for proper nouns ("Galatasaray'da" not "Galatasarayda"). Pinned via golden file; drift = test fail.
+- [x] **Citation block (mandatory for `predict.*` intents).** Every templated answer ends with a structured citation block: `prediction_id`, `produced_at_utc`, `model_versions: [predictor_id@version, ...]`, `calibration_version`, and (when `degraded:true`) `degraded_reason`. The block is included BEFORE humanizer rephrasing and is invariant across humanizer output (the proofreader §10.9 enforces preservation byte-for-byte).
+- [x] **Confidence rendering.** Probability → calibrated confidence band (default 3 bands: < 0.55 = "düşük", 0.55-0.75 = "orta", > 0.75 = "yüksek"), pinned via `cfg.nlp_confidence_bands`. Raw probability is included in the citation block; the user-facing prose uses the band.
+- [x] **Degraded-mode rendering.** `predict.approved.v1{degraded:true}` → template gains an explicit Turkish disclaimer ("Tahmin sınırlı veriyle üretildi: <reason>") AND humanizer is bypassed for the disclaimer line (preserves operator-vetted phrasing under degraded conditions).
 
 
 ### 10.8 Humanizer LLM (opt-in, fenced, decoding-constrained)
 
-- [ ] **Default OFF.** `cfg.nlp_humanize=false`. Flips on per-deployment via single config change.
-- [ ] **Model.** Pinned by exact version in `xops/versioning/chart.json` compatibility block (NEVER `*-latest` per CLAUDE.md). Default candidate `Trendyol-LLM-1B-base@<sha>`; <= 1 B params; quantized GGUF for CPU; bf16 for GPU.
-- [ ] **Role.** Rephrase the templated answer for tone. **NEVER** decides the prediction; **NEVER** generates citation block; **NEVER** introduces facts not in the templated answer.
-- [ ] **Decoding constraints (binding).**
+- [x] **Default OFF.** `cfg.nlp_humanize=false`. Flips on per-deployment via single config change.
+- [x] **Model.** Pinned by exact version in `xops/versioning/chart.json` compatibility block (NEVER `*-latest` per CLAUDE.md). Default candidate `Trendyol-LLM-1B-base@<sha>`; <= 1 B params; quantized GGUF for CPU; bf16 for GPU.
+- [x] **Role.** Rephrase the templated answer for tone. **NEVER** decides the prediction; **NEVER** generates citation block; **NEVER** introduces facts not in the templated answer.
+- [x] **Decoding constraints (binding).**
   - `temperature=0.3`, `top_p=0.9`, `repetition_penalty=1.05`, `max_new_tokens=cfg.nlp_humanizer_max_new_tokens=120`.
   - Stop sequences include the citation block delimiter (humanizer cannot bleed into citations).
   - Logit bias against fabricated-fact triggers (numerals not in the source template; team names not in the source template; English words from a pinned blocklist `ai/nlp/data/en_word_blocklist.txt`).
-- [ ] **Latency budget.** Per-call hard cap `cfg.nlp_humanizer_max_latency_ms=600` (deadline-propagated). Breach → fall back to template, emit `nlp.event.v1{kind=humanizer_disabled, reason=latency}`, open a circuit breaker (gobreaker-style) for `cfg.nlp_humanizer_breaker_open_s=60` — refuses humanize for that window, emits `nlp.event.v1{kind=humanizer_breaker_open}` once on transition.
-- [ ] **Drift guard.** Output character-level edit distance vs templated answer must be ≤ `cfg.nlp_humanizer_max_edit_ratio=0.6` (LLM is rephrasing, not authoring). Over-cap → discard, fall back to template, emit `nlp.alert.v1{kind=nlp_humanizer_drift, severity=warn}`.
-- [ ] **GPU sharing.** Phase 11 §11.2 round-robin scheduler — humanizer holds a single-LLM lease; coexistence with Phase 8 patcher LLM is by lease swap, not concurrent load.
-- [ ] **CPU parity test (Phase 11 §11.3).** Same input + greedy seed=1337 → byte-identical output across CUDA / CPU within ε for tokens (deterministic decode required); else `cpu_only` test fails.
+- [x] **Latency budget.** Per-call hard cap `cfg.nlp_humanizer_max_latency_ms=600` (deadline-propagated). Breach → fall back to template, emit `nlp.event.v1{kind=humanizer_disabled, reason=latency}`, open a circuit breaker (gobreaker-style) for `cfg.nlp_humanizer_breaker_open_s=60` — refuses humanize for that window, emits `nlp.event.v1{kind=humanizer_breaker_open}` once on transition.
+- [x] **Drift guard.** Output character-level edit distance vs templated answer must be ≤ `cfg.nlp_humanizer_max_edit_ratio=0.6` (LLM is rephrasing, not authoring). Over-cap → discard, fall back to template, emit `nlp.alert.v1{kind=nlp_humanizer_drift, severity=warn}`.
+- [x] **GPU sharing.** Phase 11 §11.2 round-robin scheduler — humanizer holds a single-LLM lease; coexistence with Phase 8 patcher LLM is by lease swap, not concurrent load.
+- [x] **CPU parity test (Phase 11 §11.3).** Same input + greedy seed=1337 → byte-identical output across CUDA / CPU within ε for tokens (deterministic decode required); else `cpu_only` test fails.
 
 
 ### 10.9 TR-quality proofreader agent (`nlp.proofreader.v1`)
 
-- [ ] **Subscribes** `qa.answer.v1` (pre-publish channel — internal to NLP plane via `_pre_answer_topic`, not a bus topic to avoid double-emission). **Publishes** `qa.answer.v1` (post-block) OR `qa.answer.v1{kind=proofreader_blocked}` plus `nlp.alert.v1`.
-- [ ] **Deterministic gates** (any failure → block):
+- [x] **Subscribes** `qa.answer.v1` (pre-publish channel — internal to NLP plane via `_pre_answer_topic`, not a bus topic to avoid double-emission). **Publishes** `qa.answer.v1` (post-block) OR `qa.answer.v1{kind=proofreader_blocked}` plus `nlp.alert.v1`.
+- [x] **Deterministic gates** (any failure → block):
   1. **Citation block present and unmodified** for any `predict.*` answer (sha256 over the citation block compared against the dispatcher-stamped value).
   2. **No mid-sentence English** (regex over a pinned EN-word blocklist; allowlist for proper nouns from LeagueCatalog like "Premier League").
   3. **Length bounds** `cfg.nlp_min_answer_chars=20 ≤ len ≤ cfg.nlp_max_answer_chars=600`.
   4. **PII redaction.** Phone-number / email / credit-card / TC-kimlik-no patterns (regex from `ai/common/security/patterns.py` — single source) → redact (replace with `[***]`) AND emit `nlp.alert.v1{kind=nlp_pii_in_answer, severity=error}`.
   5. **Forbidden phrases.** Pinned blocklist (`ai/nlp/data/forbidden_phrases.tr.yaml`) — covers self-promotion ("ben bir yapay zekayım"), liability disclaimers user wouldn't expect ("yatırım tavsiyesi değildir" — moved to a separate disclaimer slot), and known jailbreak echoes.
   6. **Suffix-harmony probe.** Sample 5 random `<noun>'<suffix>` constructions in the answer; assert each passes `ai/common/text/turkish.py::suffix_harmony_ok`.
-- [ ] **Block taxonomy.** `nlp.event.v1{kind=proofreader_blocked, reason ∈ {citation_drift, mid_sentence_english, length_under, length_over, pii_redacted, forbidden_phrase, suffix_harmony}}`. Operators see exactly why.
-- [ ] **Fail-safe.** Proofreader exception → emit template-only answer (NEVER block the user on proofreader bug); emit `nlp.alert.v1{kind=nlp_proofreader_failed, severity=error}`.
+- [x] **Block taxonomy.** `nlp.event.v1{kind=proofreader_blocked, reason ∈ {citation_drift, mid_sentence_english, length_under, length_over, pii_redacted, forbidden_phrase, suffix_harmony}}`. Operators see exactly why.
+- [x] **Fail-safe.** Proofreader exception → emit template-only answer (NEVER block the user on proofreader bug); emit `nlp.alert.v1{kind=nlp_proofreader_failed, severity=error}`.
 
 
 ### 10.10 Graceful degradation matrix (binding)
@@ -189,14 +188,14 @@ The matrix is enumeratively tested (`test_nlp_degradation_matrix.py`).
 
 ### 10.11 Wire schemas (binding, schema_version=1)
 
-- [ ] `qa.intent.v1.json`:
+- [x] `qa.intent.v1.json`:
   ```
   {request_id, qa_correlation_id, sanitized_text, locale ∈ {tr-TR}, intent ∈ <closed enum §10.4>,
    intent_confidence ∈ [0,1], intent_distribution: [{intent, p}, ...],
    entities: [{kind, canonical_id, span_start, span_end, source ∈ {gazetteer, crf}}, ...],
    resolved_at_utc, intent_model_version, intent_calibration_version, lexicon_versions: {teams, ..., dialects}}
   ```
-- [ ] `qa.answer.v1.json`:
+- [x] `qa.answer.v1.json`:
   ```
   {request_id, qa_correlation_id, locale, intent, answer_text, answer_format ∈ {plain, markdown_safe},
    citations: [{kind ∈ {prediction, fact, fixture, source}, prediction_id?, source_id?, produced_at_utc,
@@ -204,18 +203,18 @@ The matrix is enumeratively tested (`test_nlp_degradation_matrix.py`).
    degraded: bool, degraded_reason?, humanizer_used: bool, proofreader_status ∈ {pass, blocked, redacted},
    tier_id_required ∈ <Phase 20 enum>, emitted_at_utc, nlp_pipeline_version}
   ```
-- [ ] `nlp.event.v1.json` — kind-discriminated `oneOf` per §8.16.2 doctrine; per-kind sub-schemas under `ai/swarm/sdk/schemas/nlp.event.v1/<kind>.json`.
-- [ ] `nlp.alert.v1.json` — mirrors `sec.alert.v1` shape (kind, severity, subject, debounce_key, details ≤ 2KB, emitted_at_utc); open-enum on `kind` per §7.4 doctrine; debounce via `swarm.sdk.AlertDebouncer` (pulled out of `SecAlertDebouncer` into a shared base `_BaseAlertDebouncer`).
-- [ ] **`predict.request.v1` additive field.** `qa_correlation_id` (already pinned at Phase 9 §9.15); `predict.approved.v1` additive field `qa_correlation_id` is the missing piece — schema_version 1→2 additive (mirrors §9.2 KID rotation doctrine: additive only). Boundary test asserts every NLP-originated `predict.request.v1` carries it.
-- [ ] **Cross-language schema parity.** Same `make verify.schemas` gate that covers `qa.request.v1` extends to all four new topics (Go gateway needs only `qa.answer.v1` for response serialization — pure data, no schema duplicate logic).
+- [x] `nlp.event.v1.json` — kind-discriminated `oneOf` per §8.16.2 doctrine; per-kind sub-schemas under `ai/swarm/sdk/schemas/nlp.event.v1/<kind>.json`.
+- [x] `nlp.alert.v1.json` — mirrors `sec.alert.v1` shape (kind, severity, source, reason, emitted_at, subject, request_id, qa_correlation_id, details ≤ 2KB); open-enum on `kind` per §7.4 doctrine; debounce via `swarm.sdk.AlertDebouncer` (pulled out of `SecAlertDebouncer` into a shared base `_BaseAlertDebouncer` at `ai/swarm/sdk/_alert_debouncer.py`). Schema at `ai/swarm/sdk/schemas/nlp.alert.v1.json` with `additionalProperties:false`.
+- [x] **`predict.request.v1` additive field.** `qa_correlation_id` (already pinned at Phase 9 §9.15); `predict.approved.v1` additive field `qa_correlation_id` is the missing piece — schema_version 1→2 additive (mirrors §9.2 KID rotation doctrine: additive only). Boundary test asserts every NLP-originated `predict.request.v1` carries it.
+- [x] **Cross-language schema parity.** Same `make verify.schemas` gate that covers `qa.request.v1` extends to all four new topics (Go gateway needs only `qa.answer.v1` for response serialization — pure data, no schema duplicate logic).
 
 
 ### 10.12 Performance, caching, and backpressure
 
-- [ ] **L0 intent cache** (in-process, mirrors §9.17.6 doctrine). Key = `sha256(normalized_text|locale)`; value = `(intent, intent_confidence, entity_hash)`. `cfg.nlp_intent_cache_max_entries=10000`, TTL `cfg.nlp_intent_cache_ttl_s=300`. Negative-cache `meta.unsupported` only (never cache `predict.*` outputs — those depend on time-varying state).
-- [ ] **L1 answer cache (Phase 4 `cache.v1` plane reuse).** Key = `(qa_correlation_id-stable-hash) = sha256(intent|entity_hash|fixture_window_bucket|model_versions_hash|calibration_version)`. TTL = `cfg.nlp_answer_cache_ttl_s=120` for `data.*`, `=60` for `predict.*` (predictions evolve). Invalidation reactor subscribes to `predict.approved.v1` and bumps the bucket.
-- [ ] **Singleflight collapse.** Mirrors §9.17.4 — concurrent identical queries collapse to a single dispatch (`nlp.dispatcher.v1` keyed on `(qa_correlation_id-stable-hash)` with sync.Cond-equivalent in Python `threading.Event` map).
-- [ ] **Latency budget table** (binding, p50 / p95 / p99 in ms, end-to-end NLP plane only — gateway+sec budget on top per Phase 9 §9.17.5):
+- [x] **L0 intent cache** (in-process, mirrors §9.17.6 doctrine). Key = `sha256(normalized_text|locale)`; value = `(intent, intent_confidence, entity_hash)`. `cfg.nlp_intent_cache_max_entries=10000`, TTL `cfg.nlp_intent_cache_ttl_s=300`. Negative-cache `meta.unsupported` only (never cache `predict.*` outputs — those depend on time-varying state).
+- [x] **L1 answer cache (Phase 4 `cache.v1` plane reuse).** Key = `(qa_correlation_id-stable-hash) = sha256(intent|entity_hash|fixture_window_bucket|model_versions_hash|calibration_version)`. TTL = `cfg.nlp_answer_cache_ttl_data_s=120` for `data.*`, `=60` for `predict.*` (predictions evolve). Invalidation reactor subscribes to `predict.approved.v1` and bumps the bucket.
+- [x] **Singleflight collapse.** Mirrors §9.17.4 — concurrent identical queries collapse to a single dispatch (`nlp.dispatcher.v1` keyed on `(qa_correlation_id-stable-hash)` with sync.Cond-equivalent in Python `threading.Event` map).
+- [x] **Latency budget table** (binding, p50 / p95 / p99 in ms, end-to-end NLP plane only — gateway+sec budget on top per Phase 9 §9.17.5):
   | Path | p50 | p95 | p99 |
   |---|---|---|---|
   | `meta.help` (cache hit) | 5 | 25 | 50 |
@@ -223,64 +222,64 @@ The matrix is enumeratively tested (`test_nlp_degradation_matrix.py`).
   | `predict.*` template-only | 250 | 800 | 1500 |
   | `predict.*` humanized | 350 | 1200 | 2000 |
   | `summary.next_week` (10 fixtures) | 800 | 2200 | 3500 |
-- [ ] **Backpressure.** When `qa.intent.v1` queue depth > `cfg.nlp_queue_pressure_threshold=100`: (a) disable humanizer (template-only mode) for `cfg.nlp_pressure_humanize_off_s=60`; (b) widen `nlp_intent_cache_ttl_s` 2x; (c) emit `nlp.alert.v1{kind=nlp_queue_pressure, severity=warn}` (debounced 60s).
+- [x] **Backpressure.** When `qa.intent.v1` queue depth > `cfg.nlp_queue_pressure_threshold=100`: (a) disable humanizer (template-only mode) for `cfg.nlp_pressure_humanize_off_s=60`; (b) widen `nlp_intent_cache_ttl_s` 2x; (c) emit `nlp.alert.v1{kind=nlp_queue_pressure, severity=warn}` (debounced 60s).
 
 
 ### 10.13 Idempotency, dedup, replay safety
 
-- [ ] **Producer-side `RequestIdDeduper`** at every NLP agent ingress (mirrors Phase 7 `swarm.sdk.dedup`). Window = `cfg.nlp_request_dedup_window_s=600` (≥ §10.0 inequality lower bound). Rejects double-publish from `qa.request.v1` Streams retry.
-- [ ] **`(qa_correlation_id, intent_model_version, calibration_version)` audit key.** Two requests with the same correlation but different model/calibration versions MUST produce two distinct `qa.answer.v1` envelopes (the user is allowed to see "the system updated its mind"); cache (§10.12 L1) keys include both versions.
-- [ ] **Spool on bus down.** NLP agents spool `qa.intent.v1` → disk (`data/nlp/spool/`, fcntl-flock per (`agent`, `qa_correlation_id`), `0700` dir / `0600` file, mtime-ordered replay) when bus publish fails ≥ `cfg.nlp_bus_failure_circuit_threshold=3` consecutive. Mirrors §8.1 opsctl spool. Cap `cfg.nlp_spool_max_entries=1000`; over-cap → drop oldest + `nlp.alert.v1{kind=nlp_spool_overflow, severity=critical}`.
+- [x] **Producer-side `RequestIdDeduper`** at every NLP agent ingress (mirrors Phase 7 `swarm.sdk.dedup`). Window = `cfg.nlp_request_dedup_window_s=600` (≥ §10.0 inequality lower bound). Rejects double-publish from `qa.request.v1` Streams retry.
+- [x] **`(qa_correlation_id, intent_model_version, calibration_version)` audit key.** Two requests with the same correlation but different model/calibration versions MUST produce two distinct `qa.answer.v1` envelopes (the user is allowed to see "the system updated its mind"); cache (§10.12 L1) keys include both versions.
+- [x] **Spool on bus down.** NLP agents spool qa.intent.v1 → disk (data/nlp/spool/, fcntl-flock per (agent, qa_correlation_id), 0700 dir / 0600 file, mtime-ordered replay) when bus publish fails ≥ cfg.nlp_bus_failure_circuit_threshold=3 consecutive. Mirrors §8.1 opsctl spool. Cap cfg.nlp_spool_max_entries=1000; over-cap → drop oldest + nlp.alert.v1{kind=nlp_spool_overflow, severity=critical}.
 
 
 ### 10.14 Observability (structured, PII-clean)
 
-- [ ] **Structured logs.** Every NLP plane log line carries `qa_correlation_id`, `request_id`, `intent`, `intent_confidence`, `entity_count`, `humanizer_used`, `proofreader_status`. **Never** the raw or sanitized text (PII discipline; mirrors Phase 9 §9.8).
-- [ ] **Metrics (RED + custom).** Cardinality bounded by intent enum + degraded flag (no per-team labels — explosion guard mirrors §9.8):
+- [x] **Structured logs.** Every NLP plane log line carries `qa_correlation_id`, `request_id`, `intent`, `intent_confidence`, `entity_count`, `humanizer_used`, `proofreader_status`. **Never** the raw or sanitized text (PII discipline; mirrors Phase 9 §9.8).
+- [x] **Metrics (RED + custom).** Cardinality bounded by intent enum + degraded flag (no per-team labels — explosion guard mirrors §9.8):
   - `nlp_pipeline_latency_seconds{stage ∈ {normalize, intent, entities, dispatch, predict_wait, render, humanize, proofread}, intent}` histogram with §9.17.5-aligned buckets.
   - `nlp_intent_confidence{intent}` summary (p50 / p95 / p99).
   - `nlp_humanizer_breaker_state{state ∈ {closed, open, half_open}}` gauge.
   - `nlp_proofreader_block_total{reason}` counter.
   - `nlp_lexicon_version{file}` info gauge (operator can correlate version → behavior change).
-- [ ] **Tracing.** W3C trace propagation (Phase 9 §9.5) extended through NLP pipeline; per-stage span on every request.
-- [ ] **Sampled answer audit.** 1-in-`cfg.nlp_answer_sample_inverse=1000` answers captured (PII-redacted text + envelope) into `data/nlp/audit/<date>/<qa_correlation_id>.json` for offline quality review. Capped daily volume `cfg.nlp_answer_sample_daily_cap=5000`.
+- [x] **Tracing.** W3C trace propagation (Phase 9 §9.5) extended through NLP pipeline; per-stage span on every request.
+- [x] **Sampled answer audit.** 1-in-`cfg.nlp_answer_sample_inverse=1000` answers captured (PII-redacted text + envelope) into `data/nlp/audit/<date>/<qa_correlation_id>.json` for offline quality review. Capped daily volume `cfg.nlp_answer_sample_daily_cap=5000`.
 
 
 ### 10.15 Adversarial & safety integration with Phase 7
 
-- [ ] **Defense-in-depth.** Even though sec.input.v1 already classifies `qa.request` and produces `qa.request.v1`, NLP runs a **second-pass deterministic injection probe** on the normalized text against the same `ai/common/security/injection_patterns.yaml` (single-source) — defends against an injection that survived sanitize because rules drifted. Hit → route intent to `meta.adversarial`, emit `nlp.alert.v1{kind=nlp_secondary_injection_hit, severity=warn}`.
-- [ ] **Hallucination guard.** Templated answer must reference only canonical entities present in the resolved entity list OR static template-baked phrases (`make nlp.template-lint` AST-asserts no `{{ free_text }}` slot in any template — only structured-slot interpolation).
-- [ ] **Off-topic handling.** `meta.adversarial` template returns a polite Turkish redirection ("Bu konuda yardımcı olamıyorum; lütfen futbolla ilgili bir soru sorun.") — fixed phrasing, humanizer bypassed, proofreader still runs PII check.
-- [ ] **Adversarial corpus alignment with Phase 12.** Phase 12 §12.2 fixture set (`ai/tests/fixtures/adversarial/`) is the **single source** for NLP adversarial tests too; NLP DoD requires 100% block of every entry mapped to NLP plane (no `xfail`).
+- [x] **Defense-in-depth.** Even though sec.input.v1 already classifies `qa.request` and produces `qa.request.v1`, NLP runs a **second-pass deterministic injection probe** on the normalized text against the same `ai/common/security/injection_patterns.yaml` (single-source) — defends against an injection that survived sanitize because rules drifted. Hit → route intent to `meta.adversarial`, emit `nlp.alert.v1{kind=nlp_secondary_injection_hit, severity=warn}`.
+- [x] **Hallucination guard.** Templated answer must reference only canonical entities present in the resolved entity list OR static template-baked phrases (`make nlp.template-lint` AST-asserts no `{{ free_text }}` slot in any template — only structured-slot interpolation).
+- [x] **Off-topic handling.** `meta.adversarial` template returns a polite Turkish redirection ("Bu konuda yardımcı olamıyorum; lütfen futbolla ilgili bir soru sorun.") — fixed phrasing, humanizer bypassed, proofreader still runs PII check.
+- [x] **Adversarial corpus alignment with Phase 12.** Phase 12 §12.2 fixture set (`ai/tests/fixtures/adversarial/`) is the **single source** for NLP adversarial tests too; NLP DoD requires 100% block of every entry mapped to NLP plane (no `xfail`).
 
 
 ### 10.16 Calibration & degraded-flag flow-through
 
-- [ ] **Hard rule.** `predict.approved.v1{degraded:true, degraded_reason}` → `qa.answer.v1{degraded:true, degraded_reason}` byte-for-byte preserved. AST-asserted at the answer agent (`test_nlp_degraded_flag_round_trip`).
-- [ ] **Calibration version stamping.** Every `predict.*` answer carries `calibration_version` from `predict.approved.v1`; mismatched versions across fixtures in a `summary.*` aggregation → multiple citation entries (one per version), explicit Turkish note ("X tahmin için kalibrasyon güncellendi").
-- [ ] **Confidence narration discipline.** Banded confidence text MUST never contradict the raw probability (e.g., raw 0.51 with band-text "yüksek güven" → block). Proofreader §10.9 gate #7 checks this via `(prob, band, text-keywords)` cross-check table.
+- [x] **Hard rule.** `predict.approved.v1{degraded:true, degraded_reason}` → `qa.answer.v1{degraded:true, degraded_reason}` byte-for-byte preserved. AST-asserted at the answer agent (`test_nlp_degraded_flag_round_trip`).
+- [x] **Calibration version stamping.** Every `predict.*` answer carries `calibration_version` from `predict.approved.v1`; mismatched versions across fixtures in a `summary.*` aggregation → multiple citation entries (one per version), explicit Turkish note ("X tahmin için kalibrasyon güncellendi").
+- [x] **Confidence narration discipline.** Banded confidence text MUST never contradict the raw probability (e.g., raw 0.51 with band-text "yüksek güven" → block). Proofreader §10.9 gate #7 checks this via `(prob, band, text-keywords)` cross-check table.
 
 
 ### 10.17 Multi-locale forward hook (TR-tr default; future-safe)
 
-- [ ] `locale ∈ {tr-TR}` enum at v1; structured to additively gain `en-GB` / `en-US` post-Phase-13a without schema break (per §8.16.2 versioning doctrine).
-- [ ] All template paths keyed `ai/nlp/templates/<intent>.<locale>.j2`; NLP code resolves locale via `cfg.nlp_default_locale` + per-request override (Phase 9 honors `Accept-Language`, lossy-mapped to supported set).
-- [ ] Lexicons future-keyed by locale (`teams.tr.yaml` → `teams.tr-TR.yaml` post-rename in §R-locale, deferred). v1 ships TR-only; symlinks for forward path.
+- [x] `locale ∈ {tr-TR}` enum at v1; structured to additively gain `en-GB` / `en-US` post-Phase-13a without schema break (per §8.16.2 versioning doctrine).
+- [x] All template paths keyed `ai/nlp/templates/<intent>.<locale>.j2`; NLP code resolves locale via `cfg.nlp_default_locale` + per-request override (Phase 9 honors `Accept-Language`, lossy-mapped to supported set).
+- [x] Lexicons future-keyed by locale (`teams.tr.yaml` → `teams.tr-TR.yaml` post-rename in §R-locale, deferred). v1 ships TR-only; symlinks for forward path.
 
 
 ### 10.18 Evaluation harness (versioned, CI-gated)
 
-- [ ] **Golden corpus.** `ai/tests/fixtures/turkish_queries.yaml` — ≥ 250 entries (from §10.4 originally 200; expanded), each row: `{id, raw, locale, expected_intent, expected_entities, expected_template_id, expected_disambiguation: bool, tags: [clean|no_diacritics|typo|slang|code_switch|adversarial|temporal]}`.
-- [ ] **Distribution targets.** clean=60, no_diacritics=60, typos=50, slang=30, code_switch=20, adversarial=20, temporal=10.
-- [ ] **CI gates.**
+- [x] **Golden corpus.** `ai/tests/fixtures/turkish_queries.yaml` — ≥ 250 entries (from §10.4 originally 200; expanded), each row: `{id, raw, locale, expected_intent, expected_entities, expected_template_id, expected_disambiguation: bool, tags: [clean|no_diacritics|typo|slang|code_switch|adversarial|temporal]}`.
+- [x] **Distribution targets.** clean=60, no_diacritics=60, typos=50, slang=30, code_switch=20, adversarial=20, temporal=10.
+- [x] **CI gates.**
   - Intent accuracy ≥ `cfg.nlp_intent_accuracy_floor=0.92` over (clean ∪ no_diacritics ∪ typos).
   - Entity F1 ≥ 0.90 over the same slice.
   - 100% "did-you-mean" for low-confidence cases (no silent guesses).
   - 100% block on adversarial slice.
   - 100% suffix-harmony golden table.
   - p95 normalize ≤ 5 ms; p95 entity extraction ≤ 8 ms; p99 template render ≤ 10 ms (`make nlp.bench`).
-- [ ] **Regression diff.** `make nlp.eval-diff BASELINE=<sha>` produces a markdown report comparing intent/entity/render outcomes vs a baseline corpus run; required attachment on any PR touching `ai/swarm/agents/nlp/**` (CI gate via `xops/lint/nlp_eval_diff_present.py`).
-- [ ] **Property tests.** `hypothesis` strategies for: (a) normalize idempotency; (b) gazetteer round-trip (alias → canonical → alias-set membership); (c) suffix-harmony filters on random vowel-class stems; (d) template render never raises `StrictUndefined` on the closed intent enum.
+- [x] **Regression diff.** `make nlp.eval-diff BASELINE=<sha>` produces a markdown report comparing intent/entity/render outcomes vs a baseline corpus run; required attachment on any PR touching `ai/swarm/agents/nlp/**` (CI gate via `xops/lint/nlp_eval_diff_present.py`).
+- [x] **Property tests.** `hypothesis` strategies for: (a) normalize idempotency; (b) gazetteer round-trip (alias → canonical → alias-set membership); (c) suffix-harmony filters on random vowel-class stems; (d) template render never raises `StrictUndefined` on the closed intent enum.
 
 
 ### 10.19 Triangle-test config knobs (~36 new keys)

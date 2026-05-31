@@ -282,6 +282,42 @@ api.erase-user: ## §9.8 GDPR right-to-erasure: null-stamp api_audit_log.user_id
 api.slo-report: ## 28-day rolling SLO summary (Phase 19 GA gate input)
 	@$(XOPS)/api.py slo-report
 
+.PHONY: nlp.bench
+nlp.bench: ## Phase 10 §10.1 — normalize_input p95 latency gate (≤5 ms on nlp_input_max_codepoints input)
+	@$(XOPS)/nlp.py nlp.bench
+
+.PHONY: nlp.entity-bench
+nlp.entity-bench: ## Phase 10 §10.5 — EntityExtractor.extract p95 latency gate (≤8 ms on cap-length token list)
+	@$(XOPS)/nlp.py nlp.entity-bench
+
+.PHONY: nlp.intent-pin
+nlp.intent-pin: ## Phase 10 §10.4 — SHA256-pin the fastText intent model (hashes model file, writes sha to chart.json)
+	@$(XOPS)/nlp.py nlp.intent-pin
+
+.PHONY: nlp.lexicon-build
+nlp.lexicon-build: ## Phase 10 §10.2 — apply _aliases_delta.tr.yaml onto lexicons, bump patch version
+	@$(XOPS)/nlp.py nlp.lexicon-build
+
+.PHONY: nlp.diacritics-build
+nlp.diacritics-build: ## Phase 10 §10.3 — generate _diacritics.tr.yaml from tr_word_freq.txt + lexicon union
+	@$(XOPS)/nlp.py nlp.diacritics-build
+
+.PHONY: nlp.template-lint
+nlp.template-lint: ## Phase 10 §10.15 — AST-assert no {{ free_text }} slot in any template (hallucination guard)
+	@$(XOPS)/nlp.py nlp.template-lint
+
+.PHONY: nlp.eval-diff
+nlp.eval-diff: ## Phase 10 §10.18 — Regression diff: compare intent/entity/render outcomes vs BASELINE sha (usage: make nlp.eval-diff BASELINE=<sha>)
+	@$(XOPS)/nlp.py nlp.eval-diff $(BASELINE)
+
+.PHONY: verify.nlp-lexicons
+verify.nlp-lexicons: ## Phase 10 §10.2 — assert (a) canonical_id resolves (b) no uncovered alias collision (c) normalize round-trip
+	@$(XOPS)/nlp.py verify.nlp-lexicons
+
+.PHONY: verify.nlp-schemas
+verify.nlp-schemas: ## Phase 10 §10.19 — assert all four NLP topics (qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1) have valid JSON Schema files
+	@$(XOPS)/nlp.py verify.nlp-schemas
+
 .PHONY: api.bench
 api.bench: ## §9.17.5 per-endpoint latency benchmark (k6, 200 RPS, 60s); asserts §9.17.5 latency table
 	@$(XOPS)/bench.py api.bench

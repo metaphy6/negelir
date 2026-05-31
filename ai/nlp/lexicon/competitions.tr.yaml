@@ -1,0 +1,62 @@
+# Negelir — NLP lexicon: Cup / competition formats (Phase 13a §13.x)
+# canonical_id references competition_catalog IDs.
+# Managed by: make nlp.lexicon-build
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - canonical_id: tr_kupasi
+    names:
+      - Türkiye Kupası
+      - Ziraat Türkiye Kupası
+    aliases:
+      - kupa
+      - türkiye kupası
+      - ziraat kupası
+
+  - canonical_id: tr_supe_kupa
+    names:
+      - Türkiye Süper Kupası
+    aliases:
+      - süper kupa
+      - sezonu başlangıç kupası
+
+  - canonical_id: uefa_champions_league
+    names:
+      - UEFA Şampiyonlar Ligi
+      - Şampiyonlar Ligi
+      - Champions League
+    aliases:
+      - şampiyonlar ligi
+      - ucl
+      - sl
+
+  - canonical_id: uefa_europa_league
+    names:
+      - UEFA Avrupa Ligi
+      - Avrupa Ligi
+      - Europa League
+    aliases:
+      - avrupa ligi
+      - uel
+
+  - canonical_id: uefa_conference_league
+    names:
+      - UEFA Konferans Ligi
+      - Konferans Ligi
+      - Conference League
+    aliases:
+      - konferans ligi
+      - uecl
+
+  - canonical_id: fifa_world_cup
+    names:
+      - FIFA Dünya Kupası
+      - Dünya Kupası
+      - World Cup
+    aliases:
+      - dünya kupası
+      - wc

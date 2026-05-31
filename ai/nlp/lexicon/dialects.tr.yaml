@@ -1,0 +1,114 @@
+# Negelir — NLP lexicon: Turkish football slang, regionalisms, abbreviations
+# Each entry maps a colloquial token/phrase to a canonical token sequence.
+# canonical_tokens: list of normalized tokens (lowercased, NFC, no diacritics variant handled)
+# Managed by: make nlp.lexicon-build
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-05-27T00:00:00Z"
+  generator: nlp.lexicon-build
+entries:
+  - token: cimbom
+    canonical_tokens:
+      - galatasaray
+
+  - token: kanarya
+    canonical_tokens:
+      - fenerbahçe
+
+  - token: gs
+    canonical_tokens:
+      - galatasaray
+
+  - token: fb
+    canonical_tokens:
+      - fenerbahçe
+
+  - token: bjk
+    canonical_tokens:
+      - beşiktaş
+
+  - token: ts
+    canonical_tokens:
+      - trabzonspor
+
+  - token: mac
+    canonical_tokens:
+      - maç
+
+  - token: tahmın
+    canonical_tokens:
+      - tahmin
+
+  - token: skor
+    canonical_tokens:
+      - skor
+
+  - token: gol
+    canonical_tokens:
+      - gol
+
+  - token: kupa
+    canonical_tokens:
+      - kupa
+
+  - token: derby
+    canonical_tokens:
+      - derbi
+
+  - token: derbi
+    canonical_tokens:
+      - derbi
+
+  - token: gece maçı
+    canonical_tokens:
+      - akşam
+      - maç
+
+  - token: bugünkü maç
+    canonical_tokens:
+      - bugün
+      - maç
+
+  - token: yarınki maç
+    canonical_tokens:
+      - yarın
+      - maç
+
+  - token: bu hafta
+    canonical_tokens:
+      - bu
+      - hafta
+
+  - token: galibiyet
+    canonical_tokens:
+      - kazanır
+
+  - token: yenilgi
+    canonical_tokens:
+      - kaybeder
+
+  - token: beraberlik
+    canonical_tokens:
+      - beraberlik
+
+  - token: ilk devre
+    canonical_tokens:
+      - ilk
+      - yarı
+
+  - token: ikinci devre
+    canonical_tokens:
+      - ikinci
+      - yarı
+
+  - token: hy
+    canonical_tokens:
+      - ilk
+      - yarı
+
+  - token: 2y
+    canonical_tokens:
+      - ikinci
+      - yarı

@@ -1,0 +1,13 @@
+{{ home_team }} - {{ away_team }} maçı için skor tahminimiz:
+En olası skorlar:
+{% for row in score_rows %}
+  {{ row.home_goals }}-{{ row.away_goals }}: %{{ row.probability_pct }}
+{% endfor %}
+
+Maç: {{ home_team }} - {{ away_team }}
+Tarih: {{ kickoff_time(kickoff_utc) }}
+{% if degraded %}
+Tahmin sınırlı veriyle üretildi: {{ degraded_reason }}
+{% endif %}
+---
+[tahmin:{{ prediction_id }} | üretim:{{ produced_at_utc }} | model:{{ model_versions | join(', ') }} | kalibrasyon:{{ calibration_version }} | olasılık:{{ probability }}]

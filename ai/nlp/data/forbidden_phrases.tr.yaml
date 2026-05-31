@@ -1,0 +1,37 @@
+# Phase 10 §10.9 — forbidden phrases in NLP answers (gate 5).
+#
+# Any phrase in this list triggers a proofreader block if found in the
+# rendered answer text (case-insensitive match). Covers:
+#   - Self-promotion ("ben bir yapay zekayım", "chatbot olarak")
+#   - Liability disclaimers user wouldn't expect in a prediction answer
+#     ("yatırım tavsiyesi değildir" — moved to separate disclaimer slot)
+#   - Known jailbreak echoes ("ignore previous instructions")
+#
+# Schema version 1. Reload via mtime poll (shared with lexicon reload,
+# cfg.nlp_lexicon_reload_s=30).
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-05-29T00:00:00Z"
+  generator: "manual"
+
+phrases:
+  # Self-promotion
+  - "ben bir yapay zekayım"
+  - "ben bir yapay zeka"
+  - "ben bir dil modeliyim"
+  - "chatbot olarak"
+  - "asistan olarak"
+  - "AI asistanıyım"
+  - "language model"
+  
+  # Liability disclaimers (belong in separate slot)
+  - "yatırım tavsiyesi değildir"
+  - "bu bir yatırım tavsiyesi değil"
+  - "kesinlikle doğru olmayabilir"
+  - "sorumlu tutulamam"
+  - "sorumluluk kabul etmiyorum"
+  
+  # Jailbreak echoes (English)
+  - "ignore previous instructions"
+  - "disregard all prior"
+  - "pretend you are"

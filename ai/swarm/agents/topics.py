@@ -165,11 +165,53 @@ API_RESPONSE_V1 = Topic("api.response.v1")
 # Schema: ``ai/swarm/sdk/schemas/predict.cancel.v1.json``.
 PREDICT_CANCEL_V1 = Topic("predict.cancel.v1")
 
+# ── Phase 10 — Turkish NLP layer (§10.0 wire authority) ───────────────
+# These six topics are the NLP plane's complete wire surface. The
+# boundary test in ``test_boundary_discipline.py`` enforces that no
+# NLP agent publishes outside this set and no NLP agent subscribes to
+# the forbidden raw/candidate topics (``qa.request``, ``predict.final``).
+#
+# ``qa.intent.v1``      — sec-sanitized request → structured intent +
+#                         entity envelope.  Produced by ``nlp.intent.v1``;
+#                         consumed by ``nlp.dispatcher.v1`` (§10.6).
+# ``qa.answer.v1``      — Turkish-language answer; produced by
+#                         ``nlp.answer.v1`` (or ``nlp.proofreader.v1``
+#                         post-block).  Consumer: API gateway response
+#                         stream + ``cache.v1`` + ``telemetry.v1``.
+# ``nlp.event.v1``      — kind-discriminated control-plane observability
+#                         (§8.16.2 doctrine).  Producer set bounded to
+#                         three NLP agents; consumer = ``telemetry.v1``
+#                         + Phase 8 operator console.
+# ``nlp.alert.v1``      — operator-visibility alert channel; mirrors the
+#                         §7.4 ``sec.alert.v1`` pattern but scoped to NLP
+#                         only so the ``sec.alert.v1`` producer-set stays
+#                         bounded to sec.*/maint.*.
+# ``predict.request.v1`` — versioned form of ``predict.request``; emitted
+#                         by ``nlp.dispatcher.v1`` (§10.6, deferred) to
+#                         route fully-resolved match+market intents to the
+#                         Phase 5 predictor swarm.  Added here so the
+#                         boundary test can reference it in the NLP
+#                         outbound allow-set before the dispatcher lands.
+# ``data.request.v1``  — emitted by ``nlp.dispatcher.v1`` (§10.6) to
+#                         query Phase 4 storage for fixtures/standings.
+QA_INTENT_V1 = Topic("qa.intent.v1")
+QA_ANSWER_V1 = Topic("qa.answer.v1")
+NLP_EVENT_V1 = Topic("nlp.event.v1")
+NLP_ALERT_V1 = Topic("nlp.alert.v1")
+PREDICT_REQUEST_V1 = Topic("predict.request.v1")
+DATA_REQUEST_V1 = Topic("data.request.v1")
+
 
 __all__ = [
     "API_REQUEST_V1",
     "API_RESPONSE_V1",
+    "DATA_REQUEST_V1",
+    "NLP_ALERT_V1",
+    "NLP_EVENT_V1",
     "PREDICT_CANCEL_V1",
+    "PREDICT_REQUEST_V1",
+    "QA_ANSWER_V1",
+    "QA_INTENT_V1",
     "FRESHNESS_EVENTS",
     "MAINT_ACK",
     "MAINT_EVENT",

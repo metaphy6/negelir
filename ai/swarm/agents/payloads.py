@@ -849,6 +849,9 @@ class PredictApproved:
     user-visible decision. The cache subscribes here, never to
     ``predict.final`` directly. Carries the full ``predict.final``
     payload verbatim under ``final`` so consumers do not need a join.
+
+    Phase 10 §10.19 adds optional ``qa_correlation_id`` and
+    ``schema_version`` (additive, mirrors §9.2 KID rotation doctrine).
     """
 
     request_id: str
@@ -861,6 +864,8 @@ class PredictApproved:
     quorum: int                       # threshold this prediction crossed
     final: dict[str, Any]             # full PredictFinal payload, verbatim
     calibration_version: int = 0
+    schema_version: int = 1           # Phase 10 §10.19: 1 = legacy, 2 = with qa_correlation_id
+    qa_correlation_id: str | None = None  # Phase 10 §10.19: NLP QA dispatch correlation id
 
     def __post_init__(self) -> None:
         # Phase-6 audit (F-7): normalise the market key to lowercase
@@ -909,6 +914,8 @@ class PredictApproved:
             quorum=int(data["quorum"]),
             final=dict(data["final"]),
             calibration_version=int(data.get("calibration_version", 0)),
+            schema_version=int(data.get("schema_version", 1)),
+            qa_correlation_id=data.get("qa_correlation_id"),
         )
 
 

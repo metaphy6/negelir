@@ -1,0 +1,5 @@
+{{ home_team }} - {{ away_team }} son karşılaşmaları:
+{% for match in h2h_rows %}
+{{ match.date }}: {{ match.home }} {{ match.home_goals }}-{{ match.away_goals }} {{ match.away }}
+{% endfor %}
+(Son {{ h2h_rows | length }} maç gösteriliyor)

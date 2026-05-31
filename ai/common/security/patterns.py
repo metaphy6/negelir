@@ -301,10 +301,80 @@ def reset_for_tests() -> None:
         _CURRENT = None
 
 
+# ── PII detection patterns (single source; §10.5, §10.9) ─────────────────
+#
+# Used by the NLP entity extractor (§10.5 PII guard at extraction) and
+# the proofreader (§10.9 PII redaction).  Keep in sync with any equivalent
+# patterns in the Go gateway (server/internal/sec/).
+#
+# Patterns match on the *joined token text* of a CRF span (for extraction)
+# and on the full answer text (for proofreading).  Turkish phone formats:
+#   0[0-9]{10}   (0 + 10 digits, e.g. 0532 123 45 67)
+#   +90 / 0090   (international prefix)
+# Credit card covers Visa 13/16, Mastercard, Amex, Discover.
+
+PII_PHONE_RE: re.Pattern[str] = re.compile(
+    r"(?<!\d)"
+    r"(?:"
+    r"(?:\+90|0090)[\s\-]?[0-9]{3}[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}"
+    r"|0[0-9]{3}[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}"
+    r")"
+    r"(?!\d)",
+    re.ASCII,
+)
+
+PII_EMAIL_RE: re.Pattern[str] = re.compile(
+    r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+    re.ASCII,
+)
+
+PII_CREDIT_CARD_RE: re.Pattern[str] = re.compile(
+    r"(?<!\d)"
+    r"(?:"
+    r"4[0-9]{3}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}"   # Visa 16
+    r"|4[0-9]{3}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]"      # Visa 13 (4-4-4-1)
+    r"|4[0-9]{3}[\s\-]?[0-9]{4}[\s\-]?[0-9]{5}"                   # Visa 13 (4-4-5)
+    r"|5[1-5][0-9]{2}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}"  # Mastercard
+    r"|3[47][0-9]{2}[\s\-]?[0-9]{6}[\s\-]?[0-9]{5}"               # Amex
+    r"|6(?:011|5[0-9]{2})[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}"  # Discover
+    r")"
+    r"(?!\d)",
+    re.ASCII,
+)
+
+# Ordered tuple for a single-pass check: (kind_name, compiled_pattern).
+# First match wins.
+PII_PATTERNS: Tuple[Tuple[str, re.Pattern[str]], ...] = (
+    ("phone", PII_PHONE_RE),
+    ("email", PII_EMAIL_RE),
+    ("credit_card", PII_CREDIT_CARD_RE),
+)
+
+
+def detect_pii(text: str) -> Optional[str]:
+    """Return the PII kind name if *text* matches any PII pattern, else None.
+
+    Used by the NLP entity extractor (§10.5 PII guard at extraction) and
+    the proofreader (§10.9 PII redaction).  This is the **single source**
+    for PII regex definitions across the Python codebase.
+
+    Returns one of ``"phone"``, ``"email"``, ``"credit_card"``, or ``None``.
+    """
+    for kind, pattern in PII_PATTERNS:
+        if pattern.search(text):
+            return kind
+    return None
+
+
 __all__ = [
     "CompiledRule",
     "RuleSet",
     "PatternFileError",
+    "PII_CREDIT_CARD_RE",
+    "PII_EMAIL_RE",
+    "PII_PATTERNS",
+    "PII_PHONE_RE",
+    "detect_pii",
     "load_ruleset",
     "current_ruleset",
     "reload",

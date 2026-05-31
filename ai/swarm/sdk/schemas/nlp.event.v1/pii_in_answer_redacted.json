@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/pii_in_answer_redacted",
+  "title": "nlp.event.v1{kind=pii_in_answer_redacted}",
+  "description": "PII spans detected and redacted from the answer text before emission on qa.answer.v1.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "span_count"
+  ],
+  "properties": {
+    "kind": {
+      "const": "pii_in_answer_redacted"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "span_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of PII spans redacted."
+    }
+  },
+  "additionalProperties": false
+}

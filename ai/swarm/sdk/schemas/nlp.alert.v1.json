@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.alert.v1",
+  "title": "nlp.alert.v1",
+  "description": "Phase 10 §10.11: NLP-plane observability envelope. Narrow alert channel for NLP-class events that need operator visibility WITHOUT widening the §7.4 sec.alert.v1 producer-set (which is bounded to sec.* + maint.* agents). `kind` is an open enum (per §7.4 doctrine: producers emit only known kinds, consumers tolerate unknown kinds and route by `severity`). Mirrors ai/swarm/agents/nlp/payloads.py::NlpAlert (when implemented). Debounced via swarm.sdk.AlertDebouncer.",
+  "type": "object",
+  "required": [
+    "alert_id",
+    "kind",
+    "severity",
+    "source",
+    "reason",
+    "emitted_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Payload schema version. 1 = baseline schema. When absent, consumers treat the payload as version 1 for backward compatibility."
+    },
+    "alert_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique alert instance identifier."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "x-enum-open": true,
+      "description": "Open enum (mirrors §7.4 doctrine). Known NLP kinds include: lexicon_unreadable, dictionary_overflow, pii_detected_in_input, nlp_humanizer_drift, nlp_pii_in_answer, nlp_proofreader_failed, intent_classifier_unavailable, nlp_predict_timeout, nlp_bus_down, nlp_queue_pressure, nlp_spool_overflow, nlp_secondary_injection_hit. The producer-side AST scan enforces emission sites use only documented kinds."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warn", "error", "critical"],
+      "description": "Alert severity. Critical bypasses the §10.11 AlertDebouncer gate."
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^nlp\\.[a-z][a-z0-9_]{0,63}\\.v[0-9]+$",
+      "description": "NLP agent that emitted this alert (e.g., nlp.intent.v1, nlp.proofreader.v1, nlp.dispatcher.v1)."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Free-form human-readable diagnostic. Capped at 2048 chars by producers. No PII (mirrors sec.alert.v1 discipline).",
+      "maxLength": 2048
+    },
+    "subject": {
+      "type": ["string", "null"],
+      "description": "Optional subject (e.g., lexicon_file_name, intent_class). Payload-only — never a metric label dimension (cardinality bound)."
+    },
+    "request_id": {
+      "type": ["string", "null"],
+      "description": "Round-trips from qa.request.v1 when the alert is tied to a specific request."
+    },
+    "qa_correlation_id": {
+      "type": ["string", "null"],
+      "description": "Round-trips from the §10.6 dispatch correlation when available."
+    },
+    "details": {
+      "type": ["object", "null"],
+      "description": "Structured diagnostic details (e.g., {lexicon_file, entry_count, rss_mb}). Capped at 2 KB JSON serialized. No PII."
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when the alert was emitted."
+    }
+  },
+  "additionalProperties": false
+}

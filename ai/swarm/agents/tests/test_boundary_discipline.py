@@ -42,13 +42,19 @@ from swarm.agents.storage import StorageAgent
 from swarm.agents.topics import (
     API_REQUEST_V1,
     API_RESPONSE_V1,
+    DATA_REQUEST_V1,
     MAINT_ACK,
     MAINT_EVENT,
     MATCH_OUTCOME,
+    NLP_ALERT_V1,
+    NLP_EVENT_V1,
     PREDICT_APPROVED,
     PREDICT_FINAL,
+    PREDICT_REQUEST_V1,
     PROOF_FLAG,
     PROOFREADER_VERDICT,
+    QA_ANSWER_V1,
+    QA_INTENT_V1,
     QA_REQUEST,
     QA_REQUEST_V1,
     SEC_ALERT,
@@ -57,6 +63,8 @@ from swarm.agents.topics import (
 )
 from swarm.sdk.wire_contracts import API_TOPIC_V1_ALLOWED_PRODUCERS
 from swarm.sdk.wire_contracts import MAINT_EVENT_V1_ALLOWED_PRODUCERS
+from swarm.sdk.wire_contracts import NLP_ALERT_V1_ALLOWED_PRODUCERS
+from swarm.sdk.wire_contracts import NLP_EVENT_V1_ALLOWED_PRODUCERS
 from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER
 from swarm.sdk.wire_contracts import SEC_ALERT_V1_ALLOWED_PRODUCERS
 
@@ -403,29 +411,29 @@ _TELEMETRY_LABEL = "telemetry.v1"
 
 
 def test_qa_request_v1_consumer_set_is_bounded() -> None:
-    """§7.6: ``qa.request.v1`` has exactly one data consumer (NLP,
-    Phase 10 placeholder). ``telemetry.v1`` legitimately watches
-    for counter purposes (§4.6) and is excluded from the offender
-    set. Until Phase 10 lands, the data-consumer set inside the
-    swarm is empty — the gateway/agent emit, no in-process agent
-    reads. Locking this at zero now means a future phase cannot
-    accidentally route a defense agent or predictor onto the
-    sanitized QA stream.
+    """§7.6 + §10.0: ``qa.request.v1`` has exactly one data consumer:
+    ``nlp.intent.v1`` (Phase 10, now landed).  ``telemetry.v1``
+    legitimately watches for counter purposes (§4.6) and is excluded
+    from the offender set.  Any agent other than these two subscribing
+    to the sanitized QA stream would bypass the intent-classification
+    gate and route raw (though sec-sanitized) user bytes to an
+    unexpected consumer.
     """
+    # ``nlp.intent.v1`` is the ONLY data consumer; telemetry is the
+    # only allowed meta-consumer (counter-only, §4.6).
+    allowed = {"nlp.intent.v1", _TELEMETRY_LABEL}
     offenders: list[str] = []
     for agent in _registry_agents():
         label = _agent_label(agent)
-        if label == _TELEMETRY_LABEL:
+        if label in allowed:
             continue
         if QA_REQUEST_V1 in tuple(getattr(agent, "subscribes", ())):
             offenders.append(label)
     assert offenders == [], (
-        "qa.request.v1 must have at most one data consumer (the "
-        "Phase 10 NLP agent, not yet built). Today the in-swarm "
-        f"data-consumer set must be empty; got: {offenders}. If "
-        "you are landing the Phase 10 NLP layer, update this test "
-        "to allow exactly that agent and add the dedup-window "
-        "assertion (§7.5)."
+        "qa.request.v1 must have exactly one data consumer "
+        "(nlp.intent.v1) plus telemetry.v1 as a meta-watcher. "
+        "Any other subscriber bypasses the Phase 10 intent "
+        f"classification gate. Unexpected consumers: {offenders}."
     )
 
 
@@ -837,4 +845,234 @@ def test_telemetry_watches_phase9_api_audit_topics() -> None:
         "telemetry._WATCHED_TOPICS is missing Phase 9 api.* topic(s): "
         f"{sorted(missing)}. The §9.0 cross-phase alignment requires "
         "both api audit topics on the Prometheus page."
+    )
+
+
+# ── Rule 11 (Phase 10 §10.0): NLP plane boundary discipline ────────────
+#
+# Four invariants (binding, to be AST-asserted in §10.20):
+#  a) NLP NEVER subscribes to raw ``qa.request`` (control-plane).
+#     Only ``qa.request.v1`` (sanitized data-plane).  Mirrors §7.5.
+#  b) NLP NEVER subscribes to ``predict.final`` (unvetted candidate).
+#     Only ``predict.approved.v1`` (Phase 6 proofreader-gated).
+#  c) NLP NEVER publishes to ``sec.*``, ``maint.*``, ``auth.*``,
+#     ``payment.*``, ``patcher.*``.  Outbound topics bounded to
+#     ``{qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1,
+#       predict.request.v1, data.request.v1}``.
+#  d) ``nlp.event.v1`` / ``nlp.alert.v1`` producer set is bounded
+#     to the three NLP agents in
+#     ``NLP_EVENT_V1_ALLOWED_PRODUCERS`` /
+#     ``NLP_ALERT_V1_ALLOWED_PRODUCERS``.
+#
+# The tests use the canonical registry (``build_agents()``) so any
+# future NLP agent wired into bootstrap automatically inherits the
+# guard at landing time, not in production.
+# ────────────────────────────────────────────────────────────────────────
+
+
+# The complete allowed outbound set for any NLP agent (§10.0).
+_NLP_OUTBOUND_ALLOWED = frozenset({
+    QA_INTENT_V1,
+    QA_ANSWER_V1,
+    NLP_EVENT_V1,
+    NLP_ALERT_V1,
+    PREDICT_REQUEST_V1,
+    DATA_REQUEST_V1,
+})
+
+# Forbidden subscriptions for any NLP agent.
+_NLP_SUBSCRIBE_FORBIDDEN = (QA_REQUEST, PREDICT_FINAL)
+
+# Closed topic name prefixes that NLP must NEVER publish to.
+_NLP_FORBIDDEN_PUBLISH_PREFIXES = (
+    "sec.",
+    "maint.",
+    "auth.",
+    "payment.",
+    "patcher.",
+)
+
+
+def _is_nlp_agent(agent: object) -> bool:
+    """True for agents whose name starts with ``nlp.``."""
+    return str(getattr(agent, "name", "")).startswith("nlp.")
+
+
+def test_nlp_agents_do_not_subscribe_to_raw_qa_request() -> None:
+    """§10.0 boundary: NLP NEVER subscribes to ``qa.request`` (raw
+    control-plane).  Only ``qa.request.v1`` (sanitized data-plane,
+    after sec.input.v1 has run) is the legal NLP entry-point.
+    Subscribing to the raw topic would expose un-validated bytes
+    to the NLP stack, bypassing the defense tier entirely.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        if not _is_nlp_agent(agent):
+            continue
+        if QA_REQUEST in tuple(getattr(agent, "subscribes", ())):
+            offenders.append(_agent_label(agent))
+    assert offenders == [], (
+        "NLP agent(s) must not subscribe to qa.request (raw). "
+        "Use qa.request.v1 (the sec-sanitized data-plane topic). "
+        f"Offenders: {offenders}."
+    )
+
+
+def test_nlp_agents_do_not_subscribe_to_predict_final() -> None:
+    """§10.0 boundary: NLP NEVER subscribes to ``predict.final``
+    (the un-vetted Phase 5 consensus candidate).  Using it would
+    let un-proofread predictions reach the user-facing answer,
+    bypassing the Phase 6 quorum gate entirely.  Only
+    ``predict.approved.v1`` (post-quorum, post-proofreader) is the
+    legal NLP subscription for predictions.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        if not _is_nlp_agent(agent):
+            continue
+        if PREDICT_FINAL in tuple(getattr(agent, "subscribes", ())):
+            offenders.append(_agent_label(agent))
+    assert offenders == [], (
+        "NLP agent(s) must not subscribe to predict.final — that is "
+        "the unvetted candidate. Subscribe to predict.approved.v1 "
+        f"(post-quorum). Offenders: {offenders}."
+    )
+
+
+def test_nlp_agent_outbound_topics_are_bounded() -> None:
+    """§10.0 boundary: any NLP agent's publish set must be a strict
+    subset of
+    ``{qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1,
+       predict.request.v1, data.request.v1}``.
+
+    Publishing outside this set (e.g. to ``sec.alert.v1`` or
+    ``maint.event.v1``) would break the topology by routing
+    NLP-class events to operator channels meant exclusively for
+    sec.*/maint.* actors.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        if not _is_nlp_agent(agent):
+            continue
+        publishes = frozenset(getattr(agent, "publishes", ()))
+        forbidden = publishes - _NLP_OUTBOUND_ALLOWED
+        if forbidden:
+            offenders.append(
+                f"{_agent_label(agent)} publishes forbidden topics: "
+                f"{sorted(str(t) for t in forbidden)}"
+            )
+    assert offenders == [], (
+        "NLP outbound set must be a subset of "
+        f"{sorted(str(t) for t in _NLP_OUTBOUND_ALLOWED)}. "
+        f"Violations: {offenders}."
+    )
+
+
+def test_nlp_agents_do_not_publish_to_forbidden_prefixes() -> None:
+    """§10.0 boundary: NLP NEVER publishes to topics whose name
+    starts with ``sec.``, ``maint.``, ``auth.``, ``payment.``, or
+    ``patcher.``.  This is a belt-and-suspenders check on top of
+    ``test_nlp_agent_outbound_topics_are_bounded``: even if the
+    outbound allow-set above gains a mis-entry, this prefix guard
+    catches it immediately.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        if not _is_nlp_agent(agent):
+            continue
+        for topic in getattr(agent, "publishes", ()):
+            topic_str = str(topic)
+            for prefix in _NLP_FORBIDDEN_PUBLISH_PREFIXES:
+                if topic_str.startswith(prefix):
+                    offenders.append(
+                        f"{_agent_label(agent)} → {topic_str} "
+                        f"(forbidden prefix '{prefix}')"
+                    )
+    assert offenders == [], (
+        "NLP agent(s) must not publish to sec.*/maint.*/auth.*/"
+        "payment.*/patcher.* topics (§10.0 boundary discipline). "
+        f"Violations: {offenders}."
+    )
+
+
+def test_nlp_event_v1_producer_set_bounded() -> None:
+    """§10.0 wire-authority: ``nlp.event.v1`` producer set in the live
+    registry must be a subset of ``NLP_EVENT_V1_ALLOWED_PRODUCERS``.
+
+    Producers today: ``nlp.intent.v1``, ``nlp.answer.v1``,
+    ``nlp.proofreader.v1``.  Any future NLP agent that needs to emit
+    ``nlp.event.v1`` must add itself to
+    ``swarm.sdk.wire_contracts.NLP_EVENT_V1_ALLOWED_PRODUCERS`` in a
+    separate commit with a tracker row + minor version bump.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if NLP_EVENT_V1 in tuple(getattr(agent, "publishes", ())):
+            if label not in NLP_EVENT_V1_ALLOWED_PRODUCERS:
+                offenders.append(label)
+    assert offenders == [], (
+        "nlp.event.v1 producer set must stay inside "
+        f"NLP_EVENT_V1_ALLOWED_PRODUCERS="
+        f"{sorted(NLP_EVENT_V1_ALLOWED_PRODUCERS)}; "
+        f"unlisted producers in registry: {offenders}. "
+        "Add the producer to wire_contracts.py with a tracker row "
+        "+ minor version bump."
+    )
+
+
+def test_nlp_alert_v1_producer_set_bounded() -> None:
+    """§10.0 wire-authority: ``nlp.alert.v1`` producer set in the live
+    registry must be a subset of ``NLP_ALERT_V1_ALLOWED_PRODUCERS``.
+
+    The alert channel and the event channel share the same producer tier
+    (§10.0 boundary discipline) — both are bounded to the three NLP
+    plane agents.
+    """
+    offenders: list[str] = []
+    for agent in _registry_agents():
+        label = _agent_label(agent)
+        if NLP_ALERT_V1 in tuple(getattr(agent, "publishes", ())):
+            if label not in NLP_ALERT_V1_ALLOWED_PRODUCERS:
+                offenders.append(label)
+    assert offenders == [], (
+        "nlp.alert.v1 producer set must stay inside "
+        f"NLP_ALERT_V1_ALLOWED_PRODUCERS="
+        f"{sorted(NLP_ALERT_V1_ALLOWED_PRODUCERS)}; "
+        f"unlisted producers in registry: {offenders}. "
+        "Add the producer to wire_contracts.py with a tracker row "
+        "+ minor version bump."
+    )
+
+
+def test_nlp_intent_agent_subscribes_to_qa_request_v1() -> None:
+    """§10.0 positive: ``nlp.intent.v1`` MUST subscribe to
+    ``qa.request.v1`` — that is its input from the sec-sanitization
+    tier.  If this assertion fails it means the agent was wired to
+    the wrong topic (e.g. raw ``qa.request``) and the previous
+    negative test would also fire.
+    """
+    from swarm.agents.nlp import NlpIntentAgent  # noqa: PLC0415
+
+    assert QA_REQUEST_V1 in tuple(NlpIntentAgent.subscribes), (
+        "nlp.intent.v1 must subscribe to qa.request.v1 (the Phase 7 "
+        "sec-sanitized data-plane envelope)."
+    )
+
+
+def test_nlp_answer_agent_subscribes_to_predict_approved_not_final() -> None:
+    """§10.0 positive + negative pair: ``nlp.answer.v1`` MUST subscribe
+    to ``predict.approved.v1`` (post-quorum) and MUST NOT subscribe to
+    ``predict.final`` (pre-quorum candidate).
+    """
+    from swarm.agents.nlp import NlpAnswerAgent  # noqa: PLC0415
+
+    assert PREDICT_APPROVED in tuple(NlpAnswerAgent.subscribes), (
+        "nlp.answer.v1 must subscribe to predict.approved.v1 — the "
+        "post-quorum, proofreader-gated prediction surface."
+    )
+    assert PREDICT_FINAL not in tuple(NlpAnswerAgent.subscribes), (
+        "nlp.answer.v1 must NOT subscribe to predict.final — that is "
+        "the unvetted candidate.  Subscribing here would expose "
+        "un-proofread predictions to the user-facing answer."
     )

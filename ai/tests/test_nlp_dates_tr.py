@@ -1,0 +1,327 @@
+"""Tests for Phase 10 §10.5 — Turkish date/time resolver (ai/nlp/dates_tr.py).
+
+Covers:
+  * "bugün", "yarın", "dün" → day-granularity day ranges
+  * Named weekdays ("cuma", "pazartesi", …) → nearest-future day
+  * "pazar" does NOT match inside "pazartesi" (word-boundary rule)
+  * "önümüzdeki hafta", "bu hafta", "geçen hafta" → week ranges
+  * Explicit date: "27 Nisan saat 21:30", "27 Nisan 2026"
+  * Time-only: "saat 21:30" → today + time window
+  * Combined: "yarın saat 18:00"
+  * Out-of-range time ("saat 25:00") → falls through, returns day or None
+  * Invalid date ("31 Şubat") → returns None
+  * Unrecognized text → returns None
+  * Clock injection: all resolution uses the injected clock_now
+  * cfg.nlp_clock_now default is callable and returns UTC-aware datetime
+  * Granularity invariants: day → 24 h, week → 7 days, hour_minute → 2 h
+"""
+from __future__ import annotations
+
+import datetime
+from typing import Callable
+
+import pytest
+
+from nlp.dates_tr import DateTimeResolution, DateTimeResolver, _word_in
+
+UTC = datetime.timezone.utc
+
+# ── Shared fixed clock ─────────────────────────────────────────────────────
+
+# Wednesday 2026-04-29 14:35:10 UTC  (weekday() == 2)
+_FIXED_NOW = datetime.datetime(2026, 4, 29, 14, 35, 10, tzinfo=UTC)
+_FIXED_CLOCK: Callable[[], datetime.datetime] = lambda: _FIXED_NOW
+_TODAY_START = _FIXED_NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _resolver() -> DateTimeResolver:
+    return DateTimeResolver(clock_now=_FIXED_CLOCK)
+
+
+# ── Helper assertions ──────────────────────────────────────────────────────
+
+def _assert_day(res: DateTimeResolution | None, expected_date: datetime.date) -> None:
+    assert res is not None
+    assert res.granularity == "day"
+    assert res.start_utc == datetime.datetime(
+        expected_date.year, expected_date.month, expected_date.day, tzinfo=UTC
+    )
+    assert res.end_utc == res.start_utc + datetime.timedelta(days=1)
+
+
+def _assert_hour_minute(
+    res: DateTimeResolution | None,
+    expected_date: datetime.date,
+    h: int,
+    m: int,
+) -> None:
+    assert res is not None
+    assert res.granularity == "hour_minute"
+    assert res.start_utc == datetime.datetime(
+        expected_date.year, expected_date.month, expected_date.day, h, m, tzinfo=UTC
+    )
+    assert res.end_utc == res.start_utc + datetime.timedelta(hours=2)
+
+
+# ── Relative day expressions ───────────────────────────────────────────────
+
+def test_bugun_day_granularity() -> None:
+    res = _resolver().resolve("bugün")
+    _assert_day(res, _TODAY_START.date())
+
+
+def test_yarin_day_granularity() -> None:
+    res = _resolver().resolve("yarın")
+    tomorrow = (_TODAY_START + datetime.timedelta(days=1)).date()
+    _assert_day(res, tomorrow)
+
+
+def test_dun_day_granularity() -> None:
+    res = _resolver().resolve("dün")
+    yesterday = (_TODAY_START - datetime.timedelta(days=1)).date()
+    _assert_day(res, yesterday)
+
+
+def test_bugun_with_time() -> None:
+    res = _resolver().resolve("bugün saat 21:30")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 30)
+
+
+def test_yarin_with_time() -> None:
+    tomorrow = (_TODAY_START + datetime.timedelta(days=1)).date()
+    res = _resolver().resolve("yarın saat 18:00")
+    _assert_hour_minute(res, tomorrow, 18, 0)
+
+
+# ── Named weekdays ─────────────────────────────────────────────────────────
+
+# Fixed clock: Wednesday 2026-04-29 (weekday=2)
+# "cuma" = Friday = weekday 4 → 2 days ahead = 2026-05-01
+def test_cuma_nearest_future() -> None:
+    res = _resolver().resolve("cuma")
+    # Nearest Friday from Wednesday: +2 days → 2026-05-01
+    _assert_day(res, datetime.date(2026, 5, 1))
+
+
+def test_pazartesi_nearest_future() -> None:
+    # Monday = weekday 0; from Wednesday (2) → (0-2)%7 = 5 days → 2026-05-04
+    res = _resolver().resolve("pazartesi")
+    _assert_day(res, datetime.date(2026, 5, 4))
+
+
+def test_carsamba_same_day() -> None:
+    # Wednesday = today → days_ahead = 0 → returns today
+    res = _resolver().resolve("çarşamba")
+    _assert_day(res, _TODAY_START.date())
+
+
+def test_pazar_nearest_future() -> None:
+    # Sunday = weekday 6; from Wednesday (2) → (6-2)%7 = 4 days → 2026-05-03
+    res = _resolver().resolve("pazar")
+    _assert_day(res, datetime.date(2026, 5, 3))
+
+
+def test_cuma_with_time() -> None:
+    res = _resolver().resolve("cuma saat 21:30")
+    _assert_hour_minute(res, datetime.date(2026, 5, 1), 21, 30)
+
+
+def test_pazar_does_not_match_pazartesi() -> None:
+    # "pazar" should NOT fire when the token is "pazartesi"
+    res = _resolver().resolve("pazartesi")
+    # Should be parsed as pazartesi (Monday=+5d), NOT pazar (Sunday=+4d)
+    assert res is not None
+    assert res.start_utc.date() == datetime.date(2026, 5, 4)
+
+
+# ── Week expressions ───────────────────────────────────────────────────────
+
+def test_bu_hafta() -> None:
+    # Monday of current week: 2026-04-27 (Wednesday is day 2 → -2 days)
+    res = _resolver().resolve("bu hafta")
+    assert res is not None
+    assert res.granularity == "week"
+    monday = datetime.datetime(2026, 4, 27, tzinfo=UTC)
+    assert res.start_utc == monday
+    assert res.end_utc == monday + datetime.timedelta(weeks=1)
+
+
+def test_onumüzdeki_hafta() -> None:
+    res = _resolver().resolve("önümüzdeki hafta")
+    assert res is not None
+    assert res.granularity == "week"
+    next_monday = datetime.datetime(2026, 5, 4, tzinfo=UTC)
+    assert res.start_utc == next_monday
+    assert res.end_utc == next_monday + datetime.timedelta(weeks=1)
+
+
+def test_gecen_hafta() -> None:
+    res = _resolver().resolve("geçen hafta")
+    assert res is not None
+    assert res.granularity == "week"
+    prev_monday = datetime.datetime(2026, 4, 20, tzinfo=UTC)
+    assert res.start_utc == prev_monday
+    assert res.end_utc == prev_monday + datetime.timedelta(weeks=1)
+
+
+# ── Explicit date expressions ──────────────────────────────────────────────
+
+def test_explicit_date_day_only() -> None:
+    res = _resolver().resolve("27 Nisan")
+    # "nisan" = April = month 4; year defaults to clock year = 2026
+    _assert_day(res, datetime.date(2026, 4, 27))
+
+
+def test_explicit_date_with_year() -> None:
+    res = _resolver().resolve("27 Nisan 2025")
+    _assert_day(res, datetime.date(2025, 4, 27))
+
+
+def test_explicit_date_with_time() -> None:
+    res = _resolver().resolve("27 Nisan saat 21:30")
+    _assert_hour_minute(res, datetime.date(2026, 4, 27), 21, 30)
+
+
+def test_explicit_date_with_bare_time() -> None:
+    res = _resolver().resolve("27 Nisan 21:30")
+    _assert_hour_minute(res, datetime.date(2026, 4, 27), 21, 30)
+
+
+def test_explicit_other_month() -> None:
+    res = _resolver().resolve("15 Eylül")
+    _assert_day(res, datetime.date(2026, 9, 15))
+
+
+# ── Time-only ─────────────────────────────────────────────────────────────
+
+def test_time_only_saat() -> None:
+    res = _resolver().resolve("saat 21:30")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 30)
+
+
+def test_time_only_bare() -> None:
+    res = _resolver().resolve("21:30")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 30)
+
+
+def test_time_zero_hour() -> None:
+    res = _resolver().resolve("saat 00:00")
+    _assert_hour_minute(res, _TODAY_START.date(), 0, 0)
+
+
+# ── Adversarial: out-of-range time ────────────────────────────────────────
+
+def test_out_of_range_hour_ignored() -> None:
+    # "saat 25:00" — invalid hour, time component ignored
+    # text has no other temporal content → should return None
+    res = _resolver().resolve("saat 25:00")
+    assert res is None
+
+
+def test_out_of_range_minute_ignored() -> None:
+    res = _resolver().resolve("saat 10:61")
+    assert res is None
+
+
+def test_out_of_range_date_returns_none() -> None:
+    # February 31 is invalid
+    res = _resolver().resolve("31 Şubat")
+    assert res is None
+
+
+# ── Unrecognized text ─────────────────────────────────────────────────────
+
+def test_unrecognized_text_returns_none() -> None:
+    assert _resolver().resolve("galatasaray maçı tahmini") is None
+
+
+def test_empty_string_returns_none() -> None:
+    assert _resolver().resolve("") is None
+
+
+# ── Clock injection invariant ─────────────────────────────────────────────
+
+def test_clock_injection_different_now() -> None:
+    """Result changes when a different clock is injected — proves no global state."""
+    clock_a = lambda: datetime.datetime(2026, 1, 5, tzinfo=UTC)  # Monday
+    clock_b = lambda: datetime.datetime(2026, 1, 9, tzinfo=UTC)  # Friday
+
+    res_a = DateTimeResolver(clock_now=clock_a).resolve("bugün")
+    res_b = DateTimeResolver(clock_now=clock_b).resolve("bugün")
+
+    assert res_a is not None and res_b is not None
+    assert res_a.start_utc != res_b.start_utc
+
+
+def test_clock_never_called_for_none() -> None:
+    """Clock should still be called even for unrecognized input (no crash)."""
+    called = []
+    def clock() -> datetime.datetime:
+        called.append(True)
+        return _FIXED_NOW
+
+    DateTimeResolver(clock_now=clock).resolve("anlamsız metin")
+    assert called, "clock_now should have been called during resolve"
+
+
+# ── Config integration ────────────────────────────────────────────────────
+
+def test_cfg_nlp_clock_now_is_callable() -> None:
+    """cfg.nlp_clock_now must be a callable returning a UTC-aware datetime."""
+    from common.config import Config
+    cfg = Config()
+    result = cfg.nlp_clock_now()
+    assert isinstance(result, datetime.datetime)
+    assert result.tzinfo is not None
+    assert result.utcoffset() == datetime.timedelta(0)
+
+
+def test_cfg_nlp_clock_now_replaceable() -> None:
+    """cfg.nlp_clock_now can be replaced per-instance for tests."""
+    from common.config import Config
+    cfg = Config()
+    fixed = datetime.datetime(2026, 4, 27, 12, 0, tzinfo=UTC)
+    cfg.nlp_clock_now = lambda: fixed  # type: ignore[assignment]
+    assert cfg.nlp_clock_now() == fixed
+
+
+# ── Granularity invariants ────────────────────────────────────────────────
+
+def test_day_granularity_is_24h() -> None:
+    res = _resolver().resolve("bugün")
+    assert res is not None
+    assert res.end_utc - res.start_utc == datetime.timedelta(days=1)
+
+
+def test_week_granularity_is_7_days() -> None:
+    res = _resolver().resolve("bu hafta")
+    assert res is not None
+    assert res.end_utc - res.start_utc == datetime.timedelta(weeks=1)
+
+
+def test_hour_minute_granularity_is_2h() -> None:
+    res = _resolver().resolve("saat 20:00")
+    assert res is not None
+    assert res.end_utc - res.start_utc == datetime.timedelta(hours=2)
+
+
+# ── _word_in unit tests ───────────────────────────────────────────────────
+
+def test_word_in_exact_match() -> None:
+    assert _word_in("pazar", "pazar günü") is True
+
+
+def test_word_in_not_partial_match() -> None:
+    assert _word_in("pazar", "pazartesi günü") is False
+
+
+def test_word_in_at_start() -> None:
+    assert _word_in("cuma", "cuma maçı") is True
+
+
+def test_word_in_at_end() -> None:
+    assert _word_in("cuma", "bu cuma") is True
+
+
+def test_word_in_missing() -> None:
+    assert _word_in("perşembe", "cuma günü") is False

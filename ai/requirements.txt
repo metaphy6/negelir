@@ -12,5 +12,11 @@ pyyaml>=6.0.0
 psycopg2-binary>=2.9.0
 redis>=5.0.0
 apscheduler>=3.10.0
+prometheus_client>=0.19.0
 pytest>=7.4.0
+hypothesis>=6.100.0
 jsonschema>=4.0.0
+# Phase 10 §10.4 — fastText intent classifier (CPU-only, ≤1B model)
+fasttext>=0.9.2
+# Phase 10 §10.5 — CRF entity extraction (BIO tagger for date/time/score/etc.)
+python-crfsuite>=0.9.10

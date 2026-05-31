@@ -6,6 +6,22 @@ import pytest
 
 from common.config import cfg
 
+# Phase 10 §10.21.1 — Pin hypothesis settings globally for NLP suite.
+# Without database=None, CI cache divergence makes shrink-to-different-counterexample
+# non-deterministic. derandomize=True ensures the same failing input each run.
+try:
+    from hypothesis import settings
+    settings.register_profile(
+        "nlp_ci",
+        database=None,
+        derandomize=True,
+        max_examples=cfg.nlp_hypothesis_max_examples,
+    )
+    settings.load_profile("nlp_ci")
+except ImportError:
+    # hypothesis not installed — property tests will be skipped anyway
+    pass
+
 
 def pytest_configure(config):
     config.addinivalue_line(

@@ -4,16 +4,20 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 45,
+    "build": 168,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.40.1",
+      "version": "1.59.2",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-26T07:56:17+00:00",
+      "last_changed": "2026-05-31T17:00:31+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
+      },
+      "py_exact_versions": {
+        "numpy": "1.26.4",
+        "fasttext": "0.9.2"
       }
     },
     "server": {
@@ -30,14 +34,14 @@
       }
     },
     "xops": {
-      "version": "3.40.1",
+      "version": "3.41.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-26T08:01:04+00:00"
+      "last_changed": "2026-05-31T16:47:21+00:00"
     },
     "docs": {
-      "version": "1.73.1",
+      "version": "1.75.4",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-26T13:24:52+00:00"
+      "last_changed": "2026-05-31T16:47:28+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -146,6 +150,39 @@
       "min_compatible_with": {
         "ai": "1.36.2",
         "swarm": "0.50.0"
+      }
+    },
+    "data_files": {
+      "tr_word_freq": {
+        "path": "ai/nlp/data/tr_word_freq.txt",
+        "sha256": "b9f2e759253973fe3ee59f63ab3c0210e6320151247ac877b26c45c8740a39e8",
+        "source": "Turkish Wikipedia word frequency seed corpus (Phase 10 §10.3 diacritic restoration)"
+      },
+      "intent_model": {
+        "path": "data/models/nlp/intent.tr.bin",
+        "sha256": "",
+        "source": "fastText intent classifier (Phase 10 §10.4 Model)"
+      },
+      "humanizer_llm": {
+        "model_id": "Trendyol-LLM-1B-base",
+        "version": "v1.0.0-rc.1",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "params": "1B",
+        "formats": {
+          "cpu": "GGUF quantized (Q4_K_M)",
+          "gpu": "bf16"
+        },
+        "path_cpu": "data/models/nlp/humanizer-1b-q4.gguf",
+        "path_gpu": "data/models/nlp/humanizer-1b-bf16.safetensors",
+        "source": "Turkish text rephrasing LLM (Phase 10 §10.8 Humanizer, opt-in via cfg.nlp_humanize=true)",
+        "comment": "NEVER use *-latest; always pin exact version. Model is opt-in; templates are mandatory floor."
+      },
+      "confusables_table": {
+        "source_spec": "Unicode TR39 Confusables.txt v15.1.0",
+        "sha256": "derived",
+        "path": "ai/common/text/normalize.py::_CONFUSABLES_TABLE",
+        "cardinality": 49,
+        "comment": "Phase 10 §10.21.5 homoglyph defense. Derived mapping Cyrillic/Greek -> ASCII-Turkish-extended. In-code dict (no external file); SHA covers the definition in normalize.py."
       }
     }
   },
@@ -7565,6 +7602,1113 @@
       "from": "1.73.0",
       "to": "1.73.1",
       "build": 45
+    },
+    {
+      "timestamp": "2026-05-27T09:46:28+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.0 Wire authority: qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1 schemas",
+      "from": "1.40.1",
+      "to": "1.41.0",
+      "build": 46
+    },
+    {
+      "timestamp": "2026-05-27T10:07:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.0 boundary discipline: NLP stub agents + 10 Rule-11 registry-walk tests",
+      "from": "1.41.0",
+      "to": "1.41.1",
+      "build": 47
+    },
+    {
+      "timestamp": "2026-05-27T10:20:59+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.0 cross-phase contract config knobs + 3 inequality boot validators",
+      "from": "1.41.1",
+      "to": "1.42.0",
+      "build": 48
+    },
+    {
+      "timestamp": "2026-05-27T10:36:02+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.1 Binding step list: normalize_input pipeline, canonical_normalize, lowercase_tr, nlp_input_max_codepoints",
+      "from": "1.42.0",
+      "to": "1.43.0",
+      "build": 49
+    },
+    {
+      "timestamp": "2026-05-27T10:39:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.1 idempotency guarantee: hypothesis property test for normalize_input",
+      "from": "1.43.0",
+      "to": "1.43.1",
+      "build": 50
+    },
+    {
+      "timestamp": "2026-05-27T10:43:58+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.1 determinism guarantee: AST guard + PYTHONHASHSEED subprocess tests",
+      "from": "1.43.1",
+      "to": "1.43.2",
+      "build": 51
+    },
+    {
+      "timestamp": "2026-05-27T10:52:33+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.1 Bounded latency: nlp.bench CI gate + nlp_bench_latency_p95_threshold_ms config key",
+      "from": "1.43.2",
+      "to": "1.43.3",
+      "build": 52
+    },
+    {
+      "timestamp": "2026-05-27T11:01:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.2 Layout: ai/nlp/lexicon/ scaffold with 7 YAML lexicon files",
+      "from": "1.43.3",
+      "to": "1.43.4",
+      "build": 53
+    },
+    {
+      "timestamp": "2026-05-27T11:17:37+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.2 Versioning: lexicon_loader.py new public surface (LexiconSchemaError, load_lexicon_file)",
+      "from": "1.43.4",
+      "to": "1.44.0",
+      "build": 54
+    },
+    {
+      "timestamp": "2026-05-27T11:30:38+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.2 Atomic swap: LexiconStore hot-reload with mtime-poll, shadow load, validation, threading.Lock swap, debounced nlp.alert.v1",
+      "from": "1.44.0",
+      "to": "1.45.0",
+      "build": 55
+    },
+    {
+      "timestamp": "2026-05-27T11:43:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.2 Build pipeline: nlp.lexicon-build + verify.nlp-lexicons + _aliases_delta.tr.yaml + lexicon collision fixes",
+      "from": "1.45.0",
+      "to": "1.45.1",
+      "build": 56
+    },
+    {
+      "timestamp": "2026-05-27T11:43:28+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.2 Build pipeline bullet ticked",
+      "from": "1.73.1",
+      "to": "1.73.2",
+      "build": 57
+    },
+    {
+      "timestamp": "2026-05-27T11:54:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.2 Integrity: SHA256 capture + mtime-skip-if-unchanged in LexiconStore",
+      "from": "1.45.1",
+      "to": "1.45.2",
+      "build": 58
+    },
+    {
+      "timestamp": "2026-05-27T12:03:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.2 Cardinality cap: max_entries_per_file in LexiconStore, dictionary_overflow alert",
+      "from": "1.45.2",
+      "to": "1.45.3",
+      "build": 59
+    },
+    {
+      "timestamp": "2026-05-27T12:12:32+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.2 Bounded memory: AliasHit alias index + RSS budget guard",
+      "from": "1.45.3",
+      "to": "1.46.0",
+      "build": 60
+    },
+    {
+      "timestamp": "2026-05-27T12:27:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.3 SymSpell-style typo-correction index vendored in ai/nlp/vendor/symspell.py",
+      "from": "1.46.0",
+      "to": "1.46.1",
+      "build": 61
+    },
+    {
+      "timestamp": "2026-05-27T12:37:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.3 per-query fuzzy-lookup budget: lookup_tokens + NormalizedInput.typo_budget_exhausted + config nlp_typo_max_lookups_per_query",
+      "from": "1.46.1",
+      "to": "1.46.2",
+      "build": 62
+    },
+    {
+      "timestamp": "2026-05-27T13:01:32+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.3 diacritics table: DiacriticsTable loader + _diacritics.tr.yaml generation pipeline + SHA integrity pin in chart.json",
+      "from": "1.46.2",
+      "to": "1.47.0",
+      "build": 63
+    },
+    {
+      "timestamp": "2026-05-27T13:08:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.3 diacritic ambiguity policy: tie-break ratio config key + DiacriticsTable.restore_with_flags",
+      "from": "1.47.0",
+      "to": "1.47.1",
+      "build": 64
+    },
+    {
+      "timestamp": "2026-05-27T13:16:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.3 Cost ceiling: stage_timed_out + nlp_normalize_stage_timeout_ms",
+      "from": "1.47.1",
+      "to": "1.47.2",
+      "build": 65
+    },
+    {
+      "timestamp": "2026-05-27T13:31:17+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.4 Model: IntentClassifier scaffold, nlp.intent-pin, 3 cfg keys",
+      "from": "1.47.2",
+      "to": "1.48.0",
+      "build": 66
+    },
+    {
+      "timestamp": "2026-05-27T13:37:52+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.4 closed intent enum: _intent_enum.json + INTENT_LABELS",
+      "from": "1.48.0",
+      "to": "1.49.0",
+      "build": 67
+    },
+    {
+      "timestamp": "2026-05-27T13:50:02+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.4 Calibration: Platt-scaling, predict_intent_distribution, nlp_intent_calibration_path",
+      "from": "1.49.0",
+      "to": "1.50.0",
+      "build": 68
+    },
+    {
+      "timestamp": "2026-05-27T13:54:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.4 Abstention threshold: IntentAbstention + classify() + nlp_min_intent_conf cfg",
+      "from": "1.50.0",
+      "to": "1.50.1",
+      "build": 69
+    },
+    {
+      "timestamp": "2026-05-27T14:05:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.4 Drift guard: IntentDriftGuard, nlp_intent_accuracy_floor, nlp_intent_drift_window",
+      "from": "1.50.1",
+      "to": "1.50.2",
+      "build": 70
+    },
+    {
+      "timestamp": "2026-05-27T14:10:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.4 Versioning: model_version + calibration_version on IntentClassifier",
+      "from": "1.50.2",
+      "to": "1.50.3",
+      "build": 71
+    },
+    {
+      "timestamp": "2026-05-27T14:25:34+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.5 Hybrid pipeline: EntityExtractor, CrfExtractor, EntitySpan, gazetteer+CRF+conflict-resolution",
+      "from": "1.50.3",
+      "to": "1.51.0",
+      "build": 72
+    },
+    {
+      "timestamp": "2026-05-27T14:36:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.5 Date/time resolver: DateTimeResolver, DateTimeResolution, cfg.nlp_clock_now",
+      "from": "1.51.0",
+      "to": "1.51.1",
+      "build": 73
+    },
+    {
+      "timestamp": "2026-05-27T14:45:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.5 Ambiguity policy: AmbiguousHit+ExtractionResult, gazetteer_pass out_ambiguous, EntityExtractor.extract returns ExtractionResult",
+      "from": "1.51.1",
+      "to": "1.51.2",
+      "build": 74
+    },
+    {
+      "timestamp": "2026-05-27T15:34:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.5 PII guard at extraction: detect_pii, ExtractionResult.pii_dropped, CRF span filtering",
+      "from": "1.51.2",
+      "to": "1.51.3",
+      "build": 75
+    },
+    {
+      "timestamp": "2026-05-27T15:42:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.5 Bounded latency: entity bench CI gate + config key",
+      "from": "1.51.3",
+      "to": "1.51.4",
+      "build": 76
+    },
+    {
+      "timestamp": "2026-05-27T15:58:08+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.6 nlp.dispatcher.v1 agent skeleton with wire contract",
+      "from": "1.51.4",
+      "to": "1.52.0",
+      "build": 77
+    },
+    {
+      "timestamp": "2026-05-27T16:14:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.6 deterministic backoff: predict.* without fixture entity -> disambiguation answer",
+      "from": "1.52.0",
+      "to": "1.52.1",
+      "build": 78
+    },
+    {
+      "timestamp": "2026-05-27T16:26:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.6 multi-fixture intents: summary fanout + NlpAnswerAgent aggregation with nlp_summary_aggregation_timeout_ms=1500",
+      "from": "1.52.1",
+      "to": "1.52.2",
+      "build": 79
+    },
+    {
+      "timestamp": "2026-05-27T16:35:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.6 qa_correlation_id invariant: round-trip via predict.approved.v1 additive field",
+      "from": "1.52.2",
+      "to": "1.52.3",
+      "build": 80
+    },
+    {
+      "timestamp": "2026-05-27T16:44:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.6 idempotency: NlpDispatcherAgent dedup key + nlp_dispatch_dedup_window_s config",
+      "from": "1.52.3",
+      "to": "1.52.4",
+      "build": 81
+    },
+    {
+      "timestamp": "2026-05-27T16:50:08+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.7 NLP template registry: 15 Turkish Jinja2 templates + coverage gate test",
+      "from": "1.52.4",
+      "to": "1.53.0",
+      "build": 82
+    },
+    {
+      "timestamp": "2026-05-27T17:09:28+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.7: Jinja2 environment, Turkish morphology filters (render.py, jinja_filters_tr.py, nlp_confidence_bands config)",
+      "from": "1.53.0",
+      "to": "1.54.0",
+      "build": 83
+    },
+    {
+      "timestamp": "2026-05-27T17:26:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.7 suffix-harmony golden table + test harness (1207 tests)",
+      "from": "1.54.0",
+      "to": "1.54.1",
+      "build": 84
+    },
+    {
+      "timestamp": "2026-05-27T17:36:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.7 citation block extraction + sha256 for proofreader invariance",
+      "from": "1.54.1",
+      "to": "1.54.2",
+      "build": 85
+    },
+    {
+      "timestamp": "2026-05-27T17:45:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.7 confidence rendering: probability in citation block, confidence_band tests",
+      "from": "1.54.2",
+      "to": "1.54.3",
+      "build": 86
+    },
+    {
+      "timestamp": "2026-05-27T17:59:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.8 bullet 1: nlp_humanize config default OFF",
+      "from": "1.54.3",
+      "to": "1.54.4",
+      "build": 87
+    },
+    {
+      "timestamp": "2026-05-27T18:03:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.8 humanizer model pinning: added chart.json entry + never-latest tests",
+      "from": "1.54.4",
+      "to": "1.54.5",
+      "build": 88
+    },
+    {
+      "timestamp": "2026-05-27T18:04:06+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.8 ticked: humanizer model pinning bullet",
+      "from": "1.73.2",
+      "to": "1.73.3",
+      "build": 89
+    },
+    {
+      "timestamp": "2026-05-27T18:04:13+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "chart.json: added humanizer_llm compatibility entry",
+      "from": "3.40.1",
+      "to": "3.40.2",
+      "build": 90
+    },
+    {
+      "timestamp": "2026-05-29T07:33:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.8 humanizer role: created humanizer module with documented binding constraints",
+      "from": "1.54.5",
+      "to": "1.54.6",
+      "build": 91
+    },
+    {
+      "timestamp": "2026-05-29T07:37:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.8 decoding constraints: added humanizer LLM sampling params (temperature, top_p, repetition_penalty, max_new_tokens)",
+      "from": "1.54.6",
+      "to": "1.54.7",
+      "build": 92
+    },
+    {
+      "timestamp": "2026-05-29T07:46:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.8 latency budget and circuit breaker for humanizer",
+      "from": "1.54.7",
+      "to": "1.54.8",
+      "build": 93
+    },
+    {
+      "timestamp": "2026-05-29T07:57:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.8 humanizer drift guard: nlp_humanizer_max_edit_ratio=0.6",
+      "from": "1.54.8",
+      "to": "1.54.9",
+      "build": 94
+    },
+    {
+      "timestamp": "2026-05-29T08:03:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.8 GPU sharing stubs (Phase 11 §11.2 contract)",
+      "from": "1.54.9",
+      "to": "1.54.10",
+      "build": 95
+    },
+    {
+      "timestamp": "2026-05-29T08:12:56+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.9 bullet 1: proofreader.v1 skeleton",
+      "from": "1.54.10",
+      "to": "1.54.11",
+      "build": 96
+    },
+    {
+      "timestamp": "2026-05-29T08:23:47+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.9 bullet 2: proofreader deterministic gates",
+      "from": "1.54.11",
+      "to": "1.55.0",
+      "build": 97
+    },
+    {
+      "timestamp": "2026-05-29T08:29:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.9: Block taxonomy enumerative test",
+      "from": "1.55.0",
+      "to": "1.55.1",
+      "build": 98
+    },
+    {
+      "timestamp": "2026-05-29T08:36:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.9: Fail-safe — proofreader exception handler (proofread_answer_safe)",
+      "from": "1.55.1",
+      "to": "1.55.2",
+      "build": 99
+    },
+    {
+      "timestamp": "2026-05-29T08:41:06+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.11: qa.intent.v1.json schema — all required fields",
+      "from": "1.55.2",
+      "to": "1.55.3",
+      "build": 100
+    },
+    {
+      "timestamp": "2026-05-29T08:45:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.11: qa.answer.v1.json schema — all required fields",
+      "from": "1.55.3",
+      "to": "1.55.4",
+      "build": 101
+    },
+    {
+      "timestamp": "2026-05-29T08:49:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.11: nlp.event.v1.json kind-discriminated schema with per-kind sub-schemas",
+      "from": "1.55.4",
+      "to": "1.55.5",
+      "build": 102
+    },
+    {
+      "timestamp": "2026-05-29T08:56:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.11: nlp.alert.v1 schema + shared AlertDebouncer base",
+      "from": "1.55.5",
+      "to": "1.55.6",
+      "build": 103
+    },
+    {
+      "timestamp": "2026-05-29T09:04:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.12: L0 intent cache with negative-cache discipline",
+      "from": "1.55.6",
+      "to": "1.55.7",
+      "build": 104
+    },
+    {
+      "timestamp": "2026-05-29T09:09:54+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.12: L1 answer cache",
+      "from": "1.55.7",
+      "to": "1.56.0",
+      "build": 105
+    },
+    {
+      "timestamp": "2026-05-29T09:23:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.12: Singleflight collapse for concurrent identical queries",
+      "from": "1.56.0",
+      "to": "1.56.1",
+      "build": 106
+    },
+    {
+      "timestamp": "2026-05-29T09:30:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.12: NLP latency budget table + validation tests",
+      "from": "1.56.1",
+      "to": "1.56.2",
+      "build": 107
+    },
+    {
+      "timestamp": "2026-05-29T09:39:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.13: RequestIdDeduper at NLP agent ingress + dedup tests",
+      "from": "1.56.2",
+      "to": "1.56.3",
+      "build": 108
+    },
+    {
+      "timestamp": "2026-05-29T09:43:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.13: audit key (qa_correlation_id, model_version, calibration_version) for distinct envelopes on version changes",
+      "from": "1.56.3",
+      "to": "1.56.4",
+      "build": 109
+    },
+    {
+      "timestamp": "2026-05-29T09:54:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.13: NLP bus circuit breaker with disk spool",
+      "from": "1.56.4",
+      "to": "1.56.5",
+      "build": 110
+    },
+    {
+      "timestamp": "2026-05-29T09:58:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.14: NLP structured logs with PII guard",
+      "from": "1.56.5",
+      "to": "1.56.6",
+      "build": 111
+    },
+    {
+      "timestamp": "2026-05-29T10:03:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.14: Prometheus metrics (nlp_pipeline_latency_seconds, nlp_intent_confidence, nlp_humanizer_breaker_state, nlp_proofreader_block_total, nlp_lexicon_version)",
+      "from": "1.56.6",
+      "to": "1.56.7",
+      "build": 112
+    },
+    {
+      "timestamp": "2026-05-29T10:09:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.14: W3C trace propagation through NLP pipeline with per-stage spans",
+      "from": "1.56.7",
+      "to": "1.56.8",
+      "build": 113
+    },
+    {
+      "timestamp": "2026-05-29T10:16:53+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.15: Defense-in-depth injection probe for NLP normalized text",
+      "from": "1.56.8",
+      "to": "1.57.0",
+      "build": 114
+    },
+    {
+      "timestamp": "2026-05-29T10:24:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.15: Hallucination guard template linter",
+      "from": "1.57.0",
+      "to": "1.57.1",
+      "build": 115
+    },
+    {
+      "timestamp": "2026-05-29T10:31:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.15: Off-topic handling - meta.adversarial template",
+      "from": "1.57.1",
+      "to": "1.57.2",
+      "build": 116
+    },
+    {
+      "timestamp": "2026-05-29T10:39:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.15: adversarial corpus alignment",
+      "from": "1.57.2",
+      "to": "1.57.3",
+      "build": 117
+    },
+    {
+      "timestamp": "2026-05-29T10:46:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.16: degraded flag flow-through from predict.approved.v1 to qa.answer.v1",
+      "from": "1.57.3",
+      "to": "1.57.4",
+      "build": 118
+    },
+    {
+      "timestamp": "2026-05-29T10:53:38+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.16: calibration version stamping in qa.answer.v1 citations",
+      "from": "1.57.4",
+      "to": "1.57.5",
+      "build": 119
+    },
+    {
+      "timestamp": "2026-05-29T11:03:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.16: confidence narration discipline gate #7 (proofreader)",
+      "from": "1.57.5",
+      "to": "1.57.6",
+      "build": 120
+    },
+    {
+      "timestamp": "2026-05-29T11:09:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.17: locale enum tr-TR in qa schemas",
+      "from": "1.57.6",
+      "to": "1.57.7",
+      "build": 121
+    },
+    {
+      "timestamp": "2026-05-29T11:09:48+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.17: locale enum constraint documented",
+      "from": "1.73.3",
+      "to": "1.73.4",
+      "build": 122
+    },
+    {
+      "timestamp": "2026-05-29T11:14:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.17: locale-aware template resolution",
+      "from": "1.57.7",
+      "to": "1.57.8",
+      "build": 123
+    },
+    {
+      "timestamp": "2026-05-29T11:26:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.18: golden corpus landed",
+      "from": "1.57.8",
+      "to": "1.57.9",
+      "build": 124
+    },
+    {
+      "timestamp": "2026-05-29T11:35:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.18: CI gates test landed (intent/entity F1/did-you-mean/adversarial/latency gates)",
+      "from": "1.57.9",
+      "to": "1.57.10",
+      "build": 125
+    },
+    {
+      "timestamp": "2026-05-29T11:41:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.18: Regression diff — make nlp.eval-diff BASELINE=sha + CI gate",
+      "from": "1.57.10",
+      "to": "1.57.11",
+      "build": 126
+    },
+    {
+      "timestamp": "2026-05-29T11:48:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.18 property tests: gazetteer, suffix-harmony, template StrictUndefined",
+      "from": "1.57.11",
+      "to": "1.57.12",
+      "build": 127
+    },
+    {
+      "timestamp": "2026-05-29T11:57:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.8: CPU parity test contract + stub tests",
+      "from": "1.57.12",
+      "to": "1.57.13",
+      "build": 128
+    },
+    {
+      "timestamp": "2026-05-31T12:48:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.19 predict.request.v1 qa_correlation_id additive",
+      "from": "1.57.13",
+      "to": "1.57.14",
+      "build": 129
+    },
+    {
+      "timestamp": "2026-05-31T12:54:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.19 cross-language schema parity",
+      "from": "1.57.14",
+      "to": "1.57.15",
+      "build": 130
+    },
+    {
+      "timestamp": "2026-05-31T13:00:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.19 backpressure threshold config",
+      "from": "1.57.15",
+      "to": "1.57.16",
+      "build": 131
+    },
+    {
+      "timestamp": "2026-05-31T13:05:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.19 sampled answer audit",
+      "from": "1.57.16",
+      "to": "1.57.17",
+      "build": 132
+    },
+    {
+      "timestamp": "2026-05-31T13:22:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.19 lexicon locale symlinks",
+      "from": "1.57.17",
+      "to": "1.57.18",
+      "build": 133
+    },
+    {
+      "timestamp": "2026-05-31T13:25:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.23.1 multi-tenant fairness context documented",
+      "from": "1.73.4",
+      "to": "1.73.5",
+      "build": 134
+    },
+    {
+      "timestamp": "2026-05-31T13:31:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.1 AST guard for deterministic iteration + 8 violations fixed",
+      "from": "1.57.18",
+      "to": "1.57.19",
+      "build": 135
+    },
+    {
+      "timestamp": "2026-05-31T13:31:40+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.1 deterministic iteration checkbox ticked",
+      "from": "1.73.5",
+      "to": "1.73.6",
+      "build": 136
+    },
+    {
+      "timestamp": "2026-05-31T13:37:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.1 hypothesis profile registered in conftest + test",
+      "from": "1.57.19",
+      "to": "1.57.20",
+      "build": 137
+    },
+    {
+      "timestamp": "2026-05-31T13:37:56+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.1 hypothesis profile checkbox ticked",
+      "from": "1.73.6",
+      "to": "1.73.7",
+      "build": 138
+    },
+    {
+      "timestamp": "2026-05-31T13:45:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.1: fastText SHA sidecar verification",
+      "from": "1.57.20",
+      "to": "1.57.21",
+      "build": 139
+    },
+    {
+      "timestamp": "2026-05-31T13:54:33+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.1: numpy + fasttext version pin",
+      "from": "1.57.21",
+      "to": "1.57.22",
+      "build": 140
+    },
+    {
+      "timestamp": "2026-05-31T13:58:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.21.1 CRF feature determinism AST guard",
+      "from": "1.73.7",
+      "to": "1.73.8",
+      "build": 141
+    },
+    {
+      "timestamp": "2026-05-31T14:04:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.1: greedy-decode parity test",
+      "from": "1.57.22",
+      "to": "1.57.23",
+      "build": 142
+    },
+    {
+      "timestamp": "2026-05-31T14:14:38+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.2: lexicon old-generation eviction contract (bounded deque + generation tracking)",
+      "from": "1.57.23",
+      "to": "1.57.24",
+      "build": 143
+    },
+    {
+      "timestamp": "2026-05-31T14:22:29+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.21.2: AST guard for no in-process model reload",
+      "from": "1.73.8",
+      "to": "1.74.0",
+      "build": 144
+    },
+    {
+      "timestamp": "2026-05-31T14:32:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.2: Symspell dictionary lifetime - LexiconStore builds and manages SymSpellIndex, rebuilds on swap, tracks with generations",
+      "from": "1.57.24",
+      "to": "1.57.25",
+      "build": 145
+    },
+    {
+      "timestamp": "2026-05-31T14:37:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.2: Jinja2 bytecode cache - FileSystemBytecodeCache configured in build_environment, nlp_jinja_bcc_dir config key",
+      "from": "1.57.25",
+      "to": "1.57.26",
+      "build": 146
+    },
+    {
+      "timestamp": "2026-05-31T14:50:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.2: Singleflight event-map sweeper",
+      "from": "1.57.26",
+      "to": "1.57.27",
+      "build": 147
+    },
+    {
+      "timestamp": "2026-05-31T14:57:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.2: RSS ceiling per pod boot validator",
+      "from": "1.57.27",
+      "to": "1.57.28",
+      "build": 148
+    },
+    {
+      "timestamp": "2026-05-31T14:57:13+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "§10.21.2: RSS ceiling per pod boot validator doc",
+      "from": "1.74.0",
+      "to": "1.75.0",
+      "build": 149
+    },
+    {
+      "timestamp": "2026-05-31T15:00:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.2: Memory lifecycle proof tests validated",
+      "from": "1.75.0",
+      "to": "1.75.1",
+      "build": 150
+    },
+    {
+      "timestamp": "2026-05-31T15:08:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.3: atomic multi-file lexicon swap tests",
+      "from": "1.57.28",
+      "to": "1.57.29",
+      "build": 151
+    },
+    {
+      "timestamp": "2026-05-31T15:23:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.3 atomic swap policy with cross-file xref validator",
+      "from": "1.57.29",
+      "to": "1.57.30",
+      "build": 152
+    },
+    {
+      "timestamp": "2026-05-31T15:26:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.3: cross-file referential validator (validate_xref)",
+      "from": "1.57.30",
+      "to": "1.57.31",
+      "build": 153
+    },
+    {
+      "timestamp": "2026-05-31T15:32:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.3: bounded swap latency instrumentation",
+      "from": "1.57.31",
+      "to": "1.57.32",
+      "build": 154
+    },
+    {
+      "timestamp": "2026-05-31T15:36:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.3 atomic lexicon swap proof tests",
+      "from": "1.57.32",
+      "to": "1.57.33",
+      "build": 155
+    },
+    {
+      "timestamp": "2026-05-31T15:48:53+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.21.4 humanizer breaker scope (pod/cluster)",
+      "from": "1.57.33",
+      "to": "1.58.0",
+      "build": 156
+    },
+    {
+      "timestamp": "2026-05-31T15:54:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.4 singleflight per-pod AST guard",
+      "from": "1.58.0",
+      "to": "1.58.1",
+      "build": 157
+    },
+    {
+      "timestamp": "2026-05-31T16:00:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.4 lock ordering invariant AST guard",
+      "from": "1.58.1",
+      "to": "1.58.2",
+      "build": 158
+    },
+    {
+      "timestamp": "2026-05-31T16:08:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.4: AST guard test_nlp_no_io_under_lexicon_lock prevents GIL-released calls inside lexicon lock",
+      "from": "1.58.2",
+      "to": "1.58.3",
+      "build": 159
+    },
+    {
+      "timestamp": "2026-05-31T16:12:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.4: concurrency hazards proof tests verified (breaker scope, singleflight, lock ordering, no-IO-under-lock)",
+      "from": "1.58.3",
+      "to": "1.58.4",
+      "build": 160
+    },
+    {
+      "timestamp": "2026-05-31T16:26:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.5: confusables_fold step 3.5 added to normalization pipeline (49 mappings, TR39 v15.1.0)",
+      "from": "1.58.4",
+      "to": "1.58.5",
+      "build": 161
+    },
+    {
+      "timestamp": "2026-05-31T16:34:47+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.21.5 bullet 54: qa.intent.v1 schema contract extended for confusables audit trail",
+      "from": "1.58.5",
+      "to": "1.59.0",
+      "build": 162
+    },
+    {
+      "timestamp": "2026-05-31T16:36:47+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.5 confusables defense section complete",
+      "from": "1.75.1",
+      "to": "1.75.2",
+      "build": 163
+    },
+    {
+      "timestamp": "2026-05-31T16:41:03+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.6 bullet 59: documented template safety vulnerability (entity.original_text gap)",
+      "from": "1.75.2",
+      "to": "1.75.3",
+      "build": 164
+    },
+    {
+      "timestamp": "2026-05-31T16:47:21+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "§10.21.6 bullet 60: widened AST template lint to reject raw user input patterns",
+      "from": "3.40.2",
+      "to": "3.41.0",
+      "build": 165
+    },
+    {
+      "timestamp": "2026-05-31T16:47:28+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.6 bullet 60: ticked AST template lint widened checkbox",
+      "from": "1.75.3",
+      "to": "1.75.4",
+      "build": 166
+    },
+    {
+      "timestamp": "2026-05-31T16:47:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.6 bullet 60: added test_nlp_template_lint_widened",
+      "from": "1.59.0",
+      "to": "1.59.1",
+      "build": 167
+    },
+    {
+      "timestamp": "2026-05-31T17:00:31+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.6 template finalize runtime guard",
+      "from": "1.59.1",
+      "to": "1.59.2",
+      "build": 168
     }
   ]
 }

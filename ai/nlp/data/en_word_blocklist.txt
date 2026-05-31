@@ -1,0 +1,78 @@
+# Phase 10 §10.8 — English word blocklist for humanizer logit bias.
+# These common English words should NOT appear in Turkish answers.
+# The humanizer LLM is biased against generating these tokens to prevent
+# mid-sentence English leakage (per AGENTS.md Rule 6: Turkish UX, English infra).
+# Format: one lowercase word per line, comments start with #.
+# Exception: proper nouns from LeagueCatalog (e.g. "Premier League") are allowlisted
+# at runtime and not blocked.
+
+# Common verbs
+will
+would
+should
+could
+must
+have
+has
+had
+been
+being
+were
+are
+was
+
+# Common function words
+the
+and
+but
+for
+with
+from
+about
+after
+before
+between
+during
+through
+under
+over
+above
+below
+
+# Common adjectives
+good
+bad
+better
+best
+worst
+great
+nice
+very
+much
+many
+more
+most
+less
+least
+
+# Sports commentary English
+goal
+goals
+scored
+match
+team
+teams
+player
+players
+versus
+against
+win
+wins
+winning
+won
+lose
+loses
+losing
+lost
+draw
+draws
