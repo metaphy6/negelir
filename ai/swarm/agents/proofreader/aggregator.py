@@ -38,11 +38,15 @@ backed ledger drops in without surgery.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import stat
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Iterable
 
 from common.config import cfg as _cfg
@@ -69,6 +73,50 @@ _log = logging.getLogger("swarm.agents.proofreader_aggregator")
 
 
 _ACCEPT_WARN: frozenset[str] = frozenset({"accept", "warn"})
+_MOCK_PREDICT_CITATION_HMAC_KEY: bytes = b"negelir:mock:predict:citation:hmac:v1"
+
+
+def _citation_key_id(key: bytes) -> str:
+    """Return stable 16-hex key id for citation-signature key bytes."""
+    return hashlib.sha256(key).hexdigest()[:16]
+
+
+def _load_predict_citation_hmac_key() -> tuple[bytes, str]:
+    """Return the secret key used to sign citation identity tuples."""
+    key_path = str(getattr(_cfg, "predict_citation_hmac_key_path", "") or "").strip()
+    if key_path:
+        path = Path(key_path).expanduser()
+        try:
+            mode = stat.S_IMODE(path.stat().st_mode)
+            if mode != 0o400:
+                _log.warning(
+                    "%s: predict citation HMAC key mode should be 0400; got %o for %s",
+                    ProofreaderAggregatorAgent.name, mode, path,
+                )
+            key = path.read_bytes().strip()
+            if key:
+                return key, _citation_key_id(key)
+        except OSError:
+            pass
+    if str(getattr(_cfg, "profile", "mock")).lower() == "mock":
+        return _MOCK_PREDICT_CITATION_HMAC_KEY, _citation_key_id(_MOCK_PREDICT_CITATION_HMAC_KEY)
+    raise RuntimeError(
+        "predict citation HMAC key missing; set NEGELIR_PREDICT_CITATION_HMAC_KEY_PATH"
+    )
+
+
+def _model_versions_canonical(final: PredictFinal) -> str:
+    """Canonical model-version string used in the citation signature tuple."""
+    return "|".join(sorted(str(mid) for mid in final.contributing_models))
+
+
+def _compute_citation_signature(final: PredictFinal, key: bytes) -> str:
+    """HMAC-SHA256 over the citation identity tuple."""
+    blob = (
+        f"{final.prediction_id}|{final.produced_at}|"
+        f"{_model_versions_canonical(final)}|{final.calibration_version}"
+    )
+    return hmac.new(key, blob.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 @dataclass
@@ -426,6 +474,7 @@ class ProofreaderAggregatorAgent:
         # Approval path — quorum reached, no reject votes.
         if p.final is not None and p.accept_warn_count() >= self._quorum:
             approvers = p.approvers()
+            signing_key, signing_key_id = _load_predict_citation_hmac_key()
             approved = PredictApproved(
                 request_id=p.request_id,
                 prediction_id=p.prediction_id,
@@ -437,6 +486,9 @@ class ProofreaderAggregatorAgent:
                 quorum=self._quorum,
                 final=p.final.as_dict(),
                 calibration_version=p.final.calibration_version,
+                schema_version=3,
+                citation_signature=_compute_citation_signature(p.final, signing_key),
+                citation_key_id=signing_key_id,
             )
             return [
                 Message.new(

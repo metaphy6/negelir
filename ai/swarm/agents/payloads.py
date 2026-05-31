@@ -866,6 +866,8 @@ class PredictApproved:
     calibration_version: int = 0
     schema_version: int = 1           # Phase 10 §10.19: 1 = legacy, 2 = with qa_correlation_id
     qa_correlation_id: str | None = None  # Phase 10 §10.19: NLP QA dispatch correlation id
+    citation_signature: str | None = None  # Phase 10 §10.21.8: HMAC signature over citation identity tuple
+    citation_key_id: str | None = None  # Phase 10 §10.21.8: 16-hex key id used to generate citation_signature
 
     def __post_init__(self) -> None:
         # Phase-6 audit (F-7): normalise the market key to lowercase
@@ -916,6 +918,14 @@ class PredictApproved:
             calibration_version=int(data.get("calibration_version", 0)),
             schema_version=int(data.get("schema_version", 1)),
             qa_correlation_id=data.get("qa_correlation_id"),
+            citation_signature=(
+                None if data.get("citation_signature") is None
+                else str(data.get("citation_signature"))
+            ),
+            citation_key_id=(
+                None if data.get("citation_key_id") is None
+                else str(data.get("citation_key_id"))
+            ),
         )
 
 

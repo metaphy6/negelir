@@ -14,6 +14,8 @@ from __future__ import annotations
 import statistics
 import sys
 import time
+import os
+import hashlib
 from pathlib import Path
 from typing import List
 
@@ -944,6 +946,35 @@ def cmd_nlp_template_lint(argv: List[str]) -> int:
                      "§10.21.6: Forbidden dynamic access kwargs.get(")
                 )
 
+            # §10.21.6 citation block contract:
+            # predict.* templates must render citation from a single canonical
+            # slot (citation_block) in the citation section after delimiter.
+            if tpl_path.name.startswith("predict."):
+                parts = source.split("---", 1)
+                if len(parts) != 2:
+                    failed.append(
+                        (tpl_path.name, "missing '---' delimiter",
+                         "§10.21.6: predict template must include citation delimiter")
+                    )
+                else:
+                    citation_src = parts[1]
+                    try:
+                        citation_ast = env.parse(citation_src)
+                        citation_vars = extract_variables(citation_ast)
+                        illegal_vars = sorted(v for v in citation_vars if v != "citation_block")
+                        if illegal_vars:
+                            failed.append(
+                                (
+                                    tpl_path.name,
+                                    ", ".join(illegal_vars),
+                                    "§10.21.6: citation section may use only {{ citation_block }}",
+                                )
+                            )
+                    except jinja2.TemplateSyntaxError as exc:
+                        failed.append(
+                            (tpl_path.name, str(exc), "Citation section syntax error")
+                        )
+
         except jinja2.TemplateSyntaxError as exc:
             failed.append((tpl_path.name, str(exc), "Template syntax error"))
         except Exception as exc:
@@ -1242,12 +1273,68 @@ def cmd_verify_nlp_schemas(argv: List[str]) -> int:
     return 0
 
 
+def cmd_nlp_rotate_citation_key(argv: List[str]) -> int:
+    """Rotate Phase 10 citation HMAC key with dual-acceptance grace window.
+
+    Flow:
+    1) Move current key to <path>.prev (if current key exists).
+    2) Generate a new 32-byte key at <path> (mode 0400).
+    3) Keep .prev valid for cfg.predict_citation_hmac_key_grace_s seconds.
+    """
+    try:
+        from common.config import cfg
+    except ImportError as exc:
+        err(f"nlp.rotate-citation-key: import error — {exc}")
+        return 1
+
+    key_path = Path(str(cfg.predict_citation_hmac_key_path)).expanduser()
+    prev_path = Path(f"{key_path}.prev")
+    grace_s = int(cfg.predict_citation_hmac_key_grace_s)
+
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+
+    previous_key_id = None
+    if key_path.exists():
+        try:
+            old_key = key_path.read_bytes().strip()
+        except OSError as exc:
+            err(f"nlp.rotate-citation-key: cannot read existing key: {exc}")
+            return 1
+        if old_key:
+            previous_key_id = hashlib.sha256(old_key).hexdigest()[:16]
+            try:
+                prev_path.write_bytes(old_key)
+                os.chmod(prev_path, 0o400)
+            except OSError as exc:
+                err(f"nlp.rotate-citation-key: cannot persist previous key: {exc}")
+                return 1
+
+    new_key = os.urandom(32)
+    new_key_id = hashlib.sha256(new_key).hexdigest()[:16]
+    try:
+        if key_path.exists():
+            os.chmod(key_path, 0o600)
+        key_path.write_bytes(new_key)
+        os.chmod(key_path, 0o400)
+    except OSError as exc:
+        err(f"nlp.rotate-citation-key: cannot write new key: {exc}")
+        return 1
+
+    ok(
+        "nlp.rotate-citation-key: rotated citation key "
+        f"(new_key_id={new_key_id}, prev_key_id={previous_key_id or 'none'}, "
+        f"grace_s={grace_s}, key_path={key_path}, prev_path={prev_path})"
+    )
+    return 0
+
+
 COMMANDS = {
     "nlp.bench": cmd_nlp_bench,
     "nlp.entity-bench": cmd_nlp_entity_bench,
     "nlp.intent-pin": cmd_nlp_intent_pin,
     "nlp.lexicon-build": cmd_nlp_lexicon_build,
     "nlp.diacritics-build": cmd_nlp_diacritics_build,
+    "nlp.rotate-citation-key": cmd_nlp_rotate_citation_key,
     "nlp.template-lint": cmd_nlp_template_lint,
     "nlp.eval-diff": cmd_nlp_eval_diff,
     "verify.nlp-lexicons": cmd_verify_nlp_lexicons,

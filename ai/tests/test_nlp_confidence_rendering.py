@@ -6,9 +6,8 @@ Verifies:
 2. confidence_band() respects a custom band list.
 3. build_environment() wires the closure so {{ confidence_band(prob) }}
    in templates uses cfg.nlp_confidence_bands (not the module default).
-4. All predict.* templates include the raw probability in their citation
-   block (§10.7 binding: "raw probability is included in the citation block;
-   the user-facing prose uses the band").
+4. All predict.* templates include canonical citation fields and do not
+    interpolate raw probability inside citation text.
 5. User-facing prose uses the band label, not the raw float.
 6. Adversarial: probability outside [0,1] handled gracefully (edge case
    at exactly 1.0 falls back to last band label, not KeyError).
@@ -122,35 +121,34 @@ def test_build_environment_default_bands_match_config_default() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. Raw probability in citation block for all predict.* templates
+# 4. Canonical citation block content for all predict.* templates
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("tmpl", _PREDICT_TEMPLATES)
-def test_citation_block_contains_raw_probability(tmpl: str) -> None:
-    """Citation block must contain the raw probability value (§10.7 binding)."""
+def test_citation_block_is_canonical_without_probability(tmpl: str) -> None:
+    """Citation block contains canonical fields and excludes probability."""
     env = build_environment()
     text = render(tmpl, _CTX, env=env)
     _, citation = extract_citation_block(text)
     assert citation is not None, f"No citation block in {tmpl!r}"
-    # The raw probability (0.78) must appear verbatim, not just the band label.
-    assert "0.78" in citation, (
-        f"Raw probability '0.78' not found in citation block of {tmpl!r}. "
-        f"Citation block was: {citation!r}"
-    )
+    assert "tahmin:pred-conf-1" in citation
+    assert "üretim:2026-05-27T12:00:00Z" in citation
+    assert "kalibrasyon:cal-v2" in citation
+    assert "modeller:predictor-v2@2.0.0" in citation
+    assert "0.78" not in citation
 
 
 @pytest.mark.parametrize("prob", [0.30, 0.60, 0.90])
-def test_citation_contains_probability_across_all_bands(prob: float) -> None:
-    """Raw probability is included in the citation block regardless of which
-    band it falls into."""
+def test_citation_is_probability_independent_across_bands(prob: float) -> None:
+    """Citation stays canonical regardless of the confidence band in prose."""
     env = build_environment()
     ctx = {**_CTX, "probability": prob}
     text = render("predict.match_outcome.tr.j2", ctx, env=env)
     _, citation = extract_citation_block(text)
     assert citation is not None
-    assert str(prob) in citation, (
-        f"Raw probability {prob!r} not found in citation block"
-    )
+    assert "tahmin:pred-conf-1" in citation
+    assert "kalibrasyon:cal-v2" in citation
+    assert str(prob) not in citation
 
 
 # ---------------------------------------------------------------------------

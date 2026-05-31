@@ -249,9 +249,30 @@ def render(
         env = build_environment()
     if fallback_env is None:
         fallback_env = env
+    # For predict templates, synthesize the canonical citation block from the
+    # closed-schema citation dict when callers provide raw fields.
+    render_context = dict(context)
+    if template_name.startswith("predict.") and "citation_block" not in render_context:
+        required = (
+            "prediction_id",
+            "produced_at_utc",
+            "model_versions",
+            "calibration_version",
+        )
+        if all(k in render_context for k in required):
+            citation_data = {
+                "prediction_id": render_context["prediction_id"],
+                "produced_at_utc": render_context["produced_at_utc"],
+                "model_versions": render_context["model_versions"],
+                "calibration_version": render_context["calibration_version"],
+            }
+            if "degraded_reason" in render_context and render_context["degraded_reason"]:
+                citation_data["degraded_reason"] = render_context["degraded_reason"]
+            render_context["citation_block"] = render_citation_block(citation_data)
+
     try:
         tmpl = env.get_template(template_name)
-        return tmpl.render(**context)
+        return tmpl.render(**render_context)
     except jinja2.UndefinedError as exc:
         # Missing slot: route to meta.unsupported.
         unsupported_ctx: dict[str, Any] = {"suggestions": [str(exc)]}
@@ -317,7 +338,8 @@ def render_with_citation(
     template_name, context, locale, env, fallback_env:
         Forwarded verbatim to :func:`render`.
     """
-    text = render(template_name, context, locale=locale, env=env, fallback_env=fallback_env)
+    _ = locale  # Reserved for future locale-resolved rendering path.
+    text = render(template_name, context, env=env, fallback_env=fallback_env)
     _, citation = extract_citation_block(text)
     if citation is None:
         return text, None

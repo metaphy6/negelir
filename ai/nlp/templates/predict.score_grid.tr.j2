@@ -10,4 +10,4 @@ Tarih: {{ kickoff_time(kickoff_utc) }}
 Tahmin sınırlı veriyle üretildi: {{ degraded_reason }}
 {% endif %}
 ---
-[tahmin:{{ prediction_id }} | üretim:{{ produced_at_utc }} | model:{{ model_versions | join(', ') }} | kalibrasyon:{{ calibration_version }} | olasılık:{{ probability }}]
+{{ citation_block }}

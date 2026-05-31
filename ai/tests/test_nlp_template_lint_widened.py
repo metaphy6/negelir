@@ -12,6 +12,7 @@ And allows only:
 """
 import jinja2
 from jinja2 import nodes
+from pathlib import Path
 
 
 def test_nlp_template_lint_rejects_entity_original_text():
@@ -224,3 +225,28 @@ def test_render_citation_block_integration():
     assert sha_extracted == sha1, (
         "SHA256 must be stable through extract → sha256 round-trip"
     )
+
+
+def test_predict_templates_citation_section_uses_only_citation_block():
+    """§10.21.6: citation section in predict templates is single-slot canonical."""
+    env = jinja2.Environment()
+    templates_dir = Path(__file__).resolve().parents[1] / "nlp" / "templates"
+
+    predict_templates = sorted(templates_dir.glob("predict.*.tr.j2"))
+    assert predict_templates, "No predict templates found for citation-section check"
+
+    for tpl_path in predict_templates:
+        source = tpl_path.read_text(encoding="utf-8")
+        parts = source.split("---", 1)
+        assert len(parts) == 2, f"{tpl_path.name}: missing citation delimiter"
+
+        citation_ast = env.parse(parts[1])
+        vars_in_citation = {
+            n.name
+            for n in citation_ast.find_all(nodes.Name)
+            if n.name not in {"True", "False", "none"}
+        }
+        assert vars_in_citation == {"citation_block"}, (
+            f"{tpl_path.name}: citation section must use only {{ citation_block }}, "
+            f"found {sorted(vars_in_citation)}"
+        )

@@ -21,7 +21,7 @@
 
 #### 10.29.1 Geminate restoration (Arabic/Persian-origin doubled consonants)
 
-- [ ] **The problem.** Turkish single-stem stems borrowed from Arabic/Persian
+- [x] **The problem.** Turkish single-stem stems borrowed from Arabic/Persian
   restore the dropped second consonant when a vowel-initial suffix attaches:
   `hak → hakkı` (right-acc), `sır → sırrı` (secret-acc), `his → hissi`
   (feeling-acc), `zan → zannı`, `şık → şıkkı`. Native speakers do this

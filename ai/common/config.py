@@ -136,6 +136,9 @@ class Config:
     nlp_answer_sample_daily_cap: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP", "5000"
     )))
+    nlp_log_max_unredacted_str_len: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_LOG_MAX_UNREDACTED_STR_LEN", "64"
+    )))
 
     # Scraping data sources (in priority order)
     scrape_source_1: str = field(default_factory=lambda: os.getenv(
@@ -722,6 +725,39 @@ class Config:
     # nlp_request_dedup_window_s: NLP dedup window lower-bounded by
     #   qa_request_v1_dedup_window_s + 30 s (boot validator §10.0).
     nlp_request_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S", "330")))
+    # predict_citation_hmac_key_path: key file used by the Phase 10 §10.21.8
+    #   predict.approved.v1 citation-signature contract (HMAC-SHA256).
+    #   Mode should be 0400 in production.
+    predict_citation_hmac_key_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_PREDICT_CITATION_HMAC_KEY_PATH", "/var/lib/negelir/secrets/predict_citation_hmac.key"
+    ))
+    # predict_citation_hmac_key_grace_s: dual-acceptance window (seconds)
+    #   for previous citation-HMAC key after rotation (§10.21.8).
+    predict_citation_hmac_key_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_PREDICT_CITATION_HMAC_KEY_GRACE_S", "86400"
+    )))
+    # nlp_predict_citation_hmac_required: verification policy for consuming
+    #   predict.approved.v1 citation signatures (§10.21.8).
+    #   Values: off | warn | enforce. Default warn.
+    nlp_predict_citation_hmac_required: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_PREDICT_CITATION_HMAC_REQUIRED", "warn"
+    ))
+    # nlp_fairness_key: per-tenant virtual queue key for NLP intake (§10.23.1).
+    #   Values: tenant_id | account_id | ip_bucket. Default account_id.
+    nlp_fairness_key: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_FAIRNESS_KEY", "account_id"))
+    # nlp_per_tenant_inflight_max: concurrent intake-slot cap per fairness key
+    #   (§10.23.1 noisy-tenant isolation). Default 8.
+    nlp_per_tenant_inflight_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_PER_TENANT_INFLIGHT_MAX", "8")))
+    # nlp_fairness_max_tracked_keys: cardinality cap for tracked fairness keys
+    #   (§10.23.1 observability guard). LRU eviction applies over this limit.
+    nlp_fairness_max_tracked_keys: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_FAIRNESS_MAX_TRACKED_KEYS", "10000")))
+    # nlp_tenant_abuse_qps_threshold: per-fairness-key intake QPS threshold
+    #   for observability-only abuse alerts (§10.23.1). Sustained exceedance
+    #   over nlp_tenant_abuse_window_s emits nlp.alert.v1{kind=nlp_tenant_intake_abuse}.
+    nlp_tenant_abuse_qps_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_TENANT_ABUSE_QPS_THRESHOLD", "10")))
+    # nlp_tenant_abuse_window_s: rolling window for abuse-rate detection
+    #   (§10.23.1). Default 60s.
+    nlp_tenant_abuse_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_TENANT_ABUSE_WINDOW_S", "60")))
     # nlp_pipeline_timeout_ms: total NLP pipeline budget (intent + dispatch +
     #   consensus + optional humanizer).  Extends Phase 9 §9.17.4 chain:
     #   api_request_timeout_ms ≥ nlp_pipeline_timeout_ms + nlp_dispatch_overhead_ms.
@@ -744,6 +780,12 @@ class Config:
     #   Redis round-trip on every humanize call → only flip after measuring
     #   per-pod breaker open-rate above 5% (stampede-protection in dense deploys).
     nlp_humanizer_breaker_scope: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_HUMANIZER_BREAKER_SCOPE", "pod"))
+    # nlp_per_tenant_humanizer_burst: max immediate humanizer admissions per
+    #   fairness key before degrade-to-template (§10.23.1). Default 4.
+    nlp_per_tenant_humanizer_burst: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_PER_TENANT_HUMANIZER_BURST", "4")))
+    # nlp_per_tenant_humanizer_refill_per_s: token refill rate per second for
+    #   humanizer tenant budget (§10.23.1). Default 2.0.
+    nlp_per_tenant_humanizer_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_PER_TENANT_HUMANIZER_REFILL_PER_S", "2")))
     # nlp_humanize: enable the ≤1B humanizer LLM for optional answer polish
     #   (Phase 11 device-probed; never a decision-maker per AGENTS.md Rule 4).
     nlp_humanize: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_HUMANIZE", "false").lower() in ("true", "1", "yes"))
@@ -1064,6 +1106,12 @@ class Config:
     nlp_agent_spool_dir: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_NLP_AGENT_SPOOL_DIR", "data/nlp/spool"
     ))
+    # nlp_spool_payload_pii_strip: when true, spool writes for qa.intent.v1
+    #   drop payload.sanitized_text and persist only
+    #   payload.sanitized_text_sha256 for replay correlation.  Default = true.
+    nlp_spool_payload_pii_strip: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_SPOOL_PAYLOAD_PII_STRIP", "true"
+    ).lower() in ("1", "true", "yes"))
 
     # ── Phase 10 §10.7 — Answer generation / template rendering ───────────
     #
@@ -2865,6 +2913,21 @@ class Config:
         # Bounds checks.
         _bounded("nlp_input_max_codepoints", self.nlp_input_max_codepoints, 1, 100_000)
         _bounded("nlp_request_dedup_window_s", self.nlp_request_dedup_window_s, 1, 86_400)
+        _bounded("predict_citation_hmac_key_grace_s", self.predict_citation_hmac_key_grace_s, 0, 604_800)
+        if self.nlp_predict_citation_hmac_required not in ("off", "warn", "enforce"):
+            issues.append(
+                f"nlp_predict_citation_hmac_required={self.nlp_predict_citation_hmac_required!r} "
+                "must be 'off', 'warn', or 'enforce' (Phase 10 §10.21.8)"
+            )
+        if self.nlp_fairness_key not in ("tenant_id", "account_id", "ip_bucket"):
+            issues.append(
+                f"nlp_fairness_key={self.nlp_fairness_key!r} must be one of "
+                "('tenant_id', 'account_id', 'ip_bucket') (Phase 10 §10.23.1)"
+            )
+        _bounded("nlp_per_tenant_inflight_max", self.nlp_per_tenant_inflight_max, 1, 1_000)
+        _bounded("nlp_fairness_max_tracked_keys", self.nlp_fairness_max_tracked_keys, 1, 1_000_000)
+        _bounded("nlp_tenant_abuse_qps_threshold", self.nlp_tenant_abuse_qps_threshold, 0.001, 10_000.0)
+        _bounded("nlp_tenant_abuse_window_s", self.nlp_tenant_abuse_window_s, 1, 86_400)
         _bounded("nlp_pipeline_timeout_ms", self.nlp_pipeline_timeout_ms, 1, 300_000)
         _bounded("nlp_dispatch_overhead_ms", self.nlp_dispatch_overhead_ms, 1, 60_000)
         _bounded("nlp_consensus_overhead_ms", self.nlp_consensus_overhead_ms, 1, 60_000)
@@ -2875,6 +2938,8 @@ class Config:
                 f"nlp_humanizer_breaker_scope={self.nlp_humanizer_breaker_scope!r} "
                 "must be 'pod' or 'cluster' (Phase 10 §10.21.4)"
             )
+        _bounded("nlp_per_tenant_humanizer_burst", self.nlp_per_tenant_humanizer_burst, 1, 1_000)
+        _bounded("nlp_per_tenant_humanizer_refill_per_s", self.nlp_per_tenant_humanizer_refill_per_s, 0.001, 1_000.0)
         _bounded("nlp_humanizer_max_new_tokens", self.nlp_humanizer_max_new_tokens, 1, 1024)
         _bounded("nlp_humanizer_temperature", self.nlp_humanizer_temperature, 0.0, 2.0)
         _bounded("nlp_humanizer_top_p", self.nlp_humanizer_top_p, 0.0, 1.0)

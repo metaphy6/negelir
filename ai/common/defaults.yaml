@@ -121,6 +121,14 @@ nlp:
   # §10.19 sampled answer audit
   answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
   answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP
+  # §10.21.7 log redaction long-string heuristic threshold
+  log_max_unredacted_str_len: 64  # NEGELIR_NLP_LOG_MAX_UNREDACTED_STR_LEN
+  # §10.21.8 citation-signature HMAC key file
+  predict_citation_hmac_key_path: /var/lib/negelir/secrets/predict_citation_hmac.key  # NEGELIR_PREDICT_CITATION_HMAC_KEY_PATH
+  # §10.21.8 dual-acceptance window for previous citation-signature key (seconds)
+  predict_citation_hmac_key_grace_s: 86400  # NEGELIR_PREDICT_CITATION_HMAC_KEY_GRACE_S
+  # §10.21.8 consume-side citation-signature verification mode (off|warn|enforce)
+  predict_citation_hmac_required: warn  # NEGELIR_NLP_PREDICT_CITATION_HMAC_REQUIRED
   # §10.21.2 Jinja2 bytecode cache directory
   jinja_bcc_dir: "data/cache/jinja_bcc"  # NEGELIR_NLP_JINJA_BCC_DIR
   # §10.21.6 runtime guard minimum substring length
@@ -304,6 +312,16 @@ phase10:
   nlp_input_max_codepoints: 512            # NEGELIR_NLP_INPUT_MAX_CODEPOINTS
   # Dedup window lower bound: qa_request_v1_dedup_window_s(300) + 30 = 330.
   nlp_request_dedup_window_s: 330          # NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S
+  # §10.23.1 intake fairness key for virtual queues.
+  nlp_fairness_key: account_id             # NEGELIR_NLP_FAIRNESS_KEY
+  # Max concurrent intake slots per fairness key.
+  nlp_per_tenant_inflight_max: 8           # NEGELIR_NLP_PER_TENANT_INFLIGHT_MAX
+  # Cardinality cap for tracked fairness keys (LRU eviction).
+  nlp_fairness_max_tracked_keys: 10000     # NEGELIR_NLP_FAIRNESS_MAX_TRACKED_KEYS
+  # Sustained per-key intake-QPS threshold for abuse observability alerting.
+  nlp_tenant_abuse_qps_threshold: 10       # NEGELIR_NLP_TENANT_ABUSE_QPS_THRESHOLD
+  # Rolling window for per-key intake abuse detection.
+  nlp_tenant_abuse_window_s: 60            # NEGELIR_NLP_TENANT_ABUSE_WINDOW_S
   # §10.21.1: Hypothesis profile max examples for property-based tests.
   nlp_hypothesis_max_examples: 1000        # NEGELIR_NLP_HYPOTHESIS_MAX_EXAMPLES
   # §10.21.2: Singleflight event-map sweeper (orphan cleanup).
@@ -316,6 +334,8 @@ phase10:
   nlp_spool_max_entries: 1000              # NEGELIR_NLP_SPOOL_MAX_ENTRIES
   # Per-agent spool directory root (§10.13).
   nlp_agent_spool_dir: "data/nlp/spool"   # NEGELIR_NLP_AGENT_SPOOL_DIR
+  # Strip sanitized_text from qa.intent.v1 spool payloads; persist sha256 only.
+  nlp_spool_payload_pii_strip: true        # NEGELIR_NLP_SPOOL_PAYLOAD_PII_STRIP
   # Timeout chain: api_request_timeout_ms(2500) ≥ pipeline(1800) + dispatch(200) = 2000 ✓
   nlp_pipeline_timeout_ms: 1800            # NEGELIR_NLP_PIPELINE_TIMEOUT_MS
   nlp_dispatch_overhead_ms: 200            # NEGELIR_NLP_DISPATCH_OVERHEAD_MS
@@ -337,6 +357,9 @@ phase10:
   # Cluster-scope adds a Redis round-trip on every humanize call → only use after measuring
   # per-pod breaker open-rate above 5% (§10.21.4 stampede-protection in dense deploys).
   nlp_humanizer_breaker_scope: pod         # NEGELIR_NLP_HUMANIZER_BREAKER_SCOPE
+  # §10.23.1 humanizer fair-share token bucket per tenant/fairness key.
+  nlp_per_tenant_humanizer_burst: 4        # NEGELIR_NLP_PER_TENANT_HUMANIZER_BURST
+  nlp_per_tenant_humanizer_refill_per_s: 2.0  # NEGELIR_NLP_PER_TENANT_HUMANIZER_REFILL_PER_S
   # CI gate: normalize_input p95 must not exceed this (ms). Phase 10 §10.1 DoD = 5 ms.
   nlp_bench_latency_p95_threshold_ms: 5   # NEGELIR_NLP_BENCH_LATENCY_P95_THRESHOLD_MS
   # mtime-poll interval (seconds) for LexiconStore hot-reload (§10.2 Atomic swap).

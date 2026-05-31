@@ -12,8 +12,13 @@ Per AGENTS.md Rule 10: new public surface -> happy + adversarial tests.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+from pathlib import Path
+
 import pytest
 
+from common.config import cfg as _cfg
 from swarm.agents.nlp import NlpAnswerAgent, NlpDispatcherAgent
 from swarm.agents.topics import (
     DATA_REQUEST_V1,
@@ -45,6 +50,8 @@ _BASE_INTENT_PAYLOAD = {
     "locale": "tr-TR",
     "emitted_at": "2026-05-27T10:00:00+00:00",
 }
+
+_MOCK_PREDICT_CITATION_HMAC_KEY = b"negelir:mock:predict:citation:hmac:v1"
 
 
 def _make_intent_msg(overrides: dict | None = None) -> Message:
@@ -442,6 +449,7 @@ def _make_approved_msg(
     prediction_id: str | None = None,
     degraded: bool = False,
     degraded_reason: str | None = None,
+    citation_signature: str | None = "__auto__",
 ) -> Message:
     """Build a synthetic predict.approved.v1 for a summary fan-out."""
     # §10.16: predict.approved.v1 includes predict.final under "final" key
@@ -460,22 +468,39 @@ def _make_approved_msg(
         "league_id": "tr-superlig",
         "profile_id": None,
     }
+    payload = {
+        "prediction_id": prediction_id or "pred-001",
+        "summary_correlation_id": summary_corr,
+        "summary_expected_count": expected_count,
+        "qa_request_id": qa_request_id,
+        "match_id": "team-0",
+        "market": "1x2",
+        "approved_at": "2026-05-27T10:00:00+00:00",
+        "approved_by": ["proof.sanity.v1"],
+        "verdict_count": 1,
+        "quorum": 1,
+        "final": final_payload,
+        "calibration_version": 1,
+    }
+    if citation_signature == "__auto__":
+        key_id = hashlib.sha256(_MOCK_PREDICT_CITATION_HMAC_KEY).hexdigest()[:16]
+        blob = (
+            f"{payload['prediction_id']}|{final_payload['produced_at']}|"
+            f"{'|'.join(sorted(final_payload['contributing_models']))}|"
+            f"{payload['calibration_version']}"
+        )
+        payload["citation_signature"] = hmac.new(
+            _MOCK_PREDICT_CITATION_HMAC_KEY,
+            blob.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        payload["citation_key_id"] = key_id
+    else:
+        payload["citation_signature"] = citation_signature
+
     return Message.new(
         topic=PREDICT_APPROVED,
-        payload={
-            "prediction_id": prediction_id or "pred-001",
-            "summary_correlation_id": summary_corr,
-            "summary_expected_count": expected_count,
-            "qa_request_id": qa_request_id,
-            "match_id": "team-0",
-            "market": "1x2",
-            "approved_at": "2026-05-27T10:00:00+00:00",
-            "approved_by": ["proof.sanity.v1"],
-            "verdict_count": 1,
-            "quorum": 1,
-            "final": final_payload,
-            "calibration_version": 1,
-        },
+        payload=payload,
     )
 
 
@@ -621,6 +646,110 @@ class TestNlpAnswerAgentSummaryAggregation:
         assert len(out_b) == 1
         assert out_a[0].payload["qa_correlation_id"] == "corr-A"
         assert out_b[0].payload["qa_correlation_id"] == "corr-B"
+
+    def test_nlp_citation_signature_verified_under_enforce(
+        self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """§10.21.8: enforce mode accepts valid signatures and renders normally."""
+        monkeypatch.setattr(
+            _cfg,
+            "nlp_predict_citation_hmac_required",
+            "enforce",
+            raising=False,
+        )
+
+        corr = "agg-enforce-ok-001"
+        out1 = list(agent.handle(_make_approved_msg(corr, expected_count=2, prediction_id="p1")))
+        out2 = list(agent.handle(_make_approved_msg(corr, expected_count=2, prediction_id="p2")))
+        assert out1 == []
+        assert len(out2) == 1
+        assert out2[0].envelope.topic == QA_ANSWER_V1
+        assert out2[0].payload["intent"] == "summary"
+
+    def test_nlp_forged_citation_dropped_under_enforce(
+        self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """§10.21.8: enforce mode drops invalid signature and routes to predict.timeout."""
+        monkeypatch.setattr(
+            _cfg,
+            "nlp_predict_citation_hmac_required",
+            "enforce",
+            raising=False,
+        )
+
+        out = list(
+            agent.handle(
+                _make_approved_msg(
+                    "agg-enforce-bad-001",
+                    expected_count=1,
+                    citation_signature="0" * 64,
+                )
+            )
+        )
+        assert len(out) == 2
+        assert out[0].envelope.topic == QA_ANSWER_V1
+        assert out[0].payload["intent"] == "predict.timeout"
+        assert out[1].envelope.topic == NLP_ALERT_V1
+        assert out[1].payload["kind"] == "nlp_citation_signature_verify_failed"
+        assert out[1].payload["severity"] == "critical"
+
+    def test_nlp_warn_mode_renders_with_alert(
+        self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """§10.21.8: warn mode renders and emits nlp.alert.v1 on invalid signature."""
+        monkeypatch.setattr(
+            _cfg,
+            "nlp_predict_citation_hmac_required",
+            "warn",
+            raising=False,
+        )
+
+        out = list(
+            agent.handle(
+                _make_approved_msg(
+                    "agg-warn-bad-001",
+                    expected_count=1,
+                    citation_signature="f" * 64,
+                )
+            )
+        )
+        assert len(out) == 2
+        assert out[0].envelope.topic == QA_ANSWER_V1
+        assert out[0].payload["intent"] == "summary"
+        assert out[1].envelope.topic == NLP_ALERT_V1
+        assert out[1].payload["kind"] == "nlp_citation_signature_verify_failed"
+        assert out[1].payload["severity"] == "warn"
+
+    def test_nlp_citation_rotation_prev_key_accepted_within_grace_window(
+        self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """§10.21.8 rotation: previous key remains valid inside grace window."""
+        monkeypatch.setattr(
+            _cfg,
+            "nlp_predict_citation_hmac_required",
+            "enforce",
+            raising=False,
+        )
+
+        key_file = tmp_path / "predict_citation_hmac.key"
+        prev_key = b"phase10-prev-citation-key"
+        new_key = b"phase10-new-citation-key"
+        key_file.write_bytes(new_key)
+        (tmp_path / "predict_citation_hmac.key.prev").write_bytes(prev_key)
+
+        monkeypatch.setattr(_cfg, "predict_citation_hmac_key_path", str(key_file), raising=False)
+        monkeypatch.setattr(_cfg, "predict_citation_hmac_key_grace_s", 3600, raising=False)
+
+        corr = "agg-prev-key-ok-001"
+        msg = _make_approved_msg(corr, expected_count=1, prediction_id="p-prev")
+        key_id = hashlib.sha256(prev_key).hexdigest()[:16]
+        blob = "p-prev|2026-05-27T10:00:00+00:00|model-1|1"
+        msg.payload["citation_key_id"] = key_id
+        msg.payload["citation_signature"] = hmac.new(prev_key, blob.encode("utf-8"), hashlib.sha256).hexdigest()
+
+        out = list(agent.handle(msg))
+        assert len(out) == 1
+        assert out[0].envelope.topic == QA_ANSWER_V1
 
 
 # ── §10.6 qa_correlation_id invariant tests ──────────────────────────────────

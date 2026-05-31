@@ -42,7 +42,7 @@
   gateway exists, but it is per-IP / per-account, NOT per-NLP-stage —
   a tenant within their gateway budget can still saturate the humanizer
   GPU lease.
-- [ ] **Per-tenant fair-queue at NLP intake.** `qa.request.v1` consumer
+- [x] **Per-tenant fair-queue at NLP intake.** `qa.request.v1` consumer
   on the NLP pod implements weighted-fair-queueing keyed by
   `cfg.nlp_fairness_key ∈ {tenant_id, account_id, ip_bucket}` default
   `account_id` (Phase 9 stamps `account_id` onto every `qa.request.v1`;
@@ -54,7 +54,7 @@
   pod or 1000 pods, the same code path). Cardinality cap on tracked
   keys = `cfg.nlp_fairness_max_tracked_keys=10000` (LRU eviction with
   `nlp.event.v1{kind=fairness_key_evicted}` debounced).
-- [ ] **Humanizer GPU lease fair-share.** The humanizer breaker (§10.8)
+- [x] **Humanizer GPU lease fair-share.** The humanizer breaker (§10.8)
   is global; the GPU lease (§10.21.9 stage 6) is per-pod. Per-tenant
   weighted-fair scheduling extends to humanizer admission: each tenant
   gets a token-bucket of `cfg.nlp_per_tenant_humanizer_burst=4` and
@@ -63,7 +63,7 @@
   user sees a slightly less polished sentence — degraded path is
   already proof-tested in §10.10). `degraded_reason="humanizer_tenant_budget_exceeded"`
   added to the §10.10 enum.
-- [ ] **Abuse detection signal.** `nlp_tenant_intake_rate{key_class}`
+- [x] **Abuse detection signal.** `nlp_tenant_intake_rate{key_class}`
   histogram (key classes: `account_paid`, `account_free`,
   `ip_anonymous`, `ip_known_proxy`) — when a single key sustains >
   `cfg.nlp_tenant_abuse_qps_threshold=10` for `cfg.nlp_tenant_abuse_window_s=60`,

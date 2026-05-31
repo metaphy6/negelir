@@ -48,10 +48,17 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib as _hashlib
+import hmac as _hmac
+import logging
 import threading as _threading
 import time as _time
 from typing import Callable, Iterable
+import os
+from pathlib import Path
+import stat
 from uuid import uuid4
+
+from common.security.patterns import PII_PATTERNS
 
 from ...sdk.types import Message
 from ..topics import (
@@ -65,6 +72,7 @@ from ..topics import (
     QA_REQUEST_V1,
 )
 from ._bus_circuit_breaker import NlpBusCircuitBreaker
+from ._log_filter import PIIScrubFilter, add_log_filter
 
 # ── internal helpers ──────────────────────────────────────────────────────
 
@@ -78,6 +86,51 @@ _SUMMARY_INTENTS = frozenset({"summary.next_week", "summary.matchday"})
 # not a config knob because it is a data-structure bound, not a tunable
 # threshold — the window_s config is the user-facing knob).
 _NLP_DEDUP_MAX_KEYS: int = 100_000
+_MOCK_PREDICT_CITATION_HMAC_KEY: bytes = b"negelir:mock:predict:citation:hmac:v1"
+
+
+AUDIT_REDACTION_WHITELIST = frozenset(
+    {
+        "qa_correlation_id",
+        "request_id",
+        "intent",
+        "intent_confidence",
+        "entity_count",
+        "proofreader_status",
+        "humanizer_used",
+        "degraded",
+        "degraded_reason",
+        "tier_id_required",
+        "model_versions",
+        "calibration_version",
+        "nlp_pipeline_version",
+        "lexicon_versions",
+        "produced_at_utc",
+    }
+)
+
+
+def _redact_text_with_pii_patterns(value: str) -> str:
+    redacted = value
+    for pii_kind, pii_pattern in PII_PATTERNS:
+        redacted = pii_pattern.sub(
+            f"[REDACTED_{pii_kind.upper()}]",
+            redacted,
+        )
+    return redacted
+
+
+def _redact_value_with_pii_patterns(value: object) -> object:
+    if isinstance(value, str):
+        return _redact_text_with_pii_patterns(value)
+    if isinstance(value, list):
+        return [_redact_value_with_pii_patterns(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _redact_value_with_pii_patterns(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _entity_hash(entities: list) -> str:
@@ -138,6 +191,46 @@ def _new_id() -> str:
     return uuid4().hex
 
 
+def _enforce_nlp_spool_audit_dir_modes() -> None:
+    """Refuse startup when NLP spool/audit files are looser than 0600.
+
+    Directory contract: ``0700`` for ``cfg.nlp_agent_spool_dir`` and
+    ``data/nlp/audit`` (including subdirectories).
+    File contract: ``0600`` for every existing file under those trees.
+    """
+    if os.name != "posix":
+        return
+
+    from common.config import cfg
+
+    targets = [
+        Path(str(cfg.nlp_agent_spool_dir)),
+        Path("data") / "nlp" / "audit",
+    ]
+    violations: list[str] = []
+
+    for root in targets:
+        root.mkdir(parents=True, exist_ok=True)
+        os.chmod(root, 0o700)
+
+        for path in sorted(root.rglob("*")):
+            if path.is_symlink():
+                continue
+            if path.is_dir():
+                os.chmod(path, 0o700)
+                continue
+            if path.is_file():
+                mode = stat.S_IMODE(path.stat().st_mode)
+                if mode != 0o600:
+                    violations.append(f"{path}: expected 0600, got {mode:04o}")
+
+    if violations:
+        raise RuntimeError(
+            "NLP startup refused: insecure spool/audit file modes; "
+            + "; ".join(violations)
+        )
+
+
 class _SummaryAgg:
     """In-flight aggregation state for a summary.* fan-out (§10.6)."""
 
@@ -178,7 +271,10 @@ class NlpIntentAgent:
         monotonic: Callable[[], float] | None = None,
         deduper: object | None = None,
     ) -> None:
+        self._log = logging.getLogger("swarm.agents.nlp.intent")
+        add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._monotonic = monotonic or _time.monotonic
+        _enforce_nlp_spool_audit_dir_modes()
         # §10.13 producer-side deduper (lazy-init from cfg).
         self._deduper = deduper
         self._deduper_lock = _threading.Lock()
@@ -252,7 +348,10 @@ class NlpDispatcherAgent:
         monotonic: Callable[[], float] | None = None,
         deduper: object | None = None,
     ) -> None:
+        self._log = logging.getLogger("swarm.agents.nlp.dispatcher")
+        add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._clock_iso = clock_iso or _utc_iso
+        _enforce_nlp_spool_audit_dir_modes()
         self._new_id = new_id or _new_id
         self._monotonic = monotonic or _time.monotonic
         # §10.6 idempotency: lazy-init deduper (cfg not available at class load).
@@ -420,7 +519,10 @@ class NlpAnswerAgent:
         monotonic: Callable[[], float] | None = None,
         deduper: object | None = None,
     ) -> None:
+        self._log = logging.getLogger("swarm.agents.nlp.answer")
+        add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._clock_iso = clock_iso or _utc_iso
+        _enforce_nlp_spool_audit_dir_modes()
         self._new_id = new_id or _new_id
         self._monotonic = monotonic or _time.monotonic
         # §10.13 producer-side deduper (lazy-init from cfg).
@@ -464,7 +566,6 @@ class NlpAnswerAgent:
         import json
         import os
         import random
-        import re
 
         from common.config import cfg
 
@@ -485,26 +586,21 @@ class NlpAnswerAgent:
 
             self._audit_today_count += 1
 
-        # PII redaction: simple regex for email and phone patterns.
-        redacted_text = answer_text
-        # Email: basic pattern
-        redacted_text = re.sub(
-            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-            "[REDACTED_EMAIL]",
-            redacted_text,
-        )
-        # Phone: Turkish mobile pattern (05XX XXX XX XX, with optional spaces/dashes)
-        redacted_text = re.sub(
-            r"\b0[5-9]\d{2}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}\b",
-            "[REDACTED_PHONE]",
-            redacted_text,
-        )
+        redacted_text = _redact_text_with_pii_patterns(answer_text)
+        redacted_envelope = {
+            key: (
+                value
+                if key in AUDIT_REDACTION_WHITELIST
+                else _redact_value_with_pii_patterns(value)
+            )
+            for key, value in envelope.items()
+        }
 
         # Prepare audit payload.
         audit_payload = {
             "qa_correlation_id": qa_correlation_id,
             "answer_text_redacted": redacted_text,
-            "envelope": envelope,
+            "envelope": redacted_envelope,
             "captured_at": _dt.datetime.now(_dt.timezone.utc).isoformat(
                 timespec="seconds"
             ),
@@ -517,6 +613,7 @@ class NlpAnswerAgent:
             audit_path = os.path.join(audit_dir, f"{qa_correlation_id}.json")
             with open(audit_path, "w", encoding="utf-8") as fh:
                 json.dump(audit_payload, fh, ensure_ascii=False, indent=2)
+            os.chmod(audit_path, 0o600)
         except OSError:
             # Fail silently — never block the user on audit I/O error.
             pass
@@ -541,11 +638,159 @@ class NlpAnswerAgent:
 
     def _on_predict_approved(self, msg: Message) -> Iterable[Message]:
         payload = msg.payload
+        citation_check = self._validate_citation_signature(payload)
+        if citation_check is not None:
+            alert = self._build_citation_signature_alert(payload, citation_check)
+            if citation_check["mode"] == "enforce":
+                return [
+                    self._build_predict_timeout_answer(payload),
+                    alert,
+                ]
+
         summary_corr = payload.get("summary_correlation_id")
         if summary_corr:
-            return self._on_summary_prediction_arrived(payload, str(summary_corr))
+            out = list(self._on_summary_prediction_arrived(payload, str(summary_corr)))
+            if citation_check is not None:
+                out.append(alert)
+            return out
         # Single-predict path: stub for future §10.7 bullets.
+        if citation_check is not None:
+            return [alert]
         return []
+
+    def _citation_key_id(self, key: bytes) -> str:
+        return _hashlib.sha256(key).hexdigest()[:16]
+
+    def _load_predict_citation_hmac_keys(self) -> dict[str, bytes]:
+        from common.config import cfg
+
+        loaded: dict[str, bytes] = {}
+        key_path = str(getattr(cfg, "predict_citation_hmac_key_path", "") or "").strip()
+        grace_s = int(getattr(cfg, "predict_citation_hmac_key_grace_s", 86_400) or 0)
+        if key_path:
+            path = Path(key_path).expanduser()
+            try:
+                key = path.read_bytes().strip()
+                if key:
+                    loaded[self._citation_key_id(key)] = key
+                    if grace_s > 0:
+                        current_age_s = max(0.0, _time.time() - path.stat().st_mtime)
+                        if current_age_s <= grace_s:
+                            prev_path = Path(f"{path}.prev")
+                            if prev_path.exists():
+                                prev_key = prev_path.read_bytes().strip()
+                                if prev_key:
+                                    loaded[self._citation_key_id(prev_key)] = prev_key
+            except OSError:
+                pass
+
+        if str(getattr(cfg, "profile", "mock")).lower() == "mock":
+            loaded[self._citation_key_id(_MOCK_PREDICT_CITATION_HMAC_KEY)] = _MOCK_PREDICT_CITATION_HMAC_KEY
+        return loaded
+
+    def _compute_expected_citation_signature(self, payload: dict, key: bytes) -> str:
+        final = payload.get("final") if isinstance(payload.get("final"), dict) else {}
+        prediction_id = str(payload.get("prediction_id") or "")
+        produced_at = str(final.get("produced_at") or payload.get("approved_at") or "")
+        model_versions = final.get("contributing_models")
+        if not isinstance(model_versions, list):
+            model_versions = []
+        canonical_models = "|".join(sorted(str(mid) for mid in model_versions))
+        calibration_version = int(payload.get("calibration_version") or final.get("calibration_version") or 1)
+        blob = f"{prediction_id}|{produced_at}|{canonical_models}|{calibration_version}"
+        return _hmac.new(key, blob.encode("utf-8"), _hashlib.sha256).hexdigest()
+
+    def _validate_citation_signature(self, payload: dict) -> dict | None:
+        from common.config import cfg
+
+        schema_version = int(payload.get("schema_version") or 1)
+        if schema_version < 3 and "citation_signature" not in payload:
+            # Backward-compatibility path: pre-v3 approved envelopes did not
+            # carry citation signatures, so they are consumed as-is.
+            return None
+
+        mode = str(getattr(cfg, "nlp_predict_citation_hmac_required", "warn") or "warn").lower()
+        if mode == "off":
+            return None
+
+        keys = self._load_predict_citation_hmac_keys()
+        if not keys:
+            return {"mode": mode, "reason": "citation_hmac_key_unavailable"}
+
+        signature = payload.get("citation_signature")
+        if signature is None:
+            return {"mode": mode, "reason": "citation_signature_missing"}
+        observed = str(signature).strip().lower()
+        if not observed:
+            return {"mode": mode, "reason": "citation_signature_missing"}
+
+        key_id = payload.get("citation_key_id")
+        if key_id is not None:
+            selected = keys.get(str(key_id).strip().lower())
+            if selected is None:
+                return {"mode": mode, "reason": "citation_key_id_unknown"}
+            expected = self._compute_expected_citation_signature(payload, selected)
+            if not _hmac.compare_digest(observed, expected):
+                return {"mode": mode, "reason": "citation_signature_invalid"}
+            return None
+
+        # Backward compatibility path: older producers may not stamp key id.
+        if not any(
+            _hmac.compare_digest(observed, self._compute_expected_citation_signature(payload, key))
+            for key in keys.values()
+        ):
+            return {"mode": mode, "reason": "citation_signature_invalid"}
+
+        return None
+
+    def _build_citation_signature_alert(self, payload: dict, check: dict) -> Message:
+        severity = "critical" if check["mode"] == "enforce" else "warn"
+        reason = str(check.get("reason") or "citation_signature_invalid")
+        return Message.new(
+            topic=NLP_ALERT_V1,
+            payload={
+                "schema_version": 1,
+                "alert_id": self._new_id(),
+                "kind": "nlp_citation_signature_verify_failed",
+                "severity": severity,
+                "source": self.name,
+                "reason": reason,
+                "request_id": str(payload.get("qa_request_id") or "") or None,
+                "qa_correlation_id": (
+                    str(payload.get("qa_correlation_id") or payload.get("summary_correlation_id") or "") or None
+                ),
+                "details": {
+                    "mode": check["mode"],
+                    "prediction_id": str(payload.get("prediction_id") or ""),
+                },
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _build_predict_timeout_answer(self, payload: dict) -> Message:
+        request_id = str(payload.get("qa_request_id") or payload.get("request_id") or "")
+        qa_correlation_id = str(
+            payload.get("qa_correlation_id")
+            or payload.get("summary_correlation_id")
+            or self._new_id()
+        )
+        return Message.new(
+            topic=QA_ANSWER_V1,
+            payload={
+                "request_id": request_id,
+                "qa_correlation_id": qa_correlation_id,
+                "intent": "predict.timeout",
+                "answer_text": "Tahmin zaman aşımına uğradı.",
+                "kind": "predict.timeout",
+                "degraded": True,
+                "degraded_reason": "citation_signature_verification_failed",
+                "tier_id_required": None,
+                "citations": [],
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
 
     def _on_summary_prediction_arrived(
         self, payload: dict, summary_corr: str
@@ -680,7 +925,10 @@ class NlpProofreaderAgent:
         monotonic: Callable[[], float] | None = None,
         deduper: object | None = None,
     ) -> None:
+        self._log = logging.getLogger("swarm.agents.nlp.proofreader")
+        add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._monotonic = monotonic or _time.monotonic
+        _enforce_nlp_spool_audit_dir_modes()
         # §10.13 producer-side deduper (lazy-init from cfg).
         self._deduper = deduper
         self._deduper_lock = _threading.Lock()

@@ -1,9 +1,14 @@
 """Phase 10 §10.13 — NLP bus circuit breaker tests."""
+import json
+import hashlib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from swarm.agents.nlp._bus_circuit_breaker import NlpBusCircuitBreaker
+from swarm.agents.nlp._bus_circuit_breaker import (
+    NlpBusCircuitBreaker,
+    _restore_spool_payload,
+)
 from swarm.sdk.types import Message
 
 
@@ -130,6 +135,56 @@ class TestNlpBusCircuitBreaker(unittest.TestCase):
             # Now spool_dir should have 1 file from the transition.
             spool_files = list(spool_dir.glob("*.envelope.json"))
             self.assertGreaterEqual(len(spool_files), 1)
+
+    def test_nlp_spool_envelope_strips_text_field(self) -> None:
+        """qa.intent.v1 spool payload drops sanitized_text and stores sha256."""
+
+        def mock_publish_fail(msg: Message) -> None:
+            raise RuntimeError("bus down")
+
+        with TemporaryDirectory() as tmpdir:
+            spool_dir = Path(tmpdir)
+            breaker = NlpBusCircuitBreaker(
+                agent_name="nlp.intent.v1",
+                publish_fn=mock_publish_fail,
+                fail_threshold=1,
+                spool_dir=spool_dir,
+            )
+            sanitized_text = "mehmet 05321234567 galatasaray kazanır mı"
+            msg = Message.new(
+                topic="qa.intent.v1",
+                payload={
+                    "request_id": "req-001",
+                    "qa_correlation_id": "corr-001",
+                    "sanitized_text": sanitized_text,
+                },
+                producer="test",
+            )
+
+            breaker.publish(msg)
+            self.assertEqual(breaker.state, "bus_degraded")
+
+            spool_files = list(spool_dir.glob("*.envelope.json"))
+            self.assertEqual(len(spool_files), 1)
+            payload = json.loads(spool_files[0].read_text(encoding="utf-8"))["payload"]
+            self.assertNotIn("sanitized_text", payload)
+            self.assertEqual(
+                payload.get("sanitized_text_sha256"),
+                hashlib.sha256(sanitized_text.encode("utf-8")).hexdigest(),
+            )
+
+    def test_nlp_spool_replay_drops_when_original_unavailable(self) -> None:
+        """Replay drops stripped payloads when original sanitized text is unavailable."""
+        sanitized_text = "mehmet 05321234567 galatasaray kazanır mı"
+        payload = {
+            "request_id": "req-001",
+            "sanitized_text_sha256": hashlib.sha256(
+                sanitized_text.encode("utf-8")
+            ).hexdigest(),
+        }
+
+        restored = _restore_spool_payload(payload, original_sanitized_text=None)
+        self.assertIsNone(restored)
 
 
 if __name__ == "__main__":

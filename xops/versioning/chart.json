@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 168,
+    "build": 191,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.59.2",
+      "version": "1.60.11",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-31T17:00:31+00:00",
+      "last_changed": "2026-05-31T18:29:30+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -34,14 +34,14 @@
       }
     },
     "xops": {
-      "version": "3.41.0",
+      "version": "3.41.2",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-31T16:47:21+00:00"
+      "last_changed": "2026-05-31T17:59:39+00:00"
     },
     "docs": {
-      "version": "1.75.4",
+      "version": "1.77.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-31T16:47:28+00:00"
+      "last_changed": "2026-05-31T18:17:29+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -8709,6 +8709,213 @@
       "from": "1.59.1",
       "to": "1.59.2",
       "build": 168
+    },
+    {
+      "timestamp": "2026-05-31T17:48:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.21.6 canonical citation block templating",
+      "from": "1.59.2",
+      "to": "1.59.3",
+      "build": 169
+    },
+    {
+      "timestamp": "2026-05-31T17:48:40+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 10.21.6 citation section lint contract",
+      "from": "3.41.0",
+      "to": "3.41.1",
+      "build": 170
+    },
+    {
+      "timestamp": "2026-05-31T17:48:41+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.21.6 checkbox tick and binding sync",
+      "from": "1.75.4",
+      "to": "1.75.5",
+      "build": 171
+    },
+    {
+      "timestamp": "2026-05-31T17:50:09+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.6 proof tests checkbox",
+      "from": "1.75.5",
+      "to": "1.75.6",
+      "build": 172
+    },
+    {
+      "timestamp": "2026-05-31T17:53:14+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 10.23.1 intake fair queue",
+      "from": "1.59.3",
+      "to": "1.60.0",
+      "build": 173
+    },
+    {
+      "timestamp": "2026-05-31T17:53:14+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 10.23.1 checklist tick",
+      "from": "1.75.6",
+      "to": "1.76.0",
+      "build": 174
+    },
+    {
+      "timestamp": "2026-05-31T17:56:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.23.1 humanizer tenant fair-share admission",
+      "from": "1.60.0",
+      "to": "1.60.1",
+      "build": 175
+    },
+    {
+      "timestamp": "2026-05-31T17:56:10+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.23.1 humanizer fair-share checklist tick",
+      "from": "1.76.0",
+      "to": "1.76.1",
+      "build": 176
+    },
+    {
+      "timestamp": "2026-05-31T17:59:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.23.1 tenant intake abuse signal in fair queue",
+      "from": "1.60.1",
+      "to": "1.60.2",
+      "build": 177
+    },
+    {
+      "timestamp": "2026-05-31T17:59:39+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.23.1 abuse detection checkbox tick",
+      "from": "1.76.1",
+      "to": "1.76.2",
+      "build": 178
+    },
+    {
+      "timestamp": "2026-05-31T17:59:39+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "10.23.1 env example knobs for tenant abuse detection",
+      "from": "3.41.1",
+      "to": "3.41.2",
+      "build": 179
+    },
+    {
+      "timestamp": "2026-05-31T18:02:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.21 NLP log structural guard",
+      "from": "1.60.2",
+      "to": "1.60.3",
+      "build": 180
+    },
+    {
+      "timestamp": "2026-05-31T18:03:33+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "phase10 10.29.1 geminate problem checklist tick",
+      "from": "1.76.2",
+      "to": "1.77.0",
+      "build": 181
+    },
+    {
+      "timestamp": "2026-05-31T18:06:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.21.7 PII-scrubbing log filter",
+      "from": "1.60.3",
+      "to": "1.60.4",
+      "build": 182
+    },
+    {
+      "timestamp": "2026-05-31T18:08:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.21.7 Spool payload PII strip",
+      "from": "1.60.4",
+      "to": "1.60.5",
+      "build": 183
+    },
+    {
+      "timestamp": "2026-05-31T18:10:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.21.7 sampled audit redaction whitelist",
+      "from": "1.60.5",
+      "to": "1.60.6",
+      "build": 184
+    },
+    {
+      "timestamp": "2026-05-31T18:13:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.21.7 enforce NLP spool/audit startup file modes",
+      "from": "1.60.6",
+      "to": "1.60.7",
+      "build": 185
+    },
+    {
+      "timestamp": "2026-05-31T18:15:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.7 proof tests",
+      "from": "1.60.7",
+      "to": "1.60.8",
+      "build": 186
+    },
+    {
+      "timestamp": "2026-05-31T18:15:55+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 10.21.7 checklist tick",
+      "from": "1.77.0",
+      "to": "1.77.1",
+      "build": 187
+    },
+    {
+      "timestamp": "2026-05-31T18:17:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 10.21.8 first bullet tick",
+      "from": "1.77.1",
+      "to": "1.77.2",
+      "build": 188
+    },
+    {
+      "timestamp": "2026-05-31T18:21:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.8 citation_signature forward contract",
+      "from": "1.60.8",
+      "to": "1.60.9",
+      "build": 189
+    },
+    {
+      "timestamp": "2026-05-31T18:25:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.8 consume-side citation signature verification",
+      "from": "1.60.9",
+      "to": "1.60.10",
+      "build": 190
+    },
+    {
+      "timestamp": "2026-05-31T18:29:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.21.8 citation key rotation + key_id stamp",
+      "from": "1.60.10",
+      "to": "1.60.11",
+      "build": 191
     }
   ]
 }

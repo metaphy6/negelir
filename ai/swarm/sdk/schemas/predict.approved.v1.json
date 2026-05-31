@@ -16,7 +16,7 @@
     "final"
   ],
   "properties": {
-    "schema_version":     { "type": "integer", "enum": [1, 2], "description": "Payload schema marker. 1 = legacy payload without qa_correlation_id. 2 = current additive shape (Phase 10 §10.19). When absent, consumers must treat the payload as version 1 for backward compatibility." },
+    "schema_version":     { "type": "integer", "enum": [1, 2, 3], "description": "Payload schema marker. 1 = legacy payload without qa_correlation_id. 2 = additive shape with qa_correlation_id (Phase 10 §10.19). 3 = additive citation_signature field (Phase 10 §10.21.8). When absent, consumers must treat the payload as version 1 for backward compatibility." },
     "request_id":         { "type": "string", "minLength": 1, "description": "Round-trips from predict.request → predict.final → here." },
     "prediction_id":      { "type": "string", "minLength": 1, "description": "Deterministic id of the predict.final being approved." },
     "match_id":           { "type": "string", "minLength": 1 },
@@ -27,7 +27,9 @@
     "verdict_count":      { "type": "integer", "minimum": 1, "description": "Total proofreader verdicts received in the aggregation window." },
     "quorum":             { "type": "integer", "minimum": 1, "description": "Threshold this prediction crossed (≥ ⌊N/2⌋+1)." },
     "final":              { "type": "object", "description": "The full predict.final payload, verbatim. Schema = predict.final." },
-    "calibration_version":{ "type": "integer", "minimum": 0, "description": "Echo of final.calibration_version for join-free audit replay." }
+    "calibration_version":{ "type": "integer", "minimum": 0, "description": "Echo of final.calibration_version for join-free audit replay." },
+    "citation_signature": { "type": ["string", "null"], "minLength": 64, "maxLength": 64, "description": "Phase 10 §10.21.8 additive integrity signature: HMAC-SHA256 over (prediction_id || produced_at_utc || model_versions_canonical || calibration_version)." },
+    "citation_key_id":  { "type": ["string", "null"], "pattern": "^[0-9a-f]{16}$", "description": "Phase 10 §10.21.8 additive signing key id for citation_signature (sha256(key_bytes)[:16])." }
   },
   "additionalProperties": false
 }

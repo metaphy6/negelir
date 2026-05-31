@@ -16,7 +16,7 @@ from unittest import mock
 import pytest
 
 from common.config import Config, cfg
-from swarm.agents.nlp import NlpAnswerAgent
+from swarm.agents.nlp import AUDIT_REDACTION_WHITELIST, NlpAnswerAgent, NlpIntentAgent
 
 
 # ── Triangle test ──────────────────────────────────────────────────────────
@@ -252,3 +252,103 @@ def test_audit_redacts_phone():
                         data = json.load(fh)
                         assert "0555 123 45 67" not in data["answer_text_redacted"]
                         assert "[REDACTED_PHONE]" in data["answer_text_redacted"]
+
+
+def test_nlp_audit_whitelist_is_closed_set():
+    """§10.21.7 guard: sampled-audit whitelist is explicit and non-glob."""
+    expected = {
+        "qa_correlation_id",
+        "request_id",
+        "intent",
+        "intent_confidence",
+        "entity_count",
+        "proofreader_status",
+        "humanizer_used",
+        "degraded",
+        "degraded_reason",
+        "tier_id_required",
+        "model_versions",
+        "calibration_version",
+        "nlp_pipeline_version",
+        "lexicon_versions",
+        "produced_at_utc",
+    }
+    assert AUDIT_REDACTION_WHITELIST == expected
+    assert all("*" not in key for key in AUDIT_REDACTION_WHITELIST)
+
+
+def test_audit_redacts_non_whitelisted_envelope_fields_with_same_pii_set():
+    """Non-whitelisted envelope fields are recursively redacted before persistence."""
+    agent = NlpAnswerAgent()
+
+    with mock.patch("common.config.cfg") as mock_cfg:
+        mock_cfg.nlp_answer_sample_inverse = 1
+        mock_cfg.nlp_answer_sample_daily_cap = 1000
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_join = os.path.join
+
+            def mock_join(*args):
+                if len(args) >= 3 and args[0] == "data" and args[1] == "nlp":
+                    return original_join(tmpdir, *args[2:])
+                return original_join(*args)
+
+            envelope = {
+                "intent": "predict.final",
+                "request_id": "req-1",
+                "entities": [{"name": "support@negelir.com", "note": "0555 123 45 67"}],
+                "answer_text": "mail support@negelir.com",
+                "debug": {
+                    "contact": "0555 123 45 67",
+                    "owner": "help@negelir.com",
+                },
+            }
+
+            with mock.patch("os.path.join", side_effect=mock_join):
+                with mock.patch("random.randint", return_value=1):
+                    agent._maybe_audit_answer(
+                        "Destek için support@negelir.com veya 0555 123 45 67",
+                        envelope,
+                        "qa_whitelist_test",
+                    )
+
+            audit_files = list(Path(tmpdir).rglob("*.json"))
+            assert len(audit_files) == 1
+            with open(audit_files[0], "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+
+            written = data["envelope"]
+            assert written["intent"] == "predict.final"
+            assert written["request_id"] == "req-1"
+            assert "support@negelir.com" not in written["entities"][0]["name"]
+            assert "0555 123 45 67" not in written["entities"][0]["note"]
+            assert "[REDACTED_EMAIL]" in written["entities"][0]["name"]
+            assert "[REDACTED_PHONE]" in written["entities"][0]["note"]
+            assert "support@negelir.com" not in written["answer_text"]
+            assert "help@negelir.com" not in written["debug"]["owner"]
+
+
+def test_nlp_spool_audit_dir_modes_enforced_at_startup(tmp_path, monkeypatch):
+    """§10.21.8 startup mode gate: refuse start on non-0600 files."""
+    spool_root = tmp_path / "spool"
+    audit_root = tmp_path / "data" / "nlp" / "audit"
+    spool_root.mkdir(parents=True)
+    audit_root.mkdir(parents=True)
+
+    insecure = audit_root / "old.json"
+    insecure.write_text("{}", encoding="utf-8")
+    insecure.chmod(0o644)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "nlp_agent_spool_dir", str(spool_root), raising=False)
+
+    with pytest.raises(RuntimeError, match="NLP startup refused"):
+        NlpIntentAgent()
+
+    insecure.chmod(0o600)
+    NlpIntentAgent()
+
+    import stat
+
+    assert stat.S_IMODE(spool_root.stat().st_mode) == 0o700
+    assert stat.S_IMODE(audit_root.stat().st_mode) == 0o700

@@ -46,6 +46,7 @@ import json
 import logging
 import os
 import time as _time
+from hashlib import sha256
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,8 +56,10 @@ from uuid import uuid4
 from common.config import cfg as _cfg
 
 from ...sdk.types import Message
+from ._log_filter import add_log_filter
 
 _log = logging.getLogger("swarm.agents.nlp.bus_circuit_breaker")
+add_log_filter(_log)
 
 # ── States ──────────────────────────────────────────────────────────
 _STATE_CLOSED = "closed"
@@ -69,6 +72,42 @@ def _utc_iso() -> str:
 
 def _new_id() -> str:
     return uuid4().hex
+
+
+def _spool_payload_for_disk(msg: Message) -> dict:
+    """Return the payload representation persisted in spool entries."""
+    payload = dict(msg.payload or {})
+    if (
+        _cfg.nlp_spool_payload_pii_strip
+        and msg.envelope.topic == "qa.intent.v1"
+        and isinstance(payload.get("sanitized_text"), str)
+    ):
+        sanitized_text = payload.pop("sanitized_text")
+        payload["sanitized_text_sha256"] = sha256(sanitized_text.encode("utf-8")).hexdigest()
+    return payload
+
+
+def _restore_spool_payload(
+    payload: dict,
+    original_sanitized_text: str | None,
+) -> dict | None:
+    """Restore a replay payload or return ``None`` when it must be dropped.
+
+    When ``sanitized_text`` is stripped at spool-write time we persist only
+    ``sanitized_text_sha256``. Replay must rehydrate from the original
+    ``qa.request.v1`` text; if that text is unavailable or hash-mismatched,
+    the envelope is intentionally dropped.
+    """
+    restored = dict(payload)
+    text_sha = restored.get("sanitized_text_sha256")
+    if not isinstance(text_sha, str) or "sanitized_text" in restored:
+        return restored
+    if not isinstance(original_sanitized_text, str):
+        return None
+    if sha256(original_sanitized_text.encode("utf-8")).hexdigest() != text_sha:
+        return None
+    restored["sanitized_text"] = original_sanitized_text
+    return restored
 
 
 def _spool_write(
@@ -93,7 +132,7 @@ def _spool_write(
     name = f"{clock_ms():016d}-{msg_id}.envelope.json"
     target = spool_dir / name
     body = json.dumps(
-        {"envelope": msg.envelope.as_dict(), "payload": msg.payload or {}},
+        {"envelope": msg.envelope.as_dict(), "payload": _spool_payload_for_disk(msg)},
         ensure_ascii=False,
         sort_keys=True,
     ).encode("utf-8")

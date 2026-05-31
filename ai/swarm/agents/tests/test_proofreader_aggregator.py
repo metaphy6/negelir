@@ -1,6 +1,9 @@
 """Tests for `ai/swarm/agents/proofreader/aggregator.py` (Phase 6.1)."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+
 import pytest
 
 from common.config import cfg as _cfg
@@ -144,6 +147,27 @@ def test_quorum_pass_emits_predict_approved() -> None:
     # Carries full predict.final verbatim.
     assert approved.final["prediction_id"] == "pid-1"
     assert approved.final["distribution"]["market_outcomes"]["H"] == 0.5
+
+
+def test_predict_approved_includes_citation_signature(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    key_file = tmp_path / "predict_citation_hmac.key"
+    key = b"phase10-citation-hmac-test-key"
+    key_file.write_bytes(key)
+    key_file.chmod(0o400)
+    monkeypatch.setattr(_cfg, "predict_citation_hmac_key_path", str(key_file), raising=False)
+
+    a = _agg(quorum=2)
+    list(a.handle(_final_msg(_final())))
+    list(a.handle(_verdict_msg(_verdict("proof.sanity.v1"))))
+    out = list(a.handle(_verdict_msg(_verdict("proof.consistency.v1"))))
+
+    assert len(out) == 1
+    approved = PredictApproved.from_dict(out[0].payload)
+    assert approved.schema_version == 3
+    blob = "pid-1|2026-04-28T12:00:02+00:00|pred.elo.v1|1"
+    expected = hmac.new(key, blob.encode("utf-8"), hashlib.sha256).hexdigest()
+    assert approved.citation_signature == expected
+    assert approved.citation_key_id == hashlib.sha256(key).hexdigest()[:16]
 
 
 def test_warn_votes_count_toward_quorum() -> None:

@@ -302,6 +302,10 @@ nlp.lexicon-build: ## Phase 10 §10.2 — apply _aliases_delta.tr.yaml onto lexi
 nlp.diacritics-build: ## Phase 10 §10.3 — generate _diacritics.tr.yaml from tr_word_freq.txt + lexicon union
 	@$(XOPS)/nlp.py nlp.diacritics-build
 
+.PHONY: nlp.rotate-citation-key
+nlp.rotate-citation-key: ## Phase 10 §10.21.8 — rotate predict citation HMAC key (dual-acceptance grace window)
+	@$(XOPS)/nlp.py nlp.rotate-citation-key
+
 .PHONY: nlp.template-lint
 nlp.template-lint: ## Phase 10 §10.15 — AST-assert no {{ free_text }} slot in any template (hallucination guard)
 	@$(XOPS)/nlp.py nlp.template-lint

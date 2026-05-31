@@ -35,12 +35,100 @@ output across CUDA / CPU within ε for tokens (deterministic decode required).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from threading import Lock
+from time import monotonic
 from typing import TYPE_CHECKING
 
 from nlp.vendor.symspell import _edit_distance
 
 if TYPE_CHECKING:
     from common.config import Config
+
+
+HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON = "humanizer_tenant_budget_exceeded"
+
+
+@dataclass(frozen=True)
+class HumanizerAdmissionDecision:
+    """Admission decision for per-tenant humanizer scheduling."""
+
+    allowed: bool
+    degraded_reason: str | None
+
+
+class TenantHumanizerBudget:
+    """Per-tenant token bucket for humanizer admission (§10.23.1)."""
+
+    def __init__(
+        self,
+        *,
+        cfg: Config,
+        burst: int | None = None,
+        refill_per_s: float | None = None,
+        now_fn: callable | None = None,
+    ) -> None:
+        self._cfg = cfg
+        self._burst = int(
+            burst
+            if burst is not None
+            else cfg.nlp_per_tenant_humanizer_burst
+        )
+        self._refill_per_s = float(
+            refill_per_s
+            if refill_per_s is not None
+            else cfg.nlp_per_tenant_humanizer_refill_per_s
+        )
+        if self._burst < 1:
+            raise ValueError("nlp_per_tenant_humanizer_burst must be >= 1")
+        if self._refill_per_s <= 0.0:
+            raise ValueError("nlp_per_tenant_humanizer_refill_per_s must be > 0")
+
+        self._now_fn = now_fn if now_fn is not None else monotonic
+        self._lock = Lock()
+        self._tokens_by_key: dict[str, float] = {}
+        self._last_refill_ts_by_key: dict[str, float] = {}
+
+    def _resolve_key(self, attrs: dict[str, object] | None) -> str:
+        attrs = attrs or {}
+
+        def _as_str(value: object | None) -> str:
+            return str(value).strip() if value is not None else ""
+
+        tenant_id = _as_str(attrs.get("tenant_id"))
+        account_id = _as_str(attrs.get("account_id"))
+        ip_bucket = _as_str(attrs.get("ip_bucket")) or "ip:unknown"
+
+        if self._cfg.nlp_fairness_key == "tenant_id":
+            return tenant_id or account_id or ip_bucket
+        if self._cfg.nlp_fairness_key == "account_id":
+            return account_id or ip_bucket
+        return ip_bucket
+
+    def try_acquire(
+        self,
+        attrs: dict[str, object] | None = None,
+    ) -> HumanizerAdmissionDecision:
+        """Try to admit one humanizer request for the resolved key."""
+        key = self._resolve_key(attrs)
+        now = float(self._now_fn())
+
+        with self._lock:
+            tokens = self._tokens_by_key.get(key, float(self._burst))
+            last = self._last_refill_ts_by_key.get(key, now)
+            elapsed = max(0.0, now - last)
+            refilled = min(float(self._burst), tokens + elapsed * self._refill_per_s)
+
+            self._last_refill_ts_by_key[key] = now
+            if refilled >= 1.0:
+                self._tokens_by_key[key] = refilled - 1.0
+                return HumanizerAdmissionDecision(allowed=True, degraded_reason=None)
+
+            self._tokens_by_key[key] = refilled
+            return HumanizerAdmissionDecision(
+                allowed=False,
+                degraded_reason=HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON,
+            )
 
 
 def humanize(
