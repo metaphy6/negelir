@@ -1234,7 +1234,7 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 
 ### 10.DoD Phase rollup
 
-- [ ] Every binding `[ ]` in §10.0–§10.34 (across all 15 per-section
+- [x] Every binding `[ ]` in §10.0–§10.34 (across all 15 per-section
       files in [`docs/design/phase10/sections/`](../design/phase10/sections/))
       is `[x]`. The §10.20 DoD aggregator (now in
       [`00-baseline.md`](../design/phase10/sections/00-baseline.md)) plus

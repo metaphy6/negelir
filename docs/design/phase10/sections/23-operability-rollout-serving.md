@@ -77,7 +77,7 @@
   rejects any metric / log / event that emits `tenant_id` directly
   (high-cardinality leak); only the closed `key_class` enum may appear
   in observable surfaces.
-- [ ] **Proof:** `test_nlp_per_tenant_inflight_cap_isolates_noisy_tenant`
+- [x] **Proof:** `test_nlp_per_tenant_inflight_cap_isolates_noisy_tenant`
   (chaos: tenant A floods 50 QPS, tenant B sees < `cfg.nlp_p95_total_ms`
   latency unchanged), `test_nlp_humanizer_tenant_budget_degrades_to_template`,
   `test_nlp_fairness_key_eviction_lru_bounded`,
@@ -86,13 +86,13 @@
 
 #### 10.23.2 Canary rollout & shadow-mode for intent model + lexicons
 
-- [ ] **Real failure mode.** A new `intent.tr.bin` with subtly
+- [x] **Real failure mode.** A new `intent.tr.bin` with subtly
   different boundary behaviour (e.g., calibration shift) deployed to
   100% of pods at once = blast-radius of a bad model = entire user
   base. Same for a lexicon swap that introduces a new alias collision.
   §10.21.9 cold-start drains gracefully but does NOT compare new vs
   old behaviour before promotion.
-- [ ] **Pod-level rollout percentage.** K8s `Deployment` ships new
+- [x] **Pod-level rollout percentage.** K8s `Deployment` ships new
   pods with `cfg.nlp_intent_model_canary_pct=10` (env-var driven —
   the 10% of pods with `NLP_CANARY=1` at startup load
   `intent.tr.bin.canary` and the matching calibration file; the rest
@@ -100,7 +100,7 @@
   `(account_id // bucket_size)` → sticky per-account assignment so a
   single user sees consistent classifier behaviour during the canary
   window. Sticky bucket size = `cfg.nlp_canary_account_bucket_size=1000`.
-- [ ] **Shadow-mode evaluation.** Independent of canary routing,
+- [x] **Shadow-mode evaluation.** Independent of canary routing,
   `cfg.nlp_intent_shadow_mode ∈ {off, on}` default `off`; when `on`,
   every pod (canary OR baseline) runs BOTH models on every request
   and records `(input_hash, baseline_intent, baseline_conf,
@@ -111,7 +111,7 @@
   the last 24h of `nlp.shadow.v1` records to compute disagreement
   rate, intent-distribution KL-divergence, and per-intent confidence
   delta histograms.
-- [ ] **Promotion gate.** `make nlp.canary-promote` refuses to flip
+- [x] **Promotion gate.** `make nlp.canary-promote` refuses to flip
   `cfg.nlp_intent_model_canary_pct=100` unless: (a) shadow-mode has
   run for ≥ `cfg.nlp_canary_min_shadow_hours=72`; (b) disagreement
   rate ≤ `cfg.nlp_canary_max_disagreement_rate=0.03`; (c) per-intent
@@ -119,16 +119,16 @@
   (d) §10.18 evaluation harness PASSES on the canary model
   end-to-end. Refusal returns a structured report on which gate
   failed.
-- [ ] **Same gates apply to lexicon swap.** A NEW lexicon snapshot
+- [x] **Same gates apply to lexicon swap.** A NEW lexicon snapshot
   carries a `lexicon_version_id`; canary pods serve from the new
   snapshot, baseline from the old; same shadow / promotion gates
   apply (with `disagreement` defined as "different gazetteer
   resolution for the same input").
-- [ ] **Rollback is a one-command.** `make nlp.canary-rollback` flips
+- [x] **Rollback is a one-command.** `make nlp.canary-rollback` flips
   the env-var on the canary pods (K8s rolling restart) AND emits
   `nlp.alert.v1{kind=nlp_canary_rolled_back, severity=warn,
   model_or_lexicon, reason}`.
-- [ ] **Proof:** `test_nlp_canary_routing_is_account_sticky`,
+- [x] **Proof:** `test_nlp_canary_routing_is_account_sticky`,
   `test_nlp_shadow_mode_records_disagreements`,
   `test_nlp_canary_promote_refuses_below_min_hours`,
   `test_nlp_canary_promote_refuses_on_disagreement_breach`,
@@ -138,13 +138,13 @@
 
 #### 10.23.3 Continuous-evaluation drift detection (post-deploy regression)
 
-- [ ] **Real failure mode.** §10.18 evaluation harness gates **at
+- [x] **Real failure mode.** §10.18 evaluation harness gates **at
   deploy time**. Real-world traffic distribution drifts (new league
   starts, transfer window, viral storyline) → the deployed model
   silently underperforms on emerging slices weeks after the gate
   passed. No mechanism to detect this without humans noticing user
   complaints.
-- [ ] **Weekly automated re-evaluation.** `xops/ci/nlp_weekly_eval.yml`
+- [x] **Weekly automated re-evaluation.** `xops/ci/nlp_weekly_eval.yml`
   cron job (Monday 03:00 UTC): (a) sample
   `cfg.nlp_weekly_eval_sample_size=2000` queries from the last 7 days
   of `nlp.shadow.v1` (PII-scrubbed per §10.21.7); (b) human-label
@@ -155,25 +155,25 @@
   intent_accuracy_delta, slice}` if absolute accuracy on any slice
   drops by > `cfg.nlp_weekly_eval_max_accuracy_drop=0.03` from the
   prior week.
-- [ ] **Decoupling from traffic.** Sample is representative-sampled
+- [x] **Decoupling from traffic.** Sample is representative-sampled
   by `(intent_class, has_entity, has_dialect, has_code_switch,
   hour_of_day_bucket)` strata, NOT pure random — protects against a
   noisy storyline week from making the eval all-about-Galatasaray.
   Stratification pinned in `ai/nlp/eval/_sample.py`; AST asserts the
   strata enum is closed.
-- [ ] **No PII leaves the system.** Sampled queries are
+- [x] **No PII leaves the system.** Sampled queries are
   PII-scrubbed AND length-truncated to
   `cfg.nlp_weekly_eval_sample_max_chars=200` AND any token NOT in the
   combined `(LeagueCatalog ∪ ai/nlp/lang_tr/* ∪ TR top-10k word freq)`
   set is replaced with `<UNK>` before labelling. Labellers see only
   the sanitized form.
-- [ ] **Auto-degrade on sustained regression.** When 2 consecutive
+- [x] **Auto-degrade on sustained regression.** When 2 consecutive
   weekly evals show > `cfg.nlp_weekly_eval_consecutive_drop_threshold=0.05`
   cumulative drop, the next `make nlp.canary-promote` of any newer
   model is REFUSED until a human acknowledges via
   `data/nlp/weekly_eval/YYYY-WW/ack.yaml` (PR-merged). Forces human
   attention on persistent regressions.
-- [ ] **Proof:** `test_nlp_weekly_eval_sample_stratified_correctly`,
+- [x] **Proof:** `test_nlp_weekly_eval_sample_stratified_correctly`,
   `test_nlp_weekly_eval_pii_scrubbed`,
   `test_nlp_weekly_eval_unknown_tokens_replaced`,
   `test_nlp_weekly_eval_alert_fires_on_threshold`,
@@ -181,13 +181,13 @@
 
 #### 10.23.4 Summary fan-out partial-failure semantics
 
-- [ ] **Real failure mode §10.6 underspecifies.** A `summary.weekend`
+- [x] **Real failure mode §10.6 underspecifies.** A `summary.weekend`
   query fans out to N=10 fixtures via §10.6 `nlp.dispatcher.v1`. If 3
   predictions time out and 7 succeed, what does the user see? Today
   the contract is silent → renderer either blocks the whole answer
   (unfair to the 7 that succeeded) or silently omits the 3 (lying by
   omission). Neither is acceptable.
-- [ ] **K-of-N quorum policy.** `cfg.nlp_summary_min_fixture_quorum=0.6`
+- [x] **K-of-N quorum policy.** `cfg.nlp_summary_min_fixture_quorum=0.6`
   (60% of fan-out fixtures must respond within
   `cfg.nlp_summary_fanout_timeout_ms=2500`). Three outcomes:
   - **Quorum met (≥ 60% returned):** render answer with TR-disclosed
@@ -202,25 +202,25 @@
     reason at the answer level.
   - **Zero returned:** standard `nlp_predict_timeout` template (per
     §10.10 row 7).
-- [ ] **Per-fixture timeout independence.** Fan-out timeouts are
+- [x] **Per-fixture timeout independence.** Fan-out timeouts are
   per-fixture, NOT cumulative. A single slow fixture cannot block
   the others — `asyncio.as_completed` pattern with hard
   per-future timeout. AST guard `test_nlp_summary_fanout_no_gather`
   rejects `asyncio.gather(...)` in the dispatcher (it propagates the
   slowest tail latency and binds futures to the cancelled context).
-- [ ] **Stable Turkish disclosure templates.** `summary_partial.tr.j2`
+- [x] **Stable Turkish disclosure templates.** `summary_partial.tr.j2`
   and `summary_per_fixture_only.tr.j2` (NEW templates) — each with
   slot for `(returned_count, total_count, missing_fixtures[].label,
   missing_fixtures[].degraded_reason_tr)`. Reason-translation table
   at `ai/nlp/lang_tr/degraded_reasons.tr.yaml` (closed enum →
   user-facing TR string). Every `degraded_reason` enum value MUST
   have a TR translation; build refuses on missing entries.
-- [ ] **Citation-block accommodation.** Citations §10.7 / §10.21.6
+- [x] **Citation-block accommodation.** Citations §10.7 / §10.21.6
   carry the per-fixture model_versions list; in a partial summary
   the citation block reflects ONLY the returned fixtures (NOT the
   intended N). Calibration-mismatch policy from §10.21.10 still
   applies across the returned subset.
-- [ ] **Proof:** `test_nlp_summary_quorum_met_renders_partial_with_disclosure`,
+- [x] **Proof:** `test_nlp_summary_quorum_met_renders_partial_with_disclosure`,
   `test_nlp_summary_quorum_missed_renders_per_fixture_only`,
   `test_nlp_summary_zero_returns_renders_predict_timeout_template`,
   `test_nlp_summary_fanout_no_gather_in_dispatcher` (AST),
@@ -230,13 +230,13 @@
 
 #### 10.23.5 Output-side TR formatting discipline (numbers, dates, scores)
 
-- [ ] **Real failure mode.** Turkish convention: thousands separator
+- [x] **Real failure mode.** Turkish convention: thousands separator
   `.`, decimal `,` (German style); time format `HH:MM` (24h, never
   am/pm); date `DD.MM.YYYY` or `DD Ay YYYY`; football scores
   `home-away` (no space). Default Python / Jinja2 / Go formatting
   emits `1,000.5` (US), `9:30 PM`, `2026-04-27`, `1 - 0` — all WRONG
   for TR users and visibly amateurish.
-- [ ] **Single-source TR formatter.** `ai/common/text/tr_format.py`:
+- [x] **Single-source TR formatter.** `ai/common/text/tr_format.py`:
   - `tr_format_number(value, decimals=0) -> str` — `1234.56` →
     `"1.234,56"`; uses `decimal.Decimal` for exact rounding (no
     binary-float drift). Banker's rounding default; configurable via
@@ -254,25 +254,25 @@
   - `tr_format_score(home, away) -> str` — `"1-0"` (ASCII hyphen, no
     space). Final-score shorthand consistent with §10.22.6 input
     parsing.
-- [ ] **Jinja2 filter registration.** Every formatter exported as a
+- [x] **Jinja2 filter registration.** Every formatter exported as a
   Jinja2 filter (`number_tr`, `money_tr`, `clock_tr`, `date_tr`,
   `date_tr_short`, `score_tr`). AST guard
   `test_nlp_no_python_default_format_in_templates` rejects any
   template emitting `{{ value }}` for fields whose type is `int`,
   `float`, `Decimal`, `datetime`, `date` — must use a `_tr` filter.
   Filter signatures introspected from `ai/nlp/render.py`.
-- [ ] **Locale-pinned via babel optional dep.** `babel` is OPTIONAL —
+- [x] **Locale-pinned via babel optional dep.** `babel` is OPTIONAL —
   not a hard dependency (CLAUDE.md prefers smallest stack). When
   installed, locale formatting via `babel.numbers.format_decimal(
   value, locale='tr_TR')` is used for cross-validation in tests
   (regression: `tr_format_number(1234.56) == babel.format_decimal(
   1234.56, locale='tr_TR')` — proof at test time only). Production
   uses our own deterministic implementation; `babel` is dev-only.
-- [ ] **Negative-zero, infinity, NaN policy.** Formatters refuse
+- [x] **Negative-zero, infinity, NaN policy.** Formatters refuse
   `float('inf')`, `float('-inf')`, `float('nan')` — raise
   `ValueError` (callers must clamp upstream). `-0.0` formats as
   `"0"` (not `"-0"`). Guard tests pin every edge case.
-- [ ] **Proof:** `test_tr_format_number_thousands_dot_decimal_comma`
+- [x] **Proof:** `test_tr_format_number_thousands_dot_decimal_comma`
   (parametrized over 30 values), `test_tr_format_money_try_suffix`,
   `test_tr_format_clock_always_24h_no_am_pm`,
   `test_tr_format_date_long_form_uses_tr_month_names`,
@@ -284,24 +284,24 @@
 
 #### 10.23.6 Timezone discipline (render TZ vs storage TZ)
 
-- [ ] **Real failure mode.** "Maç saat 21:30'da" — in WHICH timezone?
+- [x] **Real failure mode.** "Maç saat 21:30'da" — in WHICH timezone?
   Turkish users assume Europe/Istanbul (UTC+3, no DST since 2016).
   But fixture data may carry kickoff in UTC (Phase 4 storage convention)
   or in the venue's local TZ (UEFA fixtures across Europe). Rendering
   a UTC-stored time as Istanbul-local requires explicit conversion;
   silent assumption = users miss matches by hours.
-- [ ] **Storage TZ = UTC, render TZ = Europe/Istanbul (default).**
+- [x] **Storage TZ = UTC, render TZ = Europe/Istanbul (default).**
   `cfg.nlp_render_timezone="Europe/Istanbul"` (single default at v1
   per §10.17 locale chain). All `qa.answer.v1` rendered times go
   through `tr_format_clock(dt_utc, tz=cfg.nlp_render_timezone)`. AST
   guard `test_nlp_no_naive_datetime_in_render` rejects any naive
   `datetime` (no tzinfo) reaching a formatter — must be UTC-aware
   on the wire and converted at format time.
-- [ ] **Citation always carries UTC.** Per §10.21.6 / §10.21.8 the
+- [x] **Citation always carries UTC.** Per §10.21.6 / §10.21.8 the
   citation block carries `produced_at_utc` (ISO-8601 with `Z` suffix,
   microsecond precision). Render TZ applies to user-visible body
   ONLY; citation is byte-stable across TZ changes.
-- [ ] **DST-edge / leap-second tests.** Even though Turkey has no DST
+- [x] **DST-edge / leap-second tests.** Even though Turkey has no DST
   since 2016, storage may carry pre-2016 kickoffs (historical eval),
   AND `Europe/Istanbul` IANA tz database row covers historical DST
   transitions. Test corpus pins:
@@ -311,18 +311,18 @@
   Leap-second handling: Python `datetime` doesn't model leap seconds
   → assert that any input claiming `:60` seconds raises (no silent
   truncation).
-- [ ] **`zoneinfo` SHA pin.** `cfg.nlp_zoneinfo_dir` defaults to
+- [x] **`zoneinfo` SHA pin.** `cfg.nlp_zoneinfo_dir` defaults to
   system zoneinfo; production deployments override to a pod-shipped
   `zoneinfo/` directory whose SHA is recorded in `chart.json`
   compatibility block (mirrors §10.21.5 confusables-table SHA pin).
   Boot probe asserts `Europe/Istanbul` row present + SHA matches.
   Defends against a host-OS tzdata downgrade silently changing
   rendered times.
-- [ ] **Forward hook for venue-local TZ.** When future locales add
+- [x] **Forward hook for venue-local TZ.** When future locales add
   `tr-DE`, `tr-CY`, etc. (§10.22.11), per-locale render TZ default
   table at `ai/nlp/lang_tr/locale_render_tz.tr.yaml`. v1 entry: only
   `tr-TR → Europe/Istanbul`.
-- [ ] **Proof:** `test_nlp_clock_renders_istanbul_offset_currently_plus3`,
+- [x] **Proof:** `test_nlp_clock_renders_istanbul_offset_currently_plus3`,
   `test_nlp_clock_naive_datetime_rejected` (AST + runtime),
   `test_nlp_dst_window_2014_renders_correctly` (3-point probe),
   `test_nlp_leap_second_input_rejected`,
@@ -331,13 +331,13 @@
 
 #### 10.23.7 Accessibility & answer-format negotiation
 
-- [ ] **Real failure mode.** Default answers pepper text with emoji
+- [x] **Real failure mode.** Default answers pepper text with emoji
   (⚽ 🏆 🟢 🔴) and decorative chars (▶ ✓ ✗); screen readers (NVDA,
   JAWS, VoiceOver) read these as "soccer ball, trophy, large green
   circle, large red circle, play button" — verbose and disruptive
   for blind / low-vision users. Unicode "soft hyphen" (U+00AD) and
   combining marks similarly confuse assistive tech.
-- [ ] **Closed `answer_format` enum on `qa.request.v1`.**
+- [x] **Closed `answer_format` enum on `qa.request.v1`.**
   `cfg.nlp_answer_formats = ["plain", "markdown_safe", "screen_reader"]`
   (Phase 9 wires the param; defaults `plain`). Each formats the
   same answer payload differently:
@@ -355,24 +355,24 @@
     (`"yüzde 67"` not `"%67"`); soft-hyphen and combining marks
     NORMALIZED out (`unicodedata.normalize('NFC', ...)` then strip
     U+00AD).
-- [ ] **Per-format renderer.** `ai/nlp/render_format.py` —
+- [x] **Per-format renderer.** `ai/nlp/render_format.py` —
   `render(answer_blocks, format)` dispatches; each format has its
   own template directory under `ai/nlp/templates/<format>/`. Templates
   share the same slot dict (§10.21.6 closed schema); no per-format
   template logic in code. AST guard `test_nlp_per_format_templates_share_slots`
   asserts every template across the three format dirs declares the
   same Jinja2 variable set.
-- [ ] **Format negotiation precedence.** `?answer_format=` query
+- [x] **Format negotiation precedence.** `?answer_format=` query
   param > `Accept` header (`text/plain` → `plain`,
   `text/markdown` → `markdown_safe`, `text/x-screen-reader` → custom
   MIME for SR clients) > default `plain`.
-- [ ] **Default decorative set.** `cfg.nlp_decorative_set = ["⚽",
+- [x] **Default decorative set.** `cfg.nlp_decorative_set = ["⚽",
   "🏆", "🟢", "🔴", "🟡"]` — closed list at v1; AST asserts no other
   emoji codepoints reach the `plain` template output. The
   humanizer tokenizer-mask (§10.8) is the FIRST defense; this is
   the second — proofreader §10.9 gate scans rendered output for
   emoji not in the set, blocks + alerts on hit.
-- [ ] **Proof:** `test_nlp_screen_reader_format_strips_all_emoji`,
+- [x] **Proof:** `test_nlp_screen_reader_format_strips_all_emoji`,
   `test_nlp_screen_reader_format_normalizes_combining_marks`,
   `test_nlp_screen_reader_renders_percent_as_words`,
   `test_nlp_markdown_safe_no_inline_html` (regex on rendered output),
@@ -382,18 +382,18 @@
 
 #### 10.23.8 Per-request cost-of-serving budget
 
-- [ ] **Real failure mode.** Humanizer is the dominant per-request
+- [x] **Real failure mode.** Humanizer is the dominant per-request
   cost (GPU lease seconds × wall-clock × electricity ≈ stable
   per-token). At v1 this is on-prem GPU so "cost" is wall-clock; at
   Phase 20 monetization-on it's a hard $ ceiling per tier. No
   mechanism today bounds total humanizer-tokens per request, per
   tenant per minute, or per pod per hour.
-- [ ] **Per-request token budget.** `cfg.nlp_max_humanizer_tokens_per_request=120`
+- [x] **Per-request token budget.** `cfg.nlp_max_humanizer_tokens_per_request=120`
   (already implied by §10.8 `max_new=120` decode cap, restated here
   as the binding doctrine — single source). Over-budget would be
   caught at decode time; this restatement makes the cost-budget
   contract explicit.
-- [ ] **Per-tenant per-minute budget.** `cfg.nlp_max_humanizer_tokens_per_tenant_per_min=2400`
+- [x] **Per-tenant per-minute budget.** `cfg.nlp_max_humanizer_tokens_per_tenant_per_min=2400`
   (= 20 humanized requests × 120 tokens). Tracked via a sliding
   60s window per `cfg.nlp_fairness_key` (reuse §10.23.1
   infrastructure). Over-budget → degrade to template per §10.23.1
@@ -402,21 +402,21 @@
   "nlp:humanizer:budget:"`, TTL 120s); cross-pod budget enforcement
   is best-effort, NOT strict (Redis outage → fall back to per-pod
   budget × pod-count estimate; documented as acceptable slop).
-- [ ] **Per-pod per-hour ceiling.** `cfg.nlp_max_humanizer_tokens_per_pod_per_hour=720000`
+- [x] **Per-pod per-hour ceiling.** `cfg.nlp_max_humanizer_tokens_per_pod_per_hour=720000`
   (= 100 req/min sustained × 60 min × 120 tokens). Over-ceiling →
   pod globally degrades humanizer for `cfg.nlp_humanizer_pod_cooldown_s=300`,
   emits `nlp.alert.v1{kind=nlp_humanizer_pod_budget_exceeded,
   severity=warn}`. Defends against runaway loops or model-mode
   pathology emitting maximum-length completions on every request.
-- [ ] **Phase 20 hook.** When monetization is on, the per-tenant budget
+- [x] **Phase 20 hook.** When monetization is on, the per-tenant budget
   is OVERRIDDEN by the tier's allowed tokens; v1 default budgets are
   the floor for free tier. Tier mapping pinned in §10.21.11 contract
   (`tier_id_required` is per-intent; tokens-per-tenant-per-min is
   per-tier — both single-source via Phase 20 config).
-- [ ] **Cost telemetry.** `nlp_humanizer_tokens_emitted_total{tenant_class,
+- [x] **Cost telemetry.** `nlp_humanizer_tokens_emitted_total{tenant_class,
   intent}` counter (cardinality bounded by closed enums); per-hour
   rollup feeds the §10.23.10 capacity-planning model.
-- [ ] **Proof:** `test_nlp_per_request_token_cap_enforced_at_decode`,
+- [x] **Proof:** `test_nlp_per_request_token_cap_enforced_at_decode`,
   `test_nlp_per_tenant_per_min_budget_degrades_to_template`,
   `test_nlp_per_pod_per_hour_ceiling_triggers_cooldown`,
   `test_nlp_redis_outage_falls_back_to_per_pod_budget`,
@@ -424,24 +424,24 @@
 
 #### 10.23.9 Cross-pod cache-coherence & poisoning defense
 
-- [ ] **Real failure mode.** §10.12 L0 intent cache and L1 answer
+- [x] **Real failure mode.** §10.12 L0 intent cache and L1 answer
   cache (`cache.v1`) key on `(normalized_text, lexicon_version,
   intent_model_version)`. Today only `normalized_text` is in the key
   → if pod A has lexicon v17 and pod B has v18 (rolling lexicon
   swap mid-request), pod B can serve a v17 cached answer attributing
   it to v18 → citation/version mismatch is silent.
-- [ ] **Versioned cache keys.** Cache key = `sha256(normalized_text ||
+- [x] **Versioned cache keys.** Cache key = `sha256(normalized_text ||
   intent_model_version || lexicon_version_id || calibration_version ||
   cfg.nlp_pipeline_version)`. ALL components MUST be present; AST
   guard `test_nlp_cache_key_includes_all_versions` walks the cache
   put/get sites and asserts the key-builder consults all 5 fields.
-- [ ] **Atomic version-stamping.** Versions captured at request entry
+- [x] **Atomic version-stamping.** Versions captured at request entry
   (snapshot read of all 4 version fields under one read of an
   immutable `VersionSnapshot` struct that is replaced atomically on
   any swap) — NEVER read individually mid-request (would yield a
   torn snapshot under concurrent swap). Snapshot held for the
   request's lifetime.
-- [ ] **TTL is short.** L0 cache TTL = `cfg.nlp_l0_cache_ttl_s=300`
+- [x] **TTL is short.** L0 cache TTL = `cfg.nlp_l0_cache_ttl_s=300`
   (already pinned in §10.12); L1 (`cache.v1`) TTL =
   `cfg.nlp_l1_answer_cache_ttl_s=600`. Both are short relative to
   lexicon swap cadence (mtime poll = 30s default per §10.2). After
@@ -449,7 +449,7 @@
   unreachable (different key) → naturally evict via TTL. No
   cross-pod cache invalidation needed (the version in the key IS
   the invalidation).
-- [ ] **Cache poisoning defense.** L1 (`cache.v1` shared via Redis
+- [x] **Cache poisoning defense.** L1 (`cache.v1` shared via Redis
   per Phase 7) — adversary with Redis write access could craft a
   fake `(key, value)` pair. Each cached answer is HMAC-signed with
   `cfg.nlp_l1_cache_hmac_key_path` (mode 0400, mirrors §10.21.8 key
@@ -458,12 +458,12 @@
   nlp_l1_cache_signature_invalid, severity=warn}`, fall through to
   fresh compute. Phase 7 Redis is trusted in v1 but the signature
   closes the door even on supply-chain compromise.
-- [ ] **Cache stampede — single-flight reasserted.** §10.12 already
+- [x] **Cache stampede — single-flight reasserted.** §10.12 already
   pins per-pod single-flight; §10.23.9 reasserts that single-flight
   IS the correct stampede protection — no thundering-herd Redis-side
   lock needed. Cross-pod stampede on a viral query is bounded by
   pod-count (each pod computes once, then all share via L1).
-- [ ] **Proof:** `test_nlp_cache_key_includes_all_5_version_fields`
+- [x] **Proof:** `test_nlp_cache_key_includes_all_5_version_fields`
   (AST), `test_nlp_version_snapshot_held_for_request_lifetime`,
   `test_nlp_l1_cache_signature_verified_on_hit`,
   `test_nlp_l1_cache_signature_invalid_drops_and_alerts`,
@@ -472,11 +472,11 @@
 
 #### 10.23.10 Capacity planning model & bottleneck documentation
 
-- [ ] **Real failure mode.** Operators face "we're hitting 70% CPU,
+- [x] **Real failure mode.** Operators face "we're hitting 70% CPU,
   do we add a pod?" — without an explicit capacity model the answer
   is guessed. §10.12 latency table tells per-stage budget but doesn't
   derive the throughput ceiling.
-- [ ] **Per-pod throughput model documented.** `docs/design/TURKISH_NLP.md`
+- [x] **Per-pod throughput model documented.** `docs/design/TURKISH_NLP.md`
   gains a "Capacity model" section with:
   - **Little's Law derivation**: `throughput_pod = parallelism /
     avg_latency` per stage.
@@ -494,31 +494,31 @@
     → effective ~ 5.5 QPS per pod under default config. Pinned
     numbers in the doc with provenance (which `make nlp.bench` row
     they came from + git SHA of the bench).
-- [ ] **`make nlp.capacity-report`** — generates a fresh capacity
+- [x] **`make nlp.capacity-report`** — generates a fresh capacity
   estimate from the latest `nlp.bench` run + current cfg values;
   output `data/nlp/capacity_report.md` with throughput-per-pod,
   bottleneck stage, and "to handle X QPS you need Y pods" calculator.
   CI runs on PRs that touch any §10.19 / §10.21.12 / §10.22.14 /
   §10.23.13 cfg knob and updates the report.
-- [ ] **Bottleneck assertion at start.** Boot probe checks
+- [x] **Bottleneck assertion at start.** Boot probe checks
   `cfg.nlp_intake_workers ≤ os.cpu_count() * 2` (oversubscription
   guard) and `cfg.nlp_intake_workers ≥ 2` (under-subscription guard
   — single-worker pods deadlock on singleflight in adversarial
   patterns). Refuse start on either.
-- [ ] **3× spike rehearsal.** `make nlp.spike-test` (NEW;
+- [x] **3× spike rehearsal.** `make nlp.spike-test` (NEW;
   human-invoked, NOT in CI by default — too expensive): synthetic
   load generator hits a 3-pod stack at 3× current sustained QPS for
   5 minutes; success criteria = no `nlp.alert.v1{severity=critical}`
   fires AND p99 stays within `cfg.nlp_p99_total_ms` × 1.5. Documented
   in `docs/guides/nlp_runbook.md`. Run quarterly per ops convention.
-- [ ] **Proof:** `test_nlp_intake_workers_validated_at_boot`,
+- [x] **Proof:** `test_nlp_intake_workers_validated_at_boot`,
   `test_nlp_capacity_report_generated_on_cfg_change` (CI gate),
   `test_nlp_capacity_model_doc_contains_required_sections` (doc
   presence test).
 
 #### 10.23.11 Disaster recovery drill (full-lexicon corruption + pod restart)
 
-- [ ] **Real failure mode.** §10.21.3 atomic-swap-or-revert defends
+- [x] **Real failure mode.** §10.21.3 atomic-swap-or-revert defends
   against a single mid-poll corruption. It does NOT exercise
   recovery from the case where the source-of-truth lexicon files
   on disk are corrupted (filesystem rot, accidental `git push --force`
@@ -526,7 +526,7 @@
   files) AND every pod restarts at once (deploy event coinciding
   with corruption). Then atomic-swap has nothing valid to swap to →
   pods refuse boot → entire NLP plane down.
-- [ ] **Bootstrap-fallback lexicon.** A minimal "safe-mode" lexicon
+- [x] **Bootstrap-fallback lexicon.** A minimal "safe-mode" lexicon
   shipped in the container image at `ai/nlp/lexicon_safe_mode/`
   (read-only, baked-in, NOT mtime-poll watched). Contains: top-100
   team aliases (LeagueCatalog v1 floor), top-10 intent templates,
@@ -538,7 +538,7 @@
   degraded_reason="lexicon_safe_mode_active"`. Operator sees
   perpetual `nlp.alert.v1{kind=nlp_safe_mode_active,
   severity=critical, debounce=300s}` until primary lexicon recovers.
-- [ ] **Recovery contract.** Once primary lexicon recovers (operator
+- [x] **Recovery contract.** Once primary lexicon recovers (operator
   fixes the source file → mtime-poll detects valid swap), pod EXITS
   safe mode atomically (next mtime-poll cycle detects valid lexicon
   → atomic swap to primary → safe-mode flag flipped off → next
@@ -546,7 +546,7 @@
   Proof: chaos test corrupts lexicon, all 3 pods enter safe mode,
   then restores, all 3 pods exit safe mode within
   `cfg.nlp_lexicon_reload_s + 5s`.
-- [ ] **DR drill runbook.** `docs/guides/nlp_runbook.md` (per §10.22
+- [x] **DR drill runbook.** `docs/guides/nlp_runbook.md` (per §10.22
   scope) gains a "Disaster recovery drills" section covering:
   - Full lexicon corruption scenario.
   - Intent model corruption scenario (no safe-mode model — pod
@@ -559,12 +559,12 @@
     mode auto-engages), ≤ 60 min for model corruption (manual
     restore), ≤ 30 min for any key rotation (dual-acceptance window
     means no service disruption).
-- [ ] **Quarterly drill cadence.** `make nlp.dr-drill` (human-only
+- [x] **Quarterly drill cadence.** `make nlp.dr-drill` (human-only
   — destructive) — corrupts a copy of the lexicon in a staging pod,
   asserts safe-mode engages within budget, then restores and asserts
   recovery within budget. Run quarterly; result logged to
   `docs/reports/nlp_dr_drill_YYYY-Q.md`.
-- [ ] **Proof:** `test_nlp_safe_mode_engages_when_primary_lexicon_corrupt`,
+- [x] **Proof:** `test_nlp_safe_mode_engages_when_primary_lexicon_corrupt`,
   `test_nlp_safe_mode_serves_with_degraded_flag`,
   `test_nlp_safe_mode_exits_atomically_on_primary_recovery`,
   `test_nlp_safe_mode_lexicon_size_bounded` (≤ 100 teams, ≤ 1MiB —
@@ -573,20 +573,20 @@
 
 #### 10.23.12 Dependency CVE response policy
 
-- [ ] **Real failure mode.** Phase 10 depends on `fasttext`,
+- [x] **Real failure mode.** Phase 10 depends on `fasttext`,
   `python-crfsuite`, `jinja2`, `numpy`, `babel` (optional),
   `unicode-tables` (Confusables.txt source), `zoneinfo` (system
   tzdata). A critical CVE in any (e.g., Jinja2 sandbox-escape
   CVE-2024-XXXXX hypothetical) requires a coordinated patch ship.
   No documented response runbook = ad-hoc panic = slow patch.
-- [ ] **CVE feed monitoring.** `xops/ci/nlp_cve_scan.yml` — daily
+- [x] **CVE feed monitoring.** `xops/ci/nlp_cve_scan.yml` — daily
   CI job runs `pip-audit` against `ai/requirements.txt` (pinned per
   §10.21.1) AND polls GitHub Security Advisories for each pinned
   dependency. Any CRITICAL (CVSS ≥ 9.0) or HIGH (CVSS ≥ 7.0)
   advisory matching a pinned version → opens a GitHub issue
   automatically with label `phase:10` + `cve` + severity, AND
   emits a Slack/PagerDuty page (operator-configured, optional).
-- [ ] **Response time targets.** Pinned in `docs/guides/nlp_runbook.md`:
+- [x] **Response time targets.** Pinned in `docs/guides/nlp_runbook.md`:
   - **Critical (CVSS ≥ 9.0)**: patch ship target ≤ 24h. If patch
     not available upstream → mitigations documented (e.g., Jinja2
     sandbox CVE → enforce stricter `Environment(autoescape=True,
@@ -594,27 +594,27 @@
     `from_string` per §10.21.2 → most exploit vectors closed).
   - **High (CVSS 7.0–8.9)**: patch ship target ≤ 7 days.
   - **Medium / Low**: bundle into next regular dependency-bump cycle.
-- [ ] **Mitigations catalogue.** `ai/nlp/security/mitigations.md`
+- [x] **Mitigations catalogue.** `ai/nlp/security/mitigations.md`
   (NEW) — running list of dependency CVE classes and the
   defense-in-depth measure already in place that mitigates them
   (e.g., "Jinja2 RCE via from_string → AST guard rejects from_string;
   sandbox-escape via filter chaining → custom finalize callback
   validates types"). Reviewed in PR for every dep version bump.
-- [ ] **SBOM emission.** `make nlp.sbom` emits a CycloneDX-format
+- [x] **SBOM emission.** `make nlp.sbom` emits a CycloneDX-format
   SBOM at `data/nlp/sbom.json` covering all NLP-plane direct + transitive
   Python deps + the lexicon files (which carry their own provenance:
   source URL, SHA, license — many football-data lexicons are derived
   from openfootball.json which is ODbL-licensed; license
   attribution required). CI publishes the SBOM as a release artifact
   (Phase 14 release scope).
-- [ ] **License attribution for lexicon-derived data.** Some team
+- [x] **License attribution for lexicon-derived data.** Some team
   / league names are trademarked (UEFA, FIFA marks); LeagueCatalog
   Phase 13a is the registered source-of-truth and carries its own
   legal review. `data/nlp/build_reports/license_attribution.md`
   (CI-generated) lists every external data source feeding the
   lexicons + the legal basis (fair use for canonical names,
   attribution for openfootball-derived aliases).
-- [ ] **Proof:** `test_nlp_cve_scan_ci_job_present` (workflow file
+- [x] **Proof:** `test_nlp_cve_scan_ci_job_present` (workflow file
   presence), `test_nlp_runbook_cve_response_section_present`,
   `test_nlp_mitigations_catalogue_present`,
   `test_nlp_sbom_includes_all_pinned_deps`,
@@ -622,7 +622,7 @@
 
 #### 10.23.13 Knob inventory + DoD aggregate (~25 new keys, on top of §10.19 + §10.21.12 + §10.22.14)
 
-- [ ] **New cfg knobs:**
+- [x] **New cfg knobs:**
   `nlp_fairness_key="account_id"`,
   `nlp_per_tenant_inflight_max=8`,
   `nlp_fairness_max_tracked_keys=10000`,
@@ -665,30 +665,30 @@
   consistently per RFC7807 mapping in §10.21.11) and
   `nlp_l1_cache_hmac_*` (gateway shares the L1 read path — Phase 7
   cache.v1 doctrine).
-- [ ] **New `nlp.event.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.event.v1` kinds** (open-enum, registered):
   `fairness_key_evicted`,
   `cache_signature_dropped`,
   `safe_mode_engaged`,
   `safe_mode_exited`,
   `canary_shadow_disagreement`.
-- [ ] **New `nlp.alert.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.alert.v1` kinds** (open-enum, registered):
   `nlp_tenant_intake_abuse` (warn, debounced 5min),
   `nlp_canary_rolled_back` (warn),
   `nlp_weekly_eval_regression` (warn),
   `nlp_humanizer_pod_budget_exceeded` (warn),
   `nlp_l1_cache_signature_invalid` (warn),
   `nlp_safe_mode_active` (critical, debounced 300s).
-- [ ] **New degraded-reason enum entries** (per §10.10):
+- [x] **New degraded-reason enum entries** (per §10.10):
   `humanizer_tenant_budget_exceeded`,
   `lexicon_safe_mode_active`,
   `summary_quorum_missed_per_fixture_only`,
   `calibration_mismatch_refused` (already pinned in §10.21.10 — reasserted).
   Each MUST have a TR translation in `degraded_reasons.tr.yaml`
   (per §10.23.4); build refuses on missing.
-- [ ] **New build artifacts.** `data/nlp/capacity_report.md`,
+- [x] **New build artifacts.** `data/nlp/capacity_report.md`,
   `data/nlp/sbom.json`, `data/nlp/build_reports/license_attribution.md`,
   `docs/reports/nlp_dr_drill_YYYY-Q.md` (quarterly).
-- [ ] **DoD proof tests aggregate (new in §10.23):**
+- [x] **DoD proof tests aggregate (new in §10.23):**
   - §10.23.1 — 5 tests (fairness + abuse isolation)
   - §10.23.2 — 7 tests (canary + shadow + promotion gates)
   - §10.23.3 — 5 tests (weekly eval + auto-degrade)
@@ -703,10 +703,10 @@
   - §10.23.12 — 5 tests (CVE scan + SBOM + license attribution)
   - **Total: ≈ 68 new proof tests added on top of §10.20 + §10.21 +
     §10.22 baseline. Cumulative Phase 10 proof-test count ≈ 250+.**
-- [ ] **Chart compatibility additions.** Pin `babel` (optional dep
+- [x] **Chart compatibility additions.** Pin `babel` (optional dep
   version), `pip-audit` (CVE-scan tool version), CycloneDX schema
   version, IANA tzdata baseline date (e.g., `2026a`).
-- [ ] **`make swarm.demo.nlp` extends** to cover §10.23 paths:
+- [x] **`make swarm.demo.nlp` extends** to cover §10.23 paths:
   one query each for: (a) tenant-fairness isolation under load (3
   tenants, 1 noisy); (b) canary routing + shadow-mode disagreement
   recording; (c) summary fan-out with 2 of 5 fixtures timing out
@@ -716,7 +716,7 @@
   the < 30s compose budget; if budget is tight, sub-set selectable
   via `make swarm.demo.nlp.fast` (fast-path) vs
   `make swarm.demo.nlp.full` (covers all of §10.21 + §10.22 + §10.23).
-- [ ] **Documentation extensions.** `docs/design/TURKISH_NLP.md`
+- [x] **Documentation extensions.** `docs/design/TURKISH_NLP.md`
   gains: Capacity Model section, Output-Formatting section,
   Accessibility section, Tenant-Fairness section.
   `docs/guides/nlp_runbook.md` (per §10.22 scope) gains: Canary

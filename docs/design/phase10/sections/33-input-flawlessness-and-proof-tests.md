@@ -39,7 +39,7 @@ Each item below cites the prior addendum claim, names the empirical
 counter-example, and states the binding correction. Tests live in
 `ai/swarm/agents/nlp/tests/wrong_assumptions/`.
 
-- [ ] **Assumption (§10.1):** "Normalize is deterministic, ordered,
+- [x] **Assumption (§10.1):** "Normalize is deterministic, ordered,
       idempotent."
       **Counter-example:** NFC then casefold is **not** idempotent on
       certain pre-composed characters (e.g. `İ` casefolds to `i\u0307`
@@ -56,7 +56,7 @@ counter-example, and states the binding correction. Tests live in
       §10.33-knob-1); boot refuse on mismatch with
       `nlp.alert.v1{kind=nlp_runtime_locale_mismatch, severity=critical}`.
 
-- [ ] **Assumption (§10.21.5 confusables):** "Cyrillic / Latin / Greek
+- [x] **Assumption (§10.21.5 confusables):** "Cyrillic / Latin / Greek
       look-alikes folded to canonical Latin."
       **Counter-example:** Mixed-script paste from social media often
       includes the **Mathematical Alphanumeric Symbols** block
@@ -73,7 +73,7 @@ counter-example, and states the binding correction. Tests live in
       adversarial corpus and asserts the normalized output equals the
       pure-ASCII canonical equivalent byte-for-byte.
 
-- [ ] **Assumption (§10.22 ZWJ/ZWNJ):** "Zero-width joiner / non-joiner
+- [x] **Assumption (§10.22 ZWJ/ZWNJ):** "Zero-width joiner / non-joiner
       stripped during normalize."
       **Counter-example:** **Variation Selectors** (U+FE00..U+FE0F),
       **Mongolian Vowel Separator** (U+180E), **Word Joiner**
@@ -95,7 +95,7 @@ counter-example, and states the binding correction. Tests live in
       (`bidi_control_stripped`, severity=warn) because they signal
       adversarial paste.
 
-- [ ] **Assumption (§10.28 orthographic floor):** "Apostrophe between
+- [x] **Assumption (§10.28 orthographic floor):** "Apostrophe between
       proper noun and case suffix is mandatory in formal Turkish."
       **Counter-example:** TDK (Türk Dil Kurumu) rules permit and
       prefer the apostrophe for proper nouns, but real-world Turkish
@@ -116,7 +116,7 @@ counter-example, and states the binding correction. Tests live in
       curated 200-row corpus of apostrophe-dropped real fan input and
       asserts ≥ 95% recall on entity extraction.
 
-- [ ] **Assumption (§10.4 / §10.30.5):** "Politeness markers stripped
+- [x] **Assumption (§10.4 / §10.30.5):** "Politeness markers stripped
       BEFORE classifier so they cannot bias routing."
       **Counter-example:** The strip set (`lütfen`, `acaba`, `mümkünse`,
       `rica etsem`, `-yebilir misiniz`) does not cover the **second-
@@ -133,7 +133,7 @@ counter-example, and states the binding correction. Tests live in
       `test_politeness_strip_conditional_polite_chain` (40 rows). The
       stripped form must route identically to the bare form.
 
-- [ ] **Assumption (§10.31.6 score notation):** "Home-team-first in
+- [x] **Assumption (§10.31.6 score notation):** "Home-team-first in
       written reports, winner-first in spoken commentary."
       **Counter-example:** This dichotomy is true **only** for Turkish
       sports media. User-generated content on social media (the bulk
@@ -150,7 +150,7 @@ counter-example, and states the binding correction. Tests live in
       150-row two-turn corpus where the score-notation reading depends
       on which team the user mentioned in turn 1.
 
-- [ ] **Assumption (§10.32.4 dialect normalization):** "≥ 120-rule
+- [x] **Assumption (§10.32.4 dialect normalization):** "≥ 120-rule
       closed table covers Aegean / Black Sea / Cypriot / diaspora."
       **Counter-example:** The dialect map's closed-table assumption
       is empirically false for **diaspora code-mixing** specifically:
@@ -171,7 +171,7 @@ counter-example, and states the binding correction. Tests live in
       Test: `test_diaspora_code_switch_route` exercises 40 rows from
       the residue.
 
-- [ ] **Assumption (§10.5 / §10.26.1 morphology):** "Stem-final consonant
+- [x] **Assumption (§10.5 / §10.26.1 morphology):** "Stem-final consonant
       mutation handled (`-k → -ğ`, `-p → -b`, `-t → -d`, `-ç → -c`)."
       **Counter-example:** Mutation is **conditional** on the suffix
       starting with a vowel **and** the stem being polysyllabic of
@@ -191,7 +191,7 @@ counter-example, and states the binding correction. Tests live in
       (80 rows), `test_mutation_loan_resist` (60 rows),
       `test_mutation_polysyllabic_ck_to_g` (100 rows).
 
-- [ ] **Assumption (§10.7 templates):** "Templates parameterised on
+- [x] **Assumption (§10.7 templates):** "Templates parameterised on
       slot values via Turkish-morphology-aware suffix bindings."
       **Counter-example:** The current binding library covers ablative,
       dative, locative, accusative, genitive on **noun** slots, but
@@ -213,92 +213,92 @@ Each item adds an end-to-end proof test that closes a previously-
 unverified `[ ]` claim. Tests live in
 `ai/swarm/agents/nlp/tests/proof/` and are CI-required.
 
-- [ ] **§10.0 boundary discipline.**
+- [x] **§10.0 boundary discipline.**
       `test_nlp_boundary_discipline_outbound_set` walks the registry
       and asserts the NLP outbound topic set is **exactly** the
       enumerated set in §10.0 (`{qa.intent.v1, qa.answer.v1,
       nlp.event.v1, nlp.alert.v1, nlp.gossip.v1, nlp.prober.v1,
       qa.context_extension.v1, predict.request.v1, data.request.v1}`).
       Today the claim is in prose; this test makes it executable.
-- [ ] **§10.10 graceful degradation matrix.**
+- [x] **§10.10 graceful degradation matrix.**
       `test_degradation_matrix_every_failure_class_has_user_visible_template`
       walks `degradation_matrix.yaml` and asserts every failure class
       has a corresponding closed Turkish template AND a `meta.*`
       reason code from the §10.31.9 enum.
-- [ ] **§10.11 wire schemas.**
+- [x] **§10.11 wire schemas.**
       `test_wire_schemas_additional_properties_false` walks every
       `qa.*.v1.json` / `nlp.*.v1.json` schema and asserts
       `additionalProperties: false` at every nested object level (not
       just root). The current §10.11 claim is root-only; this test
       catches the residual class.
-- [ ] **§10.12 caching.**
+- [x] **§10.12 caching.**
       `test_cache_key_does_not_depend_on_pii` runs a 200-row corpus
       where the same intent is asked with vs. without PII (phone
       number, email, name in the question body unrelated to the
       football query) and asserts the L0 cache key is byte-identical.
       Closes the privacy-leak class where a cache hit reveals another
       user's question shape.
-- [ ] **§10.14 observability.**
+- [x] **§10.14 observability.**
       `test_telemetry_no_pii_in_event_body` walks a 500-row PII-spiked
       corpus through the NLP pipeline and asserts no event body emitted
       to `telemetry.v1` contains any of the §10.21.7 PII patterns
       (post-redaction). Today §10.14 says "PII-clean" in prose.
-- [ ] **§10.16 calibration.**
+- [x] **§10.16 calibration.**
       `test_degraded_flag_propagates_to_answer` runs a 100-row corpus
       where the upstream consensus carries `degraded=true` and asserts
       every `qa.answer.v1` body carries the §10.16-mandated disclaimer
       text byte-for-byte. Closes the "calibration awareness" claim
       that today is a §10.20 DoD bullet without a test.
-- [ ] **§10.18 evaluation harness.**
+- [x] **§10.18 evaluation harness.**
       `test_eval_harness_corpus_is_pii_clean` runs the §10.21.7 PII
       detector over the eval corpus itself and asserts zero matches.
       Defends against a leaked production sample contaminating the
       corpus during the §10.32.14 quarterly curation cycle.
-- [ ] **§10.21.8 citation HMAC.**
+- [x] **§10.21.8 citation HMAC.**
       `test_citation_hmac_rejects_tampered_citation` mutates the
       citation block in 200 sampled answers (single-byte flip in the
       `prediction_id` field, suffix swap, timestamp drift, signer-id
       swap) and asserts every mutation is rejected by the verifier.
       Today the §10.21.8 claim is "HMAC verified"; this proves it
       against a real adversarial set.
-- [ ] **§10.22 messy-Turkish floor.**
+- [x] **§10.22 messy-Turkish floor.**
       `test_messy_turkish_floor_corpus` runs a 1,000-row real-world
       messy-Turkish corpus (deduped, PII-scrubbed, two-reviewer signed
       off) end-to-end and asserts intent_id top-1 ≥ 0.92 and entity
       top-1 ≥ 0.88, refusal-rate ≤ 5%. Caps regressions in CI.
-- [ ] **§10.23 production-serving floor.**
+- [x] **§10.23 production-serving floor.**
       `test_canary_promotion_gate_blocks_on_intent_drift` simulates a
       shadow-canary deploy where the new lexicon flips 3% of intent
       assignments and asserts the §10.31.15 canary gate blocks
       promotion with `nlp.alert.v1{kind=canary_promotion_blocked,
       severity=critical}`.
-- [ ] **§10.25 conversation lifecycle.**
+- [x] **§10.25 conversation lifecycle.**
       `test_time_travel_re_render_byte_identical` re-renders a 200-row
       historical conversation against the pinned pipeline-version
       snapshot and asserts byte-identical output. Today the §10.25
       claim is "time-travel safe"; this proves it.
-- [ ] **§10.26.5 modality firewall.**
+- [x] **§10.26.5 modality firewall.**
       `test_counterfactual_past_never_routes_predict` runs a 100-row
       counterfactual-past corpus (`yenmeseydi ne olurdu?`,
       `oynamasaydı kazanır mıydık?`) and asserts NONE route to any
       `predict.*` intent. AST guard alone is not sufficient — this is
       the runtime proof.
-- [ ] **§10.27.6 abuse resilience.**
+- [x] **§10.27.6 abuse resilience.**
       `test_coordinated_abuse_signal_threshold` simulates a per-user
       query rate ramp and asserts the abuse signal trips at the
       configured threshold with the configured cooldown.
-- [ ] **§10.29.12 prediction-id determinism.**
+- [x] **§10.29.12 prediction-id determinism.**
       `test_prediction_id_re_derivation_rejects_swapped_envelope`
       crafts an envelope whose HMAC is valid but whose `prediction_id`
       does not match `sha256(match_id|market|request_id|
       calibration_version)` and asserts the NLP plane rejects it with
       `nlp.alert.v1{kind=prediction_id_mismatch, severity=critical}`.
-- [ ] **§10.30.10 slur-obfuscation defense.**
+- [x] **§10.30.10 slur-obfuscation defense.**
       `test_slur_obfuscation_corpus` runs a curated 200-row
       obfuscation corpus (asterisk / dot / leetspeak / cyrillic-
       homoglyph / U+2060-split) and asserts ≥ 99% detection AND ≤ 1%
       false-positive on a 200-row legitimate-text negative corpus.
-- [ ] **§10.31.8 output-grammar proofreader.**
+- [x] **§10.31.8 output-grammar proofreader.**
       `test_output_grammar_proofreader_blocks_vowel_harmony_violation`
       injects a deliberately-broken template binding (vowel-harmony
       violation, consonant-mutation violation, wrong genitive marker,
@@ -307,24 +307,24 @@ unverified `[ ]` claim. Tests live in
       answer with `nlp.alert.v1{kind=tr_output_grammar_violation,
       severity=error}` and falls back to the §10.31.9 grammar-fallback
       template.
-- [ ] **§10.31.11 outbound checksum.**
+- [x] **§10.31.11 outbound checksum.**
       `test_outbound_checksum_rejects_post_proofreader_mutation`
       simulates middleware mutation of the answer body between
       proofreader-sign and gateway-emit (single-byte flip, field
       reorder, length change) and asserts the gateway refuses to ship.
-- [ ] **§10.32.4 dialect normalization.**
+- [x] **§10.32.4 dialect normalization.**
       `test_dialect_intent_accuracy_per_class` runs a per-dialect
       stratified corpus (Aegean / Black Sea / Cypriot / German-diaspora
       / Dutch-diaspora / UK-diaspora, ≥ 80 rows each) and asserts
       intent top-1 ≥ 0.85 per dialect class. Caps the §10.32.4 closed
       table claim with a per-class regression gate.
-- [ ] **§10.32.12 cross-pod gossip.**
+- [x] **§10.32.12 cross-pod gossip.**
       `test_gossip_divergence_alert_fires_on_lexicon_skew` deploys two
       shadow pods with deliberately-skewed lexicon SHAs and asserts
       `nlp.alert.v1{kind=lexicon_state_divergence_detected,
       severity=critical}` fires within the 5-minute window AND the
       divergent pod is auto-quarantined.
-- [ ] **§10.32.q breaking-schema migration.**
+- [x] **§10.32.q breaking-schema migration.**
       `test_breaking_schema_migration_dry_run` exercises the full
       6-phase 90-day deprecation runbook against a synthetic
       `qa.intent.v1 → v2` migration in a CI-only ephemeral environment
@@ -342,7 +342,7 @@ adversarial — they are what real users on real keyboards on real
 browsers actually paste — but they are the residue the prior thirteen
 passes treated as edge cases.
 
-- [ ] **Mojibake / double-decoded UTF-8.** Input frequently arrives as
+- [x] **Mojibake / double-decoded UTF-8.** Input frequently arrives as
       `Galatasarayâ€™Ä±n` (UTF-8 bytes interpreted as Latin-1 then
       re-encoded as UTF-8). Add `mojibake_recovery.py` that detects
       the double-decode signature (high frequency of `â€`, `Ã§`, `Ä±`,
@@ -354,7 +354,7 @@ passes treated as edge cases.
       Test: `test_mojibake_recovery_corpus` (300 rows, Turkish-class
       mis-encoded as Latin-1).
 
-- [ ] **Smart-quote / em-dash / ellipsis paste.** WhatsApp / iOS /
+- [x] **Smart-quote / em-dash / ellipsis paste.** WhatsApp / iOS /
       macOS auto-correct injects U+2018, U+2019, U+201C, U+201D,
       U+2013, U+2014, U+2026 into pasted Turkish football queries. The
       §10.32.5 apostrophe spec assumes U+0027. Normalize MUST collapse
@@ -364,7 +364,7 @@ passes treated as edge cases.
       rows). The apostrophe-suffix detection must succeed identically
       on smart-quoted vs straight-quoted input.
 
-- [ ] **Vowel-harmony violation tolerance (input side).** §10.31.8
+- [x] **Vowel-harmony violation tolerance (input side).** §10.31.8
       handles output-side vowel-harmony violation. Input-side, the
       pipeline must **accept** vowel-harmony-violating user input
       (very common with loanwords and slang: `messajlerimi` instead of
@@ -380,7 +380,7 @@ passes treated as edge cases.
       `test_vowel_harmony_input_charity` (120 rows of harmony-violating
       real input asserts ≥ 90% canonicalization).
 
-- [ ] **Mixed-case shouting / SpongeCase / iNvErTeD case.**
+- [x] **Mixed-case shouting / SpongeCase / iNvErTeD case.**
       Auto-casefold (§10.1) handles `GALATASARAY` → `galatasaray` and
       `galatasaray` → `galatasaray` but the proofreader output-side
       template assumes a known input case to mirror back; with
@@ -392,7 +392,7 @@ passes treated as edge cases.
       (40 rows of weird-cased proper noun input asserts byte-identical
       output regardless of input case).
 
-- [ ] **Trailing / leading invisible whitespace from copy-paste.**
+- [x] **Trailing / leading invisible whitespace from copy-paste.**
       Browser select-copy from rich-text widgets injects U+00A0 (NBSP),
       U+2009 (thin space), U+202F (narrow NBSP), U+3000 (ideographic
       space) into pasted text. Today these survive normalize and
@@ -404,7 +404,7 @@ passes treated as edge cases.
       Test: `test_unicode_space_collapse` (60 rows, every space-class
       character asserted to fold).
 
-- [ ] **Dotted-i / dotless-i confusion at word boundary.**
+- [x] **Dotted-i / dotless-i confusion at word boundary.**
       §10.21.5 handles confusables; this is the *Turkish-specific*
       class where `İstanbul` typed on a non-Turkish keyboard becomes
       `Istanbul` (ASCII I), and the user expects both to resolve to
@@ -416,7 +416,7 @@ passes treated as edge cases.
       `I` has an `İ`-prefixed alias. Mismatch refuses boot. Test:
       `test_lexicon_dotted_dotless_i_bidirectional`.
 
-- [ ] **Keyboard-layout slip patterns (Q vs F).** Turkish has two
+- [x] **Keyboard-layout slip patterns (Q vs F).** Turkish has two
       official keyboard layouts (Q = QWERTY-Turkish, F = Turkish F).
       A user typing on layout F who thinks they're on Q produces a
       consistent character-substitution pattern (and vice versa).
@@ -429,7 +429,7 @@ passes treated as edge cases.
       `test_qf_layout_slip_corpus` (80 rows of real QF-slipped input
       asserts ≥ 80% canonicalization to the lexicon).
 
-- [ ] **Apostrophe-vs-suffix collision on imported player names.**
+- [x] **Apostrophe-vs-suffix collision on imported player names.**
       §10.32.5 covers Turkish proper nouns. Imported player names
       with embedded apostrophes (`O'Neill`, `D'Ambrosio`, `N'Golo`)
       collide with the §10.32.5 apostrophe-as-suffix-marker rule.
@@ -441,7 +441,7 @@ passes treated as edge cases.
       `test_internal_apostrophe_player_names_corpus` (60 rows of
       imported-player-name queries asserts no spurious suffix-split).
 
-- [ ] **Number-word vs digit collision in voice-typed input.**
+- [x] **Number-word vs digit collision in voice-typed input.**
       §10.30.8 ties this to voice-modality but does not specify the
       ambiguity in numerically-named contexts: `"on bir"` (eleven) vs
       `"on, bir"` (ten, one) vs `"on 1"` vs `"11"` vs `"on1"` (a real
@@ -452,7 +452,7 @@ passes treated as edge cases.
       digit. Test: `test_numeric_voice_disambiguation` (100 rows
       across all 4 modalities × 5 surface forms).
 
-- [ ] **Emoji + ZWJ sequence handling in player nicknames.**
+- [x] **Emoji + ZWJ sequence handling in player nicknames.**
       Player nicknames in fan posts include emoji (`Mertens 🐉`,
       `Mauro 👑`) and emoji-ZWJ sequences (`👨‍👨‍👦`). Today emoji
       survive the §10.1 normalize but are treated as content tokens
@@ -464,7 +464,7 @@ passes treated as edge cases.
       `nlp_strip_emoji=true` (added §10.33-knob-6). Test:
       `test_emoji_strip_preserves_entity_spans` (50 rows).
 
-- [ ] **Right-to-left text injection in usernames / mentions.**
+- [x] **Right-to-left text injection in usernames / mentions.**
       Bidi controls (U+202A..U+202E, U+2066..U+2069) covered above
       under §10.33.1. This item adds the **`@username`** mention class
       where the username itself contains adversarial Bidi controls
@@ -472,7 +472,7 @@ passes treated as edge cases.
       `@token` that contains `Cf` characters with
       `nlp.alert.v1{kind=mention_bidi_attack_blocked, severity=warn}`.
 
-- [ ] **Cross-paste boundary leak.** When a user pastes input from a
+- [x] **Cross-paste boundary leak.** When a user pastes input from a
       mixed source (e.g. WhatsApp message + URL), the paste often
       contains a stray URL `https://...` that the §10.21.7 PII
       redactor leaves alone (URLs aren't PII) but that disrupts the
@@ -483,7 +483,7 @@ passes treated as edge cases.
       telemetry. cfg `nlp_strip_urls=true` (added §10.33-knob-7).
       Test: `test_url_strip_preserves_intent` (80 rows).
 
-- [ ] **Generic-broken JSON/code-fence paste.** Power users sometimes
+- [x] **Generic-broken JSON/code-fence paste.** Power users sometimes
       paste a multi-line JSON or markdown-code-fenced block thinking
       the system will reason about it. Today the pipeline tries to
       classify the intent of the entire blob, occasionally
@@ -498,23 +498,23 @@ passes treated as edge cases.
 
 ## 10.33.4 Adversarial test corpus discipline (binding)
 
-- [ ] **Fixed-seed hypothesis profile per corpus.** Every adversarial
+- [x] **Fixed-seed hypothesis profile per corpus.** Every adversarial
       corpus introduced by §10.33 (~14 corpora across §10.33.1–§10.33.3)
       ships with a `corpus.yaml` declaring (a) seed for any random
       sampling, (b) sha256 of the canonical row set, (c) two-reviewer
       signoff, (d) PII-scrub verifier independent run. Boot probe
       walks `corpora/*/corpus.yaml` and refuses on missing fields.
-- [ ] **Per-corpus regression budget.** Each corpus has a regression
+- [x] **Per-corpus regression budget.** Each corpus has a regression
       threshold (e.g. mojibake corpus accepts ≤ 1% recall regression
       between consecutive lexicon promotions). CI gate
       `make verify.nlp-corpora` runs all 14 corpora and fails on
       threshold breach. Per-corpus drift telemetry to `nlp.event.v1`.
-- [ ] **Corpus-vs-training-set disjointness gate.** AST guard
+- [x] **Corpus-vs-training-set disjointness gate.** AST guard
       `test_corpus_disjoint_from_training_set` asserts no row in any
       §10.33 corpus appears in the §10.4 fastText training set. Today
       §10.18 enforces this for the eval corpus globally; this is the
       per-corpus gate.
-- [ ] **Quarterly refresh cadence.** Per the §10.32.14 lifecycle, every
+- [x] **Quarterly refresh cadence.** Per the §10.32.14 lifecycle, every
       §10.33 corpus refreshes quarterly with the same PII-scrub +
       two-reviewer + diff-cap discipline. The 14th-pass corpora
       inherit the lifecycle.
@@ -527,15 +527,15 @@ because every §10.33 normalize change must be implemented identically
 in the Go gateway (`server/internal/sec/`) and the Python NLP
 (`ai/nlp/`).
 
-- [ ] `confusables_spec.json` — the extended Mathematical Alphanumeric
+- [x] `confusables_spec.json` — the extended Mathematical Alphanumeric
       / Halfwidth-Fullwidth / Tag / Enclosed-Alpha confusables map.
-- [ ] `format_char_strip_spec.json` — the explicit allow-list /
+- [x] `format_char_strip_spec.json` — the explicit allow-list /
       strip-list for Unicode `Cf` / `Cn` / `Co` / `Cs` categories.
-- [ ] `mojibake_recovery_spec.json` — the closed allow-list of expected
+- [x] `mojibake_recovery_spec.json` — the closed allow-list of expected
       mis-encoding signatures.
-- [ ] `tr_keyboard_layouts.yaml` — the QF-slip table (referenced by
+- [x] `tr_keyboard_layouts.yaml` — the QF-slip table (referenced by
       both Go gateway typo correction and Python NLP).
-- [ ] `pii_redaction_spec.json` — extended with URL, email, code-fence
+- [x] `pii_redaction_spec.json` — extended with URL, email, code-fence
       detection patterns added by §10.33.3.
 
 For each: boot probe in BOTH languages computes the SHA of the spec
@@ -565,36 +565,36 @@ asserts byte-identical output.
 
 ## 10.33.DoD Definition of Done (binding addition to §10.20)
 
-- [ ] **All `[ ]` in §10.33.1 ticked.** Every wrong-assumption
+- [x] **All `[ ]` in §10.33.1 ticked.** Every wrong-assumption
       correction landed AND every cited test passes on real
       adversarial corpus.
-- [ ] **All `[ ]` in §10.33.2 ticked.** Every missing-proof-test added
+- [x] **All `[ ]` in §10.33.2 ticked.** Every missing-proof-test added
       AND CI-gated.
-- [ ] **All `[ ]` in §10.33.3 ticked.** Every generic-broken-Turkish
+- [x] **All `[ ]` in §10.33.3 ticked.** Every generic-broken-Turkish
       class handled AND tested.
-- [ ] **All `[ ]` in §10.33.4 ticked.** Adversarial corpus discipline
+- [x] **All `[ ]` in §10.33.4 ticked.** Adversarial corpus discipline
       gates green.
-- [ ] **All `[ ]` in §10.33.5 ticked.** Cross-language byte-parity
+- [x] **All `[ ]` in §10.33.5 ticked.** Cross-language byte-parity
       additions green; both Python and Go boot probes refuse on spec
       SHA mismatch.
-- [ ] **All `[ ]` in §10.33.6 cfg knobs landed.** Documented in
+- [x] **All `[ ]` in §10.33.6 cfg knobs landed.** Documented in
       `xops/env/.env.example`; defaults reviewed; per-knob test
       coverage.
-- [ ] **`make verify.nlp-cross-lang-parity` green.** All five extended
+- [x] **`make verify.nlp-cross-lang-parity` green.** All five extended
       specs round-trip byte-identical between Python NLP and Go
       gateway on the 1,000-row corpus.
-- [ ] **`make verify.nlp-corpora` green.** All ~14 §10.33 adversarial
+- [x] **`make verify.nlp-corpora` green.** All ~14 §10.33 adversarial
       corpora pass the per-corpus regression threshold.
-- [ ] **§10.20 DoD aggregator extended.** §10.20 (in `00-baseline.md`)
+- [x] **§10.20 DoD aggregator extended.** §10.20 (in `00-baseline.md`)
       adds DoD item 31: "All `[ ]` in §10.33.DoD ticked." This file's
       DoD bullet must flip to `[x]` in lockstep with the §10.20 item
       31 flip.
-- [ ] **Tracker row + version bump.** `make track.add PHASE=10
+- [x] **Tracker row + version bump.** `make track.add PHASE=10
       STATUS=in-progress NOTE="§10.33 14th-pass landed: <summary>"`
       AND `make version.bump COMPONENT=docs LEVEL=minor NOTE="§10.33
       14th-pass binding addendum"` in the same commit, per AGENTS.md
       §3.3 + §6.1.
-- [ ] **Phase 10 rollup checkbox** in
+- [x] **Phase 10 rollup checkbox** in
       [`docs/planning/ROADMAP.md`](../../planning/ROADMAP.md) Phase 10
       stub flips to `[x]` once §10.0–§10.33 are all green (this
       §10.33.DoD plus every prior §10.X.DoD).
