@@ -196,3 +196,49 @@ Even with the relaxations above, the pipeline will refuse to:
 
 A workflow run that needs any of the above must escalate via the
 operator issue queue; it must not edit its way past the guard.
+
+## 10. PR review + auto-merge loop
+
+Auto-merge is **not** performed by `orchestrate-roadmap.yml`. That
+workflow dispatches the implementer and exits as soon as the agent
+files an issue / opens a PR. The actual review-and-merge cycle
+runs in a separate workflow,
+`.github/workflows/orchestrate-pr-review.yml`, which is triggered
+by GitHub on every `pull_request` event (`opened`, `synchronize`,
+`reopened`, `ready_for_review`) targeting `main` from an
+`agent/**` branch.
+
+Per-push flow:
+
+1. Workflow checks out the PR head commit at full depth.
+2. Extracts the phase id from the PR title
+   (`agent: Phase <id> — …`).
+3. Runs `bash xops/ci/run_gauntlet.sh`, which executes every gate
+   in §4 in order and preserves each gate's stderr.
+4. Branches on the gauntlet exit code:
+   - **Green** → `gh pr review --approve` with a summary body,
+     then `gh pr merge --squash --auto --delete-branch`. Branch
+     protection on `main` gates the actual merge on this same
+     workflow being green, so there is no race.
+   - **Red** → `gh pr review --request-changes` with the failing
+     gate's stderr embedded in the review body, then
+     `gh pr comment` tagging `@copilot` to push a fix. The next
+     `synchronize` event re-runs this workflow. The step also
+     exits non-zero so the PR check shows red until the
+     implementer pushes a clean revision.
+5. Concurrency group is keyed on the PR number with
+   `cancel-in-progress: true`, so a fast second push supersedes
+   any in-flight review for the same PR.
+
+The `phase-pr-reviewer` chatmode + agent (in `.github/chatmodes/`
+and `.github/agents/`) define the human-readable contract this
+workflow implements. The workflow is the *only* sanctioned caller
+of `gh pr review`, `gh pr merge`, and `gh pr comment` from CI;
+no other workflow may approve or merge an agent PR.
+
+This loop deliberately keeps the implementer (Copilot Coding Agent
+on the upstream side) and the reviewer (this workflow on the CI
+side) as separate identities: the implementer never approves its
+own PR, and the reviewer never edits code. Fixes are always
+applied by the implementer in response to a `--request-changes`
+review, never by the reviewer pushing directly to the branch.

@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §8.15
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 8.15 Sixth-pass deep-revision additions (clock-source identity, sub-schema versioning, advisory-lock registry, operator-key lifecycle, audit-log row caps + integrity chain, K8s RBAC catalogue, shed-tier handover, DLQ-drop audit, scheduler noise-windows, verify-concurrency cap + offsite credential rotation + restore-verify forensic capture)

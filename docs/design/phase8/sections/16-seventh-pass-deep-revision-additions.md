@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §8.16
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 8.16 Seventh-pass deep-revision additions (registry-vs-config drift, ack-in-vacuum on spool flush, prune execution-order doctrine, ack metric cardinality, S3 multipart-upload-id TTL, Object-Lock boot probe, DLQ deny-prefix forward-compat, per-model VRAM footprint hints, maint-vs-sec topic crossover doctrine, fingerprint authentication strength, sec-plane backpressure symmetry, qa↔predict DLQ correlation, swarm.demo live-Redis profile, key-id derivation invariant, Phase-5 trainer prerequisite gate)

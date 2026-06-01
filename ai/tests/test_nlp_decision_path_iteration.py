@@ -9,7 +9,7 @@ This extends the existing §10.1 guard (normalize-only) to all NLP code:
 intent classifier post-processing, entity conflict resolution, dispatcher
 routing, template slot ordering, citation block construction.
 
-Anchor: Phase 10 §10.21.1 item 1 (docs/design/nlp/sections/21-integrity-and-second-order-safety.md).
+Anchor: Phase 10 §10.21.1 item 1 (docs/design/phase10/sections/21-integrity-and-second-order-safety.md).
 """
 from __future__ import annotations
 

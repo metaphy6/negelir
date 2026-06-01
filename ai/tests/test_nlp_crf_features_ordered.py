@@ -8,7 +8,7 @@ This AST guard rejects dict(...) literal (and {...} dict literals) in
 feature builder functions, requiring list[tuple[str, float]] or list[str]
 (insertion-ordered + explicit).
 
-Anchor: Phase 10 §10.21.1 item 5 (docs/design/nlp/sections/21-integrity-and-second-order-safety.md line 19).
+Anchor: Phase 10 §10.21.1 item 5 (docs/design/phase10/sections/21-integrity-and-second-order-safety.md line 19).
 """
 from __future__ import annotations
 

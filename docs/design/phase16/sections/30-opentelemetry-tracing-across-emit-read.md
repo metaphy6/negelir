@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §16.30
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 16.30 OpenTelemetry tracing across emit/read (NEW; ledger #31)

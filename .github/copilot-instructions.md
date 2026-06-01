@@ -19,8 +19,8 @@
    (ops console & maint agents),
    [`docs/design/phase9/README.md`](../docs/design/phase9/README.md)
    (Go REST API & identity),
-   [`docs/design/phase10/sections/`](../docs/design/nlp/sections/)
-   (NLP — uses `docs/design/nlp/sections/`),
+   [`docs/design/phase10/sections/`](../docs/design/phase10/sections/)
+   (NLP — uses `docs/design/phase10/sections/`),
    [`docs/design/phase16/README.md`](../docs/design/phase16/README.md)
    (emitter & feed contract, Pivot v3).
 4. [`docs/coding/ai/automation.md`](../docs/coding/ai/automation.md)
@@ -129,6 +129,15 @@ touched. This is `AGENTS.md` Rule 11 (Phase Persistence). It binds
 every chat mode unless the user explicitly asks for partial work
 ("just bullet 3", "only the test for X", "stop after the schema").
 
+**This rule applies equally to every backend model — Claude
+Sonnet/Opus, GPT-5 / 5-Codex, Gemini, and any future addition.**
+Empirically, GPT and Gemini sessions return partial work and ask
+"should I continue?" far more often than Claude ones do. That is
+a doctrine violation, not polite engineering. Treat the human's
+phase request as a single, indivisible task — the human granted
+permission once, by dispatching the work, and is not going to
+re-grant it bullet-by-bullet.
+
 Default-on behaviour:
 
 - **Treat the named phase / sub-phase / slice as one task.** Loop
@@ -149,8 +158,11 @@ Default-on behaviour:
 - **None of these are blockers:** "the phase is large", "this will
   take many edits", "shall I continue?", "let me know if you want
   me to proceed", "I have completed part X — should I continue
-  with Y?". If you catch yourself writing any of those phrases,
-  delete them and keep working.
+  with Y?", "I'll pause here for review", "returning control to
+  confirm direction", "the remaining bullets are similar; I can
+  do them next turn". If you catch yourself writing any of those
+  phrases — or any sentence that asks permission to continue work
+  the user already requested — delete it and keep working.
 - **Per-bullet bookkeeping still applies.** Every bullet you close
   still gets its own tracker row + version bump + checkbox flip
   (§5). You batch the *work*, not the bookkeeping.

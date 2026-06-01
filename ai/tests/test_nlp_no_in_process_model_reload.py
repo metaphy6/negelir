@@ -12,7 +12,7 @@ This test rejects:
 3. Any method names suggesting reload: `reload`, `hot_swap`, `refresh_model`,
    `update_model`, etc. in classes that hold ML models.
 
-Anchor: Phase 10 §10.21.2 item 2 (docs/design/nlp/sections/21-integrity-and-second-order-safety.md).
+Anchor: Phase 10 §10.21.2 item 2 (docs/design/phase10/sections/21-integrity-and-second-order-safety.md).
 """
 from __future__ import annotations
 

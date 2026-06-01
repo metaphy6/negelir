@@ -13,7 +13,7 @@ This module implements the comprehensive CI gates for the NLP pipeline:
 
 The golden corpus lives at ai/tests/fixtures/turkish_queries.yaml (≥250 entries).
 
-Anchor: Phase 10 §10.18 (docs/design/nlp/sections/00-baseline.md).
+Anchor: Phase 10 §10.18 (docs/design/phase10/sections/00-baseline.md).
 """
 from __future__ import annotations
 

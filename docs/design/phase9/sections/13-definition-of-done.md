@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §9.13
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 9.13 Definition of Done (binding — mirrors §8.9 density)

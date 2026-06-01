@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """roadmap_split — extract a long ROADMAP phase into a modular folder.
 
-Pattern lifted from Phase 10 (`docs/design/nlp/sections/` + thin ROADMAP
+Pattern lifted from Phase 10 (`docs/design/phase10/sections/` + thin ROADMAP
 stub). Given a phase number, this:
 
 1. Locates the `## ... Phase <N> — ...` header in
@@ -197,7 +197,7 @@ def _write_section_files(
             f"\n"
             f"> Extracted from `docs/planning/ROADMAP.md` §{phase}.{sub.sub}\n"
             f"> as part of the phase-split modularization (mirrors the Phase 10\n"
-            f"> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state\n"
+            f"> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state\n"
             f"> below is **binding**; the ROADMAP carries only the rollup.\n"
             f"\n"
             + "".join(sub.body_lines).rstrip() + "\n"
@@ -233,7 +233,7 @@ def _write_readme(
         f"> **Why this folder exists.** Phase {phase} ({title_after_dash}) grew\n"
         f"> past ROADMAP's review threshold and was carved out into one file\n"
         f"> per sub-section, mirroring the Phase 10 pattern at\n"
-        f"> [`../nlp/sections/`](../nlp/sections/). Content here is **binding**\n"
+        f"> [`../phase10/sections/`](../phase10/sections/). Content here is **binding**\n"
         f"> — the ROADMAP §{phase} stub is now a pointer that delegates to this\n"
         f"> folder.\n"
         f">\n"

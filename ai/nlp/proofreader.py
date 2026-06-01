@@ -27,7 +27,7 @@ Fail-safe (§10.9 bullet 4): Proofreader exception → emit template-only answer
 (NEVER block the user on proofreader bug); emit nlp.alert.v1{kind=nlp_proofreader_failed}.
 
 References:
-  - §10.9 in docs/design/nlp/sections/00-baseline.md (binding)
+  - §10.9 in docs/design/phase10/sections/00-baseline.md (binding)
   - AGENTS.md §2 (doctrine: no fabricated data, Turkish UX, single-source config)
   - CLAUDE.md (forbidden patterns: no blanket try/except returning None)
 """

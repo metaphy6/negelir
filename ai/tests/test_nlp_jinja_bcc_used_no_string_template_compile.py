@@ -11,7 +11,7 @@ This test verifies:
 2. No `Environment().from_string(...)` calls in `ai/nlp/render.py` or related
    rendering code paths.
 
-Anchor: Phase 10 §10.21.2 item 4 (docs/design/nlp/sections/21-integrity-and-second-order-safety.md).
+Anchor: Phase 10 §10.21.2 item 4 (docs/design/phase10/sections/21-integrity-and-second-order-safety.md).
 """
 from __future__ import annotations
 

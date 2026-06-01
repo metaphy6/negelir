@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §9.14
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 9.14 Proof tests (≥ 60 deterministic + 15 adversarial; mirrors §8.16 density)

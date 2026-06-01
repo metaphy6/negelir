@@ -1,0 +1,177 @@
+name: orchestrate-pr-review
+
+# Auto-review + auto-merge loop for agent PRs.
+#
+# Triggered when the Copilot Coding Agent (or any other implementer)
+# opens or pushes to a PR on an `agent/**` branch. Runs the
+# phase-pr-reviewer agent which:
+#   1. Verifies scope, doctrine, tests, checkboxes, tracker rows, and
+#      anti-stop compliance against the PR diff.
+#   2. Runs the §4 gauntlet (lint + test.ai + test + version.validate
+#      + git_guard + changed_files_audit) via xops/ci/run_gauntlet.sh.
+#   3. On clean: approves and enables auto-merge (squash, delete
+#      branch). Branch protection on `main` makes the actual merge
+#      gated on this same workflow being green.
+#   4. On findings: posts an inline review with `gh pr review
+#      --request-changes` and re-tags @copilot so the implementer
+#      pushes a fix; the next `synchronize` event re-triggers this
+#      workflow.
+#
+# AGENTS.md Rule 9 CI carve-out applies: this workflow runs only when
+# $GITHUB_ACTIONS == 'true' on an `agent/**` branch, and the merge is
+# `gh pr merge --squash --auto --delete-branch` (ff-only equivalent
+# enforced by branch protection). No force-push, no rebase of main,
+# no tag creation.
+#
+# See `.github/instructions/ci-pipeline.instructions.md` §4 for the
+# gauntlet definition and §10 for the PR review loop contract.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+
+concurrency:
+  group: orchestrate-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review-and-merge:
+    # Only react to PRs from `agent/**` branches. Human PRs are
+    # reviewed by humans.
+    if: |
+      startsWith(github.event.pull_request.head.ref, 'agent/') &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.MASTER_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.MASTER_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Configure git identity (read-only use)
+        run: |
+          git config user.name  "negelir-orchestrator[bot]"
+          git config user.email "negelir-orchestrator[bot]@users.noreply.github.com"
+
+      - name: Extract phase id from PR title
+        id: phase
+        run: |
+          set -euo pipefail
+          TITLE=$(gh pr view "$PR_NUMBER" --json title -q .title)
+          # PR titles look like: "agent: Phase 10.4 — ..."
+          PHASE_ID=$(echo "$TITLE" | sed -nE 's/^agent: Phase ([0-9]+(\.[0-9]+)?)\b.*/\1/p')
+          if [[ -z "$PHASE_ID" ]]; then
+            echo "::warning::could not parse phase id from PR title: $TITLE"
+            PHASE_ID="unknown"
+          fi
+          echo "phase_id=$PHASE_ID" >>"$GITHUB_OUTPUT"
+          echo "phase id: $PHASE_ID"
+
+      - name: Install xops requirements (for git_guard + version CLI)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          if [[ -f xops/requirements.txt ]]; then
+            python3 -m pip install -r xops/requirements.txt
+          fi
+          if [[ -f ai/requirements.txt ]]; then
+            python3 -m pip install -r ai/requirements.txt
+          fi
+
+      - name: Run §4 gauntlet
+        id: gauntlet
+        run: |
+          set +e
+          bash xops/ci/run_gauntlet.sh 2>gauntlet.stderr
+          echo "rc=$?" >>"$GITHUB_OUTPUT"
+          # Always surface stderr in the workflow log.
+          cat gauntlet.stderr >&2 || true
+
+      - name: Build review body
+        id: review_body
+        run: |
+          set -euo pipefail
+          PHASE_ID="${{ steps.phase.outputs.phase_id }}"
+          GAUNTLET_RC="${{ steps.gauntlet.outputs.rc }}"
+          {
+            echo "# Phase ${PHASE_ID} — automated PR review"
+            echo
+            echo "Reviewed by \`phase-pr-reviewer\` on commit \`${PR_HEAD_SHA}\`."
+            echo
+            if [[ "$GAUNTLET_RC" == "0" ]]; then
+              echo "## §4 gauntlet"
+              echo
+              echo "All gates green: \`lint\`, \`test.ai\`, \`test\`, \`version.validate\`, \`git_guard --check-commit HEAD\`, \`changed_files_audit\`."
+            else
+              echo "## §4 gauntlet — RED"
+              echo
+              echo "One or more gates failed. Full stderr below:"
+              echo
+              echo '```'
+              cat gauntlet.stderr || true
+              echo '```'
+              echo
+              echo "## Required fixes"
+              echo
+              echo "Address each red gate above. Push the fix to this branch; this workflow will re-review on the next push."
+              echo
+              echo "Per AGENTS.md Rule 11, do **not** stop after fixing one gate — drain every remaining \`- [ ]\` in the phase slice in the same push."
+            fi
+          } >/tmp/review.md
+          cat /tmp/review.md
+
+      - name: Request changes (gauntlet red)
+        if: steps.gauntlet.outputs.rc != '0'
+        run: |
+          set -euo pipefail
+          gh pr review "$PR_NUMBER" --request-changes --body-file /tmp/review.md
+          gh pr comment "$PR_NUMBER" \
+            --body "@copilot please address the §4 gauntlet failures above and push fixes to this branch. The PR review workflow will re-review automatically on the next push."
+          echo "review: requested changes (gauntlet red); waiting for next push" >&2
+
+      - name: Approve and enable auto-merge (gauntlet green)
+        if: steps.gauntlet.outputs.rc == '0'
+        run: |
+          set -euo pipefail
+          gh pr review "$PR_NUMBER" --approve --body-file /tmp/review.md
+          gh pr merge "$PR_NUMBER" \
+            --squash --auto --delete-branch \
+            || {
+              echo "::warning::auto-merge enablement failed; PR remains open for human merge"
+              exit 0
+            }
+          echo "review: approved + auto-merge enabled" >&2
+
+      - name: Fail the workflow if gauntlet was red
+        if: steps.gauntlet.outputs.rc != '0'
+        run: |
+          echo "::error::§4 gauntlet failed — PR cannot merge until fixes are pushed"
+          exit 1

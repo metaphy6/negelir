@@ -1,4 +1,4 @@
-# `docs/design/nlp/` — Phase 10 (Turkish-First NLP Layer) detail
+# `docs/design/phase10/` — Phase 10 (Turkish-First NLP Layer) detail
 
 > **Why this folder exists.** Phase 10 grew to ~8,500 lines across 34
 > sub-sections after thirteen design passes and could no longer be

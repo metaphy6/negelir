@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §8.14
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 8.14 Fifth-pass deep-revision additions (audit-log partitioning, per-file dump checksum manifest, `age` supply-chain pin, opsctl ACL + signed envelopes, DLQ recursion guard, ack trace propagation, schema-sentinel rps cap, trainer scale-target sole-writer, `pg_dump` nice + verify-PG version invariant, spool-flush dir lock + newest-first ordering)

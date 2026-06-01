@@ -3,7 +3,7 @@
 > **Why this folder exists.** Phase 16 (Emitter & Feed Contract (Production Pivot v3)) grew
 > past ROADMAP's review threshold and was carved out into one file
 > per sub-section, mirroring the Phase 10 pattern at
-> [`../nlp/sections/`](../nlp/sections/). Content here is **binding**
+> [`../phase10/sections/`](../phase10/sections/). Content here is **binding**
 > — the ROADMAP §16 stub is now a pointer that delegates to this
 > folder.
 >

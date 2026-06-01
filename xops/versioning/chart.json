@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 226,
+    "build": 229,
     "released": null
   },
   "components": {
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.41.2",
+      "version": "3.42.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-05-31T17:59:39+00:00"
+      "last_changed": "2026-06-01T08:00:27+00:00"
     },
     "docs": {
-      "version": "1.78.2",
+      "version": "1.79.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-31T20:38:12+00:00"
+      "last_changed": "2026-06-01T08:00:21+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -9232,6 +9232,33 @@
       "from": "1.78.1",
       "to": "1.78.2",
       "build": 226
+    },
+    {
+      "timestamp": "2026-06-01T08:00:13+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "rename design/nlp -> design/phase10; bulk path refresh across docs+code",
+      "from": "1.78.2",
+      "to": "1.79.0",
+      "build": 227
+    },
+    {
+      "timestamp": "2026-06-01T08:00:21+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Rule 11 + Section 6 phase-persistence binding on every backend model (GPT/Gemini parity)",
+      "from": "1.79.0",
+      "to": "1.79.1",
+      "build": 228
+    },
+    {
+      "timestamp": "2026-06-01T08:00:27+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "phase-pr-reviewer agent + orchestrate-pr-review.yml + run_gauntlet.sh for PR auto-review and auto-merge",
+      "from": "3.41.2",
+      "to": "3.42.0",
+      "build": 229
     }
   ]
 }

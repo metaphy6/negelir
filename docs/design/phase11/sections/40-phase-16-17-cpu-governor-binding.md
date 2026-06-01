@@ -2,7 +2,7 @@
 
 > Extracted from `docs/planning/ROADMAP.md` §11.40
 > as part of the phase-split modularization (mirrors the Phase 10
-> pattern at `docs/design/nlp/sections/`). The `[ ]`/`[x]` state
+> pattern at `docs/design/phase10/sections/`). The `[ ]`/`[x]` state
 > below is **binding**; the ROADMAP carries only the rollup.
 
 ### 11.40 Phase 16 / 17 CPU governor binding (closing the cross-phase gap)

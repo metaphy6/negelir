@@ -63,9 +63,51 @@ case "$AGENT_BACKEND" in
       echo
       echo "## Scope"
       echo
-      echo "Implement Phase **$PHASE_ID** per the slice below. Follow"
-      echo "AGENTS.md Rule 11 (phase persistence) — drain every \`[ ]\`"
-      echo "bullet in the named scope before handing back."
+      echo "Implement Phase **$PHASE_ID** in full. Drain **every** open"
+      echo "\`- [ ]\` bullet in the slice below — not just the first one,"
+      echo "not just the easy ones. This is \`AGENTS.md\` Rule 11"
+      echo "(Phase Persistence), and it binds every model equally"
+      echo "(Claude, GPT-5, GPT-5-Codex, Gemini, all of them)."
+      echo
+      echo "### Anti-stop contract"
+      echo
+      echo "The following phrases are **forbidden** — if you write any"
+      echo "of them, you have failed the task:"
+      echo
+      echo "- \"I've completed the first part — should I continue?\""
+      echo "- \"This phase is large; let me know if you want me to proceed.\""
+      echo "- \"I'll pause for review.\""
+      echo "- \"The remaining bullets are similar; I can do them next turn.\""
+      echo "- \"Returning control to confirm direction.\""
+      echo "- Any framing that asks permission to continue work the user"
+      echo "  already requested. The user said yes by filing this issue."
+      echo
+      echo "**Real blockers** (the only legitimate reasons to stop):"
+      echo "cross-phase forbidden-edit, doctrine conflict with"
+      echo "\`AGENTS.md\` §2, a genuinely stuck failing test after ≥3"
+      echo "honest attempts, a DoD item that requires a human decision"
+      echo "(operator key, production credential), or rate-limit /"
+      echo "quota exhaustion. Anything else — \"large\", \"many edits\","
+      echo "\"context tight\", \"shall I continue?\" — is **not** a blocker."
+      echo
+      echo "### Per-bullet bookkeeping (mandatory, per \`AGENTS.md\` §3.4 + §6.1)"
+      echo
+      echo "For **each** \`- [ ]\` you close, in the same commit:"
+      echo "1. Edit the code + add/update tests (Rule 10)."
+      echo "2. Flip the \`[ ]\` to \`[x]\` in \`docs/planning/ROADMAP.md\` and"
+      echo "   the matching \`docs/design/phase<N>/sections/*.md\`."
+      echo "3. Run \`make track.add PHASE=$PHASE_ID STATUS=in-progress NOTE=\"...\"\`."
+      echo "4. Run \`make version.bump COMPONENT=<key> LEVEL=<patch|minor|major> NOTE=\"...\"\`."
+      echo
+      echo "The PR will be rejected by \`xops/ci/git_guard.py\` if any"
+      echo "code commit lacks the paired tracker row + version bump."
+      echo
+      echo "### Exit criteria"
+      echo
+      echo "Stop only when the slice has **zero** \`- [ ]\` remaining,"
+      echo "or one of the real blockers above fired. Your final PR"
+      echo "description must list every bullet you closed and any"
+      echo "still-open bullet with its explicit doctrine reason."
       echo
       echo "## Slice"
       echo

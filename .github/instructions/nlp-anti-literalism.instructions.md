@@ -1,12 +1,12 @@
 ---
-description: Anti-literalism contract for Phase 10 NLP design docs (docs/design/nlp/**) — applies whenever implementing or testing NLP code that traces back to a §10.x spec.
-applyTo: 'ai/swarm/agents/nlp/**,ai/nlp/**,ai/swarm/source_watcher/**,ai/tests/**nlp**,ai/tests/**normalize**,ai/tests/**intent**,ai/tests/**entity**,ai/tests/**humanizer**,ai/tests/**proofreader**,docs/design/nlp/**'
+description: Anti-literalism contract for Phase 10 NLP design docs (docs/design/phase10/**) — applies whenever implementing or testing NLP code that traces back to a §10.x spec.
+applyTo: 'ai/swarm/agents/nlp/**,ai/nlp/**,ai/swarm/source_watcher/**,ai/tests/**nlp**,ai/tests/**normalize**,ai/tests/**intent**,ai/tests/**entity**,ai/tests/**humanizer**,ai/tests/**proofreader**,docs/design/phase10/**'
 ---
 
 # Phase 10 NLP — Anti-literalism contract
 
 Doctrine lives in [`AGENTS.md`](../../AGENTS.md). The Phase 10 binding
-specs live in [`docs/design/nlp/sections/`](../../docs/design/nlp/sections/)
+specs live in [`docs/design/phase10/sections/`](../../docs/design/phase10/sections/)
 across 15 design passes (§10.0–§10.34, ~8,500 lines). This file
 only adds the rules that prevent **literalist** implementations of
 those specs.
@@ -130,7 +130,7 @@ or contradict another section:
 - ✅ Stop coding. Open a tracker note with `--action note` and
   `STATUS=in-progress`, citing the section and the conflict.
 - ✅ Propose an additive addendum (e.g. §10.35) per the
-  Phase 10 additive-only doctrine (`docs/design/nlp/README.md`
+  Phase 10 additive-only doctrine (`docs/design/phase10/README.md`
   editing rules). Never silently re-spec a prior pass.
 - ❌ Do not patch the principle by hand-editing the example list
   in an existing §10.x file. The spec history is part of the

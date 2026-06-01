@@ -789,7 +789,7 @@ authority for that item.
       land in the same commit as this file (per AGENTS.md §3 + §6.1).
 - [ ] ROADMAP §10 stub table extended with the 15th-pass row pointing
       here.
-- [ ] `docs/design/nlp/README.md` table + cumulative surface block
+- [ ] `docs/design/phase10/README.md` table + cumulative surface block
       extended with the 15th-pass row.
 - [ ] §10.20 DoD aggregator gains item 32 referencing §10.34.DoD.
 

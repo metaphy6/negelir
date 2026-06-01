@@ -2,7 +2,7 @@
 
 > **Provenance.** Authored on the Phase 10 split, after the §10.0–§10.32
 > contract was carved out of `docs/planning/ROADMAP.md` into
-> `docs/design/nlp/sections/`. This file is the **14th** design pass and
+> `docs/design/phase10/sections/`. This file is the **14th** design pass and
 > is binding for Phase 10 DoD (added as §10.20 DoD item 31 below).
 >
 > **Why a 14th pass after thirteen?** The prior thirteen passes built a

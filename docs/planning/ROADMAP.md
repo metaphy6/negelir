@@ -1202,13 +1202,13 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 **Goal:** Turn messy Turkish user input into structured intents + entities, dispatch to predictors / data agents, and emit Turkish-fluent, **proofread**, **calibration-aware**, **citation-bearing**, **PII-clean** answers — with deterministic templates as the floor and a tightly-fenced ≤ 1 B humanizer LLM as opt-in polish (never as a decision-maker).
 **Depends on:** Phase 5, Phase 6, Phase 7, Phase 9, Phase 13a (full dependency map in the per-section files).
 **Anchor doc:** [`design/TURKISH_NLP.md`](../design/TURKISH_NLP.md) (architectural narrative).
-**Detail folder:** [`design/nlp/`](../design/nlp/README.md) — **binding** per-addendum checkboxes live there.
+**Detail folder:** [`design/phase10/`](../design/phase10/README.md) — **binding** per-addendum checkboxes live there.
 
 > **Why this is a stub.** Phase 10 grew to ~8,500 lines across 34
 > sub-sections (§10.0–§10.34) over fifteen design passes — the latest
 > (§10.34) covering input correctness + resilience + integrity. To
 > keep the ROADMAP navigable, the binding contract was carved out into
-> [`docs/design/nlp/sections/`](../design/nlp/sections/). Every `[ ]`
+> [`docs/design/phase10/sections/`](../design/phase10/sections/). Every `[ ]`
 > checkbox state lives in those files; this stub carries only the
 > phase-rollup checkbox (last bullet below).
 
@@ -1216,28 +1216,28 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 
 | Pass | File | Theme |
 |---|---|---|
-| 1 | [`00-baseline.md`](../design/nlp/sections/00-baseline.md) | §10.0–§10.20 surface contract: doctrine, normalize, lexicon, typo, intent, NER, dispatch, templates, humanizer, proofreader, degradation, schemas, perf, idempotency, observability, adversarial, calibration, multi-locale, eval, cfg knobs, DoD |
-| 2 | [`21-integrity-and-second-order-safety.md`](../design/nlp/sections/21-integrity-and-second-order-safety.md) | §10.21 hardening + integrity floor (mirrors §9.17 pattern) |
-| 3 | [`22-turkish-input-robustness.md`](../design/nlp/sections/22-turkish-input-robustness.md) | §10.22 messy-Turkish floor |
-| 4 | [`23-operability-rollout-serving.md`](../design/nlp/sections/23-operability-rollout-serving.md) | §10.23 production-serving floor |
-| 5 | [`24-tr-input-completeness.md`](../design/nlp/sections/24-tr-input-completeness.md) | §10.24 wrong-Turkish tolerance, exhaustive |
-| 6 | [`25-lifecycle-conversation-time-travel.md`](../design/nlp/sections/25-lifecycle-conversation-time-travel.md) | §10.25 lifecycle, conversation, time-travel |
-| 7 | [`26-morphology-modality-counterfactual.md`](../design/nlp/sections/26-morphology-modality-counterfactual.md) | §10.26 morphology, modality, counterfactual |
-| 8 | [`27-match-lifecycle-abuse-regulatory-operator.md`](../design/nlp/sections/27-match-lifecycle-abuse-regulatory-operator.md) | §10.27 match-lifecycle, abuse, regulatory, operator tooling |
-| 9 | [`28-authentic-turkish-floor.md`](../design/nlp/sections/28-authentic-turkish-floor.md) | §10.28 authentic-Turkish orthographic + structural floor |
-| 10 | [`29-deep-morph-telegraphic-silent-failure.md`](../design/nlp/sections/29-deep-morph-telegraphic-silent-failure.md) | §10.29 deep-morphology, telegraphic, silent-failure |
-| 11 | [`30-conversational-completeness-intent-enum-classifier-bias.md`](../design/nlp/sections/30-conversational-completeness-intent-enum-classifier-bias.md) | §10.30 conversational completeness, intent-enum closure, classifier bias |
-| 12 | [`31-pragmatics-semantic-frame-final-mile.md`](../design/nlp/sections/31-pragmatics-semantic-frame-final-mile.md) | §10.31 pragmatics, semantic-frame integrity, final-mile reliability |
-| 13 | [`32-discourse-pragmatic-dialectal-operational-resilience.md`](../design/nlp/sections/32-discourse-pragmatic-dialectal-operational-resilience.md) | §10.32 discourse-pragmatic, dialectal, operational-resilience |
-| **14** | [`33-input-flawlessness-and-proof-tests.md`](../design/nlp/sections/33-input-flawlessness-and-proof-tests.md) | §10.33 — Turkish input flawlessness: wrong-assumption sweep, missing proof tests, generic-and-broken-Turkish floor |
-| **15** | [`34-input-correctness-resilience-and-integrity.md`](../design/nlp/sections/34-input-correctness-resilience-and-integrity.md) | **§10.34 — Input correctness + resilience + integrity: generic-broken-Turkish shapes (predictive-text overshoot, OCR/PDF paste, mid-word URL, mega-input, suffixed-emoji, comma-as-apostrophe, random-case, ambiguous date, client TZ, systematic-diacritic-loss); normalize-chain perf budget + DFA fast-path + zero-copy guarantee; in-flight per-stage timeout matrix (no 5xx); inbound checksum chain (gateway↔NLP integrity pair)** |
+| 1 | [`00-baseline.md`](../design/phase10/sections/00-baseline.md) | §10.0–§10.20 surface contract: doctrine, normalize, lexicon, typo, intent, NER, dispatch, templates, humanizer, proofreader, degradation, schemas, perf, idempotency, observability, adversarial, calibration, multi-locale, eval, cfg knobs, DoD |
+| 2 | [`21-integrity-and-second-order-safety.md`](../design/phase10/sections/21-integrity-and-second-order-safety.md) | §10.21 hardening + integrity floor (mirrors §9.17 pattern) |
+| 3 | [`22-turkish-input-robustness.md`](../design/phase10/sections/22-turkish-input-robustness.md) | §10.22 messy-Turkish floor |
+| 4 | [`23-operability-rollout-serving.md`](../design/phase10/sections/23-operability-rollout-serving.md) | §10.23 production-serving floor |
+| 5 | [`24-tr-input-completeness.md`](../design/phase10/sections/24-tr-input-completeness.md) | §10.24 wrong-Turkish tolerance, exhaustive |
+| 6 | [`25-lifecycle-conversation-time-travel.md`](../design/phase10/sections/25-lifecycle-conversation-time-travel.md) | §10.25 lifecycle, conversation, time-travel |
+| 7 | [`26-morphology-modality-counterfactual.md`](../design/phase10/sections/26-morphology-modality-counterfactual.md) | §10.26 morphology, modality, counterfactual |
+| 8 | [`27-match-lifecycle-abuse-regulatory-operator.md`](../design/phase10/sections/27-match-lifecycle-abuse-regulatory-operator.md) | §10.27 match-lifecycle, abuse, regulatory, operator tooling |
+| 9 | [`28-authentic-turkish-floor.md`](../design/phase10/sections/28-authentic-turkish-floor.md) | §10.28 authentic-Turkish orthographic + structural floor |
+| 10 | [`29-deep-morph-telegraphic-silent-failure.md`](../design/phase10/sections/29-deep-morph-telegraphic-silent-failure.md) | §10.29 deep-morphology, telegraphic, silent-failure |
+| 11 | [`30-conversational-completeness-intent-enum-classifier-bias.md`](../design/phase10/sections/30-conversational-completeness-intent-enum-classifier-bias.md) | §10.30 conversational completeness, intent-enum closure, classifier bias |
+| 12 | [`31-pragmatics-semantic-frame-final-mile.md`](../design/phase10/sections/31-pragmatics-semantic-frame-final-mile.md) | §10.31 pragmatics, semantic-frame integrity, final-mile reliability |
+| 13 | [`32-discourse-pragmatic-dialectal-operational-resilience.md`](../design/phase10/sections/32-discourse-pragmatic-dialectal-operational-resilience.md) | §10.32 discourse-pragmatic, dialectal, operational-resilience |
+| **14** | [`33-input-flawlessness-and-proof-tests.md`](../design/phase10/sections/33-input-flawlessness-and-proof-tests.md) | §10.33 — Turkish input flawlessness: wrong-assumption sweep, missing proof tests, generic-and-broken-Turkish floor |
+| **15** | [`34-input-correctness-resilience-and-integrity.md`](../design/phase10/sections/34-input-correctness-resilience-and-integrity.md) | **§10.34 — Input correctness + resilience + integrity: generic-broken-Turkish shapes (predictive-text overshoot, OCR/PDF paste, mid-word URL, mega-input, suffixed-emoji, comma-as-apostrophe, random-case, ambiguous date, client TZ, systematic-diacritic-loss); normalize-chain perf budget + DFA fast-path + zero-copy guarantee; in-flight per-stage timeout matrix (no 5xx); inbound checksum chain (gateway↔NLP integrity pair)** |
 
 ### 10.DoD Phase rollup
 
 - [ ] Every binding `[ ]` in §10.0–§10.34 (across all 15 per-section
-      files in [`docs/design/nlp/sections/`](../design/nlp/sections/))
+      files in [`docs/design/phase10/sections/`](../design/phase10/sections/))
       is `[x]`. The §10.20 DoD aggregator (now in
-      [`00-baseline.md`](../design/nlp/sections/00-baseline.md)) plus
+      [`00-baseline.md`](../design/phase10/sections/00-baseline.md)) plus
       every per-addendum DoD addition (§10.21..§10.34) are green.
       Tracker row + `make version.bump COMPONENT=docs` recorded for
       every meaningful per-section edit (per AGENTS.md §3 + §6.1).
