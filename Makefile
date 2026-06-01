@@ -724,6 +724,36 @@ orchestrate.resume-list: ## List CI resume cursors (READY=1 for cursors past not
 orchestrate.resume-drop: ## Drop a CI resume cursor — RUN_ID=<id>
 	@$(XOPS)/orchestrate.py resume-drop
 
+# ── Full-roadmap loop ─────────────────────────────────────────
+#  Serial end-to-end CI loop: implement every open phase, review
+#  its PR, fix if needed, merge, then continue with the next phase.
+#  See .github/prompts/orchestrate.fullroadmap.prompt.md and
+#  .github/workflows/orchestrate-full-roadmap.yml.
+#
+#  Usage (local — dispatches CI, does not implement locally):
+#    make orchestrate.fullroadmap
+#    make orchestrate.fullroadmap MODEL=gpt-5 EXCLUDE=9.17
+#
+#  Status / abort:
+#    make orchestrate.fullroadmap.status
+#    make orchestrate.fullroadmap.drop
+
+.PHONY: orchestrate.fullroadmap
+orchestrate.fullroadmap: ## Dispatch the full-project CI loop (EXCLUDE=… MODEL=… MAX_PHASES=…)
+	@gh workflow run orchestrate-full-roadmap.yml --ref main \
+	    $(if $(MODEL),-f model="$(MODEL)",) \
+	    $(if $(EXCLUDE),-f exclude="$(EXCLUDE)",) \
+	    $(if $(MAX_PHASES),-f max_phases="$(MAX_PHASES)",)
+	@echo "✔ orchestrate-full-roadmap.yml dispatched. Watch via: gh run list --workflow orchestrate-full-roadmap.yml"
+
+.PHONY: orchestrate.fullroadmap.status
+orchestrate.fullroadmap.status: ## Show progress of the active full-roadmap session
+	@$(XOPS)/orchestrate.py full-roadmap-status
+
+.PHONY: orchestrate.fullroadmap.drop
+orchestrate.fullroadmap.drop: ## Abort the active full-roadmap session (prevents next phase dispatch)
+	@$(XOPS)/orchestrate.py full-roadmap-drop
+
 .PHONY: roadmap.split
 roadmap.split: ## Extract a long ROADMAP phase into docs/design/phase<N>/ — PHASE=<id> [FORCE=1] [DRY=1]
 	@PHASE=$(PHASE) FORCE=$(FORCE) DRY=$(DRY) python3 $(XOPS)/roadmap_split.py extract \

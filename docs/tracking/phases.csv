@@ -985,3 +985,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-06-01T07:59:58+00:00,10,,in-progress,note,renamed docs/design/nlp -> docs/design/phase10; 208 files updated to new path,
 2026-06-01T08:00:04+00:00,0,,in-progress,note,Rule 11 + copilot-instructions Section 6 strengthened for GPT/Gemini phase-persistence; implementer chatmode now drains whole phase,
 2026-06-01T08:00:08+00:00,0,,in-progress,note,added phase-pr-reviewer agent + orchestrate-pr-review.yml workflow + run_gauntlet.sh for PR self-review and auto-merge,
+2026-06-01T08:19:29+00:00,0,,in-progress,note,added full-roadmap CI master mode: orchestrate-full-roadmap.yml + continue-full-roadmap job + ci_full_roadmap.py cursor + fullroadmap.prompt.md + Makefile targets,

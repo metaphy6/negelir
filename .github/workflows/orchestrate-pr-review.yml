@@ -28,7 +28,7 @@ name: orchestrate-pr-review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
     branches: [main]
 
 permissions:
@@ -45,8 +45,10 @@ concurrency:
 jobs:
   review-and-merge:
     # Only react to PRs from `agent/**` branches. Human PRs are
-    # reviewed by humans.
+    # reviewed by humans. Also skips the `closed` event — that is
+    # handled by the `continue-full-roadmap` job below.
     if: |
+      github.event.action != 'closed' &&
       startsWith(github.event.pull_request.head.ref, 'agent/') &&
       github.event.pull_request.draft == false
     runs-on: ubuntu-latest
@@ -175,3 +177,93 @@ jobs:
         run: |
           echo "::error::§4 gauntlet failed — PR cannot merge until fixes are pushed"
           exit 1
+
+  # ── Full-roadmap chain: fire the next phase when a PR merges ──────────────
+  continue-full-roadmap:
+    # Runs ONLY on the `closed` event and only when the PR was actually merged
+    # (not when it was closed without merge). Scoped to agent/** branches so
+    # human PRs never trigger this job.
+    #
+    # The job reads the active full-roadmap cursor (if any), marks the merged
+    # phase as complete, and re-dispatches orchestrate-full-roadmap.yml for
+    # the next phase. If the cursor is empty the loop is done.
+    if: |
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'agent/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.MASTER_TOKEN }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.MASTER_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "negelir-orchestrator[bot]"
+          git config user.email "negelir-orchestrator[bot]@users.noreply.github.com"
+
+      - name: Extract phase id from merged PR
+        id: phase
+        run: |
+          set -euo pipefail
+          TITLE="${{ github.event.pull_request.title }}"
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          # Try PR title first (agent: Phase 10.4 — ...)
+          PHASE_ID=$(echo "$TITLE" | sed -nE 's/^agent: Phase ([0-9]+(\.[0-9]+)?)\b.*/\1/p')
+          # Fall back to branch name (agent/phase-10.4-...)
+          if [[ -z "$PHASE_ID" ]]; then
+            PHASE_ID=$(echo "$BRANCH" | sed -nE 's|^agent/phase-([0-9]+(\.[0-9]+)?)-.*|\1|p')
+          fi
+          if [[ -z "$PHASE_ID" ]]; then
+            echo "::warning::could not extract phase id from title '$TITLE' or branch '$BRANCH'"
+          fi
+          echo "phase_id=$PHASE_ID" >>"$GITHUB_OUTPUT"
+          echo "merged phase: $PHASE_ID (branch: $BRANCH)"
+
+      - name: Check for active full-roadmap cursor
+        id: cursor
+        run: |
+          set -euo pipefail
+          CURSOR_EXISTS=false
+          SESSION_ID=""
+          if [[ -d .orchestrator/full-roadmap ]] && ls .orchestrator/full-roadmap/*.json >/dev/null 2>&1; then
+            CURSOR_EXISTS=true
+            SESSION_ID=$(python3 -m xops.orchestrator.cli full-roadmap-load --json \
+                | python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])')
+          fi
+          echo "cursor_exists=$CURSOR_EXISTS" >>"$GITHUB_OUTPUT"
+          echo "session_id=$SESSION_ID"       >>"$GITHUB_OUTPUT"
+          echo "cursor_exists=$CURSOR_EXISTS session_id=$SESSION_ID"
+
+      - name: Skip (no active full-roadmap session)
+        if: steps.cursor.outputs.cursor_exists == 'false'
+        run: |
+          echo "No active full-roadmap cursor — this is a standalone PR merge. Nothing to chain."
+
+      - name: Dispatch next phase via orchestrate-full-roadmap.yml
+        if: |
+          steps.cursor.outputs.cursor_exists == 'true' &&
+          steps.phase.outputs.phase_id != ''
+        run: |
+          set -euo pipefail
+          PHASE_ID="${{ steps.phase.outputs.phase_id }}"
+          SESSION_ID="${{ steps.cursor.outputs.session_id }}"
+          echo "Chaining full-roadmap: phase $PHASE_ID completed, dispatching next phase."
+          gh workflow run orchestrate-full-roadmap.yml \
+            --ref main \
+            -f session_id="$SESSION_ID" \
+            -f completed_phase="$PHASE_ID" \
+            -f model="${{ github.event.inputs.model || 'claude-sonnet-4-5' }}"
+          echo "::notice::Full-roadmap chain dispatched for session $SESSION_ID (completed: $PHASE_ID)"

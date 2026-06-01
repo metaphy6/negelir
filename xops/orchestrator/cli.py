@@ -12,6 +12,13 @@ Subcommands:
     advance <PHASE>       Update phase status / record a review pass.
     next                  Print the next un-claimed leaf id matching the filter.
 
+    full-roadmap-save     Persist a full-project loop cursor (orchestrate-full-roadmap.yml).
+    full-roadmap-load     Print the active full-roadmap cursor as JSON.
+    full-roadmap-advance  Record that a phase was dispatched (stamps last_phase_dispatched).
+    full-roadmap-complete Mark a phase as merged; pops it from phases_remaining.
+    full-roadmap-drop     Delete the cursor (project done or aborted).
+    full-roadmap-status   Human-readable progress summary.
+
 The CLI is *only* a coordinator. It never invokes git, runSubagent, or any
 mutation outside `.orchestrator/`. See AGENTS.md Rule 9.
 """
@@ -24,7 +31,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from . import ci_resume, locks, state
+from . import ci_resume, ci_full_roadmap, locks, state
 from .roadmap import RoadmapTree, parse_roadmap
 from .selector import parse_filter, select_phase_ids
 
@@ -338,6 +345,134 @@ def cmd_resume_drop(tree: RoadmapTree, args: argparse.Namespace) -> int:
     return 0
 
 
+# ── Full-roadmap cursor commands ──────────────────────────────
+
+def cmd_full_roadmap_save(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Create or overwrite the full-roadmap cursor."""
+    phases = [p.strip() for p in args.phases_remaining.split(",") if p.strip()]
+    if not phases:
+        _err("--phases-remaining must be a non-empty comma-separated list", 1)
+    cursor = ci_full_roadmap.new_cursor(
+        phases,
+        exclude=args.exclude or "",
+        model=args.model or "claude-sonnet-4-5",
+        max_phases=args.max_phases,
+        triggered_by_run_id=args.triggered_by_run_id or "",
+        session_id=args.session_id or None,
+    )
+    path = ci_full_roadmap.save_cursor(cursor)
+    _emit(
+        {
+            "session_id": cursor.session_id,
+            "cursor_path": str(path.relative_to(ci_full_roadmap.REPO_ROOT)),
+            "phases_remaining": len(cursor.phases_remaining),
+            "first_phase": cursor.phases_remaining[0] if cursor.phases_remaining else "",
+        },
+        as_json=args.json,
+    )
+    return 0
+
+
+def cmd_full_roadmap_load(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Print the active full-roadmap cursor as JSON."""
+    cursor = ci_full_roadmap.find_active_cursor()
+    if cursor is None:
+        _err("no active full-roadmap cursor found", 4)
+    if args.json:
+        print(json.dumps(cursor.to_dict(), indent=2, sort_keys=True))
+    else:
+        d = cursor.to_dict()
+        for k, v in d.items():
+            print(f"{k}: {v}")
+    return 0
+
+
+def cmd_full_roadmap_advance(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Stamp last_phase_dispatched on the active cursor."""
+    cursor = ci_full_roadmap.find_active_cursor()
+    if cursor is None:
+        _err("no active full-roadmap cursor found", 4)
+    ci_full_roadmap.advance_cursor(cursor, args.phase)
+    path = ci_full_roadmap.cursor_path(cursor.session_id)
+    ci_full_roadmap.save_cursor(cursor)
+    _emit(
+        {
+            "session_id": cursor.session_id,
+            "last_phase_dispatched": cursor.last_phase_dispatched,
+            "phases_remaining": len(cursor.phases_remaining),
+        },
+        as_json=args.json,
+    )
+    return 0
+
+
+def cmd_full_roadmap_complete(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Mark a phase done. Pops from phases_remaining; prints the next phase."""
+    cursor = ci_full_roadmap.find_active_cursor()
+    if cursor is None:
+        _err("no active full-roadmap cursor found", 4)
+    next_phase = ci_full_roadmap.complete_phase(cursor, args.phase)
+    ci_full_roadmap.save_cursor(cursor)
+    _emit(
+        {
+            "session_id": cursor.session_id,
+            "completed_phase": args.phase,
+            "next_phase": next_phase or "",
+            "phases_remaining": len(cursor.phases_remaining),
+            "phases_completed": len(cursor.phases_completed),
+        },
+        as_json=args.json,
+    )
+    return 0
+
+
+def cmd_full_roadmap_drop(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Delete the active full-roadmap cursor."""
+    cursor = ci_full_roadmap.find_active_cursor()
+    if cursor is None:
+        print("orchestrator: no active full-roadmap cursor — nothing to drop",
+              file=sys.stderr)
+        return 0
+    path = ci_full_roadmap.cursor_path(cursor.session_id)
+    ci_full_roadmap.drop_cursor(path)
+    _emit(
+        {"session_id": cursor.session_id, "dropped": str(path)},
+        as_json=args.json,
+    )
+    return 0
+
+
+def cmd_full_roadmap_status(tree: RoadmapTree, args: argparse.Namespace) -> int:
+    """Print a human-readable progress summary of the active full-roadmap run."""
+    cursor = ci_full_roadmap.find_active_cursor()
+    if cursor is None:
+        print("No active full-roadmap session.")
+        return 0
+    total = len(cursor.phases_completed) + len(cursor.phases_remaining)
+    done = len(cursor.phases_completed)
+    remaining = len(cursor.phases_remaining)
+    pct = int(100 * done / total) if total else 0
+    if args.json:
+        print(json.dumps({
+            "session_id": cursor.session_id,
+            "model": cursor.model,
+            "phases_completed": cursor.phases_completed,
+            "phases_remaining": cursor.phases_remaining,
+            "last_phase_dispatched": cursor.last_phase_dispatched,
+            "created_at": cursor.created_at,
+            "progress_pct": pct,
+        }, indent=2, sort_keys=True))
+    else:
+        print(f"session:   {cursor.session_id}")
+        print(f"model:     {cursor.model}")
+        print(f"progress:  {done}/{total} phases ({pct}%)")
+        print(f"completed: {', '.join(cursor.phases_completed) or '—'}")
+        print(f"remaining: {', '.join(cursor.phases_remaining) or '—'}")
+        print(f"in-flight: {cursor.last_phase_dispatched or '—'}")
+        print(f"started:   {cursor.created_at}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="orchestrator", description=__doc__)
     p.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -420,6 +555,35 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="delete a resume cursor (called by scheduler after re-dispatch)")
     s.add_argument("--run-id", required=True)
 
+    # ── Full-roadmap cursor commands ────────────────────────────────────────
+    s = sub.add_parser("full-roadmap-save", parents=[json_parent],
+                       help="create/overwrite the full-project loop cursor")
+    s.add_argument("--phases-remaining", required=True,
+                   help="ordered comma-sep phase ids to implement")
+    s.add_argument("--exclude", default="")
+    s.add_argument("--model", default="claude-sonnet-4-5")
+    s.add_argument("--max-phases", type=int, default=100)
+    s.add_argument("--triggered-by-run-id", default="")
+    s.add_argument("--session-id", default="",
+                   help="reuse an existing session id (for chained workflow calls)")
+
+    sub.add_parser("full-roadmap-load", parents=[json_parent],
+                   help="print the active full-roadmap cursor")
+
+    s = sub.add_parser("full-roadmap-advance", parents=[json_parent],
+                       help="stamp last_phase_dispatched on the active cursor")
+    s.add_argument("phase", help="phase id that was just dispatched")
+
+    s = sub.add_parser("full-roadmap-complete", parents=[json_parent],
+                       help="mark a phase done; prints the next phase id")
+    s.add_argument("phase", help="phase id whose PR just merged")
+
+    sub.add_parser("full-roadmap-drop", parents=[json_parent],
+                   help="delete the full-roadmap cursor (project done or aborted)")
+
+    sub.add_parser("full-roadmap-status", parents=[json_parent],
+                   help="human-readable full-roadmap progress summary")
+
     return p
 
 
@@ -439,6 +603,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "resume-save": cmd_resume_save,
         "resume-list": cmd_resume_list,
         "resume-drop": cmd_resume_drop,
+        "full-roadmap-save": cmd_full_roadmap_save,
+        "full-roadmap-load": cmd_full_roadmap_load,
+        "full-roadmap-advance": cmd_full_roadmap_advance,
+        "full-roadmap-complete": cmd_full_roadmap_complete,
+        "full-roadmap-drop": cmd_full_roadmap_drop,
+        "full-roadmap-status": cmd_full_roadmap_status,
     }
     if args.cmd == "slice":
         return cmd_slice(tree, args, source)

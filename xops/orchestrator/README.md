@@ -47,6 +47,12 @@ make orchestrate.state PHASE=16.1                        # multi-pass log
 make orchestrate.advance PHASE=16.1 ROLE=reviewer \
     OUTCOME=ok STATUS=verifying NOTES="lgtm"             # record a pass
 make orchestrate.unlock PHASE=16.1                       # operator: clear stale lock
+
+# Full-project loop (implement everything, phase by phase, via CI)
+make orchestrate.fullroadmap                             # dispatch CI loop for all open phases
+make orchestrate.fullroadmap MODEL=gpt-5 EXCLUDE=9.17   # with overrides
+make orchestrate.fullroadmap.status                      # show active session progress
+make orchestrate.fullroadmap.drop                        # abort the active session
 ```
 
 Pass `JSON=1` on any of the above for machine-readable output.
@@ -124,3 +130,52 @@ The package uses module-level `LOCK_DIR` / `STATE_DIR` constants
 that point at `<repo>/.orchestrator/`. Tests `monkeypatch` these
 to a `tmp_path` so unit tests never touch the real on-disk state.
 See [`tests/test_orchestrator.py`](tests/test_orchestrator.py).
+
+## Full-project loop (`ci_full_roadmap.py`)
+
+`ci_full_roadmap.py` manages a single **session cursor** that drives
+the autonomous end-to-end CI loop:
+
+```
+[make orchestrate.fullroadmap]
+    │ creates cursor, dispatches phase[0]
+    ▼
+[Copilot Coding Agent] implements phase, opens PR on agent/**
+    │ pull_request opened
+    ▼
+[orchestrate-pr-review.yml] reviews + auto-merges PR
+    │ pull_request closed+merged
+    ▼
+[continue-full-roadmap job] pops phase from cursor,
+    dispatches orchestrate-full-roadmap.yml for phase[1]
+    │ …
+    ▼ (repeat until cursor empty)
+[orchestrate-full-roadmap.yml] drops cursor, prints done
+```
+
+The cursor file lives at `.orchestrator/full-roadmap/<session_id>.json`
+on the default branch. CLI commands:
+
+```python
+# Create
+python3 -m xops.orchestrator.cli full-roadmap-save \
+    --phases-remaining "8,9,10" --model claude-sonnet-4-5
+
+# Read
+python3 -m xops.orchestrator.cli full-roadmap-load --json
+
+# Stamp dispatch (before dispatching phase)
+python3 -m xops.orchestrator.cli full-roadmap-advance <phase_id>
+
+# Record merge (after PR merges)
+python3 -m xops.orchestrator.cli full-roadmap-complete <phase_id>
+
+# Human-readable progress
+python3 -m xops.orchestrator.cli full-roadmap-status
+
+# Abort
+python3 -m xops.orchestrator.cli full-roadmap-drop
+```
+
+At most one cursor is active at a time. `find_active_cursor()` scans
+`.orchestrator/full-roadmap/*.json` and returns the first match.

@@ -1,0 +1,260 @@
+name: orchestrate-full-roadmap
+
+# Full-project implementation loop.
+#
+# This workflow implements every open phase in ROADMAP.md, one phase
+# at a time, entirely without human intervention:
+#
+#   1. Builds an ordered list of all open (unchecked) phases from
+#      ROADMAP.md and persists it as a cursor at
+#      `.orchestrator/full-roadmap/<session_id>.json` on main.
+#   2. Dispatches the implementer (Copilot Coding Agent via
+#      xops/ci/run_phase_agent.sh) for the FIRST remaining phase.
+#   3. Exits. The implementer runs asynchronously, opens a PR, and
+#      `orchestrate-pr-review.yml` (triggered by the PR events)
+#      reviews, requests fixes if needed, and auto-merges.
+#   4. Once the PR is merged, `orchestrate-pr-review.yml`'s
+#      `continue-full-roadmap` job reads the cursor, pops the
+#      completed phase, and re-dispatches THIS workflow with
+#      `session_id` set — which resumes from the next phase.
+#   5. Steps 2–4 repeat until the cursor is empty (all phases done).
+#
+# This workflow can also be re-triggered directly with `session_id` set
+# (e.g. after a rate-limit pause handled by orchestrate-resume.yml).
+#
+# Safety:
+#   - max_phases caps the number of phases per session (default 200).
+#   - exclude can carve out specific phase ids.
+#   - concurrency group prevents two instances from running at once.
+#   - A stale cursor (no PR activity for > 24h) pages the operator
+#     via a GitHub issue and exits 0 rather than looping.
+#
+# AGENTS.md Rule 9 CI carve-out: this workflow only runs on
+# agent/** branches when $GITHUB_ACTIONS == 'true'.
+# See .github/instructions/ci-pipeline.instructions.md §10.
+
+on:
+  workflow_dispatch:
+    inputs:
+      exclude:
+        description: "Phase ids to exclude (comma-separated). Empty = none."
+        type: string
+        default: ""
+      model:
+        description: "LLM model id for the agent loop."
+        type: choice
+        default: claude-sonnet-4-5
+        options:
+          - claude-sonnet-4-5
+          - claude-opus-4-5
+          - gpt-5
+          - gpt-5-mini
+          - gpt-5-codex
+      agent_backend:
+        description: "Which backend run_phase_agent.sh should call."
+        type: choice
+        default: copilot-issue
+        options:
+          - copilot-issue
+          - noop
+      max_phases:
+        description: "Safety cap: maximum number of phases to implement in this session."
+        type: number
+        default: 200
+      session_id:
+        description: "Existing session id to resume (set by continue-full-roadmap job)."
+        type: string
+        default: ""
+      completed_phase:
+        description: "Phase id that just merged (set by continue-full-roadmap job)."
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: orchestrate-full-roadmap
+  cancel-in-progress: false
+
+jobs:
+  dispatch-next-phase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.MASTER_TOKEN }}
+      MODEL: ${{ inputs.model }}
+      AGENT_BACKEND: ${{ inputs.agent_backend }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout main (full history)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.MASTER_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "negelir-orchestrator[bot]"
+          git config user.email "negelir-orchestrator[bot]@users.noreply.github.com"
+
+      # ── Phase A: Mark completed phase + load or build cursor ──────────
+      - name: Advance cursor (mark completed phase if provided)
+        id: advance
+        run: |
+          set -euo pipefail
+          SESSION_ID="${{ inputs.session_id }}"
+          COMPLETED="${{ inputs.completed_phase }}"
+
+          if [[ -n "$SESSION_ID" && -n "$COMPLETED" ]]; then
+            echo "Marking phase $COMPLETED as complete in session $SESSION_ID"
+            RESULT=$(python3 -m xops.orchestrator.cli full-roadmap-complete \
+                --json "$COMPLETED")
+            echo "$RESULT"
+            NEXT=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("next_phase",""))')
+            REMAINING=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("phases_remaining",0))')
+            echo "next_phase=$NEXT"         >>"$GITHUB_OUTPUT"
+            echo "phases_remaining=$REMAINING" >>"$GITHUB_OUTPUT"
+            echo "session_id=$SESSION_ID"  >>"$GITHUB_OUTPUT"
+            echo "fresh_start=false"       >>"$GITHUB_OUTPUT"
+          else
+            echo "next_phase="            >>"$GITHUB_OUTPUT"
+            echo "phases_remaining=-1"    >>"$GITHUB_OUTPUT"
+            echo "session_id="            >>"$GITHUB_OUTPUT"
+            echo "fresh_start=true"       >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Build phase list for new session
+        id: build_plan
+        if: steps.advance.outputs.fresh_start == 'true'
+        run: |
+          set -euo pipefail
+          EXCLUDE="${{ inputs.exclude }}"
+          MAX="${{ inputs.max_phases }}"
+          PLAN=$(python3 -m xops.orchestrator.cli plan \
+              ${EXCLUDE:+--exclude "$EXCLUDE"} \
+              --json)
+          PHASE_IDS=$(echo "$PLAN" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          print(",".join(d.get("phase_ids", [])))
+          ')
+          if [[ -z "$PHASE_IDS" ]]; then
+            echo "::notice::ROADMAP has no open phases — nothing to do"
+            echo "phase_ids=" >>"$GITHUB_OUTPUT"
+          else
+            echo "phase_ids=$PHASE_IDS" >>"$GITHUB_OUTPUT"
+            echo "Found phases: $PHASE_IDS"
+          fi
+
+      - name: Create cursor for new session
+        id: create_cursor
+        if: steps.advance.outputs.fresh_start == 'true' && steps.build_plan.outputs.phase_ids != ''
+        run: |
+          set -euo pipefail
+          RESULT=$(python3 -m xops.orchestrator.cli full-roadmap-save \
+              --phases-remaining "${{ steps.build_plan.outputs.phase_ids }}" \
+              --exclude "${{ inputs.exclude }}" \
+              --model "${{ inputs.model }}" \
+              --max-phases "${{ inputs.max_phases }}" \
+              --triggered-by-run-id "$GITHUB_RUN_ID" \
+              --json)
+          echo "$RESULT"
+          SESSION=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])')
+          FIRST=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["first_phase"])')
+          REMAINING=$(echo "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["phases_remaining"])')
+          echo "session_id=$SESSION"  >>"$GITHUB_OUTPUT"
+          echo "first_phase=$FIRST"   >>"$GITHUB_OUTPUT"
+          echo "phases_remaining=$REMAINING" >>"$GITHUB_OUTPUT"
+
+      # ── Phase B: Resolve the next phase to dispatch ───────────────────
+      - name: Resolve next phase
+        id: resolve
+        run: |
+          set -euo pipefail
+          FRESH="${{ steps.advance.outputs.fresh_start }}"
+          if [[ "$FRESH" == "true" ]]; then
+            NEXT="${{ steps.create_cursor.outputs.first_phase }}"
+            SESSION="${{ steps.create_cursor.outputs.session_id }}"
+            REMAINING="${{ steps.create_cursor.outputs.phases_remaining }}"
+          else
+            NEXT="${{ steps.advance.outputs.next_phase }}"
+            SESSION="${{ inputs.session_id }}"
+            REMAINING="${{ steps.advance.outputs.phases_remaining }}"
+          fi
+          echo "next_phase=$NEXT"         >>"$GITHUB_OUTPUT"
+          echo "session_id=$SESSION"       >>"$GITHUB_OUTPUT"
+          echo "phases_remaining=$REMAINING" >>"$GITHUB_OUTPUT"
+          echo "Resolved: next=$NEXT session=$SESSION remaining=$REMAINING"
+
+      - name: Done — all phases complete
+        if: steps.resolve.outputs.next_phase == '' && steps.advance.outputs.fresh_start == 'false'
+        run: |
+          echo "::notice::Full-roadmap session ${{ steps.resolve.outputs.session_id }} complete — all phases implemented and merged."
+          python3 -m xops.orchestrator.cli full-roadmap-drop --json || true
+          # Commit the dropped cursor back to main.
+          git add .orchestrator/full-roadmap || true
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: full-roadmap session ${{ steps.resolve.outputs.session_id }} complete — cursor dropped"
+            git push origin main
+          fi
+
+      - name: Stamp cursor with dispatched phase
+        if: steps.resolve.outputs.next_phase != ''
+        run: |
+          set -euo pipefail
+          python3 -m xops.orchestrator.cli full-roadmap-advance \
+              "${{ steps.resolve.outputs.next_phase }}" \
+              --json
+
+      # ── Phase C: Commit cursor to main, dispatch implementer ──────────
+      - name: Commit cursor to main
+        if: steps.resolve.outputs.next_phase != ''
+        run: |
+          set -euo pipefail
+          git add .orchestrator/full-roadmap
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: full-roadmap cursor update — next=${{ steps.resolve.outputs.next_phase }} session=${{ steps.resolve.outputs.session_id }}"
+            git push origin main
+          fi
+
+      - name: Prepare agent branch for phase
+        if: steps.resolve.outputs.next_phase != ''
+        run: |
+          set -euo pipefail
+          PHASE="${{ steps.resolve.outputs.next_phase }}"
+          BRANCH="agent/phase-${PHASE}-fullroadmap-${{ steps.resolve.outputs.session_id }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+          else
+            git checkout -b "$BRANCH"
+            git push -u origin "$BRANCH"
+          fi
+          echo "branch=$BRANCH" >>"$GITHUB_ENV"
+
+      - name: Dispatch implementer for phase
+        if: steps.resolve.outputs.next_phase != ''
+        env:
+          PHASE_ID: ${{ steps.resolve.outputs.next_phase }}
+          BRANCH: ${{ env.branch }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching implementer for phase $PHASE_ID on branch $BRANCH"
+          PHASE_ID="$PHASE_ID" \
+          MODEL="$MODEL" \
+          BRANCH="$BRANCH" \
+          AGENT_BACKEND="$AGENT_BACKEND" \
+            bash xops/ci/run_phase_agent.sh
+          echo "::notice::Phase $PHASE_ID dispatched. Waiting for PR from implementer."
+          echo "Session ${{ steps.resolve.outputs.session_id }}: ${{ steps.resolve.outputs.phases_remaining }} phases remaining after this one."

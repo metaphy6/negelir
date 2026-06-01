@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 229,
+    "build": 231,
     "released": null
   },
   "components": {
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.42.0",
+      "version": "3.43.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-01T08:00:27+00:00"
+      "last_changed": "2026-06-01T08:19:37+00:00"
     },
     "docs": {
-      "version": "1.79.1",
+      "version": "1.79.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-01T08:00:21+00:00"
+      "last_changed": "2026-06-01T08:19:45+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -9259,6 +9259,24 @@
       "from": "3.41.2",
       "to": "3.42.0",
       "build": 229
+    },
+    {
+      "timestamp": "2026-06-01T08:19:37+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "full-roadmap master-agent CI loop: ci_full_roadmap module, 6 CLI subcommands, orchestrate-full-roadmap.yml, continue-full-roadmap job, Makefile fullroadmap targets",
+      "from": "3.42.0",
+      "to": "3.43.0",
+      "build": 230
+    },
+    {
+      "timestamp": "2026-06-01T08:19:45+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "orchestrate.fullroadmap.prompt.md + orchestrator README full-roadmap loop section",
+      "from": "1.79.1",
+      "to": "1.79.2",
+      "build": 231
     }
   ]
 }
