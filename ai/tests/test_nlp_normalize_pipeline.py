@@ -21,6 +21,8 @@ _EXPECTED_STEPS = (
     "punct_normalize",
     "diacritic_restore",
     "tokenize",
+    "particle_normalize",   # step 8a §10.22.4
+    "dialect_normalize",    # step 8b §10.22.5
     "typo_correct",
 )
 

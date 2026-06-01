@@ -127,3 +127,319 @@ def suffix_harmony_ok(construction: str) -> bool:
 
     return stem_is_front == suffix_is_front
 
+
+# ---------------------------------------------------------------------------
+# §10.22.2 — Proper-noun suffix stripper
+# ---------------------------------------------------------------------------
+# These imports are at the bottom of the file to avoid circular-import issues
+# at module load time; yaml and pathlib are stdlib / lightweight deps.
+import pathlib as _pathlib  # noqa: E402  (module-level import after code is fine)
+
+try:
+    import yaml as _yaml  # type: ignore[import]
+    _YAML_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _YAML_AVAILABLE = False
+
+# Default path: ai/nlp/lang_tr/suffix_families.tr.yaml, resolved relative to
+# this file's location so the module works regardless of cwd.
+_SUFFIX_FAMILIES_PATH: _pathlib.Path = (
+    _pathlib.Path(__file__).parent  # ai/common/text/
+    .parent                          # ai/common/
+    .parent                          # ai/
+    / "nlp"
+    / "lang_tr"
+    / "suffix_families.tr.yaml"
+)
+
+# Module-level cache; populated on first call.
+_SUFFIX_FAMILIES_CACHE: "list[dict] | None" = None
+
+# Characters valid as suffix candidates per spec regex [a-zçğıiöşü].
+# Using a broad set covering all Turkish lowercase letters + ASCII lowercase.
+_SUFFIX_CHARS: frozenset = frozenset("abcçdefgğhıijklmnoöprsştuüvyz")
+
+# Turkish + Latin uppercase letters that signal a proper-noun token start.
+_TR_UPPER: frozenset = frozenset("ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ")
+
+
+def _load_suffix_families(
+    path: "_pathlib.Path | None" = None,
+) -> "list[dict]":
+    """Load and module-cache the suffix family table from YAML.
+
+    The YAML at ``ai/nlp/lang_tr/suffix_families.tr.yaml`` is the single
+    source of truth.  When *path* is ``None`` the module-level cache is used
+    after the first load; pass an explicit path to override (e.g. in tests).
+    """
+    global _SUFFIX_FAMILIES_CACHE
+    if path is None and _SUFFIX_FAMILIES_CACHE is not None:
+        return _SUFFIX_FAMILIES_CACHE
+    effective = path or _SUFFIX_FAMILIES_PATH
+    if not _YAML_AVAILABLE:  # pragma: no cover
+        return []
+    with open(effective, "r", encoding="utf-8") as fh:
+        data = _yaml.safe_load(fh)
+    families: "list[dict]" = data.get("suffix_families", [])
+    if path is None:
+        _SUFFIX_FAMILIES_CACHE = families
+    return families
+
+
+def _suffix_harmonizes(suffix: str, stem_last_vowel: "str | None") -> bool:
+    """Return True if the suffix's first vowel agrees front/back with *stem_last_vowel*.
+
+    When either the stem or suffix has no vowel (initialism / consonant-only
+    suffix) harmony cannot be checked and True is returned so the candidate
+    remains in play for gazetteer validation.
+    """
+    suffix_vowel: "str | None" = None
+    for ch in suffix:
+        if ch in _FRONT_VOWELS or ch in _BACK_VOWELS:
+            suffix_vowel = ch
+            break
+    if stem_last_vowel is None or suffix_vowel is None:
+        return True
+    return (stem_last_vowel in _FRONT_VOWELS) == (suffix_vowel in _FRONT_VOWELS)
+
+
+def _match_suffix_family(
+    suffix_candidate: str,
+    stem: str,
+    families: "list[dict]",
+) -> "str | None":
+    """Return the family name if *suffix_candidate* is a valid suffix for *stem*.
+
+    The generalising rule is vowel-harmony: the suffix's first vowel must
+    agree front/back with the stem's last vowel.  The YAML table provides all
+    known surface forms; no literal suffix strings appear here.
+    """
+    # Compute last vowel of stem (using lowercase_tr for correct TR mapping).
+    stem_lower = lowercase_tr(stem)
+    last_vowel: "str | None" = None
+    for ch in reversed(stem_lower):
+        if ch in _FRONT_VOWELS or ch in _BACK_VOWELS:
+            last_vowel = ch
+            break
+
+    if not _suffix_harmonizes(suffix_candidate, last_vowel):
+        return None
+
+    # Check suffix against all known forms in each family (both stem-final
+    # categories combined) — we don't know the original stem-final char type
+    # when the apostrophe is absent, so we check both.
+    for family in families:
+        all_forms: "set[str]" = set(
+            list(family.get("vowel_final_forms", []))
+            + list(family.get("consonant_final_forms", []))
+        )
+        if suffix_candidate in all_forms:
+            return family["name"]
+    return None
+
+
+def strip_proper_noun_suffix(
+    token: str,
+    assume_proper: bool = False,
+    *,
+    _families: "list[dict] | None" = None,
+) -> "tuple[str, str | None]":
+    """Strip a Turkish grammatical suffix from a proper-noun token.
+
+    Pre-gazetteer step (§10.22.2): recovers the canonical stem so the
+    gazetteer can perform an exact-match lookup.  The suffix families and
+    their harmonically valid surface forms are loaded from
+    ``ai/nlp/lang_tr/suffix_families.tr.yaml`` — no literal suffix strings
+    live in this function.
+
+    The function is intentionally permissive: it may return a "false-positive"
+    stem (e.g. ``"Ankar"`` from ``"Ankara"``).  The gazetteer validates
+    whether the stem resolves to a real entity and falls back to the original
+    token when the stripped stem is not found.
+
+    Parameters
+    ----------
+    token:
+        A single token, either with original casing (e.g. ``"Galatasaray'ın"``)
+        or lowercased (e.g. ``"galatasarayın"`` — requires ``assume_proper=True``).
+    assume_proper:
+        When ``True``, the proper-noun check (uppercase-start) is bypassed and
+        suffix stripping is attempted regardless of casing.  Use when the caller
+        knows the token is a proper noun after normalization lowercasing.
+    _families:
+        Pre-loaded suffix family list (for testing / hot-reload).  When
+        ``None``, the module-level cached table is used.
+
+    Returns
+    -------
+    (stem, suffix_class)
+        *stem* is the token with the grammatical suffix stripped; suitable for
+        gazetteer lookup.  *suffix_class* is the family name (``"genitive"``,
+        ``"dative"``, …).  When no suffix is detected returns ``(token, None)``.
+
+    Notes
+    -----
+    * Only ASCII apostrophe ``'`` (U+0027) must reach this function.  The
+      normalization pipeline (§10.1 step 5, §10.22.2 apostrophe-noise bullet)
+      converts all typographic apostrophes before tokenisation.
+    """
+    if not token:
+        return token, None
+
+    # Proper-noun check: token must start with Turkish/Latin uppercase OR
+    # assume_proper=True.
+    if not assume_proper and token[0] not in _TR_UPPER:
+        return token, None
+
+    families = _families if _families is not None else _load_suffix_families()
+
+    # ── Case 1: token contains an apostrophe ─────────────────────────────────
+    # Expected form: <STEM>'<suffix> — only the LAST apostrophe is authoritative.
+    if "'" in token:
+        apos_idx = token.rindex("'")
+        stem_part = token[:apos_idx]
+        suffix_part = token[apos_idx + 1:]
+        # Suffix must be 1–4 lowercase Turkish chars (per spec regex group).
+        if (
+            1 <= len(suffix_part) <= 4
+            and all(c in _SUFFIX_CHARS for c in suffix_part)
+            and stem_part  # stem must not be empty
+        ):
+            family = _match_suffix_family(suffix_part, stem_part, families)
+            if family is not None:
+                return stem_part, family
+        # Apostrophe present but split did not yield a valid suffix
+        # (e.g. misplaced apostrophe like "Galata'sarayın").  Return as-is.
+        return token, None
+
+    # ── Case 2: no apostrophe — scan suffix lengths longest-first ───────────
+    # Greedy: try 4 → 1 chars.  Longest valid suffix wins to avoid partial
+    # stems.  The gazetteer validates the returned stem independently.
+    for suffix_len in range(4, 0, -1):
+        if len(token) <= suffix_len:
+            continue
+        stem_part = token[:-suffix_len]
+        suffix_part = token[-suffix_len:]
+        if not all(c in _SUFFIX_CHARS for c in suffix_part):
+            continue  # Non-Turkish char in candidate suffix → skip
+        family = _match_suffix_family(suffix_part, stem_part, families)
+        if family is not None:
+            return stem_part, family
+
+    return token, None
+
+
+# ---------------------------------------------------------------------------
+# §10.22.3 — Buffer-consonant renderer
+# ---------------------------------------------------------------------------
+# Paths resolved relative to this file so the module is cwd-independent.
+_BUFFER_TABLE_PATH: "_pathlib.Path" = (
+    _pathlib.Path(__file__).parent  # ai/common/text/
+    .parent                          # ai/common/
+    .parent                          # ai/
+    / "nlp"
+    / "lang_tr"
+    / "buffer_consonant.tr.yaml"
+)
+_FOREIGN_OVERRIDES_PATH: "_pathlib.Path" = (
+    _pathlib.Path(__file__).parent
+    .parent
+    .parent
+    / "nlp"
+    / "lang_tr"
+    / "foreign_stem_overrides.tr.yaml"
+)
+
+_BUFFER_TABLE_CACHE: "dict[str, str] | None" = None
+_PRONUNCIATION_CLASS_CACHE: "dict[str, str] | None" = None
+
+
+def _load_buffer_table(
+    path: "_pathlib.Path | None" = None,
+) -> "dict[str, str]":
+    """Load and cache the buffer-consonant decision table from YAML.
+
+    The table at ``buffer_consonant.tr.yaml`` is the single source of truth;
+    no literal suffix-class → consonant mappings appear in code.
+    """
+    global _BUFFER_TABLE_CACHE
+    if path is None and _BUFFER_TABLE_CACHE is not None:
+        return _BUFFER_TABLE_CACHE
+    effective = path or _BUFFER_TABLE_PATH
+    if not _YAML_AVAILABLE:  # pragma: no cover
+        return {}
+    with open(effective, "r", encoding="utf-8") as fh:
+        data = _yaml.safe_load(fh)
+    table: "dict[str, str]" = data.get("buffer_rules", {})
+    if path is None:
+        _BUFFER_TABLE_CACHE = table
+    return table
+
+
+def _load_pronunciation_classes(
+    path: "_pathlib.Path | None" = None,
+) -> "dict[str, str]":
+    """Load and cache pronunciation_class overrides from foreign_stem_overrides.tr.yaml.
+
+    Returns {lowercase_stem: pronunciation_class}.
+    """
+    global _PRONUNCIATION_CLASS_CACHE
+    if path is None and _PRONUNCIATION_CLASS_CACHE is not None:
+        return _PRONUNCIATION_CLASS_CACHE
+    effective = path or _FOREIGN_OVERRIDES_PATH
+    if not _YAML_AVAILABLE or not effective.is_file():  # pragma: no cover
+        return {}
+    with open(effective, "r", encoding="utf-8") as fh:
+        raw = _yaml.safe_load(fh)
+    result: "dict[str, str]" = {}
+    for entry in raw.get("overrides", []):
+        stem = entry.get("stem", "")
+        pc = entry.get("pronunciation_class", "")
+        if stem and pc:
+            result[stem.lower()] = pc
+    if path is None:
+        _PRONUNCIATION_CLASS_CACHE = result
+    return result
+
+
+def buffer_consonant(
+    stem: str,
+    suffix_class: str,
+    *,
+    _table: "dict[str, str] | None" = None,
+    _pronunciations: "dict[str, str] | None" = None,
+) -> str:
+    """Return the buffer consonant to insert between *stem* and a vowel-initial suffix.
+
+    Generalising rule (§10.22.3):
+      - Vowel-initial suffix on a vowel-final stem → insert a buffer consonant
+        whose identity is determined by suffix_class via YAML table lookup.
+      - Consonant-final stem → return ``''`` (no buffer needed).
+      - Foreign-stem ``pronunciation_class`` override takes precedence over
+        written last-char detection.
+
+    Returns the single buffer consonant (``'y'``, ``'s'``, ``'n'``, ``'ş'``)
+    or ``''`` when no buffer is needed or the class is not in the table
+    (e.g. locative, ablative, plural are consonant-initial).
+    """
+    if not stem:
+        return ""
+
+    table = _table if _table is not None else _load_buffer_table()
+    prons = _pronunciations if _pronunciations is not None else _load_pronunciation_classes()
+
+    # 1. Foreign-stem pronunciation_class override has highest priority.
+    last_token = stem.rsplit(None, 1)[-1] if " " in stem else stem
+    pc = prons.get(last_token.lower(), "")
+    if pc == "consonant_final":
+        return ""
+    if pc == "vowel_final":
+        return table.get(suffix_class, "")
+
+    # 2. Default: check the last written character (Turkish-lowercased).
+    last_char = lowercase_tr(stem[-1])
+    if last_char not in (_FRONT_VOWELS | _BACK_VOWELS):
+        return ""
+
+    return table.get(suffix_class, "")
+

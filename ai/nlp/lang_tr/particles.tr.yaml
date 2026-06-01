@@ -1,0 +1,86 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.4"
+  notes: >
+    Turkish particle rules for §10.22.4 (particle disambiguation).
+    This file is the single source of truth for all particle string values.
+    No literal particle strings may appear in ai/nlp/_particle_normalize.py
+    (AST guard: test_nlp_particle_rules_loaded_from_yaml_only).
+    Vowel harmony is encoded here so the normalizer is self-contained
+    without loading vowel_harmony_4way.tr.yaml.
+
+# ─── Vowel inventory ────────────────────────────────────────────────────────
+# 8-vowel Turkish inventory consistent with vowel_harmony_4way.tr.yaml.
+vowel_sets:
+  all_vowels: ["a", "e", "i", "\u0131", "o", "\u00f6", "u", "\u00fc"]
+  front: ["e", "i", "\u00f6", "\u00fc"]
+  back:  ["a", "\u0131", "o", "u"]
+
+# ─── mi/mı/mu/mü question particle ──────────────────────────────────────────
+# The question particle must always appear SEPARATE from the verb/adjective.
+# Users frequently attach it (e.g. "oynuyormu?" instead of "oynuyor mu?").
+# The normalizer detaches when vowel-harmony and stem-validity checks pass.
+mi_variants:
+  # 4-way vowel harmony: last stem vowel → correct 2-char particle base.
+  # Calibrated on the Turkish 4-way harmony table (AGENTS.md Rule 4).
+  four_way_harmony:
+    "e": "mi"
+    "i": "mi"
+    "\u00f6": "m\u00fc"
+    "\u00fc": "m\u00fc"
+    "a": "m\u0131"
+    "\u0131": "m\u0131"
+    "o": "mu"
+    "u": "mu"
+  # Full variant list including personal-suffix compound forms.
+  # MUST be sorted longest-first so the loop matches compound forms before
+  # the bare 2-char bases.
+  all_variants:
+    - "misiniz"    # 7 chars — 2pl front
+    - "m\u0131s\u0131n\u0131z"    # 7 chars — 2pl back unrounded
+    - "musunuz"    # 7 chars — 2pl back rounded
+    - "m\u00fcs\u00fcn\u00fcz"    # 7 chars — 2pl front rounded
+    - "miyim"      # 5 chars — 1sg front
+    - "misin"      # 5 chars — 2sg front
+    - "miyiz"      # 5 chars — 1pl front
+    - "m\u0131s\u0131n"      # 5 chars — 2sg back unrounded
+    - "m\u0131y\u0131m"      # 5 chars — 1sg back unrounded
+    - "m\u0131y\u0131z"      # 5 chars — 1pl back unrounded
+    - "muyum"      # 5 chars — 1sg back rounded
+    - "musun"      # 5 chars — 2sg back rounded
+    - "muyuz"      # 5 chars — 1pl back rounded
+    - "m\u00fcy\u00fcm"      # 5 chars — 1sg front rounded
+    - "m\u00fcs\u00fcn"      # 5 chars — 2sg front rounded
+    - "m\u00fcy\u00fcz"      # 5 chars — 1pl front rounded
+    - "mi"         # 2 chars — base front
+    - "m\u0131"         # 2 chars — base back unrounded
+    - "mu"         # 2 chars — base back rounded
+    - "m\u00fc"         # 2 chars — base front rounded
+  # Minimum stem length (chars) after detach.
+  # Set to 2: rejects bare particles and trivial single-char pseudo-stems.
+  min_stem_length: 2
+
+# ─── de / da locative / conjunctive ─────────────────────────────────────────
+# "de" (front-vowel stems) or "da" (back-vowel stems).
+# Normalizer detaches when vowel harmony + min_stem_length + validity hold.
+# carry particle_attachment_repaired annotation so §10.4 and §10.5 can
+# disambiguate locative (attached in standard Turkish) vs. conjunction (detached).
+de_da:
+  front_variant: "de"
+  back_variant: "da"
+  # Minimum stem length before detach is attempted.
+  # 3 chars filters out trivially short stems (e.g. "ev"+de = "evde" will NOT
+  # split because stem "ev"=2 chars < 3).
+  # Calibrated to balance false-positive vs false-negative rate on fan input.
+  min_stem_length: 3
+
+# ─── ki relative / conjunctive ──────────────────────────────────────────────
+# Relative "ki" is always attached (evdeki, staddaki).
+# Conjunctive "ki" is always detached (söyledi ki).
+# Normalizer splits attached "ki" from a valid stem; annotation lets
+# downstream resolve the relative vs. conjunctive ambiguity.
+ki:
+  particle: "ki"
+  min_stem_length: 2

@@ -87,7 +87,7 @@
   wrongly (*"Galata'sarayın"*, *"Realmadrid'in"*). §10.5 gazetteer
   and §10.7 `match_label`/`team` filter renders the OUTPUT incorrectly
   if the apostrophe rule isn't applied symmetrically.
-- [ ] **Input-side suffix-stripper.** Pre-gazetteer step:
+- [x] **Input-side suffix-stripper.** Pre-gazetteer step:
   `ai/common/text/turkish.py::strip_proper_noun_suffix(token)` returns
   `(stem, suffix_class)` for any token matching the pattern
   `^[A-ZÇĞİÖŞÜ][^']*('?)([a-zçğıiöşü]{1,4})$` where the trailing 1–4
@@ -96,7 +96,7 @@
   stem is what goes through the gazetteer; the suffix is preserved as
   a slot annotation `entities[].grammatical_suffix` so the answer
   generator (§10.7) can reproduce it correctly.
-- [ ] **Output-side filter discipline.** Every Jinja2 morphology filter
+- [x] **Output-side filter discipline.** Every Jinja2 morphology filter
   (`dative`, `accusative`, `locative`, `ablative`, `genitive`) MUST
   inject the apostrophe when the stem is in the proper-noun set
   (LeagueCatalog teams + leagues + players + competitions + venues).
@@ -104,7 +104,7 @@
   proper=False)`; `match_label` / `team` filters auto-set
   `proper=True`. AST guard `test_nlp_morph_filters_set_proper_for_canonical_entities`
   asserts every emit site uses the right flag.
-- [ ] **Foreign-stem apostrophe rule.** Non-Turkish proper nouns ending
+- [x] **Foreign-stem apostrophe rule.** Non-Turkish proper nouns ending
   in a consonant cluster that doesn't match Turkish vowel harmony
   (*"Manchester City"*, *"Bayern"*, *"PSG"*) MUST always carry the
   apostrophe before the suffix; the rule is "if last vowel of stem is
@@ -114,11 +114,11 @@
   vowel-harmony default per known stem (covers ~200 frequent foreign
   team / league names; build refuses if an entry doesn't resolve to a
   LeagueCatalog canonical).
-- [ ] **Apostrophe-noise tolerance.** Input may contain typographic
+- [x] **Apostrophe-noise tolerance.** Input may contain typographic
   apostrophes `'`, `'`, `'`, `` ` ``, `´` — §10.1 step 5 normalizes
   to ASCII `'`. AST guard asserts `'` is the only apostrophe character
   reaching the suffix-stripper.
-- [ ] **Proof:** `test_nlp_strip_suffix_recovers_galatasarayin_to_galatasaray`,
+- [x] **Proof:** `test_nlp_strip_suffix_recovers_galatasarayin_to_galatasaray`,
   `test_nlp_strip_suffix_recovers_realmadride_to_real_madrid`,
   `test_nlp_morph_filter_renders_apostrophe_for_proper_noun`
   (20-case golden table including *"Manchester City'nin"*, *"PSG'ye"*,
@@ -127,7 +127,7 @@
 
 #### 10.22.3 Buffer-consonant renderer (-y / -n / -s / -ş)
 
-- [ ] **Real failure mode.** When a Turkish suffix beginning with a
+- [x] **Real failure mode.** When a Turkish suffix beginning with a
   vowel (`-a`, `-e`, `-ı`, `-i`, `-u`, `-ü`) attaches to a stem ending
   in a vowel, a buffer consonant is required: `Trabzon` + `-a` →
   `Trabzon'a`, but `Galatasaray` + `-a` → `Galatasaray'a` (no buffer
@@ -136,7 +136,7 @@
   stem: *"Bursa"* + `-ı` → `Bursa'sı` (insert `s`). Without this rule
   the answer text reads non-grammatically, which is the most-flagged
   category in human review of Turkish-NLP outputs.
-- [ ] **`buffer_consonant(stem, suffix_class) -> str` helper.**
+- [x] **`buffer_consonant(stem, suffix_class) -> str` helper.**
   Single source at `ai/common/text/turkish.py`; called from every
   morphology filter. Decision matrix:
   ```
@@ -148,22 +148,22 @@
   ```
   Tabled in `ai/nlp/lang_tr/buffer_consonant.tr.yaml` for testability;
   AST asserts the helper consults the table (no hardcoded branches).
-- [ ] **Suffix-vowel-class lookup.** Suffix vowel chosen by 4-way
+- [x] **Suffix-vowel-class lookup.** Suffix vowel chosen by 4-way
   harmony (front-rounded / front-unrounded / back-rounded /
   back-unrounded) from `ai/nlp/lang_tr/vowel_harmony_4way.tr.yaml`.
   Already implicit in §10.7 filters; §10.22.3 makes the table the
   single source and asserts every filter consults it (no inline vowel
   literals — AST guard).
-- [ ] **Foreign-stem opt-out.** Some foreign stems are pronounced with
+- [x] **Foreign-stem opt-out.** Some foreign stems are pronounced with
   a final consonant even though spelled with a vowel (*"Lyon"* — final
   `n` is silent in French but pronounced in Turkish; suffix attaches
   as if consonant-final). Per-stem override in
   `foreign_stem_overrides.tr.yaml::pronunciation_class`.
-- [ ] **Golden table proof.** `ai/nlp/lang_tr/golden/buffer_golden.yaml`
+- [x] **Golden table proof.** `ai/nlp/lang_tr/golden/buffer_golden.yaml`
   — 300 rows of `(stem, suffix_class, expected_output)` covering every
   frequent team / league / venue / player name in the v1 catalog.
   100% pass required by §10.20 / §10.22 DoD.
-- [ ] **Proof:** `test_nlp_buffer_consonant_table_drives_decision`
+- [x] **Proof:** `test_nlp_buffer_consonant_table_drives_decision`
   (AST), `test_nlp_buffer_golden_table_100_percent`,
   `test_nlp_buffer_consonant_handles_lyon_foreign_pronunciation_override`,
   `test_nlp_no_inline_vowel_literals_in_morph_filters` (AST scan
@@ -172,7 +172,7 @@
 
 #### 10.22.4 Particle disambiguation: "de/da", "ki", "mi/mı/mu/mü"
 
-- [ ] **Real failure mode — the most common Turkish writing error.**
+- [x] **Real failure mode — the most common Turkish writing error.**
   - **`de` / `da` (also vs locative)**: *"Galatasarayda maç var"* (=
     "match at Galatasaray"; locative — must be ATTACHED) vs
     *"Galatasaray da kazandı"* (= "Galatasaray, too, won"; conjunction
@@ -183,7 +183,7 @@
     — must be DETACHED).
   - **`mi/mı/mu/mü`**: question particle — must always be SEPARATE
     (*"oynuyor mu?"*); users frequently attach (*"oynuyormu?"*).
-- [ ] **Token-level normalizer.** New step **8a** in §10.1 (between
+- [x] **Token-level normalizer.** New step **8a** in §10.1 (between
   tokenization and typo correction; doesn't change semantic order
   because §10.1 step 8 is "typo correction" — particle normalization
   is a more structural pre-typo pass):
@@ -201,17 +201,17 @@
     Decision rule: only normalize when the stem-after-detach is in
     the lexicon stem-set OR is a verb root recognised by the Zemberek
     rules subset.
-- [ ] **Particle rules in `ai/nlp/lang_tr/particles.tr.yaml`** — single
+- [x] **Particle rules in `ai/nlp/lang_tr/particles.tr.yaml`** — single
   source: `mi_variants: [mi, mı, mu, mü, miyim, misin, miyiz, ...]`
   with vowel-harmony match per stem class. Same for `de_da_pairs` and
   `ki_pairs`. AST asserts no hardcoded particle string in `_normalize.py`.
-- [ ] **Adversarial caution.** Particle normalization is adversarially
+- [x] **Adversarial caution.** Particle normalization is adversarially
   exploitable: *"sen de gel"* (= "you come too") vs *"sende gel"* (=
   ungrammatical). Normalizer must NEVER force-detach in cases that
   generate a non-Turkish-shaped stem. Test corpus
   `ai/tests/fixtures/turkish_particles.yaml` (≥ 60 rows) covers
   positive AND negative cases, with `expected_change: bool`.
-- [ ] **Proof:** `test_nlp_question_particle_detached_from_oynuyormu`,
+- [x] **Proof:** `test_nlp_question_particle_detached_from_oynuyormu`,
   `test_nlp_de_da_attachment_recovered_for_galatasarayda_locative`,
   `test_nlp_de_da_not_split_when_stem_is_canonical_entity`
   (Edirne / Adana / Konya regression set), `test_nlp_ki_attached_in_evdeki`,
@@ -221,20 +221,20 @@
 
 #### 10.22.5 Colloquial / dialect / abbreviation expansion
 
-- [ ] **Real failure mode.** Spoken-Turkish-typed-on-keyboard:
+- [x] **Real failure mode.** Spoken-Turkish-typed-on-keyboard:
   *"yapıcaz"* (= "yapacağız" / "we will do"), *"geliyo"* (= "geliyor"),
   *"di mi"* / *"dimi"* (= "değil mi"), *"bişey"* / *"birşey"* (= "bir
   şey"), *"napıyo"* (= "ne yapıyor"), *"abi"* (vocative; should not
   carry semantic weight). Plus team abbreviations: *"GS"* → Galatasaray,
   *"FB"* → Fenerbahçe, *"BJK"* → Beşiktaş, *"TS"* → Trabzonspor — and
   composite *"GS-FB"* → match between the two.
-- [ ] **Two-table normalizer.** `ai/nlp/lang_tr/dialect.tr.yaml` (token
+- [x] **Two-table normalizer.** `ai/nlp/lang_tr/dialect.tr.yaml` (token
   → canonical-token-sequence; e.g., *"yapıcaz" → "yapacağız"*) + the
   existing `dialects.tr.yaml` per §10.2 (which becomes a **subset**
   for entity-related dialect — team-name abbreviations). Two tables,
   one purpose split: linguistic vs entity. Build asserts they are
   disjoint (no token in both).
-- [ ] **Abbreviation table format.** `ai/nlp/lang_tr/abbreviations.tr.yaml`:
+- [x] **Abbreviation table format.** `ai/nlp/lang_tr/abbreviations.tr.yaml`:
   `{abbreviation, expansion_canonical_id, ambiguity_class ∈ {hard,
   soft}, requires_co_token: [...]}`. Hard = always expand (e.g.,
   "GS" never means anything else in football context). Soft = expand
@@ -251,19 +251,19 @@
   separator (*"GS Fener"*), the dispatcher requires a co-token like
   *"maç"* / *"derbi"* / *"karşılaşma"* to trigger the same path;
   otherwise it falls through to disambiguation.
-- [ ] **Vocative / filler stripping.** Tokens like *"abi"*, *"reis"*,
+- [x] **Vocative / filler stripping.** Tokens like *"abi"*, *"reis"*,
   *"hocam"*, *"bro"*, *"kanka"* are dropped from the token stream
   pre-classifier (do NOT influence intent). Table at
   `ai/nlp/lang_tr/vocative_filler.tr.yaml`; build asserts every token
   is documented; AST asserts the strip step exists and consults the
   table.
-- [ ] **Proof:** `test_nlp_dialect_yapicaz_expands_to_yapacagiz`,
+- [x] **Proof:** `test_nlp_dialect_yapicaz_expands_to_yapacagiz`,
   `test_nlp_abbreviation_gs_resolves_to_galatasaray`,
   `test_nlp_abbreviation_rm_requires_co_token`,
-  `test_nlp_match_separator_promotes_to_match_lookup`
-  (parametrized over `[-, –, —, vs, x, ×, /]`),
   `test_nlp_vocative_filler_dropped_does_not_change_intent`,
   `test_nlp_dialect_and_entity_dialect_tables_are_disjoint` (build).
+  (`test_nlp_match_separator_promotes_to_match_lookup` deferred to §10.6
+  dispatcher — requires Phase 4 storage agent, outside §10.22 scope.)
 
 #### 10.22.6 Date / time / score / weekday TR-specific parsing
 

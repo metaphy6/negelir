@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 231,
+    "build": 236,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.60.37",
+      "version": "1.64.0",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-31T20:36:13+00:00",
+      "last_changed": "2026-06-01T10:53:53+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -180,10 +180,10 @@
       },
       "confusables_table": {
         "source_spec": "Unicode TR39 Confusables.txt v15.1.0",
-        "sha256": "23070dc65ac934decc67ed46f0f862d7f12fe8f35949a4b4e65b6daaf3e81521",
+        "sha256": "9634655bef1251a1dfddbe89f801721f55b2585a13fee304c189957224588a16",
         "path": "ai/common/text/normalize.py::_CONFUSABLES_TABLE",
-        "cardinality": 49,
-        "comment": "Phase 10 §10.21.5 homoglyph defense. Derived mapping Cyrillic/Greek -> ASCII-Turkish-extended. In-code dict (no external file); SHA covers the definition in normalize.py."
+        "cardinality": 48,
+        "comment": "Phase 10 §10.21.5 homoglyph defense. Derived mapping Cyrillic/Greek -> ASCII-Turkish-extended. U+0131 (ı) removed: it is a legitimate Turkish character (produced by lowercase_tr) and must not be folded. In-code dict (no external file); SHA covers the definition in normalize.py."
       }
     }
   },
@@ -9277,6 +9277,51 @@
       "from": "1.79.1",
       "to": "1.79.2",
       "build": 231
+    },
+    {
+      "timestamp": "2026-06-01T09:11:21+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.22.2 proper-noun suffix-stripper, morphology filter apostrophe discipline (proper=False), foreign-stem overrides YAML, apostrophe-noise tolerance in normalize.py",
+      "from": "1.60.37",
+      "to": "1.61.0",
+      "build": 232
+    },
+    {
+      "timestamp": "2026-06-01T09:40:11+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.22.3 buffer-consonant renderer, possessive_3sg filter, vowel harmony YAML",
+      "from": "1.61.0",
+      "to": "1.62.0",
+      "build": 233
+    },
+    {
+      "timestamp": "2026-06-01T10:29:40+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.22.4 particle disambiguation step 8a: normalize_particles + particles.tr.yaml + NormalizedInput.particle_repairs; 70-row corpus; 78 tests",
+      "from": "1.62.0",
+      "to": "1.63.0",
+      "build": 234
+    },
+    {
+      "timestamp": "2026-06-01T10:29:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix pre-existing confusables_fold ı→i regression: removed U+0131 from _CONFUSABLES_TABLE; updated chart.json SHA pin",
+      "from": "1.63.0",
+      "to": "1.63.1",
+      "build": 235
+    },
+    {
+      "timestamp": "2026-06-01T10:53:53+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.22.5: dialect_normalize step 8b (dialect.tr.yaml, abbreviations.tr.yaml, vocative_filler.tr.yaml, dialect_normalize.py); 27 proof tests",
+      "from": "1.63.1",
+      "to": "1.64.0",
+      "build": 236
     }
   ]
 }

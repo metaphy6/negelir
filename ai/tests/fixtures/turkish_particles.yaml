@@ -1,0 +1,416 @@
+_meta:
+  schema_version: 1
+  table_version: 1.0.0
+  source: phase10-10.22.4
+  notes: 'Adversarial particle corpus for §10.22.4. Each row is a single token. expected_change:
+    true → normalizer SHOULD split into expected_tokens. expected_change: false →
+    normalizer MUST NOT split. Row count: 70. All particle strings here are documentation
+    artefacts; the normalizer loads them from lang_tr/particles.tr.yaml.'
+rows:
+- token: oynuyormu
+  expected_change: true
+  expected_tokens:
+  - oynuyor
+  - mu
+  note: last-vowel o → back-rounded → mu
+- token: kazandımı
+  expected_change: true
+  expected_tokens:
+  - kazandı
+  - mı
+  note: last-vowel ı → back-unrounded → mı
+- token: geldimi
+  expected_change: true
+  expected_tokens:
+  - geldi
+  - mi
+  note: last-vowel i → front → mi
+- token: futbolmu
+  expected_change: true
+  expected_tokens:
+  - futbol
+  - mu
+  note: last-vowel o → back-rounded → mu
+- token: oynayacakmı
+  expected_change: true
+  expected_tokens:
+  - oynayacak
+  - mı
+  note: last-vowel a → back-unrounded → mı
+- token: hazırmı
+  expected_change: true
+  expected_tokens:
+  - hazır
+  - mı
+  note: last-vowel ı → back-unrounded → mı
+- token: yorgunmu
+  expected_change: true
+  expected_tokens:
+  - yorgun
+  - mu
+  note: last-vowel u → back-rounded → mu
+- token: güzelmi
+  expected_change: true
+  expected_tokens:
+  - güzel
+  - mi
+  note: last-vowel e → front-unrounded → mi
+- token: başladımı
+  expected_change: true
+  expected_tokens:
+  - başladı
+  - mı
+  note: last-vowel ı → back-unrounded → mı
+- token: kazanabilirmi
+  expected_change: true
+  expected_tokens:
+  - kazanabilir
+  - mi
+  note: last-vowel i → front → mi
+- token: atacakmı
+  expected_change: true
+  expected_tokens:
+  - atacak
+  - mı
+  note: last-vowel a → back-unrounded → mı
+- token: geliyormusun
+  expected_change: true
+  expected_tokens:
+  - geliyor
+  - musun
+  note: compound variant musun; last-vowel o → mu; harmony base mu ✓
+- token: bitmişmisiniz
+  expected_change: true
+  expected_tokens:
+  - bitmiş
+  - misiniz
+  note: compound variant misiniz; last-vowel i → mi ✓
+- token: gidiyormu
+  expected_change: true
+  expected_tokens:
+  - gidiyor
+  - mu
+  note: last-vowel o → mu
+- token: kazanırmı
+  expected_change: true
+  expected_tokens:
+  - kazanır
+  - mı
+  note: last-vowel ı → mı
+- token: beklemişmi
+  expected_change: true
+  expected_tokens:
+  - beklemiş
+  - mi
+  note: last-vowel i → mi
+- token: oynadımı
+  expected_change: true
+  expected_tokens:
+  - oynadı
+  - mı
+  note: last-vowel ı → mı
+- token: gelecekmi
+  expected_change: true
+  expected_tokens:
+  - gelecek
+  - mi
+  note: last-vowel e → mi
+- token: yorulmuşmu
+  expected_change: true
+  expected_tokens:
+  - yorulmuş
+  - mu
+  note: last-vowel u → mu
+- token: şampiyonmu
+  expected_change: true
+  expected_tokens:
+  - şampiyon
+  - mu
+  note: last-vowel o → mu
+- token: galatasarayda
+  expected_change: true
+  expected_tokens:
+  - galatasaray
+  - da
+  note: last-vowel a → back → da
+- token: fenerbahcede
+  expected_change: true
+  expected_tokens:
+  - fenerbahce
+  - de
+  note: last-vowel e → front → de
+- token: trabzonda
+  expected_change: true
+  expected_tokens:
+  - trabzon
+  - da
+  note: last-vowel o → back → da
+- token: basketbolda
+  expected_change: true
+  expected_tokens:
+  - basketbol
+  - da
+  note: last-vowel o → back → da
+- token: şehirde
+  expected_change: true
+  expected_tokens:
+  - şehir
+  - de
+  note: last-vowel i → front → de
+- token: stadyumda
+  expected_change: true
+  expected_tokens:
+  - stadyum
+  - da
+  note: last-vowel u → back → da
+- token: tribünde
+  expected_change: true
+  expected_tokens:
+  - tribün
+  - de
+  note: last-vowel ü → front-rounded → de
+- token: üniversitede
+  expected_change: true
+  expected_tokens:
+  - üniversite
+  - de
+  note: last-vowel e → front → de
+- token: sezonda
+  expected_change: true
+  expected_tokens:
+  - sezon
+  - da
+  note: last-vowel o → back → da
+- token: ligde
+  expected_change: true
+  expected_tokens:
+  - lig
+  - de
+  note: stem lig=3 chars ≥ min=3; last-vowel i → front → de
+- token: kupada
+  expected_change: true
+  expected_tokens:
+  - kupa
+  - da
+  note: last-vowel a → back → da
+- token: kulübünde
+  expected_change: true
+  expected_tokens:
+  - kulübün
+  - de
+  note: last-vowel ü → front → de
+- token: sahada
+  expected_change: true
+  expected_tokens:
+  - saha
+  - da
+  note: last-vowel a → back → da
+- token: sende
+  expected_change: true
+  expected_tokens:
+  - sen
+  - de
+  note: 'structural split: stem sen=3 ≥ min=3; last-vowel e → front → de'
+- token: transferde
+  expected_change: true
+  expected_tokens:
+  - transfer
+  - de
+  note: last-vowel e → front → de
+- token: evdeki
+  expected_change: true
+  expected_tokens:
+  - evde
+  - ki
+  note: stem evde=4 ≥ 2; note evde won't further split (stem ev=2 < de_da_min=3)
+- token: maçtaki
+  expected_change: true
+  expected_tokens:
+  - maçta
+  - ki
+  note: stem maçta=5 ≥ 2
+- token: geceki
+  expected_change: true
+  expected_tokens:
+  - gece
+  - ki
+  note: stem gece=4 ≥ 2
+- token: takımdaki
+  expected_change: true
+  expected_tokens:
+  - takım
+  - da
+  - ki
+  note: 'fixpoint: takımdaki→[takımda,ki]→[takım,da,ki]; all three tokens stable on
+    3rd pass'
+- token: dündeki
+  expected_change: true
+  expected_tokens:
+  - dün
+  - de
+  - ki
+  note: 'fixpoint: dündeki→[dünde,ki]→[dün,de,ki]; dün(3≥3)+last-vowel ü→front→de
+    ✓'
+- token: yarınki
+  expected_change: true
+  expected_tokens:
+  - yarın
+  - ki
+  note: stem yarın=5 ≥ 2
+- token: ligteki
+  expected_change: true
+  expected_tokens:
+  - ligte
+  - ki
+  note: stem ligte=5 ≥ 2
+- token: staddaki
+  expected_change: true
+  expected_tokens:
+  - stad
+  - da
+  - ki
+  note: 'fixpoint: staddaki→[stadda,ki]→[stad,da,ki]; all three tokens non-splittable
+    on 3rd pass'
+- token: sabahki
+  expected_change: true
+  expected_tokens:
+  - sabah
+  - ki
+  note: stem sabah=5 ≥ 2
+- token: önceki
+  expected_change: true
+  expected_tokens:
+  - önce
+  - ki
+  note: stem önce=4 ≥ 2
+- token: edirne
+  expected_change: false
+  expected_tokens:
+  - edirne
+  note: city name; last-2 'ne' is not any particle
+- token: adana
+  expected_change: false
+  expected_tokens:
+  - adana
+  note: city name; last-2 'na' is not a particle
+- token: konya
+  expected_change: false
+  expected_tokens:
+  - konya
+  note: city name; last-2 'ya' is not a particle
+- token: maç
+  expected_change: false
+  expected_tokens:
+  - maç
+  note: 3-char noun; no particle suffix
+- token: futbol
+  expected_change: false
+  expected_tokens:
+  - futbol
+  note: 6-char noun; last-2 'ol' is not a particle
+- token: galatasaray
+  expected_change: false
+  expected_tokens:
+  - galatasaray
+  note: proper noun; last-2 'ay' is not a particle
+- token: mi
+  expected_change: false
+  expected_tokens:
+  - mi
+  note: 'bare particle: len=2, need len>len(variant)=2; 2>2 is False'
+- token: da
+  expected_change: false
+  expected_tokens:
+  - da
+  note: 'bare particle: len=2, need len>2; 2>2 is False'
+- token: ki
+  expected_change: false
+  expected_tokens:
+  - ki
+  note: 'bare particle: len=2, need len>2; 2>2 is False'
+- token: evde
+  expected_change: false
+  expected_tokens:
+  - evde
+  note: 'STEM GUARD: stem ev=2 chars < de_da_min_stem=3 → no split'
+- token: söyledi
+  expected_change: false
+  expected_tokens:
+  - söyledi
+  note: last-2 'di' is not a tracked particle (past-tense suffix)
+- token: oynuyor
+  expected_change: false
+  expected_tokens:
+  - oynuyor
+  note: already normalised verb; last-2 'or' is not a particle
+- token: kazandı
+  expected_change: false
+  expected_tokens:
+  - kazandı
+  note: already normalised past-tense; last-2 'dı' is not a particle
+- token: top
+  expected_change: false
+  expected_tokens:
+  - top
+  note: 3-char noun; last-2 'op' not a particle
+- token: ankara
+  expected_change: false
+  expected_tokens:
+  - ankara
+  note: city; last-2 'ra' not a particle
+- token: istanbul
+  expected_change: false
+  expected_tokens:
+  - istanbul
+  note: city; last-2 'ul' not a particle
+- token: beşiktaş
+  expected_change: false
+  expected_tokens:
+  - beşiktaş
+  note: proper noun; last-2 'aş' not a particle
+- token: spor
+  expected_change: false
+  expected_tokens:
+  - spor
+  note: 3-char noun; last-2 'or' not a particle
+- token: büyük
+  expected_change: false
+  expected_tokens:
+  - büyük
+  note: 4-char adj; last-2 'ük' not a particle
+- token: geliyormi
+  expected_change: false
+  expected_tokens:
+  - geliyormi
+  note: 'HARMONY MISMATCH: last-vowel o → mu; suffix ''mi'' ≠ ''mu'' → reject'
+- token: kazandımı
+  expected_change: true
+  expected_tokens:
+  - kazandı
+  - mı
+  note: 'harmony OK: last-vowel ı → mı ✓ (positive case for mı variant)'
+- token: trabzonde
+  expected_change: false
+  expected_tokens:
+  - trabzonde
+  note: 'HARMONY MISMATCH: last-vowel o → back → da; suffix ''de'' ≠ ''da'' → reject'
+- token: kazandimi
+  expected_change: true
+  expected_tokens:
+  - kazandi
+  - mi
+  note: 'ASCII-i form: last-vowel i → front → mi ✓; this is the ASCII typed variant
+    (cf kazandımı for native ı)'
+- token: hakemde
+  expected_change: true
+  expected_tokens:
+  - hakem
+  - de
+  note: last-vowel e → front → de ✓; stem hakem=5 ≥ 3 ✓
+- token: belde
+  expected_change: true
+  expected_tokens:
+  - bel
+  - de
+  note: 'known false-positive: ''belde''=settlement; structural rule splits it; §10.5
+    lexicon may restore'

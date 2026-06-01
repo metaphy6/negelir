@@ -400,11 +400,20 @@ phase10:
   # Diacritic ambiguity tie-break ratio (§10.3 Ambiguity policy). When top-2
   # candidates' frequencies are within this ratio, token is preserved unchanged.
   nlp_diacritic_tie_break_ratio: 1.5      # NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO
+  # Hard-call: minimum corpus frequency for restored form before the restorer
+  # confidently replaces the ASCII input (§10.22.1).
+  nlp_diacritic_hard_call_min_freq: 10000 # NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ
+  # Maximum per-token risk score allowed before diacritic restoration is
+  # suppressed for that token (§10.22.1).
+  nlp_diacritic_max_risk_per_token: 2.5   # NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN
   # Minimum confidence margin required before restored-form hit can override
   # ASCII-pass hit on same span with different canonical (§10.22.1).
   nlp_ascii_vs_restored_margin: 0.2       # NEGELIR_NLP_ASCII_VS_RESTORED_MARGIN
   # Normalize+typo+diacritic stage deadline; on timeout falls through to raw tokens (§10.3).
   nlp_normalize_stage_timeout_ms: 20      # NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS
+  # §10.22.5 Composite-abbreviation separator pattern (dispatcher §10.6 uses this).
+  # Token between two resolved team entities must match → match_lookup slot.
+  nlp_match_separator_pattern: '^(-|–|—|vs\.?|x|×|/)$'  # NEGELIR_NLP_MATCH_SEPARATOR_PATTERN
   # §10.4 Intent classifier (fastText, ≤ 20 MB, CPU-only).
   nlp_intent_model_path: "data/models/nlp/intent.tr.bin"  # NEGELIR_NLP_INTENT_MODEL_PATH
   nlp_intent_model_sha256: ""             # NEGELIR_NLP_INTENT_MODEL_SHA256

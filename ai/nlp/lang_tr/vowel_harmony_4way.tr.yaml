@@ -1,0 +1,48 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.3"
+  notes: >
+    Turkish 4-way vowel harmony tables (\u00a710.22.3). Single source for all
+    vowel sets and harmony maps used by ai/nlp/jinja_filters_tr.py and
+    ai/common/text/turkish.py. No inline multi-char vowel-only string literals
+    may appear in jinja_filters_tr.py (AST guard:
+    test_nlp_no_inline_vowel_literals_in_morph_filters).
+
+    The four vowel classes:
+      front_unrounded: e, i
+      front_rounded:   \u00f6 (o-umlaut), \u00fc (u-umlaut)
+      back_unrounded:  a, \u0131 (dotless-i)
+      back_rounded:    o, u
+
+vowel_classes:
+  front_unrounded: ["e", "i"]
+  front_rounded:   ["\u00f6", "\u00fc"]
+  back_unrounded:  ["a", "\u0131"]
+  back_rounded:    ["o", "u"]
+
+# 4-way harmony: last stem vowel -> suffix vowel in {i, \u0131, \u00fc, u}
+four_way_map:
+  "e": "i"
+  "i": "i"
+  "\u00f6": "\u00fc"
+  "\u00fc": "\u00fc"
+  "a": "\u0131"
+  "\u0131": "\u0131"
+  "o": "u"
+  "u": "u"
+
+# 2-way harmony: last stem vowel -> suffix vowel in {e, a}
+two_way_map:
+  "e": "e"
+  "i": "e"
+  "\u00f6": "e"
+  "\u00fc": "e"
+  "a": "a"
+  "\u0131": "a"
+  "o": "a"
+  "u": "a"
+
+# Voiceless-final consonants: trigger -t- suffix for locative/ablative
+voiceless_consonants: ["\u00e7", "f", "h", "k", "p", "s", "\u015f", "t"]

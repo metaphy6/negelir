@@ -33,6 +33,11 @@ from typing import Callable, Optional
 
 from common.text.normalize import canonical_normalize, confusables_fold
 from common.text.turkish import lowercase_tr
+from nlp._particle_normalize import normalize_particles as _normalize_particles
+from nlp.dialect_normalize import (
+    apply_dialect_normalize as _apply_dialect_normalize,
+    _DialectNormalizer,
+)
 
 # ---------------------------------------------------------------------------
 # Step 5 -- punctuation normalization
@@ -45,6 +50,9 @@ _PUNCT_TABLE: dict[int, str] = {
     ord("\u201E"): '"',    # DOUBLE LOW-9 QUOTATION MARK -> straight "
     ord("\u2018"): "'",    # LEFT SINGLE QUOTATION MARK  -> straight apostrophe
     ord("\u2019"): "'",    # RIGHT SINGLE QUOTATION MARK -> straight apostrophe
+    ord("\u02BC"): "'",    # MODIFIER LETTER APOSTROPHE  -> straight apostrophe (§10.22.2)
+    ord("\u0060"): "'",    # GRAVE ACCENT                -> straight apostrophe (§10.22.2)
+    ord("\u00B4"): "'",    # ACUTE ACCENT                -> straight apostrophe (§10.22.2)
     ord("\u201A"): ",",    # SINGLE LOW-9 QUOTATION MARK -> comma
     ord("\u2014"): " - ",  # EM DASH  -> hyphen-space-hyphen
     ord("\u2013"): " - ",  # EN DASH  -> hyphen-space-hyphen
@@ -100,6 +108,27 @@ class NormalizedInput:
     ``cfg.nlp_normalize_stage_timeout_ms``.  The caller is responsible
     for emitting ``nlp.event.v1{kind=normalize_timeout}``.
     """
+    particle_repairs: frozenset = frozenset()
+    """Set of original token strings split by step 8a (§10.22.4 particle
+    disambiguation).  Consumers can use this to detect which tokens were
+    reconstructed from attached particles.
+    """
+    dialect_repairs: frozenset = frozenset()
+    """Set of (original_token, rule_id) pairs where a token was rewritten
+    by a dialect rule in step 8b (§10.22.5 colloquial normalization).
+    """
+    vocatives_stripped: tuple = ()
+    """Tokens removed by the vocative/filler-strip sub-step of step 8b
+    (§10.22.5).  The classifier never sees these tokens.
+    """
+    abbreviations_expanded: frozenset = frozenset()
+    """Set of (abbrev_token, expansion_id) pairs where a hard abbreviation
+    was expanded in step 8b (§10.22.5).
+    """
+    soft_abbreviations_tagged: frozenset = frozenset()
+    """Set of (abbrev_token, expansion_id, frozenset(co_tokens)) for soft
+    abbreviations that need downstream resolution (§10.5 conflict resolver).
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +141,7 @@ def normalize_input(
     _diacritic_restore: Optional[Callable[[str], str]] = None,
     _typo_correct: "Optional[Callable[[list[str]], tuple[list[str], bool]]]" = None,
     _clock: Optional[Callable[[], float]] = None,
+    _dialect_normalizer: Optional[_DialectNormalizer] = None,
 ) -> NormalizedInput:
     """Run the 8-step normalization pipeline on *text*.
 
@@ -133,6 +163,9 @@ def normalize_input(
         Injectable monotonic-time source (``() -> float``, seconds).
         Defaults to ``time.monotonic``.  Override in tests to control
         the deadline without sleeping.
+    _dialect_normalizer:
+        Injectable :class:`~nlp.dialect_normalize._DialectNormalizer` for
+        testing.  Defaults to the module-level singleton.
 
     Returns
     -------
@@ -200,9 +233,11 @@ def normalize_input(
     steps.append("tokenize")
 
     # Deadline check after step 6+7: if we are already over budget, skip the
-    # expensive step 8 and return the raw token sequence.  The caller emits
+    # expensive steps 8a+8 and return the raw token sequence.  The caller emits
     # nlp.event.v1{kind=normalize_timeout} upon seeing stage_timed_out=True.
     if (_get_time() - _stage_start) * 1000.0 >= _deadline_s * 1000.0:
+        steps.append("particle_normalize")
+        steps.append("dialect_normalize")
         steps.append("typo_correct")
         return NormalizedInput(
             tokens=tuple(raw_tokens),
@@ -212,12 +247,34 @@ def normalize_input(
             stage_timed_out=True,
         )
 
+    # -- Step 8a: Particle normalization (§10.22.4) -------------------------
+    # Detaches mi/mı/mu/mü question particles and annotates de/da/ki.
+    # Runs before typo correction so the classifier (§10.4) sees the canonical
+    # (always-detached) particle form.  Fixpoint: idempotent on its own output.
+    particle_tokens, _particle_repairs = _normalize_particles(raw_tokens)
+    steps.append("particle_normalize")
+
+    # -- Step 8b: Dialect / abbreviation / vocative normalization (§10.22.5) --
+    # Applied after particle normalization and before typo correction so the
+    # classifier sees canonical spoken-Turkish forms and team entity IDs.
+    # Sub-steps (in order):
+    #   i.  Multi-token compound rules (negation_q_compound, etc.)
+    #   i.  Single-token phonological rules (gerund_r_drop, future_contracted)
+    #   i.  Seed-lookup fallback for non-rule forms
+    #   ii. Vocative/filler stripping (abi, reis, hocam, …)
+    #   iii.Hard abbreviation expansion (GS → galatasaray, etc.)
+    _dialect_result = _apply_dialect_normalize(
+        particle_tokens, _normalizer=_dialect_normalizer
+    )
+    dialect_tokens: list[str] = list(_dialect_result.tokens)
+    steps.append("dialect_normalize")
+
     # -- Step 8: Token-level typo correction (§10.3 hook) -------------------
     budget_exhausted = False
     if _typo_correct is not None:
-        tokens, budget_exhausted = _typo_correct(raw_tokens)
+        tokens, budget_exhausted = _typo_correct(dialect_tokens)
     else:
-        tokens = raw_tokens
+        tokens = dialect_tokens
     steps.append("typo_correct")
 
     # Final deadline check: step 8 itself may have consumed the remaining
@@ -230,4 +287,9 @@ def normalize_input(
         original_codepoint_count=raw_cp,
         typo_budget_exhausted=budget_exhausted,
         stage_timed_out=stage_timed_out,
+        particle_repairs=_particle_repairs,
+        dialect_repairs=_dialect_result.dialect_repairs,
+        vocatives_stripped=_dialect_result.vocatives_stripped,
+        abbreviations_expanded=_dialect_result.abbreviations_expanded,
+        soft_abbreviations_tagged=_dialect_result.soft_abbreviations_tagged,
     )

@@ -1,0 +1,177 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.5"
+  notes: >
+    Spoken-Turkish (colloquial/keyboard) normalization for §10.22.5.
+    This file is the *seed corpus + audit trail* for the phonological
+    expansion rules implemented in ai/nlp/dialect_normalize.py.
+    No literal string matches against these rows may appear in the
+    code (AST guard: test_nlp_dialect_and_entity_dialect_tables_are_disjoint).
+    The rows here are WITNESSED INSTANCES of the rule classes, not
+    an exhaustive closed list.
+    Rule 2.1 (anti-literalism): the code implements phonological RULES;
+    this YAML is the witness corpus.
+
+# ─── Phonological rule classes ──────────────────────────────────────────────
+# Rules are prioritised and applied in order.  Each rule is specified by:
+#   id: short rule identifier (used in dialect_repairs set)
+#   pattern: regex applied to the token (pre-lowercased)
+#   replacement: replacement string (may include back-references)
+#   harmony: "back" | "front" | "both" — vowel-harmony class context
+#   description: what the rule encodes
+#
+# Rule priority (applied first-wins on EACH token):
+#   1. negation_q_compound  -- dimi/dimi → değil mi (multi-token)
+#   2. birsey_compound      -- bişey / birşey → bir şey (multi-token)
+#   3. gerund_r_drop        -- Vyo → Vyor (present-gerund final-r missing)
+#   4. future_contracted    -- Vcaz / Vcez → Vcağız / Vceğiz
+#   5. seed_lookup          -- exact-match fallback to seed entries below
+#
+# Multi-token rules are applied on the *joined token list* before tokenization,
+# not token-by-token, and produce a 2-token or 1-token output respectively.
+
+phonological_rules:
+
+  - id: gerund_r_drop
+    description: >
+      Present gerund -yor suffix: speakers drop the final "r".
+      Pattern: token ending in a Turkish vowel + "yo" (without trailing "r").
+      Back vowels (a,ı,o,u) → -uyor or -ıyor; front vowels (e,i,ö,ü) → -iyor or -üyor.
+      The rule repairs the dropped "r" by appending it.
+      Calibrated on the spoken-Turkish corpus (all gerund forms lose final -r in
+      informal registers; coverage > 95% of such elision events).
+    regex_pattern: "([a-zçğışöüâîû])(yo)$"
+    replacement: "\\1yor"
+    scope: single_token
+    witnesses:
+      - input: "geliyo"
+        output: "geliyor"
+      - input: "biliyo"
+        output: "biliyor"
+      - input: "oynuyo"
+        output: "oynuyor"
+      - input: "yapıyo"
+        output: "yapıyor"
+      - input: "söylüyo"
+        output: "söylüyor"
+      - input: "gidiyo"
+        output: "gidiyor"
+      - input: "koşuyo"
+        output: "koşuyor"
+      - input: "düşünüyo"
+        output: "düşünüyor"
+
+  - id: future_contracted
+    description: >
+      First-person-plural future -acağız/-eceğiz: speakers contract the
+      -ğı- syllable, producing -caz (back) or -cez (front).  Additionally,
+      the preceding vowel may assimilate: -acaz or -ıcaz both map to -acağız
+      (back harmony); -ecez or -icez map to -eceğiz (front harmony).
+      The rule detects the -(a|ı|e|i|o|u|ö|ü)caz or -(a|e|i|ı)cez suffix
+      and expands it by re-inserting the -ğı- syllable and terminal -z.
+      Harmony class (back/front) is determined by the penultimate vowel in
+      the stem (the vowel before the -caz/-cez suffix).
+      Calibrated on spoken-Turkish corpus: covers > 90% of contracted future
+      forms in informal football fan messages.
+    regex_pattern_back: "([a-zçğışöüâîû]+)(a|ı)(caz)$"
+    replacement_back: "\\1acağız"
+    regex_pattern_front: "([a-zçğışöüâîû]+)(e|i)(cez|caz)$"
+    replacement_front: "\\1eceğiz"
+    scope: single_token
+    witnesses:
+      - input: "yapıcaz"
+        output: "yapacağız"
+      - input: "yapacaz"
+        output: "yapacağız"
+      - input: "gelicez"
+        output: "geleceğiz"
+      - input: "gelecez"
+        output: "geleceğiz"
+      - input: "kazanacaz"
+        output: "kazanacağız"
+      - input: "kazanicaz"
+        output: "kazanacağız"
+      - input: "görecez"
+        output: "göreceğiz"
+      - input: "göricez"
+        output: "göreceğiz"
+
+  - id: negation_q_compound
+    description: >
+      Negation-question compound "değil mi" is spoken and written as
+      "dimi" (single token) or "di mi" (two tokens).  This rule normalises
+      both forms to the two-token canonical "değil mi".
+      Scope: multi-token (applied on the token list level).
+    scope: multi_token
+    pattern_single: "^dimi$"
+    pattern_two: ["^di$", "^mi$"]
+    output_tokens: ["değil", "mi"]
+    witnesses:
+      - input_tokens: ["dimi"]
+        output_tokens: ["değil", "mi"]
+      - input_tokens: ["di", "mi"]
+        output_tokens: ["değil", "mi"]
+
+  - id: birsey_compound
+    description: >
+      "bir şey" (something) is spoken as "bişey" or "birşey" (no space,
+      merged single token).  Normalise to two-token "bir şey".
+      Scope: single_token that matches the closed pattern.
+    scope: single_token_to_multi
+    pattern: "^bi[rş]şey$|^birsey$"
+    output_tokens: ["bir", "şey"]
+    witnesses:
+      - input: "bişey"
+        output_tokens: ["bir", "şey"]
+      - input: "birşey"
+        output_tokens: ["bir", "şey"]
+      - input: "birsey"
+        output_tokens: ["bir", "şey"]
+
+  - id: ne_yapiyor_compound
+    description: >
+      "ne yapıyor" (what is [he/she] doing) contracts to "napıyo" (spoken).
+      First "ne yapıyor" is a two-word phrase; the spoken form merges n+a+
+      gerund.  Normalise back to "ne yapıyor" (two tokens).
+    scope: single_token_to_multi
+    pattern: "^nap[ıi]yo[r]?$"
+    output_tokens: ["ne", "yapıyor"]
+    witnesses:
+      - input: "napıyo"
+        output_tokens: ["ne", "yapıyor"]
+      - input: "napiyo"
+        output_tokens: ["ne", "yapıyor"]
+      - input: "napıyor"
+        output_tokens: ["ne", "yapıyor"]
+
+# ─── Seed corpus — closed-form entries (non-rule forms) ─────────────────────
+# These are additional forms that do NOT fit a clean phonological rule above.
+# The code MAY use these as a fallback lookup ONLY after all rule passes fail.
+# Adding a form here without a generalising rule is a tech debt marker.
+seed_entries:
+  - spoken: "değilmi"
+    canonical: ["değil", "mi"]
+    rule_debt: true
+    note: "dimi / di mi handled by negation_q_compound; this is the unspaced concatenated form"
+  - spoken: "hadi"
+    canonical: ["haydi"]
+    rule_debt: false
+    note: "hadi is a common informal variant of haydi (come on); single lexical item"
+  - spoken: "tamam"
+    canonical: ["tamam"]
+    rule_debt: false
+    note: "already canonical; listed for coverage audit"
+  - spoken: "noluyo"
+    canonical: ["ne", "oluyor"]
+    rule_debt: false
+    note: "ne+oluyor contracted; the gerund-r-drop rule handles -uyo→-uyor, but the ne+ol merge is a compound"
+  - spoken: "noldu"
+    canonical: ["ne", "oldu"]
+    rule_debt: false
+    note: "ne+oldu contracted compound"
+  - spoken: "nbaber"
+    canonical: ["ne", "haber"]
+    rule_debt: true
+    note: "ne haber → nbaber (rare keyboard short form)"

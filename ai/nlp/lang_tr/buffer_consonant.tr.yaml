@@ -1,0 +1,21 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.3"
+  notes: >
+    Buffer-consonant decision table for buffer_consonant() (§10.22.3).
+    Rule: when a vowel-initial suffix attaches to a vowel-final stem, insert
+    a buffer consonant determined by the suffix grammatical class.
+    Consonant-initial suffixes (locative, ablative, plural) are absent
+    because no buffer is ever needed for them.
+    Foreign-stem pronunciation_class overrides in foreign_stem_overrides.tr.yaml
+    take precedence over written last-char detection.
+
+# suffix_class -> buffer consonant (for vowel-final stems only)
+buffer_rules:
+  dative:           "y"
+  accusative:       "y"
+  possessive_3sg:   "s"
+  compound_marker:  "n"
+  verb_passive_3sg: "\u015f"

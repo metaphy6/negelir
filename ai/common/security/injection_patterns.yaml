@@ -48,10 +48,10 @@ patterns:
     reason: "prompt-injection: forget-instructions"
 
   - id: forget_instructions_turkish
-    pattern: '\b(?:önceki|onceki|daha\s+önce(?:ki)?)\s+(?:tüm\s+|tum\s+)?(?:talimatlar|talimat|kurallar|kural|eğitim|egitim)(?:ı|i|ları|lari)?\s+(?:unut|görmezden\s+gel|gormezden\s+gel)\b'
+    pattern: '\b(?:önceki|önce\s+ki|onceki|daha\s+önce(?:ki)?)\s+(?:tüm\s+|tum\s+)?(?:talimatlar|talimat|kurallar|kural|eğitim|egitim)(?:ı|i|ları|lari)?\s+(?:unut|görmezden\s+gel|gormezden\s+gel)\b'
     severity: warn
     kind: prompt_injection
-    reason: "prompt-injection: forget-instructions (Turkish)"
+    reason: "prompt-injection: forget-instructions (Turkish); also handles particle-normalized form 'önce ki' (§10.22.4)"
 
   - id: system_prompt_smuggling
     pattern: '<\|(?:im_start|im_end|system|user|assistant)\|>'

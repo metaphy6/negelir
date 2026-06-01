@@ -104,7 +104,9 @@ _CONFUSABLES_TABLE: dict[int, str] = {
     0x03A5: "Y",   # Υ GREEK CAPITAL LETTER UPSILON -> Latin Y
     0x03A7: "X",   # Χ GREEK CAPITAL LETTER CHI -> Latin X
     # Additional lookalikes from other scripts
-    0x0131: "i",   # ı LATIN SMALL LETTER DOTLESS I (already Turkish, but here for completeness)
+    # NOTE: U+0131 (ı, Turkish dotless-i) is intentionally EXCLUDED here.
+    # It is a legitimate Turkish character produced by lowercase_tr('I').
+    # Folding ı→i would break idempotency of the full normalize pipeline.
     0x04BB: "h",   # һ CYRILLIC SMALL LETTER SHHA -> Latin h
     0x13A0: "a",   # Ꭺ CHEROKEE LETTER GO -> Latin a (uppercase visual)
     0x13D4: "b",   # Ꮟ CHEROKEE LETTER SI -> Latin b (visual similarity)

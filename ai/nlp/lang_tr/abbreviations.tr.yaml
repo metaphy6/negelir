@@ -1,0 +1,109 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.5"
+  domain: football
+  notes: >
+    Team abbreviation expansion table for §10.22.5.
+    Schema per spec:
+      abbreviation: string (lowercased canonical form)
+      expansion_canonical_id: the canonical entity ID resolved by the gazetteer
+      ambiguity_class: "hard" (always expand) or "soft" (requires co-token)
+      requires_co_token: list of tokens whose presence (any match) triggers
+                         expansion for soft-class entries.
+    The ambiguity class is the input to the §10.5 conflict resolver.
+    Hard = always expand (GS never means anything else in football context).
+    Soft = expand only when a required co-token is present in the same query.
+    No token may appear in BOTH this table AND dialect.tr.yaml
+    (AST guard: test_nlp_dialect_and_entity_dialect_tables_are_disjoint).
+
+# IMPORTANT: all abbreviation values are in lowercased form (after Turkish-
+# aware lowercase) because normalize_input applies lowercase_tr before this
+# step.  The expansion_canonical_id must match the entity IDs in the lexicon.
+
+abbreviations:
+  # ─── Turkish Super Lig teams — hard abbreviations ─────────────────────────
+  # These are always unambiguous in a football-domain context.
+  - abbreviation: "gs"
+    expansion_canonical_id: "galatasaray"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["g.s.", "g.s"]
+
+  - abbreviation: "fb"
+    expansion_canonical_id: "fenerbahce"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["f.b.", "f.b"]
+
+  - abbreviation: "bjk"
+    expansion_canonical_id: "besiktas"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["b.j.k.", "b.j.k"]
+
+  - abbreviation: "ts"
+    expansion_canonical_id: "trabzonspor"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["t.s.", "t.s"]
+
+  - abbreviation: "ankaragücü"
+    expansion_canonical_id: "ankaragücü"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["agücü", "ankg"]
+
+  - abbreviation: "kasımpaşa"
+    expansion_canonical_id: "kasimpaşa"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["kpaşa"]
+
+  - abbreviation: "alanyaspor"
+    expansion_canonical_id: "alanyaspor"
+    ambiguity_class: hard
+    requires_co_token: []
+    aliases: ["alanya"]
+
+  # ─── Soft abbreviations — require domain co-token ─────────────────────────
+  # These abbreviations are NOT always unambiguous in a football context alone;
+  # a neighbouring token from requires_co_token must confirm the football intent.
+  - abbreviation: "rm"
+    expansion_canonical_id: "real_madrid"
+    ambiguity_class: soft
+    requires_co_token: ["madrid", "real", "futbol", "maç", "şampiyonlar", "liga", "ispanya"]
+    aliases: ["r.m."]
+    note: "RM could mean ruh hali (mood) without football co-token"
+
+  - abbreviation: "mci"
+    expansion_canonical_id: "manchester_city"
+    ambiguity_class: soft
+    requires_co_token: ["city", "manchester", "premier", "ingiliz", "maç", "futbol"]
+    aliases: ["man city", "mcity"]
+
+  - abbreviation: "mu"
+    expansion_canonical_id: "manchester_united"
+    ambiguity_class: soft
+    requires_co_token: ["united", "manchester", "premier", "ingiliz", "maç", "futbol"]
+    aliases: ["man utd", "man united"]
+    note: "mu is also a Turkish question particle suffix — requires_co_token mandatory"
+
+  - abbreviation: "psg"
+    expansion_canonical_id: "paris_saint_germain"
+    ambiguity_class: soft
+    requires_co_token: ["paris", "fransa", "ligue", "maç", "futbol", "şampiyonlar"]
+    aliases: ["p.s.g."]
+
+  - abbreviation: "fcb"
+    expansion_canonical_id: "fc_barcelona"
+    ambiguity_class: soft
+    requires_co_token: ["barcelona", "barca", "ispanya", "maç", "futbol", "şampiyonlar"]
+    aliases: ["barca", "barça"]
+
+  - abbreviation: "juve"
+    expansion_canonical_id: "juventus"
+    ambiguity_class: soft
+    requires_co_token: ["juventus", "italya", "seria", "maç", "futbol", "şampiyonlar"]
+    aliases: ["juventus"]

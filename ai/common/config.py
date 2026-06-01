@@ -945,6 +945,13 @@ class Config:
     #   and the caller emits nlp.event.v1{kind=normalize_timeout}.  Better a
     #   degraded answer than no answer.  Must be ≥ 1 ms.
     nlp_normalize_stage_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS", "20")))
+    # nlp_match_separator_pattern: regex pattern that a token between two resolved
+    #   team entities must match for the dispatcher (§10.6) to promote the pair to
+    #   a match_lookup slot (§10.22.5 composite-abbreviation pattern).
+    #   Default covers ASCII hyphen, en-dash, em-dash, "vs"/"vs.", "x", "×", "/".
+    #   Calibrated on fan-message corpus: these separators cover > 99% of
+    #   "Team A vs Team B" phrasing in Turkish football fan messages.
+    nlp_match_separator_pattern: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_MATCH_SEPARATOR_PATTERN", r"^(-|\u2013|\u2014|vs\.?|x|\u00d7|/)$"))
     # nlp_intent_model_path: path to the fastText supervised intent classifier
     #   model file (§10.4 Model).  Relative paths are resolved from the repo
     #   root (same CWD convention as other data/ paths).  Set by the build

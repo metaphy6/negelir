@@ -1,0 +1,89 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.5"
+  notes: >
+    Vocative and filler tokens for §10.22.5.
+    Tokens listed here are stripped from the token stream pre-classifier
+    (they carry no semantic weight in the football NLP domain).
+    Every token here must be documented with category and justification.
+    AST guard: test_nlp_vocative_filler_dropped_does_not_change_intent
+    ensures every token in this file is tested for non-influence on intent.
+    BUILD guard: test_nlp_dialect_and_entity_dialect_tables_are_disjoint
+    ensures no token appears in both this table and the abbreviation table.
+
+# ─── Vocative terms (direct address) ────────────────────────────────────────
+# These are used to address the person being spoken to.  They carry no
+# semantic weight in an intent-classification context.
+vocative:
+  - token: "abi"
+    category: address
+    note: "ağabey (older brother) — common informal address"
+  - token: "abim"
+    category: address
+    note: "ağabeyim — possessed form of abi"
+  - token: "reis"
+    category: address
+    note: "captain/boss — common informal address in Turkish fan culture"
+  - token: "hocam"
+    category: address
+    note: "hoca+m = teacher/coach (mine) — respectful informal address"
+  - token: "hoca"
+    category: address
+    note: "teacher/coach — informal address, base form"
+  - token: "kanka"
+    category: address
+    note: "bro/buddy — colloquial intimate address"
+  - token: "kardeş"
+    category: address
+    note: "brother/sibling — informal address"
+  - token: "kardeşim"
+    category: address
+    note: "kardeş+im — my sibling, direct address"
+  - token: "dostum"
+    category: address
+    note: "dost+um = my friend"
+  - token: "arkadaş"
+    category: address
+    note: "friend — generic address"
+  - token: "arkadaşım"
+    category: address
+    note: "arkadaş+ım = my friend, direct address"
+  - token: "bro"
+    category: address
+    note: "English bro — used in Turkish informal digital speech"
+  - token: "lan"
+    category: address
+    note: "emphatic expletive address — carries no propositional content"
+  - token: "ya"
+    category: filler
+    note: "sentence-final filler particle (≠ question particle); stripped pre-classifier"
+  - token: "yani"
+    category: filler
+    note: "discourse filler (so/I mean) — like 'ya know' in English"
+  - token: "işte"
+    category: filler
+    note: "discourse filler (like 'you know' / 'well') — no propositional content"
+  - token: "efendim"
+    category: address
+    note: "formal address (sir/madam) — no propositional content in NLP context"
+
+# ─── Discourse fillers (sentence-level) ─────────────────────────────────────
+# Sentence-level particles/interjections that appear at phrase boundaries
+# without adding semantic content to the intent.
+fillers:
+  - token: "neyse"
+    category: filler
+    note: "ne+ise = anyway/whatever — discourse boundary marker"
+  - token: "hadi"
+    category: filler
+    note: "come on / let's go — discourse filler when not a verb complement"
+  - token: "tamam"
+    category: filler
+    note: "ok/alright — acknowledgement filler (do NOT strip if it IS the answer)"
+    strip_only_if_not_sole_token: true
+  - token: "peki"
+    category: filler
+    note: "ok/well then — discourse acknowledgement"
+    strip_only_if_not_sole_token: true

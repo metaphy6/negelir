@@ -1,0 +1,172 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.2"
+  notes: >
+    Foreign-stem apostrophe overrides for §10.22.2.
+    Non-Turkish proper nouns whose written form does not reliably indicate
+    vowel class or final-character type for Turkish suffix harmony are listed
+    here.  jinja_filters_tr.py consults this table (when proper=True) to
+    override the default last-vowel / last-char detection.
+
+    Fields:
+      stem: canonical written form, case-preserved (e.g. "PSG", "City").
+            Lookup is case-insensitive at runtime.
+      vowel_class: "front" or "back" — overrides last-written-vowel detection.
+      pronunciation_class: "vowel_final" or "consonant_final" — overrides
+        last-written-character detection.
+        Use "vowel_final" when the last SOUND is vocalic even if the last
+        LETTER is a consonant (e.g. initialisms spelled out in TR, English
+        words ending in silent consonants).
+
+    Build note: when a LeagueCatalog is present, make nlp.lexicon-build warns
+    if a stem does not resolve to a catalog canonical (catalog_validation=warn).
+
+  catalog_validation: warn
+
+overrides:
+  # ── Initialisms ────────────────────────────────────────────────────────────
+  # Rule: vowel class = last letter's Turkish pronunciation vowel.
+  # Turkish letter names: A=a, B=be, C=ce, Ç=çe, D=de, E=e, F=fe, G=ge,
+  #   H=he, I=ı, İ=i, J=je, K=ke, L=le, M=me, N=ne, O=o, Ö=ö, P=pe,
+  #   R=re, S=se, Ş=şe, T=te, U=u, Ü=ü, V=ve, Y=ye, Z=ze.
+  # Initialisms end in a vowel-like sound (the letter name) → vowel_final.
+
+  - stem: PSG
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "G='ce' (e=front, vowel-final) → PSG'ye, PSG'nin"
+
+  - stem: RB
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "B='be' (e=front, vowel-final) → RB'ye, RB'nin (RB Leipzig)"
+
+  - stem: AEK
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "K='ke' (e=front, vowel-final) → AEK'ye, AEK'nin"
+
+  - stem: BVB
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "B='be' (e=front, vowel-final) → BVB'ye, BVB'nin (Borussia Dortmund)"
+
+  - stem: FK
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "K='ke' (e=front, vowel-final) → FK'ye, FK'nin"
+
+  - stem: FC
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "C='ce' (e=front, vowel-final) → FC'ye, FC'nin"
+
+  - stem: SC
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "C='ce' (e=front, vowel-final) → SC'ye, SC'nin"
+
+  - stem: RC
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "C='ce' (e=front, vowel-final) → RC'ye, RC'nin"
+
+  # ── English words with final 'y' (semivowel treated as vowel-final in TR) ──
+  # Rule: English words ending in 'y' are vowel-final in TR suffixation
+  # because the terminal sound /i/ is vocalic.
+
+  - stem: City
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "English final 'y' = vocalic /i/ → City'nin, City'ye (Manchester City)"
+
+  - stem: County
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "English final 'y' = vocalic /i/ → County'nin, County'ye"
+
+  # ── French/Dutch/German words with silent or semi-silent consonants ────────
+
+  - stem: Lyon
+    vowel_class: back
+    pronunciation_class: consonant_final
+    notes: "French silent 'n' IS pronounced in TR; last vowel 'o' (back) → Lyon'un, Lyon'a"
+
+  - stem: Bayern
+    vowel_class: front
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'e' (front) in 'Bayern' → Bayern'in, Bayern'e"
+
+  - stem: Bayer
+    vowel_class: front
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'e' (front) → Bayer'in, Bayer'e"
+
+  # ── Spanish/Italian proper nouns ──────────────────────────────────────────
+
+  - stem: Atletico
+    vowel_class: back
+    pronunciation_class: vowel_final
+    notes: "Ends in 'o' (back, vowel-final) → Atletico'nun, Atletico'ya"
+
+  - stem: Porto
+    vowel_class: back
+    pronunciation_class: vowel_final
+    notes: "Ends in 'o' (back, vowel-final) → Porto'nun, Porto'ya"
+
+  - stem: Monaco
+    vowel_class: back
+    pronunciation_class: vowel_final
+    notes: "Ends in 'o' (back, vowel-final) → Monaco'nun, Monaco'ya"
+
+  - stem: Napoli
+    vowel_class: front
+    pronunciation_class: vowel_final
+    notes: "Ends in 'i' (front, vowel-final) → Napoli'nin, Napoli'ye"
+
+  - stem: Inter
+    vowel_class: front
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'e' (front) → Inter'in, Inter'e"
+
+  - stem: Juventus
+    vowel_class: back
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'u' (back-rounded) → Juventus'un, Juventus'a"
+
+  - stem: Madrid
+    vowel_class: front
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'i' (front-unrounded) → Madrid'in, Madrid'e"
+
+  - stem: Barcelona
+    vowel_class: back
+    pronunciation_class: vowel_final
+    notes: "Ends in 'a' (back, vowel-final) → Barcelona'nın, Barcelona'ya"
+
+  - stem: Liverpool
+    vowel_class: back
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'u' (back-rounded) in 'pool' → Liverpool'un, Liverpool'a"
+
+  - stem: Chelsea
+    vowel_class: back
+    pronunciation_class: vowel_final
+    notes: "Written 'a' end (back, vowel-final) in TR usage → Chelsea'nin, Chelsea'ye"
+
+  - stem: Arsenal
+    vowel_class: back
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'a' (back) in 'Arsenal' → Arsenal'ın, Arsenal'a"
+
+  - stem: United
+    vowel_class: front
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'i' (front) in 'ted' → United'in, United'e"
+
+  - stem: Athletic
+    vowel_class: front
+    pronunciation_class: consonant_final
+    notes: "Last vowel 'i' (front) → Athletic'in, Athletic'e"

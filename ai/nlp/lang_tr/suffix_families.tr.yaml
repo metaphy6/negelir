@@ -1,0 +1,81 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  source: "phase10-10.22.2"
+  notes: >
+    Suffix family definitions for strip_proper_noun_suffix() (§10.22.2).
+    This YAML is the SINGLE SOURCE for all known surface forms.  No literal
+    suffix strings appear in ai/common/text/turkish.py — the code loads this
+    table and performs vowel-harmony-based matching.
+
+    Fields per family:
+      name: canonical family identifier used in entities[].grammatical_suffix.
+      vowel_final_forms: forms that attach after a vowel-final stem
+        (buffer consonant already included).
+      consonant_final_forms: forms that attach after a consonant-final stem.
+        Locative/ablative list BOTH voiced ('d') and voiceless ('t') variants
+        so the recogniser accepts either without knowing the stem's voicing.
+
+    Generalising rule: for recognition (input side) both form-sets are
+    checked, filtered by front/back vowel harmony.  For generation (output
+    side), jinja_filters_tr.py selects the correct set based on stem-final
+    character type.
+
+suffix_families:
+  - name: genitive
+    # After vowel-final stem a buffer 'n' precedes the 4-way harmonic vowel.
+    # Back stems: nın (ı=back-unrounded)  e.g. Türkiye'nin… wait, Türkiye is front.
+    # Examples: Türkiye'nin, Fenerbahçe'nin (front); Trabzonspor'un (back).
+    vowel_final_forms: [nın, nin, nun, nün]
+    # After consonant-final stem: direct 4-way harmonic vowel suffix.
+    # Examples: Trabzon'un, Beşiktaş'ın, Fenerbahçe… no, Fenerbahçe is vowel-final.
+    consonant_final_forms: [ın, in, un, ün]
+
+  - name: dative
+    # After vowel-final stem: buffer 'y' + 2-way harmonic vowel.
+    # Examples: Bursa'ya (back), Fenerbahçe'ye (front).
+    vowel_final_forms: [ya, ye]
+    # After consonant-final stem: direct 2-way harmonic vowel.
+    # Examples: Trabzon'a (back), Beşiktaş'a (back), Rize'ye (front).
+    consonant_final_forms: [a, e]
+
+  - name: accusative
+    # After vowel-final stem: buffer 'y' + 4-way harmonic vowel.
+    # Examples: Bursa'yı (back-unrounded), Fenerbahçe'yi (front-unrounded).
+    vowel_final_forms: [yı, yi, yu, yü]
+    # After consonant-final stem: direct 4-way harmonic vowel.
+    # Examples: Trabzon'u (back-rounded), Beşiktaş'ı (back-unrounded).
+    consonant_final_forms: [ı, i, u, ü]
+
+  - name: locative
+    # After vowel-final stem: always voiced 'd' + 2-way harmony.
+    # Examples: Bursa'da (back), Fenerbahçe'de (front).
+    vowel_final_forms: [da, de]
+    # After consonant-final stem: voiced 'd' (after voiced consonant/vowel)
+    # or voiceless 't' (after voiceless: ç/f/h/k/p/s/ş/t).  Both forms listed
+    # because the recogniser does not re-derive voicing on the input side.
+    # Examples: Trabzon'da (back, voiced), Beşiktaş'ta (back, voiceless).
+    consonant_final_forms: [da, de, ta, te]
+
+  - name: ablative
+    # After vowel-final stem: voiced 'd' + 2-way + 'n'.
+    # Examples: Bursa'dan (back), Fenerbahçe'den (front).
+    vowel_final_forms: [dan, den]
+    # After consonant-final stem: voiced or voiceless 'd'/'t' + 2-way + 'n'.
+    # Examples: Trabzon'dan (back), Beşiktaş'tan (back, voiceless).
+    consonant_final_forms: [dan, den, tan, ten]
+
+  - name: plural
+    # Same form regardless of stem-final character type (no buffer required).
+    # 2-way harmony: lar (back) / ler (front).
+    # Examples: Galatasaray'lar (back), Fenerbahçe'ler (front).
+    vowel_final_forms: [lar, ler]
+    consonant_final_forms: [lar, ler]
+
+  - name: person_marker_1sg
+    # After vowel-final stem: just 'm' (rare in proper-noun context).
+    vowel_final_forms: []
+    # After consonant-final stem: 4-way harmonic vowel + 'm'.
+    # Examples (possessive use): Trabzon'um (back-rounded).
+    consonant_final_forms: [ım, im, um, üm]

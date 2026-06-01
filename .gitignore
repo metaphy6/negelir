@@ -64,3 +64,4 @@ logs/
 
 # Runtime maint artifacts
 data/maint/summarizer_ledger.json
+.venv/
