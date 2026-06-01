@@ -180,6 +180,99 @@ def cmd_nlp_entity_bench(argv: List[str]) -> int:
 # nlp.lexicon-build
 # ---------------------------------------------------------------------------
 
+def _ascii_fold_tr(text: str) -> str:
+    """Fold Turkish diacritics to ASCII for §10.22.1 sidecar indices."""
+    table = str.maketrans({
+        "ç": "c", "ğ": "g", "ı": "i", "ö": "o", "ş": "s", "ü": "u",
+        "Ç": "c", "Ğ": "g", "İ": "i", "Ö": "o", "Ş": "s", "Ü": "u",
+    })
+    folded = str(text).strip().lower().replace("i\u0307", "i")
+    return folded.translate(table)
+
+
+def _load_word_frequencies(path: Path) -> dict[str, int]:
+    """Load ``tr_word_freq.txt`` into folded-token -> frequency map."""
+    scores: dict[str, int] = {}
+    if not path.exists():
+        return scores
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        raw_line = raw_line.strip()
+        if not raw_line or raw_line.startswith("#"):
+            continue
+        parts = raw_line.split("\t", 1)
+        if len(parts) != 2:
+            continue
+        token = _ascii_fold_tr(parts[0])
+        try:
+            freq = int(parts[1])
+        except ValueError:
+            continue
+        if token and freq > scores.get(token, 0):
+            scores[token] = freq
+    return scores
+
+
+def _load_ascii_collision_allowlist(path: Path) -> set[str]:
+    """Load explicit ASCII collision allowlist from YAML file."""
+    import yaml
+
+    if not path.exists():
+        return set()
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    allowed = data.get("allow", [])
+    if not isinstance(allowed, list):
+        return set()
+    return {_ascii_fold_tr(v) for v in allowed if isinstance(v, str) and v.strip()}
+
+
+def _extract_negative_tokens(entries: list[dict]) -> set[str]:
+    """Extract and fold ``entities_negative`` trigger tokens."""
+    tokens: set[str] = set()
+    for entry in entries:
+        token = entry.get("token")
+        if isinstance(token, str) and token.strip():
+            tokens.add(_ascii_fold_tr(token))
+    return tokens
+
+
+def _collect_alias_rows(
+    entries: list[dict],
+    word_freq: dict[str, int],
+) -> tuple[dict[str, list[list[object]]], dict[str, set[str]]]:
+    """Build sidecar rows and ownership map from lexicon entries.
+
+    Returns:
+        (rows, ownership)
+        rows: ascii_alias -> [[canonical_id, original_alias, frequency_score], ...]
+        ownership: ascii_alias -> {canonical_id, ...} for non-empty canonicals
+    """
+    rows: dict[str, list[list[object]]] = {}
+    ownership: dict[str, set[str]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        cid = str(entry.get("canonical_id", "")).strip()
+        aliases = list(entry.get("names", []) or []) + list(entry.get("aliases", []) or [])
+        for alias in aliases:
+            if not isinstance(alias, str) or not alias.strip():
+                continue
+            folded = _ascii_fold_tr(alias)
+            if not folded:
+                continue
+            score = float(word_freq.get(folded, 0))
+            rows.setdefault(folded, []).append([cid, alias, score])
+            if cid:
+                ownership.setdefault(folded, set()).add(cid)
+    for key in sorted(rows):
+        deduped = {(str(r[0]), str(r[1]), float(r[2])) for r in rows[key]}
+        rows[key] = [list(row) for row in sorted(deduped, key=lambda r: (r[0], r[1]))]
+    return rows, ownership
+
 def cmd_nlp_lexicon_build(argv: List[str]) -> int:
     """Regenerate lexicon files by applying _aliases_delta.tr.yaml onto the
     current baseline, then refresh _meta.generated_at_utc and bump the
@@ -203,9 +296,7 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
     delta_raw = yaml.safe_load(DELTA_FILE.read_text(encoding="utf-8"))
     deltas = delta_raw.get("deltas", []) if isinstance(delta_raw, dict) else []
 
-    if not deltas:
-        ok("nlp.lexicon-build: no deltas to apply — lexicons unchanged")
-        return 0
+    no_deltas = not deltas
 
     # Group deltas by target file
     by_file: dict[str, list[dict]] = {}
@@ -290,7 +381,84 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
         else:
             info(f"nlp.lexicon-build: {fname} — no changes after applying delta")
 
-    ok(f"nlp.lexicon-build: {modified} file(s) modified")
+    if no_deltas:
+        info("nlp.lexicon-build: no deltas to apply — rebuilding ASCII indices only")
+
+    # Phase 10 §10.22.1: emit sibling ASCII alias index files and gate
+    # unresolved ASCII collisions unless covered by entities_negative or allowlist.
+    word_freq_path = REPO_ROOT_LOCAL / "ai" / "nlp" / "data" / "tr_word_freq.txt"
+    word_freq = _load_word_frequencies(word_freq_path)
+    allowlist_path = LEXICON_DIR / "_ascii_collisions.tr.yaml"
+    ascii_allow = _load_ascii_collision_allowlist(allowlist_path)
+
+    entities_negative_file = LEXICON_DIR / "entities_negative.tr.yaml"
+    neg_tokens: set[str] = set()
+    if entities_negative_file.exists():
+        try:
+            neg_raw = yaml.safe_load(entities_negative_file.read_text(encoding="utf-8"))
+            neg_entries = (neg_raw or {}).get("entries", []) if isinstance(neg_raw, dict) else []
+            neg_tokens = _extract_negative_tokens(neg_entries if isinstance(neg_entries, list) else [])
+        except yaml.YAMLError as exc:
+            err(f"nlp.lexicon-build: entities_negative.tr.yaml parse error: {exc}")
+            return 1
+
+    lexicon_files = sorted(
+        f for f in LEXICON_DIR.glob("*.tr.yaml") if not f.name.startswith("_")
+    )
+    ascii_sidecars_written = 0
+    all_collisions: dict[str, set[str]] = {}
+    per_file_rows: dict[Path, dict[str, list[list[object]]]] = {}
+
+    for lex_path in lexicon_files:
+        try:
+            data = yaml.safe_load(lex_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            err(f"nlp.lexicon-build: {lex_path.name}: YAML parse error: {exc}")
+            return 1
+        entries = (data or {}).get("entries", []) if isinstance(data, dict) else []
+        if not isinstance(entries, list):
+            err(f"nlp.lexicon-build: {lex_path.name}: 'entries' must be a list")
+            return 1
+
+        rows, ownership = _collect_alias_rows(entries, word_freq)
+        per_file_rows[lex_path] = rows
+        for alias_key, owners in ownership.items():
+            if len(owners) > 1:
+                all_collisions.setdefault(alias_key, set()).update(owners)
+
+    uncovered: list[str] = []
+    for alias_key in sorted(all_collisions):
+        if alias_key in ascii_allow:
+            continue
+        parts = [p for p in alias_key.split() if p]
+        if any(part in neg_tokens for part in parts):
+            continue
+        owners = sorted(all_collisions[alias_key])
+        uncovered.append(f"{alias_key} -> {owners}")
+
+    if uncovered:
+        err("nlp.lexicon-build: unresolved ASCII alias collisions detected")
+        err("  Add entities_negative coverage or allowlist in _ascii_collisions.tr.yaml")
+        for row in uncovered[:20]:
+            err(f"  • {row}")
+        if len(uncovered) > 20:
+            err(f"  • ... and {len(uncovered) - 20} more")
+        return 1
+
+    for lex_path, rows in sorted(per_file_rows.items(), key=lambda kv: kv[0].name):
+        idx_name = f"{lex_path.name[:-5]}.ascii.idx"
+        idx_path = lex_path.with_name(idx_name)
+        idx_data = {k: rows[k] for k in sorted(rows)}
+        idx_path.write_text(
+            json.dumps(idx_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        ascii_sidecars_written += 1
+
+    ok(
+        f"nlp.lexicon-build: {modified} file(s) modified; "
+        f"{ascii_sidecars_written} ASCII sidecar(s) refreshed"
+    )
     return 0
 
 

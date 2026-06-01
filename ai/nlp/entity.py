@@ -73,6 +73,20 @@ DEFAULT_KIND_PRIORITY: list[str] = [
     "score",
 ]
 
+_ASCII_PASS_PRIMARY_KINDS: frozenset[str] = frozenset({"team", "player", "league"})
+
+_TR_ASCII_FOLD_TABLE: dict[int, str] = str.maketrans({
+    "ç": "c",
+    "ğ": "g",
+    "ı": "i",
+    "ö": "o",
+    "ş": "s",
+    "ü": "u",
+    "â": "a",
+    "î": "i",
+    "û": "u",
+})
+
 # Lexicon files that feed the gazetteer (order does NOT matter for correctness)
 _GAZETTEER_FILES: tuple[str, ...] = (
     "teams.tr.yaml",
@@ -225,6 +239,114 @@ def _build_combined_alias_index(
             if key:
                 combined[key] = hit
     return combined
+
+
+def _ascii_fold_tr(text: str) -> str:
+    """Fold Turkish diacritics to ASCII for §10.22.1 ASCII-first matching."""
+    return lowercase_tr(text).translate(_TR_ASCII_FOLD_TABLE)
+
+
+def _build_ascii_alias_index(alias_index: dict[str, AliasHit]) -> dict[str, AliasHit]:
+    """Build a folded alias index where each alias key is Turkish-ASCII folded."""
+    folded: dict[str, AliasHit] = {}
+    for alias, hit in alias_index.items():
+        key = _ascii_fold_tr(alias)
+        if not key:
+            continue
+        folded.setdefault(key, hit)
+    return folded
+
+
+def _has_ascii_primary_hit(spans: Sequence[EntitySpan]) -> bool:
+    """Return True when ASCII pass produced a high-confidence primary hit."""
+    for span in spans:
+        if span.kind in _ASCII_PASS_PRIMARY_KINDS and span.confidence >= 1.0:
+            return True
+    return False
+
+
+def _merge_two_pass_gazetteer(
+    ascii_spans: list[EntitySpan],
+    restored_spans: list[EntitySpan],
+    *,
+    kind_priority: list[str],
+    restored_margin: float,
+) -> list[EntitySpan]:
+    """Merge ASCII/restored gazetteer spans with §10.22.1 conflict policy."""
+    if not ascii_spans:
+        return list(restored_spans)
+    if not restored_spans:
+        return list(ascii_spans)
+
+    combined: list[tuple[str, EntitySpan]] = [("ascii", s) for s in ascii_spans]
+    combined.extend(("restored", s) for s in restored_spans)
+
+    def _priority(kind: str) -> int:
+        try:
+            return kind_priority.index(kind)
+        except ValueError:
+            return len(kind_priority)
+
+    def _sort_key(item: tuple[str, EntitySpan]) -> tuple[int, float, int, int, int]:
+        source, span = item
+        length = span.span_end - span.span_start
+        source_rank = 0 if source == "ascii" else 1
+        return (-length, -span.confidence, _priority(span.kind), source_rank, span.span_start)
+
+    selected: list[tuple[str, EntitySpan]] = []
+    for source, span in sorted(combined, key=_sort_key):
+        same_slot_idx: int | None = None
+        overlaps = False
+        for idx, (_, chosen) in enumerate(selected):
+            if chosen.span_start == span.span_start and chosen.span_end == span.span_end:
+                same_slot_idx = idx
+            if not (span.span_end <= chosen.span_start or span.span_start >= chosen.span_end):
+                overlaps = True
+                break
+
+        if same_slot_idx is not None:
+            chosen_source, chosen_span = selected[same_slot_idx]
+            if (
+                source == "restored"
+                and chosen_source == "ascii"
+                and chosen_span.canonical_id != span.canonical_id
+                and span.confidence >= chosen_span.confidence + restored_margin
+            ):
+                selected[same_slot_idx] = (source, span)
+            continue
+
+        if overlaps:
+            continue
+        selected.append((source, span))
+
+    return [span for _, span in sorted(selected, key=lambda item: item[1].span_start)]
+
+
+def _fold_negative_rules_to_ascii(rules: Sequence[_NegativeRule]) -> list[_NegativeRule]:
+    """Fold negative-rule trigger/co-token strings for the ASCII pass."""
+    folded: list[_NegativeRule] = []
+    for rule in rules:
+        folded.append(
+            _NegativeRule(
+                token=_ascii_fold_tr(rule.token),
+                requires_cotoken=_ascii_fold_tr(rule.requires_cotoken),
+                ambiguous_between=rule.ambiguous_between,
+            )
+        )
+    return folded
+
+
+def _dedupe_ambiguous_hits(hits: Sequence[AmbiguousHit]) -> list[AmbiguousHit]:
+    """Return stable-order unique AmbiguousHit entries by (alias, candidates)."""
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    out: list[AmbiguousHit] = []
+    for hit in hits:
+        key = (hit.alias, hit.candidates)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(hit)
+    return out
 
 
 def gazetteer_pass(
@@ -569,18 +691,28 @@ class EntityExtractor:
         store: LexiconStore,
         kind_priority: list[str] | None = None,
         crf: CrfExtractor | None = None,
+        ascii_vs_restored_margin: float = 0.2,
     ) -> None:
         self._store = store
         self._kind_priority = kind_priority if kind_priority is not None else list(DEFAULT_KIND_PRIORITY)
         self._crf = crf if crf is not None else CrfExtractor()
+        self._ascii_vs_restored_margin = ascii_vs_restored_margin
 
-    def extract(self, tokens: Sequence[str]) -> ExtractionResult:
+    def extract(
+        self,
+        tokens: Sequence[str],
+        *,
+        raw_tokens: Sequence[str] | None = None,
+    ) -> ExtractionResult:
         """Extract entities from *tokens*.
 
         Parameters
         ----------
         tokens:
             Already-normalized token list (§10.1 pipeline output).
+        raw_tokens:
+            Optional pre-restoration token list for §10.22.1 ASCII-first
+            gazetteer pass. When omitted, falls back to *tokens*.
 
         Returns
         -------
@@ -594,14 +726,31 @@ class EntityExtractor:
 
         # 1. Build gazetteer alias index + negative rules from current store snapshot
         alias_index = _build_combined_alias_index(self._store)
+        ascii_alias_index = _build_ascii_alias_index(alias_index)
         negative_rules = _load_negative_rules(self._store)
+        ascii_negative_rules = _fold_negative_rules_to_ascii(negative_rules)
 
-        # 2. Gazetteer pass (collects ambiguous hits via out_ambiguous)
+        # 2. Gazetteer two-pass policy (§10.22.1): ASCII-first, restored fallback.
+        raw_token_list = list(raw_tokens) if raw_tokens is not None else token_list
+        ascii_tokens = [_ascii_fold_tr(t) for t in raw_token_list]
         ambiguous: list[AmbiguousHit] = []
-        gazetteer_spans = gazetteer_pass(
-            token_list, alias_index, negative_rules, self._kind_priority,
+        ascii_spans = gazetteer_pass(
+            ascii_tokens, ascii_alias_index, ascii_negative_rules, self._kind_priority,
             out_ambiguous=ambiguous,
         )
+        if _has_ascii_primary_hit(ascii_spans):
+            gazetteer_spans = ascii_spans
+        else:
+            restored_spans = gazetteer_pass(
+                token_list, alias_index, negative_rules, self._kind_priority,
+                out_ambiguous=ambiguous,
+            )
+            gazetteer_spans = _merge_two_pass_gazetteer(
+                ascii_spans,
+                restored_spans,
+                kind_priority=self._kind_priority,
+                restored_margin=self._ascii_vs_restored_margin,
+            )
 
         # 3. CRF pass — then filter out any span whose text matches a PII
         #    pattern (§10.5 PII guard at extraction).  Dropped spans are
@@ -619,6 +768,6 @@ class EntityExtractor:
         # 4. Conflict resolution
         return ExtractionResult(
             spans=_resolve_conflicts(gazetteer_spans, crf_spans),
-            ambiguous=ambiguous,
+            ambiguous=_dedupe_ambiguous_hits(ambiguous),
             pii_dropped=pii_dropped,
         )

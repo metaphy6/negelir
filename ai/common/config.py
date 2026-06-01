@@ -770,6 +770,14 @@ class Config:
     # nlp_tenant_abuse_window_s: rolling window for abuse-rate detection
     #   (§10.23.1). Default 60s.
     nlp_tenant_abuse_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_TENANT_ABUSE_WINDOW_S", "60")))
+    # nlp_tenant_class_enum: closed-set tenant classes allowed on observable
+    #   surfaces (metrics/log/event labels) for §10.23.1.
+    nlp_tenant_class_enum: tuple[str, ...] = (
+        "account_paid",
+        "account_free",
+        "ip_anonymous",
+        "ip_known_proxy",
+    )
     # nlp_pipeline_timeout_ms: total NLP pipeline budget (intent + dispatch +
     #   consensus + optional humanizer).  Extends Phase 9 §9.17.4 chain:
     #   api_request_timeout_ms ≥ nlp_pipeline_timeout_ms + nlp_dispatch_overhead_ms.
@@ -914,6 +922,22 @@ class Config:
     #   Default 1.5 (from the §10.3 spec).  Set to a very large value to always
     #   pick the highest-frequency candidate.
     nlp_diacritic_tie_break_ratio: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO", "1.5")))
+    # nlp_diacritic_hard_call_min_freq: frequency floor for the §10.22.1
+    #   hard-call restoration override.  Ambiguous entries whose top candidate
+    #   frequency is >= this value restore to the top candidate even when the
+    #   tie-break ratio would otherwise preserve the ASCII form.
+    #   Must be >= 1. Default 10000.
+    nlp_diacritic_hard_call_min_freq: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ", "10000")))
+    # nlp_diacritic_max_risk_per_token: cumulative per-character restoration
+    #   risk cap for §10.22.1. If the sum of risk weights for applied letter
+    #   swaps exceeds this value, the token stays in ASCII form even when
+    #   restoration is otherwise unambiguous. Must be >= 0.0. Default 2.5.
+    nlp_diacritic_max_risk_per_token: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN", "2.5")))
+    # nlp_ascii_vs_restored_margin: minimum confidence gap required for a
+    #   restored-form gazetteer hit to override an ASCII-pass hit when both
+    #   target the same span but map to different canonicals (§10.22.1).
+    #   Must be >= 0.0. Default 0.2.
+    nlp_ascii_vs_restored_margin: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_ASCII_VS_RESTORED_MARGIN", "0.2")))
     # nlp_normalize_stage_timeout_ms: wall-clock deadline for the combined
     #   normalize+diacritic+typo stage (steps 6-8 in §10.1, §10.3 Cost ceiling).
     #   Deadline propagation per Phase 9 §9.17.4.  On timeout the pipeline falls
@@ -2978,6 +3002,17 @@ class Config:
         _bounded("nlp_fairness_max_tracked_keys", self.nlp_fairness_max_tracked_keys, 1, 1_000_000)
         _bounded("nlp_tenant_abuse_qps_threshold", self.nlp_tenant_abuse_qps_threshold, 0.001, 10_000.0)
         _bounded("nlp_tenant_abuse_window_s", self.nlp_tenant_abuse_window_s, 1, 86_400)
+        expected_tenant_classes = (
+            "account_paid",
+            "account_free",
+            "ip_anonymous",
+            "ip_known_proxy",
+        )
+        if tuple(self.nlp_tenant_class_enum) != expected_tenant_classes:
+            issues.append(
+                f"nlp_tenant_class_enum={self.nlp_tenant_class_enum!r} must equal "
+                f"{expected_tenant_classes!r} (Phase 10 §10.23.1 closed-set class enum)"
+            )
         _bounded("nlp_pipeline_timeout_ms", self.nlp_pipeline_timeout_ms, 1, 300_000)
         _bounded("nlp_dispatch_overhead_ms", self.nlp_dispatch_overhead_ms, 1, 60_000)
         _bounded("nlp_consensus_overhead_ms", self.nlp_consensus_overhead_ms, 1, 60_000)
@@ -3037,6 +3072,21 @@ class Config:
             issues.append(
                 f"nlp_diacritic_tie_break_ratio={self.nlp_diacritic_tie_break_ratio} "
                 "must be >= 1.0 (§10.3 ambiguity policy)"
+            )
+        if self.nlp_diacritic_hard_call_min_freq < 1:
+            issues.append(
+                f"nlp_diacritic_hard_call_min_freq={self.nlp_diacritic_hard_call_min_freq} "
+                "must be >= 1 (§10.22.1 hard-call restoration policy)"
+            )
+        if self.nlp_diacritic_max_risk_per_token < 0.0:
+            issues.append(
+                f"nlp_diacritic_max_risk_per_token={self.nlp_diacritic_max_risk_per_token} "
+                "must be >= 0.0 (§10.22.1 per-character diacritic risk policy)"
+            )
+        if self.nlp_ascii_vs_restored_margin < 0.0:
+            issues.append(
+                f"nlp_ascii_vs_restored_margin={self.nlp_ascii_vs_restored_margin} "
+                "must be >= 0.0 (§10.22.1 ASCII-vs-restored conflict policy)"
             )
         _bounded("nlp_normalize_stage_timeout_ms", self.nlp_normalize_stage_timeout_ms, 1, 60_000)
         _bounded("nlp_intent_model_max_size_mb", self.nlp_intent_model_max_size_mb, 1, 10_000)

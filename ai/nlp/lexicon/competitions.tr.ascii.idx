@@ -1,0 +1,195 @@
+{
+  "avrupa ligi": [
+    [
+      "uefa_europa_league",
+      "Avrupa Ligi",
+      0.0
+    ],
+    [
+      "uefa_europa_league",
+      "avrupa ligi",
+      0.0
+    ]
+  ],
+  "champions league": [
+    [
+      "uefa_champions_league",
+      "Champions League",
+      0.0
+    ]
+  ],
+  "conference league": [
+    [
+      "uefa_conference_league",
+      "Conference League",
+      0.0
+    ]
+  ],
+  "dunya kupasi": [
+    [
+      "fifa_world_cup",
+      "Dünya Kupası",
+      0.0
+    ],
+    [
+      "fifa_world_cup",
+      "dünya kupası",
+      0.0
+    ]
+  ],
+  "europa league": [
+    [
+      "uefa_europa_league",
+      "Europa League",
+      0.0
+    ]
+  ],
+  "fifa dunya kupasi": [
+    [
+      "fifa_world_cup",
+      "FIFA Dünya Kupası",
+      0.0
+    ]
+  ],
+  "konferans ligi": [
+    [
+      "uefa_conference_league",
+      "Konferans Ligi",
+      0.0
+    ],
+    [
+      "uefa_conference_league",
+      "konferans ligi",
+      0.0
+    ]
+  ],
+  "kupa": [
+    [
+      "tr_kupasi",
+      "kupa",
+      76543.0
+    ]
+  ],
+  "sampiyonlar ligi": [
+    [
+      "uefa_champions_league",
+      "Şampiyonlar Ligi",
+      0.0
+    ],
+    [
+      "uefa_champions_league",
+      "şampiyonlar ligi",
+      0.0
+    ]
+  ],
+  "sezonu baslangic kupasi": [
+    [
+      "tr_supe_kupa",
+      "sezonu başlangıç kupası",
+      0.0
+    ]
+  ],
+  "sl": [
+    [
+      "uefa_champions_league",
+      "sl",
+      0.0
+    ]
+  ],
+  "super kupa": [
+    [
+      "tr_supe_kupa",
+      "süper kupa",
+      0.0
+    ]
+  ],
+  "turkiye kupasi": [
+    [
+      "tr_kupasi",
+      "Türkiye Kupası",
+      0.0
+    ],
+    [
+      "tr_kupasi",
+      "türkiye kupası",
+      0.0
+    ]
+  ],
+  "turkiye super kupasi": [
+    [
+      "tr_supe_kupa",
+      "Türkiye Süper Kupası",
+      0.0
+    ]
+  ],
+  "ucl": [
+    [
+      "uefa_champions_league",
+      "ucl",
+      0.0
+    ]
+  ],
+  "uecl": [
+    [
+      "uefa_conference_league",
+      "uecl",
+      0.0
+    ]
+  ],
+  "uefa avrupa ligi": [
+    [
+      "uefa_europa_league",
+      "UEFA Avrupa Ligi",
+      0.0
+    ]
+  ],
+  "uefa konferans ligi": [
+    [
+      "uefa_conference_league",
+      "UEFA Konferans Ligi",
+      0.0
+    ]
+  ],
+  "uefa sampiyonlar ligi": [
+    [
+      "uefa_champions_league",
+      "UEFA Şampiyonlar Ligi",
+      0.0
+    ]
+  ],
+  "uel": [
+    [
+      "uefa_europa_league",
+      "uel",
+      0.0
+    ]
+  ],
+  "wc": [
+    [
+      "fifa_world_cup",
+      "wc",
+      0.0
+    ]
+  ],
+  "world cup": [
+    [
+      "fifa_world_cup",
+      "World Cup",
+      0.0
+    ]
+  ],
+  "ziraat kupasi": [
+    [
+      "tr_kupasi",
+      "ziraat kupası",
+      0.0
+    ]
+  ],
+  "ziraat turkiye kupasi": [
+    [
+      "tr_kupasi",
+      "Ziraat Türkiye Kupası",
+      0.0
+    ]
+  ]
+}

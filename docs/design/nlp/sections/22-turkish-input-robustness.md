@@ -36,7 +36,7 @@
 
 #### 10.22.1 ASCIIfication tolerance (no-diacritic Turkish input)
 
-- [ ] **Real failure mode §10.3 underspecifies.** Default Turkish PC users
+- [x] **Real failure mode §10.3 underspecifies.** Default Turkish PC users
   type without `ç ğ ı ö ş ü` (and almost never the rare `â î û`):
   *"galatasaray fenerbahce maci tahmin"*, *"besiktas trabzon ne zaman
   oynuyor"*, *"unlu santrforun cezasi var mi"*. The diacritic-restore
@@ -44,7 +44,7 @@
   what happens when a token has multiple plausible restorations
   (*"sik" → "şık"* or *"sık"*; *"ucu" → "üçü"* or *"ucu"*), and how
   does the gazetteer behave under restored vs unrestored ambiguity.
-- [ ] **Two-stage restoration policy.** §10.3 already pins the
+- [x] **Two-stage restoration policy.** §10.3 already pins the
   frequency-tie-break ratio (`cfg.nlp_diacritic_tie_break_ratio=1.5x`).
   §10.22.1 pins the **integration**: (a) gazetteer pass (§10.5) runs
   **twice** — first against the raw-ASCIIfied lexicon (every alias is
@@ -53,7 +53,7 @@
   across both passes; (c) if both passes hit different canonicals,
   prefer the restored-form hit ONLY when its frequency-weighted
   confidence exceeds the ASCII hit by `cfg.nlp_ascii_vs_restored_margin=0.2`.
-- [ ] **ASCIIfied alias index built at lexicon-load.** `make nlp.lexicon-build`
+- [x] **ASCIIfied alias index built at lexicon-load.** `make nlp.lexicon-build`
   emits a sibling `*.tr.ascii.idx` per lexicon file: `dict[ascii_alias →
   list[(canonical_id, original_alias, frequency_score)]]`. Conflict
   exposed at build time: when two different canonicals share an
@@ -61,19 +61,19 @@
   build refuses unless an `entities_negative.tr.yaml` rule covers the
   ambiguity. Operator either resolves the disambiguator or accepts an
   explicit allow-list entry in `ai/nlp/lexicon/_ascii_collisions.tr.yaml`.
-- [ ] **Hard-call vs soft-call restoration.** Tokens with frequency >
+- [x] **Hard-call vs soft-call restoration.** Tokens with frequency >
   `cfg.nlp_diacritic_hard_call_min_freq=10000` (per `tr_word_freq.txt`)
   → restore even when ratio fails (the dominant form is overwhelmingly
   correct: *"futbol" never means anything else*). Below threshold →
   preserve original + flag to entity resolver.
-- [ ] **Per-character risk scoring.** Some letter swaps are far more
+- [x] **Per-character risk scoring.** Some letter swaps are far more
   ambiguous than others (*"i↔ı"* loses information; *"u↔ü"* often
   preserves meaning; *"o↔ö"* shifts vowel class which can break suffix
   harmony downstream). Restoration policy carries a per-character risk
   weight from `ai/nlp/lang_tr/diacritic_risk.tr.yaml`; total token risk
   > `cfg.nlp_diacritic_max_risk_per_token=2.5` → keep ASCII form even
   if a single restoration is unique.
-- [ ] **Proof:** `test_nlp_ascii_pass_resolves_galatasaray_no_diacritics`
+- [x] **Proof:** `test_nlp_ascii_pass_resolves_galatasaray_no_diacritics`
   (corpus 100 queries), `test_nlp_ascii_collision_build_refuses_without_allowlist`,
   `test_nlp_diacritic_restore_prefers_high_freq_form`,
   `test_nlp_diacritic_high_risk_token_keeps_ascii`,
@@ -81,11 +81,10 @@
 
 #### 10.22.2 Apostrophe discipline on proper-noun suffixation
 
-- [ ] **Real failure mode.** Turkish writes proper-noun + suffix with an
+ [x] **Real failure mode.** Turkish writes proper-noun + suffix with an
   apostrophe (*"Galatasaray'ın"*, *"Real Madrid'e"*), but users
   routinely omit it (*"Galatasarayın"*, *"Real Madride"*) or place it
   wrongly (*"Galata'sarayın"*, *"Realmadrid'in"*). §10.5 gazetteer
-  longest-match against an unkeyed alias list misses the suffixed form,
   and §10.7 `match_label`/`team` filter renders the OUTPUT incorrectly
   if the apostrophe rule isn't applied symmetrically.
 - [ ] **Input-side suffix-stripper.** Pre-gazetteer step:

@@ -15,7 +15,7 @@ from typing import Callable, Deque, Dict, Generic, Mapping, TypeVar
 from common.config import cfg
 
 _ALLOWED_FAIRNESS_KEYS = ("tenant_id", "account_id", "ip_bucket")
-_TENANT_CLASS_ENUM = ("account_paid", "account_free", "ip_anonymous", "ip_known_proxy")
+_TENANT_CLASS_ENUM = tuple(cfg.nlp_tenant_class_enum)
 _TENANT_ABUSE_ALERT_DEBOUNCE_S = 300.0
 
 T = TypeVar("T")

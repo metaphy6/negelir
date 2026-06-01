@@ -1,6 +1,9 @@
 """Phase 10 §10.23.1 — per-tenant intake fair-queue tests."""
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 from nlp.intake_fair_queue import NlpIntakeFairQueue
 
 
@@ -150,3 +153,33 @@ def test_tenant_abuse_detection_uses_ip_known_proxy_class() -> None:
     queue.enqueue("p2", {"ip_bucket": "203.0.113.0/24", "ip_known_proxy": True})
 
     assert abuse_alerts == [("ip_known_proxy", 1.5)]
+
+
+def test_nlp_no_unbounded_tenant_label() -> None:
+    """AST guard: fair-queue callbacks must emit closed key_class labels, never tenant_id."""
+    src = Path(__file__).resolve().parents[1] / "nlp" / "intake_fair_queue.py"
+    tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
+
+    callback_calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr in {"on_tenant_intake_rate", "on_tenant_abuse_detected"}:
+            callback_calls.append(node)
+
+    assert callback_calls, "expected fair-queue callback emissions to be present"
+
+    violations: list[str] = []
+    for call in callback_calls:
+        if not call.args:
+            violations.append(f"line {call.lineno}: callback call must pass key_class as first arg")
+            continue
+        first_arg = call.args[0]
+        if not isinstance(first_arg, ast.Name) or first_arg.id != "key_class":
+            violations.append(
+                f"line {call.lineno}: callback first arg must be key_class (closed enum), not tenant_id"
+            )
+
+    assert violations == [], "\n".join(violations)

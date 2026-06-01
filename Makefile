@@ -478,6 +478,10 @@ test.integration: env ## Full-pipeline integration test (skips cleanly if real d
 swarm.demo: ## Phase 4.8 DoD — end-to-end scrape→categorize→process→store
 	@$(XOPS)/swarm.py demo $(if $(LEAGUE),--league $(LEAGUE),)
 
+.PHONY: swarm.demo.nlp
+swarm.demo.nlp: ## Phase 10 §10.21.14 — swarm.demo + NLP extension scenarios within 30s budget
+	@$(XOPS)/swarm.py demo-nlp $(if $(LEAGUE),--league $(LEAGUE),)
+
 .PHONY: swarm.demo.live
 swarm.demo.live: ## Phase 8.16.13 — live Redis ops.denylist-clear demo with realistic ack budget
 	@$(XOPS)/swarm.py demo-live

@@ -1,0 +1,411 @@
+{
+  "1.5 gol": [
+    [
+      "au_15",
+      "1.5 gol",
+      0.0
+    ]
+  ],
+  "1x": [
+    [
+      "cs",
+      "1x",
+      0.0
+    ]
+  ],
+  "1x2": [
+    [
+      "ms",
+      "1x2",
+      0.0
+    ]
+  ],
+  "2.5 alt": [
+    [
+      "au_25",
+      "2.5 alt",
+      0.0
+    ]
+  ],
+  "2.5 gol": [
+    [
+      "au_25",
+      "2.5 gol",
+      0.0
+    ]
+  ],
+  "2.5 ust": [
+    [
+      "au_25",
+      "2.5 üst",
+      0.0
+    ]
+  ],
+  "3.5 gol": [
+    [
+      "au_35",
+      "3.5 gol",
+      0.0
+    ]
+  ],
+  "ah": [
+    [
+      "asya_handikap",
+      "ah",
+      0.0
+    ]
+  ],
+  "alt 2.5": [
+    [
+      "au_25",
+      "alt 2.5",
+      0.0
+    ]
+  ],
+  "alt/ust 1.5": [
+    [
+      "au_15",
+      "Alt/Üst 1.5",
+      0.0
+    ]
+  ],
+  "alt/ust 2.5": [
+    [
+      "au_25",
+      "Alt/Üst 2.5",
+      0.0
+    ]
+  ],
+  "alt/ust 3.5": [
+    [
+      "au_35",
+      "Alt/Üst 3.5",
+      0.0
+    ]
+  ],
+  "asya handikap": [
+    [
+      "asya_handikap",
+      "Asya Handikap",
+      0.0
+    ]
+  ],
+  "asya hnd": [
+    [
+      "asya_handikap",
+      "asya hnd",
+      0.0
+    ]
+  ],
+  "asya hnd.": [
+    [
+      "asya_handikap",
+      "Asya Hnd.",
+      0.0
+    ]
+  ],
+  "au 1.5": [
+    [
+      "au_15",
+      "au 1.5",
+      0.0
+    ]
+  ],
+  "au 2.5": [
+    [
+      "au_25",
+      "au 2.5",
+      0.0
+    ]
+  ],
+  "au 3.5": [
+    [
+      "au_35",
+      "au 3.5",
+      0.0
+    ]
+  ],
+  "bir bucuk gol": [
+    [
+      "au_15",
+      "bir buçuk gol",
+      0.0
+    ]
+  ],
+  "btts": [
+    [
+      "kg",
+      "btts",
+      0.0
+    ]
+  ],
+  "cifte sans": [
+    [
+      "cs",
+      "Çifte Şans",
+      0.0
+    ],
+    [
+      "cs",
+      "çifte şans",
+      0.0
+    ]
+  ],
+  "double chance": [
+    [
+      "cs",
+      "double chance",
+      0.0
+    ]
+  ],
+  "exact score": [
+    [
+      "mac_skoru",
+      "exact score",
+      0.0
+    ]
+  ],
+  "gol sayisi": [
+    [
+      "toplam_gol",
+      "gol sayısı",
+      0.0
+    ]
+  ],
+  "handicap": [
+    [
+      "asya_handikap",
+      "handicap",
+      0.0
+    ]
+  ],
+  "her iki takim gol atar": [
+    [
+      "kg",
+      "her iki takım gol atar",
+      0.0
+    ]
+  ],
+  "hy ms": [
+    [
+      "iy_ms",
+      "hy ms",
+      0.0
+    ]
+  ],
+  "hy sonuc": [
+    [
+      "iy_sonucu",
+      "hy sonuç",
+      0.0
+    ]
+  ],
+  "iki bucuk gol": [
+    [
+      "au_25",
+      "iki buçuk gol",
+      0.0
+    ]
+  ],
+  "iki takim da gol": [
+    [
+      "kg",
+      "iki takım da gol",
+      0.0
+    ]
+  ],
+  "ilk devre": [
+    [
+      "iy_sonucu",
+      "ilk devre",
+      0.0
+    ]
+  ],
+  "ilk yari": [
+    [
+      "iy_sonucu",
+      "İlk Yarı",
+      0.0
+    ]
+  ],
+  "ilk yari / mac sonucu": [
+    [
+      "iy_ms",
+      "İlk Yarı / Maç Sonucu",
+      0.0
+    ]
+  ],
+  "ilk yari mac sonucu": [
+    [
+      "iy_ms",
+      "ilk yarı maç sonucu",
+      0.0
+    ]
+  ],
+  "ilk yari sonucu": [
+    [
+      "iy_sonucu",
+      "İlk Yarı Sonucu",
+      0.0
+    ]
+  ],
+  "iy": [
+    [
+      "iy_sonucu",
+      "iy",
+      0.0
+    ]
+  ],
+  "iy ms": [
+    [
+      "iy_ms",
+      "iy ms",
+      0.0
+    ]
+  ],
+  "iy/ms": [
+    [
+      "iy_ms",
+      "İY/MS",
+      0.0
+    ]
+  ],
+  "kac gol": [
+    [
+      "toplam_gol",
+      "kaç gol",
+      0.0
+    ]
+  ],
+  "karsilikli gol": [
+    [
+      "kg",
+      "Karşılıklı Gol",
+      0.0
+    ]
+  ],
+  "kazanan": [
+    [
+      "ms",
+      "kazanan",
+      0.0
+    ]
+  ],
+  "kesin skor": [
+    [
+      "mac_skoru",
+      "Kesin Skor",
+      0.0
+    ]
+  ],
+  "kg var": [
+    [
+      "kg",
+      "kg var",
+      0.0
+    ]
+  ],
+  "kg yok": [
+    [
+      "kg",
+      "kg yok",
+      0.0
+    ]
+  ],
+  "mac skoru": [
+    [
+      "mac_skoru",
+      "Maç Skoru",
+      0.0
+    ]
+  ],
+  "mac sonu": [
+    [
+      "ms",
+      "maç sonu",
+      0.0
+    ]
+  ],
+  "mac sonucu": [
+    [
+      "ms",
+      "Maç Sonucu",
+      0.0
+    ]
+  ],
+  "mac tahmini": [
+    [
+      "ms",
+      "Maç Tahmini",
+      0.0
+    ]
+  ],
+  "ms": [
+    [
+      "ms",
+      "ms",
+      0.0
+    ]
+  ],
+  "skor tahmini": [
+    [
+      "mac_skoru",
+      "skor tahmini",
+      0.0
+    ]
+  ],
+  "tam skor": [
+    [
+      "mac_skoru",
+      "tam skor",
+      0.0
+    ]
+  ],
+  "toplam gol": [
+    [
+      "toplam_gol",
+      "Toplam Gol",
+      0.0
+    ],
+    [
+      "toplam_gol",
+      "toplam gol",
+      0.0
+    ]
+  ],
+  "toplam gol 2.5": [
+    [
+      "au_25",
+      "Toplam Gol 2.5",
+      0.0
+    ]
+  ],
+  "toplam gol sayisi": [
+    [
+      "toplam_gol",
+      "Toplam Gol Sayısı",
+      0.0
+    ]
+  ],
+  "uc bucuk gol": [
+    [
+      "au_35",
+      "üç buçuk gol",
+      0.0
+    ]
+  ],
+  "ust 2.5": [
+    [
+      "au_25",
+      "üst 2.5",
+      0.0
+    ]
+  ],
+  "x2": [
+    [
+      "cs",
+      "x2",
+      0.0
+    ]
+  ]
+}

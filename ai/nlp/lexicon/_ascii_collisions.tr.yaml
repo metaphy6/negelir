@@ -1,0 +1,6 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-05-31T00:00:00Z"
+  generator: nlp.lexicon-build
+  description: "Explicitly accepted ASCII alias collisions for §10.22.1"
+allow: []

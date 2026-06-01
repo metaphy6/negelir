@@ -71,7 +71,7 @@
   key_class, qps_observed}` (debounced 5min per key class — bounded
   cardinality). Phase 7 sec.alert.v1 is the right place for *blocking*
   decisions; this NLP-side alert is observability only.
-- [ ] **Closed-set tenant-class enum.** `cfg.nlp_tenant_class_enum =
+- [x] **Closed-set tenant-class enum.** `cfg.nlp_tenant_class_enum =
   ["account_paid", "account_free", "ip_anonymous", "ip_known_proxy"]`
   — single source. AST guard `test_nlp_no_unbounded_tenant_label`
   rejects any metric / log / event that emits `tenant_id` directly

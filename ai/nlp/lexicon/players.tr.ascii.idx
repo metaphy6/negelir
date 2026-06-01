@@ -1,0 +1,250 @@
+{
+  "akturkoglu": [
+    [
+      "kerem_akturkoglu",
+      "Aktürkoğlu",
+      0.0
+    ]
+  ],
+  "anastasios bakasetas": [
+    [
+      "bakasetas_anastasios",
+      "Anastasios Bakasetas",
+      0.0
+    ]
+  ],
+  "bakasetas": [
+    [
+      "bakasetas_anastasios",
+      "Bakasetas",
+      0.0
+    ],
+    [
+      "bakasetas_anastasios",
+      "bakasetas",
+      0.0
+    ]
+  ],
+  "batshuayi": [
+    [
+      "batshuayi_michy",
+      "Batshuayi",
+      0.0
+    ],
+    [
+      "batshuayi_michy",
+      "batshuayi",
+      0.0
+    ]
+  ],
+  "cakir": [
+    [
+      "ugurcan_cakir",
+      "Çakır",
+      0.0
+    ]
+  ],
+  "cengiz under": [
+    [
+      "cengiz_under",
+      "Cengiz Ünder",
+      0.0
+    ],
+    [
+      "cengiz_under",
+      "cengiz under",
+      0.0
+    ]
+  ],
+  "ciro mertens": [
+    [
+      "mertens_dries",
+      "ciro mertens",
+      0.0
+    ]
+  ],
+  "dries mertens": [
+    [
+      "mertens_dries",
+      "Dries Mertens",
+      0.0
+    ]
+  ],
+  "dušan tadić": [
+    [
+      "tadic_dusan",
+      "Dušan Tadić",
+      0.0
+    ]
+  ],
+  "dzeko": [
+    [
+      "dzeko_edin",
+      "Dzeko",
+      0.0
+    ],
+    [
+      "dzeko_edin",
+      "dzeko",
+      0.0
+    ]
+  ],
+  "džeko": [
+    [
+      "dzeko_edin",
+      "Džeko",
+      0.0
+    ]
+  ],
+  "edin džeko": [
+    [
+      "dzeko_edin",
+      "Edin Džeko",
+      0.0
+    ]
+  ],
+  "icardi": [
+    [
+      "icardi_mauro",
+      "Icardi",
+      0.0
+    ]
+  ],
+  "icardi mauro": [
+    [
+      "icardi_mauro",
+      "icardi mauro",
+      0.0
+    ]
+  ],
+  "irfan can": [
+    [
+      "irfan_can_kahveci",
+      "irfan can",
+      0.0
+    ],
+    [
+      "irfan_can_kahveci",
+      "İrfan Can",
+      0.0
+    ]
+  ],
+  "irfan can kahveci": [
+    [
+      "irfan_can_kahveci",
+      "İrfan Can Kahveci",
+      0.0
+    ]
+  ],
+  "kerem": [
+    [
+      "kerem_akturkoglu",
+      "Kerem",
+      0.0
+    ]
+  ],
+  "kerem akturkoglu": [
+    [
+      "kerem_akturkoglu",
+      "Kerem Aktürkoğlu",
+      0.0
+    ],
+    [
+      "kerem_akturkoglu",
+      "kerem aktürkoğlu",
+      0.0
+    ]
+  ],
+  "maurito": [
+    [
+      "icardi_mauro",
+      "maurito",
+      0.0
+    ]
+  ],
+  "mauro icardi": [
+    [
+      "icardi_mauro",
+      "Mauro Icardi",
+      0.0
+    ]
+  ],
+  "mertens": [
+    [
+      "mertens_dries",
+      "Mertens",
+      0.0
+    ]
+  ],
+  "michy batshuayi": [
+    [
+      "batshuayi_michy",
+      "Michy Batshuayi",
+      0.0
+    ]
+  ],
+  "sebastian szymański": [
+    [
+      "szymanski_sebastian",
+      "Sebastian Szymański",
+      0.0
+    ]
+  ],
+  "szymanski": [
+    [
+      "szymanski_sebastian",
+      "Szymanski",
+      0.0
+    ],
+    [
+      "szymanski_sebastian",
+      "szymanski",
+      0.0
+    ]
+  ],
+  "tadic": [
+    [
+      "tadic_dusan",
+      "Tadic",
+      0.0
+    ],
+    [
+      "tadic_dusan",
+      "tadic",
+      0.0
+    ]
+  ],
+  "tadić": [
+    [
+      "tadic_dusan",
+      "Tadić",
+      0.0
+    ]
+  ],
+  "ugurcan": [
+    [
+      "ugurcan_cakir",
+      "Uğurcan",
+      0.0
+    ]
+  ],
+  "ugurcan cakir": [
+    [
+      "ugurcan_cakir",
+      "Uğurcan Çakır",
+      0.0
+    ],
+    [
+      "ugurcan_cakir",
+      "ugurcan çakır",
+      0.0
+    ]
+  ],
+  "under": [
+    [
+      "cengiz_under",
+      "Ünder",
+      0.0
+    ]
+  ]
+}

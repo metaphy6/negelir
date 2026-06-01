@@ -400,6 +400,9 @@ phase10:
   # Diacritic ambiguity tie-break ratio (§10.3 Ambiguity policy). When top-2
   # candidates' frequencies are within this ratio, token is preserved unchanged.
   nlp_diacritic_tie_break_ratio: 1.5      # NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO
+  # Minimum confidence margin required before restored-form hit can override
+  # ASCII-pass hit on same span with different canonical (§10.22.1).
+  nlp_ascii_vs_restored_margin: 0.2       # NEGELIR_NLP_ASCII_VS_RESTORED_MARGIN
   # Normalize+typo+diacritic stage deadline; on timeout falls through to raw tokens (§10.3).
   nlp_normalize_stage_timeout_ms: 20      # NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS
   # §10.4 Intent classifier (fastText, ≤ 20 MB, CPU-only).

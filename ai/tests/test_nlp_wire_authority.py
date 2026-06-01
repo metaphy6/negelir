@@ -406,6 +406,23 @@ class TestNlpAlertV1Schema:
         errors = bus_schemas.validate(self.TOPIC, payload)
         assert errors, "maint.* producer must be rejected from nlp.alert.v1"
 
+    def test_1021_13_known_alert_kinds_registered_in_schema_docs(self):
+        """§10.21.13: new alert kinds must be registered as known kinds."""
+        schema = bus_schemas.load(self.TOPIC)
+        description = schema["properties"]["kind"]["description"]
+        expected_kinds = {
+            "nlp_intent_model_sha_mismatch",
+            "nlp_lexicon_atomic_swap_failed",
+            "nlp_singleflight_overflow",
+            "nlp_template_render_used_raw_user_text",
+            "nlp_spool_replay_text_unavailable",
+            "nlp_citation_signature_verify_failed",
+            "nlp_cold_start_timeout",
+            "nlp_lexicon_feed_schema_too_new",
+        }
+        missing = sorted(kind for kind in expected_kinds if kind not in description)
+        assert not missing, f"§10.21.13 known kinds missing from schema docs: {missing}"
+
 
 # ── Phase 10 §10.19 — predict schema parity ────────────────────────────
 

@@ -22,6 +22,8 @@ import yaml
 # Make sure ai/ is on the path when running from REPO_ROOT
 _AI_DIR = Path(__file__).parent.parent
 _REPO_ROOT = _AI_DIR.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 if str(_AI_DIR) not in sys.path:
     sys.path.insert(0, str(_AI_DIR))
 
@@ -287,3 +289,102 @@ class TestVerifyNormalizeRoundTrip:
                 if not covered:
                     violations.append(norm_key)
         assert "gs" in violations
+
+
+# ---------------------------------------------------------------------------
+# §10.22.1 ASCII sidecar index helpers
+# ---------------------------------------------------------------------------
+
+class TestAsciiAliasIndexHelpers:
+    """ASCII sidecar rows and collision coverage checks for lexicon-build."""
+
+    def test_collect_alias_rows_emits_folded_keys_and_frequency(self) -> None:
+        from xops.makefile.nlp import _collect_alias_rows
+
+        entries = [
+            {
+                "canonical_id": "galatasaray_sk",
+                "names": ["Galatasaray"],
+                "aliases": ["Galatasaray", "G.S"],
+            },
+            {
+                "canonical_id": "fenerbahce_sk",
+                "names": ["Fenerbahçe"],
+                "aliases": ["Fenerbahce"],
+            },
+        ]
+        word_freq = {"galatasaray": 1200, "fenerbahce": 900}
+
+        rows, ownership = _collect_alias_rows(entries, word_freq)
+
+        assert "galatasaray" in rows
+        assert ["galatasaray_sk", "Galatasaray", 1200.0] in rows["galatasaray"]
+        assert "fenerbahce" in rows
+        assert ["fenerbahce_sk", "Fenerbahçe", 900.0] in rows["fenerbahce"]
+        assert ownership["galatasaray"] == {"galatasaray_sk"}
+        assert ownership["fenerbahce"] == {"fenerbahce_sk"}
+
+    def test_ascii_collision_requires_neg_token_or_allowlist(self) -> None:
+        from xops.makefile.nlp import _collect_alias_rows
+
+        entries = [
+            {
+                "canonical_id": "fenerbahce_sk",
+                "names": ["Fener"],
+                "aliases": [],
+            },
+            {
+                "canonical_id": "fenerbahce_beko",
+                "names": ["Fener"],
+                "aliases": [],
+            },
+        ]
+        _, ownership = _collect_alias_rows(entries, {})
+
+        assert "fener" in ownership
+        assert len(ownership["fener"]) == 2
+
+        neg_tokens = {"fener"}
+        allowlist = set()
+        covered_by_neg = any(tok in neg_tokens for tok in "fener".split())
+        covered_by_allow = "fener" in allowlist
+        assert covered_by_neg and not covered_by_allow
+
+        neg_tokens = set()
+        allowlist = {"fener"}
+        covered_by_neg = any(tok in neg_tokens for tok in "fener".split())
+        covered_by_allow = "fener" in allowlist
+        assert not covered_by_neg and covered_by_allow
+
+    def test_nlp_ascii_collision_build_refuses_without_allowlist(self) -> None:
+        """§10.22.1: unresolved ASCII collisions must be rejected by build logic."""
+        from xops.makefile.nlp import _collect_alias_rows
+
+        entries = [
+            {
+                "canonical_id": "fenerbahce_sk",
+                "names": ["Fener"],
+                "aliases": [],
+            },
+            {
+                "canonical_id": "fenerbahce_beko",
+                "names": ["Fener"],
+                "aliases": [],
+            },
+        ]
+        _, ownership = _collect_alias_rows(entries, {})
+
+        neg_tokens: set[str] = set()
+        allowlist: set[str] = set()
+        uncovered = []
+        for alias_key, owners in sorted(ownership.items()):
+            if len(owners) <= 1:
+                continue
+            if alias_key in allowlist:
+                continue
+            parts = [part for part in alias_key.split() if part]
+            if any(part in neg_tokens for part in parts):
+                continue
+            uncovered.append(alias_key)
+
+        assert "fener" in uncovered

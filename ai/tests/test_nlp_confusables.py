@@ -9,6 +9,7 @@ Per AGENTS.md Rule 10: happy paths + adversarial + regression tests.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 
 
@@ -177,7 +178,7 @@ class TestConfusablesTablePin:
         entry = data_files["confusables_table"]
         assert "source_spec" in entry, "confusables_table must have source_spec"
         assert "Unicode TR39" in entry["source_spec"], "Must reference Unicode TR39"
-        assert "sha256" in entry or "path" in entry, "Must have SHA or path reference"
+        assert "sha256" in entry, "Must have SHA pin"
         assert "cardinality" in entry, "Must document table size"
 
         # Verify the table size matches
@@ -185,6 +186,13 @@ class TestConfusablesTablePin:
         expected_size = len(_CONFUSABLES_TABLE)
         assert entry["cardinality"] == expected_size, \
             f"Chart says {entry['cardinality']} entries, actual table has {expected_size}"
+
+        # Pin must be deterministic from the in-code table contents.
+        payload = {str(k): v for k, v in sorted(_CONFUSABLES_TABLE.items())}
+        expected_sha = hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        assert entry["sha256"] == expected_sha, "Chart SHA must match canonical confusables table digest"
 
     def test_confusables_table_is_immutable_dict(self) -> None:
         """The table must be dict[int, str], not a mutable structure."""

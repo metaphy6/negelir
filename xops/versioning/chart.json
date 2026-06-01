@@ -4,20 +4,21 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 213,
+    "build": 226,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.60.28",
+      "version": "1.60.37",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-05-31T19:44:54+00:00",
+      "last_changed": "2026-05-31T20:36:13+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
       "py_exact_versions": {
         "numpy": "1.26.4",
-        "fasttext": "0.9.2"
+        "fasttext": "0.9.2",
+        "python-crfsuite": "0.9.10"
       }
     },
     "server": {
@@ -39,9 +40,9 @@
       "last_changed": "2026-05-31T17:59:39+00:00"
     },
     "docs": {
-      "version": "1.77.6",
+      "version": "1.78.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-05-31T19:32:04+00:00"
+      "last_changed": "2026-05-31T20:38:12+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -179,7 +180,7 @@
       },
       "confusables_table": {
         "source_spec": "Unicode TR39 Confusables.txt v15.1.0",
-        "sha256": "derived",
+        "sha256": "23070dc65ac934decc67ed46f0f862d7f12fe8f35949a4b4e65b6daaf3e81521",
         "path": "ai/common/text/normalize.py::_CONFUSABLES_TABLE",
         "cardinality": 49,
         "comment": "Phase 10 §10.21.5 homoglyph defense. Derived mapping Cyrillic/Greek -> ASCII-Turkish-extended. In-code dict (no external file); SHA covers the definition in normalize.py."
@@ -9114,6 +9115,123 @@
       "from": "1.60.27",
       "to": "1.60.28",
       "build": 213
+    },
+    {
+      "timestamp": "2026-05-31T20:05:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.13 nlp.alert.v1 kind registration",
+      "from": "1.60.28",
+      "to": "1.60.29",
+      "build": 214
+    },
+    {
+      "timestamp": "2026-05-31T20:08:16+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.21.13 DoD proof tests aggregate checkbox",
+      "from": "1.77.6",
+      "to": "1.77.7",
+      "build": 215
+    },
+    {
+      "timestamp": "2026-05-31T20:11:01+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.23.1 closed tenant class enum and guard",
+      "from": "1.60.29",
+      "to": "1.60.30",
+      "build": 216
+    },
+    {
+      "timestamp": "2026-05-31T20:13:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.13 compatibility chart pins for python-crfsuite and confusables SHA",
+      "from": "1.60.30",
+      "to": "1.60.31",
+      "build": 217
+    },
+    {
+      "timestamp": "2026-05-31T20:18:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.21.14 swarm.demo.nlp extension scenarios and coverage",
+      "from": "1.60.31",
+      "to": "1.60.32",
+      "build": 218
+    },
+    {
+      "timestamp": "2026-05-31T20:20:27+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "phase10 10.22.1 first bullet ticked",
+      "from": "1.77.7",
+      "to": "1.78.0",
+      "build": 219
+    },
+    {
+      "timestamp": "2026-05-31T20:24:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10 10.22.1 two-stage restoration policy",
+      "from": "1.60.32",
+      "to": "1.60.33",
+      "build": 220
+    },
+    {
+      "timestamp": "2026-05-31T20:27:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "phase10 10.22.1 asciified alias index sidecars + collision gating",
+      "from": "1.60.33",
+      "to": "1.60.34",
+      "build": 221
+    },
+    {
+      "timestamp": "2026-05-31T20:27:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase10 10.22.1 asciified alias index bullet ticked",
+      "from": "1.78.0",
+      "to": "1.78.1",
+      "build": 222
+    },
+    {
+      "timestamp": "2026-05-31T20:30:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.22.1 hard-call diacritic restoration threshold",
+      "from": "1.60.34",
+      "to": "1.60.35",
+      "build": 223
+    },
+    {
+      "timestamp": "2026-05-31T20:33:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.22.1 diacritic per-character risk scoring",
+      "from": "1.60.35",
+      "to": "1.60.36",
+      "build": 224
+    },
+    {
+      "timestamp": "2026-05-31T20:36:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.22.1 proof tests for ASCII robustness floor",
+      "from": "1.60.36",
+      "to": "1.60.37",
+      "build": 225
+    },
+    {
+      "timestamp": "2026-05-31T20:38:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "phase10 10.22.2 real failure mode checklist tick",
+      "from": "1.78.1",
+      "to": "1.78.2",
+      "build": 226
     }
   ]
 }

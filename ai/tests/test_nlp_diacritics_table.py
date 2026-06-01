@@ -328,17 +328,18 @@ def _make_ambiguous_table(tie_break_ratio: float = 1.5):
         "mappings": {
             # 'mac' → unambiguous (only one candidate / classic format)
             "mac": {"canonical": "maç", "frequency": 50000},
-            # 'kor' → ambiguous: 45000 / 43000 = ~1.047 < 1.5 → preserve
+            # 'kor' → ambiguous: 4500 / 4300 = ~1.047 < 1.5 → preserve
+            # (and below the §10.22.1 hard-call floor of 10000)
             "kor": {
                 "candidates": [
-                    {"canonical": "kör", "frequency": 45000},
-                    {"canonical": "kor", "frequency": 43000},
+                    {"canonical": "kör", "frequency": 4500},
+                    {"canonical": "kor", "frequency": 4300},
                 ]
             },
-            # 'ust' → clear winner: 65432 / 100 = 654.32 >> 1.5 → restore
+            # 'ust' → clear winner: 6543 / 100 = 65.43 >> 1.5 → restore
             "ust": {
                 "candidates": [
-                    {"canonical": "üst", "frequency": 65432},
+                    {"canonical": "üst", "frequency": 6543},
                     {"canonical": "ust", "frequency": 100},
                 ]
             },
@@ -383,6 +384,104 @@ class TestAmbiguityPolicy:
         table = _make_ambiguous_table()
         assert table.restore("ust") == "üst"
 
+    def test_hard_call_restores_when_top_frequency_exceeds_threshold(self) -> None:
+        """High-frequency ambiguous tokens should restore via hard-call policy."""
+        from nlp.diacritics import DiacriticsTable
+
+        data = {
+            "_meta": {
+                "schema_version": 1,
+                "lexicon_version": "1.0.0",
+                "generated_at_utc": "2026-05-27T00:00:00Z",
+                "generator": "test",
+                "source_sha256": "test",
+            },
+            "mappings": {
+                "kor": {
+                    "candidates": [
+                        {"canonical": "kör", "frequency": 11000},
+                        {"canonical": "kor", "frequency": 10000},
+                    ]
+                }
+            },
+        }
+        table = DiacriticsTable(data, tie_break_ratio=1.5, hard_call_min_freq=10000)
+        assert table.restore("kor") == "kör"
+
+    def test_hard_call_not_applied_below_threshold(self) -> None:
+        """Low-frequency ambiguous tokens should remain preserved."""
+        from nlp.diacritics import DiacriticsTable
+
+        data = {
+            "_meta": {
+                "schema_version": 1,
+                "lexicon_version": "1.0.0",
+                "generated_at_utc": "2026-05-27T00:00:00Z",
+                "generator": "test",
+                "source_sha256": "test",
+            },
+            "mappings": {
+                "kor": {
+                    "candidates": [
+                        {"canonical": "kör", "frequency": 9000},
+                        {"canonical": "kor", "frequency": 8500},
+                    ]
+                }
+            },
+        }
+        table = DiacriticsTable(data, tie_break_ratio=1.5, hard_call_min_freq=10000)
+        assert table.restore("kor") == "kor"
+
+    def test_high_risk_unique_token_keeps_ascii(self) -> None:
+        """§10.22.1 risk gate preserves high-risk tokens even when unique."""
+        from nlp.diacritics import DiacriticsTable
+
+        data = {
+            "_meta": {
+                "schema_version": 1,
+                "lexicon_version": "1.0.0",
+                "generated_at_utc": "2026-05-31T00:00:00Z",
+                "generator": "test",
+                "source_sha256": "test",
+            },
+            "mappings": {
+                "sik": {"canonical": "sık", "frequency": 12000},
+            },
+        }
+        table = DiacriticsTable(
+            data,
+            tie_break_ratio=1.5,
+            hard_call_min_freq=10000,
+            max_risk_per_token=2.5,
+            risk_weights={"i->ı": 3.0},
+        )
+        assert table.restore("sik") == "sik"
+
+    def test_low_risk_unique_token_still_restores(self) -> None:
+        """Low-risk unique tokens should still restore under the same cap."""
+        from nlp.diacritics import DiacriticsTable
+
+        data = {
+            "_meta": {
+                "schema_version": 1,
+                "lexicon_version": "1.0.0",
+                "generated_at_utc": "2026-05-31T00:00:00Z",
+                "generator": "test",
+                "source_sha256": "test",
+            },
+            "mappings": {
+                "uc": {"canonical": "üç", "frequency": 12000},
+            },
+        }
+        table = DiacriticsTable(
+            data,
+            tie_break_ratio=1.5,
+            hard_call_min_freq=10000,
+            max_risk_per_token=2.5,
+            risk_weights={"u->ü": 0.7, "c->ç": 0.4},
+        )
+        assert table.restore("uc") == "üç"
+
     def test_restore_with_flags_returns_ambiguous_set(self) -> None:
         """restore_with_flags() returns the ambiguous tokens as frozenset."""
         table = _make_ambiguous_table()
@@ -421,7 +520,8 @@ class TestAmbiguityPolicy:
         """Entry with top/second == tie_break_ratio exactly → ambiguous."""
         from nlp.diacritics import DiacriticsTable
 
-        # 15000 / 10000 = 1.5 exactly → ambiguous at ratio=1.5
+        # 1500 / 1000 = 1.5 exactly → ambiguous at ratio=1.5
+        # (and below the §10.22.1 hard-call floor of 10000)
         data = {
             "_meta": {
                 "schema_version": 1,
@@ -433,8 +533,8 @@ class TestAmbiguityPolicy:
             "mappings": {
                 "test": {
                     "candidates": [
-                        {"canonical": "tëst", "frequency": 15000},
-                        {"canonical": "test", "frequency": 10000},
+                        {"canonical": "tëst", "frequency": 1500},
+                        {"canonical": "test", "frequency": 1000},
                     ]
                 }
             },
@@ -443,7 +543,7 @@ class TestAmbiguityPolicy:
         entry = table.get("test")
         assert entry is not None
         assert entry.is_ambiguous is True, (
-            "15000/10000 == 1.5 <= ratio 1.5 → should be ambiguous"
+            "1500/1000 == 1.5 <= ratio 1.5 → should be ambiguous"
         )
 
     def test_boundary_ratio_just_above_limit(self) -> None:
@@ -513,6 +613,30 @@ class TestAmbiguityPolicy:
         env_example = (REPO_ROOT / "xops" / "env" / ".env.example").read_text(encoding="utf-8")
         assert "NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO" in env_example
 
+    def test_hard_call_config_key_present_with_correct_default(self) -> None:
+        """cfg.nlp_diacritic_hard_call_min_freq must default to 10000."""
+        from common.config import cfg
+
+        assert hasattr(cfg, "nlp_diacritic_hard_call_min_freq")
+        assert cfg.nlp_diacritic_hard_call_min_freq == 10000
+
+    def test_hard_call_config_key_in_env_example(self) -> None:
+        """NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ must appear in .env.example."""
+        env_example = (REPO_ROOT / "xops" / "env" / ".env.example").read_text(encoding="utf-8")
+        assert "NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ" in env_example
+
+    def test_max_risk_config_key_present_with_correct_default(self) -> None:
+        """cfg.nlp_diacritic_max_risk_per_token must default to 2.5."""
+        from common.config import cfg
+
+        assert hasattr(cfg, "nlp_diacritic_max_risk_per_token")
+        assert cfg.nlp_diacritic_max_risk_per_token == 2.5
+
+    def test_max_risk_config_key_in_env_example(self) -> None:
+        """NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN must appear in .env.example."""
+        env_example = (REPO_ROOT / "xops" / "env" / ".env.example").read_text(encoding="utf-8")
+        assert "NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN" in env_example
+
     def test_config_boot_validator_rejects_below_one(self) -> None:
         """Boot validator must reject nlp_diacritic_tie_break_ratio < 1.0."""
         import os
@@ -529,3 +653,90 @@ class TestAmbiguityPolicy:
                 os.environ.pop("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO", None)
             else:
                 os.environ["NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO"] = orig
+
+    def test_hard_call_boot_validator_rejects_below_one(self) -> None:
+        """Boot validator must reject nlp_diacritic_hard_call_min_freq < 1."""
+        import os
+        from common.config import Config
+
+        orig = os.environ.get("NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ")
+        try:
+            os.environ["NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ"] = "0"
+            cfg_bad = Config()
+            issues = cfg_bad.validate()
+            assert any("nlp_diacritic_hard_call_min_freq" in i for i in issues), issues
+        finally:
+            if orig is None:
+                os.environ.pop("NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ", None)
+            else:
+                os.environ["NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ"] = orig
+
+    def test_max_risk_boot_validator_rejects_negative(self) -> None:
+        """Boot validator must reject nlp_diacritic_max_risk_per_token < 0."""
+        import os
+        from common.config import Config
+
+        orig = os.environ.get("NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN")
+        try:
+            os.environ["NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN"] = "-0.1"
+            cfg_bad = Config()
+            issues = cfg_bad.validate()
+            assert any("nlp_diacritic_max_risk_per_token" in i for i in issues), issues
+        finally:
+            if orig is None:
+                os.environ.pop("NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN", None)
+            else:
+                os.environ["NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN"] = orig
+
+
+def test_nlp_diacritic_restore_prefers_high_freq_form() -> None:
+    """§10.22.1: high-frequency winner should be restored."""
+    from nlp.diacritics import DiacriticsTable
+
+    data = {
+        "_meta": {
+            "schema_version": 1,
+            "lexicon_version": "1.0.0",
+            "generated_at_utc": "2026-05-31T00:00:00Z",
+            "generator": "test",
+            "source_sha256": "test",
+        },
+        "mappings": {
+            "kor": {
+                "candidates": [
+                    {"canonical": "kör", "frequency": 11000},
+                    {"canonical": "kor", "frequency": 10000},
+                ]
+            }
+        },
+    }
+
+    table = DiacriticsTable(data, tie_break_ratio=1.5, hard_call_min_freq=10000)
+    assert table.restore("kor") == "kör"
+
+
+def test_nlp_diacritic_high_risk_token_keeps_ascii() -> None:
+    """§10.22.1: high-risk unique restoration should preserve ASCII token."""
+    from nlp.diacritics import DiacriticsTable
+
+    data = {
+        "_meta": {
+            "schema_version": 1,
+            "lexicon_version": "1.0.0",
+            "generated_at_utc": "2026-05-31T00:00:00Z",
+            "generator": "test",
+            "source_sha256": "test",
+        },
+        "mappings": {
+            "sik": {"canonical": "sık", "frequency": 12000},
+        },
+    }
+
+    table = DiacriticsTable(
+        data,
+        tie_break_ratio=1.5,
+        hard_call_min_freq=10000,
+        max_risk_per_token=2.5,
+        risk_weights={"i->ı": 3.0},
+    )
+    assert table.restore("sik") == "sik"

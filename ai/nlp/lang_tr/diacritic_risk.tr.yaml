@@ -1,0 +1,13 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-05-31T00:00:00Z"
+  source: "phase10-10.22.1"
+
+weights:
+  "i->\u0131": 3.0
+  "u->\u00fc": 0.7
+  "o->\u00f6": 0.9
+  "c->\u00e7": 0.4
+  "g->\u011f": 0.6
+  "s->\u015f": 0.5

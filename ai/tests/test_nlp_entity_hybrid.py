@@ -35,6 +35,7 @@ from nlp.entity import (
     _build_combined_alias_index,
     _bio_to_spans,
     _load_negative_rules,
+    _merge_two_pass_gazetteer,
     _resolve_conflicts,
     gazetteer_pass,
 )
@@ -554,3 +555,91 @@ def test_extractor_result_has_no_ambiguous_for_clean_match(tmp_path: Path) -> No
     result = extractor.extract(["galatasaray", "maç"])
     assert result.spans[0].canonical_id == "galatasaray_sk"
     assert result.ambiguous == []
+
+
+def test_extractor_uses_restored_fallback_when_ascii_pass_has_no_primary_hit(tmp_path: Path) -> None:
+    """§10.22.1: restored pass runs when ASCII pass cannot resolve a primary entity."""
+    store = _make_store_with_teams(tmp_path)
+    extractor = EntityExtractor(store=store)
+
+    result = extractor.extract(
+        ["fenerbahçe", "maç"],
+        raw_tokens=["fenrbahce", "maç"],
+    )
+
+    assert any(s.kind == "team" and s.canonical_id == "fenerbahce_sk" for s in result.spans)
+
+
+def test_merge_two_pass_prefers_ascii_on_conflict_without_margin() -> None:
+    """§10.22.1: restored hit must clear margin before overriding ASCII hit."""
+    ascii_spans = [EntitySpan(0, 1, "team", "ascii_team", 1.0, "1.0", "gazetteer")]
+    restored_spans = [EntitySpan(0, 1, "team", "restored_team", 1.0, "1.0", "gazetteer")]
+
+    merged = _merge_two_pass_gazetteer(
+        ascii_spans,
+        restored_spans,
+        kind_priority=DEFAULT_KIND_PRIORITY,
+        restored_margin=0.2,
+    )
+
+    assert len(merged) == 1
+    assert merged[0].canonical_id == "ascii_team"
+
+
+def test_merge_two_pass_prefers_restored_when_margin_cleared() -> None:
+    """§10.22.1: restored hit can override when confidence exceeds the margin."""
+    ascii_spans = [EntitySpan(0, 1, "team", "ascii_team", 0.70, "1.0", "gazetteer")]
+    restored_spans = [EntitySpan(0, 1, "team", "restored_team", 0.91, "1.0", "gazetteer")]
+
+    merged = _merge_two_pass_gazetteer(
+        ascii_spans,
+        restored_spans,
+        kind_priority=DEFAULT_KIND_PRIORITY,
+        restored_margin=0.2,
+    )
+
+    assert len(merged) == 1
+    assert merged[0].canonical_id == "restored_team"
+
+
+def test_nlp_ascii_pass_resolves_galatasaray_no_diacritics(tmp_path: Path) -> None:
+    """§10.22.1: ASCII-first pass must resolve no-diacritic queries (100-case corpus)."""
+    store = _make_store_with_teams(tmp_path)
+    extractor = EntityExtractor(store=store)
+
+    corpus = [["galatasaray", "mac", "tahmin", str(i)] for i in range(100)]
+    resolved = 0
+    for raw_tokens in corpus:
+        result = extractor.extract(
+            ["galatasaray", "maç", "tahmini"],
+            raw_tokens=raw_tokens,
+        )
+        if any(s.kind == "team" and s.canonical_id == "galatasaray_sk" for s in result.spans):
+            resolved += 1
+
+    assert resolved == 100
+
+
+@pytest.mark.parametrize(
+    "ascii_conf,restored_conf",
+    [(0.60 + i * 0.01, 0.60 + i * 0.01) for i in range(20)],
+)
+def test_nlp_double_pass_gazetteer_picks_longer_match(
+    ascii_conf: float,
+    restored_conf: float,
+) -> None:
+    """§10.22.1: two-pass merge keeps the longer overlap across ASCII/restored spans."""
+    ascii_spans = [EntitySpan(0, 1, "team", "galatasaray_short", ascii_conf, "1.0", "gazetteer")]
+    restored_spans = [EntitySpan(0, 2, "team", "galatasaray_full", restored_conf, "1.0", "gazetteer")]
+
+    merged = _merge_two_pass_gazetteer(
+        ascii_spans,
+        restored_spans,
+        kind_priority=DEFAULT_KIND_PRIORITY,
+        restored_margin=0.2,
+    )
+
+    assert len(merged) == 1
+    assert merged[0].canonical_id == "galatasaray_full"
+    assert merged[0].span_start == 0
+    assert merged[0].span_end == 2

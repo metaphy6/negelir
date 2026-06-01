@@ -22,11 +22,58 @@ DIACRITICS_SCHEMA_VERSION: int = 1
 #: Default path: ``ai/nlp/lexicon/_diacritics.tr.yaml`` relative to this file.
 _DEFAULT_PATH: Path = Path(__file__).parent / "lexicon" / "_diacritics.tr.yaml"
 
+#: Default path: ``ai/nlp/lang_tr/diacritic_risk.tr.yaml`` relative to this file.
+_DEFAULT_RISK_PATH: Path = Path(__file__).parent / "lang_tr" / "diacritic_risk.tr.yaml"
+
 # Match sequences of pure ASCII lowercase letters (a-z).
 # After step 4 (lowercase_tr) the text is fully lowercase; any character
 # outside [a-z] is either punctuation, a digit, or a Turkish diacritic that
 # already looks correct — neither needs restoration.
 _ASCII_WORD_RE = re.compile(r"([a-z]+)")
+
+
+def _compute_token_risk(
+    ascii_form: str,
+    canonical: str,
+    risk_weights: dict[str, float],
+) -> float:
+    """Return cumulative per-character restoration risk for one token.
+
+    Risk keys are encoded as ``"<ascii_char>-><canonical_char>"`` in the
+    YAML table (for example ``"i->ı"``).
+    """
+    total = 0.0
+    for ascii_char, canonical_char in zip(ascii_form, canonical):
+        if ascii_char == canonical_char:
+            continue
+        total += float(risk_weights.get(f"{ascii_char}->{canonical_char}", 0.0))
+    return total
+
+
+def _load_risk_weights(path: Path) -> dict[str, float]:
+    """Load per-character diacritic risk weights from a YAML file.
+
+    Missing files or malformed payloads intentionally degrade to an empty table
+    so restoration keeps legacy behavior instead of failing closed at boot.
+    """
+    if not path.is_file():
+        return {}
+    raw_yaml = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw_yaml, dict):
+        return {}
+    weights_raw = raw_yaml.get("weights", {})
+    if not isinstance(weights_raw, dict):
+        return {}
+    weights: dict[str, float] = {}
+    for key, value in weights_raw.items():
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed < 0:
+            continue
+        weights[str(key)] = parsed
+    return weights
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +133,14 @@ class DiacriticsTable:
         If ``_meta.schema_version`` does not equal ``DIACRITICS_SCHEMA_VERSION``.
     """
 
-    def __init__(self, data: dict, tie_break_ratio: float = 1.5) -> None:
+    def __init__(
+        self,
+        data: dict,
+        tie_break_ratio: float = 1.5,
+        hard_call_min_freq: int = 10000,
+        max_risk_per_token: float = 2.5,
+        risk_weights: Optional[dict[str, float]] = None,
+    ) -> None:
         meta: dict = data.get("_meta", {}) or {}
         sv = meta.get("schema_version")
         if sv != DIACRITICS_SCHEMA_VERSION:
@@ -95,6 +149,7 @@ class DiacriticsTable:
                 f"expected {DIACRITICS_SCHEMA_VERSION}"
             )
         raw: dict = data.get("mappings", {}) or {}
+        safe_risk_weights = risk_weights or {}
         self._map: dict[str, DiacriticsEntry] = {}
         for ascii_form, entry in sorted(raw.items()):
             if not isinstance(entry, dict):
@@ -125,11 +180,20 @@ class DiacriticsTable:
                         is_ambiguous = False
                 else:
                     is_ambiguous = False
+                if is_ambiguous and frequency >= hard_call_min_freq:
+                    is_ambiguous = False
             else:
                 # Single-canonical format (original schema)
                 canonical = str(entry.get("canonical", ascii_form))
                 frequency = int(entry.get("frequency", 0))
                 is_ambiguous = False
+            token_risk = _compute_token_risk(
+                ascii_form=str(ascii_form),
+                canonical=canonical,
+                risk_weights=safe_risk_weights,
+            )
+            if token_risk > max_risk_per_token:
+                is_ambiguous = True
             self._map[str(ascii_form)] = DiacriticsEntry(canonical, frequency, is_ambiguous)
         self._source_sha256: str = str(meta.get("source_sha256", ""))
         self._lexicon_version: str = str(meta.get("lexicon_version", ""))
@@ -139,7 +203,14 @@ class DiacriticsTable:
     # ------------------------------------------------------------------
 
     @classmethod
-    def load(cls, path: Optional[Path] = None, tie_break_ratio: float = 1.5) -> "DiacriticsTable":
+    def load(
+        cls,
+        path: Optional[Path] = None,
+        tie_break_ratio: float = 1.5,
+        hard_call_min_freq: int = 10000,
+        max_risk_per_token: float = 2.5,
+        risk_path: Optional[Path] = None,
+    ) -> "DiacriticsTable":
         """Load the diacritics table from *path*.
 
         Parameters
@@ -150,10 +221,27 @@ class DiacriticsTable:
         tie_break_ratio:
             Forwarded to :class:`DiacriticsTable.__init__`.  Defaults to
             ``1.5`` (``cfg.nlp_diacritic_tie_break_ratio``).
+        hard_call_min_freq:
+            Forwarded to :class:`DiacriticsTable.__init__`.  Defaults to
+            ``10000`` (``cfg.nlp_diacritic_hard_call_min_freq``).
+        max_risk_per_token:
+            Forwarded to :class:`DiacriticsTable.__init__`.  Defaults to
+            ``2.5`` (``cfg.nlp_diacritic_max_risk_per_token``).
+        risk_path:
+            Path to per-character risk table YAML. Defaults to
+            ``ai/nlp/lang_tr/diacritic_risk.tr.yaml``.
         """
         target = path if path is not None else _DEFAULT_PATH
+        risk_target = risk_path if risk_path is not None else _DEFAULT_RISK_PATH
         raw_yaml = yaml.safe_load(target.read_text(encoding="utf-8"))
-        return cls(raw_yaml, tie_break_ratio=tie_break_ratio)
+        risk_weights = _load_risk_weights(risk_target)
+        return cls(
+            raw_yaml,
+            tie_break_ratio=tie_break_ratio,
+            hard_call_min_freq=hard_call_min_freq,
+            max_risk_per_token=max_risk_per_token,
+            risk_weights=risk_weights,
+        )
 
     # ------------------------------------------------------------------
     # Core API

@@ -1,4 +1,4 @@
-"""Tests for Phase 10 §10.21.1 Numpy + fastText version pin.
+"""Tests for Phase 10 §10.21.1/§10.21.13 compatibility version pins.
 
 Covers:
     1. Config keys exist (nlp_numpy_pin, nlp_fasttext_pin) with empty defaults.
@@ -262,9 +262,12 @@ class TestNlpCompatibilityVersionsPinned:
         versions = ai_component["py_exact_versions"]
         assert "numpy" in versions, "py_exact_versions must include numpy"
         assert "fasttext" in versions, "py_exact_versions must include fasttext"
+        assert "python-crfsuite" in versions, "py_exact_versions must include python-crfsuite"
         
         # Versions should be non-empty strings
         assert isinstance(versions["numpy"], str)
         assert len(versions["numpy"]) > 0
         assert isinstance(versions["fasttext"], str)
         assert len(versions["fasttext"]) > 0
+        assert isinstance(versions["python-crfsuite"], str)
+        assert len(versions["python-crfsuite"]) > 0

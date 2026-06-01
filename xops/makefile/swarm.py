@@ -16,7 +16,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -318,11 +320,219 @@ def _run_demo(league: str) -> int:
             r.deregister()
 
 
+def _build_phase10_demo_predict_approved_message() -> object:
+    """Return a schema-v3 predict.approved.v1 message without citation signature.
+
+    This intentionally exercises §10.21.8 warn-mode handling where missing
+    citation_signature emits an alert but rendering still proceeds.
+    """
+    from swarm.agents.topics import PREDICT_APPROVED  # noqa: E402
+    from swarm.sdk.types import Message  # noqa: E402
+
+    return Message.new(
+        topic=PREDICT_APPROVED,
+        payload={
+            "schema_version": 3,
+            "prediction_id": "demo-phase10-p1",
+            "summary_correlation_id": "demo-phase10-summary-1",
+            "summary_expected_count": 1,
+            "qa_request_id": "demo-phase10-req-1",
+            "qa_correlation_id": "demo-phase10-summary-1",
+            "match_id": "tr1:galatasaray-fenerbahce",
+            "market": "1x2",
+            "approved_at": "2026-05-31T10:00:00+00:00",
+            "approved_by": ["proof.sanity.v1"],
+            "verdict_count": 1,
+            "quorum": 1,
+            "calibration_version": 1,
+            "final": {
+                "prediction_id": "demo-phase10-p1",
+                "match_id": "tr1:galatasaray-fenerbahce",
+                "market": "1x2",
+                "distribution": {"1": 0.52, "X": 0.27, "2": 0.21},
+                "weights": {},
+                "contributing_models": ["model-demo-1"],
+                "calibration_version": 1,
+                "swarm_confidence": 0.85,
+                "degraded": False,
+                "degraded_reason": "",
+                "produced_at": "2026-05-31T10:00:00+00:00",
+                "league_id": "tr-superlig",
+                "profile_id": None,
+            },
+            # citation_signature intentionally omitted for warn-mode exercise.
+        },
+        producer="swarm.demo.nlp",
+    )
+
+
+def _run_phase10_nlp_demo_extensions() -> None:
+    """Run §10.21.14 extra demo paths for make swarm.demo.nlp.
+
+    Exercises:
+    1) confusables-fold path with Cyrillic a,
+    2) lexicon swap fail-revert on one corrupted file,
+    3) citation-signature warn-mode missing-key,
+    4) cold-start stage events in strict order.
+    """
+    ai_path = str(REPO_ROOT / "ai")
+    if ai_path in sys.path:
+        sys.path.remove(ai_path)
+    sys.path.insert(0, ai_path)
+    os.environ.setdefault("PYTHONPATH", ai_path)
+
+    # `xops/makefile/nlp.py` can shadow the top-level `nlp` package when the
+    # makefile directory is on sys.path during unit tests.
+    nlp_mod = sys.modules.get("nlp")
+    nlp_file = str(getattr(nlp_mod, "__file__", "")) if nlp_mod is not None else ""
+    if nlp_file.endswith("xops/makefile/nlp.py"):
+        del sys.modules["nlp"]
+
+    from common.config import cfg  # noqa: E402
+    from nlp.lexicon_loader import LexiconStore  # noqa: E402
+    from nlp.normalize import normalize_input  # noqa: E402
+    from swarm.agents.nlp import NlpAnswerAgent, NlpBootProbeState  # noqa: E402
+    from swarm.agents.topics import NLP_ALERT_V1, NLP_EVENT_V1, QA_ANSWER_V1  # noqa: E402
+
+    # (a) Confusables-fold path: Cyrillic "а" in team name.
+    confusables = normalize_input("Gal\u0430tasaray maçı")
+    normalized_joined = " ".join(confusables.tokens)
+    if "confusables_fold" not in confusables.steps_run:
+        raise AssertionError("phase10 demo: confusables_fold step did not execute")
+    if "galatasaray" not in normalized_joined:
+        raise AssertionError(
+            "phase10 demo: Cyrillic confusables input did not fold to galatasaray"
+        )
+    ok("swarm.demo.nlp: confusables-fold path exercised")
+
+    # (b) Lexicon swap fail-revert: corrupt one file and assert rollback.
+    class _Clock:
+        def __init__(self) -> None:
+            self.value = 0.0
+
+        def now(self) -> float:
+            return self.value
+
+    lexicon_src = REPO_ROOT / "ai" / "nlp" / "lexicon"
+    with tempfile.TemporaryDirectory(prefix="swarm-demo-nlp-") as tmpdir:
+        lexicon_tmp = Path(tmpdir)
+        for src_file in sorted(lexicon_src.glob("*.tr.yaml")):
+            if src_file.name.startswith("_"):
+                continue
+            shutil.copy2(src_file, lexicon_tmp / src_file.name)
+
+        clock = _Clock()
+        prev_atomicity_env = os.getenv("NEGELIR_NLP_LEXICON_SWAP_ATOMICITY")
+        os.environ["NEGELIR_NLP_LEXICON_SWAP_ATOMICITY"] = "per_file"
+        try:
+            store = LexiconStore(
+                lexicon_tmp,
+                reload_s=1,
+                max_rss_mb=0,
+                clock_mono=clock.now,
+            )
+            first_alerts = store.maybe_reload()
+            if first_alerts:
+                raise AssertionError(f"phase10 demo: initial lexicon load alerted: {first_alerts!r}")
+
+            players_path = lexicon_tmp / "players.tr.yaml"
+            # Corrupt one file with invalid YAML to force a failed reload cycle.
+            players_path.write_text("entries: [", encoding="utf-8")
+
+            # Force poll interval window to pass without sleeping.
+            clock.value = 2.0
+            alerts = store.maybe_reload()
+            if not any(a.get("kind") == "lexicon_unreadable" for a in alerts):
+                raise AssertionError(
+                    "phase10 demo: expected lexicon_unreadable alert on corrupt lexicon"
+                )
+
+            rolled_back = store.get("players.tr.yaml")
+            if rolled_back is None:
+                raise AssertionError("phase10 demo: players.tr.yaml missing after rollback")
+            rolled_back_entries = rolled_back[1]
+            if not rolled_back_entries:
+                raise AssertionError("phase10 demo: rollback snapshot unexpectedly empty")
+        finally:
+            if prev_atomicity_env is None:
+                os.environ.pop("NEGELIR_NLP_LEXICON_SWAP_ATOMICITY", None)
+            else:
+                os.environ["NEGELIR_NLP_LEXICON_SWAP_ATOMICITY"] = prev_atomicity_env
+    ok("swarm.demo.nlp: lexicon swap fail-revert exercised")
+
+    # (c) Citation signature warn-mode with missing key/signature.
+    prev_mode = str(getattr(cfg, "nlp_predict_citation_hmac_required", "warn"))
+    try:
+        cfg.nlp_predict_citation_hmac_required = "warn"
+        answer_agent = NlpAnswerAgent(clock_iso=lambda: "2026-05-31T10:00:00+00:00")
+        outputs = list(answer_agent.handle(_build_phase10_demo_predict_approved_message()))
+    finally:
+        cfg.nlp_predict_citation_hmac_required = prev_mode
+
+    has_answer = any(m.envelope.topic == QA_ANSWER_V1 for m in outputs)
+    has_warn_alert = any(
+        m.envelope.topic == NLP_ALERT_V1
+        and m.payload.get("kind") == "nlp_citation_signature_verify_failed"
+        and m.payload.get("severity") == "warn"
+        for m in outputs
+    )
+    if not has_answer or not has_warn_alert:
+        raise AssertionError(
+            "phase10 demo: citation warn-mode missing-key path did not emit answer+warn alert"
+        )
+    ok("swarm.demo.nlp: citation-signature warn-mode missing-key exercised")
+
+    # (d) Cold-start staging order check: every stage event observed in order.
+    probe = NlpBootProbeState(
+        clock_iso=lambda: "2026-05-31T10:00:00+00:00",
+        monotonic=lambda: 0.0,
+        boot_budget_s=30.0,
+        boot_liveness_grace_s=60.0,
+    )
+    observed: list[int] = []
+    for stage in range(1, 7):
+        msg = probe.mark_stage(stage, elapsed_ms=100)
+        if msg.envelope.topic != NLP_EVENT_V1:
+            raise AssertionError("phase10 demo: cold-start emitted alert instead of stage event")
+        if msg.payload.get("kind") != "cold_start_stage":
+            raise AssertionError("phase10 demo: unexpected cold-start event kind")
+        observed.append(int(msg.payload.get("stage", -1)))
+
+    if observed != [1, 2, 3, 4, 5, 6]:
+        raise AssertionError(f"phase10 demo: cold-start stage order mismatch: {observed!r}")
+    if not probe.readiness():
+        raise AssertionError("phase10 demo: readiness did not become true at stage 6")
+    ok("swarm.demo.nlp: cold-start staging order exercised")
+
+
 def cmd_demo(argv):
     parser = argparse.ArgumentParser(prog="swarm.py demo")
     parser.add_argument("--league", default="tr_super_lig")
     args = parser.parse_args(argv)
     return _run_demo(args.league)
+
+
+def cmd_demo_nlp(argv):
+    parser = argparse.ArgumentParser(prog="swarm.py demo-nlp")
+    parser.add_argument("--league", default="tr_super_lig")
+    args = parser.parse_args(argv)
+
+    started = time.monotonic()
+    rc = _run_demo(args.league)
+    if rc != 0:
+        return rc
+
+    info("swarm.demo.nlp: running Phase 10 §10.21.14 extension checks")
+    _run_phase10_nlp_demo_extensions()
+
+    elapsed_s = time.monotonic() - started
+    budget_s = 30.0
+    if elapsed_s >= budget_s:
+        raise AssertionError(
+            f"swarm.demo.nlp exceeded budget: {elapsed_s:.2f}s >= {budget_s:.2f}s"
+        )
+    ok(f"swarm.demo.nlp completed in {elapsed_s:.2f}s (< {budget_s:.2f}s)")
+    return 0
 
 
 def _run_api_smoke_test(base_url: str, *, budget_ms: int = 1500) -> None:
@@ -515,6 +725,7 @@ def cmd_demo_live(argv):
 
 COMMANDS = {
     "demo": cmd_demo,
+    "demo-nlp": cmd_demo_nlp,
     "demo-live": cmd_demo_live,
 }
 

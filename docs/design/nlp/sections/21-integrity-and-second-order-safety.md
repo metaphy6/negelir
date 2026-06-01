@@ -122,8 +122,8 @@
 #### 10.21.13 New `nlp.event.v1` and `nlp.alert.v1` kinds + DoD additions
 
 - [x] **New `nlp.event.v1` kinds** (open-enum, registered): `cold_start_stage`, `confusables_resolved`, `singleflight_event_swept`, `lexicon_old_generation_evicted`. Per-kind sub-schemas under `ai/swarm/sdk/schemas/nlp.event.v1/<kind>.json`.
-- [ ] **New `nlp.alert.v1` kinds** (open-enum, registered): `nlp_intent_model_sha_mismatch` (critical), `nlp_lexicon_atomic_swap_failed` (error), `nlp_singleflight_overflow` (warn), `nlp_template_render_used_raw_user_text` (critical), `nlp_spool_replay_text_unavailable` (warn), `nlp_citation_signature_verify_failed` (critical), `nlp_cold_start_timeout` (critical), `nlp_lexicon_feed_schema_too_new` (warn).
-- [ ] **DoD proof tests aggregate** (new in §10.21, all required for Phase 10 closure):
+- [x] **New `nlp.alert.v1` kinds** (open-enum, registered): `nlp_intent_model_sha_mismatch` (critical), `nlp_lexicon_atomic_swap_failed` (error), `nlp_singleflight_overflow` (warn), `nlp_template_render_used_raw_user_text` (critical), `nlp_spool_replay_text_unavailable` (warn), `nlp_citation_signature_verify_failed` (critical), `nlp_cold_start_timeout` (critical), `nlp_lexicon_feed_schema_too_new` (warn).
+- [x] **DoD proof tests aggregate** (new in §10.21, all required for Phase 10 closure):
   - §10.21.1 — 6 tests (determinism + version pin + greedy parity)
   - §10.21.2 — 6 tests (memory lifecycle + AST guards)
   - §10.21.3 — 3 tests (atomic swap + xref + lock-hold)
@@ -136,5 +136,5 @@
   - §10.21.10 — 4 tests (band intervals + float dtype + summary mismatch policy)
   - §10.21.11 — 6 tests (patcher boundary + RFC7807 mapping + 3 K8s probes + Phase 16 schema bump + tier×humanizer + LeagueCatalog import boundary)
   - **Total: ≈ 53 new proof tests added on top of the §10.20 baseline.**
-- [ ] **Chart compatibility additions.** Pin `numpy` wheel version, `fasttext` wheel version, Unicode TR39 `Confusables.txt` SHA, `python-crfsuite` wheel version (already implied at §10.20 item 17 — restated here as binding floor).
-- [ ] **`make swarm.demo.nlp` extends** to exercise: (a) confusables-fold path (Cyrillic а in a team name); (b) lexicon swap fail-revert (corrupt one of 6 files); (c) citation-signature warn-mode missing-key (asserts alert fires, render proceeds); (d) cold-start staging (every stage event observed in order). All within the < 30s compose budget (per §10.20 item 16).
+- [x] **Chart compatibility additions.** Pin `numpy` wheel version, `fasttext` wheel version, Unicode TR39 `Confusables.txt` SHA, `python-crfsuite` wheel version (already implied at §10.20 item 17 — restated here as binding floor).
+- [x] **`make swarm.demo.nlp` extends** to exercise: (a) confusables-fold path (Cyrillic а in a team name); (b) lexicon swap fail-revert (corrupt one of 6 files); (c) citation-signature warn-mode missing-key (asserts alert fires, render proceeds); (d) cold-start staging (every stage event observed in order). All within the < 30s compose budget (per §10.20 item 16).

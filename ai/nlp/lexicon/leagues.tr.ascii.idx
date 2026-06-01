@@ -1,0 +1,271 @@
+{
+  "1. lig": [
+    [
+      "tr_tff1_lig",
+      "1. lig",
+      0.0
+    ]
+  ],
+  "2. lig": [
+    [
+      "tr_tff2_lig",
+      "2. lig",
+      0.0
+    ]
+  ],
+  "alman ligi": [
+    [
+      "de_bundesliga",
+      "alman ligi",
+      0.0
+    ]
+  ],
+  "almanya bundesligasi": [
+    [
+      "de_bundesliga",
+      "Almanya Bundesligası",
+      0.0
+    ]
+  ],
+  "bein sports super lig": [
+    [
+      "tr_super_lig",
+      "bein sports süper lig",
+      0.0
+    ]
+  ],
+  "bundesliga": [
+    [
+      "de_bundesliga",
+      "Bundesliga",
+      0.0
+    ],
+    [
+      "de_bundesliga",
+      "bundesliga",
+      0.0
+    ]
+  ],
+  "bundesliga 1": [
+    [
+      "de_bundesliga",
+      "bundesliga 1",
+      0.0
+    ]
+  ],
+  "epl": [
+    [
+      "en_premier_league",
+      "epl",
+      0.0
+    ]
+  ],
+  "fransa ligi": [
+    [
+      "fr_ligue_1",
+      "Fransa ligi",
+      0.0
+    ]
+  ],
+  "fransa ligue 1": [
+    [
+      "fr_ligue_1",
+      "Fransa Ligue 1",
+      0.0
+    ]
+  ],
+  "ingiliz ligi": [
+    [
+      "en_premier_league",
+      "ingiliz ligi",
+      0.0
+    ]
+  ],
+  "ingiltere ligi": [
+    [
+      "en_premier_league",
+      "İngiltere ligi",
+      0.0
+    ]
+  ],
+  "ingiltere premier ligi": [
+    [
+      "en_premier_league",
+      "İngiltere Premier Ligi",
+      0.0
+    ]
+  ],
+  "ispanya la ligasi": [
+    [
+      "es_la_liga",
+      "İspanya La Ligası",
+      0.0
+    ]
+  ],
+  "ispanya ligi": [
+    [
+      "es_la_liga",
+      "İspanya ligi",
+      0.0
+    ]
+  ],
+  "italya ligi": [
+    [
+      "it_serie_a",
+      "İtalya ligi",
+      0.0
+    ]
+  ],
+  "italya serie a": [
+    [
+      "it_serie_a",
+      "İtalya Serie A",
+      0.0
+    ]
+  ],
+  "la liga": [
+    [
+      "es_la_liga",
+      "La Liga",
+      0.0
+    ]
+  ],
+  "laliga": [
+    [
+      "es_la_liga",
+      "laliga",
+      0.0
+    ]
+  ],
+  "lig 1": [
+    [
+      "fr_ligue_1",
+      "lig 1",
+      0.0
+    ]
+  ],
+  "ligue 1": [
+    [
+      "fr_ligue_1",
+      "Ligue 1",
+      0.0
+    ]
+  ],
+  "pl": [
+    [
+      "en_premier_league",
+      "pl",
+      0.0
+    ]
+  ],
+  "premier league": [
+    [
+      "en_premier_league",
+      "Premier League",
+      0.0
+    ]
+  ],
+  "premier lig": [
+    [
+      "en_premier_league",
+      "Premier Lig",
+      0.0
+    ]
+  ],
+  "primera division": [
+    [
+      "es_la_liga",
+      "Primera Division",
+      0.0
+    ]
+  ],
+  "seri a": [
+    [
+      "it_serie_a",
+      "seri a",
+      0.0
+    ]
+  ],
+  "serie a": [
+    [
+      "it_serie_a",
+      "Serie A",
+      0.0
+    ]
+  ],
+  "spor toto ligi": [
+    [
+      "tr_super_lig",
+      "spor toto ligi",
+      0.0
+    ]
+  ],
+  "spor toto super lig": [
+    [
+      "tr_super_lig",
+      "spor toto süper lig",
+      0.0
+    ]
+  ],
+  "super lig": [
+    [
+      "tr_super_lig",
+      "Süper Lig",
+      0.0
+    ],
+    [
+      "tr_super_lig",
+      "süper lig",
+      0.0
+    ]
+  ],
+  "tff 1. lig": [
+    [
+      "tr_tff1_lig",
+      "TFF 1. Lig",
+      0.0
+    ]
+  ],
+  "tff 2. lig": [
+    [
+      "tr_tff2_lig",
+      "TFF 2. Lig",
+      0.0
+    ]
+  ],
+  "tff birinci lig": [
+    [
+      "tr_tff1_lig",
+      "tff birinci lig",
+      0.0
+    ]
+  ],
+  "tff ikinci lig": [
+    [
+      "tr_tff2_lig",
+      "tff ikinci lig",
+      0.0
+    ]
+  ],
+  "tsl": [
+    [
+      "tr_super_lig",
+      "tsl",
+      0.0
+    ]
+  ],
+  "turkiye 1. ligi": [
+    [
+      "tr_tff1_lig",
+      "Türkiye 1. Ligi",
+      0.0
+    ]
+  ],
+  "turkiye super ligi": [
+    [
+      "tr_super_lig",
+      "Türkiye Süper Ligi",
+      0.0
+    ]
+  ]
+}

@@ -1,0 +1,519 @@
+{
+  "adana demir": [
+    [
+      "adana_demirspor",
+      "adana demir",
+      0.0
+    ]
+  ],
+  "adana demirspor": [
+    [
+      "adana_demirspor",
+      "Adana Demirspor",
+      0.0
+    ]
+  ],
+  "ads": [
+    [
+      "adana_demirspor",
+      "ADS",
+      0.0
+    ]
+  ],
+  "akrepler": [
+    [
+      "antalyaspor",
+      "akrepler",
+      0.0
+    ]
+  ],
+  "alanya": [
+    [
+      "alanyaspor",
+      "alanya",
+      0.0
+    ]
+  ],
+  "alanyaspor": [
+    [
+      "alanyaspor",
+      "Alanyaspor",
+      0.0
+    ]
+  ],
+  "antalya": [
+    [
+      "antalyaspor",
+      "antalya",
+      0.0
+    ]
+  ],
+  "antalyaspor": [
+    [
+      "antalyaspor",
+      "Antalyaspor",
+      0.0
+    ]
+  ],
+  "aslan": [
+    [
+      "galatasaray_sk",
+      "aslan",
+      0.0
+    ]
+  ],
+  "aslanlar": [
+    [
+      "galatasaray_sk",
+      "aslanlar",
+      0.0
+    ]
+  ],
+  "aytemiz alanyaspor": [
+    [
+      "alanyaspor",
+      "Aytemiz Alanyaspor",
+      0.0
+    ]
+  ],
+  "basaksehir": [
+    [
+      "istanbul_basaksehir_fk",
+      "Başakşehir",
+      0.0
+    ],
+    [
+      "istanbul_basaksehir_fk",
+      "başakşehir",
+      0.0
+    ]
+  ],
+  "basaksehir fk": [
+    [
+      "istanbul_basaksehir_fk",
+      "Başakşehir FK",
+      0.0
+    ]
+  ],
+  "besiktas": [
+    [
+      "besiktas_jk",
+      "Beşiktaş",
+      121345.0
+    ],
+    [
+      "besiktas_jk",
+      "besiktas",
+      121345.0
+    ]
+  ],
+  "besiktas jimnastik kulubu": [
+    [
+      "besiktas_jk",
+      "Beşiktaş Jimnastik Kulübü",
+      0.0
+    ]
+  ],
+  "besiktas jk": [
+    [
+      "besiktas_jk",
+      "Beşiktaş JK",
+      0.0
+    ]
+  ],
+  "bjk": [
+    [
+      "besiktas_jk",
+      "BJK",
+      0.0
+    ]
+  ],
+  "bordo maviler": [
+    [
+      "trabzonspor",
+      "bordo maviler",
+      0.0
+    ]
+  ],
+  "bursaspor": [
+    [
+      "bursaspor",
+      "Bursaspor",
+      0.0
+    ]
+  ],
+  "carsi": [
+    [
+      "besiktas_jk",
+      "çarşı",
+      0.0
+    ]
+  ],
+  "caykur": [
+    [
+      "rizespor",
+      "çaykur",
+      0.0
+    ]
+  ],
+  "caykur rizespor": [
+    [
+      "rizespor",
+      "Çaykur Rizespor",
+      0.0
+    ]
+  ],
+  "cim bom": [
+    [
+      "galatasaray_sk",
+      "cim bom",
+      0.0
+    ]
+  ],
+  "cimbom": [
+    [
+      "galatasaray_sk",
+      "Cimbom",
+      0.0
+    ]
+  ],
+  "demirspor": [
+    [
+      "adana_demirspor",
+      "demirspor",
+      0.0
+    ]
+  ],
+  "eyup": [
+    [
+      "eyupspor",
+      "eyüp",
+      0.0
+    ]
+  ],
+  "eyupspor": [
+    [
+      "eyupspor",
+      "Eyüpspor",
+      0.0
+    ]
+  ],
+  "fb": [
+    [
+      "fenerbahce_sk",
+      "FB",
+      0.0
+    ]
+  ],
+  "fener": [
+    [
+      "fenerbahce_sk",
+      "Fener",
+      0.0
+    ]
+  ],
+  "fenerbahce": [
+    [
+      "fenerbahce_sk",
+      "Fenerbahçe",
+      187654.0
+    ],
+    [
+      "fenerbahce_sk",
+      "fenerbahce",
+      187654.0
+    ]
+  ],
+  "fenerbahce sk": [
+    [
+      "fenerbahce_sk",
+      "Fenerbahçe SK",
+      0.0
+    ]
+  ],
+  "fenerbahce spor kulubu": [
+    [
+      "fenerbahce_sk",
+      "Fenerbahçe Spor Kulübü",
+      0.0
+    ]
+  ],
+  "galata": [
+    [
+      "galatasaray_sk",
+      "galata",
+      0.0
+    ]
+  ],
+  "galatasaray": [
+    [
+      "galatasaray_sk",
+      "Galatasaray",
+      198432.0
+    ]
+  ],
+  "galatasaray sk": [
+    [
+      "galatasaray_sk",
+      "Galatasaray SK",
+      0.0
+    ]
+  ],
+  "galatasaray spor kulubu": [
+    [
+      "galatasaray_sk",
+      "Galatasaray Spor Kulübü",
+      0.0
+    ]
+  ],
+  "gaziantep": [
+    [
+      "gaziantep_fk",
+      "Gaziantep",
+      0.0
+    ],
+    [
+      "gaziantep_fk",
+      "gaziantep",
+      0.0
+    ]
+  ],
+  "gaziantep fk": [
+    [
+      "gaziantep_fk",
+      "Gaziantep FK",
+      0.0
+    ]
+  ],
+  "gfk": [
+    [
+      "gaziantep_fk",
+      "GFK",
+      0.0
+    ]
+  ],
+  "giresun": [
+    [
+      "giresunspor",
+      "giresun",
+      0.0
+    ]
+  ],
+  "giresunspor": [
+    [
+      "giresunspor",
+      "Giresunspor",
+      0.0
+    ]
+  ],
+  "gs": [
+    [
+      "galatasaray_sk",
+      "GS",
+      0.0
+    ]
+  ],
+  "hatay": [
+    [
+      "hatayspor",
+      "hatay",
+      0.0
+    ]
+  ],
+  "hatayspor": [
+    [
+      "hatayspor",
+      "Hatayspor",
+      0.0
+    ]
+  ],
+  "ibfk": [
+    [
+      "istanbul_basaksehir_fk",
+      "IBFK",
+      0.0
+    ]
+  ],
+  "istanbul basaksehir": [
+    [
+      "istanbul_basaksehir_fk",
+      "İstanbul Başakşehir",
+      0.0
+    ]
+  ],
+  "kanarya": [
+    [
+      "fenerbahce_sk",
+      "kanarya",
+      0.0
+    ]
+  ],
+  "karadeniz firtinasi": [
+    [
+      "trabzonspor",
+      "karadeniz fırtınası",
+      0.0
+    ]
+  ],
+  "kartal": [
+    [
+      "besiktas_jk",
+      "kartal",
+      0.0
+    ]
+  ],
+  "kartallar": [
+    [
+      "besiktas_jk",
+      "kartallar",
+      0.0
+    ]
+  ],
+  "kasimpasa": [
+    [
+      "kasimpasa_sk",
+      "Kasımpaşa",
+      0.0
+    ]
+  ],
+  "kasimpasa sk": [
+    [
+      "kasimpasa_sk",
+      "Kasımpaşa SK",
+      0.0
+    ]
+  ],
+  "kayseri": [
+    [
+      "kayserispor",
+      "kayseri",
+      0.0
+    ]
+  ],
+  "kayserispor": [
+    [
+      "kayserispor",
+      "Kayserispor",
+      0.0
+    ]
+  ],
+  "konya": [
+    [
+      "konyaspor",
+      "konya",
+      0.0
+    ]
+  ],
+  "konyaspor": [
+    [
+      "konyaspor",
+      "Konyaspor",
+      0.0
+    ]
+  ],
+  "ksk": [
+    [
+      "kasimpasa_sk",
+      "KSK",
+      0.0
+    ]
+  ],
+  "rize": [
+    [
+      "rizespor",
+      "rize",
+      0.0
+    ]
+  ],
+  "rizespor": [
+    [
+      "rizespor",
+      "Rizespor",
+      0.0
+    ]
+  ],
+  "sari kirmizililar": [
+    [
+      "galatasaray_sk",
+      "sarı kırmızılılar",
+      0.0
+    ]
+  ],
+  "sari lacivert": [
+    [
+      "fenerbahce_sk",
+      "sarı lacivert",
+      0.0
+    ]
+  ],
+  "sari lacivertliler": [
+    [
+      "fenerbahce_sk",
+      "sarı lacivertliler",
+      0.0
+    ]
+  ],
+  "sivas": [
+    [
+      "sivasspor",
+      "sivas",
+      0.0
+    ]
+  ],
+  "sivasspor": [
+    [
+      "sivasspor",
+      "Sivasspor",
+      0.0
+    ]
+  ],
+  "siyah beyazlilar": [
+    [
+      "besiktas_jk",
+      "siyah beyazlılar",
+      0.0
+    ]
+  ],
+  "timsah": [
+    [
+      "bursaspor",
+      "timsah",
+      0.0
+    ]
+  ],
+  "trabzonspor": [
+    [
+      "trabzonspor",
+      "Trabzonspor",
+      89012.0
+    ]
+  ],
+  "ts": [
+    [
+      "trabzonspor",
+      "TS",
+      0.0
+    ]
+  ],
+  "umraniye": [
+    [
+      "umraniyespor",
+      "ümraniye",
+      0.0
+    ]
+  ],
+  "umraniyespor": [
+    [
+      "umraniyespor",
+      "Ümraniyespor",
+      0.0
+    ]
+  ],
+  "yesil beyazlilar": [
+    [
+      "bursaspor",
+      "yeşil beyazlılar",
+      0.0
+    ]
+  ]
+}
