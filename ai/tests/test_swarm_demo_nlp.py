@@ -21,7 +21,7 @@ def _load_swarm_makefile_module():
 
 
 def test_swarm_demo_nlp_extensions_cover_phase10_21_14_paths() -> None:
-    """Runs the extension helper and expects all scenario assertions to hold."""
+    """Runs the extension helper and expects all Phase 10 extension scenario assertions to hold."""
     swarm_make = _load_swarm_makefile_module()
     swarm_make._run_phase10_nlp_demo_extensions()
 

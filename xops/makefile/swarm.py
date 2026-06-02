@@ -482,6 +482,137 @@ def _run_phase10_nlp_demo_extensions() -> None:
         )
     ok("swarm.demo.nlp: citation-signature warn-mode missing-key exercised")
 
+    # (e) §10.22 Turkish robustness paths.
+    from nlp.entity import EntityExtractor  # noqa: E402
+    from nlp.lexicon_loader import LexiconStore  # noqa: E402
+    from nlp.normalize import normalize_input  # noqa: E402
+    from swarm.agents.nlp import NlpIntentAgent  # noqa: E402
+    from swarm.agents.topics import NLP_EVENT_V1, QA_REQUEST_V1  # noqa: E402
+    from swarm.sdk import RequestIdDeduper  # noqa: E402
+    from swarm.sdk.types import Message  # noqa: E402
+
+    normalized = normalize_input("Galatasaray maci")
+    if normalized.tokens != ("galatasaray", "maci"):
+        raise AssertionError(
+            f"phase10 demo: ASCII-only Turkish input failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp: ASCII-only Turkish input path exercised")
+
+    normalized = normalize_input("Galatasaraya maç")
+    if not normalized.apostrophe_repairs:
+        raise AssertionError(
+            "phase10 demo: dropped-apostrophe path did not produce apostrophe repairs"
+        )
+    if "galatasaray'a" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo: dropped-apostrophe token not repaired: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp: dropped-apostrophe path exercised")
+
+    normalized = normalize_input("Galatasaray maçmı")
+    if "maçmı" not in normalized.particle_repairs:
+        raise AssertionError(
+            f"phase10 demo: attached question particle path did not repair: {normalized.particle_repairs!r}"
+        )
+    ok("swarm.demo.nlp: attached-question-particle path exercised")
+
+    normalized = normalize_input("Galatasaray geliyo maç")
+    if ("geliyo", "gerund_r_drop") not in normalized.dialect_repairs:
+        raise AssertionError(
+            f"phase10 demo: dialect normalization failed: {normalized.dialect_repairs!r}"
+        )
+    ok("swarm.demo.nlp: dialect normalization path exercised")
+
+    normalized = normalize_input("mci maç")
+    if ("mci", "manchester_city") not in normalized.abbreviations_expanded:
+        raise AssertionError(
+            f"phase10 demo: abbreviation expansion failed: {normalized.abbreviations_expanded!r}"
+        )
+    ok("swarm.demo.nlp: abbreviation expansion path exercised")
+
+    with tempfile.TemporaryDirectory(prefix="swarm-demo-nlp-lexicon-") as tmpdir:
+        lexicon_tmp = Path(tmpdir)
+        lexicon_tmp.mkdir(parents=True, exist_ok=True)
+        lexicon_tmp.joinpath("teams.tr.yaml").write_text(
+            """_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: '2026-06-02T00:00:00Z'
+  generator: test
+entries:
+- canonical_id: manchester_city
+  names:
+  - Manchester City
+  aliases:
+  - Man City
+- canonical_id: bayern_munich
+  names:
+  - Bayern Münih
+  aliases:
+  - Bayern Munich
+""",
+            encoding="utf-8",
+        )
+        store = LexiconStore(lexicon_tmp)
+        store.maybe_reload()
+        extractor = EntityExtractor(store=store)
+
+        normalized = normalize_input("Manchester City formdaymış")
+        result = extractor.extract(normalized.tokens, raw_tokens=normalized.tokens)
+        if "manchester_city" not in [span.canonical_id for span in result.spans]:
+            raise AssertionError(
+                f"phase10 demo: code-switch team did not resolve: {[span.canonical_id for span in result.spans]!r}"
+            )
+        ok("swarm.demo.nlp: code-switch entity resolution path exercised")
+
+        normalized = normalize_input("Bayern Münih maç")
+        result = extractor.extract(normalized.tokens, raw_tokens=normalized.tokens)
+        if "bayern_munich" not in [span.canonical_id for span in result.spans]:
+            raise AssertionError(
+                f"phase10 demo: foreign transliteration path did not resolve: {[span.canonical_id for span in result.spans]!r}"
+            )
+        ok("swarm.demo.nlp: foreign-transliteration path exercised")
+
+    normalized = normalize_input("Galatasaray 23 Ekim maç")
+    if "23" not in normalized.tokens or "ekim" not in normalized.tokens or "maç" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo: date+match-pair path tokenization failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp: date+match-pair path exercised")
+
+    intent_agent = NlpIntentAgent(
+        monotonic=lambda: 0.0,
+        deduper=RequestIdDeduper(window_s=10.0, max_keys=1000, clock=lambda: 0.0),
+    )
+    intent_msg = Message.new(
+        topic=QA_REQUEST_V1,
+        payload={
+            "request_id": "demo-req-1",
+            "locale": "tr",
+            "sanitized_text": "gs maçı tahmin",
+            "sec_verdict": "pass",
+            "emitted_at": "2026-05-31T10:00:00+00:00",
+        },
+        producer="demo",
+    )
+    intent_out = list(intent_agent.handle(intent_msg))
+    if not any(
+        m.envelope.topic == NLP_EVENT_V1
+        and m.payload.get("kind") == "locale_fallback_used"
+        and m.payload.get("requested") == "tr"
+        and m.payload.get("resolved") == "tr-TR"
+        for m in intent_out
+    ):
+        raise AssertionError("phase10 demo: locale fallback path did not emit locale_fallback_used")
+    ok("swarm.demo.nlp: locale-fallback path exercised")
+
+    normalized = normalize_input("Galatasaray oç maç")
+    if "oç" not in normalized.slurs_stripped or "maç" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo: offensive-with-real-intent path did not strip slur while preserving intent: {normalized.slurs_stripped!r}, {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp: offensive-with-real-intent path exercised")
+
     # (d) Cold-start staging order check: every stage event observed in order.
     probe = NlpBootProbeState(
         clock_iso=lambda: "2026-05-31T10:00:00+00:00",

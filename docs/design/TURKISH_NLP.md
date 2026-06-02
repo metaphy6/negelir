@@ -52,6 +52,45 @@ ai/nlp/lexicon/
 Lexicons are versioned, hot-reloadable on `SIGHUP`, and have a property test
 that asserts every alias maps back to a canonical form.
 
+## 📘 Rule tables for Turkish input robustness
+
+Phase 10.22 embeds the robustness rules directly into the NLP design doc so
+operator-facing examples and lockstep references are available alongside the
+implementation.
+
+- `ai/nlp/lexicon/_ascii_collisions.tr.yaml` — explicit allowlist for ASCII-
+  based alias collisions, used when `Fenerbahce` and `Fener` could map to
+  different canonical entries.
+- `ai/nlp/lang_tr/particles.tr.yaml` — Turkish particle insertion and repair
+  rules for inputs such as `gs'in` and `galatasarayda`.
+- `ai/nlp/lang_tr/dialect.tr.yaml` — colloquial and abbreviation expansions
+  (`yapicaz` → `yapacagiz`, `kanka` → `kanka`, `ms` → `mac_sonucu`).
+- `ai/nlp/lexicon/dialects.tr.yaml` — entity-specific dialect aliases, kept
+  disjoint from the general dialect table to prevent false-positive team
+  matches.
+- `ai/nlp/entities_negative.tr.yaml` — negative rules preventing ambiguous
+  foreign names like `Bayer` from matching `Bayern Münih` unless the phrase
+  context supports it.
+- `make nlp.lexicon-build` — the Phase 10.22 build pipeline emits both the
+  `*.tr.ascii.idx` search index and the PR-gated phonetic collision review at
+  `ai/nlp/lexicon/_phonetic_review.md`.
+- `cfg.nlp_lexicon_feed_*` and `make nlp.rotate-lexicon-key` — feed integrity,
+  signature validation, and dual-acceptance key rotation for production lexicon
+  swaps.
+
+### Worked examples
+
+- `bugun gs maci kacta` → ASCII alias index restores `gs` to `galatasaray`, then
+  the intent classifier dispatches `match.kickoff_time`.
+- `fenerbahce kupasi` → alias expansion matches the canonical team name and
+  avoids an ASCII collision with `fener`.
+- `bugun gs'in maci` → particle repair normalizes the possessive form before
+  entity extraction.
+- `yapicaz` → dialect rule expands to `yapacagiz` and preserves the original
+  intent context.
+- `Galatasaray score` → bilingual lexicon lookup handles the English token while
+  still matching the Turkish team name.
+
 ## 🧪 Test corpus
 
 `ai/tests/fixtures/turkish_queries.yaml` — at least 200 entries grouped:

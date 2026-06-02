@@ -676,12 +676,13 @@ def test_sec_input_sanitizer_strips_rtl_override_and_zero_width() -> None:
     (the NLP layer trusts `sec_verdict=sanitized`).
     """
     from swarm.agents.sec.input import sanitize_text
-    # Mix RLO (U+202E), ZWNJ (U+200C), BOM (U+FEFF), and a NUL.
-    raw = "kim\u202Eşampiyon\u200colacak?\uFEFF\u0000"
+    # Mix RLO (U+202E), ZWNJ (U+200C), BOM (U+FEFF), a variation selector,
+    # a private-use char, and a NUL.
+    raw = "kim\u202Eşampiyon\u2060olacak?\uFE0F\uE000\u0000"
     clean, steps, mutated = sanitize_text(raw)
     assert mutated is True
     # All attack-class characters stripped.
-    for ch in ("\u202E", "\u200c", "\uFEFF", "\u0000"):
+    for ch in ("\u202E", "\u2060", "\uFE0F", "\uE000", "\u0000"):
         assert ch not in clean, f"sanitizer left {ch!r} on the wire"
     assert "kim" in clean and "şampiyon" in clean and "olacak?" in clean
     assert steps == ["nfc", "strip_control"]

@@ -58,6 +58,13 @@ func stripControlAndZeroWidth(s string) string {
 	return b.String()
 }
 
+var allowedFormatCodepoints = map[rune]bool{}
+var hangulFillerRunes = map[rune]bool{
+	0x115F: true,
+	0x1160: true,
+	0x3164: true,
+}
+
 // needsStrip is a fast-path check: return false (no allocation needed)
 // when the string is plain ASCII printable + whitespace + non-Latin
 // codepoints that don't fall in any stripped range. The check inspects
@@ -97,6 +104,14 @@ func isStripped(r rune) bool {
 	case r >= 0x2066 && r <= 0x2069: // LRI / RLI / FSI / PDI
 		return true
 	case r == 0xFEFF: // BOM / ZWNBSP
+		return true
+	case r >= 0xFE00 && r <= 0xFE0F: // Variation selectors
+		return true
+	case unicode.Is(unicode.Cf, r):
+		return !allowedFormatCodepoints[r]
+	case unicode.Is(unicode.Cn, r) || unicode.Is(unicode.Co, r) || unicode.Is(unicode.Cs, r):
+		return true
+	case hangulFillerRunes[r]:
 		return true
 	}
 	return false

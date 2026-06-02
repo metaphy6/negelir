@@ -48,6 +48,7 @@ from swarm.agents.topics import (
     MATCH_OUTCOME,
     NLP_ALERT_V1,
     NLP_EVENT_V1,
+    NLP_SHADOW_V1,
     PREDICT_APPROVED,
     PREDICT_FINAL,
     PREDICT_REQUEST_V1,
@@ -878,6 +879,7 @@ _NLP_OUTBOUND_ALLOWED = frozenset({
     QA_CONTEXT_V1,
     NLP_EVENT_V1,
     NLP_ALERT_V1,
+    NLP_SHADOW_V1,
     PREDICT_REQUEST_V1,
     DATA_REQUEST_V1,
 })

@@ -69,6 +69,7 @@ from ..topics import (
     DATA_REQUEST_V1,
     NLP_ALERT_V1,
     NLP_EVENT_V1,
+    NLP_SHADOW_V1,
     PREDICT_APPROVED,
     PREDICT_CANCEL_V1,
     PREDICT_REQUEST_V1,
@@ -592,7 +593,7 @@ class NlpIntentAgent:
 
     name = "nlp.intent.v1"
     subscribes = [QA_REQUEST_V1, QA_CONTEXT_V1]
-    publishes = [QA_INTENT_V1, NLP_EVENT_V1, NLP_ALERT_V1]
+    publishes = [QA_INTENT_V1, NLP_EVENT_V1, NLP_ALERT_V1, NLP_SHADOW_V1]
 
     def __init__(
         self,

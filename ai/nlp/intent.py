@@ -38,6 +38,7 @@ Calibration workflow::
 from __future__ import annotations
 
 import collections
+import datetime as _dt
 import hashlib
 import json
 import math
@@ -80,6 +81,10 @@ def _load_intent_labels() -> FrozenSet[str]:
             "_intent_enum.json missing or empty 'enum' array."
         )
     return frozenset(values)
+
+
+def _utc_iso() -> str:
+    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
 #: Closed set of all valid intent labels (§10.4).  fastText ``__label__``
@@ -404,20 +409,26 @@ class IntentClassifier:
     # ------------------------------------------------------------------
 
     @classmethod
-    def load(cls, cfg: object) -> "IntentClassifier":
-        """Load the fastText model from cfg.nlp_intent_model_path.
+        """Resolve the deployed intent model path, including canary pods.
 
-        Verifies SHA256 and file size BEFORE importing fasttext, so callers
-        can catch config/integrity errors without the library installed.
-
-        Also attempts to load the Platt calibration file (§10.4 Calibration).
-        Calibration path is resolved from ``cfg.nlp_intent_calibration_path``
-        when set; otherwise defaults to the model directory with the
-        ``intent.tr.calibration.json`` name.  Missing calibration file is
-        accepted gracefully (``_calibration=None``); a present-but-malformed
-        file raises :exc:`IntentCalibrationLoadError`.
+        When ``cfg.nlp_canary_pod`` is true, the canary pod loads the canary
+        model file path by appending ".canary" to the configured model file
+        name (§10.23.2).
+        When ``canary=True``, returns the canary path regardless of pod role.
         """
-        model_path = cls._resolve_model_path(cfg)
+        base_path = Path(getattr(cfg, "nlp_intent_model_path", "data/models/nlp/intent.tr.bin"))
+        if canary or getattr(cfg, "nlp_canary_pod", False):
+            return base_path.with_name(base_path.name + ".canary")
+        return base_path
+
+    @classmethod
+    def load(cls, cfg: object, canary: bool = False) -> "IntentClassifier":
+        """Load the intent classifier from the configured path.
+
+        When ``canary=True``, loads the canary model path independently of
+        the pod role. This supports §10.23.2 shadow-mode evaluation.
+        """
+        model_path = cls._resolve_model_path(cfg, canary=canary)
         if not model_path.exists():
             raise IntentModelNotFoundError(
                 f"Intent model not found: {model_path}. "
@@ -538,17 +549,90 @@ class IntentClassifier:
         return cls(model, model_path, calibration, cal_version, _model_version=model_version)
 
     @classmethod
-    def _resolve_model_path(cls, cfg: object) -> Path:
-        """Resolve the deployed intent model path, including canary pods.
+    def load_shadow_pair(cls, cfg: object) -> tuple["IntentClassifier", "IntentClassifier"]:
+        """Load both the baseline and canary intent models for shadow evaluation."""
+        baseline = cls.load(cfg, canary=False)
+        canary = cls.load(cfg, canary=True)
+        return baseline, canary
 
-        When ``cfg.nlp_canary_pod`` is true, the canary pod loads the canary
-        model file path by appending ".canary" to the configured model file
-        name (§10.23.2).
+    @staticmethod
+    def _shadow_input_hash(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _shadow_should_sample(text: str, sample_rate: float) -> bool:
+        if sample_rate <= 0.0:
+            return False
+        if sample_rate >= 1.0:
+            return True
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:8], "big")
+        return bucket < int(sample_rate * (1 << 64))
+
+    @staticmethod
+    def make_shadow_payload(
+        text: str,
+        baseline: "IntentClassifier",
+        canary: "IntentClassifier",
+        request_id: str | None = None,
+    ) -> dict[str, object]:
+        baseline_intent, baseline_conf = baseline.predict_intent(text)
+        canary_intent, canary_conf = canary.predict_intent(text)
+        return {
+            "input_hash": IntentClassifier._shadow_input_hash(text),
+            "request_id": request_id or None,
+            "baseline_intent": baseline_intent,
+            "baseline_conf": baseline_conf,
+            "baseline_model_version": baseline.model_version,
+            "canary_intent": canary_intent,
+            "canary_conf": canary_conf,
+            "canary_model_version": canary.model_version,
+            "agreement": baseline_intent == canary_intent,
+            "producer": "nlp.intent.v1",
+            "emitted_at": _utc_iso(),
+        }
+
+    @staticmethod
+    def shadow_payload_for_request(
+        text: str,
+        baseline: "IntentClassifier",
+        canary: "IntentClassifier",
+        cfg: object,
+        request_id: str | None = None,
+    ) -> dict[str, object] | None:
+        if getattr(cfg, "nlp_intent_shadow_mode", "off") != "on":
+            return None
+        if not IntentClassifier._shadow_should_sample(text, float(getattr(cfg, "nlp_shadow_sample_rate", 0.01))):
+            return None
+        return IntentClassifier.make_shadow_payload(text, baseline, canary, request_id=request_id)
+
+    @staticmethod
+    def should_route_to_canary(account_id: str | int | None, cfg: object) -> bool:
+        """Return True when the account should be routed to the canary model.
+
+        Uses a stable SHA-256 sticky bucket over ``account_id`` and the
+        configured rollout percentage / account bucket size (§10.23.2).
         """
-        base_path = Path(getattr(cfg, "nlp_intent_model_path", "data/models/nlp/intent.tr.bin"))
-        if getattr(cfg, "nlp_canary_pod", False):
-            return base_path.with_name(base_path.name + ".canary")
-        return base_path
+        if not account_id:
+            return False
+
+        pct = int(getattr(cfg, "nlp_intent_model_canary_pct", 0))
+        if pct <= 0:
+            return False
+        if pct >= 100:
+            return True
+
+        bucket_size = int(getattr(cfg, "nlp_canary_account_bucket_size", 1000))
+        if bucket_size <= 0:
+            return False
+
+        threshold = (pct * bucket_size) // 100
+        if threshold <= 0:
+            return False
+
+        account_bytes = str(account_id).encode("utf-8")
+        bucket = int.from_bytes(hashlib.sha256(account_bytes).digest()[:8], "big") % bucket_size
+        return bucket < threshold
 
     # ------------------------------------------------------------------
     # Inference

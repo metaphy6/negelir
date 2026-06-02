@@ -151,6 +151,29 @@ class TestIntentModelConfig:
 
             importlib.reload(_cm)
 
+    def test_config_validates_canary_pod_requires_pct(self):
+        import os
+
+        os.environ["NEGELIR_NLP_CANARY_POD"] = "1"
+        os.environ["NEGELIR_NLP_INTENT_MODEL_CANARY_PCT"] = "0"
+        try:
+            import importlib
+
+            from common import config as _cm
+
+            importlib.reload(_cm)
+            cfg = _cm.Config()
+            issues = cfg.validate(strict=False)
+            assert any("nlp_canary_pod=true requires nlp_intent_model_canary_pct > 0" in i for i in issues)
+        finally:
+            del os.environ["NEGELIR_NLP_CANARY_POD"]
+            del os.environ["NEGELIR_NLP_INTENT_MODEL_CANARY_PCT"]
+            import importlib
+
+            from common import config as _cm
+
+            importlib.reload(_cm)
+
 
 # ---------------------------------------------------------------------------
 # §10.4 IntentClassifier scaffold
@@ -238,6 +261,48 @@ class TestIntentClassifierScaffold:
         with pytest.raises(IntentModelUnavailable):
             IntentClassifier.load(cfg)
 
+    def test_canary_path_resolves_to_canary_model_file(self, tmp_path):
+        from nlp.intent import IntentClassifier
+
+        cfg = _Cfg(nlp_intent_model_path=str(tmp_path / "intent.tr.bin"))
+        path = IntentClassifier._resolve_model_path(cfg, canary=True)
+        assert path.name == "intent.tr.bin.canary"
+
+    def test_shadow_sampling_is_deterministic(self):
+        from nlp.intent import IntentClassifier
+
+        assert IntentClassifier._shadow_should_sample("foo", 0.0) is False
+        assert IntentClassifier._shadow_should_sample("foo", 1.0) is True
+        assert IntentClassifier._shadow_should_sample("foo", 0.05) == IntentClassifier._shadow_should_sample("foo", 0.05)
+
+    def test_shadow_payload_includes_expected_fields(self):
+        from nlp.intent import IntentClassifier
+
+        baseline_model = MagicMock()
+        baseline_model.predict.return_value = ("predict.match_outcome", 0.91)
+        baseline = IntentClassifier(baseline_model, Path("baseline.bin"), _model_version="1.0.0")
+
+        canary_model = MagicMock()
+        canary_model.predict.return_value = ("predict.match_outcome", 0.92)
+        canary = IntentClassifier(canary_model, Path("canary.bin"), _model_version="1.1.0")
+
+        payload = IntentClassifier.make_shadow_payload(
+            "Galatasaray maçı",
+            baseline,
+            canary,
+            request_id="req-1",
+        )
+
+        assert payload["input_hash"] == hashlib.sha256("Galatasaray maçı".encode("utf-8")).hexdigest()
+        assert payload["baseline_intent"] == "predict.match_outcome"
+        assert payload["canary_intent"] == "predict.match_outcome"
+        assert payload["baseline_conf"] == 0.91
+        assert payload["canary_conf"] == 0.92
+        assert payload["agreement"] is True
+        assert payload["baseline_model_version"] == "1.0.0"
+        assert payload["canary_model_version"] == "1.1.0"
+        assert payload["producer"] == "nlp.intent.v1"
+
     def test_sha256_match_proceeds_to_fasttext(self, tmp_path):
         """Correct SHA passes verification; load proceeds to fasttext import."""
         from nlp.intent import IntentClassifier, IntentModelUnavailable
@@ -318,6 +383,32 @@ class TestIntentClassifierScaffold:
 
         with pytest.raises(IntentModelUnavailable, match="fasttext library"):
             IntentClassifier.load(cfg)
+
+    def test_canary_assignment_uses_sticky_account_bucket(self):
+        from hashlib import sha256
+        from nlp.intent import IntentClassifier
+
+        cfg = _Cfg(
+            nlp_intent_model_canary_pct=10,
+            nlp_canary_account_bucket_size=1000,
+        )
+
+        account_id = "account-123"
+        digest = sha256(account_id.encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:8], "big") % cfg.nlp_canary_account_bucket_size
+        expected = bucket < (cfg.nlp_intent_model_canary_pct * cfg.nlp_canary_account_bucket_size) // 100
+
+        assert IntentClassifier.should_route_to_canary(account_id, cfg) == expected
+        assert IntentClassifier.should_route_to_canary(account_id, cfg) == IntentClassifier.should_route_to_canary(account_id, cfg)
+
+    def test_canary_assignment_respects_boundaries(self):
+        from nlp.intent import IntentClassifier
+
+        cfg_off = _Cfg(nlp_intent_model_canary_pct=0, nlp_canary_account_bucket_size=1000)
+        assert IntentClassifier.should_route_to_canary("account-1", cfg_off) is False
+
+        cfg_all = _Cfg(nlp_intent_model_canary_pct=100, nlp_canary_account_bucket_size=1000)
+        assert IntentClassifier.should_route_to_canary("account-1", cfg_all) is True
 
     def test_sidecar_sha_file_malformed_raises(self, tmp_path):
         """§10.21.1: Unreadable sidecar → IntentModelSHAMismatch."""

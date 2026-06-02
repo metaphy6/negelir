@@ -1,0 +1,60 @@
+{
+  "$id": "nlp.shadow.v1",
+  "title": "nlp.shadow.v1",
+  "schema_version": 1,
+  "type": "object",
+  "required": [
+    "input_hash",
+    "baseline_intent",
+    "baseline_conf",
+    "canary_intent",
+    "canary_conf",
+    "agreement",
+    "producer",
+    "emitted_at"
+  ],
+  "properties": {
+    "input_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "baseline_intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_conf": {
+      "type": "number"
+    },
+    "baseline_model_version": {
+      "type": "string"
+    },
+    "canary_intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canary_conf": {
+      "type": "number"
+    },
+    "canary_model_version": {
+      "type": "string"
+    },
+    "agreement": {
+      "type": "boolean"
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "emitted_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

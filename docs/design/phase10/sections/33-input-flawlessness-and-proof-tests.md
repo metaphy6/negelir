@@ -73,7 +73,7 @@ counter-example, and states the binding correction. Tests live in
       adversarial corpus and asserts the normalized output equals the
       pure-ASCII canonical equivalent byte-for-byte.
 
-- [ ] **Assumption (§10.22 ZWJ/ZWNJ):** "Zero-width joiner / non-joiner
+- [x] **Assumption (§10.22 ZWJ/ZWNJ):** "Zero-width joiner / non-joiner
       stripped during normalize."
       **Counter-example:** **Variation Selectors** (U+FE00..U+FE0F),
       **Mongolian Vowel Separator** (U+180E), **Word Joiner**

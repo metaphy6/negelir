@@ -204,6 +204,24 @@ class TestPhase1030Normalization:
             twice = canonical_normalize(once)
             assert once == twice, f"Not idempotent for {s!r}: {once!r} vs {twice!r}"
 
+    def test_canonical_normalize_strips_disallowed_format_and_private_use_chars(self) -> None:
+        from common.text.normalize import canonical_normalize
+
+        raw = "gala\u2060tasaray\uFE0F\uE000\u0378"
+        clean = canonical_normalize(raw)
+        assert "\u2060" not in clean
+        assert "\uFE0F" not in clean
+        assert "\uE000" not in clean
+        assert "\u0378" not in clean
+
+    def test_normalize_input_strips_disallowed_format_and_private_use_chars(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("gala\u2060tasaray\uFE0F\uE000\u0378")
+        joined = " ".join(result.tokens)
+        for ch in ("\u2060", "\uFE0F", "\uE000", "\u0378"):
+            assert ch not in joined
+
 
 class TestStep4TurkishLowercase:
     """Step 4: I->ı (dotless-i) and dotted-I->i; NOT str.lower() behaviour."""

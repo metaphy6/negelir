@@ -140,6 +140,23 @@ _STRIP_CONTROL_RE = re.compile(
     "]"
 )
 
+_FORMAT_CATEGORY_ALLOWLIST: frozenset[int] = frozenset()
+_HANGUL_FILLER_CODEPOINTS = frozenset({0x115F, 0x1160, 0x3164})
+
+
+def _is_disallowed_unicode_char(ch: str) -> bool:
+    cp = ord(ch)
+    category = unicodedata.category(ch)
+    if category == "Cf" and cp not in _FORMAT_CATEGORY_ALLOWLIST:
+        return True
+    if 0xFE00 <= cp <= 0xFE0F:
+        return True
+    if cp in _HANGUL_FILLER_CODEPOINTS:
+        return True
+    if category in {"Cn", "Co", "Cs"}:
+        return True
+    return False
+
 
 def sanitize_text(raw: str) -> tuple[str, list[str], bool]:
     """Apply defense-in-depth transforms.
@@ -164,6 +181,7 @@ def sanitize_text(raw: str) -> tuple[str, list[str], bool]:
     nfc = unicodedata.normalize("NFC", raw)
     # 2. Strip control chars + zero-widths + RTL overrides + BOM.
     stripped = _STRIP_CONTROL_RE.sub("", nfc)
+    stripped = "".join(ch for ch in stripped if not _is_disallowed_unicode_char(ch))
     return stripped, ["nfc", "strip_control"], stripped != raw
 
 

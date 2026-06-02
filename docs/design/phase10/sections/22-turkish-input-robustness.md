@@ -429,7 +429,7 @@
 
 #### 10.22.10 Foreign-team transliteration variants
 
-- [ ] **Real failure mode.** *"Bayer Münih"* / *"Bayer Munih"* /
+- [x] **Real failure mode.** *"Bayer Münih"* / *"Bayer Munih"* /
   *"Bayern"* (the user's confusion between Bayer Leverkusen and
   Bayern München is real); *"Mancester"* / *"Mancester Citi"* /
   *"Manchester Citi"* / *"M. City"* / *"Man City"*; *"Inter"* /
@@ -543,7 +543,7 @@
   - `nlp_offensive_input_total{class ∈ {mild, slur, severe_threat}}`
     counter (debounce on emit, not on count — count is always
     truthful).
-- [ ] **Per-day quality dashboard.** Operator-facing aggregation over
+- [x] **Per-day quality dashboard.** Operator-facing aggregation over
   the above — tail of `nlp_input_repair_density` is the leading
   indicator of incoming input-quality drift (e.g., a viral tweet
   drives a flood of code-switched / dialect input). Documented in
@@ -600,7 +600,7 @@
 - [x] **New build artifacts.** `data/nlp/build_reports/phonetic_collisions.md`
   (CI-tracked); `ai/nlp/lexicon/_phonetic_review.md` (PR-gated
   acknowledgement file).
-- [ ] **DoD proof tests aggregate (new in §10.22):**
+- [x] **DoD proof tests aggregate (new in §10.22):**
   - §10.22.1 — 5 tests
   - §10.22.2 — 5 tests
   - §10.22.3 — 4 tests (incl. 300-row golden table)
@@ -616,14 +616,14 @@
   - §10.22.13 — 4 tests
   - **Total: ≈ 65 new proof tests added on top of §10.20 + §10.21
     baseline.**
-- [ ] **`make swarm.demo.nlp` extends** to cover the §10.22 paths:
+- [x] **`make swarm.demo.nlp` extends** to cover the §10.22 paths:
   one query per family (ASCII-only, dropped-apostrophe,
   attached-question-particle, dialect, abbreviation, code-switch,
   date+match-pair, foreign-transliteration, locale-fallback,
   offensive-with-real-intent). All within the < 30s compose budget
   (per §10.20 item 16 — additional queries amortize via singleflight
   and L0 cache hits on shared sub-paths).
-- [ ] **Documentation.** `docs/design/TURKISH_NLP.md` rewritten in
+- [x] **Documentation.** `docs/design/TURKISH_NLP.md` rewritten in
   lockstep with §10.22 — every rule table referenced here gets a
   prose explanation + worked examples in the design doc.
   `docs/guides/nlp_runbook.md` (NEW): operator-facing playbook

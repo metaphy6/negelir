@@ -186,6 +186,9 @@ PREDICT_CANCEL_V1 = Topic("predict.cancel.v1")
 #                         §7.4 ``sec.alert.v1`` pattern but scoped to NLP
 #                         only so the ``sec.alert.v1`` producer-set stays
 #                         bounded to sec.*/maint.*.
+# ``nlp.shadow.v1``     — sampled audit stream for intent-model shadow-mode
+#                         comparisons (§10.23.2).  Produced by ``nlp.intent.v1``
+#                         when ``cfg.nlp_intent_shadow_mode=on``.
 # ``predict.request.v1`` — versioned form of ``predict.request``; emitted
 #                         by ``nlp.dispatcher.v1`` (§10.6, deferred) to
 #                         route fully-resolved match+market intents to the
@@ -199,6 +202,7 @@ QA_ANSWER_V1 = Topic("qa.answer.v1")
 QA_CONTEXT_V1 = Topic("qa.context.v1")
 NLP_EVENT_V1 = Topic("nlp.event.v1")
 NLP_ALERT_V1 = Topic("nlp.alert.v1")
+NLP_SHADOW_V1 = Topic("nlp.shadow.v1")
 PREDICT_REQUEST_V1 = Topic("predict.request.v1")
 DATA_REQUEST_V1 = Topic("data.request.v1")
 
@@ -209,6 +213,7 @@ __all__ = [
     "DATA_REQUEST_V1",
     "NLP_ALERT_V1",
     "NLP_EVENT_V1",
+    "NLP_SHADOW_V1",
     "PREDICT_CANCEL_V1",
     "PREDICT_REQUEST_V1",
     "QA_ANSWER_V1",

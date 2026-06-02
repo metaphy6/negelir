@@ -39,6 +39,30 @@ _STRIP_RE = re.compile(
     "]"
 )
 
+# Explicit default-strip allow-list for Unicode format category characters.
+# The list is empty for v1; any allowlist entry must be documented and
+# audited via `test_normalize_no_format_chars_pass`.
+_FORMAT_CATEGORY_ALLOWLIST: frozenset[int] = frozenset()
+
+# Additional explicit codepoints outside the Cf category that are known to
+# survive ZWJ/ZWNJ-only stripping and are adversarial in the Turkish input
+# path.
+_HANGUL_FILLER_CODEPOINTS = frozenset({0x115F, 0x1160, 0x3164})
+
+
+def _is_disallowed_codepoint(ch: str) -> bool:
+    cp = ord(ch)
+    category = unicodedata.category(ch)
+    if category == "Cf" and cp not in _FORMAT_CATEGORY_ALLOWLIST:
+        return True
+    if 0xFE00 <= cp <= 0xFE0F:  # Variation selectors
+        return True
+    if cp in _HANGUL_FILLER_CODEPOINTS:
+        return True
+    if category in {"Cn", "Co", "Cs"}:
+        return True
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Phase 10 §10.21.5 -- Unicode confusables folding (homoglyph defense)
@@ -187,4 +211,6 @@ def canonical_normalize(text: str) -> str:
     (not a local re-implementation) in any Python code that needs the same
     transforms -- prevents Python/Go drift.
     """
-    return _STRIP_RE.sub("", unicodedata.normalize("NFC", text))
+    normalized = unicodedata.normalize("NFC", text)
+    stripped = _STRIP_RE.sub("", normalized)
+    return "".join(ch for ch in stripped if not _is_disallowed_codepoint(ch))

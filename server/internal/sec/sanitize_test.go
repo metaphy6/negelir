@@ -46,6 +46,10 @@ func TestSanitizeStripsControlAndZeroWidth(t *testing.T) {
 		{"LRO_RLO", "ab\u202d\u202ec", "abc"},
 		{"FSI_PDI", "ab\u2068\u2069c", "abc"},
 		{"BOM", "\ufeffabc", "abc"},
+		{"VARIATION_SELECTOR", "ab\ufe0fc", "abc"},
+		{"PRIVATE_USE", "ab\ue000c", "abc"},
+		{"UNASSIGNED", "ab\u0378c", "abc"},
+		{"HANGUL_FILLER_115F", "ab\u115fc", "abc"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

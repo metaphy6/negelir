@@ -86,13 +86,13 @@
 
 #### 10.23.2 Canary rollout & shadow-mode for intent model + lexicons
 
-- [ ] **Real failure mode.** A new `intent.tr.bin` with subtly
+- [x] **Real failure mode.** A new `intent.tr.bin` with subtly
   different boundary behaviour (e.g., calibration shift) deployed to
   100% of pods at once = blast-radius of a bad model = entire user
   base. Same for a lexicon swap that introduces a new alias collision.
   §10.21.9 cold-start drains gracefully but does NOT compare new vs
   old behaviour before promotion.
-- [ ] **Pod-level rollout percentage.** K8s `Deployment` ships new
+- [x] **Pod-level rollout percentage.** K8s `Deployment` ships new
   pods with `cfg.nlp_intent_model_canary_pct=10` (env-var driven —
   the 10% of pods with `NLP_CANARY=1` at startup load
   `intent.tr.bin.canary` and the matching calibration file; the rest
@@ -100,7 +100,7 @@
   `(account_id // bucket_size)` → sticky per-account assignment so a
   single user sees consistent classifier behaviour during the canary
   window. Sticky bucket size = `cfg.nlp_canary_account_bucket_size=1000`.
-- [ ] **Shadow-mode evaluation.** Independent of canary routing,
+- [x] **Shadow-mode evaluation.** Independent of canary routing,
   `cfg.nlp_intent_shadow_mode ∈ {off, on}` default `off`; when `on`,
   every pod (canary OR baseline) runs BOTH models on every request
   and records `(input_hash, baseline_intent, baseline_conf,

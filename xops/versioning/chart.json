@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 301,
+    "build": 312,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.67.6",
+      "version": "1.67.8",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-02T16:57:59+00:00",
+      "last_changed": "2026-06-02T18:32:17+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.45.2",
+      "version": "1.45.3",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-02T15:58:26+00:00",
+      "last_changed": "2026-06-02T18:26:57+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.43.3",
+      "version": "3.43.4",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-02T12:32:49+00:00"
+      "last_changed": "2026-06-02T18:14:49+00:00"
     },
     "docs": {
-      "version": "1.81.1",
+      "version": "1.82.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-02T14:09:57+00:00"
+      "last_changed": "2026-06-02T18:32:17+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -9921,6 +9921,105 @@
       "from": "1.67.5",
       "to": "1.67.6",
       "build": 301
+    },
+    {
+      "timestamp": "2026-06-02T17:58:57+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.22.10: mark failure-mode checklist item done in design docs",
+      "from": "1.81.1",
+      "to": "1.81.2",
+      "build": 302
+    },
+    {
+      "timestamp": "2026-06-02T18:01:54+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Add NLP quality dashboard runbook for Phase 10.22.13",
+      "from": "1.81.2",
+      "to": "1.81.3",
+      "build": 303
+    },
+    {
+      "timestamp": "2026-06-02T18:06:54+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.22 proof aggregate bullet",
+      "from": "1.81.3",
+      "to": "1.81.4",
+      "build": 304
+    },
+    {
+      "timestamp": "2026-06-02T18:14:49+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 10.22: extend swarm.demo.nlp demo helper to cover Turkish robustness paths",
+      "from": "3.43.3",
+      "to": "3.43.4",
+      "build": 305
+    },
+    {
+      "timestamp": "2026-06-02T18:14:49+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.22: tick swarm.demo.nlp §10.22 coverage bullet",
+      "from": "1.81.4",
+      "to": "1.81.5",
+      "build": 306
+    },
+    {
+      "timestamp": "2026-06-02T18:17:52+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10.22 doc runbook and Turkish NLP design alignment",
+      "from": "1.81.5",
+      "to": "1.82.0",
+      "build": 307
+    },
+    {
+      "timestamp": "2026-06-02T18:26:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 normalize strip fix",
+      "from": "1.67.6",
+      "to": "1.67.7",
+      "build": 308
+    },
+    {
+      "timestamp": "2026-06-02T18:26:57+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 10 sec sanitizer parity bug fix",
+      "from": "1.45.2",
+      "to": "1.45.3",
+      "build": 309
+    },
+    {
+      "timestamp": "2026-06-02T18:26:57+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design doc checkbox closed",
+      "from": "1.82.0",
+      "to": "1.82.1",
+      "build": 310
+    },
+    {
+      "timestamp": "2026-06-02T18:32:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 canary sticky assignment helper",
+      "from": "1.67.7",
+      "to": "1.67.8",
+      "build": 311
+    },
+    {
+      "timestamp": "2026-06-02T18:32:17+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 docs checkbox sync for 10.23.2 canary rollout",
+      "from": "1.82.1",
+      "to": "1.82.2",
+      "build": 312
     }
   ]
 }
