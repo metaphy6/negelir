@@ -23,13 +23,13 @@
 
 #### 10.28.1 Consonant softening / vowel-drop tolerance (`ünsüz yumuşaması` + `ünlü düşmesi`)
 
-- [ ] **Real bug.** §10.22.2 strips proper-noun suffixes correctly *when present*, but
+- [x] **Real bug.** §10.22.2 strips proper-noun suffixes correctly *when present*, but
   silently mishandles the inverse: real users type the unsoftened form (e.g.
   *"Beşiktaşın maçı"* instead of canonical *"Beşiktaş'ın maçı"*, or *"kitabı"* when
   they mean *"kitap+ı"*) **and** the softened-without-apostrophe form (*"futbolcunun
   ayağı"* vs erroneous *"ayagı"*). Lexicon hits miss because the surface form drifted
   one consonant.
-- [ ] **Closed table** `ai/nlp/lang_tr/spelling/consonant_alternations.tr.yaml`:
+- [x] **Closed table** `ai/nlp/lang_tr/spelling/consonant_alternations.tr.yaml`:
   per-canonical-stem `{stem, final_char, soften_to, soften_blocked: bool, source:
   manual|tdk}`. AST-asserted CODEOWNER `nlp-curator`. Initial set = every
   LeagueCatalog team / player / city stem ending in `{p,ç,t,k}` plus the closed
@@ -37,69 +37,69 @@
   is *blocked* by tradition — e.g. *"Tokat→Tokatın"* not *"Tokadın"*; *"Halit→Halitin"*
   not *"Halidin"*). Build refuses if any canonical from LeagueCatalog isn't in the
   table when its final char is in `{p,ç,t,k}` (forces explicit decision).
-- [ ] **New §10.1 step 8b** `tolerate_consonant_alternation(token, lexicon_index)`
+- [x] **New §10.1 step 8b** `tolerate_consonant_alternation(token, lexicon_index)`
   AFTER §10.22 particle disambiguation, BEFORE typo correction. Two probes per
   unresolved token: *(a)* try softening the final consonant (`p→b, ç→c, t→d, k→ğ`)
   and re-lookup; *(b)* try un-softening if the surface form ends in `{b,c,d,ğ}` and
   the un-softened canonical exists. Cost ≤ 2 lookups (cheap; far below
   `nlp_typo_max_lookups_per_query`). Hit emits `nlp.event.v1{kind=consonant_softening_repaired}`
   debounced 60s.
-- [ ] **`ünlü düşmesi` (vowel drop in 2-syllable nouns)** — *"akıl+ı"* → *"aklı"*,
+- [x] **`ünlü düşmesi` (vowel drop in 2-syllable nouns)** — *"akıl+ı"* → *"aklı"*,
   *"burun+u"* → *"burnu"*, *"şehir+i"* → *"şehri"*. Closed table
   `vowel_drop_stems.tr.yaml` with `{full_stem, dropped_form, suffix_pattern}`. Symspell
   index includes BOTH forms; canonical-id collapse via `_xref.py::validate_xref`
   ensures both surface forms map to the same canonical (build refuses on collision).
   AST `test_nlp_vowel_drop_round_trip` asserts every entry resolves bidirectionally.
-- [ ] **Hard guard.** Never apply consonant softening / vowel drop to a token already
+- [x] **Hard guard.** Never apply consonant softening / vowel drop to a token already
   in `_no_strip_canonicals.tr.yaml` (extends §10.22.4). Concretely: tokens *"Edirne",
   "Manisa", "Adana"* etc. must not be re-spelled; lookup hits before alternation.
-- [ ] **Proof tests.** ≥ 30-row golden `consonant_alternation_corpus.tr.json` with
+- [x] **Proof tests.** ≥ 30-row golden `consonant_alternation_corpus.tr.json` with
   1:1 expected canonical_id per surface form; CI gate 100%. Hypothesis property test
   ≥ 500 examples: `tolerate_consonant_alternation(canonical) == canonical` for every
   closed-table canonical (idempotency).
 
 #### 10.28.2 Consonant assimilation tolerance (`ünsüz benzeşmesi / sertleşmesi`)
 
-- [ ] **Real bug.** TR locative suffix `-de/-da` becomes `-te/-ta` after voiceless
+- [x] **Real bug.** TR locative suffix `-de/-da` becomes `-te/-ta` after voiceless
   consonants (`p, ç, t, k, f, h, s, ş`); user-typed *"futbolda"* (correct) vs
   *"futbolta"* (wrong) vs *"galatasarayda"* (correct) vs *"galatasarayta"* (wrong)
   must all resolve to the same intent / entity. The §10.22.4 particle table only
   handles the orthographic *space* particle, not the suffixed assimilation form.
-- [ ] **Closed table** `ai/nlp/lang_tr/spelling/assimilation_pairs.tr.yaml` —
+- [x] **Closed table** `ai/nlp/lang_tr/spelling/assimilation_pairs.tr.yaml` —
   `{voiced: 'de|da|den|dan', voiceless: 'te|ta|ten|tan', triggers: [voiceless_consonants]}`.
   Two-way fold inside the §10.22.4 particle step: any `-te/-ta/-ten/-tan` after a
   vowel-final stem is folded back to `-de/-da/-den/-dan` for canonicalisation
   (purely a normalize step; the original surface form preserved in
   `entities[].original_text` per §10.21.5).
-- [ ] **Symmetric: `-le/-la` → `-yle/-yla` after vowel-final stems.** Both surface
+- [x] **Symmetric: `-le/-la` → `-yle/-yla` after vowel-final stems.** Both surface
   forms map to one canonical instrumental marker.
-- [ ] **Hard guard.** Never apply to tokens that are themselves dictionary entries
+- [x] **Hard guard.** Never apply to tokens that are themselves dictionary entries
   (e.g. *"Nokta"* is a word, not *"Nok"+ta*). Lookup precedence: lexicon hit > particle fold.
-- [ ] **Proof tests.** 40-row golden `assimilation_corpus.tr.json` covering both
+- [x] **Proof tests.** 40-row golden `assimilation_corpus.tr.json` covering both
   directions × 4 suffix families × 5 trigger consonants; CI 100%.
 
 #### 10.28.3 No-space compound splitting (`birleşik yazım`)
 
-- [ ] **Real bug.** Mobile fans drop spaces (autocorrect race, fat-finger): *"galatasarayfenerbahçe
+- [x] **Real bug.** Mobile fans drop spaces (autocorrect race, fat-finger): *"galatasarayfenerbahçe
   derbisi"*, *"liverpoolmanutd"*, *"tahminneolur"*. §10.22.7 match-pattern parser
   assumes whitespace separation; this slice silently mis-classifies as one
   unresolvable mega-token → `meta.unsupported`.
-- [ ] **`compound_splitter.py`** — bounded recursive longest-prefix split against
+- [x] **`compound_splitter.py`** — bounded recursive longest-prefix split against
   `(lexicon ∪ TR top-5k word-frequency)`; max 4 splits per token; max 1 application
   per query (no quadratic blow-up on adversarial input). Greedy with one-step
   backtrack only when the residual tail itself fails to lex. Cost ceiling
   `nlp_compound_split_max_lookups_per_query=24` enforced via shared budget with §10.3 typo.
-- [ ] **Decision rule.** Only emit a split when *all* resulting parts resolve to
+- [x] **Decision rule.** Only emit a split when *all* resulting parts resolve to
   lexicon entries OR top-1k frequency-table words. Partial coverage → discard split,
   preserve original token, fall through to typo correction. Avoids producing
   hallucinated entity pairs from random concatenations.
-- [ ] **PII safety.** AST `test_nlp_compound_splitter_skips_pii_kinds` — never
+- [x] **PII safety.** AST `test_nlp_compound_splitter_skips_pii_kinds` — never
   attempt to split a token already flagged by §10.28.4 PII detector (otherwise a
   concatenated TC kimlik no could be split into "harmless" digits and lose its
   PII flag).
-- [ ] **Telemetry.** `nlp.event.v1{kind=compound_word_split, parts_count, applied_strategy}`
+- [x] **Telemetry.** `nlp.event.v1{kind=compound_word_split, parts_count, applied_strategy}`
   debounced 60s/intent_class.
-- [ ] **Proof tests.** ≥ 25-row corpus covering 2-, 3-, and 4-way splits; 100% gate.
+- [x] **Proof tests.** ≥ 25-row corpus covering 2-, 3-, and 4-way splits; 100% gate.
   10-row negative corpus (genuine single-token: *"Galatasaraylılar"* must NOT split into
   *"Galatasaray+lılar"* because the residual is a valid TR suffix-form not a top-1k word).
   Adversarial 50-row `random_concatenation_flood.tr.json` ≥ 95% routed to
@@ -107,13 +107,13 @@
 
 #### 10.28.4 TR-specific PII detector & redactor
 
-- [ ] **Real bug.** §10.5 / §10.21.7 PII discipline catches `phone | email | credit-card`
+- [x] **Real bug.** §10.5 / §10.21.7 PII discipline catches `phone | email | credit-card`
   via generic patterns. Turkish users routinely embed **TC kimlik no** (11-digit,
   mod-10 + mod-11 checksum), **IBAN-TR** (`TR` + 24 digits + ISO-13616 mod-97 check),
   **Turkish mobile phone** (`+90 5XX` / `0 5XX` formats), **Turkish landline**
   (`0212/0216/0312` ...), **vehicle plate** (`34 ABC 1234`), **VKN** (10-digit tax id).
   None of these have TR-specific detectors today; KVKK Art 6/8 exposure on data-at-rest.
-- [ ] **`ai/common/security/tr_pii.py`** (single source — Phase 7 sec layer also
+- [x] **`ai/common/security/tr_pii.py`** (single source — Phase 7 sec layer also
   imports this; cross-language Go port mirrors via the §10.24.4 pattern). Detectors:
   `detect_tc_kimlik(text) -> [Span]` (regex `\b\d{11}\b` + checksum validate; first
   digit ≠ 0 + Σ-rule); `detect_iban_tr(text)` (regex `\bTR\d{2}\s?(\d{4}\s?){5}\d{2}\b` +
@@ -121,16 +121,16 @@
   10-digit forms with optional separators); `detect_plate_tr(text)` (`\b\d{2}\s?[A-ZÇĞİÖŞÜ]{1,3}\s?\d{2,4}\b`
   bounded, plate-number range 01-81); `detect_vkn(text)` (10-digit + Türkiye VKN
   algorithm).
-- [ ] **Pipeline integration.** New §10.1 step 0.5 `redact_tr_pii` BEFORE length cap
+- [x] **Pipeline integration.** New §10.1 step 0.5 `redact_tr_pii` BEFORE length cap
   (oversized PII could otherwise be split across the cap boundary and one half slip
   through unredacted). Each detected span replaced with closed sentinel
   `[REDACTED:KIND:sha8=...]`; sha8 enables idempotent operator forensic recovery via
   the `make nlp.complaint-trace --confirm-pii` workflow (§10.27.3) without ever
   storing the raw PII at rest.
-- [ ] **Per-kind alert.** Each detector hit emits `nlp.alert.v1{kind=nlp_pii_in_input_<kind>,
+- [x] **Per-kind alert.** Each detector hit emits `nlp.alert.v1{kind=nlp_pii_in_input_<kind>,
   severity=warn}` debounced per `(subject_key_sha8, kind)` for 600s. Aggregated
   daily by Phase 8 maint console.
-- [ ] **Cross-language parity.** Phase 7 Go sec layer imports the same algorithm
+- [x] **Cross-language parity.** Phase 7 Go sec layer imports the same algorithm
   (port `server/internal/sec/tr_pii.go`); byte-parity test with the Python reference
   on a 200-row corpus (positives + negatives + boundary cases: 11-digit numbers that
   are NOT valid TC because checksum fails).

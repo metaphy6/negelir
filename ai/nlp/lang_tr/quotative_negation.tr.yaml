@@ -1,0 +1,22 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.1"
+  notes: >
+    Closed negative quotative patterns for Phase 10.32.1.
+    These patterns identify constructions that negate an attributed claim.
+
+negation_patterns:
+  - '\bhic kimse demedi ki\b'
+  - '\bkimse demedi ki\b'
+  - '\bhic kimse soylemedi ki\b'
+  - '\bkimse soylemedi ki\b'
+  - '\bbiri demedi ki\b'
+  - '\bbiri soylemedi ki\b'
+  - '\bhic kimse boyle demedi ki\b'
+  - '\bkimse boyle demedi ki\b'
+  - '\bbiri boyle demedi ki\b'
+  - '\bhic kimse nasil demedi ki\b'
+  - '\bkimse nasil demedi ki\b'
+  - '\bbiri nasil demedi ki\b'

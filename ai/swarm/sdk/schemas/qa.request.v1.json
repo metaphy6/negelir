@@ -18,6 +18,7 @@
     "sec_verdict":    { "type": "string", "enum": ["pass", "sanitized"], "description": "`pass` = no transform; `sanitized` = deterministic transform applied (NFC, strip control / zero-width / RTL, optional homoglyph fold)." },
     "sec_steps_run":  { "type": "array", "items": { "type": "string" }, "description": "Ordered audit trail of which deterministic / classifier steps fired." },
     "client_id":      { "type": ["string", "null"] },
+    "conversation_id": { "type": ["string", "null"], "description": "Optional conversation identifier for multi-turn follow-up context." },
     "emitted_at":     { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": false

@@ -57,6 +57,8 @@ from typing import Optional
 
 import yaml
 
+from nlp.offensive import strip_offensive_slurs
+
 DIALECT_SCHEMA_VERSION: int = 1
 ABBREVIATION_SCHEMA_VERSION: int = 1
 VOCATIVE_SCHEMA_VERSION: int = 1
@@ -273,6 +275,7 @@ class DialectResult:
     tokens: tuple[str, ...]
     dialect_repairs: frozenset = field(default_factory=frozenset)
     vocatives_stripped: tuple[str, ...] = field(default_factory=tuple)
+    slurs_stripped: tuple[str, ...] = field(default_factory=tuple)
     abbreviations_expanded: frozenset = field(default_factory=frozenset)
     soft_abbreviations_tagged: frozenset = field(default_factory=frozenset)
 
@@ -495,6 +498,9 @@ class _DialectNormalizer:
             out, self._vocative_set, self._sole_token_safe_set
         )
 
+        # Sub-step ii.b: offensive slur stripping (§10.22.9)
+        out, slurs_stripped = strip_offensive_slurs(out)
+
         # Sub-step iii: abbreviation expansion
         out = _expand_abbreviations(
             out, self._hard_map, self._soft_map, expanded, soft_tagged
@@ -508,6 +514,7 @@ class _DialectNormalizer:
             soft_abbreviations_tagged=frozenset(
                 (a, b, c) for a, b, c in soft_tagged
             ),
+            slurs_stripped=tuple(slurs_stripped),
         )
 
 

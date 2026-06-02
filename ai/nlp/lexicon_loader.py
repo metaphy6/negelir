@@ -31,6 +31,7 @@ from __future__ import annotations
 import collections
 import datetime
 import hashlib
+import hmac
 import json
 import threading
 import time
@@ -194,6 +195,58 @@ def _parse_lexicon_raw(
         generator=str(meta_raw["generator"]),
     )
     return meta, entries
+
+
+def _signature_file_for(path: Path) -> Path:
+    return path.with_name(path.name + ".hmac")
+
+
+def _load_lexicon_feed_hmac_keys(cfg: Config, now: float | None = None) -> dict[str, bytes]:
+    keys: dict[str, bytes] = {}
+    key_path = Path(cfg.nlp_lexicon_feed_hmac_key_path).expanduser()
+    prev_path = Path(f"{key_path}.prev")
+    if key_path.exists():
+        try:
+            current_key = key_path.read_bytes().strip()
+        except OSError:
+            current_key = b""
+        if current_key:
+            keys["current"] = current_key
+    if prev_path.exists():
+        try:
+            prev_key = prev_path.read_bytes().strip()
+        except OSError:
+            prev_key = b""
+        if prev_key and prev_key != keys.get("current"):
+            if now is None:
+                now = time.time()
+            try:
+                prev_mtime = prev_path.stat().st_mtime
+            except OSError:
+                prev_mtime = 0.0
+            if now - prev_mtime <= cfg.nlp_lexicon_feed_hmac_key_grace_s:
+                keys["prev"] = prev_key
+    return keys
+
+
+_SENSITIVE_LEXICON_FILES = frozenset({"markets.tr.yaml", "entities_negative.tr.yaml"})
+
+
+def _valid_hex_signature(value: str) -> bool:
+    try:
+        raw = bytes.fromhex(value.strip())
+    except ValueError:
+        return False
+    return len(raw) == hashlib.sha256().digest_size
+
+
+def _verify_lexicon_feed_signature(raw_bytes: bytes, signature: str, keys: dict[str, bytes]) -> bool:
+    signature = signature.strip().lower()
+    for key in keys.values():
+        expected = hmac.new(key, raw_bytes, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(signature, expected):
+            return True
+    return False
 
 
 def load_lexicon_file(path: Path) -> tuple[LexiconMeta, list[dict[str, Any]]]:
@@ -526,9 +579,12 @@ class LexiconStore:
         # single pass. This avoids a second read_text() call inside
         # load_lexicon_file and prevents TOCTOU races for the SHA capture.
         cfg = Config()
+        hmac_keys = _load_lexicon_feed_hmac_keys(cfg)
         shadow: dict[str, _LoadedFile] = {}
         load_errors: list[str] = []
         schema_too_new_errors: list[str] = []
+        signature_warn_files: list[str] = []
+        signature_enforce_files: list[str] = []
 
         for yaml_file in yaml_files:
             try:
@@ -536,6 +592,38 @@ class LexiconStore:
                 raw_bytes = yaml_file.read_bytes()
                 sha256 = _compute_sha256(raw_bytes)
                 raw_text = raw_bytes.decode("utf-8")
+
+                signature_path = _signature_file_for(yaml_file)
+                effective_mode = cfg.nlp_lexicon_feed_signature_required
+                if yaml_file.name in _SENSITIVE_LEXICON_FILES:
+                    effective_mode = "enforce"
+
+                if cfg.nlp_lexicon_source == "feed" and effective_mode != "off":
+                    signature = None
+                    if signature_path.exists():
+                        try:
+                            signature = signature_path.read_text(encoding="utf-8").strip()
+                        except OSError:
+                            signature = None
+
+                    if signature is None or not _valid_hex_signature(signature):
+                        if effective_mode == "enforce":
+                            signature_enforce_files.append(yaml_file.name)
+                            load_errors.append(
+                                f"{yaml_file.name}: lexicon feed signature missing or malformed"
+                            )
+                            continue
+                        signature_warn_files.append(yaml_file.name)
+                    else:
+                        if not _verify_lexicon_feed_signature(raw_bytes, signature, hmac_keys):
+                            if effective_mode == "enforce":
+                                signature_enforce_files.append(yaml_file.name)
+                                load_errors.append(
+                                    f"{yaml_file.name}: lexicon feed signature invalid"
+                                )
+                                continue
+                            signature_warn_files.append(yaml_file.name)
+
                 meta, entries = _parse_lexicon_raw(
                     yaml_file.name,
                     raw_text,
@@ -562,6 +650,33 @@ class LexiconStore:
                 load_errors.append(f"{yaml_file.name}: UTF-8 decode error: {exc}")
             except OSError as exc:
                 load_errors.append(f"{yaml_file.name}: I/O error: {exc}")
+
+        if signature_warn_files:
+            alert = self._maybe_emit_alert(
+                kind="nlp_lexicon_feed_signature_invalid",
+                severity="warn",
+                subject=",".join(sorted(set(signature_warn_files))),
+                reason=(
+                    "lexicon feed signature missing, malformed, or invalid; "
+                    "valid HMAC required for enforce mode"
+                ),
+            )
+            if alert:
+                alerts.append(alert)
+
+        if signature_enforce_files:
+            alert = self._maybe_emit_alert(
+                kind="nlp_lexicon_feed_signature_invalid",
+                severity="critical",
+                subject=",".join(sorted(set(signature_enforce_files))),
+                reason=(
+                    "lexicon feed signature missing, malformed, or invalid; "
+                    "valid HMAC required"
+                ),
+            )
+            if alert:
+                alerts.append(alert)
+            return alerts
 
         if schema_too_new_errors:
             alert = self._maybe_emit_alert(

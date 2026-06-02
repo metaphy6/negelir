@@ -58,6 +58,7 @@ from common.security import (
     load_ruleset,
     resolve_path as _resolve_pattern_path,
 )
+from common.security.tr_pii import redact_tr_pii
 
 from ..payloads import (
     QaRequest,
@@ -378,6 +379,11 @@ class SecInputAgent:
             while len(self._dedup) > self._dedup_max:
                 self._dedup.popitem(last=False)
 
+        # Defense-in-depth Turkish-specific PII redaction happens before
+        # the classifier and before the length cap. This ensures the NLP
+        # plane never receives raw TR-sensitive identifiers in transit.
+        redacted_text, pii_spans = redact_tr_pii(req.raw_text)
+
         # Defense-in-depth length cap. The Go gateway enforces this on
         # the request boundary (rejects 413 before bytes reach the bus
         # — §7.1 byte-semantics binding); the agent re-checks because
@@ -389,7 +395,7 @@ class SecInputAgent:
         # → quarantine (NOT pass), so a malicious bypass never
         # silently widens the attack surface.
         max_len = max(1, int(_cfg.sec_input_max_len))
-        encoded_len = len(req.raw_text.encode("utf-8", errors="replace"))
+        encoded_len = len(redacted_text.encode("utf-8", errors="replace"))
         if encoded_len > max_len:
             yield from self._emit_quarantine(
                 req,
@@ -405,7 +411,9 @@ class SecInputAgent:
         # bytes the NLP layer will see (sec_verdict=sanitized
         # contract: the v1 envelope and the classifier input are
         # consistent — no slip-through between detection and forward).
-        clean_text, sanitize_steps, mutated = sanitize_text(req.raw_text)
+        clean_text, sanitize_steps, sanitized_mutated = sanitize_text(redacted_text)
+        mutated = sanitized_mutated or bool(pii_spans)
+        sanitize_steps = ["tr_pii_redaction"] + sanitize_steps
         yield from self._emit_allowlist_key_rotation_overdue(req)
 
         # Deterministic injection-rule sweep BEFORE the (possibly

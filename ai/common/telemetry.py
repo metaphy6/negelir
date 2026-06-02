@@ -71,6 +71,34 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["reason"],
     )
 
+    # nlp_input_repair_total{repair_class} — counter of input repair events per class
+    NLP_INPUT_REPAIR_TOTAL = Counter(
+        "nlp_input_repair_total",
+        "NLP input repair events by class",
+        labelnames=["repair_class"],
+    )
+
+    # nlp_input_repair_density — histogram of repairs/token-count per query
+    NLP_INPUT_REPAIR_DENSITY = Histogram(
+        "nlp_input_repair_density",
+        "NLP input repair density per query",
+        buckets=(0.001, 0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0),
+    )
+
+    # nlp_disambiguation_offered_total{cause} — counter of disambiguation offers
+    NLP_DISAMBIGUATION_OFFERED_TOTAL = Counter(
+        "nlp_disambiguation_offered_total",
+        "Disambiguation offers by cause",
+        labelnames=["cause"],
+    )
+
+    # nlp_offensive_input_total{offense_class} — counter of offensive input tokens
+    NLP_OFFENSIVE_INPUT_TOTAL = Counter(
+        "nlp_offensive_input_total",
+        "Offensive input tokens by class",
+        labelnames=["offense_class"],
+    )
+
     # nlp_lexicon_version{file} — info gauge
     NLP_LEXICON_VERSION = Info(
         "nlp_lexicon_version",
@@ -334,6 +362,55 @@ class TelemetrySink:
         if _PROMETHEUS_AVAILABLE and NLP_PROOFREADER_BLOCK_TOTAL:
             try:
                 NLP_PROOFREADER_BLOCK_TOTAL.labels(reason=reason).inc()
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_input_repair(self, repair_class: str, count: int = 1) -> None:
+        """
+        Increment an NLP input repair event counter for the given repair class.
+        """
+        if count <= 0:
+            return
+        if _PROMETHEUS_AVAILABLE and NLP_INPUT_REPAIR_TOTAL:
+            try:
+                NLP_INPUT_REPAIR_TOTAL.labels(repair_class=repair_class).inc(count)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_input_repair_density(self, repairs: int, token_count: int) -> None:
+        """
+        Record the ratio of repair events to token count for a single query.
+        """
+        if token_count <= 0:
+            return
+        ratio = repairs / float(token_count)
+        if _PROMETHEUS_AVAILABLE and NLP_INPUT_REPAIR_DENSITY:
+            try:
+                NLP_INPUT_REPAIR_DENSITY.observe(ratio)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_disambiguation_offered(self, cause: str) -> None:
+        """
+        Increment a disambiguation-offer counter by cause.
+        cause ∈ {low_intent_conf, ambiguous_entity, ambiguous_match_pair, confused_phonetic_alias}
+        """
+        if _PROMETHEUS_AVAILABLE and NLP_DISAMBIGUATION_OFFERED_TOTAL:
+            try:
+                NLP_DISAMBIGUATION_OFFERED_TOTAL.labels(cause=cause).inc()
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_offensive_input(self, offense_class: str, count: int = 1) -> None:
+        """
+        Increment an offensive-input counter for the given class.
+        offense_class ∈ {mild, slur, severe_threat}
+        """
+        if count <= 0:
+            return
+        if _PROMETHEUS_AVAILABLE and NLP_OFFENSIVE_INPUT_TOTAL:
+            try:
+                NLP_OFFENSIVE_INPUT_TOTAL.labels(offense_class=offense_class).inc(count)
             except Exception:  # noqa: BLE001
                 pass  # non-blocking
 

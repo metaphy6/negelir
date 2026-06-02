@@ -196,6 +196,7 @@ PREDICT_CANCEL_V1 = Topic("predict.cancel.v1")
 #                         query Phase 4 storage for fixtures/standings.
 QA_INTENT_V1 = Topic("qa.intent.v1")
 QA_ANSWER_V1 = Topic("qa.answer.v1")
+QA_CONTEXT_V1 = Topic("qa.context.v1")
 NLP_EVENT_V1 = Topic("nlp.event.v1")
 NLP_ALERT_V1 = Topic("nlp.alert.v1")
 PREDICT_REQUEST_V1 = Topic("predict.request.v1")
@@ -211,6 +212,7 @@ __all__ = [
     "PREDICT_CANCEL_V1",
     "PREDICT_REQUEST_V1",
     "QA_ANSWER_V1",
+    "QA_CONTEXT_V1",
     "QA_INTENT_V1",
     "FRESHNESS_EVENTS",
     "MAINT_ACK",

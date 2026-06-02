@@ -136,3 +136,11 @@ entries:
   - Eyüpspor
   aliases:
   - eyüp
+- canonical_id: manchester_city
+  freeform: true
+  names:
+  - Manchester City
+  aliases:
+  - manchester city
+  - city
+  - man city

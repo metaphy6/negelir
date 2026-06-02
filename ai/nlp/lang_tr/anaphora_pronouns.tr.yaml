@@ -1,0 +1,27 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Closed Turkish anaphora pronouns with type constraints for cross-turn resolution."
+entries:
+  - pronoun: onlar
+    type_constraint: team_set
+  - pronoun: bunlar
+    type_constraint: team_set
+  - pronoun: şunlar
+    type_constraint: team_set
+  - pronoun: o
+    type_constraint: ambiguous
+  - pronoun: kendisi
+    type_constraint: person
+  - pronoun: orası
+    type_constraint: venue
+  - pronoun: burası
+    type_constraint: venue
+  - pronoun: şurası
+    type_constraint: venue
+  - pronoun: oraya
+    type_constraint: venue_direction
+  - pronoun: buraya
+    type_constraint: venue_direction
+  - pronoun: oradakiler
+    type_constraint: venue_or_group

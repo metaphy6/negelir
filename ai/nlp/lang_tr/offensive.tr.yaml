@@ -1,0 +1,26 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.22.9"
+  domain: football
+  notes: >
+    Offensive language taxonomy for §10.22.9. The table is a closed set of
+    Turkic offensive tokens by class: mild, slur, or severe_threat.
+
+offensive:
+  - token: "saçmalık"
+    class: "mild"
+    note: "Common profanity that should not block answering."
+
+  - token: "oç"
+    class: "slur"
+    note: "Targeted insult; stripped before classifier and audited."
+
+  - token: "amk"
+    class: "slur"
+    note: "Strong profanity; should be removed from the classifier input."
+
+  - token: "öldüreceğim"
+    class: "severe_threat"
+    note: "Death-threat language, should route to adversarial treatment in future phases."

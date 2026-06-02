@@ -1,0 +1,17 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Contexts that disambiguate idioms with possible literal meanings."
+entries:
+  - idiom: "göze girmek"
+    triggers:
+      - "takım"
+      - "oyuncu"
+  - idiom: "sahada kalmak"
+    triggers:
+      - "oyun"
+      - "maç"
+  - idiom: "kırmızı kart"
+    triggers:
+      - "hakem"
+      - "kart"

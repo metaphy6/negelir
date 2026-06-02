@@ -19,7 +19,7 @@
 
 #### 10.32.1 Reported-speech / quotative-chain firewall (CRITICAL — confidently-wrong class)
 
-- [ ] **Real failure pattern.** *"Hocan diyor ki yarın 3-0 bitecekmiş"*,
+- [x] **Real failure pattern.** *"Hocan diyor ki yarın 3-0 bitecekmiş"*,
   *"X gazetesine göre Y kazanacak"*, *"Twitter'da yazıyorlar Galatasaray
   şampiyon"*  — the surface form contains a `predict.match_outcome`-
   shaped clause **embedded inside a hearsay frame**. The prior twelve
@@ -27,7 +27,7 @@
   (`bitecekmiş`/`kazanacak`) parses as predict-future. The user is
   asking *"who said this?"* / *"is this rumor true?"* — a `data.*`
   question — **not** asking the system for its own forecast.
-- [ ] **Closed `quotative_frames.tr.yaml`** — frame markers in 4
+- [x] **Closed `quotative_frames.tr.yaml`** — frame markers in 4
   classes:
   - `direct_quote_marker` (`diyor ki`, `dedi ki`, `şöyle yazıyor`,
     `der ki`)
@@ -38,12 +38,15 @@
     these are quotative-chained)
   - `social_media_attribution` (`Twitter'da`, `sosyal medyada`,
     `forumda`, `internette`)
-- [ ] **Detection ordering** — runs AFTER §10.31.1 sarcasm strip
+- [x] **Detection ordering** — runs AFTER §10.31.1 sarcasm strip
   AFTER §10.30.5 politeness strip AFTER §10.30.3 idiom expand
   BEFORE §10.31.7 negation-scope BEFORE classifier. Ordering
   pinned in §10.1 step list as **step 7d**; AST guard
   `test_nlp_quotative_runs_in_pinned_order`.
-- [ ] **Dispatch override** — when frame class detected with
+- [x] **Cross-language SHA pin** — `quotative_frames.tr.yaml` SHA in
+  Phase 9 gateway compatibility quartet; refuse-boot on drift
+  (mirrors §10.31.10 lexicon-catalog discipline).
+- [x] **Proof tests** — 35-row golden corpus (10 per frame class
   confidence ≥ `nlp_quotative_min_confidence=0.70`:
   - `direct_quote_marker` + `attributed_source` → route to NEW
     `data.attributed_claim` intent (additive; `qa.intent.v1`
@@ -56,16 +59,16 @@
   - `evidential_hearsay_compound` → already routed via §10.26.5
     inferential_past path; this section adds the test-coverage
     gate (was tested in isolation, never composed with quotative).
-- [ ] **Negative-quotative tolerance** — *"hiç kimse demedi ki Y
+- [x] **Negative-quotative tolerance** — *"hiç kimse demedi ki Y
   kazanır"* → route to `data.attributed_claim` with negation flag,
   NOT to predict; closed `quotative_negation.tr.yaml` 12-row.
-- [ ] **Cross-language SHA pin** — `quotative_frames.tr.yaml` SHA in
+- [x] **Cross-language SHA pin** — `quotative_frames.tr.yaml` SHA in
   Phase 9 gateway compatibility quartet; refuse-boot on drift
   (mirrors §10.31.10 lexicon-catalog discipline).
-- [ ] **Audit event** `kind=quotative_frame_detected` with closed-enum
+- [x] **Audit event** `kind=quotative_frame_detected` with closed-enum
   `frame_class` field; PII-clean (no quoted text, only frame
   signal).
-- [ ] **Proof tests** — 35-row golden corpus (10 per frame class
+- [x] **Proof tests** — 35-row golden corpus (10 per frame class
   minus negative-quotative which gets 5) requires 100% routing
   to `data.*` / `meta.*`, **0 leak to `predict.*`**; AST guard
   `test_nlp_quotative_never_routes_predict`; Hypothesis property
@@ -74,7 +77,7 @@
 
 #### 10.32.2 Aspectual-stack & serial-verb modality composition
 
-- [ ] **Real failure pattern.** *"yenmiş olacak"*, *"kazanmış olur"*,
+- [x] **Real failure pattern.** *"yenmiş olacak"*, *"kazanmış olur"*,
   *"oynayacak olan"*, *"başlamak üzereler"*, *"bitiyor olabilir"* —
   Turkish stacks aspect markers into compound forms that combine
   modalities §10.26.5 handles individually but **not in stack**.
@@ -85,18 +88,18 @@
   `-mIş` makes the entire clause a *future-perfect-evidential*
   meaning "will turn out to have beaten" — a counterfactual probe,
   not a prediction).
-- [ ] **Closed `aspectual_stacks.tr.yaml`** — 6-row type-grammar
+- [x] **Closed `aspectual_stacks.tr.yaml`** — 6-row type-grammar
   matrix `(inner_aspect, outer_aspect) → composed_modality` with
   the 18 valid Turkish stacks: future-perfect-evidential,
   perfect-modal-potential, future-relative-clause-attributive,
   imminent-progressive, progressive-epistemic, progressive-
   inferential. AST guard rejects inline detection — must be table-
   driven (mirrors §10.31.4 grammar discipline).
-- [ ] **Right-recursive parse** with depth cap `nlp_aspectual_stack_max_depth=3`
+- [x] **Right-recursive parse** with depth cap `nlp_aspectual_stack_max_depth=3`
   (DoS guard); ambiguous parse → §10.31.9 disambiguation refusal
   with `refusal_reason_code=aspectual_stack_ambiguous` (added to
   the §10.31.9 enum, schema v5→v6 additive).
-- [ ] **Routing matrix** binding:
+- [x] **Routing matrix** binding:
   - future-perfect-evidential → `meta.counterfactual_probe`
     (NEW; closed Turkish refusal "Olması durumunda nasıl olurdu
     sorusuna cevap veremem") humanizer-bypassed.
@@ -110,20 +113,20 @@
   - future-relative-clause-attributive (`oynayacak olan kim`) →
     routes to `data.lineup_probable` (per §10.30.1 v4 enum); NEVER
     predict.
-- [ ] **Composition with §10.30.4 conditional & §10.31.5 comparative**
+- [x] **Composition with §10.30.4 conditional & §10.31.5 comparative**
   — when an aspectual stack composes with a conditional or
   comparative modifier (e.g. *"eğer yenmiş olacaksa"* — conditional-
   future-perfect), the composed routing is the **most restrictive**
   of the three (any single class refusing → entire query refuses);
   AST guard `test_nlp_modality_composition_uses_most_restrictive`.
-- [ ] **Proof tests** — 50-row golden corpus across the 18 valid
+- [x] **Proof tests** — 50-row golden corpus across the 18 valid
   stacks (~3 each + adversarial); 100% correct routing; 0 leak
   to `predict.*`; Hypothesis property: every (inner, outer) pair
   in the table produces a deterministic routing decision.
 
 #### 10.32.3 Postposition stack disambiguation
 
-- [ ] **Real failure pattern.** Turkish postpositions stack with
+- [x] **Real failure pattern.** Turkish postpositions stack with
   subtle meaning shift: *"Galatasaray'a karşı"* (vs.) ≠
   *"Galatasaray ile karşı karşıya"* (face-to-face); *"maç için
   karşı"* (against-the-match — adversarial sense vs. preparation
@@ -131,31 +134,31 @@
   3 goals"). Today these are normalized away by §10.22.4
   particle stripper which **collapses postpositions before
   parsing** — losing the distinction.
-- [ ] **Closed `postposition_stacks.tr.yaml`** — 4-class table:
+- [x] **Closed `postposition_stacks.tr.yaml`** — 4-class table:
   - `vs_marker` (`-A karşı`, `-A karşı karşıya`, `-A göre`)
   - `comparison_marker` (`-A göre`, `kadar`, `gibi`, `nazaran`)
   - `instrumental_marker` (`ile`, `-yle`, `-la`, `beraber`,
     `birlikte`)
   - `causal_marker` (`için`, `-DEn dolayı`, `nedeniyle`,
     `yüzünden`)
-- [ ] **Stack-aware parser** — recognises 12 valid 2-postposition
+- [x] **Stack-aware parser** — recognises 12 valid 2-postposition
   stacks (e.g. `karşı karşıya`, `kadar gibi`, `için karşı`) with
   closed disambiguation rules; un-listed 2-stack → preserve
   surface form + emit `nlp.event.v1{kind=postposition_stack_unknown}`
   + fall through to existing §10.22.4 single-postposition path.
-- [ ] **Entity role projection** — when `vs_marker` detected, the
+- [x] **Entity role projection** — when `vs_marker` detected, the
   governed entity is marked `entity_role=opponent` in
   `qa.intent.v1.entities[].syntactic_role` (additive, joins
   §10.29.6 `entity_subject`/`entity_object`/`ambiguous` →
   4-valued). When `instrumental_marker`, role is
   `entity_companion` (used for *"X ile beraber"* attendance
   queries vs. *"X'e karşı"* fixture queries).
-- [ ] **Dispatch hook** — `qa.intent.v1{intent=data.fixture_lookup,
+- [x] **Dispatch hook** — `qa.intent.v1{intent=data.fixture_lookup,
   entities=[{kind=team, role=opponent}]}` resolves via NEW
   `data.request.v1{kind=fixture_vs_team_lookup}` (additive
   kind; v4→v5 additive — coordinated with §10.27.1 schema
   evolution).
-- [ ] **Proof tests** — 40-row golden corpus across 4 classes +
+- [x] **Proof tests** — 40-row golden corpus across 4 classes +
   12 valid stacks; 100% correct role projection; 0 confusion
   between `karşı`-as-vs and `karşı`-as-physical-direction
   (closed `karsi_disambig.tr.yaml` 8-row trigger window ±3
@@ -163,7 +166,7 @@
 
 #### 10.32.4 Regional & diaspora-dialect normalization
 
-- [ ] **Real failure pattern.** Native speakers of regional /
+- [x] **Real failure pattern.** Native speakers of regional /
   diaspora variants produce input that breaks Zemberek (which is
   trained on Standard Turkish). Examples actually observed in
   Turkish football fan corpora:
@@ -189,11 +192,11 @@
   rewrites preserve original surface in a `dialect_alternatives[]`
   field on `qa.intent.v1` and **may** trigger a
   did-you-mean-style clarification when ambiguous.
-- [ ] **Detection ordering** — runs as new §10.1 **step 6.3**
+- [x] **Detection ordering** — runs as new §10.1 **step 6.3**
   AFTER §10.1 step 6 (diacritic restore) AFTER §10.28.1 consonant
   alternation tolerance BEFORE §10.29.1 geminate restoration.
   Pinned in step list; AST guard.
-- [ ] **Confidence floor** — dialect rewrite is applied only when
+- [x] **Confidence floor** — dialect rewrite is applied only when
   the dialect form is **not** itself a Standard Turkish word in
   the §10.2 lexicons or LeagueCatalog (defends against rewriting
   *"Schalke"* the team name as German-Turkish diaspora variant).
@@ -217,7 +220,7 @@
 
 #### 10.32.5 Apostrophe-suffix proper-noun robustness (extends §10.31.8)
 
-- [ ] **Real failure pattern not covered by §10.31.8.** §10.31.8 is
+- [x] **Real failure pattern not covered by §10.31.8.** §10.31.8 is
   an *output-side* grammar-check gate; this section is *input-side*
   apostrophe robustness. Native Turkish writers commonly:
   - Drop the apostrophe entirely on proper-noun + suffix:
@@ -229,7 +232,7 @@
     hygiene but not in *all* apostrophe positions
   - Apostrophes inside brand names themselves: *"Akhisar'spor"*
     (legitimate league spelling), *"D'Or"* (player nickname)
-- [ ] **Closed `apostrophe_proper_noun.tr.yaml`** — three rule
+- [x] **Closed `apostrophe_proper_noun.tr.yaml`** — three rule
   classes:
   - `missing_apostrophe_suffix` — heuristic: token of length ≥
     7 ending in {`a`, `e`, `de`, `da`, `den`, `dan`, `ya`, `ye`,
@@ -246,7 +249,7 @@
   - `legitimate_internal_apostrophe` — closed allow-list of brand
     names that contain internal apostrophes; bypasses both
     repair classes
-- [ ] **Detection ordering** — runs as new §10.1 **step 6.7**
+- [x] **Detection ordering** — runs as new §10.1 **step 6.7**
   AFTER §10.32.4 dialect normalize AFTER §10.29.1 geminate
   restoration BEFORE §10.5 entity extraction. AST guard.
 - [ ] **Cross-language consistency with §10.31.8 output-side** —

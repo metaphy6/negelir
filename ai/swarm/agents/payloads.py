@@ -1395,6 +1395,7 @@ class QaRequestV1:
     sec_verdict: str
     sec_steps_run: list[str] = field(default_factory=list)
     client_id: str | None = None
+    conversation_id: str | None = None
     emitted_at: str = ""
 
     def __post_init__(self) -> None:
@@ -1416,6 +1417,7 @@ class QaRequestV1:
             sec_verdict=str(data["sec_verdict"]),
             sec_steps_run=[str(s) for s in (data.get("sec_steps_run") or [])],
             client_id=data.get("client_id"),
+            conversation_id=data.get("conversation_id"),
             emitted_at=str(data.get("emitted_at", "")),
         )
 

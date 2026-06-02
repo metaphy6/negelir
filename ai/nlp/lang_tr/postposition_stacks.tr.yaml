@@ -1,0 +1,70 @@
+_meta:
+  schema_version: 1
+  description: "Closed 2-postposition stacks for Phase 10 §10.32.3."
+
+stacks:
+  - id: "karşı_karşıya"
+    first_token: "karşı"
+    second_token: "karşıya"
+    stack_class: "vs_marker"
+    role: "opponent"
+
+  - id: "kadar_gibi"
+    first_token: "kadar"
+    second_token: "gibi"
+    stack_class: "comparison_marker"
+
+  - id: "göre_kadar"
+    first_token: "göre"
+    second_token: "kadar"
+    stack_class: "comparison_marker"
+
+  - id: "göre_gibi"
+    first_token: "göre"
+    second_token: "gibi"
+    stack_class: "comparison_marker"
+
+  - id: "kadar_nazaran"
+    first_token: "kadar"
+    second_token: "nazaran"
+    stack_class: "comparison_marker"
+
+  - id: "ile_beraber"
+    first_token: "ile"
+    second_token: "beraber"
+    stack_class: "instrumental_marker"
+    role: "companion"
+
+  - id: "ile_birlikte"
+    first_token: "ile"
+    second_token: "birlikte"
+    stack_class: "instrumental_marker"
+    role: "companion"
+
+  - id: "yle_beraber"
+    first_token: "yle"
+    second_token: "beraber"
+    stack_class: "instrumental_marker"
+    role: "companion"
+
+  - id: "yle_birlikte"
+    first_token: "yle"
+    second_token: "birlikte"
+    stack_class: "instrumental_marker"
+    role: "companion"
+
+  - id: "için_karşı"
+    first_token: "için"
+    second_token: "karşı"
+    stack_class: "causal_marker"
+    role: "opponent"
+
+  - id: "den_dolayı"
+    first_token: "den"
+    second_token: "dolayı"
+    stack_class: "causal_marker"
+
+  - id: "dolayı_yüzünden"
+    first_token: "dolayı"
+    second_token: "yüzünden"
+    stack_class: "causal_marker"

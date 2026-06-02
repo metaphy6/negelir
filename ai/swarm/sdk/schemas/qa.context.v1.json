@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.context.v1",
+  "title": "qa.context.v1",
+  "description": "Phase 10 §10.25 wire authority: conversation context state carried from nlp.dispatcher.v1 to nlp.intent.v1. This envelope is additive, does not contain raw text, and is bounded by schema_version and expires_at_utc.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "conversation_id",
+    "turn_index",
+    "entities",
+    "intent",
+    "expires_at_utc"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Envelope schema version for qa.context.v1."
+    },
+    "conversation_id": {
+      "type": ["string", "null"],
+      "description": "Conversation identifier minted by the API gateway; null means no conversation context is available." 
+    },
+    "turn_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based turn index within this conversation." 
+    },
+    "entities": {
+      "type": "array",
+      "description": "Frozen resolved entities from the prior turn; carries structured handles only, not raw text.",
+      "items": {
+        "type": "object",
+        "required": [
+          "span_start",
+          "span_end",
+          "kind",
+          "canonical_id",
+          "confidence",
+          "source"
+        ],
+        "properties": {
+          "span_start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "span_end": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "description": "Entity kind.",
+            "enum": [
+              "team",
+              "player",
+              "league",
+              "competition",
+              "market",
+              "date",
+              "time",
+              "weekday",
+              "ordinal",
+              "money_amount",
+              "score"
+            ]
+          },
+          "canonical_id": {
+            "type": ["string", "null"],
+            "description": "Resolved canonical identifier or null for structural entities."
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "source": {
+            "type": "string",
+            "enum": ["gazetteer", "crf"],
+            "description": "Extraction source for the entity." 
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "intent": {
+      "type": "string",
+      "description": "Intent predicted for the preceding turn."
+    },
+    "expires_at_utc": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp after which the context is considered expired." 
+    }
+  },
+  "additionalProperties": false
+}

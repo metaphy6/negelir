@@ -113,12 +113,38 @@ _CONFUSABLES_TABLE: dict[int, str] = {
 }
 
 
+def _unicode_compat_confusables_fold(text: str) -> str:
+    result: list[str] = []
+    for ch in text:
+        ord_ch = ord(ch)
+        # Tag characters are Cf format marks used in emoji-flag spoofing.
+        if 0xE0020 <= ord_ch <= 0xE007F:
+            continue
+
+        if (
+            0x1D400 <= ord_ch <= 0x1D7FF
+            or 0xFF01 <= ord_ch <= 0xFF5E
+            or 0x2460 <= ord_ch <= 0x24FF
+        ):  # math alpha, halfwidth/fullwidth, enclosed alphanumerics
+            folded = unicodedata.normalize("NFKD", ch)
+            if folded and all(ord(c) < 128 for c in folded):
+                result.append(folded)
+                continue
+
+        result.append(ch)
+    return "".join(result)
+
+
 def confusables_fold(text: str) -> str:
     """Fold Unicode confusables to ASCII-Turkish-extended (Phase 10 §10.21.5).
 
     Replaces visually-confusable characters (Cyrillic а, Greek α, etc.) with
     their ASCII-Turkish equivalents to defend against homoglyph attacks on
     gazetteer exact-match (CVE-2021-42574-style).
+
+    This function also normalizes the additional Unicode blocks enumerated by
+    Phase 10 §10.33.1: Mathematical Alphanumeric Symbols, Halfwidth/Fullwidth
+    Forms, and Enclosed Alphanumerics. Tag characters are stripped.
 
     This function is idempotent and MUST NOT be applied to password fields
     (already excluded upstream by §7.1; the NLP plane never sees passwords).
@@ -139,8 +165,15 @@ def confusables_fold(text: str) -> str:
     'Galatasaray'
     >>> confusables_fold("Αthens")       # Greek Α U+0391
     'Athens'
+    >>> confusables_fold("ＦＣ")         # fullwidth Latin letters
+    'FC'
+    >>> confusables_fold("𝐀")          # mathematical bold A
+    'A'
+    >>> confusables_fold("Ⓐ")          # enclosed Latin capital A
+    'A'
     """
-    return text.translate(_CONFUSABLES_TABLE)
+    normalized = text.translate(_CONFUSABLES_TABLE)
+    return _unicode_compat_confusables_fold(normalized)
 
 
 def canonical_normalize(text: str) -> str:

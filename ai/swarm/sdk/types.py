@@ -83,5 +83,9 @@ class Message:
         )
         return cls(envelope=env, payload=payload)
 
+    @property
+    def topic(self) -> Topic:
+        return self.envelope.topic
+
     def with_envelope(self, envelope: Envelope) -> "Message":
         return Message(envelope=envelope, payload=self.payload)

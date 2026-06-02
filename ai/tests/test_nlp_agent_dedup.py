@@ -22,6 +22,7 @@ from swarm.agents.nlp import (
     NlpProofreaderAgent,
 )
 from swarm.agents.topics import (
+    NLP_EVENT_V1,
     PREDICT_APPROVED,
     QA_ANSWER_V1,
     QA_INTENT_V1,
@@ -53,8 +54,9 @@ def _make_qa_request_v1_msg(request_id: str = "req-001") -> Message:
         payload={
             "request_id": request_id,
             "locale": "tr-TR",
-            "text": "gs maçı tahmin",
-            "sanitized_at": "2026-05-27T10:00:00+00:00",
+            "sanitized_text": "gs maçı tahmin",
+            "sec_verdict": "pass",
+            "emitted_at": "2026-05-27T10:00:00+00:00",
         },
         producer="test",
     )
@@ -185,6 +187,24 @@ class TestNlpIntentAgentDedup:
         # Empty keys are not recorded
         assert deduper.size() == 0
 
+    def test_locale_fallback_event_emitted_for_unsupported_tag(self) -> None:
+        """Locale fallback should produce an nlp.event.v1 locale_fallback_used event."""
+        clock = FakeClock(now=100.0)
+        deduper = RequestIdDeduper(window_s=10.0, max_keys=1_000, clock=clock.mono)
+        agent = NlpIntentAgent(monotonic=clock.mono, deduper=deduper)
+
+        msg = _make_qa_request_v1_msg("req-001")
+        msg.payload["locale"] = "tr"
+
+        out = list(agent.handle(msg))
+
+        assert len(out) == 1
+        event = out[0]
+        assert event.envelope.topic == NLP_EVENT_V1
+        assert event.payload["kind"] == "locale_fallback_used"
+        assert event.payload["requested"] == "tr"
+        assert event.payload["resolved"] == "tr-TR"
+
 
 # ── NlpAnswerAgent dedup tests ───────────────────────────────────────────
 
@@ -290,6 +310,30 @@ class TestNlpProofreaderAgentDedup:
         out2 = list(agent.handle(msg))
         assert out2 == []
         assert deduper.size() == 1
+
+    def test_proofreader_blocked_clears_conversation_context_and_emits_alert(self) -> None:
+        clock = FakeClock(now=100.0)
+        deduper = RequestIdDeduper(window_s=10.0, max_keys=1_000, clock=clock.mono)
+        agent = NlpProofreaderAgent(monotonic=clock.mono, deduper=deduper)
+        agent._conversation_store._cache["conv-123"] = {
+            "conversation_id": "conv-123",
+            "turn_index": 1,
+            "entities": [],
+            "intent": "predict.match_outcome",
+        }
+
+        msg = _make_qa_answer_v1_msg("req-abc")
+        msg.payload["kind"] = "proofreader_blocked"
+        msg.payload["conversation_id"] = "conv-123"
+        msg.payload["qa_correlation_id"] = "qc-123"
+
+        out = list(agent.handle(msg))
+        assert len(out) == 2
+        assert out[0].payload["kind"] == "proofreader_blocked"
+        assert out[1].envelope.topic == "nlp.alert.v1"
+        assert out[1].payload["kind"] == "conversation_context_cleared_after_block"
+        assert out[1].payload["subject"] == "conv-123"
+        assert agent._conversation_store.load("conv-123") is None
 
 
 # ── NlpDispatcherAgent dedup tests (already exists, spot-check) ────────────

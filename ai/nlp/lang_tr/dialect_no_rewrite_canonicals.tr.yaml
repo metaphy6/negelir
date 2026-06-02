@@ -1,0 +1,17 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.4"
+  notes: >
+    Closed allowlist for standard words and proper nouns that must not be
+    rewritten by the regional dialect normalizer.
+
+dialect_no_rewrite_canonicals:
+  - "galatasaray"
+  - "fenerbahçe"
+  - "premier league"
+  - "schalke"
+  - "bayern münich"
+  - "özil"
+  - "yapıyorum"
+  - "oynuyorum"

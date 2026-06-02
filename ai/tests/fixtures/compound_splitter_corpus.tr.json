@@ -1,0 +1,181 @@
+[
+  {
+    "input": "galatasarayfenerbahcederbisi",
+    "expected": [
+      "galatasaray",
+      "fenerbahce",
+      "derbisi"
+    ]
+  },
+  {
+    "input": "besiktastakim",
+    "expected": [
+      "besiktas",
+      "takim"
+    ]
+  },
+  {
+    "input": "ankarasporfutbol",
+    "expected": [
+      "ankaraspor",
+      "futbol"
+    ]
+  },
+  {
+    "input": "trabzonspormac",
+    "expected": [
+      "trabzonspor",
+      "mac"
+    ]
+  },
+  {
+    "input": "istanbulsaraya",
+    "expected": [
+      "istanbul",
+      "saraya"
+    ]
+  },
+  {
+    "input": "antalyasporgalibiyet",
+    "expected": [
+      "antalyaspor",
+      "galibiyet"
+    ]
+  },
+  {
+    "input": "konyasporfener",
+    "expected": [
+      "konyaspor",
+      "fener"
+    ]
+  },
+  {
+    "input": "bugunmacvarmi",
+    "expected": [
+      "bugun",
+      "mac",
+      "varmi"
+    ]
+  },
+  {
+    "input": "superligpuan",
+    "expected": [
+      "superlig",
+      "puan"
+    ]
+  },
+  {
+    "input": "galatasaraymaci",
+    "expected": [
+      "galatasaray",
+      "maci"
+    ]
+  },
+  {
+    "input": "besiktasgol",
+    "expected": [
+      "besiktas",
+      "gol"
+    ]
+  },
+  {
+    "input": "fenerbahcehaberleri",
+    "expected": [
+      "fenerbahce",
+      "haberleri"
+    ]
+  },
+  {
+    "input": "ankaragucuda",
+    "expected": [
+      "ankaragucu",
+      "da"
+    ]
+  },
+  {
+    "input": "malatyasporgunleri",
+    "expected": [
+      "malatyaspor",
+      "gunleri"
+    ]
+  },
+  {
+    "input": "samsunsporcocuk",
+    "expected": [
+      "samsunspor",
+      "cocuk"
+    ]
+  },
+  {
+    "input": "kardemirkarabukspor",
+    "expected": [
+      "kardemirkarabukspor"
+    ]
+  },
+  {
+    "input": "eskisehirsporaktif",
+    "expected": [
+      "eskisehirspor",
+      "aktif"
+    ]
+  },
+  {
+    "input": "orduankarayolu",
+    "expected": [
+      "ordu",
+      "ankarayolu"
+    ]
+  },
+  {
+    "input": "bugunankarasporfenerbahcederbisi",
+    "expected": [
+      "bugun",
+      "ankaraspor",
+      "fenerbahce",
+      "derbisi"
+    ]
+  },
+  {
+    "input": "antalyaspormacvarmi",
+    "expected": [
+      "antalyaspor",
+      "mac",
+      "varmi"
+    ]
+  },
+  {
+    "input": "trabzonsporcanli",
+    "expected": [
+      "trabzonspor",
+      "canli"
+    ]
+  },
+  {
+    "input": "galatasaraykaleci",
+    "expected": [
+      "galatasaray",
+      "kaleci"
+    ]
+  },
+  {
+    "input": "fenerbahceform",
+    "expected": [
+      "fenerbahce",
+      "form"
+    ]
+  },
+  {
+    "input": "galatasarayliga",
+    "expected": [
+      "galatasaray",
+      "liga"
+    ]
+  },
+  {
+    "input": "besiktastrafik",
+    "expected": [
+      "besiktas",
+      "trafik"
+    ]
+  }
+]

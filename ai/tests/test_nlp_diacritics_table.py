@@ -688,6 +688,49 @@ class TestAmbiguityPolicy:
             else:
                 os.environ["NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN"] = orig
 
+    def test_repair_density_config_key_present_with_correct_default(self) -> None:
+        """cfg.nlp_repair_density_p95_max must default to 0.5."""
+        from common.config import cfg
+
+        assert hasattr(cfg, "nlp_repair_density_p95_max")
+        assert cfg.nlp_repair_density_p95_max == 0.5
+
+    def test_repair_density_config_key_in_env_example(self) -> None:
+        """NEGELIR_NLP_REPAIR_DENSITY_P95_MAX must appear in .env.example."""
+        env_example = (REPO_ROOT / "xops" / "env" / ".env.example").read_text(encoding="utf-8")
+        assert "NEGELIR_NLP_REPAIR_DENSITY_P95_MAX" in env_example
+
+    def test_repair_density_boot_validator_rejects_negative(self) -> None:
+        """Boot validator must reject nlp_repair_density_p95_max < 0."""
+        import os
+        from common.config import Config
+
+        orig = os.environ.get("NEGELIR_NLP_REPAIR_DENSITY_P95_MAX")
+        try:
+            os.environ["NEGELIR_NLP_REPAIR_DENSITY_P95_MAX"] = "-0.1"
+            cfg_bad = Config()
+            issues = cfg_bad.validate()
+            assert any("nlp_repair_density_p95_max" in i for i in issues), issues
+        finally:
+            if orig is None:
+                os.environ.pop("NEGELIR_NLP_REPAIR_DENSITY_P95_MAX", None)
+            else:
+                os.environ["NEGELIR_NLP_REPAIR_DENSITY_P95_MAX"] = orig
+
+    def test_lang_tr_dir_config_key_present_with_correct_default(self) -> None:
+        """cfg.nlp_lang_tr_dir must default to ai/nlp/lang_tr."""
+        from common.config import cfg
+
+        assert hasattr(cfg, "nlp_lang_tr_dir")
+        assert cfg.nlp_lang_tr_dir == "ai/nlp/lang_tr"
+
+    def test_lang_tr_reload_config_key_present_with_correct_default(self) -> None:
+        """cfg.nlp_lang_tr_reload_s must default to 30."""
+        from common.config import cfg
+
+        assert hasattr(cfg, "nlp_lang_tr_reload_s")
+        assert cfg.nlp_lang_tr_reload_s == 30
+
 
 def test_nlp_diacritic_restore_prefers_high_freq_form() -> None:
     """§10.22.1: high-frequency winner should be restored."""

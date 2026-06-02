@@ -121,6 +121,10 @@ nlp:
   # §10.19 sampled answer audit
   answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
   answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP
+  audit_bundle_retention_days: 2555  # NEGELIR_NLP_AUDIT_BUNDLE_RETENTION_DAYS
+  template_git_sha: ""           # NEGELIR_NLP_TEMPLATE_GIT_SHA
+  pipeline_version: "10.0.0"     # NEGELIR_NLP_PIPELINE_VERSION
+  compatibility_matrix_path: "ai/nlp/_compat/compatibility_matrix.json"  # NEGELIR_NLP_COMPATIBILITY_MATRIX_PATH
   # §10.21.9 boot-time readiness budget and liveness restart grace
   boot_budget_s: 30              # NEGELIR_NLP_BOOT_BUDGET_S
   boot_liveness_grace_s: 60      # NEGELIR_NLP_BOOT_LIVENESS_GRACE_S
@@ -315,6 +319,8 @@ phase7:
 phase10:
   # §10.1 step 1: hard codepoint cap on raw user input (defense-in-depth).
   nlp_input_max_codepoints: 512            # NEGELIR_NLP_INPUT_MAX_CODEPOINTS
+  # Collapse Unicode Zs space characters to ASCII space before tokenization.
+  nlp_collapse_unicode_spaces: true        # NEGELIR_NLP_COLLAPSE_UNICODE_SPACES
   # Dedup window lower bound: qa_request_v1_dedup_window_s(300) + 30 = 330.
   nlp_request_dedup_window_s: 330          # NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S
   # §10.23.1 intake fairness key for virtual queues.
@@ -369,6 +375,13 @@ phase10:
   nlp_bench_latency_p95_threshold_ms: 5   # NEGELIR_NLP_BENCH_LATENCY_P95_THRESHOLD_MS
   # mtime-poll interval (seconds) for LexiconStore hot-reload (§10.2 Atomic swap).
   nlp_lexicon_reload_s: 30                 # NEGELIR_NLP_LEXICON_RELOAD_S
+  # p95 repair-density cap for clean-input quality alerts (§10.22.13).
+  nlp_repair_density_p95_max: 0.5          # NEGELIR_NLP_REPAIR_DENSITY_P95_MAX
+  # Directory containing Phase 10 Turkish language rule tables consumed by
+  # the input normalizer and lexicon build pipeline.
+  nlp_lang_tr_dir: "ai/nlp/lang_tr"         # NEGELIR_NLP_LANG_TR_DIR
+  # File-mtime poll interval for Turkish language rule hot-reload.
+  nlp_lang_tr_reload_s: 30                 # NEGELIR_NLP_LANG_TR_RELOAD_S
   # Max entries per lexicon file (§10.2 Cardinality cap). Over-cap → dictionary_overflow warn + refuse load.
   nlp_lexicon_max_entries_per_file: 50000  # NEGELIR_NLP_LEXICON_MAX_ENTRIES_PER_FILE
   # RSS budget for all lexicons (§10.2 Bounded memory). 0 = disable check.
@@ -463,6 +476,9 @@ phase10:
   # §10.17 default locale: IETF BCP 47 language tag for template resolution.
   # Template path: ai/nlp/templates/<intent>.<locale>.j2
   nlp_default_locale: "tr-TR"             # NEGELIR_NLP_DEFAULT_LOCALE
+  # §10.22 locale fallback chain: ordered supported locales used to resolve
+  # language-only or unsupported tags.
+  nlp_locale_fallback_chain: '["tr-TR"]'  # NEGELIR_NLP_LOCALE_FALLBACK_CHAIN
 
 # ── Phase 9 §9.12 — Full API knob inventory (shared: Python AI + Go API) ────
 # Every key below is also in ai/common/config.py, server/internal/config/config.go,

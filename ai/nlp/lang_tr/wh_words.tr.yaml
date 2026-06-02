@@ -1,0 +1,17 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Turkish WH words used to detect interrogative intent and WH intent priors."
+wh_words:
+  - kim
+  - ne
+  - hangi
+  - nerede
+  - neden
+  - niye
+  - ne zaman
+  - kaç
+  - ne kadar
+  - nasıl
+  - hangi takım
+  - hangi maç

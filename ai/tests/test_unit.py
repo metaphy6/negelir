@@ -3593,16 +3593,16 @@ def test_nlp_locale_resolution_default():
 
 
 def test_nlp_locale_resolution_with_override():
-    """§10.17: Template resolution accepts per-request locale override."""
+    """§10.17: Template resolution accepts a per-request locale override that resolves via the supported chain."""
     from nlp.render import _resolve_template_name
     
-    # Override locale with en-GB
-    resolved = _resolve_template_name("predict.match_outcome", locale="en-GB")
-    assert resolved == "predict.match_outcome.en-GB.j2"
+    # Override language-only Turkish tag and resolve to the supported tr-TR locale.
+    resolved = _resolve_template_name("predict.match_outcome", locale="tr")
+    assert resolved == "predict.match_outcome.tr-TR.j2"
     
-    # Override locale with en-US
-    resolved = _resolve_template_name("data.fixture_lookup", locale="en-US")
-    assert resolved == "data.fixture_lookup.en-US.j2"
+    # Override a Turkish diaspora tag and resolve to the supported tr-TR locale.
+    resolved = _resolve_template_name("data.fixture_lookup", locale="tr-CY")
+    assert resolved == "data.fixture_lookup.tr-TR.j2"
 
 
 def test_nlp_locale_resolution_backward_compat():
@@ -3626,7 +3626,31 @@ def test_nlp_locale_resolution_meta_templates():
     resolved = _resolve_template_name("meta.help")
     assert resolved == "meta.help.tr-TR.j2"
     
-    # meta.adversarial with override
-    resolved = _resolve_template_name("meta.adversarial", locale="en-GB")
-    assert resolved == "meta.adversarial.en-GB.j2"
+    # meta.adversarial with supported Turkish dialect override
+    resolved = _resolve_template_name("meta.adversarial", locale="tr-CY")
+    assert resolved == "meta.adversarial.tr-TR.j2"
+
+
+def test_nlp_locale_resolution_language_only_tag_falls_back_to_default():
+    """§10.22: Language-only locale tags fall back to the configured default locale."""
+    from nlp.render import _resolve_template_name
+
+    resolved = _resolve_template_name("predict.match_outcome", locale="tr")
+    assert resolved == "predict.match_outcome.tr-TR.j2"
+
+
+def test_nlp_locale_resolution_unknown_tag_falls_back_to_default():
+    """§10.22: Unsupported locale tags fall back to the configured default locale."""
+    from nlp.render import _resolve_template_name
+
+    resolved = _resolve_template_name("predict.match_outcome", locale="en-US")
+    assert resolved == "predict.match_outcome.tr-TR.j2"
+
+
+def test_nlp_locale_resolution_malformed_tag_falls_back_to_default():
+    """§10.22: Malformed locale tags fall back to the configured default locale."""
+    from nlp.render import _resolve_template_name
+
+    resolved = _resolve_template_name("predict.match_outcome", locale="tr_XX")
+    assert resolved == "predict.match_outcome.tr-TR.j2"
 

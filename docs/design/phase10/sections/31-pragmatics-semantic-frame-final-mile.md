@@ -436,7 +436,7 @@
 
 #### 10.31.8 Output-side TR grammar-check proofreader gate (post-render)
 
-- [ ] **`tr_output_grammar_validator.py`** — new proofreader
+- [x] **`tr_output_grammar_validator.py`** — new proofreader
   stage that runs AFTER §10.7 template render, BEFORE
   §10.21.x envelope sign. Checks the rendered Turkish output
   for:
@@ -457,7 +457,7 @@
   - **Stem-final vowel deletion failures.** `oğul + u` → must
     drop to `oğlu`, not `oğulu`. Validator runs §10.29.1
     geminate/vowel-drop rules.
-- [ ] **Validation outcome contract.**
+- [x] **Validation outcome contract.**
   - **All checks pass** → answer ships as-is.
   - **One or more violations detected** → DO NOT ship the
     answer; emit `nlp.event.v1{kind=tr_output_grammar_violation,
@@ -469,20 +469,20 @@
     severity=warn}`. Defends against shipping
     grammatically-broken Turkish that the input pipeline
     never sees.
-- [ ] **Performance budget.** Validation cost must be
+- [x] **Performance budget.** Validation cost must be
   ≤ `nlp_output_grammar_validator_p99_ms=15`; budget overrun
   triggers a kill-switch
   `nlp_output_grammar_validator_killswitch_enabled` (default
   off) that bypasses validation and emits
   `nlp.alert.v1{kind=tr_output_grammar_validator_killswitch_engaged,
   severity=critical}` for ops review.
-- [ ] **AST guard: validator runs after template render, before
+- [x] **AST guard: validator runs after template render, before
   envelope sign.** `test_tr_output_grammar_validator_pipeline_position_ast`.
-- [ ] **Cross-language byte parity.** Vowel-harmony /
+- [x] **Cross-language byte parity.** Vowel-harmony /
   consonant-mutation rule tables consumed by the validator are
   the same SHA-pinned files (§10.28.1) used by the input
   normalize stage; one-source-of-truth invariant.
-- [ ] **Proof:** `test_tr_output_grammar_validator_catches_vowel_harmony_violation`,
+- [x] **Proof:** `test_tr_output_grammar_validator_catches_vowel_harmony_violation`,
   `test_tr_output_grammar_validator_catches_consonant_mutation_violation`,
   `test_tr_output_grammar_validator_catches_genitive_buffer_violation`,
   `test_tr_output_grammar_validator_catches_stem_vowel_deletion_failure`,

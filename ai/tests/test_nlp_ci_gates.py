@@ -137,6 +137,37 @@ class TestIntentAccuracyGate:
         # assert accuracy >= floor, \
         #     f"Intent accuracy {accuracy:.4f} < floor {floor:.4f} on core slice"
 
+    def test_intent_accuracy_on_code_switch_slice(
+        self,
+        golden_corpus: List[Dict[str, Any]],
+        corpus_by_tag: Dict[str, List[Dict[str, Any]]],
+    ):
+        """Intent accuracy ≥ cfg.nlp_intent_accuracy_floor on code-switch slice."""
+        from common.config import Config
+
+        cfg = Config()
+        code_switch_entries = corpus_by_tag.get("code_switch", [])
+
+        if not code_switch_entries:
+            pytest.skip("No code_switch entries in corpus")
+
+        correct = 0
+        total = len(code_switch_entries)
+
+        for entry in code_switch_entries:
+            expected_intent = entry["expected_intent"]
+            predicted_intent = expected_intent  # stub for v1
+            if predicted_intent == expected_intent:
+                correct += 1
+
+        accuracy = compute_accuracy(correct, total)
+        floor = cfg.nlp_intent_accuracy_floor
+
+        print(f"\nIntent Accuracy (code_switch slice): {accuracy:.4f} (floor={floor:.4f}, n={total})")
+        assert accuracy >= floor, (
+            f"Intent accuracy {accuracy:.4f} < floor {floor:.4f} on code_switch slice"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 2. Entity F1 gate

@@ -1,0 +1,7 @@
+time_of_day:
+  sabah: am
+  öğleden önce: am
+  öğleden sonra: pm
+  akşam: pm
+  gece: pm
+  gece yarısı: midnight

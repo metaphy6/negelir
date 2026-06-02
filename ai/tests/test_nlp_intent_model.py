@@ -82,6 +82,32 @@ class TestIntentModelConfig:
         finally:
             importlib.reload(_cm)
 
+    def test_env_override_canary_pod(self, monkeypatch):
+        monkeypatch.setenv("NEGELIR_NLP_CANARY_POD", "1")
+        import importlib
+
+        from common import config as _cm
+
+        importlib.reload(_cm)
+        try:
+            cfg = _cm.Config()
+            assert cfg.nlp_canary_pod is True
+        finally:
+            importlib.reload(_cm)
+
+    def test_env_override_shadow_mode(self, monkeypatch):
+        monkeypatch.setenv("NEGELIR_NLP_INTENT_SHADOW_MODE", "on")
+        import importlib
+
+        from common import config as _cm
+
+        importlib.reload(_cm)
+        try:
+            cfg = _cm.Config()
+            assert cfg.nlp_intent_shadow_mode == "on"
+        finally:
+            importlib.reload(_cm)
+
     def test_config_validates_max_size_mb_bound(self):
         """nlp_intent_model_max_size_mb must be >= 1 (validator)."""
         import os
@@ -98,6 +124,27 @@ class TestIntentModelConfig:
             assert any("nlp_intent_model_max_size_mb" in i for i in issues)
         finally:
             del os.environ["NEGELIR_NLP_INTENT_MODEL_MAX_SIZE_MB"]
+            import importlib
+
+            from common import config as _cm
+
+            importlib.reload(_cm)
+
+    def test_config_validates_shadow_mode(self):
+        import os
+
+        os.environ["NEGELIR_NLP_INTENT_SHADOW_MODE"] = "invalid"
+        try:
+            import importlib
+
+            from common import config as _cm
+
+            importlib.reload(_cm)
+            cfg = _cm.Config()
+            issues = cfg.validate(strict=False)
+            assert any("nlp_intent_shadow_mode" in i for i in issues)
+        finally:
+            del os.environ["NEGELIR_NLP_INTENT_SHADOW_MODE"]
             import importlib
 
             from common import config as _cm
@@ -249,6 +296,27 @@ class TestIntentClassifierScaffold:
             IntentModelSHAMismatch,
             match=r"nlp_intent_model_sha_mismatch.*severity=critical"
         ):
+            IntentClassifier.load(cfg)
+
+    def test_canary_pod_loads_canary_model_path(self, tmp_path):
+        from nlp.intent import IntentClassifier, IntentModelUnavailable
+
+        model_file = tmp_path / "intent.tr.bin"
+        model_file.write_bytes(b"fake-model-bytes")
+        canary_file = tmp_path / "intent.tr.bin.canary"
+        canary_file.write_bytes(b"fake-canary-bytes")
+
+        cfg = _Cfg(
+            nlp_intent_model_path=str(model_file),
+            nlp_canary_pod=True,
+            nlp_intent_model_sha256="",
+        )
+
+        resolved_path = IntentClassifier._resolve_model_path(cfg)
+        assert resolved_path.name == "intent.tr.bin.canary"
+        assert resolved_path.exists()
+
+        with pytest.raises(IntentModelUnavailable, match="fasttext library"):
             IntentClassifier.load(cfg)
 
     def test_sidecar_sha_file_malformed_raises(self, tmp_path):

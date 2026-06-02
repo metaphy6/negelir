@@ -260,6 +260,7 @@ class TestQaRequestV1LocaleEnum:
 def _valid_qa_intent() -> dict:
     """Minimal valid qa.intent.v1 payload."""
     return {
+        "schema_version": 4,
         "request_id": "req-001",
         "qa_correlation_id": "corr-001",
         "intent": "predict.match_outcome",
@@ -396,7 +397,14 @@ class TestNlpSchemaParityGate:
         """qa.intent.v1 schema accepts a minimal valid payload."""
         errors = bus_schemas.validate("qa.intent.v1", _valid_qa_intent())
         assert errors == [], f"qa.intent.v1 validation failed: {errors}"
-    
+
+    def test_qa_intent_v1_accepts_quotative_frame_class(self):
+        """qa.intent.v1 schema allows an optional quotative_frame_class property."""
+        payload = _valid_qa_intent()
+        payload["quotative_frame_class"] = "direct_quote_marker"
+        errors = bus_schemas.validate("qa.intent.v1", payload)
+        assert errors == [], f"qa.intent.v1 validation failed for quotative_frame_class: {errors}"
+
     def test_qa_answer_v1_can_validate_minimal_payload(self):
         """qa.answer.v1 schema accepts a minimal valid payload."""
         errors = bus_schemas.validate("qa.answer.v1", _valid_qa_answer())

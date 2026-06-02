@@ -260,6 +260,101 @@ def test_gate6_suffix_harmony_correct_passes():
     assert result.block_reason != "suffix_harmony"
 
 
+def test_tr_output_grammar_validator_catches_invalid_suffix_form():
+    cfg = Config()
+    answer = "Galatasaray'xy formu iyi."
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is False
+    assert result.block_reason == "tr_output_grammar_violation"
+    assert any(v["type"] == "invalid_suffix_form" for v in result.grammar_violations)
+
+
+def test_tr_output_grammar_validator_catches_consonant_mutation_violation():
+    cfg = Config()
+    answer = "Antep'de bugün maç var."
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is False
+    assert result.block_reason == "tr_output_grammar_violation"
+    assert any(v["type"] == "locative_voicing" for v in result.grammar_violations)
+
+
+def test_tr_output_grammar_validator_catches_genitive_buffer_violation():
+    cfg = Config()
+    answer = "Galatasaray'nın formu iyi."
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is False
+    assert result.block_reason == "tr_output_grammar_violation"
+    assert any(v["type"] == "genitive_buffer" for v in result.grammar_violations)
+
+
+def test_tr_output_grammar_validator_catches_stem_vowel_deletion_failure():
+    cfg = Config()
+    answer = "oğul'u dün akşam gördüm."
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is False
+    assert result.block_reason == "tr_output_grammar_violation"
+    assert any(v["type"] == "stem_vowel_deletion" for v in result.grammar_violations)
+
+
+def test_tr_output_grammar_violation_falls_back_to_grammar_fallback_template():
+    cfg = Config()
+    answer = "Antep'de bugün maç var."
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.answer_text == "Yanıtım hazırlanırken bir hata oluştu. Lütfen tekrar deneyiniz."
+    assert result.block_reason == "tr_output_grammar_violation"
+
+
+def test_tr_output_grammar_validator_pipeline_position_ast():
+    import inspect
+
+    source = inspect.getsource(proofread_answer)
+    assert "validate_tr_output_grammar(working_text, cfg)" in source
+    assert "tr_output_grammar_violation" in source
+
+
+def test_tr_output_grammar_validator_within_p99_budget():
+    cfg = Config(
+        nlp_output_grammar_validator_p99_ms=0,
+        nlp_output_grammar_validator_killswitch_enabled=True,
+    )
+    answer = "Antep'de bugün maç var."
+    with mock.patch("nlp.proofreader.time.perf_counter", side_effect=[0.0, 1.0]):
+        result = proofread_answer(
+            answer,
+            intent="data.fixture_lookup",
+            citation_sha256_expected=None,
+            cfg=cfg,
+        )
+    assert result.passed is True
+    assert result.block_reason is None
+    assert result.grammar_violations == []
+
+
 def test_all_gates_pass_clean_answer():
     """All gates pass for a clean, well-formed answer."""
     cfg = Config(nlp_min_answer_chars=10, nlp_max_answer_chars=200)
@@ -343,6 +438,7 @@ def test_proofreader_block_taxonomy_complete():
         "forbidden_phrase",
         "suffix_harmony",
         "confidence_narration_contradiction",
+        "tr_output_grammar_violation",
     })
 
     # Collect all block_reason values produced in the test suite above.
@@ -421,6 +517,16 @@ def test_proofreader_block_taxonomy_complete():
     )
     if not r6.passed:
         observed_reasons.add(r6.block_reason)
+
+    # Gate 6.5: tr_output_grammar_violation
+    r6_5 = proofread_answer(
+        "Antep'de bugün maç var.",
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    if not r6_5.passed:
+        observed_reasons.add(r6_5.block_reason)
 
     # Gate 7: confidence_narration_contradiction
     r7 = proofread_answer(

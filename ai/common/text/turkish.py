@@ -186,6 +186,111 @@ def _load_suffix_families(
     return families
 
 
+_NUMBER_WORDS_PATH: _pathlib.Path = (
+    _pathlib.Path(__file__).parent
+    .parent
+    .parent
+    / "nlp"
+    / "lang_tr"
+    / "number_words.tr.yaml"
+)
+
+_NUMBER_WORDS_CACHE: "dict[str, int] | None" = None
+
+_DEFAULT_NUMBER_WORDS: dict[str, int] = {
+    "sıfır": 0,
+    "bir": 1,
+    "iki": 2,
+    "üç": 3,
+    "dört": 4,
+    "beş": 5,
+    "altı": 6,
+    "yedi": 7,
+    "sekiz": 8,
+    "dokuz": 9,
+    "on": 10,
+    "yirmi": 20,
+    "otuz": 30,
+    "kırk": 40,
+    "elli": 50,
+    "altmış": 60,
+    "yetmiş": 70,
+    "seksen": 80,
+    "doksan": 90,
+    "yüz": 100,
+    "bin": 1000,
+    "milyon": 1000000,
+}
+
+
+def _load_number_words(path: "_pathlib.Path | None" = None) -> "dict[str, int]":
+    """Load and cache the Turkish number-word mapping from YAML.
+
+    If PyYAML is unavailable or the YAML data cannot be read, fall back to a
+    built-in default mapping so parser behavior remains deterministic in
+    minimal environments.
+    """
+    global _NUMBER_WORDS_CACHE
+    if path is None and _NUMBER_WORDS_CACHE is not None:
+        return _NUMBER_WORDS_CACHE
+    effective = path or _NUMBER_WORDS_PATH
+    if not _YAML_AVAILABLE or not effective.exists():
+        mapping = dict(_DEFAULT_NUMBER_WORDS)
+    else:
+        with open(effective, "r", encoding="utf-8") as fh:
+            data = _yaml.safe_load(fh) or {}
+        mapping = {}
+        raw = data.get("number_words", {})
+        if isinstance(raw, dict):
+            for key, value in raw.items():
+                if isinstance(key, str) and isinstance(value, int):
+                    mapping[key] = value
+    if path is None:
+        _NUMBER_WORDS_CACHE = mapping
+    return mapping
+
+
+def parse_number_word(text: str) -> int | None:
+    """Parse a Turkish number phrase into an integer.
+
+    Supports both single-word numbers like ``"bir"`` and composite
+    forms like ``"yirmi bir"`` or ``"iki yüz otuz dört"``.
+
+    Returns ``None`` when the phrase cannot be parsed from the
+    configured ``ai/nlp/lang_tr/number_words.tr.yaml`` table.
+    """
+    text = lowercase_tr(text.strip())
+    if not text:
+        return None
+
+    words = [tok for tok in text.replace("-", " ").split() if tok]
+    if not words:
+        return None
+
+    number_words = _load_number_words()
+    total = 0
+    current = 0
+    for word in words:
+        value = number_words.get(word)
+        if value is None:
+            return None
+        if value >= 1000:
+            if current == 0:
+                current = 1
+            current *= value
+            total += current
+            current = 0
+        elif value == 100:
+            if current == 0:
+                current = 1
+            current *= value
+        else:
+            current += value
+
+    total += current
+    return total
+
+
 def _suffix_harmonizes(suffix: str, stem_last_vowel: "str | None") -> bool:
     """Return True if the suffix's first vowel agrees front/back with *stem_last_vowel*.
 

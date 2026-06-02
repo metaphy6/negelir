@@ -1,0 +1,53 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Turkish football venues with home-team binding and optional alias metadata."
+entries:
+  - name: "Türk Telekom Stadyumu"
+    home_team: "Galatasaray"
+    validity: "2011-present"
+    aliases:
+      - "Ali Sami Yen"
+    canonical_slug: "galatasaray"
+  - name: "Vodafone Park"
+    home_team: "Beşiktaş"
+    validity: "2016-present"
+    aliases:
+      - "İnönü Stadyumu"
+    canonical_slug: "besiktas"
+  - name: "Şükrü Saracoğlu Stadyumu"
+    home_team: "Fenerbahçe"
+    validity: "2016-present"
+    aliases:
+      - "Ülker Stadyumu"
+    canonical_slug: "fenerbahce"
+  - name: "Medical Park Stadyumu"
+    home_team: "Trabzonspor"
+    validity: "2016-present"
+    aliases:
+      - "Hüseyin Avni Aker"
+    canonical_slug: "trabzonspor"
+  - name: "Konya Büyükşehir Stadyumu"
+    home_team: "Konyaspor"
+    validity: "2014-present"
+    aliases:
+      - "Konya Stadyumu"
+    canonical_slug: "konyaspor"
+  - name: "Başakşehir Fatih Terim Stadyumu"
+    home_team: "Başakşehir"
+    validity: "2014-present"
+    aliases:
+      - "İstanbul Başakşehir Stadyumu"
+    canonical_slug: "basaksehir"
+  - name: "Eryaman Stadyumu"
+    home_team: "Ankaragücü"
+    validity: "2019-present"
+    aliases:
+      - "Ankara Stadyumu"
+    canonical_slug: "ankaragucu"
+  - name: "Yeni Sivas 4 Eylül Stadyumu"
+    home_team: "Sivasspor"
+    validity: "2016-present"
+    aliases:
+      - "4 Eylül Stadı"
+    canonical_slug: "sivasspor"

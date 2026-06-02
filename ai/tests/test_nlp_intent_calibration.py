@@ -277,10 +277,54 @@ class TestPredictIntentDistribution:
         top = next(s for s in result if s.label == "predict.match_outcome")
         assert abs(top.raw_prob - 0.85) < 1e-9
 
+    def test_wh_prior_adjusts_logit_before_calibration(self, tmp_path):
+        from nlp.intent import IntentClassifier
+
+        cal = {"predict.match_outcome": (-1.5, 0.3)}
+        clf = self._clf_with_mock(tmp_path, calibration=cal)
+        result = clf.predict_intent_distribution("nerede maç", k=3)
+        top = next(s for s in result if s.label == "predict.match_outcome")
+
+        assert top.raw_logit is not None
+        assert top.raw_logit_after_wh_prior is not None
+        assert top.raw_logit_after_wh_prior > top.raw_logit
+        expected = top.raw_logit + 0.9
+        assert abs(top.raw_logit_after_wh_prior - expected) < 1e-9
+        assert top.calibrated_prob != top.raw_prob
+
 
 # ---------------------------------------------------------------------------
 # 13. calibration_version attribute
 # ---------------------------------------------------------------------------
+
+
+class TestPhase1030Tables:
+    def test_wh_words_covered_by_wh_intent_map(self) -> None:
+        from nlp.phase10_30 import load_wh_intent_map, load_wh_words
+
+        wh_words = load_wh_words()
+        wh_intent_map = load_wh_intent_map()
+        assert len(wh_words) >= 12
+        assert set(wh_words).issubset(set(wh_intent_map.keys()))
+
+    def test_politeness_marker_table_min_coverage(self) -> None:
+        from nlp.phase10_30 import load_politeness_markers
+
+        markers = load_politeness_markers()
+        assert len(markers) >= 30
+
+    def test_idiom_phrasebook_min_coverage(self) -> None:
+        from nlp.phase10_30 import load_idiom_phrasebook
+
+        assert len(load_idiom_phrasebook()) >= 60
+
+    def test_politeness_marker_table_includes_suffixal_forms(self) -> None:
+        from nlp.phase10_30 import load_politeness_markers
+
+        markers = load_politeness_markers()
+        assert "yapabilir misiniz" in markers
+        assert "rica ediyorum" in markers
+        assert "mümkünse" in markers
 
 
 class TestCalibrationVersion:

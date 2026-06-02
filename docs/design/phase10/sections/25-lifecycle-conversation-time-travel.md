@@ -29,12 +29,12 @@
 
 #### 10.25.1 Multi-turn conversation context (stateful follow-ups, bounded scope)
 
-- [ ] **Real gap §10.0–§10.24 misses.** Every `qa.request.v1` is treated
+- [x] **Real gap §10.0–§10.24 misses.** Every `qa.request.v1` is treated
   as stateless. A user asking "Galatasaray Fenerbahçe maçı ne zaman?"
   followed by "tahmin ne?" forces the second query through the full
   pipeline with no context — intent classifier hits `meta.unsupported`
   (no entity), dispatcher fires `did-you-mean`. Real chat UX is broken.
-- [ ] **`qa.context.v1` (data plane, additive).** New topic;
+- [x] **`qa.context.v1` (data plane, additive).** New topic;
   `additionalProperties:false`; producer = `nlp.dispatcher.v1`;
   consumer = `nlp.intent.v1`. Schema:
   `{conversation_id (uuid), turn_index (≥0), entities[] (frozen
@@ -43,29 +43,29 @@
   list is the only conversational handle. PII guarantee identical to
   §10.21.7 spool: text is fetched on-demand from the bus by
   `request_id` if needed, never persisted in the context envelope.
-- [ ] **Conversation lifetime caps.** `cfg.nlp_conversation_max_turns=8`
+- [x] **Conversation lifetime caps.** `cfg.nlp_conversation_max_turns=8`
   (hard cap; over-cap → context dropped, fresh start, info event);
   `cfg.nlp_conversation_idle_ttl_s=180` (3 min idle → expire);
   `cfg.nlp_conversation_redis_key_prefix="nlp:ctx:"`; per-pod LRU L0 +
   Redis L1 (mirrors §10.23.9 5-component cache key, +`conversation_id`
   as 6th component). Redis-down → fall-through to stateless (NEVER
   block on context).
-- [ ] **Authority of explicit re-mention.** When the new turn contains
+- [x] **Authority of explicit re-mention.** When the new turn contains
   an entity that conflicts with the carried context (user changes
   team), the new entity wins; carried entities of the same `kind` are
   evicted; `nlp.event.v1{kind=conversation_entity_overridden}` debounced.
   Closed precedence rules in `ai/nlp/conversation/precedence.tr.yaml`.
-- [ ] **Conversation-id authority.** API gateway (Phase 9) mints
+- [x] **Conversation-id authority.** API gateway (Phase 9) mints
   `conversation_id` per session token (per device, not per user — multi-
   device users get distinct contexts deliberately to avoid cross-device
   surprise). Anonymous users get `conversation_id = null`; NLP runs
   stateless. Boundary test: `test_nlp_anonymous_request_has_no_context`.
-- [ ] **Adversarial.** Carried context MUST NOT survive a
+- [x] **Adversarial.** Carried context MUST NOT survive a
   `proofreader_blocked` turn (e.g., a slur turn poisoning the next).
   Block → context cleared + `nlp.alert.v1{kind=conversation_context_cleared_after_block, severity=info}`.
-- [ ] **Tier-aware (Phase 20 hook, dormant).** `cfg.nlp_conversation_enabled_tier_floor=0`
+- [x] **Tier-aware (Phase 20 hook, dormant).** `cfg.nlp_conversation_enabled_tier_floor=0`
   default 0 (everyone); Phase 20 may flip to gate behind a tier.
-- [ ] **Proof:** `test_nlp_followup_resolves_entity_from_context`,
+- [x] **Proof:** `test_nlp_followup_resolves_entity_from_context`,
   `test_nlp_context_capped_at_max_turns`, `test_nlp_context_idle_ttl_evicts`,
   `test_nlp_explicit_team_mention_overrides_context`,
   `test_nlp_proofreader_block_clears_context`,
@@ -73,12 +73,12 @@
 
 #### 10.25.2 Streaming response (SSE / chunked humanizer w/ mid-stream proofreader gate)
 
-- [ ] **Real gap §10.7 / §10.8 / §10.9 misses.** Humanizer p95 600 ms is
+- [x] **Real gap §10.7 / §10.8 / §10.9 misses.** Humanizer p95 600 ms is
   acceptable for one-shot but feels broken in a chat UI vs the same
   time spent token-streaming. §10.9 proofreader is whole-answer; if
   applied post-stream, the user has already seen forbidden-phrase
   tokens before they're masked. Naïve streaming = PII / jailbreak echo.
-- [ ] **Two-pass guarded streaming.** New mode
+- [x] **Two-pass guarded streaming.** New mode
   `cfg.nlp_answer_streaming=disabled|guarded|off` default `disabled`
   at v1 (rolled out behind explicit operator flag). Under `guarded`:
   (1) template renders deterministically and is **fully** proofread
@@ -89,15 +89,15 @@
   on each accumulated buffer of `cfg.nlp_streaming_proofread_chunk_chars=80`);
   (5) chunk fails gate → stream cuts to skeleton continuation +
   `nlp.alert.v1{kind=streaming_humanizer_chunk_blocked, severity=warn}`.
-- [ ] **Citation block NEVER streamed.** Citation MUST land as the final
+- [x] **Citation block NEVER streamed.** Citation MUST land as the final
   whole-block frame after humanize completes; if humanize fails mid-
   stream, citation lands attached to the skeleton continuation. AST
   guard: `test_nlp_citation_never_in_streaming_chunk`.
-- [ ] **Backpressure.** Slow client (write blocks > `cfg.nlp_streaming_write_timeout_ms=2000`)
+- [x] **Backpressure.** Slow client (write blocks > `cfg.nlp_streaming_write_timeout_ms=2000`)
   → cancel humanize, fall to skeleton-only completion, emit
   `nlp.event.v1{kind=streaming_client_slow_canceled}`. Mirrors Phase 9
   §9.17.4 slow-client doctrine.
-- [ ] **Cancellation contract.** `predict.cancel.v1` (Phase 9) → also
+- [x] **Cancellation contract.** `predict.cancel.v1` (Phase 9) → also
   cancels the humanize call; in-flight chunks NOT sent after cancel.
   Boundary test: `test_nlp_streaming_honors_predict_cancel`.
 - [ ] **Cache coherence.** Streamed answers cached as `(chunks[], final)`
@@ -121,34 +121,34 @@
   generation), `intent.tr.bin.sha256`, `crf.tr.model.sha256`,
   calibration version, template git SHA, `pipeline_version`, fixture
   state from `predict.approved.v1`, `request_id`, normalized text.
-- [ ] **`nlp_audit_bundle_sha` field added to sampled audit row.** Single
+- [x] **`nlp_audit_bundle_sha` field added to sampled audit row.** Single
   hex string = sha256 over the canonical-form quintet
   `(lexicon_snapshot_sha, intent_model_sha, crf_model_sha,
   calibration_version, template_git_sha, pipeline_version)`. Acts as a
   pointer; the actual bundle lives in `data/nlp/audit_bundles/<sha>/`
   (immutable; populated on first observation; later requests with the
   same quintet reuse the same dir).
-- [ ] **Bundle contents.** `manifest.json` (the quintet + UTC timestamp
+- [x] **Bundle contents.** `manifest.json` (the quintet + UTC timestamp
   of first observation + retention class) + `lexicons/*.tr.yaml.sha256`
   (SHAs only — actual bytes recovered from Phase 16 lexicon feed
   cold-storage by SHA) + `intent.tr.bin.sha256` + `crf.tr.model.sha256`
   + `templates/*.j2.sha256` (resolved against repo `templates/` at
   `template_git_sha`). NEVER the raw model bytes (would explode disk
   + duplicate Phase 16 cold storage).
-- [ ] **`make nlp.audit-rerender BUNDLE=<sha> REQUEST_ID=...`** runbook
+- [x] **`make nlp.audit-rerender BUNDLE=<sha> REQUEST_ID=...`** runbook
   CLI: fetches the original `qa.request.v1` from Phase 8 backup if
   retention permits, fetches `predict.approved.v1` similarly, rebuilds
   a sandboxed Python venv pinned to the chart compat block of the
   bundle's date, re-renders, asserts byte-equality with the audited
   answer text. Operator-only; logged as `maint.event.v1{kind=nlp_audit_rerender_executed}`.
-- [ ] **Retention.** Bundle dirs retained `cfg.nlp_audit_bundle_retention_days=2555`
+- [x] **Retention.** Bundle dirs retained `cfg.nlp_audit_bundle_retention_days=2555`
   (7 years — matches `pii_erased` retention floor in §8.3 doctrine for
   legal-hold compatibility). Storage cost negligible (SHAs only, not
   bytes). Per-quintet dedup makes total dir count ≪ total request count.
-- [ ] **Right-to-erasure interaction.** `quarantine_erase` (§10.25.9)
+- [x] **Right-to-erasure interaction.** `quarantine_erase` (§10.25.9)
   nullstamps the audit ROW; bundle dir is unaffected (the bundle
   doesn't contain user PII — it's artifact metadata only).
-- [ ] **Proof:** `test_nlp_audit_row_carries_bundle_sha`,
+- [x] **Proof:** `test_nlp_audit_row_carries_bundle_sha`,
   `test_nlp_bundle_quintet_canonical_form_byte_stable`,
   `test_nlp_audit_rerender_dry_run_produces_byte_identical_answer`
   (compose-mode, mocked Phase 8 lookups),
@@ -165,7 +165,7 @@
   new template referencing `entity.role_class` (added in §10.24.8)
   paired with an old CRF that doesn't emit it → render-time
   `UndefinedError` under StrictUndefined.
-- [ ] **`compatibility_matrix.json`** (new file at
+- [x] **`compatibility_matrix.json`** (new file at
   `ai/nlp/_compat/compatibility_matrix.json`, schema_version=1,
   `additionalProperties:false`). One row per `pipeline_version`. Each
   row pins the exact compatible quartet:
@@ -174,17 +174,17 @@
   calibration_version_min..max, template_git_sha, humanizer_model_sha,
   introduced_at_utc, retired_at_utc?}`. Append-only; `retired_at_utc`
   set when a row is no longer accepted at boot.
-- [ ] **Boot-time validator.** NLP agent at startup walks the matrix,
+- [x] **Boot-time validator.** NLP agent at startup walks the matrix,
   finds the row matching its current `pipeline_version`, asserts every
   loaded artifact SHA matches; mismatch → refuse boot +
   `nlp.alert.v1{kind=nlp_compatibility_quartet_mismatch, severity=critical, missing: [...]}`.
-- [ ] **Calibration version range.** Calibration is the only artifact
+- [x] **Calibration version range.** Calibration is the only artifact
   that can move forward without a coordinated rollout (new calibration
   every Phase 5 retrain). Each compat row carries `calibration_version_min..max`;
   out-of-range → refuse the specific calibration (degrades to template-
   only mode for that intent group, NEVER renders a half-calibrated
   answer).
-- [ ] **CI gate.** `make nlp.compat-validate` runs before any PR that
+- [x] **CI gate.** `make nlp.compat-validate` runs before any PR that
   touches `ai/nlp/lexicon/`, `intent.tr.bin*`, `crf.tr.model*`,
   `ai/nlp/templates/`, or the humanizer pin in chart.json. Refuses
   merge if a new artifact lands without a matching new matrix row.
@@ -506,7 +506,7 @@
   dates), "Cumhuriyet Bayramı'nda kim oynar" (29 Ekim, fixed), "milli
   maç haftası" (FIFA windows — moving). These return `meta.unsupported`
   today, which is a fan-visible quality bug.
-- [ ] **`ai/nlp/dates/holidays_tr.yaml`** (single-source).  Each entry:
+- [x] **`ai/nlp/dates/holidays_tr.yaml`** (single-source).  Each entry:
   `{key (closed enum: ramazan_bayrami | kurban_bayrami | yilbasi |
   cumhuriyet_bayrami | zafer_bayrami | gencler_bayrami |
   ulusal_egemenlik | demokrasi_bayrami), name_tr, name_aliases[],
@@ -515,7 +515,7 @@
   by `ai/nlp/dates/hijri.py` — vendored deterministic lookup, NEVER
   network), fifa_window_lookup? (per-year from `openfootball` feed
   cached locally + SHA-pinned per year)}`.
-- [ ] **Lookup horizon.** `cfg.nlp_holiday_lookup_horizon_days=540`
+- [x] **Lookup horizon.** `cfg.nlp_holiday_lookup_horizon_days=540`
   (~18 months — covers any "next year's bayram" query). Refuses to
   resolve dates beyond horizon → falls back to numeric-date prompt.
 - [ ] **Hijri determinism.** `hijri.py` is a vendored table for the next

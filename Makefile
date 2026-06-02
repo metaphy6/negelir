@@ -132,6 +132,10 @@ fix.lua: ## Phase 7 §7.3 — rewrite Lua SHA headers after intended edits
 scrape: env ## Scrape & cache real match data (LEAGUE=super_lig)
 	@$(XOPS)/ai_commands.py scrape --league $(LEAGUE)
 
+.PHONY: nlp.audit-rerender
+nlp.audit-rerender: env ## Operator-only runbook for NLP audit bundle re-render
+	@$(XOPS)/makefile/nlp.py nlp.audit-rerender
+
 .PHONY: bootstrap
 bootstrap: env ## Scrape + validate cache (gate before training)
 	@$(XOPS)/ai_commands.py bootstrap --league $(LEAGUE) --min-matches $(BOOTSTRAP_MIN_MATCHES)
@@ -309,6 +313,10 @@ nlp.rotate-citation-key: ## Phase 10 §10.21.8 — rotate predict citation HMAC 
 .PHONY: nlp.template-lint
 nlp.template-lint: ## Phase 10 §10.15 — AST-assert no {{ free_text }} slot in any template (hallucination guard)
 	@$(XOPS)/nlp.py nlp.template-lint
+
+.PHONY: nlp.compat-validate
+nlp.compat-validate: ## Phase 10 §10.25.4 — validate NLP compatibility matrix and artifact quartet before merge
+	@$(XOPS)/nlp.py nlp.compat-validate
 
 .PHONY: nlp.eval-diff
 nlp.eval-diff: ## Phase 10 §10.18 — Regression diff: compare intent/entity/render outcomes vs BASELINE sha (usage: make nlp.eval-diff BASELINE=<sha>)

@@ -1,0 +1,9 @@
+# Phase 10 §10.25.1 closed precedence rules for conversational entity overrides.
+# Explicitly re-mentioning an entity of the same kind replaces the prior carried
+# context entity of that kind.
+explicit_override_kinds:
+  - team
+  - competition
+  - league
+  - player
+  - market

@@ -257,10 +257,26 @@ class CacheAgent:
             model_versions_hash,
             calibration_version,
         )
-        # Store the full qa.answer.v1 payload. JSON-encoded for wire parity.
+
+        if (
+            isinstance(payload.get("streaming_chunks"), list)
+            and isinstance(payload.get("final_answer"), str)
+        ):
+            cache_value = {
+                "streamed": True,
+                "chunks": payload["streaming_chunks"],
+                "final": payload["final_answer"],
+                "payload": payload,
+            }
+        else:
+            cache_value = {
+                "streamed": False,
+                "payload": payload,
+            }
+
         self.backend.set(
             key,
-            json.dumps(payload, separators=(",", ":"), sort_keys=True),
+            json.dumps(cache_value, separators=(",", ":"), sort_keys=True),
             ttl_sec=ttl,
         )
         return ()

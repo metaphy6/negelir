@@ -54,6 +54,7 @@ from swarm.agents.topics import (
     PROOF_FLAG,
     PROOFREADER_VERDICT,
     QA_ANSWER_V1,
+    QA_CONTEXT_V1,
     QA_INTENT_V1,
     QA_REQUEST,
     QA_REQUEST_V1,
@@ -874,6 +875,7 @@ def test_telemetry_watches_phase9_api_audit_topics() -> None:
 _NLP_OUTBOUND_ALLOWED = frozenset({
     QA_INTENT_V1,
     QA_ANSWER_V1,
+    QA_CONTEXT_V1,
     NLP_EVENT_V1,
     NLP_ALERT_V1,
     PREDICT_REQUEST_V1,
@@ -1057,6 +1059,20 @@ def test_nlp_intent_agent_subscribes_to_qa_request_v1() -> None:
     assert QA_REQUEST_V1 in tuple(NlpIntentAgent.subscribes), (
         "nlp.intent.v1 must subscribe to qa.request.v1 (the Phase 7 "
         "sec-sanitized data-plane envelope)."
+    )
+    assert QA_CONTEXT_V1 in tuple(NlpIntentAgent.subscribes), (
+        "nlp.intent.v1 must also subscribe to qa.context.v1 for multi-turn "
+        "conversation follow-up context."
+    )
+
+
+def test_nlp_dispatcher_publishes_qa_context_v1() -> None:
+    """§10.25 positive: nlp.dispatcher.v1 must be able to emit qa.context.v1."""
+    from swarm.agents.nlp import NlpDispatcherAgent  # noqa: PLC0415
+
+    assert QA_CONTEXT_V1 in tuple(NlpDispatcherAgent.publishes), (
+        "nlp.dispatcher.v1 must publish qa.context.v1 for conversation "
+        "context updates."
     )
 
 

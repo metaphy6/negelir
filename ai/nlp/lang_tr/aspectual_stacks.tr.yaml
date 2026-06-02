@@ -1,0 +1,54 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.2"
+stack_rules:
+  - inner_aspect: evidential
+    outer_aspect: future
+    modality_class: future_perfect_evidential
+    confidence: 0.90
+    patterns:
+      - "\\b(yenmiş|gelmiş|kazanmış|bitmiş) olacak(?:sa|se)?\\b"
+      - "\\b(oynamış|kazanmış|gelmiş|bitmiş) olacak(?:sa|se)?\\b"
+      - "\\b((yerleşmiş|görülmüş) olacak)\\b"
+  - inner_aspect: evidential
+    outer_aspect: potential
+    modality_class: perfect_modal_potential
+    confidence: 0.88
+    patterns:
+      - "\\b(olmuş olabilir|kazanmış olabilir|gelmiş olabilir|bitmiş olabilir|yenmiş olabilir|atılmış olabilir)\\b"
+      - "\\b(oynamış olabilir|gelmiş olabilir|kazanmış olabilir|yenmiş olabilir|atılmış olabilir)\\b"
+      - "\\b((olmuş|kazanmış|gelmiş|yenmiş|atılmış) olabilir)\\b"
+  - inner_aspect: progressive
+    outer_aspect: imminent
+    modality_class: imminent_progressive
+    confidence: 0.85
+    patterns:
+      - "\\b(başlamak üzere|başlayacak üzere|oynamak üzere|oynayacak üzere|kazanmak üzere|kazanacak üzere|gelmek üzere|girmek üzere|kalkmak üzere|bitecek üzere|bitmek üzere)\\b"
+      - "\\b(bitmek üzere|bitecek üzere|başlamak üzereler|başlayacak üzere|oynayacak üzere|kazanacak üzere|kalkmak üzere)\\b"
+      - "\\b(kazanmak üzere|kazanacak üzere|oynamak üzere|oynayacak üzere|girmek üzere|kalkmak üzere|bitecek üzere|başlayacak üzere)\\b"
+  - inner_aspect: epistemic
+    outer_aspect: progressive
+    modality_class: progressive_epistemic
+    confidence: 0.85
+    patterns:
+      - "\\b(oynuyor olabilir|geliyor olabilir|kazanıyor olabilir|bitiyor olabilir|gidiyor olabilir|oluyor olabilir)\\b"
+      - "\\b(oynuyor olabilir|kazanıyor olabilir|gidiyor olabilir|oluyor olabilir)\\b"
+      - "\\b(oynuyor olabilir|gidiyor olabilir|oluyor olabilir)\\b"
+  - inner_aspect: relative
+    outer_aspect: future
+    modality_class: future_relative_clause_attributive
+    confidence: 0.85
+    patterns:
+      - "\\b(oynayacak olan|girecek olan|kazanacak olan|gelecek olan|bitecek olan|bitirecek olan|yapacak olan)\\b"
+      - "\\b(oynayacak olan kim|girecek olan kim|bitirecek olan kim|yapacak olan kim)\\b"
+      - "\\b(kazanacak olan kim|gelecek olan kim|bitirecek olan kim|yapacak olan kim)\\b"
+  - inner_aspect: inferential
+    outer_aspect: progressive
+    modality_class: progressive_inferential
+    confidence: 0.86
+    patterns:
+      - "\\b(oynamış olur|kazanmış olur|gelmiş olur|bitmiş olur)(?:sa|se)?\\b"
+      - "\\b(oynamış olur mu|kazanmış olur mu)\\b"
+      - "\\b(gelmiş olur|bitmiş olur)\\b"

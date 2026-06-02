@@ -5,6 +5,7 @@
   "description": "Phase 10 §10.0 wire authority: published by nlp.intent.v1 after sec-pass + normalize (§10.1) + intent-classify (§10.4) + entity-extract (§10.5). Consumer = nlp.dispatcher.v1. Carries the closed-enum intent, entity spans, calibrated intent distribution, and model versions for post-hoc audit. Mirrors ai/swarm/agents/nlp/payloads.py::QaIntentV1.",
   "type": "object",
   "required": [
+    "schema_version",
     "request_id",
     "qa_correlation_id",
     "intent",
@@ -20,6 +21,11 @@
     "resolved_at_utc"
   ],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Envelope schema version for qa.intent.v1; v4 after Phase 10.30 additive intent additions."
+    },
     "request_id": {
       "type": "string",
       "minLength": 1,
@@ -30,10 +36,15 @@
       "minLength": 1,
       "description": "Generated at §10.6 dispatch; round-trips through predict.request.v1 → predict.approved.v1 → qa.answer.v1."
     },
+    "conversation_id": {
+      "type": ["string", "null"],
+      "description": "Optional conversation identifier carried from qa.request.v1 for follow-up context." 
+    },
     "intent": {
       "type": "string",
       "enum": [
         "predict.match_outcome",
+        "predict.match_outcome.conditional",
         "predict.over_under",
         "predict.btts",
         "predict.handicap",
@@ -42,11 +53,28 @@
         "data.kickoff_time",
         "data.standings",
         "data.head_to_head",
+        "data.top_scorer",
+        "data.assist_leader",
+        "data.clean_sheets_leader",
+        "data.table_leader",
+        "data.relegation_zone",
+        "data.lineup_probable",
+        "data.live_state",
+        "data.lineup_official",
+        "data.injury_list",
+        "data.suspension_list",
+        "data.referee_appointment",
+        "data.weather_at_kickoff",
+        "data.transfer_window_status",
+        "data.head_to_head_history",
         "data.player_card_risk",
         "summary.next_week",
         "summary.matchday",
         "meta.help",
+        "meta.social_media_unverifiable",
         "meta.unsupported",
+        "meta.modality_unsupported",
+        "meta.counterfactual_probe",
         "meta.adversarial"
       ],
       "description": "Classified intent. Mirrors _intent_enum.json (§10.4)."
@@ -190,6 +218,34 @@
     "normalized_text": {
       "type": "string",
       "description": "Post-§10.1-normalize text; omit raw input (PII boundary)."
+    },
+    "intent_modifier": {
+      "description": "Optional intent modifier that augments the classified intent.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["none", "conditional", "comparative", "sarcastic"]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["conditional", "comparative", "sarcastic"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      ]
+    },
+    "query_style": {
+      "description": "Optional query styling metadata for special input modes.",
+      "type": "string",
+      "enum": ["natural", "search", "quoted_exact_search"],
+      "default": "natural"
+    },
+    "quotative_frame_class": {
+      "type": ["string", "null"],
+      "description": "Optional quotative frame class detected during NLP normalization."
     },
     "confusables_resolved_count": {
       "type": "integer",

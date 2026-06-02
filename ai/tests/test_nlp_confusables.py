@@ -79,6 +79,42 @@ class TestConfusablesCyrillicA:
         joined = " ".join(result.tokens)
         assert joined == "arsenal"  # Lowercase after fold
 
+    def test_confusables_fullwidth_fold_to_ascii(self) -> None:
+        """Fullwidth Latin letters should normalize to ASCII."""
+        from nlp.normalize import normalize_input
+
+        malicious_input = "Ｇａｌａｔａｓａｒａｙ"
+        result = normalize_input(malicious_input)
+
+        assert " ".join(result.tokens) == "galatasaray"
+
+    def test_confusables_mathalpha_fold_to_ascii(self) -> None:
+        """Mathematical alphanumeric symbols should normalize to ASCII."""
+        from nlp.normalize import normalize_input
+
+        malicious_input = "𝐆𝐚𝐥𝐚𝐭𝐚𝐬𝐚𝐫𝐚𝐲"
+        result = normalize_input(malicious_input)
+
+        assert " ".join(result.tokens) == "galatasaray"
+
+    def test_confusables_tag_characters_stripped(self) -> None:
+        """Tag characters used for emoji spoofing must be stripped."""
+        from nlp.normalize import normalize_input
+
+        malicious_input = "Galatasaray\U000E0020"
+        result = normalize_input(malicious_input)
+
+        assert " ".join(result.tokens) == "galatasaray"
+
+    def test_confusables_enclosed_alphanumerics_fold_to_ascii(self) -> None:
+        """Enclosed alphanumerics should normalize to ASCII."""
+        from nlp.normalize import normalize_input
+
+        malicious_input = "ⒼⒶⓁⒶⓉⒶⓈⒶⓇⒶⓎ"
+        result = normalize_input(malicious_input)
+
+        assert " ".join(result.tokens) == "galatasaray"
+
 
 class TestBidiStripCoverage:
     """Bidi formatting strip must cover all 9 specified codepoints."""

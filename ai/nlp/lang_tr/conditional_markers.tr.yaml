@@ -1,0 +1,17 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Markers that signal conditional or hypothetical phrasing in Turkish."
+markers:
+  - eğer
+  - olursa
+  - olsa
+  - olsa bile
+  - kazanırsa
+  - kazansa
+  - kaybederse
+  - yaparsa
+  - etse
+  - olsaydı
+  - olsa idi
+  - gelirse

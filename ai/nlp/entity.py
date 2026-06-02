@@ -101,17 +101,27 @@ _NEGATIVE_FILE: str = "entities_negative.tr.yaml"
 
 # ── Public types ───────────────────────────────────────────────────────────
 
-class AmbiguousHit(NamedTuple):
-    """Signals that a token matched an alias declared ambiguous in entities_negative.
+class PhoneticAliasMatch(NamedTuple):
+    """Records a resolved phonetic alias from the curated allow-list.
 
     alias:
-        The normalized trigger token that fired the negative rule.
-    candidates:
-        Canonical IDs from the ``ambiguous_between`` list in the YAML entry.
-        The caller should surface these to the user via a 'Did you mean?' flow
-        and emit ``nlp.event.v1{kind=slot_resolution_failed, candidates=[...]}``.  
-        Never silently pick one. (§10.5 Ambiguity policy)
+        The exact phonetic form matched from ``ai/nlp/lang_tr/phonetic_aliases.tr.yaml``.
+    canonical_id:
+        The resolved canonical entity ID.
+    kind:
+        Entity kind inferred from the current lexicon snapshot.
+    confused_with:
+        Alternative canonical IDs that the phonetic form is commonly confused with.
     """
+
+    alias: str
+    canonical_id: str
+    kind: str
+    confused_with: tuple[str, ...]
+
+
+class AmbiguousHit(NamedTuple):
+    """Represents an alias suppressed by a negative rule with ambiguous candidates."""
 
     alias: str
     candidates: tuple[str, ...]
@@ -136,11 +146,16 @@ class ExtractionResult(NamedTuple):
         The caller must emit ``nlp.alert.v1{kind=pii_detected_in_input,
         severity=warn}`` for each entry (operator visibility; user-facing
         answer is unaffected). (§10.5 PII guard at extraction)
+    phonetic_alias_matches:
+        Phonetic alias matches from ``ai/nlp/lang_tr/phonetic_aliases.tr.yaml``.
+        These are curated resolutions; the caller may emit corresponding
+        ``nlp.event.v1`` events with ``confused_with`` metadata.
     """
 
     spans: list[EntitySpan]
     ambiguous: list[AmbiguousHit]
-    pii_dropped: list[EntitySpan] = []  # type: ignore[assignment]
+    pii_dropped: list[EntitySpan] = []
+    phonetic_alias_matches: tuple[PhoneticAliasMatch, ...] = ()
 
 
 class EntitySpan(NamedTuple):
@@ -239,6 +254,110 @@ def _build_combined_alias_index(
             if key:
                 combined[key] = hit
     return combined
+
+
+_PHONETIC_ALIASES_PATH = Path(__file__).resolve().parent / "lang_tr" / "phonetic_aliases.tr.yaml"
+
+
+@dataclass(frozen=True)
+class PhoneticAlias:
+    phonetic_form: str
+    canonical_id: str
+    requires_co_token: bool
+    confused_with: tuple[str, ...]
+    table_version: str
+
+
+def _load_phonetic_aliases(path: Path | None = None) -> tuple[PhoneticAlias, ...]:
+    """Load the curated phonetic alias allow-list for §10.22.10."""
+    path = path or _PHONETIC_ALIASES_PATH
+    if not path.exists():
+        return ()
+
+    try:
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, ImportError, yaml.YAMLError):
+        return ()
+    if not isinstance(data, dict):
+        return ()
+
+    meta = data.get("_meta")
+    if not isinstance(meta, dict):
+        return ()
+    if meta.get("schema_version") != 1:
+        return ()
+
+    table_version = str(meta.get("table_version", "1.0.0")).strip() or "1.0.0"
+    aliases: list[PhoneticAlias] = []
+    for item in data.get("aliases", []) if isinstance(data.get("aliases", []), list) else []:
+        if not isinstance(item, dict):
+            continue
+        phonetic_form = item.get("phonetic_form")
+        canonical_id = item.get("canonical_id")
+        if not isinstance(phonetic_form, str) or not phonetic_form.strip():
+            continue
+        if not isinstance(canonical_id, str) or not canonical_id.strip():
+            continue
+        requires_co_token = bool(item.get("requires_co_token", False))
+        confused_with = tuple(
+            str(v).strip()
+            for v in item.get("confused_with", [])
+            if isinstance(v, str) and v.strip()
+        )
+        aliases.append(
+            PhoneticAlias(
+                phonetic_form=phonetic_form.strip(),
+                canonical_id=canonical_id.strip(),
+                requires_co_token=requires_co_token,
+                confused_with=confused_with,
+                table_version=table_version,
+            )
+        )
+    return tuple(aliases)
+
+
+def _canonical_kind_map(store: LexiconStore) -> dict[str, str]:
+    """Return a canonical_id → kind map from the current lexicon snapshot."""
+    kind_map: dict[str, str] = {}
+    for fname in _GAZETTEER_FILES:
+        idx = store.get_alias_index(fname)
+        if idx is None:
+            continue
+        for hit in idx.values():
+            if hit.canonical_id and hit.kind in GAZETTEER_KINDS:
+                kind_map.setdefault(hit.canonical_id, hit.kind)
+    return kind_map
+
+
+def _inject_phonetic_aliases(
+    alias_index: dict[str, AliasHit],
+    store: LexiconStore,
+    phonetic_aliases: tuple[PhoneticAlias, ...],
+) -> dict[str, PhoneticAlias]:
+    """Merge curated phonetic aliases into the gazetteer alias index."""
+    canonical_kind = _canonical_kind_map(store)
+    matches: dict[str, PhoneticAlias] = {}
+    for alias in phonetic_aliases:
+        kind = canonical_kind.get(alias.canonical_id)
+        if kind is None:
+            continue
+        normalized = " ".join(lowercase_tr(alias.phonetic_form).split())
+        if not normalized:
+            continue
+        if alias.requires_co_token and " " not in normalized:
+            continue
+        alias_index[normalized] = AliasHit(
+            canonical_id=alias.canonical_id,
+            kind=kind,
+            lexicon_version=alias.table_version,
+        )
+        matches[normalized] = alias
+        folded = _ascii_fold_tr(normalized)
+        if folded != normalized:
+            matches[folded] = alias
+    return matches
 
 
 def _ascii_fold_tr(text: str) -> str:
@@ -684,6 +803,9 @@ class EntityExtractor:
     crf:
         Optional :class:`CrfExtractor`.  When omitted, a no-op extractor
         (CRF unavailable) is used — gazetteer-only mode.
+    phonetic_aliases_path:
+        Optional path to a curated phonetic alias allow-list YAML file.
+        Defaults to ``ai/nlp/lang_tr/phonetic_aliases.tr.yaml``.
     """
 
     def __init__(
@@ -692,11 +814,14 @@ class EntityExtractor:
         kind_priority: list[str] | None = None,
         crf: CrfExtractor | None = None,
         ascii_vs_restored_margin: float = 0.2,
+        phonetic_aliases_path: Path | None = None,
     ) -> None:
         self._store = store
         self._kind_priority = kind_priority if kind_priority is not None else list(DEFAULT_KIND_PRIORITY)
         self._crf = crf if crf is not None else CrfExtractor()
         self._ascii_vs_restored_margin = ascii_vs_restored_margin
+        self._phonetic_aliases_path = phonetic_aliases_path
+        self._phonetic_aliases = _load_phonetic_aliases(phonetic_aliases_path)
 
     def extract(
         self,
@@ -726,6 +851,11 @@ class EntityExtractor:
 
         # 1. Build gazetteer alias index + negative rules from current store snapshot
         alias_index = _build_combined_alias_index(self._store)
+        phonetic_alias_map: dict[str, PhoneticAlias] = {}
+        if self._phonetic_aliases:
+            phonetic_alias_map = _inject_phonetic_aliases(
+                alias_index, self._store, self._phonetic_aliases
+            )
         ascii_alias_index = _build_ascii_alias_index(alias_index)
         negative_rules = _load_negative_rules(self._store)
         ascii_negative_rules = _fold_negative_rules_to_ascii(negative_rules)
@@ -766,8 +896,26 @@ class EntityExtractor:
                 crf_spans.append(span)
 
         # 4. Conflict resolution
+        phonetic_matches: list[PhoneticAliasMatch] = []
+        for span in gazetteer_spans:
+            window = " ".join(lowercase_tr(t) for t in token_list[span.span_start:span.span_end]).strip()
+            alias_match = phonetic_alias_map.get(window)
+            if alias_match is None:
+                ascii_window = " ".join(_ascii_fold_tr(t) for t in token_list[span.span_start:span.span_end]).strip()
+                alias_match = phonetic_alias_map.get(ascii_window)
+            if alias_match is not None:
+                phonetic_matches.append(
+                    PhoneticAliasMatch(
+                        alias=alias_match.phonetic_form,
+                        canonical_id=alias_match.canonical_id,
+                        kind=span.kind,
+                        confused_with=alias_match.confused_with,
+                    )
+                )
+
         return ExtractionResult(
             spans=_resolve_conflicts(gazetteer_spans, crf_spans),
             ambiguous=_dedupe_ambiguous_hits(ambiguous),
             pii_dropped=pii_dropped,
+            phonetic_alias_matches=tuple(phonetic_matches),
         )

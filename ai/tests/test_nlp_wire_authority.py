@@ -36,6 +36,12 @@ _NLP_EVENT_V1_KNOWN_KINDS = frozenset({
     "confusables_resolved",
     "singleflight_event_swept",
     "lexicon_old_generation_evicted",
+    "phonetic_alias_resolved_with_confusion_warning",
+    "locale_fallback_used",
+    "dialect_expanded",
+    "abbreviation_expanded",
+    "particle_repaired",
+    "apostrophe_inserted",
 })
 
 
@@ -43,6 +49,7 @@ _NLP_EVENT_V1_KNOWN_KINDS = frozenset({
 
 def _valid_qa_intent() -> dict:
     return {
+        "schema_version": 4,
         "request_id": "req-001",
         "qa_correlation_id": "corr-001",
         "intent": "predict.match_outcome",
@@ -419,6 +426,9 @@ class TestNlpAlertV1Schema:
             "nlp_citation_signature_verify_failed",
             "nlp_cold_start_timeout",
             "nlp_lexicon_feed_schema_too_new",
+            "nlp_slur_in_input",
+            "nlp_lexicon_feed_signature_invalid",
+            "nlp_repair_density_anomaly",
         }
         missing = sorted(kind for kind in expected_kinds if kind not in description)
         assert not missing, f"§10.21.13 known kinds missing from schema docs: {missing}"

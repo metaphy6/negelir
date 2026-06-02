@@ -1,0 +1,15 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Turkish words that represent punctuation when input_modality is voice."
+entries:
+  - word: virgül
+  - word: nokta
+  - word: noktalı virgül
+  - word: iki nokta
+  - word: soru işareti
+  - word: ünlem işareti
+  - word: tire
+  - word: parantez
+  - word: tırnak
+  - word: kısa çizgi

@@ -1,0 +1,19 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.5"
+  notes: >
+    Closed negative examples for input-side apostrophe repair. These are
+    common nouns and high-risk false positives that must not be repaired.
+
+no_insert_allowlist:
+  - "birlik"
+  - "bilgi"
+  - "tarih"
+  - "liman"
+  - "sanat"
+  - "takim"
+  - "koruma"
+  - "yarin"
+  - "kapi"
+  - "saglik"

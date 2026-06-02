@@ -1,0 +1,22 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.5"
+  notes: >
+    Closed input-side apostrophe repair rules for Phase 10 §10.32.5.
+
+apostrophe_repair:
+  missing_apostrophe_suffix:
+    id: "missing_apostrophe_suffix"
+    min_length: 7
+  misplaced_apostrophe:
+    id: "misplaced_apostrophe"
+    max_candidates: 1
+  legitimate_internal_apostrophe:
+    id: "legitimate_internal_apostrophe"
+    allowlist:
+      - "akhisar'spor"
+      - "d'or"
+      - "fenerbahçe'spor"
+      - "trabzonspor'su"
+      - "bursaspor'un"

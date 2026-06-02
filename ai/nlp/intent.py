@@ -44,6 +44,8 @@ import math
 from pathlib import Path
 from typing import Deque, Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Union
 
+from nlp.phase10_30 import apply_wh_prior_to_scores
+
 # ---------------------------------------------------------------------------
 # Closed intent enum (§10.4)
 # ---------------------------------------------------------------------------
@@ -55,7 +57,7 @@ _INTENT_ENUM_PATH: Path = (
 )
 
 #: Expected schema_version in _intent_enum.json; mismatch refuses load.
-_INTENT_ENUM_SCHEMA_VERSION: int = 1
+_INTENT_ENUM_SCHEMA_VERSION: int = 4
 
 
 def _load_intent_labels() -> FrozenSet[str]:
@@ -135,15 +137,22 @@ class IntentScore(NamedTuple):
     """Top-k intent classification result with calibrated probability.
 
     Attributes:
-        label:           Intent label (stripped of fastText ``__label__`` prefix).
-        raw_prob:        Raw fastText softmax probability.
-        calibrated_prob: Platt-calibrated probability; equals ``raw_prob``
-                         when calibration file is absent.
+        label:              Intent label (stripped of fastText ``__label__`` prefix).
+        raw_prob:           Raw fastText softmax probability.
+        calibrated_prob:    Platt-calibrated probability; equals ``raw_prob``
+                            when calibration file is absent.
+        raw_logit:          Estimated logit before WH prior adjustment.
+        raw_logit_after_wh_prior: Estimated logit after WH prior adjustment.
     """
 
     label: str
     raw_prob: float
     calibrated_prob: float
+    raw_logit: float | None = None
+    raw_logit_after_wh_prior: float | None = None
+
+    def __iter__(self):
+        return iter((self.label, self.raw_prob, self.calibrated_prob))
 
 
 class IntentAbstention(NamedTuple):
@@ -408,9 +417,7 @@ class IntentClassifier:
         accepted gracefully (``_calibration=None``); a present-but-malformed
         file raises :exc:`IntentCalibrationLoadError`.
         """
-        model_path = Path(
-            getattr(cfg, "nlp_intent_model_path", "data/models/nlp/intent.tr.bin")
-        )
+        model_path = cls._resolve_model_path(cfg)
         if not model_path.exists():
             raise IntentModelNotFoundError(
                 f"Intent model not found: {model_path}. "
@@ -522,8 +529,26 @@ class IntentClassifier:
             getattr(cfg, "nlp_intent_model_version", "") or ""
         ).strip()
 
-        model = fasttext.load_model(str(model_path))
+        try:
+            model = fasttext.load_model(str(model_path))
+        except Exception as exc:
+            raise IntentModelUnavailable(
+                f"fasttext model load failed: {exc}"
+            ) from exc
         return cls(model, model_path, calibration, cal_version, _model_version=model_version)
+
+    @classmethod
+    def _resolve_model_path(cls, cfg: object) -> Path:
+        """Resolve the deployed intent model path, including canary pods.
+
+        When ``cfg.nlp_canary_pod`` is true, the canary pod loads the canary
+        model file path by appending ".canary" to the configured model file
+        name (§10.23.2).
+        """
+        base_path = Path(getattr(cfg, "nlp_intent_model_path", "data/models/nlp/intent.tr.bin"))
+        if getattr(cfg, "nlp_canary_pod", False):
+            return base_path.with_name(base_path.name + ".canary")
+        return base_path
 
     # ------------------------------------------------------------------
     # Inference
@@ -576,16 +601,33 @@ class IntentClassifier:
             k:    Number of top intents to return (default 3).
         """
         labels, probs = self._model.predict(text, k=k)
-        scores: List[IntentScore] = []
+        raw_scores: list[dict[str, float | str]] = []
         for raw_label, raw_prob_val in zip(labels, probs):
             label = raw_label.replace("__label__", "")
             raw_p = float(raw_prob_val)
+            raw_scores.append({"label": label, "raw_prob": raw_p})
+
+        biased_scores = apply_wh_prior_to_scores(text, raw_scores)
+        scores: List[IntentScore] = []
+        for entry in biased_scores:
+            label = str(entry["label"])
+            adjusted_raw = float(entry.get("adjusted_raw_prob", entry["raw_prob"]))
+            raw_logit = float(entry.get("raw_logit")) if entry.get("raw_logit") is not None else None
+            raw_logit_after_wh = float(entry.get("raw_logit_after_wh_prior")) if entry.get("raw_logit_after_wh_prior") is not None else None
             if self._calibration is not None and label in self._calibration:
                 A, B = self._calibration[label]
-                cal_p = self._platt_sigmoid(raw_p, A, B)
+                cal_p = self._platt_sigmoid(adjusted_raw, A, B)
             else:
-                cal_p = raw_p
-            scores.append(IntentScore(label=label, raw_prob=raw_p, calibrated_prob=cal_p))
+                cal_p = adjusted_raw
+            scores.append(
+                IntentScore(
+                    label=label,
+                    raw_prob=float(entry["raw_prob"]),
+                    calibrated_prob=cal_p,
+                    raw_logit=raw_logit,
+                    raw_logit_after_wh_prior=raw_logit_after_wh,
+                )
+            )
         return scores
 
     # ------------------------------------------------------------------

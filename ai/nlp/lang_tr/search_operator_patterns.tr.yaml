@@ -1,0 +1,9 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Patterns that indicate search-operator style queries or quoted exact-match search input."
+patterns:
+  - '\b(veya|ya da|yada)\b'
+  - '(?:^|\s)(?:\+|\-)\w+'
+  - '(?:^|\s)"[^"]+"'
+  - '(?:^|\s)(?:site:|inurl:|intitle:)'

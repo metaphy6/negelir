@@ -1,0 +1,397 @@
+version: 1
+schema_version: 1
+corpus:
+- id: code_switch-001
+  raw: Manchester City formdaymış
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-002
+  raw: Manchester City maçını ne zaman
+  locale: tr-TR
+  expected_intent: data.fixture_lookup
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: data_fixture_lookup
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-003
+  raw: Premier League puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-004
+  raw: City'nin kadrosu nasıl
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 1
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-005
+  raw: Manchester City bu hafta kimle oynuyor
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-006
+  raw: Premier League fikstürü nasıl
+  locale: tr-TR
+  expected_intent: summary.matchday
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_matchday
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-007
+  raw: Manchester City maçında kim sakat
+  locale: tr-TR
+  expected_intent: data.fixture_lookup
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: data_fixture_lookup
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-008
+  raw: Premier League'de lider kim
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-009
+  raw: Manchester City score grid
+  locale: tr-TR
+  expected_intent: predict.score_grid
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: predict_score_grid
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-010
+  raw: Premier League standings nasıl
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-011
+  raw: Galatasaraylar maçını ne zaman
+  locale: tr-TR
+  expected_intent: data.fixture_lookup
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray_sk
+    span_start: 0
+    span_end: 1
+  expected_template_id: data_fixture_lookup
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-012
+  raw: Galatasaraylar bugün kimle
+  locale: tr-TR
+  expected_intent: data.fixture_lookup
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray_sk
+    span_start: 0
+    span_end: 1
+  expected_template_id: data_fixture_lookup
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-013
+  raw: City'nin next match
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 1
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-014
+  raw: Premier League table show
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-015
+  raw: Manchester City's formu nasıl
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 1
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-016
+  raw: Premier League'de scoring average
+  locale: tr-TR
+  expected_intent: predict.score_grid
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: predict_score_grid
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-017
+  raw: Manchester City vs Fenerbahçe
+  locale: tr-TR
+  expected_intent: data.fixture_lookup
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  - kind: team
+    canonical_id: fenerbahce_sk
+    span_start: 3
+    span_end: 4
+  expected_template_id: data_fixture_lookup
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-018
+  raw: Premier League fixtures
+  locale: tr-TR
+  expected_intent: summary.matchday
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_matchday
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-019
+  raw: Manchester City over under
+  locale: tr-TR
+  expected_intent: predict.over_under
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: predict_over_under
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-020
+  raw: Galatasaraylar formu nasıl
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray_sk
+    span_start: 0
+    span_end: 1
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-021
+  raw: Manchester City next week match
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-022
+  raw: Premier League goals average
+  locale: tr-TR
+  expected_intent: predict.score_grid
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: predict_score_grid
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-023
+  raw: City maçını kaç gol
+  locale: tr-TR
+  expected_intent: predict.over_under
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 1
+  expected_template_id: predict_over_under
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-024
+  raw: Manchester City fixtures listesi
+  locale: tr-TR
+  expected_intent: summary.matchday
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_matchday
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-025
+  raw: Premier League'de bugün maç var mı
+  locale: tr-TR
+  expected_intent: summary.matchday
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_matchday
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-026
+  raw: Manchester City maçları
+  locale: tr-TR
+  expected_intent: summary.matchday
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_matchday
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-027
+  raw: Galatasaraylar kaçıncı sırada
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray_sk
+    span_start: 0
+    span_end: 1
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-028
+  raw: Manchester City's next game
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 1
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-029
+  raw: Premier League fixtures ne zaman
+  locale: tr-TR
+  expected_intent: summary.matchday
+  expected_entities:
+  - kind: league
+    canonical_id: en_premier_league
+    span_start: 0
+    span_end: 2
+  expected_template_id: summary_matchday
+  expected_disambiguation: false
+  tags:
+  - code_switch
+- id: code_switch-030
+  raw: Manchester City formda mı
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: manchester_city
+    span_start: 0
+    span_end: 2
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - code_switch

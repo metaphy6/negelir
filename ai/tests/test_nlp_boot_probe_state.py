@@ -1,10 +1,13 @@
 """Phase 10 §10.21.9 bug floor: liveness and readiness must diverge at boot."""
 
 import json
+import locale
 import pathlib
 import threading
 import time
 from typing import Iterable
+
+import pytest
 
 from swarm.agents.nlp import NlpBootProbeState
 from swarm.sdk import AgentRegistry, AgentRunner, InMemoryBus, Message

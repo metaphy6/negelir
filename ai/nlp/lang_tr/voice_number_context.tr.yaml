@@ -1,0 +1,21 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Voice-number context tie-break rules for speech-mode numeric interpretation."
+entries:
+  - context: time
+    resolution: digit
+  - context: scoring
+    resolution: ordinal
+  - context: cardinality
+    resolution: raw_number
+  - context: year
+    resolution: year
+  - context: temperature
+    resolution: digit
+  - context: attendance
+    resolution: digit
+  - context: period
+    resolution: ordinal
+  - context: distance
+    resolution: digit

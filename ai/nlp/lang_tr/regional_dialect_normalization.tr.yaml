@@ -1,0 +1,89 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.4"
+  notes: >
+    Closed regional dialect normalization rules for Phase 10 §10.32.4.
+    These rules rewrite dialectal forms to standard Turkish before tokenization.
+
+dialect_rules:
+  - id: "aegean_gidiyon"
+    spoken: "gidiyon"
+    canonical: "gidiyorsun"
+    dialect_class: "aegean"
+    audit_only: false
+  - id: "aegean_yapiyom"
+    spoken: "yapıyom"
+    canonical: "yapıyorum"
+    dialect_class: "aegean"
+    audit_only: false
+  - id: "aegean_haketiyon"
+    spoken: "haketiyon"
+    canonical: "hak ediyorsun"
+    dialect_class: "aegean"
+    audit_only: true
+  - id: "aegean_geziyon"
+    spoken: "geziyon"
+    canonical: "geziyorsun"
+    dialect_class: "aegean"
+    audit_only: false
+  - id: "black_sea_gelmişum"
+    spoken: "gelmişum"
+    canonical: "gelmişim"
+    dialect_class: "black_sea"
+    audit_only: false
+  - id: "black_sea_oynerum"
+    spoken: "oynerum"
+    canonical: "oynuyorum"
+    dialect_class: "black_sea"
+    audit_only: true
+  - id: "black_sea_olmuştu_mi"
+    spoken: "olmuştu mi"
+    canonical: "olmuş mu"
+    dialect_class: "black_sea"
+    audit_only: false
+  - id: "black_sea_habirim"
+    spoken: "habirim"
+    canonical: "haberim"
+    dialect_class: "black_sea"
+    audit_only: false
+  - id: "cypriot_oynayceği"
+    spoken: "oynayceği"
+    canonical: "oynayacağı"
+    dialect_class: "cypriot"
+    audit_only: false
+  - id: "cypriot_yenmiştir_mi"
+    spoken: "yenmiştir mi"
+    canonical: "yenmiş mi"
+    dialect_class: "cypriot"
+    audit_only: true
+  - id: "cypriot_biletvar"
+    spoken: "biletvar"
+    canonical: "bilet var"
+    dialect_class: "cypriot"
+    audit_only: false
+  - id: "cypriot_oynaceğiz"
+    spoken: "oynaçeğiz"
+    canonical: "oynayacağız"
+    dialect_class: "cypriot"
+    audit_only: false
+  - id: "diaspora_voetbalcı"
+    spoken: "voetbalcı"
+    canonical: "futbolcu"
+    dialect_class: "diaspora"
+    audit_only: false
+  - id: "diaspora_schalterda"
+    spoken: "schalterda"
+    canonical: "stadyumda"
+    dialect_class: "diaspora"
+    audit_only: true
+  - id: "diaspora_premier_ligesi"
+    spoken: "premier ligesi"
+    canonical: "premier liginde"
+    dialect_class: "diaspora"
+    audit_only: false
+  - id: "diaspora_voetbal_game"
+    spoken: "voetbal game"
+    canonical: "futbol maçı"
+    dialect_class: "diaspora"
+    audit_only: false

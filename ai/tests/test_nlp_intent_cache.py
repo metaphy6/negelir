@@ -11,6 +11,8 @@ Tests cover:
 from __future__ import annotations
 
 import time
+from typing import List
+
 from ai.common.config import Config
 from ai.nlp._intent_cache import IntentCache
 
@@ -219,3 +221,67 @@ def test_intent_cache_config_integration():
     cache.put("smoke", "tr-TR", "meta.unsupported", 0.5, "hash")
     result = cache.get("smoke", "tr-TR")
     assert result is not None
+
+
+def test_l0_cache_key_includes_pod_id_salt():
+    """The L0 cache key includes the configured pod_id salt."""
+    cache_a = IntentCache(max_entries=10, ttl_s=300, pod_id="pod-a")
+    cache_b = IntentCache(max_entries=10, ttl_s=300, pod_id="pod-b")
+
+    assert cache_a._make_key("same", "tr-TR", 4, "1.0") != cache_b._make_key("same", "tr-TR", 4, "1.0")
+
+
+def test_l0_cache_key_uses_128bit_prefix_not_64bit():
+    """Cache key aliases are 16-byte prefixes, not 8-byte truncations."""
+    cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
+    key = cache._make_key("same", "tr-TR", 4, "1.0")
+    assert len(key) == 32
+
+
+def test_l0_cache_namespaced_by_schema_version():
+    """Same surface query under different schema or calibration versions miss each other."""
+    cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
+    cache.put(
+        normalized_text="hello",
+        locale="tr-TR",
+        intent="meta.unsupported",
+        intent_confidence=0.5,
+        entity_hash="hash1",
+        schema_version=3,
+        calibration_version="1.0",
+    )
+
+    assert cache.get("hello", "tr-TR", schema_version=4, calibration_version="1.0") is None
+    assert cache.get("hello", "tr-TR", schema_version=3, calibration_version="1.0") is not None
+
+
+def test_l0_cache_collision_emits_critical_alert_and_redo_rpc():
+    """A truncated key collision is detected, the entry is dropped, and an alert callback fires."""
+    calls: List[bool] = []
+
+    def alert():
+        calls.append(True)
+
+    cache = IntentCache(
+        max_entries=10,
+        ttl_s=300,
+        pod_id="pod",
+        collision_alert_callback=alert,
+    )
+    cache.put(
+        normalized_text="collision",
+        locale="tr-TR",
+        intent="meta.unsupported",
+        intent_confidence=0.4,
+        entity_hash="hash",
+        schema_version=4,
+        calibration_version="1.0",
+    )
+
+    key = cache._make_key("collision", "tr-TR", 4, "1.0")
+    stored = cache._cache[key]
+    stored.subject_key_full_sha256 = "deadbeef" * 8
+
+    result = cache.get("collision", "tr-TR", schema_version=4, calibration_version="1.0")
+    assert result is None
+    assert calls == [True]

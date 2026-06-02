@@ -24,9 +24,12 @@ from __future__ import annotations
 
 import datetime
 import re
+from pathlib import Path
 from typing import Callable, NamedTuple
 
-from common.text.turkish import lowercase_tr
+import yaml
+
+from common.text.turkish import lowercase_tr, parse_number_word
 
 # ── Public types ──────────────────────────────────────────────────────────
 
@@ -71,28 +74,60 @@ _MONTHS_TR: dict[str, int] = {
 
 _WEEKDAYS_TR: dict[str, int] = {
     "pazartesi": 0,
+    "pzt": 0,
     "salı": 1,
+    "sal": 1,
     "çarşamba": 2,
+    "çar": 2,
     "perşembe": 3,
+    "per": 3,
     "cuma": 4,
+    "cum": 4,
     "cumartesi": 5,
+    "cmt": 5,
     "pazar": 6,
+    "paz": 6,
 }
 
 # ── Compiled regex patterns ───────────────────────────────────────────────
 
-# "saat 21:30" or bare "21:30" — match anywhere in the string
-_TIME_RE = re.compile(r"(?:saat\s+)?(\d{1,2}):(\d{2})")
+# "saat 21:30", "21:30", "21.30", "21,30", "saat 9", "21'de" / "21de"
+_TIME_SAAT_RE = re.compile(r"saat\s+(\d{1,2})(?:(?:[:.,](\d{2}))?)")
+_TIME_BARE_RE = re.compile(r"\b(\d{1,2})[:.,](\d{2})\b")
+_TIME_LOCATIVE_RE = re.compile(r"\b(\d{1,2})'?(de|da)\b")
 
-# "27 nisan" or "27 nisan 2026" — Turkish locale, case-insensitive via
+# "27 nisan" or "27nisan" or "27 nisan 2026" — Turkish locale, case-insensitive via
 # caller-side lowercase_tr so the regex literals use already-lowercased forms.
 _DATE_RE = re.compile(
-    r"(\d{1,2})\s+(" + "|".join(re.escape(m) for m in _MONTHS_TR) + r")(?:\s+(\d{4}))?",
+    r"(\d{1,2})\s*(" + "|".join(re.escape(m) for m in _MONTHS_TR) + r")(?:\s+(\d{4}))?"
 )
+
+# "27/04", "27.04", "27.04.2026" — numeric day/month forms accepted in Turkish input.
+_DATE_NUMERIC_RE = re.compile(r"\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{4}))?\b")
+
+_TIME_OF_DAY_PHRASE_RE = re.compile(
+    r"\b(gece yarısı|öğleden önce|öğleden sonra|akşam|sabah|gece)\b"
+)
+_TIME_OF_DAY_NUMERIC_RE = re.compile(
+    r"\b(akşam|sabah|öğleden önce|öğleden sonra|gece)\s+(?:saat\s+)?(\d{1,2})(?:(?:[:.,](\d{2}))?)?\b"
+)
+
+_DEFAULT_HOLIDAY_LOOKUP_HORIZON_DAYS = 540
+_HOLIDAY_CONFIG_PATH = Path(__file__).resolve().parent / "dates" / "holidays_tr.yaml"
+
+class _HolidayDefinition(NamedTuple):
+    key: str
+    aliases: tuple[str, ...]
+    date_kind: str
+    fixed_month: int | None
+    fixed_day: int | None
 
 _TWO_HOURS = datetime.timedelta(hours=2)
 _ONE_DAY = datetime.timedelta(days=1)
 _ONE_WEEK = datetime.timedelta(weeks=1)
+
+_DEFAULT_DATE_WINDOW_DAYS = 180
+_DEFAULT_TIME_DEFAULT_PERIOD = "am"
 
 # ── Resolver ─────────────────────────────────────────────────────────────
 
@@ -109,8 +144,20 @@ class DateTimeResolver:
         the clock without monkey-patching globals.
     """
 
-    def __init__(self, clock_now: Callable[[], datetime.datetime]) -> None:
+    def __init__(
+        self,
+        clock_now: Callable[[], datetime.datetime],
+        date_default_window_days: int = _DEFAULT_DATE_WINDOW_DAYS,
+        time_default_period: str = _DEFAULT_TIME_DEFAULT_PERIOD,
+        holiday_lookup_horizon_days: int = _DEFAULT_HOLIDAY_LOOKUP_HORIZON_DAYS,
+    ) -> None:
+        if time_default_period not in {"am", "pm"}:
+            raise ValueError("time_default_period must be 'am' or 'pm'")
+
         self._clock_now = clock_now
+        self._date_default_window = datetime.timedelta(days=date_default_window_days)
+        self._time_default_period = time_default_period
+        self._holiday_lookup_horizon = datetime.timedelta(days=holiday_lookup_horizon_days)
 
     # ------------------------------------------------------------------
     # Public API
@@ -132,14 +179,40 @@ class DateTimeResolver:
 
         # ── 1. Extract optional time component ────────────────────────
         time_delta: datetime.timedelta | None = None
-        time_m = _TIME_RE.search(text_lower)
+        time_m = _TIME_SAAT_RE.search(text_lower)
         if time_m:
-            h, m_min = int(time_m.group(1)), int(time_m.group(2))
+            h = int(time_m.group(1))
+            m_min = int(time_m.group(2) or 0)
             if 0 <= h < 24 and 0 <= m_min < 60:
                 time_delta = datetime.timedelta(hours=h, minutes=m_min)
-            # Out-of-range values (e.g. "saat 25:00") → ignore, fall through
 
-        # ── 2. Explicit date: "27 nisan" / "27 nisan 2026" ────────────
+        if time_delta is None:
+            time_m = _TIME_BARE_RE.search(text_lower)
+            if time_m:
+                h, m_min = int(time_m.group(1)), int(time_m.group(2))
+                if 0 <= h < 24 and 0 <= m_min < 60:
+                    time_delta = datetime.timedelta(hours=h, minutes=m_min)
+
+        if time_delta is None:
+            time_m = _TIME_OF_DAY_NUMERIC_RE.search(text_lower)
+            if time_m:
+                period = time_m.group(1)
+                h = int(time_m.group(2))
+                m_min = int(time_m.group(3) or 0)
+                if 0 <= h < 24 and 0 <= m_min < 60:
+                    time_delta = self._resolve_time(h, m_min, period)
+
+        if time_delta is None:
+            time_m = _TIME_LOCATIVE_RE.search(text_lower)
+            if time_m:
+                h = int(time_m.group(1))
+                if 0 <= h < 24:
+                    time_delta = datetime.timedelta(hours=h, minutes=0)
+
+        if time_delta is None and "gece yarısı" in text_lower:
+            time_delta = datetime.timedelta(hours=0)
+
+        # ── 2. Explicit date: "27 nisan" / "27nisan" / "27 nisan 2026" ─
         date_m = _DATE_RE.search(text_lower)
         if date_m:
             day = int(date_m.group(1))
@@ -151,7 +224,32 @@ class DateTimeResolver:
                 )
             except ValueError:
                 return None
+            if date_m.group(3) is None:
+                base_date = self._apply_year_omission_window(base_date, now)
             return self._apply_time(base_date, time_delta)
+
+        date_m = _DATE_NUMERIC_RE.search(text_lower)
+        if date_m:
+            day = int(date_m.group(1))
+            month = int(date_m.group(2))
+            year = int(date_m.group(3)) if date_m.group(3) else now.year
+            try:
+                base_date = datetime.datetime(
+                    year, month, day, tzinfo=datetime.timezone.utc
+                )
+            except ValueError:
+                # Numeric strings like "21.30" are also valid time-only forms.
+                # Only return None if no other temporal resolution exists.
+                if time_delta is None:
+                    return None
+            else:
+                if date_m.group(3) is None:
+                    base_date = self._apply_year_omission_window(base_date, now)
+                return self._apply_time(base_date, time_delta)
+
+        holiday_date = self._resolve_holiday(text_lower, now)
+        if holiday_date is not None:
+            return self._apply_time(holiday_date, time_delta)
 
         # ── 3. Relative day keywords ───────────────────────────────────
         if "bugün" in text_lower:
@@ -198,6 +296,71 @@ class DateTimeResolver:
 
         return None
 
+    def _resolve_time(
+        self,
+        hour: int,
+        minute: int,
+        period: str | None,
+    ) -> datetime.timedelta:
+        if period == "midnight":
+            hour = 0
+        elif period in ("sabah", "öğleden önce"):  # explicit morning anchors
+            if hour == 12:
+                hour = 0
+        elif period in ("akşam", "öğleden sonra", "gece"):  # evening anchors
+            if hour < 12:
+                hour += 12
+        elif period == "am":
+            if hour == 12:
+                hour = 0
+        elif period == "pm":
+            if hour < 12:
+                hour += 12
+        elif self._time_default_period == "pm" and 1 <= hour <= 11:
+            hour += 12
+        return datetime.timedelta(hours=hour, minutes=minute)
+
+    def _apply_year_omission_window(
+        self,
+        base_date: datetime.datetime,
+        now: datetime.datetime,
+    ) -> datetime.datetime:
+        if base_date >= now:
+            return base_date
+        next_year = base_date.replace(year=base_date.year + 1)
+        if next_year <= now + self._date_default_window:
+            return next_year
+        return base_date
+
+    def _resolve_holiday(self, text_lower: str, now: datetime.datetime) -> datetime.datetime | None:
+        for holiday in _HOLIDAY_DEFINITIONS:
+            for alias in holiday.aliases:
+                if _word_in(alias, text_lower):
+                    return self._resolve_holiday_date(holiday, now)
+        return None
+
+    def _resolve_holiday_date(
+        self,
+        holiday: _HolidayDefinition,
+        now: datetime.datetime,
+    ) -> datetime.datetime | None:
+        if holiday.date_kind != "fixed_gregorian" or holiday.fixed_month is None or holiday.fixed_day is None:
+            return None
+
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        candidate = datetime.datetime(
+            today_start.year,
+            holiday.fixed_month,
+            holiday.fixed_day,
+            tzinfo=datetime.timezone.utc,
+        )
+        if candidate < today_start:
+            candidate = candidate.replace(year=candidate.year + 1)
+
+        if candidate - today_start > self._holiday_lookup_horizon:
+            return None
+        return candidate
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -215,6 +378,49 @@ class DateTimeResolver:
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
+
+def _load_holiday_definitions() -> tuple["_HolidayDefinition", ...]:
+    try:
+        raw = yaml.safe_load(_HOLIDAY_CONFIG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return ()
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("holiday definitions must be a YAML list")
+
+    definitions: list[_HolidayDefinition] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("holiday definition entries must be mapping objects")
+        key = str(item["key"])
+        date_kind = str(item["date_kind"])
+        aliases = tuple(
+            lowercase_tr(str(alias))
+            for alias in item.get("name_aliases", [])
+            if alias is not None
+        )
+        fixed_month = None
+        fixed_day = None
+        if date_kind == "fixed_gregorian":
+            fixed_md = str(item["fixed_md"])
+            month_str, day_str = fixed_md.split("-")
+            fixed_month = int(month_str)
+            fixed_day = int(day_str)
+        definitions.append(
+            _HolidayDefinition(
+                key=key,
+                aliases=aliases,
+                date_kind=date_kind,
+                fixed_month=fixed_month,
+                fixed_day=fixed_day,
+            )
+        )
+    return tuple(definitions)
+
+_HOLIDAY_DEFINITIONS = _load_holiday_definitions()
+
 
 def _word_in(word: str, text: str) -> bool:
     """Return True when *word* appears as a whole token in *text*.

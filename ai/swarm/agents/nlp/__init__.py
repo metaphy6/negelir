@@ -49,7 +49,9 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib as _hashlib
 import hmac as _hmac
+import locale
 import logging
+import re
 import threading as _threading
 import time as _time
 from typing import Callable, Iterable
@@ -59,20 +61,29 @@ import stat
 from uuid import uuid4
 
 from common.security.patterns import PII_PATTERNS
+from common.security.tr_pii import parse_redacted_tr_pii
 
+from ...sdk import AlertDebouncer
 from ...sdk.types import Message
 from ..topics import (
     DATA_REQUEST_V1,
     NLP_ALERT_V1,
     NLP_EVENT_V1,
     PREDICT_APPROVED,
+    PREDICT_CANCEL_V1,
     PREDICT_REQUEST_V1,
     QA_ANSWER_V1,
+    QA_CONTEXT_V1,
     QA_INTENT_V1,
     QA_REQUEST_V1,
 )
 from ._bus_circuit_breaker import NlpBusCircuitBreaker
+from nlp.compat import validate_compatibility_matrix
+from nlp.conversation import ConversationStore
 from ._log_filter import PIIScrubFilter, add_log_filter
+from nlp.aspectual_stack import detect_aspectual_stack
+from nlp.quotative import detect_quotative_frame
+from nlp.render import _resolve_locale_tag
 
 # ── internal helpers ──────────────────────────────────────────────────────
 
@@ -131,6 +142,129 @@ def _redact_value_with_pii_patterns(value: object) -> object:
             for key, item in value.items()
         }
     return value
+
+
+def _sha256_hex(value: str) -> str:
+    return _hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _canonical_lexicon_snapshot_sha(lexicon_versions: object) -> str:
+    if not isinstance(lexicon_versions, dict):
+        return ""
+    pairs = sorted(
+        f"{str(key)}:{str(value)}"
+        for key, value in lexicon_versions.items()
+        if isinstance(key, str)
+    )
+    return _sha256_hex("|".join(pairs))
+
+
+def _nlp_audit_bundle_dir(bundle_sha: str) -> str:
+    return os.path.join("data", "nlp", "audit_bundles", bundle_sha)
+
+
+def _write_bundle_file(bundle_path: str, rel_path: str, contents: str) -> None:
+    path = os.path.join(bundle_path, rel_path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(contents)
+    os.chmod(path, 0o600)
+
+
+def _write_bundle_json(bundle_path: str, rel_path: str, data: object) -> None:
+    path = os.path.join(bundle_path, rel_path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        import json
+
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.chmod(path, 0o600)
+
+
+def _canonical_templates_dir() -> Path:
+    return Path(__file__).resolve().parents[3] / "nlp" / "templates"
+
+
+def _write_bundle_templates(bundle_path: str) -> None:
+    template_dir = _canonical_templates_dir()
+    if not template_dir.exists():
+        return
+    for path in sorted(template_dir.rglob("*.j2")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(template_dir)
+        sha = _hashlib.sha256(path.read_bytes()).hexdigest()
+        rel_path = os.path.join("templates", f"{rel.as_posix()}.sha256")
+        _write_bundle_file(bundle_path, rel_path, sha)
+
+
+def _maybe_create_nlp_audit_bundle(envelope: dict[str, object]) -> None:
+    from common.config import cfg
+
+    bundle_sha = _nlp_audit_bundle_sha(envelope)
+    bundle_path = _nlp_audit_bundle_dir(bundle_sha)
+    manifest_path = os.path.join(bundle_path, "manifest.json")
+    if os.path.exists(manifest_path):
+        return
+
+    lexicon_versions = envelope.get("lexicon_versions", {})
+    lexicon_snapshot_sha = _canonical_lexicon_snapshot_sha(lexicon_versions)
+    intent_model_sha = str(getattr(cfg, "nlp_intent_model_sha256", "") or "")
+    crf_model_sha = str(getattr(cfg, "nlp_entity_crf_model_sha256", "") or "")
+    calibration_version = str(envelope.get("calibration_version", "") or "")
+    template_git_sha = str(getattr(cfg, "nlp_template_git_sha", "") or "")
+    pipeline_version = str(envelope.get("nlp_pipeline_version", "") or "")
+
+    os.makedirs(bundle_path, exist_ok=True)
+    os.chmod(bundle_path, 0o700)
+    _write_bundle_json(bundle_path, "manifest.json", {
+        "bundle_sha": bundle_sha,
+        "lexicon_snapshot_sha": lexicon_snapshot_sha,
+        "intent_model_sha256": intent_model_sha,
+        "crf_model_sha256": crf_model_sha,
+        "calibration_version": calibration_version,
+        "template_git_sha": template_git_sha,
+        "pipeline_version": pipeline_version,
+        "first_observed_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "retention_class": "legal_hold",
+    })
+
+    if isinstance(lexicon_versions, dict):
+        for key, value in sorted(lexicon_versions.items()):
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            name = f"{key}.tr.yaml.sha256"
+            _write_bundle_file(bundle_path, os.path.join("lexicons", name), value)
+
+    _write_bundle_file(bundle_path, "intent.tr.bin.sha256", intent_model_sha)
+    _write_bundle_file(bundle_path, "crf.tr.model.sha256", crf_model_sha)
+    _write_bundle_templates(bundle_path)
+
+
+def _nlp_audit_bundle_sha(envelope: dict[str, object]) -> str:
+    from common.config import cfg
+
+    lexicon_snapshot_sha = _canonical_lexicon_snapshot_sha(
+        envelope.get("lexicon_versions", {})
+    )
+    intent_model_sha = str(getattr(cfg, "nlp_intent_model_sha256", "") or "")
+    crf_model_sha = str(getattr(cfg, "nlp_entity_crf_model_sha256", "") or "")
+    calibration_version = str(envelope.get("calibration_version", "") or "")
+    template_git_sha = str(getattr(cfg, "nlp_template_git_sha", "") or "")
+    pipeline_version = str(envelope.get("nlp_pipeline_version", "") or "")
+
+    return _sha256_hex(
+        "|".join(
+            [
+                lexicon_snapshot_sha,
+                intent_model_sha,
+                crf_model_sha,
+                calibration_version,
+                template_git_sha,
+                pipeline_version,
+            ]
+        )
+    )
 
 
 def _entity_hash(entities: list) -> str:
@@ -228,6 +362,33 @@ def _enforce_nlp_spool_audit_dir_modes() -> None:
         raise RuntimeError(
             "NLP startup refused: insecure spool/audit file modes; "
             + "; ".join(violations)
+        )
+
+
+def _enforce_nlp_runtime_locale() -> None:
+    from common.config import cfg
+
+    locale_required = str(cfg.nlp_runtime_locale or "").strip()
+    if not locale_required:
+        raise RuntimeError(
+            "NLP startup refused: nlp_runtime_locale is not configured; "
+            "must be tr_TR.UTF-8 or und-TR"
+        )
+
+    try:
+        actual = locale.setlocale(locale.LC_CTYPE, locale_required)
+    except locale.Error as exc:
+        raise RuntimeError(
+            "NLP startup refused: nlp_runtime_locale mismatch; "
+            "failed to set LC_CTYPE to the required locale. "
+            "Expected tr_TR.UTF-8 or und-TR."
+        ) from exc
+
+    normalized_actual = actual.replace("-", "_").lower()
+    if not normalized_actual.startswith(("tr_tr", "und_tr")):
+        raise RuntimeError(
+            "NLP startup refused: nlp_runtime_locale_mismatch; "
+            f"LC_CTYPE resolved to {actual!r} instead of tr_TR.UTF-8 or und-TR"
         )
 
 
@@ -430,7 +591,7 @@ class NlpIntentAgent:
     """
 
     name = "nlp.intent.v1"
-    subscribes = [QA_REQUEST_V1]
+    subscribes = [QA_REQUEST_V1, QA_CONTEXT_V1]
     publishes = [QA_INTENT_V1, NLP_EVENT_V1, NLP_ALERT_V1]
 
     def __init__(
@@ -442,6 +603,12 @@ class NlpIntentAgent:
         add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._monotonic = monotonic or _time.monotonic
         _enforce_nlp_spool_audit_dir_modes()
+        self._conversation_store = ConversationStore()
+        self._tr_pii_alert_debouncer = AlertDebouncer(
+            ttl_s=600,
+            max_buckets=10_000,
+            clock=self._monotonic,
+        )
         # §10.13 producer-side deduper (lazy-init from cfg).
         self._deduper = deduper
         self._deduper_lock = _threading.Lock()
@@ -460,16 +627,94 @@ class NlpIntentAgent:
                     )
         return self._deduper
 
-    def handle(self, msg: Message) -> Iterable[Message]:
-        """Process qa.request.v1 → qa.intent.v1 (stub for §10.1–§10.5).
+    def _make_tr_pii_alert(self, request_id: str, kind: str, subject: str) -> Message:
+        return Message.new(
+            topic=NLP_ALERT_V1,
+            payload={
+                "kind": kind,
+                "producer": self.name,
+                "request_id": request_id or None,
+                "subject": subject,
+                "severity": "warn",
+                "emitted_at": _utc_iso(),
+            },
+            producer=self.name,
+        )
 
-        §10.13 idempotency: dedup on request_id at ingress.
+    def _with_tr_pii_alerts(self, results: list[Message], payload: dict[str, object]) -> list[Message]:
+        alerts: list[Message] = []
+        request_id = str(payload.get("request_id", ""))
+        sanitized_text = str(payload.get("sanitized_text", ""))
+        for kind, subject in parse_redacted_tr_pii(sanitized_text):
+            alert_kind = f"nlp_pii_in_input_{kind.lower()}"
+            decision = self._tr_pii_alert_debouncer.decide(
+                kind=alert_kind,
+                subject=subject,
+                severity="warn",
+                reason=f"tr_pii_detected:{kind}",
+            )
+            if not decision.emit:
+                continue
+            alerts.append(self._make_tr_pii_alert(request_id, alert_kind, subject))
+        return results + alerts
+
+    def handle(self, msg: Message) -> Iterable[Message]:
+        """Process qa.request.v1 / qa.context.v1 for intent classification.
+
+        §10.13 idempotency: dedup on request_id at ingress for qa.request.v1.
         """
-        request_id = str(msg.payload.get("request_id", ""))
-        if self._get_deduper().seen(request_id):  # type: ignore[union-attr]
+        if msg.topic == QA_CONTEXT_V1:
+            raw_conversation_id = msg.payload.get("conversation_id")
+            conversation_id = str(raw_conversation_id).strip() if isinstance(raw_conversation_id, str) else ""
+            if conversation_id:
+                self._conversation_store.save(msg.payload)
             return []
-        # Stub: full implementation lands in §10.1–§10.5 bullets.
+
+        if msg.topic == QA_REQUEST_V1:
+            raw_conversation_id = msg.payload.get("conversation_id")
+            conversation_id = str(raw_conversation_id).strip() if isinstance(raw_conversation_id, str) else ""
+            if conversation_id:
+                self._conversation_store.load(conversation_id)
+            request_id = str(msg.payload.get("request_id", ""))
+            if self._get_deduper().seen(request_id):  # type: ignore[union-attr]
+                return []
+
+            locale = msg.payload.get("locale")
+            requested_locale = str(locale).strip() if isinstance(locale, str) else ""
+            resolved_locale = _resolve_locale_tag(requested_locale)
+            if resolved_locale != requested_locale:
+                return self._with_tr_pii_alerts(
+                    [
+                        self._make_locale_fallback_event(
+                            request_id=request_id,
+                            requested=requested_locale,
+                            resolved=resolved_locale,
+                        )
+                    ],
+                    msg.payload,
+                )
+            return self._with_tr_pii_alerts([], msg.payload)
+
         return []
+
+    def _make_locale_fallback_event(
+        self,
+        request_id: str,
+        requested: str,
+        resolved: str,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "locale_fallback_used",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "requested": requested,
+                "resolved": resolved,
+                "emitted_at": _utc_iso(),
+            },
+            producer=self.name,
+        )
 
 
 class NlpDispatcherAgent:
@@ -503,6 +748,7 @@ class NlpDispatcherAgent:
     publishes = [
         PREDICT_REQUEST_V1,
         DATA_REQUEST_V1,
+        QA_CONTEXT_V1,
         QA_ANSWER_V1,
         NLP_EVENT_V1,
         NLP_ALERT_V1,
@@ -521,6 +767,13 @@ class NlpDispatcherAgent:
         _enforce_nlp_spool_audit_dir_modes()
         self._new_id = new_id or _new_id
         self._monotonic = monotonic or _time.monotonic
+        self._conversation_store = ConversationStore()
+        self._conversation_entity_override_debouncer = AlertDebouncer(
+            ttl_s=60,
+            max_buckets=1_000,
+            clock=self._monotonic,
+        )
+        self._conversation_explicit_override_kinds = self._load_explicit_override_kinds()
         # §10.6 idempotency: lazy-init deduper (cfg not available at class load).
         self._deduper = deduper  # None → created on first handle() call
         self._deduper_lock = _threading.Lock()
@@ -539,6 +792,98 @@ class NlpDispatcherAgent:
                     )
         return self._deduper
 
+    def _load_explicit_override_kinds(self) -> frozenset[str]:
+        try:
+            import yaml
+
+            path = Path(__file__).resolve().parents[4] / "nlp" / "conversation" / "precedence.tr.yaml"
+            if not path.exists():
+                return frozenset()
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            return frozenset(
+                kind
+                for kind in data.get("explicit_override_kinds", [])
+                if isinstance(kind, str)
+            )
+        except Exception:
+            return frozenset()
+
+    def _merge_conversation_entities(
+        self,
+        previous_entities: list[dict[str, object]],
+        current_entities: list[dict[str, object]],
+    ) -> tuple[list[dict[str, object]], bool]:
+        current_kinds = {
+            str(entity.get("kind"))
+            for entity in current_entities
+            if isinstance(entity.get("kind"), str) and entity.get("canonical_id") is not None
+        }
+        if self._conversation_explicit_override_kinds:
+            current_kinds &= self._conversation_explicit_override_kinds
+
+        override_occurred = False
+        previous_by_kind: dict[str, list[dict[str, object]]] = {}
+        for entity in previous_entities:
+            kind = entity.get("kind")
+            if isinstance(kind, str):
+                previous_by_kind.setdefault(kind, []).append(entity)
+
+        for entity in current_entities:
+            kind = entity.get("kind")
+            if not isinstance(kind, str):
+                continue
+            canonical_id = entity.get("canonical_id")
+            if canonical_id is None:
+                continue
+            for prior in previous_by_kind.get(kind, []):
+                if prior.get("canonical_id") != canonical_id:
+                    override_occurred = True
+                    break
+            if override_occurred:
+                break
+
+        merged_entities = [
+            entity
+            for entity in previous_entities
+            if not (
+                isinstance(entity.get("kind"), str)
+                and entity.get("kind") in current_kinds
+            )
+        ]
+        merged_entities.extend(current_entities)
+        return merged_entities, override_occurred
+
+    def _make_conversation_entity_overridden_event(
+        self,
+        request_id: str,
+        conversation_id: str,
+        overridden_kinds: list[str],
+    ) -> Message | None:
+        if not overridden_kinds:
+            return None
+
+        decision = self._conversation_entity_override_debouncer.decide(
+            kind="conversation_entity_overridden",
+            subject=conversation_id,
+            severity="info",
+            reason="conversation_entity_overridden",
+        )
+        if not decision.emit:
+            return None
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "conversation_entity_overridden",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "conversation_id": conversation_id,
+                "overridden_kinds": overridden_kinds,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
     def handle(self, msg: Message) -> Iterable[Message]:
         """Route qa.intent.v1 to the appropriate downstream action.
 
@@ -556,12 +901,64 @@ class NlpDispatcherAgent:
         intent: str = str(payload.get("intent", ""))
         entities: list = list(payload.get("entities", []))
         request_id: str = str(payload.get("request_id", ""))
+        raw_conversation_id = payload.get("conversation_id")
+        conversation_id = str(raw_conversation_id).strip() if isinstance(raw_conversation_id, str) else ""
+        context_msg: Message | None = None
+
+        override_event: Message | None = None
+        if conversation_id:
+            context = self._conversation_store.load(conversation_id)
+            turn_index = 0 if context is None else int(context.get("turn_index", -1)) + 1
+            if turn_index >= int(cfg.nlp_conversation_max_turns):
+                self._conversation_store.clear(conversation_id)
+                context = None
+                turn_index = 0
+
+            previous_entities = list(context.get("entities", [])) if context else []
+            merged_entities, override_occurred = self._merge_conversation_entities(
+                previous_entities,
+                entities,
+            )
+            if override_occurred:
+                overridden_kinds = sorted({
+                    str(entity.get("kind"))
+                    for entity in entities
+                    if isinstance(entity.get("kind"), str)
+                })
+                override_event = self._make_conversation_entity_overridden_event(
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    overridden_kinds=overridden_kinds,
+                )
+
+            context_payload = {
+                "schema_version": 1,
+                "conversation_id": conversation_id,
+                "turn_index": turn_index,
+                "entities": merged_entities,
+                "intent": intent,
+                "expires_at_utc": self._clock_iso(),
+            }
+            self._conversation_store.save(context_payload)
+            context_msg = Message.new(
+                topic=QA_CONTEXT_V1,
+                payload=context_payload,
+                producer=self.name,
+            )
+
+        def _with_context(results: Iterable[Message]) -> list[Message]:
+            out = list(results)
+            if override_event is not None:
+                out.append(override_event)
+            if context_msg is not None:
+                out.append(context_msg)
+            return out
 
         # ── §10.6 idempotency — dedup before any routing ───────────────────
         qa_corr_in: str = str(payload.get("qa_correlation_id") or "")
         dedup_key = f"{qa_corr_in}:{intent}:{_entity_hash(entities)}"
         if self._get_deduper().seen(dedup_key):  # type: ignore[union-attr]
-            return []
+            return _with_context([])
 
         # ── §10.6 multi-fixture fan-out ────────────────────────────────────
         if intent in _SUMMARY_INTENTS:
@@ -571,7 +968,14 @@ class NlpDispatcherAgent:
             ]
             if not fixture_entities:
                 # No fixture anchors → disambiguation
-                return self._make_disambiguation(request_id, intent, cfg)
+                return _with_context(
+                    self._make_disambiguation(
+                        request_id,
+                        intent,
+                        cfg,
+                        conversation_id=conversation_id or None,
+                    )
+                )
             max_f = cfg.nlp_summary_max_fixtures
             capped = fixture_entities[:max_f]
             summary_corr = self._new_id()
@@ -596,7 +1000,138 @@ class NlpDispatcherAgent:
                         producer=self.name,
                     )
                 )
-            return out
+            return _with_context(out)
+
+        # ── §10.22.5 composite-abbreviation match separator ────────────────
+        if intent == "data.fixture_lookup":
+            normalized_text = str(payload.get("normalized_text", ""))
+            match = self._match_separator_team_pair(
+                normalized_text,
+                entities,
+                cfg,
+            )
+            if match is None:
+                match = self._match_word_bridge_team_pair(
+                    normalized_text,
+                    entities,
+                    cfg,
+                )
+            if match is None:
+                match = self._match_co_token_team_pair(
+                    normalized_text,
+                    entities,
+                    cfg,
+                )
+            if match is not None:
+                left_id, right_id = match
+                fixture_filter = self._match_fixture_date_filter(
+                    normalized_text,
+                    entities,
+                    left_id,
+                    right_id,
+                    cfg,
+                )
+                return _with_context(self._make_data_fixture_lookup_request(
+                    request_id,
+                    qa_corr_in,
+                    left_id,
+                    right_id,
+                    fixture_filter=fixture_filter,
+                ))
+
+        if intent.startswith("data.") and intent != "data.fixture_lookup":
+            return _with_context(self._make_data_request(request_id, qa_corr_in, intent))
+
+        normalized_text = str(payload.get("normalized_text", ""))
+        quotative = detect_quotative_frame(normalized_text)
+        if quotative is not None and quotative.confidence >= cfg.nlp_quotative_min_confidence:
+            out: list[Message] = []
+            out.append(self._make_quotative_frame_detected_event(request_id, qa_corr_in, quotative))
+            if quotative.frame_class in ("direct_quote_marker", "attributed_source", "evidential_hearsay_compound"):
+                out.extend(
+                    self._make_data_request(
+                        request_id,
+                        qa_corr_in,
+                        "data.attributed_claim",
+                        extra_params={"quotative_negation": quotative.negated} if quotative.negated else None,
+                    )
+                )
+                return _with_context(out)
+            if quotative.frame_class == "social_media_attribution":
+                return _with_context(out)
+
+        aspectual = detect_aspectual_stack(normalized_text, max_depth=int(cfg.nlp_aspectual_stack_max_depth))
+        if aspectual is not None and intent.startswith("predict."):
+            out: list[Message] = []
+            out.append(
+                self._make_aspectual_stack_resolved_event(
+                    request_id,
+                    qa_corr_in,
+                    aspectual.modality_class,
+                    aspectual.confidence,
+                )
+            )
+            if aspectual.modality_class == "future_perfect_evidential":
+                out.append(
+                    self._make_meta_answer(
+                        request_id,
+                        qa_corr_in,
+                        "meta.counterfactual_probe",
+                        "Olması durumunda nasıl olurdu sorusuna cevap veremem.",
+                        conversation_id=conversation_id or None,
+                    )
+                )
+                return _with_context(out)
+            if aspectual.modality_class == "perfect_modal_potential":
+                out.append(
+                    self._make_meta_answer(
+                        request_id,
+                        qa_corr_in,
+                        "meta.modality_unsupported",
+                        "Bu tür modalite sorgusuna destek veremem.",
+                        conversation_id=conversation_id or None,
+                    )
+                )
+                return _with_context(out)
+            if aspectual.modality_class == "imminent_progressive":
+                out.extend(
+                    self._make_data_request(
+                        request_id,
+                        qa_corr_in,
+                        "data.live_state",
+                    )
+                )
+                return _with_context(out)
+            if aspectual.modality_class == "progressive_epistemic":
+                out.extend(
+                    self._make_data_request(
+                        request_id,
+                        qa_corr_in,
+                        "data.fixture_lookup",
+                        extra_params={"state": "in_play"},
+                    )
+                )
+                return _with_context(out)
+            if aspectual.modality_class == "future_relative_clause_attributive":
+                out.extend(
+                    self._make_data_request(
+                        request_id,
+                        qa_corr_in,
+                        "data.lineup_probable",
+                    )
+                )
+                return _with_context(out)
+            if aspectual.modality_class == "progressive_inferential":
+                out.append(
+                    self._make_meta_answer(
+                        request_id,
+                        qa_corr_in,
+                        "meta.modality_unsupported",
+                        "Bu tür modalite sorgusuna destek veremem.",
+                        conversation_id=conversation_id or None,
+                    )
+                )
+                return _with_context(out)
 
         # ── §10.6 deterministic backoff ────────────────────────────────────
         if intent.startswith("predict."):
@@ -607,15 +1142,19 @@ class NlpDispatcherAgent:
             )
             if not has_fixture_entity:
                 # §10.6 deterministic backoff — never guess a headline match.
-                return self._make_disambiguation(request_id, intent, cfg)
+                return _with_context(self._make_disambiguation(request_id, intent, cfg, conversation_id=conversation_id or None))
             # predict.* with resolvable fixture: routing to predict.request.v1
             # implemented in subsequent §10.6 bullets.
 
         # data.*, meta.*, and resolvable predict.* routing: future bullets.
-        return []
+        return _with_context([])
 
     def _make_disambiguation(
-        self, request_id: str, intent: str, cfg: object
+        self,
+        request_id: str,
+        intent: str,
+        cfg: object,
+        conversation_id: str | None = None,
     ) -> list[Message]:
         """Emit qa.answer.v1{kind=disambiguation} (shared helper)."""
         qa_correlation_id = self._new_id()
@@ -625,19 +1164,353 @@ class NlpDispatcherAgent:
             f"Hangi maç için tahmin istiyorsunuz? "
             f"Önümüzdeki {window_h} saat içindeki maçları listeleyebilirim."
         )
+        payload = {
+            "request_id": request_id,
+            "qa_correlation_id": qa_correlation_id,
+            "answer_text": answer_text,
+            "intent": intent,
+            "kind": "disambiguation",
+            "degraded": False,
+            "degraded_reason": None,
+            "tier_id_required": tier_id_required,
+            "citations": [],
+            "emitted_at": self._clock_iso(),
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
         return [
             Message.new(
                 topic=QA_ANSWER_V1,
+                payload=payload,
+                producer=self.name,
+            )
+        ]
+
+    def _make_quotative_frame_detected_event(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        detection: "QuotativeDetection",
+    ) -> Message:
+        """Emit an NLP event when a quotative frame is detected."""
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "quotative_frame_detected",
+                "producer": self.name,
+                "request_id": request_id,
+                "qa_correlation_id": qa_correlation_id or self._new_id(),
+                "frame_class": detection.frame_class,
+                "confidence": detection.confidence,
+                "negated": detection.negated,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _make_aspectual_stack_resolved_event(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        decision: str,
+        confidence: float,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "aspectual_stack_resolved",
+                "producer": self.name,
+                "request_id": request_id,
+                "qa_correlation_id": qa_correlation_id or self._new_id(),
+                "aspectual_stack_decision": decision,
+                "confidence": confidence,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _make_meta_answer(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        intent: str,
+        answer_text: str,
+        conversation_id: str | None = None,
+    ) -> Message:
+        qa_corr = qa_correlation_id or self._new_id()
+        kind = intent.split(".", 1)[1]
+        payload = {
+            "request_id": request_id,
+            "qa_correlation_id": qa_corr,
+            "intent": intent,
+            "answer_text": answer_text,
+            "kind": kind,
+            "degraded": False,
+            "degraded_reason": None,
+            "tier_id_required": None,
+            "citations": [],
+            "emitted_at": self._clock_iso(),
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        return Message.new(
+            topic=QA_ANSWER_V1,
+            payload=payload,
+            producer=self.name,
+        )
+
+    def _match_separator_team_pair(
+        self,
+        normalized_text: str,
+        entities: list[dict],
+        cfg: object,
+    ) -> tuple[str, str] | None:
+        """Detect two resolved team entities separated by a match separator token."""
+        team_entities = sorted(
+            (
+                e
+                for e in entities
+                if e.get("kind") == "team" and e.get("canonical_id")
+            ),
+            key=lambda ent: int(ent.get("span_start", 0)),
+        )
+        separator_re = re.compile(cfg.nlp_match_separator_pattern, re.UNICODE)
+        for left, right in zip(team_entities, team_entities[1:]):
+            if not isinstance(left.get("span_end"), int) or not isinstance(
+                right.get("span_start"), int
+            ):
+                continue
+            separator = normalized_text[left["span_end"] : right["span_start"]].strip()
+            if separator and separator_re.fullmatch(separator):
+                return str(left["canonical_id"]), str(right["canonical_id"])
+        return None
+
+    def _match_word_bridge_team_pair(
+        self,
+        normalized_text: str,
+        entities: list[dict],
+        cfg: object,
+    ) -> tuple[str, str] | None:
+        """Detect team pairs joined by bridge words (§10.22.7 word-bridge parsing)."""
+        team_entities = sorted(
+            (
+                e
+                for e in entities
+                if e.get("kind") == "team" and e.get("canonical_id")
+            ),
+            key=lambda ent: int(ent.get("span_start", 0)),
+        )
+        if len(team_entities) < 2:
+            return None
+
+        bridges = getattr(cfg, "nlp_match_word_bridges", [])
+        if not bridges:
+            return None
+
+        for left, right in zip(team_entities, team_entities[1:]):
+            separator = normalized_text[left["span_end"] : right["span_start"]].strip()
+            if not separator:
+                continue
+            for bridge in bridges:
+                if re.fullmatch(
+                    rf"\W*{re.escape(bridge)}\W*",
+                    separator,
+                    flags=re.UNICODE | re.IGNORECASE,
+                ):
+                    return str(left["canonical_id"]), str(right["canonical_id"])
+        return None
+
+    def _token_spans(self, normalized_text: str) -> list[tuple[str, int, int]]:
+        tokens: list[tuple[str, int, int]] = []
+        cursor = 0
+        for token in normalized_text.split():
+            start = normalized_text.find(token, cursor)
+            if start == -1:
+                continue
+            tokens.append((token, start, start + len(token)))
+            cursor = start + len(token)
+        return tokens
+
+    def _entity_token_interval(
+        self,
+        entity: dict,
+        token_spans: list[tuple[str, int, int]],
+    ) -> tuple[int | None, int | None]:
+        start_index = None
+        end_index = None
+        for index, (_token, start, end) in enumerate(token_spans):
+            if start_index is None and start == entity["span_start"]:
+                start_index = index
+            if end_index is None and end == entity["span_end"]:
+                end_index = index
+            if start_index is not None and end_index is not None:
+                break
+        if start_index is None:
+            for index, (_token, start, end) in enumerate(token_spans):
+                if start <= entity["span_start"] < end:
+                    start_index = index
+                    break
+        if end_index is None:
+            for index, (_token, start, end) in enumerate(token_spans):
+                if start < entity["span_end"] <= end:
+                    end_index = index
+                    break
+        if start_index is None or end_index is None:
+            return None, None
+        return start_index, end_index + 1
+
+    def _match_co_token_team_pair(
+        self,
+        normalized_text: str,
+        entities: list[dict],
+        cfg: object,
+    ) -> tuple[str, str] | None:
+        """Detect team pairs by co-occurring match tokens (§10.22.7 adjacency rule)."""
+        team_entities = sorted(
+            (
+                e
+                for e in entities
+                if e.get("kind") == "team" and e.get("canonical_id")
+            ),
+            key=lambda ent: int(ent.get("span_start", 0)),
+        )
+        if len(team_entities) < 2:
+            return None
+
+        co_tokens = {tok.lower() for tok in getattr(cfg, "nlp_match_co_tokens", [])}
+        if not co_tokens:
+            return None
+
+        token_spans = self._token_spans(normalized_text)
+        for left, right in zip(team_entities, team_entities[1:]):
+            if re.search(r"[.!?]", normalized_text[left["span_end"] : right["span_start"]]):
+                continue
+
+            left_start, left_end = self._entity_token_interval(left, token_spans)
+            right_start, right_end = self._entity_token_interval(right, token_spans)
+            if left_start is None or right_start is None or right_end is None:
+                continue
+
+            for index, (token, _start, _end) in enumerate(token_spans):
+                if token.lower() not in co_tokens:
+                    continue
+                if left_end <= index < right_start:
+                    return str(left["canonical_id"]), str(right["canonical_id"])
+                if index < left_start:
+                    distance = left_start - index - 1
+                elif index >= right_end:
+                    distance = index - right_end
+                else:
+                    continue
+                if distance <= getattr(cfg, "nlp_match_adjacency_radius", 4):
+                    return str(left["canonical_id"]), str(right["canonical_id"])
+        return None
+
+    def _match_fixture_date_filter(
+        self,
+        normalized_text: str,
+        entities: list[dict],
+        team_a_id: str,
+        team_b_id: str,
+        cfg: object,
+    ) -> dict[str, str] | None:
+        """Bind a nearby resolved date/time entity to a fixture lookup request."""
+        team_pair = {team_a_id, team_b_id}
+        team_entities = sorted(
+            (
+                e
+                for e in entities
+                if e.get("kind") == "team"
+                and e.get("canonical_id") in team_pair
+            ),
+            key=lambda ent: int(ent.get("span_start", 0)),
+        )
+        if len(team_entities) != 2:
+            return None
+
+        date_entities = [
+            e
+            for e in entities
+            if e.get("kind") in ("date", "time") and e.get("canonical_id")
+        ]
+        if not date_entities:
+            return None
+
+        token_spans = self._token_spans(normalized_text)
+        left_start, left_end = self._entity_token_interval(team_entities[0], token_spans)
+        right_start, right_end = self._entity_token_interval(team_entities[1], token_spans)
+        if left_start is None or right_start is None or right_end is None:
+            return None
+
+        radius = getattr(cfg, "nlp_fixture_date_adjacency_radius", 8)
+        fixture_filter: dict[str, str] = {}
+        for entity in date_entities:
+            date_start, date_end = self._entity_token_interval(entity, token_spans)
+            if date_start is None or date_end is None:
+                continue
+            if date_end <= left_start:
+                gap = left_start - date_end
+            elif date_start >= right_end:
+                gap = date_start - right_end
+            else:
+                gap = 0
+            if gap <= radius:
+                kind = entity["kind"]
+                fixture_filter[kind] = str(entity["canonical_id"])
+        return fixture_filter or None
+
+    def _make_data_fixture_lookup_request(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        team_a_id: str,
+        team_b_id: str,
+        fixture_filter: dict[str, str] | None = None,
+    ) -> list[Message]:
+        """Emit a data.request.v1 for a composite match lookup slot."""
+        qa_correlation_id = qa_correlation_id or self._new_id()
+        params: dict[str, object] = {
+            "team_pair": sorted([team_a_id, team_b_id])
+        }
+        if fixture_filter is not None:
+            params["fixture_filter"] = fixture_filter
+        return [
+            Message.new(
+                topic=DATA_REQUEST_V1,
                 payload={
-                    "request_id": request_id,
+                    "request_id": self._new_id(),
+                    "qa_request_id": request_id,
                     "qa_correlation_id": qa_correlation_id,
-                    "answer_text": answer_text,
-                    "intent": intent,
-                    "kind": "disambiguation",
-                    "degraded": False,
-                    "degraded_reason": None,
-                    "tier_id_required": tier_id_required,
-                    "citations": [],
+                    "kind": "fixture_lookup",
+                    "params": params,
+                    "emitted_at": self._clock_iso(),
+                },
+                producer=self.name,
+            )
+        ]
+
+    def _make_data_request(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        intent: str,
+        extra_params: dict[str, object] | None = None,
+    ) -> list[Message]:
+        """Emit a generic data.request.v1 for any data.* intent."""
+        qa_corr = qa_correlation_id or self._new_id()
+        kind = intent.split(".", 1)[1]
+        params: dict[str, object] = {"intent": intent}
+        if extra_params:
+            params.update(extra_params)
+        return [
+            Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": self._new_id(),
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_corr,
+                    "kind": kind,
+                    "params": params,
                     "emitted_at": self._clock_iso(),
                 },
                 producer=self.name,
@@ -688,7 +1561,7 @@ class NlpAnswerAgent:
     """
 
     name = "nlp.answer.v1"
-    subscribes = [QA_INTENT_V1, PREDICT_APPROVED]
+    subscribes = [QA_INTENT_V1, PREDICT_APPROVED, PREDICT_CANCEL_V1]
     publishes = [QA_ANSWER_V1, NLP_EVENT_V1, NLP_ALERT_V1]
 
     def __init__(
@@ -702,6 +1575,7 @@ class NlpAnswerAgent:
         add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._clock_iso = clock_iso or _utc_iso
         _enforce_nlp_spool_audit_dir_modes()
+        validate_compatibility_matrix()
         self._new_id = new_id or _new_id
         self._monotonic = monotonic or _time.monotonic
         # §10.13 producer-side deduper (lazy-init from cfg).
@@ -711,6 +1585,9 @@ class NlpAnswerAgent:
         # Keyed by summary_correlation_id.
         self._pending_summaries: dict[str, _SummaryAgg] = {}
         self._lock = _threading.Lock()
+        # Cancellation state for streaming humanizer requests.
+        self._cancelled_requests: set[str] = set()
+        self._cancel_lock = _threading.Lock()
         # §10.19 sampled answer audit state.
         self._audit_today_count = 0
         self._audit_date = ""
@@ -731,7 +1608,11 @@ class NlpAnswerAgent:
         return self._deduper
 
     def _maybe_audit_answer(
-        self, answer_text: str, envelope: dict, qa_correlation_id: str
+        self,
+        answer_text: str,
+        envelope: dict,
+        qa_correlation_id: str,
+        repair_classes: list[str] | None = None,
     ) -> None:
         """§10.19 sampled answer audit — capture 1-in-N answers (PII-redacted).
 
@@ -739,6 +1620,9 @@ class NlpAnswerAgent:
         ``data/nlp/audit/<YYYY-MM-DD>/<qa_correlation_id>.json`` for offline
         quality review. PII-redacts the answer text (email/phone regex) before
         writing. Enforces daily cap via in-memory counter (resets on date change).
+
+        If present, ``repair_classes`` records the per-rule-class repair list
+        without storing original tokens.
 
         Silently skips on any I/O error (never blocks the user).
         """
@@ -780,12 +1664,20 @@ class NlpAnswerAgent:
             "qa_correlation_id": qa_correlation_id,
             "answer_text_redacted": redacted_text,
             "envelope": redacted_envelope,
+            "repair_classes": sorted(set(repair_classes or [])),
+            "nlp_audit_bundle_sha": _nlp_audit_bundle_sha(envelope),
             "captured_at": _dt.datetime.now(_dt.timezone.utc).isoformat(
                 timespec="seconds"
             ),
         }
 
-        # Write to disk (fail silently).
+        # Write bundle metadata on first observation. Never block the user.
+        try:
+            _maybe_create_nlp_audit_bundle(envelope)
+        except OSError:
+            pass
+
+        # Write sampled audit row to disk (fail silently).
         try:
             audit_dir = os.path.join("data", "nlp", "audit", today)
             os.makedirs(audit_dir, exist_ok=True)
@@ -810,6 +1702,11 @@ class NlpAnswerAgent:
             if self._get_deduper().seen(request_id):  # type: ignore[union-attr]
                 return []
             # Stub: full implementation lands in future bullets.
+            return []
+        if topic == PREDICT_CANCEL_V1:
+            request_id = str(msg.payload.get("request_id", ""))
+            if request_id:
+                self._cancel_request(request_id)
             return []
         if topic == PREDICT_APPROVED:
             return self._on_predict_approved(msg)
@@ -839,6 +1736,16 @@ class NlpAnswerAgent:
 
     def _citation_key_id(self, key: bytes) -> str:
         return _hashlib.sha256(key).hexdigest()[:16]
+
+    def _cancel_request(self, request_id: str) -> None:
+        with self._cancel_lock:
+            self._cancelled_requests.add(request_id)
+
+    def is_request_cancelled(self, request_id: str) -> bool:
+        if not request_id:
+            return False
+        with self._cancel_lock:
+            return request_id in self._cancelled_requests
 
     def _load_predict_citation_hmac_keys(self) -> dict[str, bytes]:
         from common.config import cfg
@@ -954,20 +1861,24 @@ class NlpAnswerAgent:
             or payload.get("summary_correlation_id")
             or self._new_id()
         )
+        output_payload = {
+            "request_id": request_id,
+            "qa_correlation_id": qa_correlation_id,
+            "intent": "predict.timeout",
+            "answer_text": "Tahmin zaman aşımına uğradı.",
+            "kind": "predict.timeout",
+            "degraded": True,
+            "degraded_reason": "citation_signature_verification_failed",
+            "tier_id_required": None,
+            "citations": [],
+            "emitted_at": self._clock_iso(),
+        }
+        conversation_id = str(payload.get("conversation_id") or "")
+        if conversation_id:
+            output_payload["conversation_id"] = conversation_id
         return Message.new(
             topic=QA_ANSWER_V1,
-            payload={
-                "request_id": request_id,
-                "qa_correlation_id": qa_correlation_id,
-                "intent": "predict.timeout",
-                "answer_text": "Tahmin zaman aşımına uğradı.",
-                "kind": "predict.timeout",
-                "degraded": True,
-                "degraded_reason": "citation_signature_verification_failed",
-                "tier_id_required": None,
-                "citations": [],
-                "emitted_at": self._clock_iso(),
-            },
+            payload=payload,
             producer=self.name,
         )
 
@@ -1130,6 +2041,7 @@ class NlpProofreaderAgent:
         add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._monotonic = monotonic or _time.monotonic
         _enforce_nlp_spool_audit_dir_modes()
+        self._conversation_store = ConversationStore()
         # §10.13 producer-side deduper (lazy-init from cfg).
         self._deduper = deduper
         self._deduper_lock = _threading.Lock()
@@ -1156,8 +2068,45 @@ class NlpProofreaderAgent:
         request_id = str(msg.payload.get("request_id", ""))
         if self._get_deduper().seen(request_id):  # type: ignore[union-attr]
             return []
-        # Stub: full implementation lands in §10.9 bullets.
-        return []
+
+        out: list[Message] = [msg]
+        if str(msg.payload.get("kind", "")) == "proofreader_blocked":
+            conversation_id = str(msg.payload.get("conversation_id", ""))
+            if conversation_id:
+                self._conversation_store.clear(conversation_id)
+            out.append(self._build_conversation_context_cleared_alert(
+                request_id=request_id,
+                qa_correlation_id=str(msg.payload.get("qa_correlation_id", "")) or None,
+                conversation_id=conversation_id or None,
+            ))
+        return out
+
+    def _build_conversation_context_cleared_alert(
+        self,
+        request_id: str,
+        qa_correlation_id: str | None,
+        conversation_id: str | None,
+    ) -> Message:
+        payload = {
+            "schema_version": 1,
+            "alert_id": uuid4().hex,
+            "kind": "conversation_context_cleared_after_block",
+            "severity": "info",
+            "source": self.name,
+            "reason": "Proofreader blocked this turn; cleared conversation context.",
+            "emitted_at": _utc_iso(),
+        }
+        if request_id:
+            payload["request_id"] = request_id
+        if qa_correlation_id:
+            payload["qa_correlation_id"] = qa_correlation_id
+        if conversation_id:
+            payload["subject"] = conversation_id
+        return Message.new(
+            topic=NLP_ALERT_V1,
+            payload=payload,
+            producer=self.name,
+        )
 
 
 __all__ = [

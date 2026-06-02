@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import random
 import re
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -43,6 +44,12 @@ import yaml
 
 from common.security.patterns import PII_PATTERNS
 from common.text.turkish import suffix_harmony_ok
+
+from nlp.offensive import contains_offensive_phrase
+from nlp.tr_output_grammar_validator import (
+    GRAMMAR_FALLBACK_TEMPLATE,
+    validate_tr_output_grammar,
+)
 
 if TYPE_CHECKING:
     from common.config import Config
@@ -125,6 +132,7 @@ class ProofreadResult:
         "block_reason",
         "alert_severity",
         "redacted_pii",
+        "grammar_violations",
         "fail_safe_triggered",
         "exception_detail",
     )
@@ -137,6 +145,7 @@ class ProofreadResult:
         block_reason: "str | None" = None,
         alert_severity: str = "warn",
         redacted_pii: bool = False,
+        grammar_violations: "list[dict[str, str]] | None" = None,
         fail_safe_triggered: bool = False,
         exception_detail: "str | None" = None,
     ) -> None:
@@ -145,6 +154,7 @@ class ProofreadResult:
         self.block_reason = block_reason
         self.alert_severity = alert_severity
         self.redacted_pii = redacted_pii
+        self.grammar_violations = grammar_violations or []
         self.fail_safe_triggered = fail_safe_triggered
         self.exception_detail = exception_detail
 
@@ -305,7 +315,7 @@ def proofread_answer(
             redacted_pii=True,
         )
 
-    # Gate 5: Forbidden phrases.
+    # Gate 5: Forbidden phrases and offensive-table matches.
     forbidden_phrases = _load_forbidden_phrases()
     text_lower_check = working_text.lower()
     for phrase in forbidden_phrases:
@@ -317,6 +327,15 @@ def proofread_answer(
                 alert_severity="warn",
                 redacted_pii=False,
             )
+
+    if contains_offensive_phrase(working_text):
+        return ProofreadResult(
+            passed=False,
+            answer_text=working_text,
+            block_reason="forbidden_phrase",
+            alert_severity="warn",
+            redacted_pii=False,
+        )
 
     # Gate 6: Suffix-harmony probe (sample 5 random constructions).
     # Match pattern: <word>'<suffix> (Turkish genitive/dative/accusative constructions).
@@ -336,6 +355,32 @@ def proofread_answer(
                     alert_severity="warn",
                     redacted_pii=False,
                 )
+
+    # Gate 6.5: Output-side Turkish grammar validator (§10.31.8).
+    validation_start = time.perf_counter()
+    grammar_violations = validate_tr_output_grammar(working_text, cfg)
+    validation_latency_ms = (time.perf_counter() - validation_start) * 1000.0
+    if validation_latency_ms > float(cfg.nlp_output_grammar_validator_p99_ms) and cfg.nlp_output_grammar_validator_killswitch_enabled:
+        # Bypass the validator under extreme latency while preserving the
+        # existing answer path. The alert / event emission is handled by
+        # the caller / ops monitoring framework.
+        return ProofreadResult(
+            passed=True,
+            answer_text=working_text,
+            block_reason=None,
+            alert_severity="warn",
+            redacted_pii=False,
+        )
+
+    if grammar_violations:
+        return ProofreadResult(
+            passed=False,
+            answer_text=GRAMMAR_FALLBACK_TEMPLATE,
+            block_reason="tr_output_grammar_violation",
+            alert_severity="warn",
+            redacted_pii=False,
+            grammar_violations=grammar_violations,
+        )
 
     # Gate 7: Confidence narration discipline (§10.16).
     # Banded confidence text MUST never contradict the raw probability.

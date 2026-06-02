@@ -39,7 +39,7 @@ Each item below cites the prior addendum claim, names the empirical
 counter-example, and states the binding correction. Tests live in
 `ai/swarm/agents/nlp/tests/wrong_assumptions/`.
 
-- [ ] **Assumption (§10.1):** "Normalize is deterministic, ordered,
+- [x] **Assumption (§10.1):** "Normalize is deterministic, ordered,
       idempotent."
       **Counter-example:** NFC then casefold is **not** idempotent on
       certain pre-composed characters (e.g. `İ` casefolds to `i\u0307`
@@ -56,7 +56,7 @@ counter-example, and states the binding correction. Tests live in
       §10.33-knob-1); boot refuse on mismatch with
       `nlp.alert.v1{kind=nlp_runtime_locale_mismatch, severity=critical}`.
 
-- [ ] **Assumption (§10.21.5 confusables):** "Cyrillic / Latin / Greek
+- [x] **Assumption (§10.21.5 confusables):** "Cyrillic / Latin / Greek
       look-alikes folded to canonical Latin."
       **Counter-example:** Mixed-script paste from social media often
       includes the **Mathematical Alphanumeric Symbols** block
@@ -298,7 +298,7 @@ unverified `[ ]` claim. Tests live in
       obfuscation corpus (asterisk / dot / leetspeak / cyrillic-
       homoglyph / U+2060-split) and asserts ≥ 99% detection AND ≤ 1%
       false-positive on a 200-row legitimate-text negative corpus.
-- [ ] **§10.31.8 output-grammar proofreader.**
+- [x] **§10.31.8 output-grammar proofreader.**
       `test_output_grammar_proofreader_blocks_vowel_harmony_violation`
       injects a deliberately-broken template binding (vowel-harmony
       violation, consonant-mutation violation, wrong genitive marker,
@@ -392,7 +392,7 @@ passes treated as edge cases.
       (40 rows of weird-cased proper noun input asserts byte-identical
       output regardless of input case).
 
-- [ ] **Trailing / leading invisible whitespace from copy-paste.**
+- [x] **Trailing / leading invisible whitespace from copy-paste.**
       Browser select-copy from rich-text widgets injects U+00A0 (NBSP),
       U+2009 (thin space), U+202F (narrow NBSP), U+3000 (ideographic
       space) into pasted text. Today these survive normalize and

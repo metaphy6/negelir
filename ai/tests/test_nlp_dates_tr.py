@@ -126,6 +126,11 @@ def test_cuma_with_time() -> None:
     _assert_hour_minute(res, datetime.date(2026, 5, 1), 21, 30)
 
 
+def test_weekday_abbreviation_cmt_resolves_to_saturday() -> None:
+    res = _resolver().resolve("cmt")
+    _assert_day(res, datetime.date(2026, 5, 2))
+
+
 def test_pazar_does_not_match_pazartesi() -> None:
     # "pazar" should NOT fire when the token is "pazartesi"
     res = _resolver().resolve("pazartesi")
@@ -192,6 +197,53 @@ def test_explicit_other_month() -> None:
     _assert_day(res, datetime.date(2026, 9, 15))
 
 
+def test_fixed_holiday_name_resolves_to_cumhuriyet_bayrami() -> None:
+    res = _resolver().resolve("Cumhuriyet Bayramı")
+    _assert_day(res, datetime.date(2026, 10, 29))
+
+
+def test_fixed_holiday_name_with_time_resolves() -> None:
+    res = _resolver().resolve("Cumhuriyet Bayramı saat 20:00")
+    _assert_hour_minute(res, datetime.date(2026, 10, 29), 20, 0)
+
+
+def test_holiday_beyond_horizon_returns_none() -> None:
+    clock = lambda: datetime.datetime(2027, 12, 1, tzinfo=UTC)
+    resolver = DateTimeResolver(
+        clock_now=clock,
+        date_default_window_days=180,
+        time_default_period="am",
+        holiday_lookup_horizon_days=30,
+    )
+    assert resolver.resolve("Cumhuriyet Bayramı") is None
+
+
+def test_explicit_date_without_year_uses_next_occurrence_within_window() -> None:
+    clock = lambda: datetime.datetime(2026, 12, 20, tzinfo=UTC)
+    resolver = DateTimeResolver(
+        clock_now=clock,
+        date_default_window_days=180,
+        time_default_period="am",
+    )
+    res = resolver.resolve("1 Ocak")
+    _assert_day(res, datetime.date(2027, 1, 1))
+
+
+def test_numeric_date_dot_format_resolves_to_2704() -> None:
+    res = _resolver().resolve("27.04")
+    _assert_day(res, datetime.date(2026, 4, 27))
+
+
+def test_numeric_date_slash_format_resolves_to_2704() -> None:
+    res = _resolver().resolve("27/04")
+    _assert_day(res, datetime.date(2026, 4, 27))
+
+
+def test_numeric_date_dot_year_resolves_to_2704_2026() -> None:
+    res = _resolver().resolve("27.04.2026")
+    _assert_day(res, datetime.date(2026, 4, 27))
+
+
 # ── Time-only ─────────────────────────────────────────────────────────────
 
 def test_time_only_saat() -> None:
@@ -202,6 +254,46 @@ def test_time_only_saat() -> None:
 def test_time_only_bare() -> None:
     res = _resolver().resolve("21:30")
     _assert_hour_minute(res, _TODAY_START.date(), 21, 30)
+
+
+def test_time_only_dot_separator_resolves_2130() -> None:
+    res = _resolver().resolve("21.30")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 30)
+
+
+def test_time_only_comma_separator_resolves_2130() -> None:
+    res = _resolver().resolve("21,30")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 30)
+
+
+def test_time_locative_21de_resolves_to_2100() -> None:
+    res = _resolver().resolve("21'de")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 0)
+
+
+def test_time_saat_9_resolves_to_0900() -> None:
+    res = _resolver().resolve("saat 9")
+    _assert_hour_minute(res, _TODAY_START.date(), 9, 0)
+
+
+def test_aksam_9_resolves_to_2100() -> None:
+    res = _resolver().resolve("akşam 9")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 0)
+
+
+def test_ogleden_once_10_resolves_to_1000() -> None:
+    res = _resolver().resolve("öğleden önce 10")
+    _assert_hour_minute(res, _TODAY_START.date(), 10, 0)
+
+
+def test_ogleden_sonra_3_resolves_to_1500() -> None:
+    res = _resolver().resolve("öğleden sonra 3")
+    _assert_hour_minute(res, _TODAY_START.date(), 15, 0)
+
+
+def test_gece_yarisi_resolves_to_midnight() -> None:
+    res = _resolver().resolve("gece yarısı")
+    _assert_hour_minute(res, _TODAY_START.date(), 0, 0)
 
 
 def test_time_zero_hour() -> None:

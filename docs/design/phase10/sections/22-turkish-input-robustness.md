@@ -241,7 +241,7 @@
   only with required co-token (e.g., "RM" could be Real Madrid OR
   "ruh hali" — requires `[madrid, real, futbol, maç]` neighbour). The
   ambiguity class is the input to the §10.5 conflict resolver.
-- [ ] **Composite-abbreviation pattern.** *"GS-FB"*, *"FB vs BJK"*,
+- [x] **Composite-abbreviation pattern.** *"GS-FB"*, *"FB vs BJK"*,
   *"GS Fener"* — handled at the **dispatcher** (§10.6), not at the
   tokenizer. After gazetteer resolution, when two team entities resolve
   AND the token between them matches `cfg.nlp_match_separator_pattern`
@@ -267,7 +267,7 @@
 
 #### 10.22.6 Date / time / score / weekday TR-specific parsing
 
-- [ ] **Real failure mode §10.5 underspecifies.** Turkish users write:
+- [x] **Real failure mode §10.5 underspecifies.** Turkish users write:
   - **Times**: *"21:30"*, *"21.30"*, *"21,30"*, *"21de"*, *"saat 9"*,
     *"akşam 9"*, *"21'de"*, *"21'inde"* (locative inflection on
     numerical clock).
@@ -281,35 +281,35 @@
   - **Weekdays**: *"pazartesi"* / *"Pazartesi"* (TDK convention is
     lowercase except sentence-start); *"pzt"* / *"sal"* / *"çar"* /
     *"per"* / *"cum"* / *"cmt"* / *"paz"* abbreviations.
-- [ ] **Per-class CRF feature templates** (extends §10.5 step 2). One
+- [x] **Per-class CRF feature templates** (extends §10.5 step 2). One
   feature template file per class (`time.tmpl`, `date.tmpl`,
   `score.tmpl`, `weekday.tmpl`) under `ai/nlp/lang_tr/crf_templates/`;
   trained CRF model carries the template hash in its sidecar so model
   + template stay in sync (refuse-load on hash mismatch — mirrors
   §10.21.1 fastText SHA pin).
-- [ ] **Number-word resolver.** `ai/nlp/lang_tr/number_words.tr.yaml`
+- [x] **Number-word resolver.** `ai/nlp/lang_tr/number_words.tr.yaml`
   — table for *"sıfır"* → 0 ... *"yirmi"* → 20 plus *"otuz"*,
   *"kırk"*, ..., *"yüz"*, *"bin"*, *"milyon"*; composite (*"yirmi
   bir"* → 21) computed via `ai/common/text/turkish.py::parse_number_word`.
   Used by score parser to accept *"bir sıfır"*.
-- [ ] **Locative-on-clock disambiguation.** *"21'de"* (= "at 21:00")
+- [x] **Locative-on-clock disambiguation.** *"21'de"* (= "at 21:00")
   vs *"21'i"* (= "the 21st [of the month]") — distinguished by suffix
   class, not just regex. Suffix-stripper from §10.22.2 reused.
-- [ ] **Default time-of-day resolver.** *"akşam"* + numerical hour
+- [x] **Default time-of-day resolver.** *"akşam"* + numerical hour
   resolves to PM if hour < 12; *"sabah"* / *"öğleden önce"* → AM;
   *"gece yarısı"* → 00:00. Table at
   `ai/nlp/lang_tr/time_of_day.tr.yaml`. Match-time-typical bias:
   unqualified hour 1–11 in football context defaults to PM (matches
   rarely play AM); operator-tunable via `cfg.nlp_time_default_period`.
-- [ ] **Date relative to now.** *"haftaya"*, *"önümüzdeki hafta"*,
+- [x] **Date relative to now.** *"haftaya"*, *"önümüzdeki hafta"*,
   *"gelecek hafta"*, *"hafta sonu"*, *"yarın"*, *"öbürsü gün"* /
   *"öbür gün"*, *"dün"*, *"evvelki gün"* — all resolved against
   `cfg.nlp_clock_now()` (already pinned at §10.5 for testability).
-- [ ] **Year-omission default.** Fixture lookup defaults to "next
+- [x] **Year-omission default.** Fixture lookup defaults to "next
   occurrence in [now, now + `cfg.nlp_date_default_window_days=180`]";
   if no fixture matches → disambiguation answer enumerating top-3
   candidates with explicit year.
-- [ ] **Proof:** `test_nlp_time_dot_separator_resolves_2130`,
+- [x] **Proof:** `test_nlp_time_dot_separator_resolves_2130`,
   `test_nlp_time_locative_21de_resolves_to_2100`,
   `test_nlp_date_27_nisan_no_year_resolves_to_next_occurrence`,
   `test_nlp_score_bir_sifir_word_form_parses_to_1_0`,
@@ -322,13 +322,13 @@
 
 #### 10.22.7 Match-pattern parsing (multi-format team-vs-team)
 
-- [ ] **Real failure mode.** Users describe a fixture in many ways:
+- [x] **Real failure mode.** Users describe a fixture in many ways:
   - *"Galatasaray-Fenerbahçe"*, *"Galatasaray Fenerbahçe maçı"*,
     *"GS - FB"*, *"GS-FB derbisi"*, *"galatasaray vs fenerbahce"*,
     *"galatasaray ile fenerbahçe"*, *"galatasaray fenere karşı"*.
   - Including a date / matchday: *"27 Nisan GS-FB"*, *"derbi
     cumartesi"*, *"haftaya Trabzon Beşiktaş"*.
-- [ ] **Dispatcher-side composite-entity resolver.** Already partially
+- [x] **Dispatcher-side composite-entity resolver.** Already partially
   pinned in §10.22.5 (separator-driven). §10.22.7 expands to:
   - Word-bridges: `cfg.nlp_match_word_bridges = ["ile", "karşı",
     "vs", "vs.", "ve"]` — when two team entities are separated by
@@ -341,12 +341,12 @@
   - Date / matchday adjacency: a resolved date/time entity within
     `cfg.nlp_fixture_date_adjacency_radius=8` tokens of a team-pair
     entity is bound to it as the fixture filter.
-- [ ] **Order-insensitive fixture lookup.** Once `(team_a_id, team_b_id)`
+- [x] **Order-insensitive fixture lookup.** Once `(team_a_id, team_b_id)`
   resolves, the storage-agent query (Phase 4) must be order-insensitive
   (matches both home / away). Forward contract: `data.request.v1{kind=
   fixture_lookup, team_pair: [a_id, b_id]}` where the pair is
   alphabetically sorted before publish (deterministic dedup-friendly).
-- [ ] **Proof:** `test_nlp_match_word_bridge_ile_promotes_to_match_lookup`,
+- [x] **Proof:** `test_nlp_match_word_bridge_ile_promotes_to_match_lookup`,
   `test_nlp_match_adjacency_co_token_derbi_promotes_pair`,
   `test_nlp_date_adjacent_to_pair_binds_fixture_filter`,
   `test_nlp_team_pair_sorted_before_dispatch`
@@ -354,42 +354,42 @@
 
 #### 10.22.8 Code-switching (TR / EN intermix) handling
 
-- [ ] **Real failure mode.** *"manchester city formdaymış"*,
+- [x] **Real failure mode.** *"manchester city formdaymış"*,
   *"premier league standings"*, *"fixture nasıl?"*,
   *"city'nin kadrosu"*, *"liverpool maçında kim sakat?"* — English
   team / league / common-noun mixed with Turkish syntax. Pure-TR
   classifier may abstain or mis-classify.
-- [ ] **Bilingual gazetteer pass.** Lexicon files already store
+- [x] **Bilingual gazetteer pass.** Lexicon files already store
   English-canonical names (*"Premier League"*, *"Manchester City"*).
   §10.22.8 pins: gazetteer pass (§10.5) is **case-insensitive** AND
   the §10.22.1 ASCIIfied alias index covers EN spellings (a no-op
   for plain ASCII, but ensures the same code path).
-- [ ] **English-token tolerance in classifier.** fastText n-gram
+- [x] **English-token tolerance in classifier.** fastText n-gram
   features cope with EN tokens natively; §10.18 evaluation harness
   `code_switch=20` slice already gates intent accuracy on this.
   §10.22.8 raises the gate: code-switch slice MUST hit
   `cfg.nlp_intent_accuracy_floor` (=0.92) — same as the clean slice
   (was previously implicitly weaker).
-- [ ] **English suffix-noise tolerance.** Users sometimes English-pluralize
+- [x] **English suffix-noise tolerance.** Users sometimes English-pluralize
   Turkish stems (*"galatasaraylar"* — ungrammatical) or vice-versa
   (*"city'nin"* — Turkish suffix on EN stem, handled by §10.22.2
   apostrophe rule + §10.22.3 buffer-consonant via foreign-stem
   override). Test corpus `ai/tests/fixtures/turkish_code_switch.yaml`
   covers ≥ 30 mixed-language queries with `expected_intent` and
   `expected_entities`.
-- [ ] **NEVER translate the user's text.** No machine translation
+- [x] **NEVER translate the user's text.** No machine translation
   layer in either direction; humanizer §10.8 is bound to TR-only
   output via the EN-blocklist in proofreader gate #2 (§10.9). AST
   asserts no `translate(`, `translation`, `googletrans`, `deep_translator`
   symbol anywhere under `ai/swarm/agents/nlp/**` and `ai/nlp/**`.
-- [ ] **Proof:** `test_nlp_code_switch_manchester_city_resolves_to_canonical`,
+- [x] **Proof:** `test_nlp_code_switch_manchester_city_resolves_to_canonical`,
   `test_nlp_code_switch_intent_accuracy_meets_floor`
   (full code-switch corpus), `test_nlp_no_translation_dependency`
   (AST), `test_nlp_english_pluralized_galatasaraylar_recovers_to_galatasaray`.
 
 #### 10.22.9 Offensive language / slang gate
 
-- [ ] **Real failure mode.** Users curse, joke, abuse the bot. Two
+- [x] **Real failure mode.** Users curse, joke, abuse the bot. Two
   sub-cases that need different handling:
   - **Direct abuse at the bot** — e.g., *"amk yapay zeka"* — must
     not be parroted back, must not fail loud, must route gracefully.
@@ -398,7 +398,7 @@
     contains a real intent: penalty / referee question). The intent
     extraction must succeed; the offensive tokens are stripped from
     any answer text but DO NOT block answering.
-- [ ] **Closed taxonomy.** `ai/nlp/lang_tr/offensive.tr.yaml` —
+- [x] **Closed taxonomy.** `ai/nlp/lang_tr/offensive.tr.yaml` —
   three classes: `mild` (everyday vulgar; e.g., *"saçmalık"*, *"abi
   ya"*) — no action; `slur` (targeted slurs incl. ethnic / sexist /
   homophobic) — strip-and-answer + `nlp.alert.v1{kind=
@@ -406,22 +406,22 @@
   visibility, not user-visible block); `severe_threat` (death
   threats, doxxing patterns, instructions to harm) — route to
   `meta.adversarial`, do NOT answer the question.
-- [ ] **Tokenizer-level stripping for `slur` class.** Replace each
+- [x] **Tokenizer-level stripping for `slur` class.** Replace each
   matched token with a sentinel `<STRIPPED>` BEFORE classifier sees
   text (so the classifier doesn't learn slur → intent association).
   Sentinel acts as a generic noise token; entity / intent extraction
   proceeds normally on the remaining stream.
-- [ ] **NEVER quote-back any class.** §10.21.6 already forbids raw
+- [x] **NEVER quote-back any class.** §10.21.6 already forbids raw
   user text in templates; §10.22.9 reasserts: even sanitized,
   the offensive tokens are NEVER reproduced in `qa.answer.v1`.
   Proofreader §10.9 gate #4 extends to scan for offensive-table
   matches in the rendered answer (defense-in-depth — should never
   fire because templates don't carry user text, but if it does, the
   answer is blocked + critical alert).
-- [ ] **Adversarial-jailbreak echoes.** Already covered by §10.9
+- [x] **Adversarial-jailbreak echoes.** Already covered by §10.9
   gate #5 (forbidden phrases). §10.22.9 adds the `slur` table to
   the same gate (single source — the gate consults both).
-- [ ] **Proof:** `test_nlp_slur_token_stripped_before_classifier`,
+- [x] **Proof:** `test_nlp_slur_token_stripped_before_classifier`,
   `test_nlp_severe_threat_routes_to_adversarial`,
   `test_nlp_mild_offensive_does_not_block`,
   `test_nlp_proofreader_blocks_slur_in_rendered_answer`
@@ -436,7 +436,7 @@
   *"Internazionale"* / *"Inter Milan"*; *"Atletico"* / *"Athletico"*
   (commonly confused with Athletic Bilbao); *"Saint Etienne"* /
   *"Sant Etienne"* / *"St Etienne"*.
-- [ ] **Phonetic-collision allow-list.** `ai/nlp/lang_tr/phonetic_aliases.tr.yaml`
+- [x] **Phonetic-collision allow-list.** `ai/nlp/lang_tr/phonetic_aliases.tr.yaml`
   — manually curated list of `(phonetic_form, canonical_id, requires_co_token?,
   confused_with: [...])`. The `confused_with` field drives the
   `entities_negative.tr.yaml` rules: *"Bayer Münih"* alone resolves
@@ -444,28 +444,28 @@
   phonetic_alias_resolved_with_confusion_warning, confused_with:
   ['Bayer Leverkusen']}` event so operators can see how often the
   user's "wrong" spelling is being silently corrected.
-- [ ] **Non-Latin script support (deferred but pinned).** Arabic /
+- [x] **Non-Latin script support (deferred but pinned).** Arabic /
   Cyrillic / Greek football terms not in scope at v1; gazetteer
   build refuses any entry with non-Latin characters AND no
   Latin-transliteration sibling. Forward hook: locale `tr-TR` only
   at v1 per §10.17; future locale additions reopen the question.
-- [ ] **Build-time collision report.** `make nlp.lexicon-build`
+- [x] **Build-time collision report.** `make nlp.lexicon-build`
   emits `data/nlp/build_reports/phonetic_collisions.md` listing
   every `confused_with` pair. Reviewed in PR by humans (CI-gated:
   PR refuses merge if the file changed without a same-PR
   acknowledgement file `ai/nlp/lexicon/_phonetic_review.md` updated).
-- [ ] **Proof:** `test_nlp_phonetic_bayer_munih_resolves_to_bayern_with_event`,
+- [x] **Proof:** `test_nlp_phonetic_bayer_munih_resolves_to_bayern_with_event`,
   `test_nlp_phonetic_table_entries_resolve_to_catalog`,
   `test_nlp_phonetic_collisions_report_generated`,
   `test_nlp_no_non_latin_script_in_v1_lexicon` (build).
 
 #### 10.22.11 Locale-tag normalization & fallback chain
 
-- [ ] **Real failure mode §10.17 underspecifies.** API gateway honors
+- [x] **Real failure mode §10.17 underspecifies.** API gateway honors
   `Accept-Language`; users may send `tr`, `tr-TR`, `tr-CY` (Cyprus),
   `tr-DE` (German Turkish diaspora), `tr-NL`, or even malformed
   tags. v1 supports only `tr-TR`; everything else MUST graceful-fall.
-- [ ] **Fallback chain.** `cfg.nlp_locale_fallback_chain =
+- [x] **Fallback chain.** `cfg.nlp_locale_fallback_chain =
   ["tr-TR"]` (closed list at v1). Resolver:
   1. Parse incoming tag via BCP-47 rules (lowercase region,
      uppercase country); reject malformed → fall through.
@@ -474,18 +474,18 @@
   4. No match → `cfg.nlp_default_locale=tr-TR` + emit
      `nlp.event.v1{kind=locale_fallback_used, requested, resolved}`
      (debounced 60s per requested tag — bounded cardinality).
-- [ ] **Per-request override.** API surfaces an explicit
+- [x] **Per-request override.** API surfaces an explicit
   `?locale=tr-TR` query param (Phase 9); param > header > default.
   Forward-compat: when a second locale is added, no schema change
   needed — just update the chain.
-- [ ] **Proof:** `test_nlp_locale_tr_only_falls_back_to_tr_tr`,
+- [x] **Proof:** `test_nlp_locale_tr_only_falls_back_to_tr_tr`,
   `test_nlp_locale_tr_de_falls_back_with_event`,
   `test_nlp_locale_malformed_falls_back_default`,
   `test_nlp_locale_param_overrides_header`.
 
 #### 10.22.12 Lexicon-feed integrity (Phase 16 supply-chain signature)
 
-- [ ] **Real attack §10.21.8 / §10.21.11 partially miss.** §10.21.8
+- [x] **Real attack §10.21.8 / §10.21.11 partially miss.** §10.21.8
   signs `predict.approved.v1` citations; §10.21.11 forces
   feed-schema-version refusal. Neither covers the case where Phase 16
   emitter publishes a **lexicon feed** with the same schema_version
@@ -493,7 +493,7 @@
   mapping that re-routes "Galatasaray" queries to a different
   canonical_id; or a `dialects.tr.yaml` rule that injects an
   attacker-controlled token sequence into common queries).
-- [ ] **Feed signature.** Phase 16 emitter signs every lexicon feed
+- [x] **Feed signature.** Phase 16 emitter signs every lexicon feed
   payload with `cfg.nlp_lexicon_feed_hmac_key_path` (mode 0400,
   shared between emitter and NLP via secret-mount; rotated via
   `make nlp.rotate-lexicon-key` with 24h dual-acceptance window —
@@ -503,23 +503,23 @@
   switch: `cfg.nlp_lexicon_feed_signature_required ∈ {off, warn,
   enforce}` default `warn` at v1 (consistent with §10.21.8 rollout
   doctrine), `enforce` post-Phase-14.
-- [ ] **Fail-closed default for sensitive lexicons.** `markets.tr.yaml`
+- [x] **Fail-closed default for sensitive lexicons.** `markets.tr.yaml`
   AND `entities_negative.tr.yaml` ALWAYS require valid signature
   regardless of the global `*_required` setting (rationale: market
   enum + disambiguators are the highest-leverage corruption targets
   — a single bad market mapping mis-routes every betting query).
   Hard-coded list at `ai/swarm/agents/nlp/_critical_lexicons.py`.
-- [ ] **Signature key rotation runbook.** `make nlp.rotate-lexicon-key`
+- [x] **Signature key rotation runbook.** `make nlp.rotate-lexicon-key`
   shipped alongside the agent; same dual-window pattern as
   §10.21.8. Operator runbook entry in `docs/guides/nlp_runbook.md`
   (NEW file in this phase).
-- [ ] **Build-pipeline signature.** `make nlp.lexicon-build` emits
+- [x] **Build-pipeline signature.** `make nlp.lexicon-build` emits
   signed bundles for non-feed-driven path too (when running from
   in-repo source pre-Phase-16); SHA-only verify at load (no HMAC)
   for in-repo flow, HMAC verify for Phase 16 feed flow. Boundary
   test: NLP runtime never trusts a SHA-only artifact when running
   in `cfg.nlp_lexicon_source ∈ {file, feed}` mode `feed`.
-- [ ] **Proof:** `test_nlp_lexicon_feed_invalid_signature_refused_in_enforce`,
+- [x] **Proof:** `test_nlp_lexicon_feed_invalid_signature_refused_in_enforce`,
   `test_nlp_lexicon_feed_warn_mode_swaps_with_alert`,
   `test_nlp_critical_lexicons_always_enforce_regardless_of_global_mode`,
   `test_nlp_lexicon_key_rotation_dual_acceptance_window`,
@@ -527,7 +527,7 @@
 
 #### 10.22.13 Turkish-quality telemetry & error-class metrics
 
-- [ ] **Per-rule-class counters** (cardinality bounded — closed set):
+- [x] **Per-rule-class counters** (cardinality bounded — closed set):
   - `nlp_input_repair_total{class ∈ {ascii_restored, particle_detached_mi,
     particle_repaired_de_da, particle_repaired_ki, apostrophe_inserted,
     suffix_recovered, abbreviation_expanded, dialect_expanded,
@@ -548,19 +548,19 @@
   indicator of incoming input-quality drift (e.g., a viral tweet
   drives a flood of code-switched / dialect input). Documented in
   `docs/guides/nlp_runbook.md` with action thresholds.
-- [ ] **Sampled-answer audit slice tagging.** §10.14 sampling
+- [x] **Sampled-answer audit slice tagging.** §10.14 sampling
   extends to record the per-rule-class repair list per sampled query
   (PII-redacted: only the class names, not the original tokens).
   Allows offline correlation of "repairs applied" vs "human-judged
   answer correctness".
-- [ ] **Proof:** `test_nlp_repair_counters_increment_per_class`
+- [x] **Proof:** `test_nlp_repair_counters_increment_per_class`
   (parametrized), `test_nlp_repair_density_metric_bounded_in_clean_slice`,
   `test_nlp_disambiguation_cause_bounded_enum`,
   `test_nlp_offensive_counter_truthful_under_debounce`.
 
 #### 10.22.14 Knob inventory + DoD aggregate
 
-- [ ] **New cfg knobs (~22, on top of §10.19 + §10.21.12):**
+- [x] **New cfg knobs (~22, on top of §10.19 + §10.21.12):**
   `nlp_ascii_vs_restored_margin=0.2`,
   `nlp_diacritic_hard_call_min_freq=10000`,
   `nlp_diacritic_max_risk_per_token=2.5`,
@@ -585,19 +585,19 @@
   `nlp_lexicon_feed_hmac_*` (Phase 16 emitter is Go-friendly per
   §16 Pivot v3 ownership — when emitter ships, the gateway-equivalent
   signature-publishing path needs the shared knob).
-- [ ] **New `nlp.event.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.event.v1` kinds** (open-enum, registered):
   `phonetic_alias_resolved_with_confusion_warning`,
   `locale_fallback_used`,
   `dialect_expanded`,
   `abbreviation_expanded`,
   `particle_repaired`,
   `apostrophe_inserted`.
-- [ ] **New `nlp.alert.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.alert.v1` kinds** (open-enum, registered):
   `nlp_slur_in_input` (warn, debounced),
   `nlp_lexicon_feed_signature_invalid` (critical),
   `nlp_repair_density_anomaly` (warn — fires when 10-min rolling
    p95 of repair-density exceeds the cfg cap).
-- [ ] **New build artifacts.** `data/nlp/build_reports/phonetic_collisions.md`
+- [x] **New build artifacts.** `data/nlp/build_reports/phonetic_collisions.md`
   (CI-tracked); `ai/nlp/lexicon/_phonetic_review.md` (PR-gated
   acknowledgement file).
 - [ ] **DoD proof tests aggregate (new in §10.22):**

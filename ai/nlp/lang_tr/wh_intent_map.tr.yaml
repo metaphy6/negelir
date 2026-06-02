@@ -1,0 +1,63 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "WH words to intent candidate mappings and prior log odds.
+    Used for the Phase 10.30 WH-word prior nudge."
+entries:
+  - wh_word: kim
+    intent_candidates:
+      - data.lineup_probable
+      - data.top_scorer
+    prior_log_odds: 0.8
+  - wh_word: ne
+    intent_candidates:
+      - data.formation
+      - data.referee_appointment
+    prior_log_odds: 0.6
+  - wh_word: nerede
+    intent_candidates:
+      - data.venue
+      - data.kickoff_time
+    prior_log_odds: 0.9
+  - wh_word: ne zaman
+    intent_candidates:
+      - data.kickoff_time
+      - data.match_date
+    prior_log_odds: 1.1
+  - wh_word: hangi
+    intent_candidates:
+      - data.next_match
+      - data.previous_match
+    prior_log_odds: 0.7
+  - wh_word: kaç
+    intent_candidates:
+      - data.scoreline
+      - data.goals_expected
+    prior_log_odds: 0.5
+  - wh_word: neden
+    intent_candidates:
+      - meta.opinion_unsupported
+    prior_log_odds: -1.0
+  - wh_word: niye
+    intent_candidates:
+      - meta.opinion_unsupported
+    prior_log_odds: -1.0
+  - wh_word: nasıl
+    intent_candidates:
+      - data.form_recent
+    prior_log_odds: 0.8
+  - wh_word: ne kadar
+    intent_candidates:
+      - data.score_current
+      - data.no_of_goals
+    prior_log_odds: 0.4
+  - wh_word: hangi maç
+    intent_candidates:
+      - data.fixture_lookup
+      - data.next_match
+    prior_log_odds: 0.7
+  - wh_word: hangi takım
+    intent_candidates:
+      - data.fixture_lookup
+      - data.team_record
+    prior_log_odds: 0.7

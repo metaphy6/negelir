@@ -136,6 +136,17 @@
         "additionalProperties": false
       }
     },
+    "streaming_chunks": {
+      "type": "array",
+      "description": "Optional streaming answer chunks emitted by the NLP agent before final assembly (§10.25.2 cache coherence).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "final_answer": {
+      "type": "string",
+      "description": "Optional final answer text that completes a streamed response (§10.25.2 cache coherence)."
+    },
     "emitted_at_utc": {
       "type": "string",
       "description": "ISO-8601 UTC timestamp when answer was emitted (§10.11)."

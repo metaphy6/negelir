@@ -1,0 +1,38 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.32.1"
+  notes: >
+    Closed quotative frame markers for the Phase 10 quotative firewall.
+    Patterns are ordered by frame class and used by ai/nlp/quotative.py.
+
+frame_classes:
+  direct_quote_marker:
+    confidence: 0.80
+    patterns:
+      - '\bdiyor ki\b'
+      - '\bdedi ki\b'
+      - '\bder ki\b'
+      - '\bsoyle yaziyor\b'
+      - '\bsoyle diyor\b'
+      - '\bsoyle demis\b'
+  attributed_source:
+    confidence: 0.75
+    patterns:
+      - '\be gore\b'
+      - '\b(?:in|un|unun) dedigine gore\b'
+      - '\b(?:in|un|unun) aciklamasina gore\b'
+      - '\b(?:in|un|unun) kaynaklarina gore\b'
+  evidential_hearsay_compound:
+    confidence: 0.72
+    patterns:
+      - '\b(?:mis|miş|mus|muş|müş)\b.*\b(?:bilinen|soylenen|söylenen|iddia edilen)\b'
+      - '\b(?:bilinen|soylenen|söylenen|iddia edilen)\b.*\b(?:mis|miş|mus|muş|müş)\b'
+  social_media_attribution:
+    confidence: 0.70
+    patterns:
+      - "\\btwitter(?:['’])?da\\b"
+      - "\\bsosyal medyada\\b"
+      - "\\bforumda\\b"
+      - "\\binternette\\b"

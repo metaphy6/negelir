@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from common.config import cfg as _cfg
+from nlp.conversation import ConversationStore
 from swarm.agents.nlp import NlpAnswerAgent, NlpDispatcherAgent
 from swarm.agents.topics import (
     DATA_REQUEST_V1,
@@ -29,6 +30,7 @@ from swarm.agents.topics import (
     PREDICT_APPROVED,
     PREDICT_REQUEST_V1,
     QA_ANSWER_V1,
+    QA_CONTEXT_V1,
     QA_INTENT_V1,
     QA_REQUEST,
     SEC_ALERT,
@@ -71,6 +73,23 @@ def _make_team_entity(canonical_id: str = "gs") -> dict:
         "canonical_id": canonical_id,
         "confidence": 0.99,
         "lexicon_version": "1.0.0",
+        "source": "gazetteer",
+    }
+
+
+def _make_team_entity_at(
+    canonical_id: str,
+    span_start: int,
+    span_end: int,
+) -> dict:
+    return {
+        "span_start": span_start,
+        "span_end": span_end,
+        "kind": "team",
+        "canonical_id": canonical_id,
+        "confidence": 0.99,
+        "lexicon_version": "1.0.0",
+        "source": "gazetteer",
     }
 
 
@@ -118,6 +137,9 @@ class TestNlpDispatcherAgentContract:
     def test_publishes_nlp_alert_v1(self, agent: NlpDispatcherAgent) -> None:
         assert NLP_ALERT_V1 in agent.publishes
 
+    def test_publishes_qa_context_v1(self, agent: NlpDispatcherAgent) -> None:
+        assert QA_CONTEXT_V1 in agent.publishes
+
 
 class TestNlpDispatcherProducerRegistration:
     def test_registered_in_nlp_event_allowed_producers(self) -> None:
@@ -144,6 +166,7 @@ class TestNlpDispatcherBoundaryDiscipline:
         nlp_allowed_outbound = {
             QA_INTENT_V1,
             QA_ANSWER_V1,
+            QA_CONTEXT_V1,
             NLP_EVENT_V1,
             NLP_ALERT_V1,
             PREDICT_REQUEST_V1,
@@ -215,6 +238,28 @@ class TestNlpDispatcherDeterministicBackoff:
         for field in required:
             assert field in payload, f"Missing required field: {field}"
 
+    def test_predict_no_entity_disambiguation_preserves_conversation_id(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [],
+        })
+        results = list(agent.handle(msg))
+        answer = results[0]
+        assert answer.payload["kind"] == "disambiguation"
+        assert answer.payload["conversation_id"] == "conv-123"
+
+    def test_meta_answer_helper_includes_conversation_id(self, agent: NlpDispatcherAgent) -> None:
+        answer = agent._make_meta_answer(
+            "req-001",
+            "qc-001",
+            "meta.modality_unsupported",
+            "Bu tür modalite sorgusuna destek veremem.",
+            conversation_id="conv-123",
+        )
+        assert answer.payload["conversation_id"] == "conv-123"
+
     def test_predict_with_team_entity_no_backoff(
         self, agent: NlpDispatcherAgent
     ) -> None:
@@ -231,6 +276,153 @@ class TestNlpDispatcherDeterministicBackoff:
         msg = _make_intent_msg({"entities": [_make_competition_entity()]})
         results = list(agent.handle(msg))
         assert results == []
+
+    def test_predict_with_conversation_id_emits_context(self, agent: NlpDispatcherAgent) -> None:
+        msg = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [_make_team_entity()],
+        })
+        results = list(agent.handle(msg))
+        assert any(result.envelope.topic == QA_CONTEXT_V1 for result in results)
+        context_msg = next(
+            result for result in results if result.envelope.topic == QA_CONTEXT_V1
+        )
+        assert context_msg.payload["conversation_id"] == "conv-123"
+        assert context_msg.payload["intent"] == "predict.match_outcome"
+        assert context_msg.payload["turn_index"] == 0
+        assert context_msg.payload["entities"] == msg.payload["entities"]
+
+    def test_predict_without_conversation_id_does_not_emit_context(
+        self,
+        agent: NlpDispatcherAgent,
+        monkeypatch,
+    ) -> None:
+        called = False
+
+        def fail_if_loaded(conversation_id: str) -> None:
+            nonlocal called
+            called = True
+            raise AssertionError("load() must not be called for anonymous requests")
+
+        monkeypatch.setattr(agent._conversation_store, "load", fail_if_loaded)
+        msg = _make_intent_msg({
+            "conversation_id": None,
+            "entities": [_make_team_entity()],
+        })
+        results = list(agent.handle(msg))
+        assert all(result.envelope.topic != QA_CONTEXT_V1 for result in results)
+        assert not called
+
+    def test_nlp_conversation_context_carries_prior_entities_when_current_turn_has_none(
+        self, agent: NlpDispatcherAgent,
+    ) -> None:
+        first = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [_make_team_entity("gs"), _make_competition_entity("ucl")],
+        })
+        second = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [],
+        })
+
+        results1 = list(agent.handle(first))
+        assert any(r.envelope.topic == QA_CONTEXT_V1 for r in results1)
+
+        results2 = list(agent.handle(second))
+        context2 = next(r for r in results2 if r.envelope.topic == QA_CONTEXT_V1)
+        assert context2.payload["turn_index"] == 1
+        assert context2.payload["entities"] == first.payload["entities"]
+
+    def test_nlp_followup_resolves_entity_from_context(self, agent: NlpDispatcherAgent) -> None:
+        first = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [_make_team_entity("gs"), _make_competition_entity("ucl")],
+        })
+        second = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [],
+        })
+
+        list(agent.handle(first))
+        results2 = list(agent.handle(second))
+        context2 = next(r for r in results2 if r.envelope.topic == QA_CONTEXT_V1)
+
+        assert context2.payload["turn_index"] == 1
+        assert context2.payload["entities"] == first.payload["entities"]
+
+    def test_nlp_explicit_team_mention_overrides_prior_context(self, agent: NlpDispatcherAgent) -> None:
+        first = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [_make_team_entity("gs"), _make_competition_entity("ucl")],
+        })
+        second = _make_intent_msg({
+            "conversation_id": "conv-123",
+            "entities": [_make_team_entity("fb")],
+        })
+
+        list(agent.handle(first))
+        results2 = list(agent.handle(second))
+
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "conversation_entity_overridden"
+            for r in results2
+        )
+        context2 = next(r for r in results2 if r.envelope.topic == QA_CONTEXT_V1)
+        expected_entities = [
+            _make_competition_entity("ucl"),
+            _make_team_entity("fb"),
+        ]
+        assert context2.payload["entities"] == expected_entities
+
+    def test_nlp_context_capped_at_max_turns_resets_on_overflow(self, agent: NlpDispatcherAgent, monkeypatch) -> None:
+        monkeypatch.setattr(_cfg, "nlp_conversation_max_turns", 1)
+        first = _make_intent_msg({
+            "conversation_id": "conv-321",
+            "entities": [_make_team_entity("gs")],
+        })
+        second = _make_intent_msg({
+            "conversation_id": "conv-321",
+            "entities": [_make_team_entity("gs")],
+        })
+
+        results1 = list(agent.handle(first))
+        context1 = next(r for r in results1 if r.envelope.topic == QA_CONTEXT_V1)
+        assert context1.payload["turn_index"] == 0
+
+        results2 = list(agent.handle(second))
+        context2 = next(r for r in results2 if r.envelope.topic == QA_CONTEXT_V1)
+        assert context2.payload["turn_index"] == 0
+
+    def test_nlp_redis_down_falls_through_to_stateless(self) -> None:
+        store = ConversationStore()
+
+        class BrokenClient:
+            def get(self, key: str):
+                raise RuntimeError("redis down")
+
+            def delete(self, key: str):
+                pass
+
+        store._redis_client = lambda: BrokenClient()
+        assert store.load("conv-999") is None
+
+    def test_nlp_context_idle_ttl_evicts(self, monkeypatch) -> None:
+        monkeypatch.setattr(_cfg, "nlp_conversation_idle_ttl_s", 0)
+        store = ConversationStore()
+
+        class FakeClient:
+            def setex(self, key: str, ttl: int, value: str) -> None:
+                pass
+
+        store._redis_client = lambda: FakeClient()
+        store.save({
+            "schema_version": 1,
+            "conversation_id": "conv-ttl",
+            "turn_index": 0,
+            "entities": [],
+            "intent": "predict.match_outcome",
+        })
+        assert store.load("conv-ttl") is None
 
     def test_predict_with_null_canonical_id_triggers_backoff(
         self, agent: NlpDispatcherAgent
@@ -249,7 +441,9 @@ class TestNlpDispatcherDeterministicBackoff:
         for intent in ("data.fixture_lookup", "data.standings", "meta.help"):
             msg = _make_intent_msg({"intent": intent, "entities": []})
             results = list(agent.handle(msg))
-            assert results == [], f"Unexpected output for intent={intent}"
+            assert all(
+                r.envelope.topic != QA_ANSWER_V1 for r in results
+            ), f"Unexpected predict backoff for intent={intent}"
 
     def test_all_predict_intents_backoff_without_entity(
         self, agent: NlpDispatcherAgent
@@ -257,6 +451,7 @@ class TestNlpDispatcherDeterministicBackoff:
         """Every predict.* intent in the closed enum triggers backoff when empty."""
         predict_intents = [
             "predict.match_outcome",
+            "predict.match_outcome.conditional",
             "predict.over_under",
             "predict.btts",
             "predict.handicap",
@@ -267,6 +462,145 @@ class TestNlpDispatcherDeterministicBackoff:
             results = list(agent.handle(msg))
             assert len(results) == 1, f"predict backoff missing for intent={intent}"
             assert results[0].payload["kind"] == "disambiguation"
+
+    def test_all_data_intents_route_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """Every closed data.* intent routes to data.request.v1 when no fixture lookup is present."""
+        from nlp.intent import INTENT_LABELS
+
+        for intent in sorted(INTENT_LABELS):
+            if not intent.startswith("data.") or intent == "data.fixture_lookup":
+                continue
+
+            msg = _make_intent_msg({"intent": intent, "entities": []})
+            results = list(agent.handle(msg))
+            assert len(results) == 1, f"data route missing for intent={intent}"
+            assert results[0].envelope.topic == DATA_REQUEST_V1
+            assert results[0].payload["kind"] == intent.split(".", 1)[1]
+
+    def test_quotative_frame_detected_reroutes_predict_to_attributed_claim(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "hocan diyor ki yarın 3-0 bitecekmiş",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == NLP_EVENT_V1 for r in results)
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1
+            and r.payload["kind"] == "attributed_claim"
+            for r in results
+        )
+
+    def test_future_perfect_evidential_aspectual_stack_routes_to_meta_counterfactual_probe(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "yenmiş olacak",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == NLP_EVENT_V1 for r in results)
+        assert any(
+            r.envelope.topic == QA_ANSWER_V1
+            and r.payload["intent"] == "meta.counterfactual_probe"
+            and r.payload["kind"] == "counterfactual_probe"
+            for r in results
+        )
+
+    def test_conditional_predict_intent_with_aspectual_stack_routes_to_most_restrictive_safe_path(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome.conditional",
+                "normalized_text": "eğer yenmiş olacaksa",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == NLP_EVENT_V1 for r in results)
+        assert any(
+            r.envelope.topic == QA_ANSWER_V1
+            and r.payload["intent"] == "meta.counterfactual_probe"
+            and r.payload["kind"] == "counterfactual_probe"
+            for r in results
+        )
+
+    def test_progressive_epistemic_aspectual_stack_routes_to_fixture_lookup_in_play(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "oynuyor olabilir",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == NLP_EVENT_V1 for r in results)
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1
+            and r.payload["kind"] == "fixture_lookup"
+            and r.payload["params"]["state"] == "in_play"
+            for r in results
+        )
+
+    def test_future_relative_clause_aspectual_stack_routes_to_lineup_probable(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "oynayacak olan kim",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == NLP_EVENT_V1 for r in results)
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1
+            and r.payload["kind"] == "lineup_probable"
+            for r in results
+        )
+
+    def test_social_media_attribution_routes_to_meta_unverifiable(self, agent: NlpDispatcherAgent) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "twitter'da yazıyorlar galatasaray şampiyon",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == NLP_EVENT_V1
+        assert results[0].payload["kind"] == "quotative_frame_detected"
+
+    def test_negative_quotative_routes_to_attributed_claim_with_negation(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "hic kimse demedi ki galatasaray kazanır",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == NLP_EVENT_V1 for r in results)
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1
+            and r.payload["kind"] == "attributed_claim"
+            and r.payload["params"]["quotative_negation"] is True
+            for r in results
+        )
 
     def test_disambiguation_emitted_at_is_set(
         self, agent: NlpDispatcherAgent
@@ -284,6 +618,116 @@ class TestNlpDispatcherDeterministicBackoff:
         payload = list(agent.handle(msg))[0].payload
         assert isinstance(payload["qa_correlation_id"], str)
         assert len(payload["qa_correlation_id"]) > 0
+
+
+class TestNlpDispatcherMatchSeparator:
+    def test_nlp_team_pair_sorted_before_dispatch(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "data.fixture_lookup",
+                "normalized_text": "gs - fb",
+                "qa_correlation_id": "test-qa-corr",
+                "entities": [
+                    _make_team_entity_at("gs", 0, 2),
+                    _make_team_entity_at("fb", 5, 7),
+                ],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        out = results[0]
+        assert out.envelope.topic == DATA_REQUEST_V1
+        assert out.payload["kind"] == "fixture_lookup"
+        assert out.payload["params"] == {"team_pair": ["fb", "gs"]}
+        assert out.payload["qa_correlation_id"] == "test-qa-corr"
+        assert out.payload["qa_request_id"] == "req-001"
+
+    def test_data_fixture_lookup_without_separator_does_not_route_to_data_request(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "data.fixture_lookup",
+                "normalized_text": "gs fb",
+                "entities": [
+                    _make_team_entity_at("gs", 0, 2),
+                    _make_team_entity_at("fb", 3, 5),
+                ],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert results == []
+
+    def test_nlp_match_word_bridge_ile_promotes_to_match_lookup(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "data.fixture_lookup",
+                "normalized_text": "gs ile fb",
+                "qa_correlation_id": "test-qa-corr",
+                "entities": [
+                    _make_team_entity_at("gs", 0, 2),
+                    _make_team_entity_at("fb", 6, 8),
+                ],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        out = results[0]
+        assert out.payload["params"] == {"team_pair": ["fb", "gs"]}
+
+    def test_nlp_match_adjacency_co_token_derbi_promotes_pair(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "data.fixture_lookup",
+                "normalized_text": "gs fb maçı",
+                "qa_correlation_id": "test-qa-corr",
+                "entities": [
+                    _make_team_entity_at("gs", 0, 2),
+                    _make_team_entity_at("fb", 3, 5),
+                ],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        out = results[0]
+        assert out.payload["params"] == {"team_pair": ["fb", "gs"]}
+
+    def test_nlp_date_adjacent_to_pair_binds_fixture_filter(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "data.fixture_lookup",
+                "normalized_text": "gs ile fb cuma",
+                "qa_correlation_id": "test-qa-corr",
+                "entities": [
+                    _make_team_entity_at("gs", 0, 2),
+                    _make_team_entity_at("fb", 7, 9),
+                    {
+                        "span_start": 10,
+                        "span_end": 14,
+                        "kind": "date",
+                        "canonical_id": "2026-05-27",
+                        "confidence": 0.95,
+                        "source": "crf",
+                        "lexicon_version": None,
+                    },
+                ],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        out = results[0]
+        assert out.payload["params"] == {
+            "team_pair": ["fb", "gs"],
+            "fixture_filter": {"date": "2026-05-27"},
+        }
 
 
 # ── §10.6 multi-fixture fan-out tests ──────────────────────────────────────

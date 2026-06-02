@@ -38,6 +38,7 @@ from nlp.entity import (
     _merge_two_pass_gazetteer,
     _resolve_conflicts,
     gazetteer_pass,
+    PhoneticAliasMatch,
 )
 from nlp.lexicon_loader import AliasHit, LexiconStore
 
@@ -357,6 +358,59 @@ def test_extractor_suppresses_negative_entity(tmp_path: Path) -> None:
     result = extractor.extract(["fener", "maçı"])
     # The negative rule should suppress "fener" without "bahçe" co-token
     assert all(s.canonical_id != "fenerbahce_sk" for s in result.spans)
+
+
+def test_extractor_uses_phonetic_alias_allowlist(tmp_path: Path) -> None:
+    store = _make_store_with_teams(tmp_path)
+    alias_file = tmp_path / "phonetic_aliases.tr.yaml"
+    alias_file.write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+aliases:
+  - canonical_id: galatasaray_sk
+    kind: team
+    phonetic_form: gs
+""",
+        encoding="utf-8",
+    )
+    extractor = EntityExtractor(store=store, phonetic_aliases_path=alias_file)
+    result = extractor.extract(["gs", "maç"])
+    assert any(s.canonical_id == "galatasaray_sk" for s in result.spans)
+    assert result.phonetic_alias_matches == (
+        PhoneticAliasMatch(
+            alias="gs",
+            canonical_id="galatasaray_sk",
+            kind="team",
+            confused_with=(),
+        ),
+    )
+
+
+def test_extractor_ignores_non_allowlisted_phonetic_form(tmp_path: Path) -> None:
+    store = _make_store_with_teams(tmp_path)
+    alias_file = tmp_path / "phonetic_aliases.tr.yaml"
+    alias_file.write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+aliases:
+  - canonical_id: unknown_id
+    kind: team
+    phonetic_form: qq
+""",
+        encoding="utf-8",
+    )
+    extractor = EntityExtractor(store=store, phonetic_aliases_path=alias_file)
+    result = extractor.extract(["qq", "maç"])
+    assert result.spans == []
+    assert result.phonetic_alias_matches == ()
 
 
 def test_extractor_empty_store_returns_empty(tmp_path: Path) -> None:

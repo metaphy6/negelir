@@ -1,0 +1,19 @@
+_meta:
+  schema_version: 1
+assimilation_pairs:
+  voiced:
+    - de
+    - da
+    - den
+    - dan
+  voiceless:
+    - te
+    - ta
+    - ten
+    - tan
+  instrumental_short:
+    - le
+    - la
+  instrumental_canonical:
+    - yle
+    - yla

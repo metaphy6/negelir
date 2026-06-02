@@ -56,6 +56,59 @@ class RawUserTextInTemplateError(jinja2.TemplateError):
 
 # Canonical template directory: sibling ``templates/`` folder of this file.
 
+_LOCALE_TAG_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$")
+
+
+def _canonicalize_locale_tag(locale: str | None) -> str | None:
+    if locale is None:
+        return None
+    tag = locale.strip()
+    if not tag:
+        return None
+    if not _LOCALE_TAG_RE.fullmatch(tag):
+        return None
+
+    parts = tag.split("-")
+    if any(part == "" for part in parts):
+        return None
+
+    language = parts[0].lower()
+    canonical_parts: list[str] = [language]
+    for part in parts[1:]:
+        if len(part) == 2 and part.isalpha():
+            canonical_parts.append(part.upper())
+        elif len(part) == 4 and part.isalpha():
+            canonical_parts.append(part.title())
+        else:
+            canonical_parts.append(part.lower())
+    return "-".join(canonical_parts)
+
+
+def _resolve_locale_tag(locale: str | None) -> str:
+    from common.config import cfg
+
+    canonical = _canonicalize_locale_tag(locale)
+    if canonical is None:
+        return cfg.nlp_default_locale
+
+    chain = [
+        normalized
+        for normalized in (
+            _canonicalize_locale_tag(entry) for entry in cfg.nlp_locale_fallback_chain
+        )
+        if normalized is not None
+    ]
+    if canonical in chain:
+        return canonical
+
+    language = canonical.split("-")[0]
+    for entry in chain:
+        if entry.split("-")[0] == language:
+            return entry
+
+    return cfg.nlp_default_locale
+
+
 def _resolve_template_name(template_name: str, locale: "str | None" = None) -> str:
     """Resolve template name to locale-keyed path per §10.17.
     
@@ -85,14 +138,8 @@ def _resolve_template_name(template_name: str, locale: "str | None" = None) -> s
     # If already a full path with extension, return as-is for backward compat
     if template_name.endswith(".j2"):
         return template_name
-    
-    # Resolve locale from override or config
-    if locale is None:
-        # Import lazily to avoid circular dependency at module load
-        from common.config import cfg
-        locale = cfg.nlp_default_locale
-    
-    # Append locale and extension: "predict.match_outcome" → "predict.match_outcome.tr-TR.j2"
+
+    locale = _resolve_locale_tag(locale)
     return f"{template_name}.{locale}.j2"
 
 # ---------------------------------------------------------------------------

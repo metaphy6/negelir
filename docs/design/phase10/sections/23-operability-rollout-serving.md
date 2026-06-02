@@ -77,7 +77,7 @@
   rejects any metric / log / event that emits `tenant_id` directly
   (high-cardinality leak); only the closed `key_class` enum may appear
   in observable surfaces.
-- [ ] **Proof:** `test_nlp_per_tenant_inflight_cap_isolates_noisy_tenant`
+- [x] **Proof:** `test_nlp_per_tenant_inflight_cap_isolates_noisy_tenant`
   (chaos: tenant A floods 50 QPS, tenant B sees < `cfg.nlp_p95_total_ms`
   latency unchanged), `test_nlp_humanizer_tenant_budget_degrades_to_template`,
   `test_nlp_fairness_key_eviction_lru_bounded`,

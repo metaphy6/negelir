@@ -20,8 +20,12 @@ _EXPECTED_STEPS = (
     "lowercase_tr",
     "punct_normalize",
     "diacritic_restore",
+    "regional_dialect_normalize",
+    "apostrophe_proper_noun_repair",
     "tokenize",
     "particle_normalize",   # step 8a §10.22.4
+    "postposition_stack",  # step 8a.5 §10.32.3
+    "consonant_alternation",  # step 8a.1 §10.28.1
     "dialect_normalize",    # step 8b §10.22.5
     "typo_correct",
 )
@@ -116,6 +120,51 @@ class TestSteps23CanonicalNormalize:
         result = normalize_input("fenerbah\u202Ece")  # RLO injection
         joined = " ".join(result.tokens)
         assert "\u202E" not in joined
+
+
+class TestPhase1030Normalization:
+    def test_detects_search_query_style(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("site:example.com galatasaray")
+        assert result.query_style == "search"
+
+    def test_strips_politeness_markers(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("lütfen galatasaray maçını tahmin et")
+        assert result.politeness_class == "polite"
+        assert "lütfen" not in result.tokens
+
+    def test_expands_idioms_when_context_is_present(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("göze girmek takım")
+        assert "etkilenmek" in result.tokens
+
+    def test_conditional_modifier_set_when_marker_present(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray kazanırsa lider olur mu")
+        assert result.intent_modifier == "conditional"
+
+    def test_search_operator_patterns_detect_plus_minus(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("+galatasaray -fenerbahçe")
+        assert result.query_style == "search"
+
+    def test_search_operator_detects_field_prefix(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("site:mackolik.com galatasaray")
+        assert result.query_style == "search"
+
+    def test_search_operator_detects_quoted_exact_match(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input('"şampiyonlar ligi" nerede')
+        assert result.query_style == "quoted_exact_search"
 
     def test_strips_bom(self) -> None:
         from nlp.normalize import normalize_input
@@ -255,6 +304,32 @@ class TestStep5PunctNormalize:
         assert "galatasaray" in result.tokens
         assert "fenerbahce" in result.tokens
 
+    def test_unicode_space_collapse(self) -> None:
+        from nlp.normalize import normalize_input
+
+        unicode_spaces = [
+            "\u00A0",  # NO-BREAK SPACE
+            "\u1680",  # OGHAM SPACE MARK
+            "\u2000",  # EN QUAD
+            "\u2001",  # EM QUAD
+            "\u2002",  # EN SPACE
+            "\u2003",  # EM SPACE
+            "\u2004",  # THREE-PER-EM SPACE
+            "\u2005",  # FOUR-PER-EM SPACE
+            "\u2006",  # SIX-PER-EM SPACE
+            "\u2007",  # FIGURE SPACE
+            "\u2008",  # PUNCTUATION SPACE
+            "\u2009",  # THIN SPACE
+            "\u200A",  # HAIR SPACE
+            "\u202F",  # NARROW NO-BREAK SPACE
+            "\u205F",  # MEDIUM MATHEMATICAL SPACE
+            "\u3000",  # IDEOGRAPHIC SPACE
+        ]
+        for space_char in unicode_spaces:
+            result = normalize_input(f"galatasaray{space_char}fenerbahce")
+            assert "galatasaray" in result.tokens
+            assert "fenerbahce" in result.tokens
+            assert space_char not in " ".join(result.tokens)
     def test_single_quotes_normalized(self) -> None:
         from nlp.normalize import normalize_input
 
@@ -418,6 +493,12 @@ class TestNlpInputMaxCodepointsConfig:
         monkeypatch.setenv("NEGELIR_NLP_INPUT_MAX_CODEPOINTS", "256")
         cfg = Config()
         assert cfg.nlp_input_max_codepoints == 256
+
+    def test_nlp_collapse_unicode_spaces_default_true(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_collapse_unicode_spaces is True
 
     def test_bounds_check_positive(self) -> None:
         from common.config import Config

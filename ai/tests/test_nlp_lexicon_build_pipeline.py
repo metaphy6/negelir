@@ -388,3 +388,87 @@ class TestAsciiAliasIndexHelpers:
             uncovered.append(alias_key)
 
         assert "fener" in uncovered
+
+
+class TestLexiconBuildNonLatinValidation:
+    """§10.22.10: Non-Latin lexicon entries require a Latin transliteration sibling."""
+
+    def test_non_latin_alias_without_latin_sibling_fails(self) -> None:
+        from xops.makefile.nlp import _lexicon_entries_have_latin_transliteration_siblings
+
+        entries = [
+            {
+                "canonical_id": "galatasaray_sk",
+                "names": ["Галатасарай"],
+                "aliases": ["ГС"],
+            }
+        ]
+
+        violations = _lexicon_entries_have_latin_transliteration_siblings(
+            entries,
+            Path("teams.tr.yaml"),
+        )
+
+        assert violations
+        assert "Галатасарай" in violations[0]
+        assert "ГС" in violations[0]
+
+    def test_non_latin_alias_with_latin_sibling_passes(self) -> None:
+        from xops.makefile.nlp import _lexicon_entries_have_latin_transliteration_siblings
+
+        entries = [
+            {
+                "canonical_id": "bayern_munich",
+                "names": ["Bayer Münih"],
+                "aliases": ["Байер Мюнхен"],
+            }
+        ]
+
+        violations = _lexicon_entries_have_latin_transliteration_siblings(
+            entries,
+            Path("teams.tr.yaml"),
+        )
+
+        assert not violations
+
+
+class TestPhoneticAliasBuildReport:
+    """§10.22.10: Phonetic alias build report generation."""
+
+    def test_load_phonetic_aliases(self, tmp_path) -> None:
+        from xops.makefile.nlp import _load_phonetic_aliases
+
+        path = tmp_path / "phonetic_aliases.tr.yaml"
+        path.write_text(
+            """_meta:\n  schema_version: 1\n  table_version: \"1.0.0\"\naliases:\n  - phonetic_form: \"Bayer Münih\"\n    canonical_id: \"bayern_munich\"\n    requires_co_token: false\n    confused_with:\n      - \"bayer_leverkusen\"\n""",
+            encoding="utf-8",
+        )
+
+        aliases = _load_phonetic_aliases(path)
+
+        assert aliases == [
+            {
+                "phonetic_form": "Bayer Münih",
+                "canonical_id": "bayern_munich",
+                "requires_co_token": False,
+                "confused_with": ["bayer_leverkusen"],
+            }
+        ]
+
+    def test_phonetic_collisions_report_generated(self, tmp_path) -> None:
+        from xops.makefile.nlp import _load_phonetic_aliases, _write_phonetic_collisions_report
+
+        alias_file = tmp_path / "ai" / "nlp" / "lang_tr" / "phonetic_aliases.tr.yaml"
+        alias_file.parent.mkdir(parents=True, exist_ok=True)
+        alias_file.write_text(
+            """_meta:\n  schema_version: 1\n  table_version: \"1.0.0\"\naliases:\n  - phonetic_form: \"Bayer Münih\"\n    canonical_id: \"bayern_munich\"\n    requires_co_token: false\n    confused_with:\n      - \"bayer_leverkusen\"\n""",
+            encoding="utf-8",
+        )
+        report_path = tmp_path / "data" / "nlp" / "build_reports" / "phonetic_collisions.md"
+
+        aliases = _load_phonetic_aliases(alias_file)
+        _write_phonetic_collisions_report(aliases, report_path)
+
+        report_text = report_path.read_text(encoding="utf-8")
+        assert "Bayer Münih -> bayern_munich" in report_text
+        assert "confused_with=[bayer_leverkusen]" in report_text

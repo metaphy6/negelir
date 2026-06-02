@@ -1,0 +1,18 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.22.10"
+  notes: >
+    Manually curated phonetic alias allowlist for §10.22.10.
+    Each entry is a known phonetic variant together with the target
+    canonical_id and the set of canonical alternatives that it is
+    commonly confused with.
+
+aliases:
+  # Example entry format; add real phonetic aliases here as part of Phase 10.
+  # - phonetic_form: "Bayer Münih"
+  #   canonical_id: "bayern_munich"
+  #   requires_co_token: false
+  #   confused_with:
+  #     - "bayer_leverkusen"

@@ -1,0 +1,55 @@
+- key: yilbasi
+  name_tr: "Yılbaşı"
+  name_aliases:
+    - "yılbaşı"
+    - "yılbaşında"
+    - "yılbaşı günü"
+    - "1 ocak"
+    - "1 ocakta"
+  date_kind: fixed_gregorian
+  fixed_md: "01-01"
+- key: cumhuriyet_bayrami
+  name_tr: "Cumhuriyet Bayramı"
+  name_aliases:
+    - "cumhuriyet bayramı"
+    - "cumhuriyet bayramında"
+    - "29 ekim"
+    - "29 ekimde"
+  date_kind: fixed_gregorian
+  fixed_md: "10-29"
+- key: zafer_bayrami
+  name_tr: "Zafer Bayramı"
+  name_aliases:
+    - "zafer bayramı"
+    - "zafer bayramında"
+    - "30 ağustos"
+    - "30 ağustosta"
+  date_kind: fixed_gregorian
+  fixed_md: "08-30"
+- key: gencler_bayrami
+  name_tr: "Gençlik ve Spor Bayramı"
+  name_aliases:
+    - "gençlik bayramı"
+    - "gençlik ve spor bayramı"
+    - "19 mayıs"
+    - "19 mayısta"
+  date_kind: fixed_gregorian
+  fixed_md: "05-19"
+- key: ulusal_egemenlik
+  name_tr: "Ulusal Egemenlik ve Çocuk Bayramı"
+  name_aliases:
+    - "ulusal egemenlik bayramı"
+    - "ulusal egemenlik ve çocuk bayramı"
+    - "23 nisan"
+    - "23 nisanda"
+  date_kind: fixed_gregorian
+  fixed_md: "04-23"
+- key: demokrasi_bayrami
+  name_tr: "Demokrasi ve Millî Birlik Günü"
+  name_aliases:
+    - "demokrasi bayramı"
+    - "demokrasi ve millî birlik günü"
+    - "15 temmuz"
+    - "15 temmuzda"
+  date_kind: fixed_gregorian
+  fixed_md: "07-15"

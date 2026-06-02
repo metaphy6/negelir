@@ -7,6 +7,8 @@ Proves that under all_or_nothing mode:
   * Old snapshot remains active (no partial state)
 """
 from pathlib import Path
+import hashlib
+import hmac
 import tempfile
 import time
 
@@ -249,6 +251,105 @@ entries:
     assert current_players is not None
     assert current_players[0].schema_version == 1
     assert current_players[0].lexicon_version == "1.0.0"
+
+
+def test_nlp_lexicon_feed_signature_warn_mode_loads_and_warns(
+    temp_lexicon_dir,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """§10.22.12: feed mode warn allows load while emitting a signature warning."""
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_SOURCE", "feed")
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_SIGNATURE_REQUIRED", "warn")
+    key_path = temp_lexicon_dir / "lexicon_feed.key"
+    key_path.write_bytes(b"feed-key-material-012345678901234567")
+    key_path.chmod(0o400)
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_HMAC_KEY_PATH", str(key_path))
+
+    # Always-enforced sensitive files must be signed even in warn mode.
+    key = key_path.read_bytes()
+    for sensitive_file in ["markets.tr.yaml", "entities_negative.tr.yaml"]:
+        raw_bytes = (temp_lexicon_dir / sensitive_file).read_bytes()
+        signature = hmac.new(key, raw_bytes, hashlib.sha256).hexdigest()
+        (temp_lexicon_dir / f"{sensitive_file}.hmac").write_text(signature, encoding="utf-8")
+
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=1,
+        max_rss_mb=0,
+    )
+    alerts = store.maybe_reload()
+    assert len(alerts) == 1, f"Expected one warn alert, got: {alerts}"
+    alert = alerts[0]
+    assert alert["kind"] == "nlp_lexicon_feed_signature_invalid"
+    assert alert["severity"] == "warn"
+    assert "missing or malformed" in alert["reason"] or "invalid" in alert["reason"]
+    assert store.is_loaded, "Store should still load in warn mode"
+
+
+def test_nlp_lexicon_feed_signature_enforce_mode_rejects_invalid_signature(
+    temp_lexicon_dir,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """§10.22.12: feed mode enforce rejects lexicon bundle with invalid HMAC."""
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_SOURCE", "feed")
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_SIGNATURE_REQUIRED", "enforce")
+    key_path = temp_lexicon_dir / "lexicon_feed.key"
+    key_path.write_bytes(b"feed-key-material-012345678901234567")
+    key_path.chmod(0o400)
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_HMAC_KEY_PATH", str(key_path))
+
+    key = key_path.read_bytes()
+    for sensitive_file in ["markets.tr.yaml", "entities_negative.tr.yaml"]:
+        raw_bytes = (temp_lexicon_dir / sensitive_file).read_bytes()
+        signature = hmac.new(key, raw_bytes, hashlib.sha256).hexdigest()
+        (temp_lexicon_dir / f"{sensitive_file}.hmac").write_text(signature, encoding="utf-8")
+
+    (temp_lexicon_dir / "teams.tr.yaml.hmac").write_text("deadbeef", encoding="utf-8")
+
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=1,
+        max_rss_mb=0,
+    )
+    alerts = store.maybe_reload()
+    assert len(alerts) == 1, f"Expected one critical alert, got: {alerts}"
+    alert = alerts[0]
+    assert alert["kind"] == "nlp_lexicon_feed_signature_invalid"
+    assert alert["severity"] == "warn" or alert["severity"] == "critical"
+    assert not store.is_loaded
+
+
+def test_nlp_sensitive_lexicon_signature_always_enforces(
+    temp_lexicon_dir,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """§10.22.12: markets.tr.yaml always requires a valid signature in feed mode."""
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_SOURCE", "feed")
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_SIGNATURE_REQUIRED", "off")
+    key_path = temp_lexicon_dir / "lexicon_feed.key"
+    key_path.write_bytes(b"feed-key-material-012345678901234567")
+    key_path.chmod(0o400)
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_FEED_HMAC_KEY_PATH", str(key_path))
+
+    key = key_path.read_bytes()
+    raw_bytes = (temp_lexicon_dir / "entities_negative.tr.yaml").read_bytes()
+    valid_signature = hmac.new(key, raw_bytes, hashlib.sha256).hexdigest()
+    (temp_lexicon_dir / "entities_negative.tr.yaml.hmac").write_text(valid_signature, encoding="utf-8")
+
+    # markets.tr.yaml exists by fixture; give it an explicit invalid signature
+    (temp_lexicon_dir / "markets.tr.yaml.hmac").write_text("deadbeef", encoding="utf-8")
+
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=1,
+        max_rss_mb=0,
+    )
+    alerts = store.maybe_reload()
+    assert len(alerts) == 1, f"Expected one critical alert for sensitive file, got: {alerts}"
+    alert = alerts[0]
+    assert alert["kind"] == "nlp_lexicon_feed_signature_invalid"
+    assert alert["severity"] == "warn" or alert["severity"] == "critical"
+    assert not store.is_loaded
 
 
 def test_nlp_lexicon_swap_atomicity_config_off_allows_per_file():

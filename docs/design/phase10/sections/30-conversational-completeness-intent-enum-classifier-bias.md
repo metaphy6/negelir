@@ -60,7 +60,7 @@
 
 #### 10.30.1 Closed intent-enum completion (`schema_version=4` for `qa.intent.v1`)
 
-- [ ] **New intent_ids land additively in `_intent_enum.json`** (the
+- [x] **New intent_ids land additively in `_intent_enum.json`** (the
   CODEOWNERS-protected closed enum from §10.27.6 and prior):
   `data.top_scorer` (e.g., *bu sezon gol kralı kim?*),
   `data.assist_leader` (*asist kralı*),
@@ -79,14 +79,14 @@
   pre-match summary; this is multi-historical-fixture aggregation),
   `predict.match_outcome.conditional` (NEW — see §10.30.4 below;
   *Galatasaray kazanırsa lider olur mu?*).
-- [ ] **Schema-version bump.** `qa.intent.v1` → `schema_version=4`
+- [x] **Schema-version bump.** `qa.intent.v1` → `schema_version=4`
   (additive: enum widening only; existing v3 producers/consumers
   unchanged; §10.27.7 schema-downgrade negotiation contract honored
   — old SDK clients sending `Accept: application/vnd.negelir.qa-intent+json; version=3`
   receive `meta.unsupported` with closed Turkish disclosure
   *"İstediğiniz sorgu türü için lütfen güncel uygulamayı kullanın"*
   rather than silent enum-value drop).
-- [ ] **Cross-language gate.** `ai/common/nlp/intent_enum_spec.json`
+- [x] **Cross-language gate.** `ai/common/nlp/intent_enum_spec.json`
   is single source; `ai/swarm/agents/nlp/intent.py` and
   `server/internal/api/intent_tier.go` (gateway tier-mapper) both
   load it and refuse boot on SHA mismatch (mirrors §10.29.11
@@ -95,11 +95,11 @@
   commit; CI gate `test_intent_enum_has_tier_mapping_row` rejects
   any enum entry without a tier mapping. Defends against the
   `403 tier_unknown` class on additive enum landings.
-- [ ] **Per-intent template existence gate.** CI walks
+- [x] **Per-intent template existence gate.** CI walks
   `ai/nlp/templates/tr_TR/*.j2` and asserts each new intent_id has
   at least one bound template (with at least one *missing-data*
   variant for graceful degradation). `test_intent_enum_has_template_coverage`.
-- [ ] **Per-intent dispatcher route gate.** `nlp.dispatcher.v1`
+- [x] **Per-intent dispatcher route gate.** `nlp.dispatcher.v1`
   route table is closed; AST guard `test_dispatcher_routes_cover_intent_enum`
   enumerates the intent_enum at test-collection time and asserts
   every value has a route (or an explicit `meta.unsupported`
@@ -116,7 +116,7 @@
 
 #### 10.30.2 WH-word → intent binding table (deterministic feature, classifier-blind)
 
-- [ ] **Closed `wh_intent_map.tr.yaml`** lists every Turkish
+- [x] **Closed `wh_intent_map.tr.yaml`** lists every Turkish
   question word and its prior-belief intent class:
   `kim` → `data.lineup_*` / `data.top_scorer` / `data.referee_appointment`
   (person-asking class; classifier picks among them);
@@ -132,13 +132,13 @@
   ADDED to the classifier logit at inference (NOT trained into
   the classifier — kept as a separate deterministic feature so a
   classifier retrain cannot silently flip the prior).
-- [ ] **AST guard: WH-word coverage.** Test scans the file at
+- [x] **AST guard: WH-word coverage.** Test scans the file at
   collection time, asserts every Turkish WH-word in a closed
   `wh_words.tr.yaml` (≥ 12 entries including `kimler`/`hangileri`/
   `kaçıncı`/`hangisi`/`kaç tane`) has a row in `wh_intent_map.tr.yaml`;
   missing entry → test fail. Defends against the
   add-WH-word-forget-the-mapping class.
-- [ ] **Inference-time guard.** `nlp.intent.v1` inference applies the
+- [x] **Inference-time guard.** `nlp.intent.v1` inference applies the
   WH-word prior AFTER the fastText logit, BEFORE the §10.4
   Platt-calibration; record both `intent_score_raw_logit` and
   `intent_score_after_wh_prior` in `nlp.event.v1{kind=intent_decision_breakdown}`
@@ -158,7 +158,7 @@
 
 #### 10.30.3 Football-idiom phrasebook (atomic meaning units, expansion BEFORE classifier)
 
-- [ ] **Closed `idioms.tr.yaml`** ships ≥ 60 atomic Turkish football
+- [x] **Closed `idioms.tr.yaml`** ships ≥ 60 atomic Turkish football
   idioms with their canonical-token expansion: `ipi göğüslemek`
   → `(intent: predict.match_outcome.conditional, modifier: comparative,
   trigger: title_race)`; `küme düşmek` → `(intent: data.relegation_zone)`;
@@ -174,7 +174,7 @@
   plus regional / supporter / commentary register entries
   (`teknik adam`, `defansın gediği`, `kontra atak`, `çift forvet`,
   `dar alan oyunu`, `top sahibi olmak`, `pres yapmak`).
-- [ ] **Expansion stage in normalize pipeline.** New deterministic
+- [x] **Expansion stage in normalize pipeline.** New deterministic
   step inserted between §10.1 step 6 (lexicon-canonicalisation)
   and step 7 (Symspell typo correction): idiom multi-token match
   (longest-match-first, deterministic on tie via lexicographic
@@ -188,7 +188,7 @@
   table (PR-gated, two-reviewer minimum, alias-delta cap per
   §10.26.6). `nlp-curator` orthographic + `nlp-domain-football`
   (NEW CODEOWNERS group) co-required.
-- [ ] **Idiom-vs-literal disambiguation.** When an idiom span is
+- [x] **Idiom-vs-literal disambiguation.** When an idiom span is
   also a valid literal phrase (`son düdük` literally = "the last
   whistle" but in commentary = "full time"), require contextual
   trigger from a closed `idiom_context.tr.yaml` (e.g., requires a
@@ -208,7 +208,7 @@
 
 #### 10.30.4 Conditional-clause routing (`-sa/-se` + `eğer/şayet`) — new intent_modifier
 
-- [ ] **Closed `conditional_markers.tr.yaml`** lists the explicit
+- [x] **Closed `conditional_markers.tr.yaml`** lists the explicit
   conditional triggers: lexical (`eğer`, `şayet`, `farzedelim`,
   `tutalım ki`, `diyelim ki`, `kazanırsa`-style suffix-with-`mı`)
   + suffixal (`-sa`/`-se`/`-ysa`/`-yse` after vowel-harmony resolution
@@ -241,14 +241,14 @@
 
 #### 10.30.5 Politeness-register classifier-bias guard (politeness is a non-feature)
 
-- [ ] **Closed `politeness_markers.tr.yaml`** lists ≥ 30 politeness
+- [x] **Closed `politeness_markers.tr.yaml`** lists ≥ 30 politeness
   tokens / patterns: `lütfen`, `acaba`, `mümkünse`, `rica etsem`,
   `rica ediyorum`, `eğer mümkünse`, `zahmet olmazsa`,
   `-yebilir misiniz` / `-abilir misiniz` (suffixal-formed — match
   via Zemberek root-form), `bir bakar mısınız`, `söyler misiniz`,
   `mümkün mü acaba`, `yardımcı olur musunuz`. Plus regional /
   formal / Ottoman-formal register variants.
-- [ ] **Pre-classifier strip-with-recording.** During §10.1
+- [x] **Pre-classifier strip-with-recording.** During §10.1
   normalize, politeness markers are stripped to a separate
   `politeness_class ∈ {neutral, polite, very_polite, curt}`
   (curt = ALL-CAPS without polite markers, per §10.28.10 ALL-CAPS
@@ -287,7 +287,7 @@
 
 #### 10.30.6 Search-operator syntax detection (`+`/`-`/`"…"`/`OR`/`AND`) → explicit refusal
 
-- [ ] **Closed `search_operator_patterns.tr.yaml`** detects power-user
+- [x] **Closed `search_operator_patterns.tr.yaml`** detects power-user
   search syntax: leading `+`/`-` on word boundary
   (`+galatasaray -fenerbahçe`), bare `OR`/`AND` uppercase keywords
   (Turkish equivalents `VE`/`VEYA` ALL-CAPS), `site:`/`from:`/`title:`
@@ -310,7 +310,7 @@
   resolution. Schema lands now; route returns
   `meta.search_syntax_unsupported` until the entity-exact-match
   path lands in a future phase.
-- [ ] **AST guard: search-operator detection runs BEFORE classifier.**
+- [x] **AST guard: search-operator detection runs BEFORE classifier.**
   `test_search_operator_detection_pre_classifier_ast` walks the
   pipeline order and asserts the detector fires before any
   expensive classifier / extractor work (cost containment + no
@@ -481,7 +481,7 @@
 
 #### 10.30.11 Venue → home-team inference (closed table, confidence-bounded)
 
-- [ ] **Closed `venues.tr.yaml`** lists active TR football venues with
+- [x] **Closed `venues.tr.yaml`** lists active TR football venues with
   their home-team binding and a per-row `(season_start, season_end)`
   validity window: `Türk Telekom Stadyumu` → `Galatasaray` (season
   2011–present), `Vodafone Park` → `Beşiktaş` (2016–present),
@@ -511,24 +511,24 @@
 
 #### 10.30.12 L0 LRU cache-collision integrity (per-pod salt + key-truncation defense)
 
-- [ ] **Per-pod cache-key salt.** L0 in-process LRU on each NLP pod
+- [x] **Per-pod cache-key salt.** L0 in-process LRU on each NLP pod
   is keyed by `sha256(pod_id || subject_key || schema_version || calibration_version)[:16]`
   rather than the §10.21.x `sha256(subject_key)[:8]` 64-bit truncate.
   16-byte (128-bit) prefix kills the §10.30 motivation
   (truncate-collision against the 64-bit subject-key bucket); the
   `pod_id` salt prevents two pods with adjacent traffic from
   observing aligned collisions.
-- [ ] **Cache-hit verification gate.** On every L0 hit, the entry's
+- [x] **Cache-hit verification gate.** On every L0 hit, the entry's
   stored `subject_key_full_sha256` (not truncated) is compared
   against the request's; mismatch → drop entry, emit
   `nlp.alert.v1{kind=cache_subject_key_collision, severity=critical}`,
   re-RPC. Mirrors §10.21.x envelope-HMAC-mismatch pattern.
-- [ ] **L0/L1 schema-version namespacing.** Cache keys include
+- [x] **L0/L1 schema-version namespacing.** Cache keys include
   `qa.answer.v1.schema_version` so the §10.27.7 schema-downgrade
   variants do not cross-cache (a v3 client and a v4 client asking
   the same surface query receive different rendered answers; cache
   must respect this). Per-version cache namespace.
-- [ ] **Proof:** `test_l0_cache_key_includes_pod_id_salt`,
+- [x] **Proof:** `test_l0_cache_key_includes_pod_id_salt`,
   `test_l0_cache_key_uses_128bit_prefix_not_64bit`,
   `test_l0_cache_hit_verifies_full_subject_key_sha`,
   `test_l0_cache_collision_emits_critical_alert_and_redo_rpc`,

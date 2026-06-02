@@ -772,6 +772,34 @@ def test_sec_input_classifier_sees_sanitized_text_not_raw() -> None:
     assert seen[0] == "Galatasaray maç tahmini"
 
 
+def test_sec_input_redacts_tr_pii_before_classification_and_records_step() -> None:
+    import common.config as _cfg_mod
+    _cfg_mod.cfg.sec_input_max_len = 8192
+    seen: list[str] = []
+
+    def classifier(text: str) -> tuple[str, str]:
+        seen.append(text)
+        return ("pass", "ok")
+
+    clock = _FakeClock()
+    agent = SecInputAgent(
+        classifier=classifier,
+        debouncer=SecAlertDebouncer(ttl_s=60, clock=clock.mono),
+        clock_iso=clock.iso,
+        new_id=_next_id_factory(),
+    )
+    raw = "Lütfen 0555 123 4567 arayın"
+    req = QaRequest(request_id="r-pii", raw_text=raw, ip="1.2.3.4")
+    out = list(agent.handle(_msg(QA_REQUEST, req.as_dict())))
+    assert len(seen) == 1
+    assert "0555" not in seen[0]
+    assert "[REDACTED:PHONE_TR:" in seen[0]
+    v1 = next(m for m in out if m.envelope.topic == QA_REQUEST_V1)
+    parsed = QaRequestV1.from_dict(v1.payload)
+    assert parsed.sec_steps_run[0] == "tr_pii_redaction"
+    assert parsed.sec_verdict == "sanitized"
+
+
 # ── Producer-side quarantine overflow guard (§7.5) ───────────────
 
 
