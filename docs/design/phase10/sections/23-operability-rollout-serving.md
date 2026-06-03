@@ -361,11 +361,11 @@
   template logic in code. AST guard `test_nlp_per_format_templates_share_slots`
   asserts every template across the three format dirs declares the
   same Jinja2 variable set.
-- [ ] **Format negotiation precedence.** `?answer_format=` query
+- [x] **Format negotiation precedence.** `?answer_format=` query
   param > `Accept` header (`text/plain` → `plain`,
   `text/markdown` → `markdown_safe`, `text/x-screen-reader` → custom
   MIME for SR clients) > default `plain`.
-- [ ] **Default decorative set.** `cfg.nlp_decorative_set = ["⚽",
+- [x] **Default decorative set.** `cfg.nlp_decorative_set = ["⚽",
   "🏆", "🟢", "🔴", "🟡"]` — closed list at v1; AST asserts no other
   emoji codepoints reach the `plain` template output. The
   humanizer tokenizer-mask (§10.8) is the FIRST defense; this is

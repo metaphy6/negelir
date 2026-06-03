@@ -11,6 +11,15 @@ from common.config import cfg
 
 _LANG_TR_DIR = Path(__file__).parent / "lang_tr"
 
+GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES = frozenset({
+    "idioms.tr.yaml",
+})
+
+
+def is_high_leverage_governance_lexicon(path: Path | str) -> bool:
+    actual_name = Path(path).name if isinstance(path, (Path, str)) else str(path)
+    return actual_name in GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
+
 
 class Phase10SchemaError(ValueError):
     pass
@@ -127,6 +136,12 @@ def apply_wh_prior_to_scores(normalized_text: str, scores: list[dict[str, Any]])
     return out
 
 
+def should_fire_wh_prior_drift_alert(previous_week_mean: float, current_week_mean: float) -> bool:
+    """Return True when WH prior drift exceeds the configured threshold in percentage points."""
+    drift_pp = abs(current_week_mean - previous_week_mean) * 100.0
+    return drift_pp > float(cfg.nlp_wh_prior_drift_alert_pp)
+
+
 def load_politeness_markers(path: Path | None = None) -> dict[str, str]:
     actual_path = path or _LANG_TR_DIR / "politeness_markers.tr.yaml"
     if not actual_path.exists():
@@ -151,24 +166,39 @@ def strip_politeness_markers(tokens: list[str]) -> tuple[list[str], str]:
     if not cfg.nlp_politeness_marker_strip_enabled:
         return tokens, "neutral"
     markers = load_politeness_markers()
-    stripped: list[str] = []
+    if not markers:
+        return tokens, "neutral"
+
+    marker_sequences = sorted(
+        ((tuple(marker.lower().split()), cls) for marker, cls in markers.items()),
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    stripped_tokens: list[str] = []
     highest = "neutral"
-    for token in tokens:
-        lower = token.lower()
-        polite = markers.get(lower)
-        if polite is not None:
-            stripped.append(token)
-            if polite == "very_polite":
-                highest = polite
-            elif polite == "polite" and highest == "neutral":
-                highest = polite
-            elif polite == "curt":
-                highest = "curt"
-        else:
-            stripped.append(token)
-    if not stripped:
-        stripped = tokens
-    return [t for t in tokens if t.lower() not in markers], highest
+    lower_tokens = [token.lower() for token in tokens]
+    i = 0
+    while i < len(tokens):
+        matched = False
+        for token_seq, cls in marker_sequences:
+            seq_len = len(token_seq)
+            if seq_len == 0 or i + seq_len > len(tokens):
+                continue
+            if tuple(lower_tokens[i : i + seq_len]) == token_seq:
+                matched = True
+                if cls == "very_polite":
+                    highest = cls
+                elif cls == "polite" and highest == "neutral":
+                    highest = cls
+                elif cls == "curt":
+                    highest = "curt"
+                i += seq_len
+                break
+        if not matched:
+            stripped_tokens.append(tokens[i])
+            i += 1
+
+    return stripped_tokens, highest
 
 
 def load_search_operator_patterns(path: Path | None = None) -> list[re.Pattern]:
@@ -204,19 +234,21 @@ def load_conditional_markers(path: Path | None = None) -> list[str]:
     return [str(item) for item in entries if isinstance(item, str)]
 
 
-def detect_conditional_modifier(tokens: list[str]) -> tuple[str, str]:
+def detect_conditional_modifier(tokens: list[str]) -> tuple[str | tuple[str, ...], str]:
     markers = load_conditional_markers()
     token_text = " ".join(tokens).lower()
     has_conditional = any(re.search(rf"\b{re.escape(marker)}\b", token_text) for marker in markers)
     if not has_conditional:
         return "none", "none"
+    comparative = re.search(r"\b(daha|en|kadar|gibi|önde|geride|fazla|az)\b", token_text)
+    modifier = ("conditional", "comparative") if comparative else "conditional"
     future = re.search(r"\b(kazanırsa|olursa|gelirse|atarsa)\b", token_text)
     past = re.search(r"\b(kazansaydı|olurdu|gelirseyd[iı])\b", token_text)
     if past:
-        return "conditional", "past"
+        return modifier, "past"
     if future:
-        return "conditional", "future"
-    return "conditional", "present"
+        return modifier, "future"
+    return modifier, "present"
 
 
 def load_idiom_phrasebook(path: Path | None = None) -> list[dict[str, Any]]:
@@ -268,17 +300,20 @@ def expand_idioms(tokens: list[str], normalized_text: str) -> tuple[list[str], l
     while i < len(tokens):
         match = None
         match_len = 0
-        best = None
+        match_key: tuple[int, tuple[str, ...]] = (-1, ())
         for entry in phrasebook:
             idiom = str(entry.get("idiom", "")).split()
             if not idiom or len(idiom) > max_len:
                 continue
             if i + len(idiom) > len(tokens):
                 continue
-            if lowered[i:i + len(idiom)] == [w.lower() for w in idiom]:
-                if len(idiom) > match_len:
+            idiom_lower = tuple(w.lower() for w in idiom)
+            if lowered[i:i + len(idiom)] == list(idiom_lower):
+                candidate_key = (len(idiom), idiom_lower)
+                if candidate_key > match_key:
                     match = entry
                     match_len = len(idiom)
+                    match_key = candidate_key
         if match is None:
             out.append(tokens[i])
             i += 1

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"mime"
 	"net/http"
 	_ "net/http/pprof" // §9.17.10: registers /debug/pprof/* handlers on http.DefaultServeMux (unused here — we register on metricsMux selectively)
 	"os"
@@ -29,8 +30,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/net/http2/h2c"
 	_ "go.uber.org/automaxprocs" // Phase 9 §9.17.1: sets GOMAXPROCS from cgroup CPU quota at init time.
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/metaphy6/negelir/server/internal/api"
 	"github.com/metaphy6/negelir/server/internal/auth"
@@ -321,7 +322,7 @@ func main() {
 		// Full auth logic (bcrypt, JWT) wired in Phase 9.2.
 		// Phase 9 §9.1 — /v1/auth/login sub-cap (cfg.AuthLoginMaxBytes; blocks bcrypt-bomb).
 		v1.POST("/auth/login", middleware.BodySizeCap(int64(cfg.AuthLoginMaxBytes)), authLoginHandler(qaGate))
-			v1.POST("/auth/register", authRegisterHandler(qaGate, cfg.APISelfRegistrationEnabled, cfg.APIRegisterCapPerSubnetPerH, rdb))
+		v1.POST("/auth/register", authRegisterHandler(qaGate, cfg.APISelfRegistrationEnabled, cfg.APIRegisterCapPerSubnetPerH, rdb))
 		// Phase 9 §9.1 Predictions — CalibrationStore Protocol seam (Phase 16
 		// forward contract): handler reads only through the interface; backend
 		// is swapped in cmd/api/main.go, never in the handler.
@@ -974,28 +975,70 @@ func bootCostTotalityGate(r *gin.Engine, m *sec.EndpointCostMap) {
 // The qa_correlation_id returned here WILL be stamped on every
 // predict.request.v1 spawned by the Phase 10 NLP fan-out.
 func qaHandler(gate *sec.QAInputGate) gin.HandlerFunc {
-        return func(c *gin.Context) {
-                var req struct {
-                        Q      string `json:"q"`
-                        Locale string `json:"locale"`
-                }
-                if err := c.ShouldBindJSON(&req); err != nil || req.Q == "" {
-                        aperrors.Respond(c, aperrors.CodeInvalidRequest, "q is required")
-                        return
-                }
-                decision := gate.Inspect(req.Q)
-                if decision.Verdict == sec.VerdictQuarantine {
-                        aperrors.Respond(c, aperrors.CodeQAQuarantined, "input rejected by security gate")
-                        return
-                }
-                // Phase 10 NLP fan-out wired here; qa_correlation_id will be
-                // stamped on every predict.request.v1 envelope (§8.16.12).
-                corrID := newQACorrelationID()
-                c.JSON(http.StatusAccepted, gin.H{
-                        "status":           "accepted",
-                        "qa_correlation_id": corrID,
-                })
-        }
+	return func(c *gin.Context) {
+		var req struct {
+			Q      string `json:"q"`
+			Locale string `json:"locale"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.Q == "" {
+			aperrors.Respond(c, aperrors.CodeInvalidRequest, "q is required")
+			return
+		}
+
+		answerFormat, err := resolveAnswerFormat(c)
+		if err != nil {
+			aperrors.Respond(c, aperrors.CodeInvalidRequest, err.Error())
+			return
+		}
+		c.Set("answer_format", answerFormat)
+
+		decision := gate.Inspect(req.Q)
+		if decision.Verdict == sec.VerdictQuarantine {
+			aperrors.Respond(c, aperrors.CodeQAQuarantined, "input rejected by security gate")
+			return
+		}
+		// Phase 10 NLP fan-out wired here; qa_correlation_id will be
+		// stamped on every predict.request.v1 envelope (§8.16.12).
+		corrID := newQACorrelationID()
+		c.JSON(http.StatusAccepted, gin.H{
+			"status":            "accepted",
+			"qa_correlation_id": corrID,
+		})
+	}
+}
+
+func resolveAnswerFormat(c *gin.Context) (string, error) {
+	const (
+		plain        = "plain"
+		markdown     = "markdown_safe"
+		screenReader = "screen_reader"
+	)
+
+	if q := strings.TrimSpace(c.Query("answer_format")); q != "" {
+		switch q {
+		case plain, markdown, screenReader:
+			return q, nil
+		default:
+			return "", fmt.Errorf("unsupported answer_format: %q", q)
+		}
+	}
+
+	acceptHeader := c.GetHeader("Accept")
+	for _, part := range strings.Split(acceptHeader, ",") {
+		mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+		switch strings.ToLower(mediaType) {
+		case "text/x-screen-reader":
+			return screenReader, nil
+		case "text/markdown":
+			return markdown, nil
+		case "text/plain":
+			return plain, nil
+		}
+	}
+	return plain, nil
 }
 
 // newQACorrelationID returns a random UUIDv4 used as the qa_correlation_id
@@ -1003,12 +1046,12 @@ func qaHandler(gate *sec.QAInputGate) gin.HandlerFunc {
 // (§8.16.12). UUIDv4 is used here (not v7) because qa correlation IDs are
 // content-correlated, not time-sorted — the timestamp prefix is meaningless.
 func newQACorrelationID() string {
-        var b [16]byte
-        if _, err := rand.Read(b[:]); err != nil {
-                panic("cmd/api: crypto/rand.Read failed: " + err.Error())
-        }
-        b[6] = (b[6] & 0x0f) | 0x40 // version 4
-        b[8] = (b[8] & 0x3f) | 0x80 // variant 10 (RFC 4122)
-        return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-                b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("cmd/api: crypto/rand.Read failed: " + err.Error())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10 (RFC 4122)
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

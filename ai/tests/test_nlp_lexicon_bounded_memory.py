@@ -77,7 +77,7 @@ def _make_dialects_yaml() -> str:
         + "entries:\n"
         + "  - token: kl\n"
         + "    canonical_tokens:\n"
-        + "      - kilit\n"
+        + "      - Galatasaray\n"
     )
 
 

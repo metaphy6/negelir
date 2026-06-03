@@ -83,12 +83,14 @@ def make_diacritic_restorer(cfg: Config, input_source: str = "keyboard") -> Call
 
     The voice path uses a relaxed tie-break ratio to accept more aggressive
     diacritic restoration when ASR under-emits diacritics on low-frequency tokens.
+    Keyboard / non-voice input is a pass-through hook to preserve the user's
+    typed ASCII form and avoid over-restoring Turkish characters during normal
+    keyboard entry.
     """
-    tie_break_ratio = (
-        cfg.nlp_diacritic_tie_break_ratio_voice
-        if str(input_source).strip().lower() == "voice"
-        else cfg.nlp_diacritic_tie_break_ratio
-    )
+    if str(input_source).strip().lower() != "voice":
+        return lambda text: text
+
+    tie_break_ratio = cfg.nlp_diacritic_tie_break_ratio_voice
     table = DiacriticsTable.load(tie_break_ratio=tie_break_ratio)
     return table.restore
 

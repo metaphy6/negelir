@@ -841,6 +841,17 @@ class Config:
     #   latency breach bypasses grammar validation instead of delaying
     #   pipeline completion.
     nlp_output_grammar_validator_killswitch_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_OUTPUT_GRAMMAR_VALIDATOR_KILLSWITCH_ENABLED", "false").lower() in ("true", "1", "yes"))
+    # nlp_decorative_set: closed allowed decorative emoji in plain answer
+    #   output. Proofreader blocks any emoji outside this set (§10.23.7).
+    nlp_decorative_set: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            item.strip()
+            for item in os.getenv(
+                "NEGELIR_NLP_DECORATIVE_SET", "⚽,🏆,🟢,🔴,🟡"
+            ).split(",")
+            if item.strip()
+        )
+    )
     # nlp_per_tenant_humanizer_refill_per_s: token refill rate per second for
     #   humanizer tenant budget (§10.23.1). Default 2.0.
     nlp_per_tenant_humanizer_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_PER_TENANT_HUMANIZER_REFILL_PER_S", "2")))

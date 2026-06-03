@@ -1,13 +1,14 @@
 """Phase 10 §10.9 + §10.16 — Test for nlp.proofreader.v1 deterministic gates.
 
-This test covers §10.9 bullet 2 (gates 1-6) + §10.16 (gate 7):
+This test covers §10.9 bullet 2 (gates 1-7 plus decorative emoji whitelist) + §10.16 (gate 8):
   1. Citation block present and unmodified (sha256 check)
   2. No mid-sentence English (regex blocklist with allowlist)
   3. Length bounds (min/max characters)
   4. PII redaction (phone/email/credit-card)
   5. Forbidden phrases (from yaml blocklist)
-  6. Suffix-harmony probe (sample 5 random constructions)
-  7. Confidence narration discipline (§10.16: banded confidence text must not
+  6. Decorative emoji whitelist (allowed decorative emoji only)
+  7. Suffix-harmony probe (sample 5 random constructions)
+  8. Confidence narration discipline (§10.16: banded confidence text must not
      contradict raw probability)
 
 Each gate is tested with:
@@ -231,6 +232,34 @@ def test_gate5_no_forbidden_phrase_passes():
     assert result.block_reason != "forbidden_phrase"
 
 
+def test_gate5_decorative_emoji_allowed_passes():
+    """Gate 6.1: allowed decorative emoji pass the proofreader whitelist."""
+    cfg = Config()
+    answer = "Galatasaray bugün kazanacak ⚽"
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is True
+    assert result.block_reason is None
+
+
+def test_gate5_decorative_emoji_not_in_set_blocks():
+    """Gate 6.1: disallowed emoji outside the decorative set are blocked."""
+    cfg = Config()
+    answer = "Galatasaray bugün kazanacak 🏟️"
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is False
+    assert result.block_reason == "decorative_emoji"
+
+
 def test_gate6_suffix_harmony_violation_blocks():
     """Gate 6: suffix harmony violation → blocked."""
     cfg = Config()
@@ -437,6 +466,7 @@ def test_proofreader_block_taxonomy_complete():
         "pii_redacted",
         "forbidden_phrase",
         "suffix_harmony",
+        "decorative_emoji",
         "confidence_narration_contradiction",
         "tr_output_grammar_violation",
     })
@@ -507,6 +537,16 @@ def test_proofreader_block_taxonomy_complete():
     )
     if not r5.passed:
         observed_reasons.add(r5.block_reason)
+
+    # Gate 6.1: decorative_emoji
+    r6_0 = proofread_answer(
+        "Galatasaray bugün kazanacak 🏟️",
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    if not r6_0.passed:
+        observed_reasons.add(r6_0.block_reason)
 
     # Gate 6: suffix_harmony
     r6 = proofread_answer(

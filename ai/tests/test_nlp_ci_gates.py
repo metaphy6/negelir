@@ -137,6 +137,33 @@ class TestIntentAccuracyGate:
         # assert accuracy >= floor, \
         #     f"Intent accuracy {accuracy:.4f} < floor {floor:.4f} on core slice"
 
+    def test_idiom_eval_corpus_min_coverage(self, golden_corpus: List[Dict[str, Any]]) -> None:
+        """Validate the Turkish eval corpus includes ≥25 idiom-bearing rows."""
+        from nlp.phase10_30 import load_idiom_phrasebook
+        import unicodedata
+
+        def fold(text: str) -> str:
+            normalized = unicodedata.normalize("NFKC", text)
+            normalized = normalized.replace("İ", "i").replace("ı", "i").replace("i̇", "i")
+            return normalized.lower().translate(str.maketrans({
+                "ç": "c",
+                "ö": "o",
+                "ü": "u",
+                "ş": "s",
+                "ğ": "g",
+            }))
+
+        idioms = [fold(entry["idiom"]) for entry in load_idiom_phrasebook()]
+        matching = 0
+        for entry in golden_corpus:
+            raw = fold(entry["raw"])
+            if any(idiom in raw for idiom in idioms):
+                matching += 1
+
+        assert matching >= 25, (
+            f"Eval corpus contains only {matching} idiom-bearing rows; require ≥25 for §10.30.3 coverage seed"
+        )
+
     def test_intent_accuracy_on_code_switch_slice(
         self,
         golden_corpus: List[Dict[str, Any]],

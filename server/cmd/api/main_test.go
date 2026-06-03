@@ -93,6 +93,65 @@ func TestQAHandlerRejectsInjectionPattern(t *testing.T) {
 	}
 }
 
+func TestQAHandlerRejectsUnsupportedAnswerFormatQueryParam(t *testing.T) {
+	gate := sec.NewQAInputGate(nil, 8192)
+	r := newTestRouter(gate)
+
+	body := strings.NewReader(`{"q":"Galatasaray maçı ne zaman?","locale":"tr-TR"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/qa?answer_format=html", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsupported answer_format query param, got %d; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestResolveAnswerFormatPrefersQueryParamOverAccept(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa?answer_format=markdown_safe", nil)
+	c.Request.Header.Set("Accept", "text/plain")
+
+	format, err := resolveAnswerFormat(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if format != "markdown_safe" {
+		t.Fatalf("expected markdown_safe, got %q", format)
+	}
+}
+
+func TestResolveAnswerFormatFromAcceptHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	c.Request.Header.Set("Accept", "text/x-screen-reader, text/plain;q=0.5")
+
+	format, err := resolveAnswerFormat(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if format != "screen_reader" {
+		t.Fatalf("expected screen_reader, got %q", format)
+	}
+}
+
+func TestResolveAnswerFormatDefaultsToPlain(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+
+	format, err := resolveAnswerFormat(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if format != "plain" {
+		t.Fatalf("expected plain, got %q", format)
+	}
+}
+
 // TestQAHandlerReturnsQACorrelationID — boundary (§9.15): 202 response MUST
 // include a non-empty qa_correlation_id that will be stamped on every
 // predict.request.v1 spawned by the Phase 10 NLP fan-out (§8.16.12).
@@ -168,6 +227,7 @@ func TestBootLuaGatesUsesLibrary(t *testing.T) {
 		}
 	}
 }
+
 // TestBootCostTotalityGateHappyPath — every registered route has an explicit
 // cost entry; bootCostTotalityGate must not panic or return missing patterns.
 func TestBootCostTotalityGateHappyPath(t *testing.T) {
@@ -202,7 +262,7 @@ func TestBootCostTotalityGateDetectsUnmappedRoute(t *testing.T) {
 		t.Fatalf("LoadEndpointCosts: %v", err)
 	}
 	routes := []string{
-		"/api/v1/health", // known, has entry
+		"/api/v1/health",      // known, has entry
 		"/api/v1/new-feature", // NOT in YAML — must be flagged
 	}
 	missing := m.CheckTotality(routes, nil)

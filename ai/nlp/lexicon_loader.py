@@ -363,10 +363,14 @@ def _build_alias_index(
         for field_name in ("names", "aliases"):
             for alias in entry.get(field_name, []) or []:
                 if alias and isinstance(alias, str):
-                    index[alias] = hit
+                    stripped = alias.strip()
+                    if stripped:
+                        index[stripped] = hit
         token = entry.get("token")
         if token and isinstance(token, str):
-            index[token] = hit
+            stripped = token.strip()
+            if stripped:
+                index[stripped] = hit
     return index
 
 

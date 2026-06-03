@@ -16,12 +16,14 @@ Deterministic gates (any failure → block, §10.9 bullet 2):
      → redact (replace with `[***]`) AND emit nlp.alert.v1{kind=nlp_pii_in_answer}.
   5. **Forbidden phrases.** Pinned blocklist (ai/nlp/data/forbidden_phrases.tr.yaml)
      — covers self-promotion, liability disclaimers, jailbreak echoes.
-  6. **Suffix-harmony probe.** Sample 5 random `<noun>'<suffix>` constructions;
+  6. **Decorative emoji whitelist.** Rendered output may only contain allowed
+     decorative emoji; any emoji outside the set is blocked.
+  7. **Suffix-harmony probe.** Sample 5 random `<noun>'<suffix>` constructions;
      assert each passes ai/common/text/turkish.py::suffix_harmony_ok.
 
 Block taxonomy (§10.9 bullet 3): nlp.event.v1{kind=proofreader_blocked, reason ∈
 {citation_drift, mid_sentence_english, length_under, length_over, pii_redacted,
-forbidden_phrase, suffix_harmony}}.
+forbidden_phrase, decorative_emoji, suffix_harmony}}.
 
 Fail-safe (§10.9 bullet 4): Proofreader exception → emit template-only answer
 (NEVER block the user on proofreader bug); emit nlp.alert.v1{kind=nlp_proofreader_failed}.
@@ -37,6 +39,7 @@ import hashlib
 import random
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -102,6 +105,15 @@ def _load_forbidden_phrases() -> "list[str]":
 
     _forbidden_phrases = [p.lower() for p in data.get("phrases", [])]
     return _forbidden_phrases
+
+
+def _find_unauthorized_decorative_emoji(text: str, allowed: set[str]) -> list[str]:
+    """Return decorative emoji characters in text that are not in the allowlist."""
+    return [
+        ch
+        for ch in text
+        if unicodedata.category(ch) == "So" and ch not in allowed
+    ]
 
 
 class ProofreadResult:
@@ -333,6 +345,21 @@ def proofread_answer(
             passed=False,
             answer_text=working_text,
             block_reason="forbidden_phrase",
+            alert_severity="warn",
+            redacted_pii=False,
+        )
+
+    # Gate 6.1: Decorative emoji whitelist (§10.23.7).
+    # Any emoji outside the allowed decorative set is blocked by the proofreader.
+    unauthorized_emoji = _find_unauthorized_decorative_emoji(
+        working_text,
+        set(cfg.nlp_decorative_set),
+    )
+    if unauthorized_emoji:
+        return ProofreadResult(
+            passed=False,
+            answer_text=working_text,
+            block_reason="decorative_emoji",
             alert_severity="warn",
             redacted_pii=False,
         )

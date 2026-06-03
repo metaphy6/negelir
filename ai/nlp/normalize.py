@@ -224,7 +224,7 @@ class NormalizedInput:
     """Detected politeness marker class after normalizing polite/casual tokens."""
     query_style: str = "natural"
     """Detected query style for the input, e.g. natural, search, quoted_exact_search."""
-    intent_modifier: str = "none"
+    intent_modifier: str | tuple[str, ...] = "none"
     """Detected intent modifier such as conditional or comparative."""
     idiom_events: tuple[dict[str, Any], ...] = tuple()
     """Logged idiom expansion/ambiguity events discovered during normalization."""

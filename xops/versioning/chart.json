@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 364,
+    "build": 385,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.71.1",
+      "version": "1.71.15",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-02T23:40:19+00:00",
+      "last_changed": "2026-06-03T07:45:56+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.45.4",
+      "version": "1.45.5",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-02T20:47:27+00:00",
+      "last_changed": "2026-06-03T05:13:14+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-02T21:21:13+00:00"
     },
     "docs": {
-      "version": "1.89.0",
+      "version": "1.93.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-02T23:28:40+00:00"
+      "last_changed": "2026-06-03T07:10:04+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -10493,6 +10493,195 @@
       "from": "1.71.0",
       "to": "1.71.1",
       "build": 364
+    },
+    {
+      "timestamp": "2026-06-03T05:13:14+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 10 §10.23 QA answer_format negotiation",
+      "from": "1.45.4",
+      "to": "1.45.5",
+      "build": 365
+    },
+    {
+      "timestamp": "2026-06-03T05:18:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fix intent enum loader schema validation order and restore IntentClassifier factory method",
+      "from": "1.71.1",
+      "to": "1.71.2",
+      "build": 366
+    },
+    {
+      "timestamp": "2026-06-03T05:21:17+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "10.30: WH prior tier-blind invariant AST guard",
+      "from": "1.89.0",
+      "to": "1.90.0",
+      "build": 367
+    },
+    {
+      "timestamp": "2026-06-03T05:24:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.30: add WH prior drift alert helper and proof tests",
+      "from": "1.71.2",
+      "to": "1.71.3",
+      "build": 368
+    },
+    {
+      "timestamp": "2026-06-03T05:27:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30 idioms governance metadata",
+      "from": "1.71.3",
+      "to": "1.71.4",
+      "build": 369
+    },
+    {
+      "timestamp": "2026-06-03T05:27:39+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.30 governance docs update for idioms",
+      "from": "1.90.0",
+      "to": "1.91.0",
+      "build": 370
+    },
+    {
+      "timestamp": "2026-06-03T05:34:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.30.3 idiom eval coverage seed",
+      "from": "1.71.4",
+      "to": "1.71.5",
+      "build": 371
+    },
+    {
+      "timestamp": "2026-06-03T05:38:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fix idiom expansion lexicographic tie-break",
+      "from": "1.71.5",
+      "to": "1.71.6",
+      "build": 372
+    },
+    {
+      "timestamp": "2026-06-03T05:47:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.30 conditional tense dispatcher routing fix",
+      "from": "1.71.6",
+      "to": "1.71.7",
+      "build": 373
+    },
+    {
+      "timestamp": "2026-06-03T06:02:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.23.7: decorative emoji whitelist proofreader gate",
+      "from": "1.71.7",
+      "to": "1.71.8",
+      "build": 374
+    },
+    {
+      "timestamp": "2026-06-03T06:09:59+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 baseline tracker/ROADMAP metadata sync",
+      "from": "1.91.0",
+      "to": "1.92.0",
+      "build": 375
+    },
+    {
+      "timestamp": "2026-06-03T06:12:11+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 baseline tracker/ROADMAP checklist meta item",
+      "from": "1.92.0",
+      "to": "1.92.1",
+      "build": 376
+    },
+    {
+      "timestamp": "2026-06-03T06:18:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix QaRequestV1 dataclass ordering and close routing AST guard",
+      "from": "1.71.8",
+      "to": "1.71.9",
+      "build": 377
+    },
+    {
+      "timestamp": "2026-06-03T06:24:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 conditional+comparative tuple modifier support",
+      "from": "1.71.9",
+      "to": "1.71.10",
+      "build": 378
+    },
+    {
+      "timestamp": "2026-06-03T06:36:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "keyboard input diacritic hook pass-through; conditional marker proof test",
+      "from": "1.71.10",
+      "to": "1.71.11",
+      "build": 379
+    },
+    {
+      "timestamp": "2026-06-03T06:49:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix politeness marker phrase stripping before intent classifier",
+      "from": "1.71.11",
+      "to": "1.71.12",
+      "build": 380
+    },
+    {
+      "timestamp": "2026-06-03T06:49:37+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "tick Phase 10 politeness classifier guard design checkbox",
+      "from": "1.92.1",
+      "to": "1.93.0",
+      "build": 381
+    },
+    {
+      "timestamp": "2026-06-03T06:55:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.30 AST guard for politeness not consulted by routing/proofreader",
+      "from": "1.71.12",
+      "to": "1.71.13",
+      "build": 382
+    },
+    {
+      "timestamp": "2026-06-03T07:10:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.30.5 politeness invariant test",
+      "from": "1.71.13",
+      "to": "1.71.14",
+      "build": 383
+    },
+    {
+      "timestamp": "2026-06-03T07:10:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.30.5 politeness invariant design checkbox",
+      "from": "1.93.0",
+      "to": "1.93.1",
+      "build": 384
+    },
+    {
+      "timestamp": "2026-06-03T07:45:56+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "relax dialect xref validation for generic lexicon tokens",
+      "from": "1.71.14",
+      "to": "1.71.15",
+      "build": 385
     }
   ]
 }

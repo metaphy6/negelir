@@ -1392,8 +1392,8 @@ class QaRequestV1:
     request_id: str
     sanitized_text: str
     locale: str
-    answer_format: str | None = None
     sec_verdict: str
+    answer_format: str | None = None
     input_source: str | None = None
     sec_steps_run: list[str] = field(default_factory=list)
     client_id: str | None = None

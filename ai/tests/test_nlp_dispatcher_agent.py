@@ -549,6 +549,96 @@ class TestNlpDispatcherDeterministicBackoff:
             for r in results
         )
 
+    def test_conditional_future_match_outcome_is_rewritten_to_predict_conditional_intent(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "qa_correlation_id": "corr-future",
+                "normalized_text": "galatasaray kazanırsa lider olur mu",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == QA_ANSWER_V1
+        assert results[0].payload["intent"] == "predict.match_outcome.conditional"
+        assert results[0].payload["kind"] == "disambiguation"
+
+    def test_conditional_marker_table_byte_identical_cross_phase(self) -> None:
+        path = Path(__file__).resolve().parents[2] / "ai" / "nlp" / "lang_tr" / "conditional_markers.tr.yaml"
+        assert path.exists(), f"Missing conditional markers file: {path}"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+            "a52ad54a7728084577dc3e3e3b0e93c4960081bee8fd2f1f49cd340f5dbb8703"
+        )
+
+    def test_conditional_plus_comparative_tuple_routing(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "qa_correlation_id": "corr-cond-comp",
+                "normalized_text": "galatasaray kazanırsa fenerbahçeden önde mi olur",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == QA_ANSWER_V1
+        assert results[0].payload["intent"] == "predict.match_outcome.conditional"
+        assert results[0].payload["kind"] == "disambiguation"
+
+    def test_conditional_present_match_outcome_rewrites_to_data_lineup_probable(self, agent: NlpDispatcherAgent) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "qa_correlation_id": "corr-present",
+                "normalized_text": "galatasaray oynarsa kim oynar",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "lineup_probable"
+
+    def test_conditional_past_intent_routes_to_meta_counterfactual_past_unsupported(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "qa_correlation_id": "corr-past",
+                "normalized_text": "galatasaray kazansaydı lider olurdu mu",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == QA_ANSWER_V1
+        assert results[0].payload["intent"] == "meta.counterfactual_past_unsupported"
+        assert results[0].payload["kind"] == "counterfactual_past_unsupported"
+
+    def test_conditional_routing_matrix_complete_ast(self) -> None:
+        src = Path(__file__).resolve().parents[2] / "ai" / "swarm" / "agents" / "nlp" / "__init__.py"
+        tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
+
+        required_constants = {
+            "predict.match_outcome.conditional",
+            "meta.counterfactual_past_unsupported",
+            "data.lineup_probable",
+        }
+        found_constants: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if node.value in required_constants:
+                    found_constants.add(node.value)
+
+        missing = required_constants - found_constants
+        assert missing == set(), f"Conditional routing matrix missing constants: {sorted(missing)}"
+
     def test_progressive_epistemic_aspectual_stack_routes_to_fixture_lookup_in_play(
         self, agent: NlpDispatcherAgent
     ) -> None:

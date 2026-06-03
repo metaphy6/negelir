@@ -177,11 +177,54 @@ class TestPhase1030Normalization:
         result = normalize_input("göze girmek takım")
         assert "etkilenmek" in result.tokens
 
+    def test_idiom_expansion_is_deterministic_and_longest_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from nlp.phase10_30 import expand_idioms
+
+        def fake_phrasebook() -> list[dict[str, str]]:
+            return [
+                {"idiom": "sahada kalmak", "expansion": "oyundan çıkmak"},
+                {"idiom": "sahada", "expansion": "sahayı"},
+                {"idiom": "sahada kalmak", "expansion": "oyunduan çıkmak"},
+            ]
+
+        monkeypatch.setattr(
+            "nlp.phase10_30.load_idiom_phrasebook",
+            fake_phrasebook,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "nlp.phase10_30.load_idiom_context",
+            lambda: {},
+            raising=False,
+        )
+
+        tokens = ["sahada", "kalmak"]
+        expanded_first, events_first = expand_idioms(tokens, "sahada kalmak")
+        expanded_second, events_second = expand_idioms(tokens, "sahada kalmak")
+
+        assert expanded_first == ["oyundan çıkmak"]
+        assert events_first == [
+            {
+                "kind": "idiom_expansion",
+                "idiom": "sahada kalmak",
+                "span": (0, 2),
+                "replaced_tokens": ["sahada", "kalmak"],
+            }
+        ]
+        assert expanded_second == expanded_first
+        assert events_second == events_first
+
     def test_conditional_modifier_set_when_marker_present(self) -> None:
         from nlp.normalize import normalize_input
 
         result = normalize_input("galatasaray kazanırsa lider olur mu")
         assert result.intent_modifier == "conditional"
+
+    def test_conditional_plus_comparative_tuple_set_when_both_markers_present(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray kazanırsa fenerbahçeden önde mi olur")
+        assert result.intent_modifier == ("conditional", "comparative")
 
     def test_search_operator_patterns_detect_plus_minus(self) -> None:
         from nlp.normalize import normalize_input
@@ -269,6 +312,19 @@ class TestPhase1030Normalization:
 
         result = normalize_input("yani galatasaray maçını tahmin et", input_source="keyboard")
         assert "yani" in result.tokens
+
+    def test_keyboard_input_does_not_restore_diacritics_by_default(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray mac", input_source="keyboard")
+        assert "mac" in result.tokens
+        assert "maç" not in result.tokens
+
+    def test_voice_input_restores_diacritics_on_explicit_voice_path(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray mac", input_source="voice")
+        assert "maç" in result.tokens
 
     def test_voice_input_strips_yani(self) -> None:
         from nlp.normalize import normalize_input

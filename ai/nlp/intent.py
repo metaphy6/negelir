@@ -69,16 +69,16 @@ def _load_intent_labels() -> FrozenSet[str]:
         ValueError: if schema_version != 1 or ``enum`` key is absent.
     """
     raw = json.loads(_INTENT_ENUM_PATH.read_text(encoding="utf-8"))
+    values = raw.get("enum")
+    if not values or not isinstance(values, list):
+        raise ValueError(
+            "_intent_enum.json missing or empty 'enum' array."
+        )
     version = raw.get("schema_version")
     if version != _INTENT_ENUM_SCHEMA_VERSION:
         raise ValueError(
             f"_intent_enum.json schema_version mismatch: "
             f"expected={_INTENT_ENUM_SCHEMA_VERSION}, got={version!r}"
-        )
-    values = raw.get("enum")
-    if not values or not isinstance(values, list):
-        raise ValueError(
-            "_intent_enum.json missing or empty 'enum' array."
         )
     return frozenset(values)
 
@@ -409,6 +409,7 @@ class IntentClassifier:
     # ------------------------------------------------------------------
 
     @classmethod
+    def _resolve_model_path(cls, cfg: object, canary: bool = False) -> Path:
         """Resolve the deployed intent model path, including canary pods.
 
         When ``cfg.nlp_canary_pod`` is true, the canary pod loads the canary

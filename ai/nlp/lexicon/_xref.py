@@ -4,7 +4,7 @@ Validates that cross-file references in the lexicon snapshot are consistent:
   * Every player.team_canonical_id resolves in teams
   * Every team.league_canonical_id resolves in leagues
   * Every competition.parent_id resolves
-  * Every alias in dialects expands to tokens that resolve via teams ∪ players ∪ markets
+  * Dialects canonical_tokens are syntactically valid; generic vocabulary is allowed
   * Every entities_negative rule references at least one declared canonical_id
 
 Called by LexiconStore.maybe_reload() before atomic swap under §10.21.3
@@ -23,6 +23,8 @@ Usage::
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
+
+from common.text.turkish import lowercase_tr
 
 if TYPE_CHECKING:
     from nlp.lexicon_loader import _LoadedFile
@@ -142,18 +144,9 @@ def validate_xref(snapshot: "dict[str, _LoadedFile]") -> list[str]:
                         f"parent_id={parent_id!r} does not resolve in competitions"
                     )
 
-    # ── Check (d): dialects canonical_tokens resolve ───────────────────────
-    # Union of all entity names/aliases for dialect token resolution.
-    # For simplicity, collect all strings from the alias_index of teams,
-    # players, and markets (this includes both names and aliases).
-    resolvable_tokens: set[str] = set()
-    for fname in ["teams.tr.yaml", "players.tr.yaml", "markets.tr.yaml",
-                  "teams.tr-TR.yaml", "players.tr-TR.yaml", "markets.tr-TR.yaml"]:
-        loaded = snapshot.get(fname)
-        if loaded:
-            # alias_index keys are the resolvable token strings.
-            resolvable_tokens.update(loaded.alias_index.keys())
-
+    # ── Check (d): dialects canonical_tokens are syntactically valid ────────
+    # Dialects can normalize to generic Turkish vocabulary as well as entity
+    # aliases, so this validator does not require cross-file resolution here.
     dialects_loaded = snapshot.get("dialects.tr.yaml") or snapshot.get("dialects.tr-TR.yaml")
     if dialects_loaded:
         for i, entry in enumerate(dialects_loaded.entries):
@@ -163,12 +156,11 @@ def validate_xref(snapshot: "dict[str, _LoadedFile]") -> list[str]:
             if canonical_tokens and isinstance(canonical_tokens, list):
                 for token in canonical_tokens:
                     if token and isinstance(token, str):
-                        if token not in resolvable_tokens:
+                        if not token.strip():
                             dialect_token = entry.get("token", f"<entry {i}>")
                             errors.append(
                                 f"dialects.tr.yaml[{i}] (token={dialect_token!r}): "
-                                f"canonical_token={token!r} does not resolve in "
-                                f"teams ∪ players ∪ markets"
+                                f"canonical_token must be a non-empty string"
                             )
 
     # ── Check (e): entities_negative references at least one canonical_id ──

@@ -16,6 +16,7 @@ Covers:
 """
 from __future__ import annotations
 
+import builtins
 import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -38,6 +39,17 @@ class _Cfg:
         defaults.update(kwargs)
         for k, v in defaults.items():
             setattr(self, k, v)
+
+
+def _simulate_fasttext_missing(monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "fasttext":
+            raise ImportError("No module named fasttext")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
 
 
 # ---------------------------------------------------------------------------
@@ -279,11 +291,11 @@ class TestIntentClassifierScaffold:
         from nlp.intent import IntentClassifier
 
         baseline_model = MagicMock()
-        baseline_model.predict.return_value = ("predict.match_outcome", 0.91)
+        baseline_model.predict.return_value = (["predict.match_outcome"], [0.91])
         baseline = IntentClassifier(baseline_model, Path("baseline.bin"), _model_version="1.0.0")
 
         canary_model = MagicMock()
-        canary_model.predict.return_value = ("predict.match_outcome", 0.92)
+        canary_model.predict.return_value = (["predict.match_outcome"], [0.92])
         canary = IntentClassifier(canary_model, Path("canary.bin"), _model_version="1.1.0")
 
         payload = IntentClassifier.make_shadow_payload(
@@ -303,8 +315,9 @@ class TestIntentClassifierScaffold:
         assert payload["canary_model_version"] == "1.1.0"
         assert payload["producer"] == "nlp.intent.v1"
 
-    def test_sha256_match_proceeds_to_fasttext(self, tmp_path):
+    def test_sha256_match_proceeds_to_fasttext(self, monkeypatch, tmp_path):
         """Correct SHA passes verification; load proceeds to fasttext import."""
+        _simulate_fasttext_missing(monkeypatch)
         from nlp.intent import IntentClassifier, IntentModelUnavailable
 
         model_file = tmp_path / "intent.bin"
@@ -319,8 +332,9 @@ class TestIntentClassifierScaffold:
         with pytest.raises(IntentModelUnavailable, match="fasttext library"):
             IntentClassifier.load(cfg)
 
-    def test_sidecar_sha_file_takes_precedence_over_config(self, tmp_path):
+    def test_sidecar_sha_file_takes_precedence_over_config(self, monkeypatch, tmp_path):
         """§10.21.1: Sidecar .sha256 file is checked before config."""
+        _simulate_fasttext_missing(monkeypatch)
         from nlp.intent import IntentClassifier, IntentModelUnavailable
 
         model_file = tmp_path / "intent.bin"
@@ -363,7 +377,8 @@ class TestIntentClassifierScaffold:
         ):
             IntentClassifier.load(cfg)
 
-    def test_canary_pod_loads_canary_model_path(self, tmp_path):
+    def test_canary_pod_loads_canary_model_path(self, monkeypatch, tmp_path):
+        _simulate_fasttext_missing(monkeypatch)
         from nlp.intent import IntentClassifier, IntentModelUnavailable
 
         model_file = tmp_path / "intent.tr.bin"
@@ -429,8 +444,9 @@ class TestIntentClassifierScaffold:
         with pytest.raises(IntentModelSHAMismatch, match="unreadable"):
             IntentClassifier.load(cfg)
 
-    def test_sidecar_sha_missing_falls_back_to_config(self, tmp_path):
+    def test_sidecar_sha_missing_falls_back_to_config(self, monkeypatch, tmp_path):
         """§10.21.1: No sidecar → fall back to config SHA."""
+        _simulate_fasttext_missing(monkeypatch)
         from nlp.intent import IntentClassifier, IntentModelUnavailable
 
         model_file = tmp_path / "intent.bin"
@@ -448,8 +464,9 @@ class TestIntentClassifierScaffold:
         with pytest.raises(IntentModelUnavailable, match="fasttext library"):
             IntentClassifier.load(cfg)
 
-    def test_neither_sidecar_nor_config_skips_verification(self, tmp_path):
+    def test_neither_sidecar_nor_config_skips_verification(self, monkeypatch, tmp_path):
         """§10.21.1: No sidecar and empty config → skip SHA check (dev mode)."""
+        _simulate_fasttext_missing(monkeypatch)
         from nlp.intent import IntentClassifier, IntentModelUnavailable
 
         model_file = tmp_path / "intent.bin"

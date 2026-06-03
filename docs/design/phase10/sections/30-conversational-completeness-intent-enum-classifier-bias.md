@@ -107,7 +107,7 @@
   enum-not-routed bug where a new intent reaches the dispatcher
   and falls through to whatever default the prior implementer
   picked.
-- [ ] **Proof:** `test_intent_enum_v4_additive_only`,
+- [x] **Proof:** `test_intent_enum_v4_additive_only`,
   `test_intent_enum_cross_language_sha_match`,
   `test_intent_enum_has_tier_mapping_row`,
   `test_intent_enum_has_template_coverage`,
@@ -145,13 +145,13 @@
   for explainability and drift monitoring (per-WH-word mean shift
   > `nlp_wh_prior_drift_alert_pp=2.0` percentage points over a
   7-day window → `nlp.alert.v1{kind=wh_prior_drift, severity=warn}`).
-- [ ] **Tier-blind invariant.** AST guard ensures the WH-prior
+- [x] **Tier-blind invariant.** AST guard ensures the WH-prior
   table is consulted by the *intent classifier only* and never by
   the dispatcher, the proofreader, or the template selector
   (those operate on the post-classifier `intent_id`, not the
   WH-token). Defends against the WH-token being smuggled into
   routing as a side channel.
-- [ ] **Proof:** `test_wh_intent_map_covers_all_wh_words`,
+- [x] **Proof:** `test_wh_intent_map_covers_all_wh_words`,
   `test_wh_prior_applied_after_logit_before_calibration`,
   `test_wh_prior_drift_alert_fires_above_threshold`,
   `test_wh_token_not_consulted_post_classifier_ast`.
@@ -183,7 +183,7 @@
   for full traceability; the expansion is REVERSIBLE for audit
   re-render (the audit bundle stores both pre- and post-expansion
   token streams per §10.27.3).
-- [ ] **Provenance & two-reviewer rule.** `idioms.tr.yaml` is added
+- [x] **Provenance & two-reviewer rule.** `idioms.tr.yaml` is added
   to the §10.25.6 lexicon-contributor governance high-leverage
   table (PR-gated, two-reviewer minimum, alias-delta cap per
   §10.26.6). `nlp-curator` orthographic + `nlp-domain-football`
@@ -196,10 +196,10 @@
   `nlp.event.v1{kind=idiom_ambiguous, idiom_id}` and proceed
   with literal interpretation; coverage telemetry tracks per-idiom
   trigger-hit-rate.
-- [ ] **Coverage seed.** Initial v1 ships ≥ 60 idioms; CI gate
+- [x] **Coverage seed.** Initial v1 ships ≥ 60 idioms; CI gate
   `test_idiom_phrasebook_min_coverage` enforces floor; eval-set
   §10.18 grows by ≥ 25 idiom-bearing rows.
-- [ ] **Proof:** `test_idiom_expansion_is_deterministic_and_longest_match`,
+- [x] **Proof:** `test_idiom_expansion_is_deterministic_and_longest_match`,
   `test_idiom_expansion_is_reversible_in_audit_bundle`,
   `test_idiom_event_emitted_per_expansion`,
   `test_idiom_ambiguous_falls_back_to_literal_with_event`,
@@ -215,23 +215,23 @@
   via Zemberek). At least one trigger present → set
   `intent_modifier=conditional` in `qa.intent.v1` (joins
   existing `none`/`comparative` from §10.29.8; enum becomes 3-valued).
-- [ ] **Tense-discriminated dispatch matrix** (deterministic, AST-guarded):
+- [x] **Tense-discriminated dispatch matrix** (deterministic, AST-guarded):
   | Trigger tense | Intent class | Route |
   |---|---|---|
   | conditional + future verb (*kazanırsa lider olur* — *future projected*) | `predict.*` | `predict.match_outcome.conditional` (NEW intent_id, §10.30.1); template appends closed-text disclosure *"Şartlı bir tahmin yapıyorum; gerçek sonuç farklı olabilir."* |
   | conditional + past verb (*kazansaydı lider olurdu* — *counterfactual past*) | (none) | §10.26.5 counterfactual_past firewall → `meta.counterfactual_past_unsupported` |
   | conditional + present verb (*Galatasaray oynarsa kim oynar* — *present hypothetical*) | `data.lineup_probable` | regular dispatch, modifier carried to `request_metadata.intent_modifier=conditional` for analytics |
-- [ ] **Routing AST guard.** `test_conditional_routing_matrix_complete`
+- [x] **Routing AST guard.** `test_conditional_routing_matrix_complete`
   walks the dispatcher and asserts every (intent_class × tense)
   cell has an explicit route or refusal — no fall-through default.
-- [ ] **Conditional + comparative compose-ability.** When BOTH
+- [x] **Conditional + comparative compose-ability.** When BOTH
   conditional and comparative triggers fire (*Galatasaray
   kazanırsa Fenerbahçe'den önde mi olur?*), modifier is the
   ordered tuple `(conditional, comparative)`; dispatcher routes
   to `predict.match_outcome.conditional` and the comparative-leg
   fan-out from §10.29.8 applies on the predicted-state world.
   Closed enum for ordered tuples.
-- [ ] **Proof:** `test_conditional_marker_table_byte_identical_cross_phase`,
+- [x] **Proof:** `test_conditional_marker_table_byte_identical_cross_phase`,
   `test_conditional_modifier_set_when_marker_present`,
   `test_conditional_future_routes_to_predict_conditional`,
   `test_conditional_past_routes_to_counterfactual_firewall`,
@@ -258,18 +258,18 @@
   spurious-correlation (politeness markers correlate with hesitant
   users who ask exotic queries; classifier should not pick this
   up).
-- [ ] **AST guard: politeness tokens not in classifier features.**
+- [x] **AST guard: politeness tokens not in classifier features.**
   `test_politeness_tokens_absent_from_classifier_input` runs the
   100-row golden corpus through the normalize pipeline and asserts
   no politeness-marker token survives into the classifier feature
   vector.
-- [ ] **AST guard: politeness not consulted by routing/proofreader.**
+- [x] **AST guard: politeness not consulted by routing/proofreader.**
   `test_politeness_class_only_used_by_template_selector_ast`
   scans `nlp.dispatcher`, `nlp.proofreader`, `nlp.calibrator` and
   rejects any read of `request_metadata.politeness_class`. Only
   `nlp.template_selector` may read it (to choose the polite vs
   neutral closed-template variant; tier-blind to routing).
-- [ ] **Tier-blind invariant.** Per-tenant template-selection by
+- [x] **Tier-blind invariant.** Per-tenant template-selection by
   politeness MUST NOT change the underlying answer payload, only
   the surface form. `test_politeness_class_does_not_change_answer_payload`
   runs the same query twice (one polite, one curt) and asserts

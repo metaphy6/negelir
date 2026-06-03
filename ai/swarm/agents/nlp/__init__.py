@@ -85,6 +85,7 @@ from nlp.compat import validate_compatibility_matrix
 from nlp.conversation import ConversationStore
 from ._log_filter import PIIScrubFilter, add_log_filter
 from nlp.aspectual_stack import detect_aspectual_stack
+from nlp.phase10_30 import detect_conditional_modifier
 from nlp.quotative import detect_quotative_frame
 from nlp.render import _resolve_locale_tag, build_environment, render
 
@@ -1099,9 +1100,10 @@ class NlpDispatcherAgent:
                 )
             return _with_context(out)
 
+        normalized_text = str(payload.get("normalized_text", ""))
+
         # ── §10.22.5 composite-abbreviation match separator ────────────────
         if intent == "data.fixture_lookup":
-            normalized_text = str(payload.get("normalized_text", ""))
             match = self._match_separator_team_pair(
                 normalized_text,
                 entities,
@@ -1136,10 +1138,20 @@ class NlpDispatcherAgent:
                     fixture_filter=fixture_filter,
                 ))
 
+        routed_intent, conditional_result = self._apply_conditional_routing(
+            intent,
+            normalized_text,
+            request_id,
+            qa_corr_in,
+            conversation_id or None,
+        )
+        if conditional_result is not None:
+            return _with_context(conditional_result)
+        intent = routed_intent
+
         if intent.startswith("data.") and intent != "data.fixture_lookup":
             return _with_context(self._make_data_request(request_id, qa_corr_in, intent))
 
-        normalized_text = str(payload.get("normalized_text", ""))
         quotative = detect_quotative_frame(normalized_text)
         if quotative is not None and quotative.confidence >= cfg.nlp_quotative_min_confidence:
             out: list[Message] = []
@@ -1230,6 +1242,17 @@ class NlpDispatcherAgent:
                 )
                 return _with_context(out)
 
+        routed_intent, conditional_result = self._apply_conditional_routing(
+            intent,
+            normalized_text,
+            request_id,
+            qa_corr_in,
+            conversation_id or None,
+        )
+        if conditional_result is not None:
+            return _with_context(conditional_result)
+        intent = routed_intent
+
         # ── §10.6 deterministic backoff ────────────────────────────────────
         if intent.startswith("predict."):
             # Check for fixture-anchoring entities (team or competition).
@@ -1282,6 +1305,42 @@ class NlpDispatcherAgent:
                 producer=self.name,
             )
         ]
+
+    def _apply_conditional_routing(
+        self,
+        intent: str,
+        normalized_text: str,
+        request_id: str,
+        qa_correlation_id: str,
+        conversation_id: str | None = None,
+    ) -> tuple[str, list[Message] | None]:
+        """Apply the Phase 10.30 conditional tense routing matrix."""
+        modifier, tense = detect_conditional_modifier(normalized_text.split())
+        conditional_modifier = (
+            modifier == "conditional"
+            or (isinstance(modifier, tuple) and len(modifier) > 0 and modifier[0] == "conditional")
+        )
+        if not conditional_modifier:
+            return intent, None
+
+        if tense == "past":
+            return intent, [
+                self._make_meta_answer(
+                    request_id,
+                    qa_correlation_id,
+                    "meta.counterfactual_past_unsupported",
+                    "Bir geçmiş varsayımı sorusuna yanıt veremiyorum.",
+                    conversation_id=conversation_id,
+                )
+            ]
+
+        if tense == "future" and intent == "predict.match_outcome":
+            return "predict.match_outcome.conditional", None
+
+        if tense == "present" and intent == "predict.match_outcome":
+            return "data.lineup_probable", None
+
+        return intent, None
 
     def _make_quotative_frame_detected_event(
         self,

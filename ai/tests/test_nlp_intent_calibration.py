@@ -23,6 +23,7 @@ Covers:
 """
 from __future__ import annotations
 
+import ast
 import json
 import math
 from pathlib import Path
@@ -30,6 +31,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +279,7 @@ class TestPredictIntentDistribution:
         top = next(s for s in result if s.label == "predict.match_outcome")
         assert abs(top.raw_prob - 0.85) < 1e-9
 
-    def test_wh_prior_adjusts_logit_before_calibration(self, tmp_path):
+    def test_wh_prior_applied_after_logit_before_calibration(self, tmp_path):
         from nlp.intent import IntentClassifier
 
         cal = {"predict.match_outcome": (-1.5, 0.3)}
@@ -299,13 +301,81 @@ class TestPredictIntentDistribution:
 
 
 class TestPhase1030Tables:
-    def test_wh_words_covered_by_wh_intent_map(self) -> None:
+    def test_wh_intent_map_covers_all_wh_words(self) -> None:
         from nlp.phase10_30 import load_wh_intent_map, load_wh_words
 
         wh_words = load_wh_words()
         wh_intent_map = load_wh_intent_map()
         assert len(wh_words) >= 12
         assert set(wh_words).issubset(set(wh_intent_map.keys()))
+
+    def test_wh_prior_drift_alert_fires_above_threshold(self) -> None:
+        from nlp.phase10_30 import should_fire_wh_prior_drift_alert
+
+        assert should_fire_wh_prior_drift_alert(0.0, 0.021)
+        assert should_fire_wh_prior_drift_alert(0.5, 0.529)
+        assert not should_fire_wh_prior_drift_alert(0.0, 0.019)
+
+    def test_wh_token_not_consulted_post_classifier_ast(self) -> None:
+        from pathlib import Path
+
+        nlp_dir = Path(__file__).resolve().parents[1] / "nlp"
+        banned_helpers = {
+            "apply_wh_prior_to_scores",
+            "detect_wh_token",
+            "load_wh_intent_map",
+            "load_wh_words",
+        }
+        allowed_sources = {"intent.py", "phase10_30.py"}
+
+        violations: list[str] = []
+        for path in sorted(nlp_dir.glob("*.py")):
+            if path.name in allowed_sources:
+                continue
+
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module == "nlp.phase10_30":
+                    for alias in node.names:
+                        if alias.name in banned_helpers or alias.asname in banned_helpers:
+                            violations.append(
+                                f"{path.name}: from nlp.phase10_30 import {alias.name}"
+                            )
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "nlp.phase10_30":
+                            violations.append(f"{path.name}: import nlp.phase10_30")
+
+        assert not violations, (
+            "WH prior helpers must be consulted only from nlp.intent; "
+            f"found in: {violations}"
+        )
+
+    def test_politeness_helpers_not_consulted_by_routing_or_proofreader_ast(self) -> None:
+        nlp_swarm_dir = Path(__file__).resolve().parents[1] / "swarm" / "agents" / "nlp"
+        violations: list[str] = []
+
+        banned_helpers = {"load_politeness_markers", "strip_politeness_markers"}
+
+        for path in sorted(nlp_swarm_dir.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module == "nlp.phase10_30":
+                    for alias in node.names:
+                        if alias.name in banned_helpers:
+                            violations.append(
+                                f"{path.name}: from nlp.phase10_30 import {alias.name}"
+                            )
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "nlp.phase10_30":
+                            violations.append(f"{path.name}: import nlp.phase10_30")
+
+        assert not violations, (
+            "Politeness helpers must not be consulted by routing/proofreader; "
+            f"found imports in: {violations}"
+        )
 
     def test_politeness_marker_table_min_coverage(self) -> None:
         from nlp.phase10_30 import load_politeness_markers
@@ -318,6 +388,11 @@ class TestPhase1030Tables:
 
         assert len(load_idiom_phrasebook()) >= 60
 
+    def test_idiom_phrasebook_governance_file_is_high_leverage(self) -> None:
+        from nlp.phase10_30 import GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
+
+        assert "idioms.tr.yaml" in GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
+
     def test_politeness_marker_table_includes_suffixal_forms(self) -> None:
         from nlp.phase10_30 import load_politeness_markers
 
@@ -325,6 +400,100 @@ class TestPhase1030Tables:
         assert "yapabilir misiniz" in markers
         assert "rica ediyorum" in markers
         assert "mümkünse" in markers
+
+    def test_politeness_tokens_absent_from_classifier_input(self) -> None:
+        from nlp.normalize import normalize_input
+        from nlp.phase10_30 import load_politeness_markers
+
+        marker_sequences = [tuple(marker.lower().split()) for marker in load_politeness_markers().keys()]
+        corpus_path = Path(__file__).parent / "fixtures" / "turkish_queries.yaml"
+        if not corpus_path.exists():
+            pytest.skip(f"Golden corpus not found: {corpus_path}")
+
+        with corpus_path.open("r", encoding="utf-8") as fh:
+            corpus = yaml.safe_load(fh)["corpus"][:100]
+
+        def contains_politeness_sequence(tokens: list[str]) -> bool:
+            lower_tokens = [token.lower() for token in tokens]
+            for sequence in marker_sequences:
+                if not sequence:
+                    continue
+                for start in range(len(lower_tokens) - len(sequence) + 1):
+                    if tuple(lower_tokens[start : start + len(sequence)]) == sequence:
+                        return True
+            return False
+
+        for entry in corpus:
+            raw = entry.get("raw")
+            assert isinstance(raw, str)
+            result = normalize_input(raw)
+            assert not contains_politeness_sequence(result.tokens), (
+                f"Politeness marker survived into classifier input for query: {raw!r}"
+            )
+
+    def test_politeness_class_does_not_change_answer_payload(self) -> None:
+        from nlp.normalize import normalize_input
+        from nlp.render import build_environment, extract_citation_block, render_with_citation
+
+        polite_result = normalize_input("lütfen galatasaray maçı için tahmin et")
+        curt_result = normalize_input("galatasaray maçı için tahmin et")
+        assert polite_result.politeness_class != curt_result.politeness_class
+
+        common_payload = {
+            "request_id": "req-001",
+            "qa_correlation_id": "qa-corr-001",
+            "intent": "predict.match_outcome",
+            "kind": "predict.match_outcome",
+            "degraded": False,
+            "degraded_reason": None,
+            "tier_id_required": None,
+            "citations": [],
+            "emitted_at": "2026-06-03T12:00:00.000000Z",
+        }
+
+        base_context = {
+            "home_team": "Galatasaray",
+            "away_team": "Fenerbahçe",
+            "probability": 0.65,
+            "outcome_label": "Ev sahibi",
+            "kickoff_utc": "2026-06-03T21:00:00Z",
+            "degraded": False,
+            "degraded_reason": "",
+            "prediction_id": "pred-001",
+            "produced_at_utc": "2026-06-03T21:00:00.000000Z",
+            "model_versions": ["predictor-v1@1.0.0"],
+            "calibration_version": "cal-v1",
+        }
+
+        env = build_environment()
+
+        polite_text, _ = render_with_citation(
+            "predict.match_outcome.tr.j2",
+            {**base_context, "politeness_class": polite_result.politeness_class},
+            env=env,
+        )
+        curt_text, _ = render_with_citation(
+            "predict.match_outcome.tr.j2",
+            {**base_context, "politeness_class": curt_result.politeness_class},
+            env=env,
+        )
+
+        polite_parts = polite_text.split("\n---\n", 1)
+        curt_parts = curt_text.split("\n---\n", 1)
+
+        polite_payload = {**common_payload, "answer_text": polite_text}
+        curt_payload = {**common_payload, "answer_text": curt_text}
+
+        assert polite_parts[1:] == curt_parts[1:]
+        assert {
+            key: value
+            for key, value in polite_payload.items()
+            if key != "answer_text"
+        } == {
+            key: value
+            for key, value in curt_payload.items()
+            if key != "answer_text"
+        }
 
 
 class TestCalibrationVersion:
