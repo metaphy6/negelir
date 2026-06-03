@@ -1,8 +1,10 @@
 package sec
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,6 +70,35 @@ func TestEmbeddedConstantsNonEmpty(t *testing.T) {
 	}
 	if len(EmbeddedEndpointCostsYAML) == 0 {
 		t.Fatal("EmbeddedEndpointCostsYAML is empty")
+	}
+}
+
+func TestGoSecLayerDoesNotParseMorphology(t *testing.T) {
+	root := repoRoot(t)
+	secDir := filepath.Join(root, "server/internal/sec")
+	walkErr := filepath.WalkDir(secDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		needle := strings.Join([]string{"z", "e", "m", "b", "e", "r", "e", "k"}, "")
+		if strings.Contains(string(content), needle) {
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				rel = path
+			}
+			t.Fatalf("unexpected Zemberek reference in %s", rel)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk sec dir: %v", walkErr)
 	}
 }
 

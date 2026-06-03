@@ -1,0 +1,12 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  source: "phase10-10.23.6"
+  notes: >
+    Locale-specific render timezone defaults for future Turkish variants.
+    v1 entry covers only tr-TR -> Europe/Istanbul.
+
+entries:
+  - locale: tr-TR
+    render_timezone: Europe/Istanbul

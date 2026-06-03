@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from common.config import Config
+from common.security.patterns import detect_pii
 from nlp.render import CITATION_DELIMITER, extract_citation_block
 
 
@@ -16,6 +17,7 @@ class GuardedStreamingPlan:
     humanizer_used: bool
     canceled: bool
     write_timed_out: bool
+    chunk_blocked_reason: str | None = None
 
 
 def _chunk_text(text: str, chunk_chars: int) -> list[str]:
@@ -50,6 +52,7 @@ def build_guarded_streaming_plan(
     humanizer: Callable[[str, Config], str],
     cancel_token: Callable[[], bool] | None = None,
     write_chunk: Callable[[str], None] | None = None,
+    chunk_proofread_fn: Callable[[str], str | None] | None = None,
 ) -> GuardedStreamingPlan:
     body, citation_block = extract_citation_block(answer_text)
     skeleton = body
@@ -84,6 +87,20 @@ def build_guarded_streaming_plan(
 
     if write_chunk is not None:
         for chunk in skeleton_chunks:
+            if chunk_proofread_fn is not None:
+                blocked_reason = chunk_proofread_fn(chunk)
+                if blocked_reason is not None:
+                    final_answer = skeleton + (CITATION_DELIMITER + citation_block if citation_block else "")
+                    return GuardedStreamingPlan(
+                        skeleton=skeleton,
+                        citation_block=citation_block,
+                        skeleton_chunks=skeleton_chunks,
+                        final_answer=final_answer,
+                        humanizer_used=False,
+                        canceled=False,
+                        write_timed_out=False,
+                        chunk_blocked_reason=blocked_reason,
+                    )
             try:
                 write_chunk(chunk)
             except TimeoutError:

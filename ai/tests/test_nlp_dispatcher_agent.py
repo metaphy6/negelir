@@ -22,7 +22,7 @@ import pytest
 
 from common.config import cfg as _cfg
 from nlp.conversation import ConversationStore
-from swarm.agents.nlp import NlpAnswerAgent, NlpDispatcherAgent
+from swarm.agents.nlp import NlpAnswerAgent, NlpDispatcherAgent, _SummaryAgg
 from swarm.agents.topics import (
     DATA_REQUEST_V1,
     NLP_ALERT_V1,
@@ -40,6 +40,22 @@ from swarm.sdk.wire_contracts import (
     NLP_ALERT_V1_ALLOWED_PRODUCERS,
     NLP_EVENT_V1_ALLOWED_PRODUCERS,
 )
+
+
+def test_nlp_summary_fanout_no_gather_in_dispatcher() -> None:
+    """AST guard: dispatcher must not use asyncio.gather for summary fan-out."""
+    src = Path(__file__).resolve().parents[2] / "ai" / "swarm" / "agents" / "nlp" / "__init__.py"
+    tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "gather":
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "asyncio":
+                violations.append(f"{src}:{node.lineno}: asyncio.gather is forbidden in dispatcher")
+
+    assert violations == [], "\n".join(violations)
 
 # ── helpers ──────────────────────────────────────────────────────────────────────────
 
@@ -1050,8 +1066,158 @@ class TestNlpAnswerAgentSummaryAggregation:
         msg = _make_approved_msg(corr, expected_count=5)
         out = list(expired_agent.handle(msg))
         text = out[0].payload["answer_text"]
-        # Must contain "1 / 5" (received / expected)
-        assert "1" in text and "5" in text, f"Expected X/Y in answer text, got: {text!r}"
+        assert text.startswith("Tüm")
+        assert "hazırlanamadı" in text
+
+    def test_expired_summary_answer_discloses_quorum_failure_for_insufficient_fixtures(
+        self, agent: NlpAnswerAgent
+    ) -> None:
+        """Below quorum, the summary should degrade to per-fixture-only text."""
+        call_count = [0]
+
+        def fake_monotonic() -> float:
+            call_count[0] += 1
+            return 0.0 if call_count[0] == 1 else 1_000_000.0
+
+        expired_agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            monotonic=fake_monotonic,
+        )
+        corr = "agg-expired-005"
+        msg = _make_approved_msg(corr, expected_count=5)
+        out = list(expired_agent.handle(msg))
+        assert len(out) == 1
+        assert out[0].payload["answer_text"].startswith("Tüm")
+        assert "hazırlanamadı" in out[0].payload["answer_text"]
+        assert "summary quorum not met" in out[0].payload["degraded_reason"]
+
+    def test_expired_summary_answer_discloses_partial_matches_and_incomplete_notice(
+        self, agent: NlpAnswerAgent
+    ) -> None:
+        """Partial summary answers must disclose the received/expected count and incomplete status."""
+        call_count = [0]
+
+        def fake_monotonic() -> float:
+            call_count[0] += 1
+            return 0.0 if call_count[0] == 1 else 1_000_000.0
+
+        expired_agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            monotonic=fake_monotonic,
+        )
+        corr = "agg-expired-003"
+        msg = _make_approved_msg(corr, expected_count=10)
+        out = list(expired_agent.handle(msg))
+        assert len(out) == 1
+        assert out[0].payload["answer_text"].startswith("Tüm")
+        assert "hazırlanamadı" in out[0].payload["answer_text"]
+        assert "summary quorum not met" in out[0].payload["degraded_reason"]
+
+    def test_expired_summary_answer_below_quorum_renders_per_fixture_only_degraded_answer(
+        self, agent: NlpAnswerAgent
+    ) -> None:
+        """Below quorum, the summary should degrade to per-fixture-only text."""
+        call_count = [0]
+
+        def fake_monotonic() -> float:
+            call_count[0] += 1
+            return 0.0 if call_count[0] == 1 else 1_000_000.0
+
+        expired_agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            monotonic=fake_monotonic,
+        )
+        corr = "agg-expired-004"
+        msg = _make_approved_msg(corr, expected_count=3)
+        out = list(expired_agent.handle(msg))
+
+        assert len(out) == 1
+        ans = out[0]
+        assert ans.payload["degraded"] is True
+        assert "Tüm maçları kapsayan bir özet hazırlanamadı" in ans.payload["answer_text"]
+        assert "summary quorum not met" in ans.payload["degraded_reason"]
+
+    def test_nlp_summary_quorum_met_renders_partial_with_disclosure(
+        self, agent: NlpAnswerAgent
+    ) -> None:
+        """Quorum met but some fixtures are missing should render partial summary disclosure."""
+        call_count = [0]
+
+        def fake_monotonic() -> float:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return 0.0
+            if call_count[0] == 2:
+                return 0.1
+            if call_count[0] == 3:
+                return 0.2
+            return 2.0
+
+        expired_agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            monotonic=fake_monotonic,
+        )
+        corr = "agg-partial-001"
+        for prediction_id in ("p1", "p2", "p3"):
+            msg = _make_approved_msg(corr, expected_count=4, prediction_id=prediction_id)
+            results = list(expired_agent.handle(msg))
+            if prediction_id != "p3":
+                assert results == []
+            else:
+                assert len(results) == 1
+                ans = results[0]
+                assert ans.payload["degraded"] is True
+                assert "3/4 maç tahmini hazır" in ans.payload["answer_text"]
+                assert "Eksik maçlar" in ans.payload["answer_text"]
+                assert "summary quorum not met" not in (
+                    ans.payload["degraded_reason"] or ""
+                )
+
+    def test_nlp_summary_zero_returns_renders_predict_timeout_template(self) -> None:
+        """Zero returned summary aggregation renders predict.timeout template."""
+        agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            monotonic=lambda: 0.0,
+        )
+        agg = _SummaryAgg(
+            expected=0,
+            qa_request_id="req-summary-zero",
+            qa_correlation_id="corr-summary-zero",
+            deadline=0.0,
+        )
+        answer = agent._build_summary_answer(agg, "corr-summary-zero", 0)
+        assert answer.envelope.topic == QA_ANSWER_V1
+        assert answer.payload["intent"] == "predict.timeout"
+        assert answer.payload["kind"] == "predict.timeout"
+        assert answer.payload["degraded"] is True
+
+    def test_nlp_summary_per_fixture_independent_timeout(self) -> None:
+        """Summary answer emits on deadline expiry without waiting for all fixtures."""
+        call_count = [0]
+
+        def fake_monotonic() -> float:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return 0.0
+            if call_count[0] == 2:
+                return 0.1
+            return 2.0
+
+        expired_agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            monotonic=fake_monotonic,
+        )
+        corr = "agg-deadline-001"
+        for prediction_id in ("p1", "p2"):
+            msg = _make_approved_msg(corr, expected_count=4, prediction_id=prediction_id)
+            results = list(expired_agent.handle(msg))
+            if prediction_id == "p1":
+                assert results == []
+            else:
+                assert len(results) == 1
+                ans = results[0]
+                assert ans.payload["degraded"] is True
+                assert "summary quorum not met" in ans.payload["degraded_reason"]
 
     def test_non_summary_predict_approved_returns_empty(
         self, agent: NlpAnswerAgent
@@ -1782,6 +1948,54 @@ class TestCalibrationVersionStamping:
         assert citations[1]["prediction_count"] == 1
         assert "note" in citations[1]
         assert "1 tahmin için kalibrasyon güncellendi" == citations[1]["note"]
+
+    def test_summary_citations_reflect_only_returned_fixtures_model_versions(
+        self,
+    ) -> None:
+        """Partial summary citations carry model_versions only for returned fixtures."""
+        agent = NlpAnswerAgent(
+            clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+            new_id=lambda: "test-ans-id",
+        )
+
+        agg = _SummaryAgg(
+            expected=2,
+            qa_request_id="req-summary-001",
+            qa_correlation_id="req-summary-001",
+            deadline=0.0,
+        )
+
+        msg1 = _make_approved_msg(
+            "agg-cite-001",
+            expected_count=2,
+            prediction_id="p1",
+            degraded=False,
+            degraded_reason=None,
+        )
+        msg1.payload["final"]["contributing_models"] = ["predictor-a@1.0.0"]
+        msg1.payload["calibration_version"] = 1
+
+        msg2 = _make_approved_msg(
+            "agg-cite-001",
+            expected_count=3,
+            prediction_id="p2",
+            degraded=False,
+            degraded_reason=None,
+        )
+        msg2.payload["final"]["contributing_models"] = ["predictor-b@2.0.0"]
+        msg2.payload["calibration_version"] = 2
+
+        agg.predictions.extend([msg1.payload, msg2.payload])
+        answer = agent._build_summary_answer(agg, "agg-cite-001", received=2)
+        citations = answer.payload["citations"]
+
+        assert len(citations) == 2
+        assert citations[0]["calibration_version"] == 1
+        assert citations[0]["model_versions"] == ["predictor-a@1.0.0"]
+        assert citations[0]["prediction_count"] == 1
+        assert citations[1]["calibration_version"] == 2
+        assert citations[1]["model_versions"] == ["predictor-b@2.0.0"]
+        assert citations[1]["prediction_count"] == 1
 
     def test_calibration_version_missing_defaults_to_one(
         self, agent: NlpAnswerAgent

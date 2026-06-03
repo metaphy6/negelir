@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 312,
+    "build": 364,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.67.8",
+      "version": "1.71.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-02T18:32:17+00:00",
+      "last_changed": "2026-06-02T23:40:19+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.45.3",
+      "version": "1.45.4",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-02T18:26:57+00:00",
+      "last_changed": "2026-06-02T20:47:27+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.43.4",
+      "version": "3.43.7",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-02T18:14:49+00:00"
+      "last_changed": "2026-06-02T21:21:13+00:00"
     },
     "docs": {
-      "version": "1.82.2",
+      "version": "1.89.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-02T18:32:17+00:00"
+      "last_changed": "2026-06-02T23:28:40+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -198,6 +198,11 @@
         "path": "ai/nlp/lang_tr/aspectual_stacks.tr.yaml",
         "cardinality": 6,
         "comment": "Phase 10 §10.32.2 aspectual stack table used by ai/nlp/aspectual_stack.py and the dispatcher to prevent predict.* leakage on stacked Turkish modality forms."
+      },
+      "zoneinfo_file": {
+        "source_spec": "IANA tzdata Europe/Istanbul zoneinfo file, pinned for Phase 10 §10.23.6 TZ render consistency.",
+        "sha256": "d92d00fdfed5c6fc84ac930c08fa8adf7002840dbd21590caf5a3e4a932d3319",
+        "path": "zoneinfo/Europe/Istanbul"
       }
     }
   },
@@ -10020,6 +10025,474 @@
       "from": "1.82.1",
       "to": "1.82.2",
       "build": 312
+    },
+    {
+      "timestamp": "2026-06-02T19:37:41+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "added Phase 10 morphology top-K config knobs",
+      "from": "1.82.2",
+      "to": "1.83.0",
+      "build": 313
+    },
+    {
+      "timestamp": "2026-06-02T19:40:26+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.26: top-K morphology parse acceptance closed",
+      "from": "1.83.0",
+      "to": "1.83.1",
+      "build": 314
+    },
+    {
+      "timestamp": "2026-06-02T19:48:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 morphology pipeline integration",
+      "from": "1.67.8",
+      "to": "1.67.9",
+      "build": 315
+    },
+    {
+      "timestamp": "2026-06-02T19:59:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26 morphology ambiguity event",
+      "from": "1.67.9",
+      "to": "1.67.10",
+      "build": 316
+    },
+    {
+      "timestamp": "2026-06-02T19:59:49+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.26 design docs update",
+      "from": "1.83.1",
+      "to": "1.84.0",
+      "build": 317
+    },
+    {
+      "timestamp": "2026-06-02T20:04:27+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "add nlp.canary-promote gate command",
+      "from": "3.43.4",
+      "to": "3.43.5",
+      "build": 318
+    },
+    {
+      "timestamp": "2026-06-02T20:04:27+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "tick Phase 10 §10.23 canary promotion gate in docs",
+      "from": "1.84.0",
+      "to": "1.84.1",
+      "build": 319
+    },
+    {
+      "timestamp": "2026-06-02T20:08:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added morphology arbitration helper",
+      "from": "1.67.10",
+      "to": "1.67.11",
+      "build": 320
+    },
+    {
+      "timestamp": "2026-06-02T20:08:28+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 morphology design updated for resolution arbitration",
+      "from": "1.84.1",
+      "to": "1.85.0",
+      "build": 321
+    },
+    {
+      "timestamp": "2026-06-02T20:12:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26 proper noun morphology bypass",
+      "from": "1.67.11",
+      "to": "1.67.12",
+      "build": 322
+    },
+    {
+      "timestamp": "2026-06-02T20:14:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26 unparseable morphology token policy",
+      "from": "1.67.12",
+      "to": "1.67.13",
+      "build": 323
+    },
+    {
+      "timestamp": "2026-06-02T20:21:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.25.2 cached streamed answers one-shot coherence",
+      "from": "1.67.13",
+      "to": "1.67.14",
+      "build": 324
+    },
+    {
+      "timestamp": "2026-06-02T20:31:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 morphology ambiguity budget per query",
+      "from": "1.67.14",
+      "to": "1.67.15",
+      "build": 325
+    },
+    {
+      "timestamp": "2026-06-02T20:34:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added deterministic morphology parser property test",
+      "from": "1.67.15",
+      "to": "1.67.16",
+      "build": 326
+    },
+    {
+      "timestamp": "2026-06-02T20:44:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix lexicon canary atomic swap snapshot id",
+      "from": "1.67.16",
+      "to": "1.67.17",
+      "build": 327
+    },
+    {
+      "timestamp": "2026-06-02T20:47:22+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.26.1 design checkbox closed with Go sec boundary test",
+      "from": "1.85.0",
+      "to": "1.86.0",
+      "build": 328
+    },
+    {
+      "timestamp": "2026-06-02T20:47:27+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 10 §10.26.1 boundary test added to server internal sec",
+      "from": "1.45.3",
+      "to": "1.45.4",
+      "build": 329
+    },
+    {
+      "timestamp": "2026-06-02T20:51:54+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "add nlp.canary-rollback operator command",
+      "from": "3.43.5",
+      "to": "3.43.6",
+      "build": 330
+    },
+    {
+      "timestamp": "2026-06-02T21:12:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.2 voice ASR filler strip handling",
+      "from": "1.67.17",
+      "to": "1.67.18",
+      "build": 331
+    },
+    {
+      "timestamp": "2026-06-02T21:17:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add nlp.weekly-eval weekly regression detection",
+      "from": "1.67.18",
+      "to": "1.67.19",
+      "build": 332
+    },
+    {
+      "timestamp": "2026-06-02T21:21:13+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Add Phase 10 weekly NLP evaluation workflow file",
+      "from": "3.43.6",
+      "to": "3.43.7",
+      "build": 333
+    },
+    {
+      "timestamp": "2026-06-02T21:24:58+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 weekly-eval strata sample implementation",
+      "from": "1.67.19",
+      "to": "1.67.20",
+      "build": 334
+    },
+    {
+      "timestamp": "2026-06-02T21:28:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add weekly NLP eval sample sanitization helper",
+      "from": "1.67.20",
+      "to": "1.67.21",
+      "build": 335
+    },
+    {
+      "timestamp": "2026-06-02T21:33:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 nlp.canary-promote consecutive weekly-eval regression gate",
+      "from": "1.67.21",
+      "to": "1.67.22",
+      "build": 336
+    },
+    {
+      "timestamp": "2026-06-02T21:38:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.23.4 summary aggregation semantics regression test",
+      "from": "1.67.22",
+      "to": "1.67.23",
+      "build": 337
+    },
+    {
+      "timestamp": "2026-06-02T21:47:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Added Phase 10 summary quorum policy",
+      "from": "1.67.23",
+      "to": "1.67.24",
+      "build": 338
+    },
+    {
+      "timestamp": "2026-06-02T21:51:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 summary dispatcher no-gather guard",
+      "from": "1.67.24",
+      "to": "1.67.25",
+      "build": 339
+    },
+    {
+      "timestamp": "2026-06-02T21:57:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 partial summary template+translation table",
+      "from": "1.67.25",
+      "to": "1.67.26",
+      "build": 340
+    },
+    {
+      "timestamp": "2026-06-02T22:04:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 ASR input_source detection + schema extension",
+      "from": "1.67.26",
+      "to": "1.67.27",
+      "build": 341
+    },
+    {
+      "timestamp": "2026-06-02T22:07:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 apostrophe inference audit evidence",
+      "from": "1.67.27",
+      "to": "1.67.28",
+      "build": 342
+    },
+    {
+      "timestamp": "2026-06-02T22:14:58+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 summary citations now carry returned fixture model_versions",
+      "from": "1.67.28",
+      "to": "1.68.0",
+      "build": 343
+    },
+    {
+      "timestamp": "2026-06-02T22:22:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Added Phase 10 summary proof test coverage for partial summary outputs",
+      "from": "1.68.0",
+      "to": "1.68.1",
+      "build": 344
+    },
+    {
+      "timestamp": "2026-06-02T22:28:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Added Phase 10 voice query split helper for relaxed ASR question boundaries",
+      "from": "1.68.1",
+      "to": "1.68.2",
+      "build": 345
+    },
+    {
+      "timestamp": "2026-06-02T22:34:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Implemented Phase 10 Turkish formatter helpers and Jinja filters",
+      "from": "1.68.2",
+      "to": "1.68.3",
+      "build": 346
+    },
+    {
+      "timestamp": "2026-06-02T22:34:13+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Ticked Phase 10 §10.23.5 TR formatting design checklist",
+      "from": "1.86.0",
+      "to": "1.87.0",
+      "build": 347
+    },
+    {
+      "timestamp": "2026-06-02T22:36:01+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Closed Phase 10 §10.23.5 Babel optional dep design tick",
+      "from": "1.87.0",
+      "to": "1.88.0",
+      "build": 348
+    },
+    {
+      "timestamp": "2026-06-02T22:37:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 negative-zero/inf/NaN formatter policy closed",
+      "from": "1.68.3",
+      "to": "1.68.4",
+      "build": 349
+    },
+    {
+      "timestamp": "2026-06-02T22:40:32+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design doc checkbox ticked for 10.23.5 proof tests",
+      "from": "1.88.0",
+      "to": "1.88.1",
+      "build": 350
+    },
+    {
+      "timestamp": "2026-06-02T22:43:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 timezone render discipline fix",
+      "from": "1.68.4",
+      "to": "1.68.5",
+      "build": 351
+    },
+    {
+      "timestamp": "2026-06-02T22:48:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 wrong-harmony suffix fallback",
+      "from": "1.68.5",
+      "to": "1.68.6",
+      "build": 352
+    },
+    {
+      "timestamp": "2026-06-02T22:50:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 streaming chunk gate proofread PII block",
+      "from": "1.68.6",
+      "to": "1.68.7",
+      "build": 353
+    },
+    {
+      "timestamp": "2026-06-02T22:56:23+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 render timezone config",
+      "from": "1.68.7",
+      "to": "1.69.0",
+      "build": 354
+    },
+    {
+      "timestamp": "2026-06-02T23:03:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.3 voice diacritic restoration ratio",
+      "from": "1.69.0",
+      "to": "1.69.1",
+      "build": 355
+    },
+    {
+      "timestamp": "2026-06-02T23:12:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.23.6 citation UTC format enforcement",
+      "from": "1.69.1",
+      "to": "1.69.2",
+      "build": 356
+    },
+    {
+      "timestamp": "2026-06-02T23:15:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 DST/leap-second clock formatting tests",
+      "from": "1.69.2",
+      "to": "1.69.3",
+      "build": 357
+    },
+    {
+      "timestamp": "2026-06-02T23:23:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.23.6 zoneinfo boot validation",
+      "from": "1.69.3",
+      "to": "1.69.4",
+      "build": 358
+    },
+    {
+      "timestamp": "2026-06-02T23:25:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10: add locale render timezone hook table",
+      "from": "1.69.4",
+      "to": "1.69.5",
+      "build": 359
+    },
+    {
+      "timestamp": "2026-06-02T23:28:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10: add timezone/citation regression tests for 10.23.6",
+      "from": "1.69.5",
+      "to": "1.69.6",
+      "build": 360
+    },
+    {
+      "timestamp": "2026-06-02T23:28:40+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10: close 10.23.6 design proof item",
+      "from": "1.88.1",
+      "to": "1.89.0",
+      "build": 361
+    },
+    {
+      "timestamp": "2026-06-02T23:33:40+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "add screen_reader answer_format support for accessibility",
+      "from": "1.69.6",
+      "to": "1.70.0",
+      "build": 362
+    },
+    {
+      "timestamp": "2026-06-02T23:36:17+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10: qa.request.v1 answer_format enum added",
+      "from": "1.70.0",
+      "to": "1.71.0",
+      "build": 363
+    },
+    {
+      "timestamp": "2026-06-02T23:40:19+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 per-format NLP renderer dispatch",
+      "from": "1.71.0",
+      "to": "1.71.1",
+      "build": 364
     }
   ]
 }

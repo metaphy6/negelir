@@ -45,9 +45,10 @@
       "type": "string",
       "enum": [
         "plain",
-        "markdown_safe"
+        "markdown_safe",
+        "screen_reader"
       ],
-      "description": "Output format (§10.7). markdown_safe = subset safe for rendering without HTML injection."
+      "description": "Output format (§10.7). markdown_safe = subset safe for rendering without HTML injection. screen_reader = assistive-technology friendly output."
     },
     "degraded": {
       "type": "boolean",

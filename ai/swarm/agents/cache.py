@@ -262,11 +262,21 @@ class CacheAgent:
             isinstance(payload.get("streaming_chunks"), list)
             and isinstance(payload.get("final_answer"), str)
         ):
+            assembled_payload = dict(payload)
+            assembled_payload.pop("streaming_chunks", None)
+            assembled_payload.pop("final_answer", None)
+            # Ensure cache hits can be served as one-shot answers instead
+            # of replaying a previously-streamed chunk sequence.
+            if "answer_text" in assembled_payload:
+                assembled_payload["answer_text"] = payload["final_answer"]
+            else:
+                assembled_payload["answer_text"] = payload["final_answer"]
+
             cache_value = {
                 "streamed": True,
                 "chunks": payload["streaming_chunks"],
                 "final": payload["final_answer"],
-                "payload": payload,
+                "payload": assembled_payload,
             }
         else:
             cache_value = {

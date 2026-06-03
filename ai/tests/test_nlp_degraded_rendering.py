@@ -48,7 +48,7 @@ _BASE_CTX: dict = {
     "probability": 0.72,
     "kickoff_utc": dt.datetime(2026, 6, 1, 18, 0, tzinfo=dt.timezone.utc),
     "prediction_id": "pred-deg-1",
-    "produced_at_utc": "2026-06-01T10:00:00Z",
+    "produced_at_utc": "2026-06-01T10:00:00.000000Z",
     "model_versions": ["predictor-v2@2.0.0"],
     "calibration_version": "cal-v2",
 }

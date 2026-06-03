@@ -52,7 +52,7 @@ _CITATION_CTX: dict = {
     "degraded": False,
     "degraded_reason": "",
     "prediction_id": "pred-cite-1",
-    "produced_at_utc": "2026-05-27T10:00:00Z",
+    "produced_at_utc": "2026-05-27T10:00:00.000000Z",
     "model_versions": ["predictor-v1@1.0.0"],
     "calibration_version": "cal-v1",
 }
@@ -99,9 +99,19 @@ def test_citation_fields_complete(tmpl: str) -> None:
     _, citation = extract_citation_block(text)
     assert citation is not None, f"No citation block extracted from {tmpl!r}"
     assert "pred-cite-1" in citation, "prediction_id missing from citation"
-    assert "2026-05-27T10:00:00Z" in citation, "produced_at_utc missing from citation"
+    assert "2026-05-27T10:00:00.000000Z" in citation, "produced_at_utc missing from citation"
     assert "predictor-v1@1.0.0" in citation, "model_version missing from citation"
     assert "cal-v1" in citation, "calibration_version missing from citation"
+
+
+@pytest.mark.parametrize("tmpl", _PREDICT_TEMPLATES)
+def test_nlp_citation_always_utc_z_suffix(tmpl: str) -> None:
+    env = build_environment()
+    text = render(tmpl, _CITATION_CTX, env=env)
+    _, citation = extract_citation_block(text)
+    assert citation is not None, "No citation block extracted"
+    assert "2026-05-27T10:00:00.000000Z" in citation
+    assert citation.endswith("\n\n") or citation.endswith("\n") or citation.count("Z") >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +158,7 @@ def test_non_predict_template_returns_none_citation(tmpl: str) -> None:
 
 def test_extract_splits_on_delimiter() -> None:
     body = "Tahmin metni burada."
-    citation = "[tahmin:pred-1 | üretim:2026-05-27T10:00:00Z]\n"
+    citation = "[tahmin:pred-1 | üretim:2026-05-27T10:00:00.000000Z]\n"
     full = body + CITATION_DELIMITER + citation
     extracted_body, extracted_citation = extract_citation_block(full)
     assert extracted_body == body
@@ -180,7 +190,7 @@ def test_extract_only_first_delimiter_is_used() -> None:
 # ---------------------------------------------------------------------------
 
 def test_citation_sha256_matches_stdlib() -> None:
-    block = "[tahmin:pred-1 | üretim:2026-05-27T10:00:00Z]\n"
+    block = "[tahmin:pred-1 | üretim:2026-05-27T10:00:00.000000Z]\n"
     expected = hashlib.sha256(block.encode("utf-8")).hexdigest()
     assert citation_sha256(block) == expected
 
@@ -243,7 +253,7 @@ def test_nlp_citation_block_canonical_form_is_byte_stable() -> None:
     
     citation_data = {
         "prediction_id": "pred-test-123",
-        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "produced_at_utc": "2026-05-27T10:00:00.000000Z",
         "model_versions": ["predictor-v2@2.1.0", "predictor-v1@1.0.0"],
         "calibration_version": 42,
     }
@@ -273,7 +283,7 @@ def test_nlp_citation_block_canonical_form_is_byte_stable() -> None:
     citation_data_reversed = {
         "calibration_version": 42,
         "model_versions": ["predictor-v2@2.1.0", "predictor-v1@1.0.0"],
-        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "produced_at_utc": "2026-05-27T10:00:00.000000Z",
         "prediction_id": "pred-test-123",
     }
     block_reversed = render_citation_block(citation_data_reversed)
@@ -288,7 +298,7 @@ def test_render_citation_block_with_degraded_reason() -> None:
     
     citation_data = {
         "prediction_id": "pred-deg-1",
-        "produced_at_utc": "2026-05-27T12:00:00Z",
+        "produced_at_utc": "2026-05-27T12:00:00.000000Z",
         "model_versions": ["predictor-v1@1.0.0"],
         "calibration_version": 10,
         "degraded_reason": "insufficient-data",
@@ -298,7 +308,7 @@ def test_render_citation_block_with_degraded_reason() -> None:
     
     # Must contain all required fields
     assert "pred-deg-1" in block
-    assert "2026-05-27T12:00:00Z" in block
+    assert "2026-05-27T12:00:00.000000Z" in block
     assert "10" in block
     assert "predictor-v1@1.0.0" in block
     
@@ -310,13 +320,31 @@ def test_render_citation_block_with_degraded_reason() -> None:
     assert block == block2
 
 
+def test_render_citation_block_rejects_non_microsecond_produced_at_utc() -> None:
+    from nlp.render import render_citation_block
+
+    citation_data = {
+        "prediction_id": "pred-format-1",
+        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "model_versions": ["predictor-v1@1.0.0"],
+        "calibration_version": 1,
+    }
+
+    with pytest.raises(ValueError, match="produced_at_utc.*microsecond precision"):
+        render_citation_block(citation_data)
+
+    citation_data["produced_at_utc"] = "2026-05-27T10:00:00.123456Z"
+    block = render_citation_block(citation_data)
+    assert "üretim:2026-05-27T10:00:00.123456Z" in block
+
+
 def test_render_citation_block_rejects_extra_keys() -> None:
     """§10.21.6 requirement: citation block accepts ONLY the closed schema."""
     from nlp.render import render_citation_block
     
     citation_data = {
         "prediction_id": "pred-1",
-        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "produced_at_utc": "2026-05-27T10:00:00.000000Z",
         "model_versions": ["predictor-v1@1.0.0"],
         "calibration_version": 1,
         "extra_field": "not allowed",  # This should trigger ValueError
@@ -332,7 +360,7 @@ def test_render_citation_block_requires_all_mandatory_fields() -> None:
     
     # Missing prediction_id
     citation_data_incomplete = {
-        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "produced_at_utc": "2026-05-27T10:00:00.000000Z",
         "model_versions": ["predictor-v1@1.0.0"],
         "calibration_version": 1,
     }
@@ -348,14 +376,14 @@ def test_render_citation_block_model_versions_sorted() -> None:
     # Test with different ordering
     citation1 = {
         "prediction_id": "pred-sort-test",
-        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "produced_at_utc": "2026-05-27T10:00:00.000000Z",
         "model_versions": ["z-predictor", "a-predictor", "m-predictor"],
         "calibration_version": 1,
     }
     
     citation2 = {
         "prediction_id": "pred-sort-test",
-        "produced_at_utc": "2026-05-27T10:00:00Z",
+        "produced_at_utc": "2026-05-27T10:00:00.000000Z",
         "model_versions": ["m-predictor", "z-predictor", "a-predictor"],
         "calibration_version": 1,
     }

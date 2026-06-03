@@ -4,6 +4,7 @@ All settings respect Docker Compose injection.
 """
 
 import datetime as _dt
+import hashlib
 import json
 import os
 import re
@@ -151,6 +152,14 @@ class Config:
     # §10.25.4 compatibility matrix version used by boot-time validator.
     nlp_pipeline_version: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_NLP_PIPELINE_VERSION", "10.0.0").strip()
+    )
+    # §10.23.6 render timezone for Turkish NLP answers.
+    nlp_render_timezone: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_RENDER_TIMEZONE", "Europe/Istanbul").strip()
+    )
+    # §10.23.6 optional pod-shipped zoneinfo directory. Empty => system zoneinfo.
+    nlp_zoneinfo_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_ZONEINFO_DIR", "").strip()
     )
     # §10.25.4 compatibility matrix path for boot validation and CI gate.
     nlp_compatibility_matrix_path: str = field(default_factory=lambda: os.getenv(
@@ -905,6 +914,10 @@ class Config:
     #   in-repo lexicons with SHA-only integrity; "feed" enables HMAC-signed
     #   bundle verification before load.
     nlp_lexicon_source: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_LEXICON_SOURCE", "file"))
+    # nlp_lexicon_dir: filesystem directory containing lexicon YAML files.
+    #   Used by LexiconStore and compatibility validation. Defaults to the
+    #   in-repo lexicon directory for Phase 10.
+    nlp_lexicon_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_LEXICON_DIR", "ai/nlp/lexicon"))
     # nlp_lexicon_feed_hmac_key_path: HMAC-SHA256 key file used to verify
     #   signed lexicon bundle artifacts in feed mode.
     nlp_lexicon_feed_hmac_key_path: str = field(default_factory=lambda: os.getenv(
@@ -975,6 +988,25 @@ class Config:
     #   Must be ≥ 1.  Default 8 (covers typical sentence length; rare queries with
     #   many misspellings get the "Did you mean?" path rather than silent guessing).
     nlp_typo_max_lookups_per_query: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_TYPO_MAX_LOOKUPS_PER_QUERY", "8")))
+    # nlp_asr_filler_strip_max: per-query cap on voice ASR filler stripping.
+    #   When a voice query would strip more than this many fillers, the voice
+    #   path preserves the raw token stream to avoid abuse-sensitive over-strip.
+    #   Must be ≥ 1. Default 6.
+    nlp_asr_filler_strip_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_ASR_FILLER_STRIP_MAX", "6")))
+    # nlp_morph_topk: number of Zemberek-style candidate parses to retain per
+    #   token in the morphology stage (§10.26.1 top-K parse acceptance). Must be
+    #   ≥ 1. Default 3.
+    nlp_morph_topk: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_MORPH_TOPK", "3")))
+    # nlp_morph_min_confidence: confidence floor for morphology parse candidates.
+    #   Parses below this threshold are flagged as high ambiguity (§10.26.1).
+    #   Must be in [0.0, 1.0]. Default 0.55.
+    nlp_morph_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_MORPH_MIN_CONFIDENCE", "0.55")))
+    # nlp_morph_context_radius: token radius for co-token morphology context
+    #   arbitration (§10.26.1). Must be ≥ 0. Default 4.
+    nlp_morph_context_radius: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_MORPH_CONTEXT_RADIUS", "4")))
+    # nlp_morph_ambiguous_max_per_query: per-query cap on high-ambiguity tokens
+    #   before fallback to did_you_mean (§10.26.1). Must be ≥ 1. Default 4.
+    nlp_morph_ambiguous_max_per_query: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_MORPH_AMBIGUOUS_MAX_PER_QUERY", "4")))
     # nlp_compound_split_max_splits: maximum number of segments to create when a
     #   no-space token is split into Turkish words.  Must be ≥ 1.  Default 4.
     nlp_compound_split_max_splits: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_COMPOUND_SPLIT_MAX_SPLITS", "4")))
@@ -990,6 +1022,11 @@ class Config:
     #   Default 1.5 (from the §10.3 spec).  Set to a very large value to always
     #   pick the highest-frequency candidate.
     nlp_diacritic_tie_break_ratio: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO", "1.5")))
+    # nlp_diacritic_tie_break_ratio_voice: boosted ambiguity threshold for
+    #   voice input (§10.3). ASR output is noisier on diacritics, so the voice
+    #   path may restore more aggressively than keyboard input.
+    #   Must be ≥ 1.0. Default 2.5.
+    nlp_diacritic_tie_break_ratio_voice: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE", "2.5")))
     # nlp_diacritic_hard_call_min_freq: frequency floor for the §10.22.1
     #   hard-call restoration override.  Ambiguous entries whose top candidate
     #   frequency is >= this value restore to the top candidate even when the
@@ -1085,6 +1122,19 @@ class Config:
     # nlp_canary_max_confidence_drift: maximum tolerated Δp95 confidence drift
     #   for a canary promotion (§10.23.2).
     nlp_canary_max_confidence_drift: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_CANARY_MAX_CONFIDENCE_DRIFT", "0.05")))
+
+    # nlp_weekly_eval_sample_size: number of sampled queries for weekly eval
+    #   re-run evaluation (§10.23.3). Default 2000.
+    nlp_weekly_eval_sample_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_WEEKLY_EVAL_SAMPLE_SIZE", "2000")))
+    # nlp_weekly_eval_sample_max_chars: truncate sanitized weekly eval queries
+    #   to this many characters before labelling (§10.23.3). Default 200.
+    nlp_weekly_eval_sample_max_chars: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_WEEKLY_EVAL_SAMPLE_MAX_CHARS", "200")))
+    # nlp_weekly_eval_max_accuracy_drop: maximum tolerated delta in accuracy
+    #   for weekly re-evaluation (§10.23.3).
+    nlp_weekly_eval_max_accuracy_drop: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_WEEKLY_EVAL_MAX_ACCURACY_DROP", "0.03")))
+    # nlp_weekly_eval_consecutive_drop_threshold: cumulative consecutive drop
+    #   above which the next canary promotion is refused until operator ack.
+    nlp_weekly_eval_consecutive_drop_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_WEEKLY_EVAL_CONSECUTIVE_DROP_THRESHOLD", "0.05")))
 
     # nlp_intent_model_path: path to the fastText supervised intent classifier
     #   model file (§10.4 Model).  Relative paths are resolved from the repo
@@ -1363,6 +1413,16 @@ class Config:
     #   (must be <= nlp_pipeline_timeout_ms).  Default = 1500 ms.
     nlp_summary_aggregation_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_SUMMARY_AGGREGATION_TIMEOUT_MS", "1500"
+    )))
+    # nlp_summary_min_fixture_quorum: minimum fraction of fixtures that must
+    #   return before a summary can still be rendered.  Default = 0.6.
+    nlp_summary_min_fixture_quorum: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_NLP_SUMMARY_MIN_FIXTURE_QUORUM", "0.6"
+    )))
+    # nlp_summary_fanout_timeout_ms: per-fixture fan-out timeout in the
+    #   summary dispatcher.  Default = 2500 ms.
+    nlp_summary_fanout_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_SUMMARY_FANOUT_TIMEOUT_MS", "2500"
     )))
     # nlp_summary_calibration_mismatch_policy: behavior when summary fan-out
     #   collects predictions with multiple calibration versions.
@@ -2642,6 +2702,12 @@ class Config:
         _bounded("training_thresholds_model_acc", self.training_thresholds_model_acc, 0.0, 1.0)
         _bounded("training_thresholds_holdout_acc", self.training_thresholds_holdout_acc, 0.0, 1.0)
         _bounded("training_thresholds_quarantine_max", self.training_thresholds_quarantine_max, 0.0, 1.0)
+        _bounded("nlp_morph_min_confidence", self.nlp_morph_min_confidence, 0.0, 1.0)
+
+        if not isinstance(self.nlp_morph_context_radius, int) or self.nlp_morph_context_radius < 0:
+            issues.append(
+                f"nlp_morph_context_radius={self.nlp_morph_context_radius} must be an integer >= 0"
+            )
 
         # Positive integers
         for name, value in (
@@ -2682,6 +2748,8 @@ class Config:
             ("drift_window_size", self.drift_window_size),
             ("drift_max_pending", self.drift_max_pending),
             ("drift_max_settled", self.drift_max_settled),
+            ("nlp_morph_topk", self.nlp_morph_topk),
+            ("nlp_morph_ambiguous_max_per_query", self.nlp_morph_ambiguous_max_per_query),
         ):
             if not isinstance(value, int) or value <= 0:
                 issues.append(f"{name}={value} must be a positive integer")
@@ -3335,10 +3403,16 @@ class Config:
                 f"nlp_intent_shadow_mode={self.nlp_intent_shadow_mode!r} must be 'off' or 'on' "
                 "(Phase 10 §10.23.2)"
             )
+        if not self.nlp_lexicon_dir:
+            issues.append("nlp_lexicon_dir must be configured for lexicon load")
         _bounded("nlp_shadow_sample_rate", self.nlp_shadow_sample_rate, 0.0, 1.0)
         _bounded("nlp_canary_min_shadow_hours", self.nlp_canary_min_shadow_hours, 0, 8_760)
         _bounded("nlp_canary_max_disagreement_rate", self.nlp_canary_max_disagreement_rate, 0.0, 1.0)
         _bounded("nlp_canary_max_confidence_drift", self.nlp_canary_max_confidence_drift, 0.0, 1.0)
+        _bounded("nlp_weekly_eval_sample_size", self.nlp_weekly_eval_sample_size, 1, 100_000)
+        _bounded("nlp_weekly_eval_sample_max_chars", self.nlp_weekly_eval_sample_max_chars, 1, 10_000)
+        _bounded("nlp_weekly_eval_max_accuracy_drop", self.nlp_weekly_eval_max_accuracy_drop, 0.0, 1.0)
+        _bounded("nlp_weekly_eval_consecutive_drop_threshold", self.nlp_weekly_eval_consecutive_drop_threshold, 0.0, 1.0)
         _bounded("nlp_pipeline_timeout_ms", self.nlp_pipeline_timeout_ms, 1, 300_000)
         _bounded("nlp_dispatch_overhead_ms", self.nlp_dispatch_overhead_ms, 1, 60_000)
         _bounded("nlp_consensus_overhead_ms", self.nlp_consensus_overhead_ms, 1, 60_000)
@@ -3377,6 +3451,58 @@ class Config:
                 f"must be <= nlp_pipeline_timeout_ms={self.nlp_pipeline_timeout_ms} "
                 "(Phase 10 §10.6 deadline-propagation)"
             )
+        if not (0.0 < self.nlp_summary_min_fixture_quorum <= 1.0):
+            issues.append(
+                f"nlp_summary_min_fixture_quorum={self.nlp_summary_min_fixture_quorum!r} "
+                "must be > 0.0 and <= 1.0 (Phase 10 §10.6 quorum policy)"
+            )
+        if self.nlp_zoneinfo_dir:
+            zoneinfo_dir = Path(self.nlp_zoneinfo_dir)
+            if not zoneinfo_dir.exists():
+                issues.append(
+                    f"nlp_zoneinfo_dir={self.nlp_zoneinfo_dir!r} does not exist "
+                    "(Phase 10 §10.23.6)"
+                )
+            elif not zoneinfo_dir.is_dir():
+                issues.append(
+                    "nlp_zoneinfo_dir must be a directory (Phase 10 §10.23.6)"
+                )
+            else:
+                istanbul_file = zoneinfo_dir / "Europe" / "Istanbul"
+                if not istanbul_file.exists():
+                    issues.append(
+                        "nlp_zoneinfo_dir is missing Europe/Istanbul zoneinfo file "
+                        "(Phase 10 §10.23.6)"
+                    )
+                else:
+                    try:
+                        actual_sha = hashlib.sha256(istanbul_file.read_bytes()).hexdigest()
+                    except OSError as exc:
+                        issues.append(
+                            f"nlp_zoneinfo_dir Europe/Istanbul unreadable: {exc} "
+                            "(Phase 10 §10.23.6)"
+                        )
+                    else:
+                        chart_path = Path(__file__).resolve().parents[2] / "xops" / "versioning" / "chart.json"
+                        if chart_path.exists():
+                            chart = json.loads(chart_path.read_text(encoding="utf-8"))
+                            expected = (
+                                chart.get("compatibility", {})
+                                .get("data_files", {})
+                                .get("zoneinfo_file", {})
+                                .get("sha256", "")
+                            )
+                            if not expected:
+                                issues.append(
+                                    "chart.json compatibility.data_files.zoneinfo_file.sha256 missing "
+                                    "(Phase 10 §10.23.6)"
+                                )
+                            elif actual_sha != expected:
+                                issues.append(
+                                    "nlp_zoneinfo_dir Europe/Istanbul SHA mismatch with chart.json "
+                                    "compatibility data (Phase 10 §10.23.6)"
+                                )
+        _bounded("nlp_summary_fanout_timeout_ms", self.nlp_summary_fanout_timeout_ms, 1, 300_000)
         if self.nlp_summary_calibration_mismatch_policy not in ("note", "refuse"):
             issues.append(
                 f"nlp_summary_calibration_mismatch_policy={self.nlp_summary_calibration_mismatch_policy!r} "
@@ -3406,6 +3532,7 @@ class Config:
                 "must be 1 or 2 (§10.3 SymSpellIndex constraint)"
             )
         _bounded("nlp_typo_max_lookups_per_query", self.nlp_typo_max_lookups_per_query, 1, 1_000)
+        _bounded("nlp_asr_filler_strip_max", self.nlp_asr_filler_strip_max, 1, 100)
         _bounded(
             "nlp_lexicon_feed_max_supported_schema_version",
             self.nlp_lexicon_feed_max_supported_schema_version,
@@ -3416,6 +3543,11 @@ class Config:
             issues.append(
                 f"nlp_diacritic_tie_break_ratio={self.nlp_diacritic_tie_break_ratio} "
                 "must be >= 1.0 (§10.3 ambiguity policy)"
+            )
+        if self.nlp_diacritic_tie_break_ratio_voice < 1.0:
+            issues.append(
+                f"nlp_diacritic_tie_break_ratio_voice={self.nlp_diacritic_tie_break_ratio_voice} "
+                "must be >= 1.0 (§10.3 voice path policy)"
             )
         if self.nlp_diacritic_hard_call_min_freq < 1:
             issues.append(

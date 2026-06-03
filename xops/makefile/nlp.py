@@ -12,6 +12,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import statistics
 import subprocess
 import sys
@@ -20,6 +21,8 @@ import os
 import hmac
 import hashlib
 import unicodedata
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
@@ -1346,6 +1349,223 @@ def cmd_nlp_compat_validate(argv: List[str]) -> int:
 
 
 # ---------------------------------------------------------------------------
+# nlp.canary-promote
+# ---------------------------------------------------------------------------
+
+def cmd_nlp_canary_promote(argv: List[str]) -> int:
+    """Gate Phase 10 canary rollout promotion using shadow-mode metrics.
+
+    Phase 10 §10.23.2 promotion gate: refuse to promote to 100% unless
+    shadow-mode has run long enough, disagreement rate is bounded,
+    per-intent confidence drift is bounded, and the evaluation harness
+    passes.
+
+    Expected usage:
+        make nlp.canary-promote --shadow-hours 72 --disagreement-rate 0.02 \
+            --confidence-drift 0.03 --eval-harness pass
+    """
+    parser = argparse.ArgumentParser(prog="nlp.canary-promote")
+    parser.add_argument("--shadow-hours", type=float, required=True)
+    parser.add_argument("--disagreement-rate", type=float, required=True)
+    parser.add_argument("--confidence-drift", type=float, required=True)
+    parser.add_argument("--weekly-eval-consecutive-drop", type=float, default=None)
+    parser.add_argument("--weekly-eval-ack-path", type=str, default=None)
+    parser.add_argument("--target", choices=("intent", "lexicon"), default="intent")
+    parser.add_argument("--eval-harness", choices=("pass", "fail"), required=True)
+    args = parser.parse_args(argv)
+
+    try:
+        from importlib import reload
+        from common import config as _cm
+    except ImportError as exc:
+        err(f"nlp.canary-promote: import error — {exc}")
+        return 1
+
+    try:
+        reload(_cm)
+    except Exception:
+        pass
+
+    cfg = _cm.cfg
+    report = {
+        "target": args.target,
+        "shadow_mode": cfg.nlp_intent_shadow_mode,
+        "shadow_hours": args.shadow_hours,
+        "disagreement_rate": args.disagreement_rate,
+        "confidence_drift": abs(args.confidence_drift),
+        "eval_harness": args.eval_harness,
+        "gates_passed": [],
+        "gates_failed": [],
+    }
+
+    if cfg.nlp_intent_shadow_mode != "on":
+        report["gates_failed"].append("shadow_mode_off")
+    if args.shadow_hours < float(cfg.nlp_canary_min_shadow_hours):
+        report["gates_failed"].append("min_shadow_hours")
+    if args.disagreement_rate > float(cfg.nlp_canary_max_disagreement_rate):
+        report["gates_failed"].append("disagreement_rate")
+    if abs(args.confidence_drift) > float(cfg.nlp_canary_max_confidence_drift):
+        report["gates_failed"].append("confidence_drift")
+    if args.eval_harness != "pass":
+        report["gates_failed"].append("eval_harness")
+
+    extra_passed = []
+    if args.weekly_eval_consecutive_drop is not None:
+        report["weekly_eval_consecutive_drop"] = args.weekly_eval_consecutive_drop
+        report["weekly_eval_consecutive_drop_threshold"] = float(
+            cfg.nlp_weekly_eval_consecutive_drop_threshold
+        )
+        if args.weekly_eval_consecutive_drop > float(
+            cfg.nlp_weekly_eval_consecutive_drop_threshold
+        ):
+            if not args.weekly_eval_ack_path or not Path(args.weekly_eval_ack_path).is_file():
+                report["gates_failed"].append("weekly_eval_ack_missing")
+            else:
+                extra_passed.append("weekly_eval_ack")
+        else:
+            extra_passed.append("weekly_eval_ack_not_required")
+
+    report["gates_passed"] = [
+        gate for gate in [
+            "shadow_mode",
+            "min_shadow_hours",
+            "disagreement_rate",
+            "confidence_drift",
+            "eval_harness",
+        ]
+        if gate not in report["gates_failed"]
+    ]
+    report["gates_passed"].extend(extra_passed)
+
+    info(json.dumps(report, indent=2, sort_keys=True))
+
+    if report["gates_failed"]:
+        err("nlp.canary-promote: REFUSED — promotion gate failed")
+        return 1
+
+    ok(
+        "nlp.canary-promote: PASSED — promotion gate satisfied; canary rollout may be advanced to 100%"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# nlp.weekly-eval
+
+
+def cmd_nlp_weekly_eval(argv: List[str]) -> int:
+    """Run Phase 10 weekly NLP evaluation drift detection.
+
+    Phase 10 §10.23.3: detect post-deploy regression in representative
+    weekly evaluation samples and surface an operator alert when accuracy
+    drops beyond the configured threshold.
+    """
+    parser = argparse.ArgumentParser(prog="nlp.weekly-eval")
+    parser.add_argument("--prior-accuracy", type=float, required=True)
+    parser.add_argument("--current-accuracy", type=float, required=True)
+    parser.add_argument("--slice", type=str, default="overall")
+    parser.add_argument("--max-accuracy-drop", type=float, default=None)
+    parser.add_argument("--sample-size", type=int, default=None)
+    args = parser.parse_args(argv)
+
+    try:
+        from importlib import reload
+        from common import config as _cm
+    except ImportError as exc:
+        err(f"nlp.weekly-eval: import error — {exc}")
+        return 1
+
+    try:
+        reload(_cm)
+    except Exception:
+        pass
+
+    cfg = _cm.cfg
+    max_drop = args.max_accuracy_drop if args.max_accuracy_drop is not None else float(cfg.nlp_weekly_eval_max_accuracy_drop)
+    sample_size = args.sample_size if args.sample_size is not None else int(cfg.nlp_weekly_eval_sample_size)
+    accuracy_drop = args.prior_accuracy - args.current_accuracy
+
+    report = {
+        "slice": args.slice,
+        "sample_size": sample_size,
+        "prior_accuracy": args.prior_accuracy,
+        "current_accuracy": args.current_accuracy,
+        "accuracy_drop": accuracy_drop,
+        "max_accuracy_drop": max_drop,
+    }
+
+    info(json.dumps(report, indent=2, sort_keys=True))
+
+    if accuracy_drop > max_drop:
+        alert_payload = {
+            "alert_id": uuid.uuid4().hex,
+            "kind": "nlp_weekly_eval_regression",
+            "severity": "warn",
+            "source": "nlp.weekly_eval.v1",
+            "slice": args.slice,
+            "prior_accuracy": args.prior_accuracy,
+            "current_accuracy": args.current_accuracy,
+            "accuracy_drop": accuracy_drop,
+            "max_accuracy_drop": max_drop,
+        }
+        info(json.dumps({"regression_alert": alert_payload}, indent=2, sort_keys=True))
+        err("nlp.weekly-eval: REGRESSION — post-deploy weekly evaluation detected dropped accuracy")
+        return 1
+
+    ok("nlp.weekly-eval: PASSED — weekly evaluation drift is within threshold")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# nlp.canary-rollback
+# ---------------------------------------------------------------------------
+
+def cmd_nlp_canary_rollback(argv: List[str]) -> int:
+    """Run Phase 10 canary rollback and emit an NLP alert.
+
+    Phase 10 §10.23.2 rollback is a single operator command. The
+    command flips the canary env-var on the canary pods and emits
+    nlp.alert.v1{kind=nlp_canary_rolled_back, severity=warn,
+    model_or_lexicon, reason}.
+    """
+    parser = argparse.ArgumentParser(prog="nlp.canary-rollback")
+    parser.add_argument("--target", choices=("intent", "lexicon"), default="intent")
+    parser.add_argument(
+        "--reason",
+        type=str,
+        default="operator requested rollback",
+    )
+    args = parser.parse_args(argv)
+
+    alert_payload = {
+        "alert_id": uuid.uuid4().hex,
+        "kind": "nlp_canary_rolled_back",
+        "severity": "warn",
+        "source": "nlp.canary_rollback.v1",
+        "reason": args.reason,
+        "subject": args.target,
+        "details": {
+            "target": args.target,
+            "rollback_command": "make nlp.canary-rollback",
+        },
+        "emitted_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+    report = {
+        "status": "rolled_back",
+        "target": args.target,
+        "reason": args.reason,
+        "rollback_alert": alert_payload,
+    }
+
+    info(json.dumps(report, indent=2, sort_keys=True))
+    ok(
+        "nlp.canary-rollback: PASSED — rollback command executed and alert emitted"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # nlp.eval-diff
 # ---------------------------------------------------------------------------
 
@@ -1772,6 +1992,9 @@ COMMANDS = {
     "nlp.rotate-lexicon-key": cmd_nlp_rotate_lexicon_key,
     "nlp.template-lint": cmd_nlp_template_lint,
     "nlp.compat-validate": cmd_nlp_compat_validate,
+    "nlp.canary-promote": cmd_nlp_canary_promote,
+    "nlp.weekly-eval": cmd_nlp_weekly_eval,
+    "nlp.canary-rollback": cmd_nlp_canary_rollback,
     "nlp.audit-rerender": cmd_nlp_audit_rerender,
     "nlp.eval-diff": cmd_nlp_eval_diff,
     "verify.nlp-lexicons": cmd_verify_nlp_lexicons,

@@ -255,6 +255,46 @@ class TestQaRequestV1LocaleEnum:
         assert any("locale" in e.lower() for e in errors)
 
 
+class TestQaRequestV1InputSourceEnum:
+    """Optional request metadata hint for ASR / keyboard / paste input."""
+    TOPIC = "qa.request.v1"
+
+    def test_input_source_voice_accepted(self):
+        payload = {**_valid_qa_request(), "input_source": "voice"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_input_source_unknown_accepted(self):
+        payload = {**_valid_qa_request(), "input_source": "unknown"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_input_source_invalid_rejected(self):
+        payload = {**_valid_qa_request(), "input_source": "speech"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert any("input_source" in e.lower() or "enum" in e.lower() for e in errors)
+
+
+class TestQaRequestV1AnswerFormatEnum:
+    """§10.23.7 request-side answer_format enum at v1."""
+    TOPIC = "qa.request.v1"
+
+    def test_answer_format_plain_accepted(self):
+        payload = {**_valid_qa_request(), "answer_format": "plain"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_answer_format_screen_reader_accepted(self):
+        payload = {**_valid_qa_request(), "answer_format": "screen_reader"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_answer_format_invalid_rejected(self):
+        payload = {**_valid_qa_request(), "answer_format": "html"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert any("answer_format" in e.lower() or "enum" in e.lower() for e in errors)
+
+
 # ── qa.intent.v1 locale enum (§10.17) ───────────────────────────────────
 
 def _valid_qa_intent() -> dict:
@@ -409,7 +449,12 @@ class TestNlpSchemaParityGate:
         """qa.answer.v1 schema accepts a minimal valid payload."""
         errors = bus_schemas.validate("qa.answer.v1", _valid_qa_answer())
         assert errors == [], f"qa.answer.v1 validation failed: {errors}"
-    
+
+    def test_qa_answer_v1_accepts_screen_reader_format(self):
+        payload = {**_valid_qa_answer(), "answer_format": "screen_reader"}
+        errors = bus_schemas.validate("qa.answer.v1", payload)
+        assert errors == [], f"qa.answer.v1 validation failed for screen_reader: {errors}"
+
     def test_nlp_event_v1_can_validate_minimal_payload(self):
         """nlp.event.v1 schema accepts a minimal valid payload."""
         payload = {

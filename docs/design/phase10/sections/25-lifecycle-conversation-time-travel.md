@@ -100,12 +100,12 @@
 - [x] **Cancellation contract.** `predict.cancel.v1` (Phase 9) → also
   cancels the humanize call; in-flight chunks NOT sent after cancel.
   Boundary test: `test_nlp_streaming_honors_predict_cancel`.
-- [ ] **Cache coherence.** Streamed answers cached as `(chunks[], final)`
+- [x] **Cache coherence.** Streamed answers cached as `(chunks[], final)`
   tuple under same §10.23.9 key; cache hit returns the assembled answer
   in one shot (NOT replayed as a stream — re-streaming a cached answer
   fakes "live generation" and is forbidden). AST guard:
   `test_nlp_cached_answer_never_re_streamed`.
-- [ ] **Proof:** `test_nlp_streaming_skeleton_first_then_polish`,
+- [x] **Proof:** `test_nlp_streaming_skeleton_first_then_polish`,
   `test_nlp_streaming_chunk_blocked_on_pii`,
   `test_nlp_streaming_slow_client_cancels_humanize_in_under_2s`,
   `test_nlp_streaming_disabled_mode_falls_through_to_oneshot`,

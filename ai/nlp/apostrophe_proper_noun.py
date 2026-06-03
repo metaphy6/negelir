@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 import yaml
 
@@ -46,6 +46,7 @@ class ApostropheRepair(NamedTuple):
     repaired: str
     rule_id: str
     rule_class: str
+    evidence: Optional[str] = None
 
 
 def _load_yaml(path: Path) -> dict:
@@ -169,6 +170,7 @@ def _repair_token(
             repaired=repaired,
             rule_id="missing_apostrophe_suffix",
             rule_class="missing_apostrophe_suffix",
+            evidence="lexicon_prefix_match",
         )
 
     return token, None

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+import json
 import pytest
 
 from common.config import cfg
+from common.security.patterns import detect_pii
 from nlp.streaming import build_guarded_streaming_plan
 from swarm.agents.nlp import NlpAnswerAgent
 from swarm.agents.topics import PREDICT_CANCEL_V1
@@ -45,6 +48,27 @@ def test_guarded_streaming_plan_citation_never_in_streaming_chunk(monkeypatch: p
     assert plan.citation_block == "Kaynak"
     assert all("---" not in chunk for chunk in plan.skeleton_chunks)
     assert all("Kaynak" not in chunk for chunk in plan.skeleton_chunks)
+
+
+def test_nlp_streaming_chunk_blocked_on_pii(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cfg, "nlp_answer_streaming", "guarded")
+    answer_text = "Bu bir taslak 0555 123 4567.\n---\nKaynak"
+
+    def chunk_proofread_fn(chunk: str) -> str | None:
+        return "pii_redacted" if detect_pii(chunk) else None
+
+    plan = build_guarded_streaming_plan(
+        answer_text,
+        cfg=cfg,
+        humanizer=lambda body, cfg: body + " POLISHED",
+        cancel_token=lambda: False,
+        write_chunk=lambda chunk: None,
+        chunk_proofread_fn=chunk_proofread_fn,
+    )
+
+    assert plan.chunk_blocked_reason == "pii_redacted"
+    assert not plan.humanizer_used
+    assert plan.final_answer == "Bu bir taslak 0555 123 4567.\n---\nKaynak"
 
 
 def test_guarded_streaming_plan_backpressure_falls_back_to_skeleton(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,6 +122,19 @@ def test_nlp_streaming_disabled_mode_falls_through_to_oneshot() -> None:
 
     assert not plan.humanizer_used
     assert plan.final_answer == answer_text
+
+
+def test_nlp_cached_answer_never_re_streamed() -> None:
+    root = Path(__file__).resolve().parents[1] / "swarm" / "agents"
+    allowed = {root / "cache.py"}
+
+    for path in sorted(root.rglob("*.py")):
+        if path in allowed:
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert "streaming_chunks" not in source, (
+            f"Unexpected streaming_chunks reference in {path}. Cached answers must be served one-shot."
+        )
 
 
 def test_nlp_streaming_honors_predict_cancel() -> None:

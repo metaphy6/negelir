@@ -78,6 +78,12 @@ class TestStripProperNounSuffix:
         assert stem == "Fenerbahçe"
         assert cls is not None
 
+    def test_strip_no_apostrophe_wrong_harmony_dative(self) -> None:
+        """Wrong-harmony dative suffix 'Fenerbahçeya' recovers 'Fenerbahçe'."""
+        stem, cls = strip_proper_noun_suffix("Fenerbahçeya")
+        assert stem == "Fenerbahçe"
+        assert cls == "dative"
+
     def test_strip_preserves_non_proper(self) -> None:
         """A lowercase token without assume_proper → (token, None)."""
         token = "galatasaray"

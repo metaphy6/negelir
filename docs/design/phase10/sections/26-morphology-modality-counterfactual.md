@@ -25,7 +25,7 @@
 
 #### 10.26.1 Morphological analyzer ambiguity discipline (Zemberek top-K + confidence floor)
 
-- [ ] **Real bug §10.1 step 7 left open.** "Zemberek tokens"
+- [x] **Real bug §10.1 step 7 left open.** "Zemberek tokens"
   (vendored rules in `ai/nlp/vendor/zemberek_rules.json`) was
   spec'd as a single best-parse output. In production Zemberek-style
   analysers commonly emit 3–8 candidate parses for one Turkish
@@ -35,11 +35,11 @@
   to the gazetteer, especially on proper nouns
   (*Galatasaray'ından* — possessive vs ablative collide on the
   surface form *-ından*).
-- [ ] **Top-K parse acceptance.** `cfg.nlp_morph_topk=3` candidate
+- [x] **Top-K parse acceptance.** `cfg.nlp_morph_topk=3` candidate
   parses retained per token. `MorphCandidate = (root, suffix_class,
   pos, confidence, ambiguity_class ∈ {unique, low, high,
   unparseable})`. Stored on the token, NOT collapsed at this stage.
-- [ ] **Confidence floor + abstention.** Each parse carries a
+- [x] **Confidence floor + abstention.** Each parse carries a
   unigram-frequency-weighted confidence `0.0..1.0` from
   `ai/nlp/data/tr_morph_freq.json` (SHA-pinned, rebuilt from the
   same Wikipedia corpus as §10.3 diacritics). Floor
@@ -48,7 +48,7 @@
   parse — emit `nlp.event.v1{kind=morph_parse_ambiguous,
   surface_form_sha8, candidate_count}` (debounced 60s, PII-safe via
   sha8 only).
-- [ ] **Resolution arbitration (deterministic, ordered).** When
+- [x] **Resolution arbitration (deterministic, ordered).** When
   multiple parses survive the confidence floor:
   1. **Gazetteer cross-check wins.** If exactly one candidate root
      matches a `lexicon_canonical_id` in §10.2, pick it.
@@ -62,7 +62,7 @@
   4. **Tie-break by frequency rank.** Higher unigram frequency wins.
   5. **Still tied** → emit `slot_resolution_failed` (per §10.5) and
      route to `did_you_mean` (NEVER guess).
-- [ ] **Proper-noun morphology guard.** Proper-noun stems
+- [x] **Proper-noun morphology guard.** Proper-noun stems
   (`is_proper=True` from §10.22.2 `strip_proper_noun_suffix`)
   short-circuit the parser — Zemberek does not own proper-noun
   morphology and frequently truncates them
@@ -70,24 +70,24 @@
   `test_nlp_proper_noun_skips_zemberek` asserts the surface form
   reaches the gazetteer untransformed when `is_proper=True`. Bypass
   emits `nlp.event.v1{kind=morph_proper_noun_bypassed}` (debounced).
-- [ ] **Unparseable token policy.** Zemberek returning zero parses
+- [x] **Unparseable token policy.** Zemberek returning zero parses
   is a **valid signal** (foreign word, code-switch, neologism,
   emoji-name); fall through to: (a) gazetteer pass, (b) §10.22.8
   bilingual gazetteer, (c) §10.24.10 abbrev table, (d) §10.3
   Symspell. Only if all four miss → token is "unresolved" and feeds
   the §10.25.8 `nlp_unresolved_token_top_k` telemetry. Never raise.
-- [ ] **Ambiguity budget per query.** ≤ `cfg.nlp_morph_ambiguous_max_per_query=4`
+- [x] **Ambiguity budget per query.** ≤ `cfg.nlp_morph_ambiguous_max_per_query=4`
   high-ambiguity tokens; over-budget → `did_you_mean` fallback with
   the first 2 unambiguous content tokens echoed back. Defends
   against pathologically agglutinated input
   (*"Galatasaraylılaştıramadıklarımızdan mısınız?"* — fun trivia,
   but not a useful classifier signal).
-- [ ] **Determinism guarantee.** Same input + same
+- [x] **Determinism guarantee.** Same input + same
   `zemberek_rules.json` SHA + same `tr_morph_freq.json` SHA + same
   arbitration tables → byte-identical `MorphCandidate[]` ordering
   across runs. Hypothesis property test (≥ 500 examples,
   `derandomize=True`) seeds + hashes parser output.
-- [ ] **Cross-language parity unaffected.** Morphology runs Python-
+- [x] **Cross-language parity unaffected.** Morphology runs Python-
   side only — Go sec layer (Phase 7) does not parse morphology and
   does not need to mirror this. Boundary test
   `test_go_sec_layer_does_not_parse_morphology` asserts no Zemberek
@@ -95,7 +95,7 @@
 
 #### 10.26.2 Voice-to-text / ASR-input tolerance (binding)
 
-- [ ] **Why this section.** Mobile clients (Phase 9 forward) will
+- [x] **Why this section.** Mobile clients (Phase 9 forward) will
   ship a speech-to-text affordance. ASR engines (Google/Apple/Yandex
   TR models) emit input that systematically violates assumptions
   baked into §10.1: no punctuation, no question marks, no
@@ -106,7 +106,7 @@
   disambiguation), §10.22.5 (dialect/abbreviation), §10.24.5 (run-on
   multi-question split) handles this cleanly because they assume
   punctuation as a primary signal.
-- [ ] **Detect ASR origin (heuristic, advisory).** New
+- [x] **Detect ASR origin (heuristic, advisory).** New
   `request_metadata.input_source ∈ {keyboard, voice, paste,
   unknown}` (additive on `qa.request.v1`, `qa.context.v1` —
   schema_version 2→3, default `unknown`). When `voice`, opt-in to
@@ -115,7 +115,7 @@
   chars + ≥ 2 hesitation tokens → auto-mark `voice` and emit
   `nlp.event.v1{kind=asr_input_auto_detected}` (debounced 60s).
   Detector NEVER mutates the request — only sets the flag.
-- [ ] **Hesitation / filler token table.** `ai/nlp/lang_tr/asr/fillers.tr.yaml`
+- [x] **Hesitation / filler token table.** `ai/nlp/lang_tr/asr/fillers.tr.yaml`
   closed enum — `{ııı, eee, ee, ıı, mmm, hmmm, şey, yani, aslında,
   yaa, işte, falan, falan filan, ne bileyim}`. New §10.1 step 6.5
   `strip_asr_fillers` — runs ONLY when `input_source=voice` (do not
@@ -123,13 +123,13 @@
   Per-query strip cap `cfg.nlp_asr_filler_strip_max=6` (over-cap →
   emit `asr_filler_overflow`, fall through to raw — defends against
   "ya ya ya ya ya ..." abuse).
-- [ ] **Implicit punctuation reconstruction.** When `input_source=voice`,
+- [x] **Implicit punctuation reconstruction.** When `input_source=voice`,
   apply §10.24.5 `split_questions` with **relaxed** rules: any
   occurrence of `mi/mı/mu/mü` followed by ≥ 5 content tokens splits
   even without a question mark; `ve` + clause-boundary detection
   upgraded from passive to active. Boundary test enforces this is
   a no-op when `input_source=keyboard`.
-- [ ] **Diacritic restoration aggressiveness toggle.** §10.3
+- [x] **Diacritic restoration aggressiveness toggle.** §10.3
   diacritic ambiguity tie-break ratio (`nlp_diacritic_tie_break_ratio=1.5x`)
   loosens to `cfg.nlp_diacritic_tie_break_ratio_voice=2.5x` when
   `input_source=voice` (ASR engines under-emit diacritics on

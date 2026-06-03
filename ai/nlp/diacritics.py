@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 import yaml
+
+from common.config import Config
 
 #: Schema version this loader understands (must match ``_diacritics.tr.yaml``
 #: ``_meta.schema_version``).
@@ -74,6 +76,21 @@ def _load_risk_weights(path: Path) -> dict[str, float]:
             continue
         weights[str(key)] = parsed
     return weights
+
+
+def make_diacritic_restorer(cfg: Config, input_source: str = "keyboard") -> Callable[[str], str]:
+    """Return a callable step-6 restoration hook for the normalization pipeline.
+
+    The voice path uses a relaxed tie-break ratio to accept more aggressive
+    diacritic restoration when ASR under-emits diacritics on low-frequency tokens.
+    """
+    tie_break_ratio = (
+        cfg.nlp_diacritic_tie_break_ratio_voice
+        if str(input_source).strip().lower() == "voice"
+        else cfg.nlp_diacritic_tie_break_ratio
+    )
+    table = DiacriticsTable.load(tie_break_ratio=tie_break_ratio)
+    return table.restore
 
 
 # ---------------------------------------------------------------------------

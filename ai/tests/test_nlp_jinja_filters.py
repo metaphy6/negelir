@@ -31,6 +31,7 @@ sys.path.insert(0, str(_REPO_ROOT / "ai"))
 
 import jinja2  # noqa: E402
 
+from common.config import cfg  # noqa: E402
 from nlp.jinja_filters_tr import (  # noqa: E402
     dative,
     accusative,
@@ -61,7 +62,9 @@ def test_env_strict_undefined():
 def test_env_all_filters_registered():
     env = build_environment()
     required = {"dative", "accusative", "locative", "ablative", "genitive",
-                "plural", "kickoff_time", "match_label", "confidence_band"}
+                "plural", "kickoff_time", "match_label", "number_tr",
+                "money_tr", "clock_tr", "date_tr", "date_tr_short",
+                "score_tr", "confidence_band"}
     missing = required - set(env.filters)
     assert not missing, f"Missing Jinja2 filters: {missing}"
 
@@ -219,14 +222,20 @@ def test_confidence_band_via_env_global():
 # \u2500\u2500 kickoff_time filter \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 def test_kickoff_time_datetime():
-    # 2026-05-30 is a Saturday (Cumartesi = weekday 5)
+    # 2026-05-30T21:30Z is Sunday 00:30 in Europe/Istanbul.
     d = dt.datetime(2026, 5, 30, 21, 30, tzinfo=dt.timezone.utc)
-    assert kickoff_time(d) == "Cumartesi 21:30"
+    assert kickoff_time(d) == "Pazar 00:30"
 
 
 def test_kickoff_time_iso_string():
     result = kickoff_time("2026-05-30T21:30:00Z")
-    assert result == "Cumartesi 21:30"
+    assert result == "Pazar 00:30"
+
+
+def test_kickoff_time_uses_configured_render_timezone(monkeypatch):
+    monkeypatch.setattr(cfg, "nlp_render_timezone", "UTC")
+    d = dt.datetime(2026, 5, 30, 21, 30, tzinfo=dt.timezone.utc)
+    assert kickoff_time(d) == "Cumartesi 21:30"
 
 
 def test_kickoff_time_none():
@@ -329,7 +338,7 @@ _MATCH_OUTCOME_CTX = {
     "kickoff_utc": dt.datetime(2026, 5, 30, 20, 0, tzinfo=dt.timezone.utc),
     "degraded": False,
     "prediction_id": "pred-test-1",
-    "produced_at_utc": "2026-05-27T10:00:00Z",
+    "produced_at_utc": "2026-05-27T10:00:00.000000Z",
     "model_versions": ["predictor-v1"],
     "calibration_version": "cal-v1",
 }

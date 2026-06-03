@@ -149,7 +149,9 @@ def _current_row(matrix: dict[str, Any], pipeline_version: str) -> dict[str, Any
 
 
 def _lexicon_snapshot_sha() -> str:
-    lexicon_dir = Path(__file__).resolve().parents[0] / 'lexicon'
+    lexicon_dir = Path(getattr(cfg, 'nlp_lexicon_dir', 'ai/nlp/lexicon'))
+    if getattr(cfg, 'nlp_canary_pod', False):
+        lexicon_dir = lexicon_dir.with_name(lexicon_dir.name + '.canary')
     if not lexicon_dir.exists() or not lexicon_dir.is_dir():
         return ''
 

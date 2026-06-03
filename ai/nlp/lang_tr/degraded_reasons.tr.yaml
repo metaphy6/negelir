@@ -1,0 +1,7 @@
+predict_timeout: "Tahmin zaman aşımına uğradı"
+predict_unavailable: "Tahmin şu anda kullanılamıyor"
+data_lookup_failed: "Veri araması başarısız oldu"
+calibration_mismatch_refused: "Kalibrasyon uyumsuzluğu nedeniyle red edildi"
+summary quorum not met: "Küme oy çokluğu sağlanamadı"
+summary_quorum_zero_received: "Hiç tahmin alınamadı"
+summary calibration mismatch: "Kalibrasyon uyumsuzluğu"

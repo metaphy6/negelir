@@ -397,3 +397,18 @@ class TestDistributionTargets:
             print(f"Tag '{tag}': {actual_count} entries (target={target_count})")
             # For v1, we'll be lenient and just log.
             # In production: assert actual_count >= target_count
+
+
+def test_phase10_baseline_tracker_row_and_roadmap_checkbox_meta_is_checked() -> None:
+    """Verify the Phase 10 baseline meta checklist item is marked complete."""
+    from pathlib import Path
+    import re
+
+    root = Path(__file__).resolve().parents[2]
+    baseline = root / "docs" / "design" / "phase10" / "sections" / "00-baseline.md"
+    content = baseline.read_text(encoding="utf-8")
+    assert re.search(
+        r'^- \[x\] \*\*Tracker row \+ ROADMAP checkbox flips',
+        content,
+        flags=re.MULTILINE,
+    ), "Phase 10 baseline tracker/ROADMAP meta item must be marked complete"

@@ -15,10 +15,16 @@
     "request_id":     { "type": "string", "minLength": 1 },
     "sanitized_text": { "type": "string", "description": "Post-NFC, post-control-strip text. Original raw bytes are NOT carried here; quarantine forensics live on `sec.quarantine.v1`." },
     "locale":         { "type": "string", "enum": ["tr-TR"], "description": "Language locale (§10.17). v1 ships tr-TR only; designed to additively gain en-GB/en-US post-Phase-13a." },
+    "answer_format":  { "type": "string", "enum": ["plain", "markdown_safe", "screen_reader"], "description": "Requested answer output format (§10.23.7). Optional at v1; defaults to plain when absent." },
     "sec_verdict":    { "type": "string", "enum": ["pass", "sanitized"], "description": "`pass` = no transform; `sanitized` = deterministic transform applied (NFC, strip control / zero-width / RTL, optional homoglyph fold)." },
     "sec_steps_run":  { "type": "array", "items": { "type": "string" }, "description": "Ordered audit trail of which deterministic / classifier steps fired." },
     "client_id":      { "type": ["string", "null"] },
     "conversation_id": { "type": ["string", "null"], "description": "Optional conversation identifier for multi-turn follow-up context." },
+    "input_source": {
+      "type": ["string", "null"],
+      "enum": ["keyboard", "voice", "paste", "unknown", null],
+      "description": "Optional request metadata hint for the input source; voice enables ASR-tolerant normalization paths."
+    },
     "emitted_at":     { "type": "string", "description": "ISO-8601 UTC." }
   },
   "additionalProperties": false

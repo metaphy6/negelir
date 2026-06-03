@@ -95,7 +95,7 @@ counter-example, and states the binding correction. Tests live in
       (`bidi_control_stripped`, severity=warn) because they signal
       adversarial paste.
 
-- [ ] **Assumption (§10.28 orthographic floor):** "Apostrophe between
+- [x] **Assumption (§10.28 orthographic floor):** "Apostrophe between
       proper noun and case suffix is mandatory in formal Turkish."
       **Counter-example:** TDK (Türk Dil Kurumu) rules permit and
       prefer the apostrophe for proper nouns, but real-world Turkish

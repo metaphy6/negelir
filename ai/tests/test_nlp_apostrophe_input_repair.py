@@ -16,7 +16,22 @@ def test_missing_apostrophe_suffix_rewrites_proper_noun() -> None:
             repaired="galatasaray'a",
             rule_id="missing_apostrophe_suffix",
             rule_class="missing_apostrophe_suffix",
+            evidence="lexicon_prefix_match",
         ),
+    )
+
+
+def test_normalize_input_records_apostrophe_inference_event() -> None:
+    from nlp.normalize import normalize_input
+
+    result = normalize_input("Galatasaraya maç")
+    assert result.apostrophe_repair_events == (
+        {
+            "kind": "apostrophe_inferred",
+            "evidence": "lexicon_prefix_match",
+            "original": "galatasaraya",
+            "canonical": "galatasaray'a",
+        },
     )
 
 

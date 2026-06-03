@@ -59,12 +59,6 @@ vocative:
   - token: "ya"
     category: filler
     note: "sentence-final filler particle (≠ question particle); stripped pre-classifier"
-  - token: "yani"
-    category: filler
-    note: "discourse filler (so/I mean) — like 'ya know' in English"
-  - token: "işte"
-    category: filler
-    note: "discourse filler (like 'you know' / 'well') — no propositional content"
   - token: "efendim"
     category: address
     note: "formal address (sir/madam) — no propositional content in NLP context"

@@ -33,7 +33,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from common.text.normalize import canonical_normalize, confusables_fold
-from common.text.turkish import lowercase_tr
+from common.text.turkish import MorphCandidate, lowercase_tr, normalize_morph_candidates
+import hashlib
 from nlp._particle_normalize import (
     _is_valid_stem as _is_valid_particle_stem,
     _last_vowel as _particle_last_vowel,
@@ -44,6 +45,7 @@ from nlp.dialect_normalize import (
     apply_dialect_normalize as _apply_dialect_normalize,
     _DialectNormalizer,
 )
+from nlp.diacritics import make_diacritic_restorer
 from nlp.postposition_stack import (
     detect_postposition_stacks,
     PostpositionStackMatch,
@@ -118,7 +120,42 @@ def _collapse_unicode_spaces(text: str, enabled: bool) -> str:
 # Split on sequences of whitespace + common punctuation boundaries.
 # Apostrophes inside tokens are preserved (e.g. Turkish suffix "yarin'ki").
 _TOKEN_SPLIT_RE = re.compile(r"[\s,\.\?!\:;()\[\]/|]+")
+_VOICE_QUESTION_PARTICLES = frozenset(("mi", "mı", "mu", "mü"))
+_VOICE_SUBQUERY_LOOKAHEAD = 5
 
+
+def split_questions(tokens: list[str], *, input_source: str = "keyboard") -> list[list[str]]:
+    """Split voice queries into subqueries using relaxed Turkish rules.
+
+    When ``input_source == "voice"``, a detached question-particle token
+    followed by at least five remaining tokens triggers a boundary split.
+    The keyboard path is intentionally a no-op to preserve existing typed
+    input behavior.
+    """
+    if input_source != "voice":
+        return [tokens]
+    if not tokens:
+        return []
+
+    subqueries: list[list[str]] = []
+    current: list[str] = []
+    for idx, token in enumerate(tokens):
+        current.append(token)
+        if token in _VOICE_QUESTION_PARTICLES and len(tokens) - idx - 1 >= 5:
+            subqueries.append(current)
+            current = []
+            continue
+
+        if token == "ve":
+            lookahead = tokens[idx + 1 : idx + 1 + _VOICE_SUBQUERY_LOOKAHEAD]
+            if any(t in _VOICE_QUESTION_PARTICLES for t in lookahead):
+                subqueries.append(current)
+                current = []
+                continue
+
+    if current:
+        subqueries.append(current)
+    return subqueries
 
 # ---------------------------------------------------------------------------
 # Public types
@@ -152,6 +189,11 @@ class NormalizedInput:
     steps_run: tuple[str, ...]
     original_codepoint_count: int
     typo_budget_exhausted: bool = False
+    morph_ambiguity_budget_exhausted: bool = False
+    """True when morphology sees more than ``cfg.nlp_morph_ambiguous_max_per_query``
+    high-ambiguity tokens.  The caller may emit ``nlp.event.v1{kind=did_you_mean_offered}``
+    and route the request to a fallback path instead of guessing the ambiguous parse.
+    """
     stage_timed_out: bool = False
     """True when the normalize+diacritic+typo stage exceeded
     ``cfg.nlp_normalize_stage_timeout_ms``.  The caller is responsible
@@ -170,8 +212,10 @@ class NormalizedInput:
     """Regional dialect rewrites applied before tokenization (§10.32.4)."""
     dialect_alternatives: tuple[tuple[str, str], ...] = tuple()
     """Canonicalized alternatives preserved for audit_only=false rewrites."""
-    apostrophe_repairs: tuple[tuple[str, str, str], ...] = tuple()
-    """Set of (original_token, repaired_token, rule_id) repairs applied in step 6.7."""
+    apostrophe_repairs: tuple[ApostropheRepair, ...] = tuple()
+    """Set of normalized apostrophe repairs applied in step 6.7."""
+    apostrophe_repair_events: tuple[dict[str, str], ...] = tuple()
+    """Audit-friendly event payloads for inferred apostrophe repairs."""
     consonant_alternation_repairs: tuple[tuple[str, str], ...] = tuple()
     """Set of (original_token, repaired_token) repairs applied in step 8a.1."""
     consonant_alternation_events: tuple[dict[str, str], ...] = tuple()
@@ -205,6 +249,10 @@ class NormalizedInput:
     """Detected closed postposition stacks in the token stream."""
     postposition_stack_unknowns: tuple[UnknownPostpositionStack, ...] = tuple()
     """Unknown marker stacks that should fall through and emit an event."""
+    morphology_candidates: tuple[tuple[MorphCandidate, ...], ...] = tuple()
+    """Per-token morphology candidate lists after §10.26.1 top-K normalization."""
+    morphology_events: tuple[dict[str, object], ...] = tuple()
+    """Emitted morphology ambiguity events for low-confidence parse candidates."""
 
 
 def _classify_particle_repairs(repaired_originals: frozenset[str]) -> dict[str, int]:
@@ -338,7 +386,10 @@ def normalize_input(
     _compound_splitter_lookup: Optional[Callable[[str], Any]] = None,
     _compound_splitter_top_words: Optional[set[str]] = None,
     _compound_splitter_skip_if_pii: Optional[Callable[[str], bool]] = None,
+    _morph_candidates: Optional[list[list[MorphCandidate]]] = None,
+    _morph_token_is_proper: Optional[list[bool]] = None,
     _assimilation_lookup: Optional[Callable[[str], Any]] = None,
+    input_source: str = "keyboard",
     _assimilation_pairs: Optional[AssimilationRules] = None,
     _consonant_alternation_lookup: Optional[Callable[[str], Any]] = None,
     _consonant_alternation_alternations: Optional[tuple[ConsonantAlternationRule, ...]] = None,
@@ -361,6 +412,14 @@ def normalize_input(
         Optional step-8 hook ``(list[str]) -> (list[str], bool)``.
         Returns ``(corrected_tokens, budget_exhausted)``.  When ``None``,
         step 8 is a pass-through with ``typo_budget_exhausted=False``.
+    _morph_candidates:
+        Optional list of morphology candidate lists, one per token.
+        When supplied the morphology stage runs normalization on each token.
+    _morph_token_is_proper:
+        Optional list of booleans matching ``_morph_candidates``.  When a
+        token is marked ``True`` the morphology parser is bypassed and the
+        surface form is left for gazetteer matching, emitting a
+        ``morph_proper_noun_bypassed`` event.
     _consonant_alternation_lookup:
         Optional per-token lexicon lookup hook for consonant alternation
         repair.  When ``None``, step 8a.1 is a no-op.
@@ -374,6 +433,10 @@ def normalize_input(
     _dialect_normalizer:
         Injectable :class:`~nlp.dialect_normalize._DialectNormalizer` for
         testing.  Defaults to the module-level singleton.
+    input_source:
+        Optional input source marker. When ``voice``, the dialect
+        normalizer loads the voice-specific ASR filler table so tokens
+        like ``yani`` are preserved on typed input.
 
     Returns
     -------
@@ -434,10 +497,11 @@ def normalize_input(
 
     # -- Step 6: Diacritic restoration (§10.3 hook) -------------------------
     ascii_restored = False
-    if _diacritic_restore is not None:
-        pre_diacritic = normalized
-        normalized = _diacritic_restore(normalized)
-        ascii_restored = normalized != pre_diacritic
+    if _diacritic_restore is None:
+        _diacritic_restore = make_diacritic_restorer(cfg, input_source=input_source)
+    pre_diacritic = normalized
+    normalized = _diacritic_restore(normalized)
+    ascii_restored = normalized != pre_diacritic
     steps.append("diacritic_restore")
 
     # -- Step 6.5: Regional / diaspora dialect normalization (§10.32.4) -----
@@ -472,6 +536,63 @@ def normalize_input(
         )
         steps.append("compound_split")
 
+    morphology_candidates: tuple[tuple[MorphCandidate, ...], ...] = tuple()
+    morphology_events: list[dict[str, object]] = []
+    morph_ambiguity_budget_exhausted: bool = False
+    if _morph_candidates is not None:
+        if len(_morph_candidates) != len(raw_tokens):
+            raise ValueError("_morph_candidates must match the normalized token count")
+        if _morph_token_is_proper is not None and len(_morph_token_is_proper) != len(_morph_candidates):
+            raise ValueError("_morph_token_is_proper must match the length of _morph_candidates")
+
+        normalized_per_token: list[tuple[MorphCandidate, ...]] = []
+        morph_high_ambiguity_count = 0
+        for idx, candidates in enumerate(_morph_candidates):
+            token_is_proper = (_morph_token_is_proper or [False] * len(_morph_candidates))[idx]
+            token = raw_tokens[idx] if idx < len(raw_tokens) else ""
+            if token_is_proper:
+                normalized_per_token.append(())
+                morphology_events.append({
+                    "kind": "morph_proper_noun_bypassed",
+                    "surface_form_sha8": hashlib.sha256(token.encode("utf-8")).hexdigest()[:8],
+                })
+                continue
+
+            if not candidates:
+                normalized_per_token.append(())
+                morphology_events.append({
+                    "kind": "morph_parse_unparseable",
+                    "surface_form_sha8": hashlib.sha256(token.encode("utf-8")).hexdigest()[:8],
+                    "candidate_count": 0,
+                })
+                continue
+
+            retained = tuple(
+                normalize_morph_candidates(
+                    candidates,
+                    topk=cfg.nlp_morph_topk,
+                    min_confidence=cfg.nlp_morph_min_confidence,
+                )
+            )
+            normalized_per_token.append(retained)
+            if any(candidate.ambiguity_class == "high" for candidate in retained):
+                morph_high_ambiguity_count += 1
+                morphology_events.append({
+                    "kind": "morph_parse_ambiguous",
+                    "surface_form_sha8": hashlib.sha256(token.encode("utf-8")).hexdigest()[:8],
+                    "candidate_count": len(retained),
+                })
+        morphology_candidates = tuple(normalized_per_token)
+        morph_ambiguity_budget_exhausted = (
+            morph_high_ambiguity_count > cfg.nlp_morph_ambiguous_max_per_query
+        )
+        if morph_ambiguity_budget_exhausted:
+            morphology_events.append({
+                "kind": "morph_ambiguity_budget_exhausted",
+                "high_ambiguity_token_count": morph_high_ambiguity_count,
+            })
+        steps.append("morphology_candidate_normalize")
+
     # Deadline check after step 6+7: if we are already over budget, skip the
     # expensive steps 8a+8 and return the raw token sequence.  The caller emits
     # nlp.event.v1{kind=normalize_timeout} upon seeing stage_timed_out=True.
@@ -492,6 +613,7 @@ def normalize_input(
             apostrophe_repairs=(),
             postposition_stack_matches=(),
             postposition_stack_unknowns=(),
+            morphology_candidates=morphology_candidates,
         )
 
     # -- Step 8a: Particle normalization (§10.22.4) -------------------------
@@ -550,9 +672,18 @@ def normalize_input(
     #   i.  Seed-lookup fallback for non-rule forms
     #   ii. Vocative/filler stripping (abi, reis, hocam, …)
     #   iii.Hard abbreviation expansion (GS → galatasaray, etc.)
-    _dialect_result = _apply_dialect_normalize(
-        particle_tokens, _normalizer=_dialect_normalizer
-    )
+    if _dialect_normalizer is not None:
+        _dialect_result = _apply_dialect_normalize(
+            particle_tokens, _normalizer=_dialect_normalizer
+        )
+    else:
+        _dialect_result = _apply_dialect_normalize(
+            particle_tokens,
+            use_asr_fillers=(input_source == "voice"),
+            asr_filler_strip_max=(
+                cfg.nlp_asr_filler_strip_max if input_source == "voice" else None
+            ),
+        )
     dialect_tokens: list[str] = list(_dialect_result.tokens)
     steps.append("dialect_normalize")
 
@@ -572,18 +703,31 @@ def normalize_input(
     # budget.  Flag the result so the caller can act accordingly.
     stage_timed_out = (_get_time() - _stage_start) * 1000.0 >= _deadline_s * 1000.0
 
+    apostrophe_repair_events = tuple(
+        {
+            "kind": "apostrophe_inferred",
+            "evidence": repair.evidence,
+            "original": repair.original,
+            "canonical": repair.repaired,
+        }
+        for repair in apostrophe_repairs
+        if repair.evidence is not None
+    )
+
     result = NormalizedInput(
         tokens=tuple(tokens),
         steps_run=tuple(steps),
         original_codepoint_count=raw_cp,
         typo_budget_exhausted=budget_exhausted,
+        morph_ambiguity_budget_exhausted=morph_ambiguity_budget_exhausted,
         stage_timed_out=stage_timed_out,
         compound_split_events=tuple(compound_split_events),
         particle_repairs=_particle_repairs,
-        dialect_repairs=_dialect_result.dialect_repairs,
+        dialect_repairs=tuple(_dialect_result.dialect_repairs),
         regional_dialect_rewrites=regional_dialect_rewrites,
         dialect_alternatives=dialect_alternatives,
         apostrophe_repairs=tuple(apostrophe_repairs),
+        apostrophe_repair_events=apostrophe_repair_events,
         politeness_class=politeness_class,
         query_style=query_style,
         intent_modifier=intent_modifier,
@@ -596,6 +740,8 @@ def normalize_input(
         postposition_stack_unknowns=tuple(postposition_stack_unknowns),
         consonant_alternation_repairs=tuple(consonant_alternation_repairs),
         consonant_alternation_events=tuple(consonant_alternation_events),
+        morphology_candidates=morphology_candidates,
+        morphology_events=tuple(morphology_events),
     )
     _record_nlp_input_repair_metrics(result, len(tokens), confusables_folded, ascii_restored)
     return result

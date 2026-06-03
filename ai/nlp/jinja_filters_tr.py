@@ -41,6 +41,9 @@ from __future__ import annotations
 import datetime as _dt
 import pathlib as _pathlib
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+from common.config import cfg
 
 try:
     import yaml as _yaml  # type: ignore[import]
@@ -55,6 +58,14 @@ _FOREIGN_OVERRIDES_PATH: _pathlib.Path = (
 
 # §10.22.3 — buffer-consonant helper (loaded here, avoids circular imports).
 from common.text.turkish import buffer_consonant as _buffer_consonant  # noqa: E402
+from common.text.tr_format import (
+    tr_format_number,
+    tr_format_money,
+    tr_format_clock,
+    tr_format_date,
+    tr_format_date_short,
+    tr_format_score,
+)
 
 # §10.22.3 — vowel-harmony tables live in YAML, not inline code.
 _VOWEL_HARMONY_PATH: _pathlib.Path = (
@@ -387,8 +398,11 @@ def kickoff_time(dt: "str | _dt.datetime | None", locale: str = "tr-TR") -> str:
             return dt  # pass-through unparseable strings unchanged
     if not isinstance(dt, _dt.datetime):
         return str(dt)
-    weekday_name = _WEEKDAYS_TR[dt.weekday()]
-    return f"{weekday_name} {dt.hour:02d}:{dt.minute:02d}"
+    if dt.tzinfo is None:
+        raise ValueError("naive datetime is not allowed; datetime must include timezone information")
+    target = dt.astimezone(ZoneInfo(cfg.nlp_render_timezone))
+    weekday_name = _WEEKDAYS_TR[target.weekday()]
+    return f"{weekday_name} {target.hour:02d}:{target.minute:02d}"
 
 
 def match_label(home: str, away: str) -> str:
@@ -438,5 +452,11 @@ FILTERS: dict[str, object] = {
     "possessive_3sg": possessive_3sg,
     "kickoff_time": kickoff_time,
     "match_label": match_label,
+    "number_tr": tr_format_number,
+    "money_tr": tr_format_money,
+    "clock_tr": tr_format_clock,
+    "date_tr": tr_format_date,
+    "date_tr_short": tr_format_date_short,
+    "score_tr": tr_format_score,
     "confidence_band": confidence_band,
 }

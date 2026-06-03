@@ -1,0 +1,7 @@
+{{ returned_count }}/{{ total_count }} maç tahmini hazır; kalan {{ missing_fixtures|length }} maç henüz tamamlanmadı.
+{% if missing_fixtures %}
+Eksik maçlar:
+{% for fixture in missing_fixtures -%}
+- {{ fixture.label }} ({{ fixture.degraded_reason_tr }})
+{% endfor %}
+{% endif %}

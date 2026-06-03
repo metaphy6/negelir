@@ -21,9 +21,11 @@ Design choices (\u00a710.7 binding):
 from __future__ import annotations
 
 import hashlib
+import datetime as dt
 import json
 import pathlib
 import re
+import unicodedata
 from typing import Any
 
 import jinja2
@@ -57,6 +59,26 @@ class RawUserTextInTemplateError(jinja2.TemplateError):
 # Canonical template directory: sibling ``templates/`` folder of this file.
 
 _LOCALE_TAG_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$")
+
+_PRODUCED_AT_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$")
+
+
+def _validate_produced_at_utc(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError(
+            "produced_at_utc must be an ISO-8601 UTC string with microsecond precision and Z suffix"
+        )
+    if not _PRODUCED_AT_UTC_RE.fullmatch(value):
+        raise ValueError(
+            "produced_at_utc must be an ISO-8601 UTC string with microsecond precision and Z suffix"
+        )
+    try:
+        dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ")
+    except ValueError as exc:
+        raise ValueError(
+            "produced_at_utc must be a valid UTC timestamp with microsecond precision"
+        ) from exc
+    return value
 
 
 def _canonicalize_locale_tag(locale: str | None) -> str | None:
@@ -141,6 +163,21 @@ def _resolve_template_name(template_name: str, locale: "str | None" = None) -> s
 
     locale = _resolve_locale_tag(locale)
     return f"{template_name}.{locale}.j2"
+
+
+def _normalize_screen_reader_answer(text: str) -> str:
+    """Normalize rendered answer text for screen-reader-friendly output."""
+    text = unicodedata.normalize("NFC", text)
+    text = re.sub(r"%\s*(\d+)", r"yüzde \1", text)
+    text = text.replace("✓", " evet ").replace("✗", " hayır ").replace("▶", " ")
+    result: list[str] = []
+    for ch in text:
+        if unicodedata.category(ch) in {"So", "Cf"}:
+            continue
+        result.append(ch)
+    normalized = "".join(result)
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
+    return normalized
 
 # ---------------------------------------------------------------------------
 # Citation block contract (§10.7 binding)
@@ -356,6 +393,7 @@ def render(
     *,
     env: "jinja2.Environment | None" = None,
     fallback_env: "jinja2.Environment | None" = None,
+    answer_format: str = "plain",
 ) -> str:
     """Render *template_name* with *context*, falling back to meta.unsupported.
 
@@ -371,6 +409,10 @@ def render(
     fallback_env:
         Environment used for the ``meta.unsupported`` fallback.  Defaults to
         *env*.
+    answer_format:
+        Output format for the rendered answer. ``plain`` and
+        ``markdown_safe`` preserve rendered text; ``screen_reader`` strips
+        emoji and decorative characters for assistive technology.
 
     Returns
     -------
@@ -385,6 +427,8 @@ def render(
         env = build_environment()
     if fallback_env is None:
         fallback_env = env
+    if answer_format not in {"plain", "markdown_safe", "screen_reader"}:
+        raise ValueError(f"unsupported answer_format: {answer_format!r}")
     # For predict templates, synthesize the canonical citation block from the
     # closed-schema citation dict when callers provide raw fields.
     render_context = dict(context)
@@ -408,14 +452,20 @@ def render(
 
     try:
         tmpl = env.get_template(template_name)
-        return tmpl.render(**render_context)
+        rendered = tmpl.render(**render_context)
+        if answer_format == "screen_reader":
+            return _normalize_screen_reader_answer(rendered)
+        return rendered
     except jinja2.UndefinedError as exc:
         # Missing slot: route to meta.unsupported.
         unsupported_ctx: dict[str, Any] = {"suggestions": [str(exc)]}
         try:
-            return fallback_env.get_template("meta.unsupported.tr.j2").render(
+            result = fallback_env.get_template("meta.unsupported.tr.j2").render(
                 **unsupported_ctx
             )
+            if answer_format == "screen_reader":
+                return _normalize_screen_reader_answer(result)
+            return result
         except Exception:  # noqa: BLE001 — absolute last resort
             return "\u00dczg\u00fcn\u00fcm, bu soruyu yan\u0131tlayam\u0131yorum."
 
@@ -458,6 +508,7 @@ def render_with_citation(
     locale: "str | None" = None,
     env: "jinja2.Environment | None" = None,
     fallback_env: "jinja2.Environment | None" = None,
+    answer_format: str = "plain",
 ) -> "tuple[str, str | None]":
     """Render *template_name* and return ``(answer_text, citation_sha256_or_None)``.
 
@@ -471,11 +522,17 @@ def render_with_citation(
 
     Parameters
     ----------
-    template_name, context, locale, env, fallback_env:
+    template_name, context, locale, env, fallback_env, answer_format:
         Forwarded verbatim to :func:`render`.
     """
     _ = locale  # Reserved for future locale-resolved rendering path.
-    text = render(template_name, context, env=env, fallback_env=fallback_env)
+    text = render(
+        template_name,
+        context,
+        env=env,
+        fallback_env=fallback_env,
+        answer_format=answer_format,
+    )
     _, citation = extract_citation_block(text)
     if citation is None:
         return text, None
@@ -634,6 +691,7 @@ def render_citation_block(citation_data: dict[str, Any]) -> str:
     # Extract fields (deterministic order, not dict iteration order)
     prediction_id = citation_data["prediction_id"]
     produced_at_utc = citation_data["produced_at_utc"]
+    _validate_produced_at_utc(produced_at_utc)
     model_versions = citation_data["model_versions"]
     calibration_version = citation_data["calibration_version"]
     degraded_reason = citation_data.get("degraded_reason", None)

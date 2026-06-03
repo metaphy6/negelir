@@ -59,6 +59,41 @@ class TestBindingStepOrder:
         result = normalize_input(text)
         assert result.original_codepoint_count == len(text)
 
+    def test_voice_input_uses_voice_diacritic_ratio(self) -> None:
+        from unittest.mock import patch
+
+        from common.config import Config
+        from nlp.diacritics import DiacriticsTable
+        from nlp.normalize import normalize_input
+
+        cfg = Config()
+        cfg.nlp_diacritic_tie_break_ratio = 1.5
+        cfg.nlp_diacritic_tie_break_ratio_voice = 2.5
+        dummy_table = DiacriticsTable(
+            {
+                "_meta": {
+                    "schema_version": 1,
+                    "lexicon_version": "1.0.0",
+                    "generated_at_utc": "2026-05-27T00:00:00Z",
+                    "generator": "test",
+                    "source_sha256": "test",
+                },
+                "mappings": {
+                    "mac": {
+                        "candidates": [
+                            {"canonical": "maç", "frequency": 10},
+                            {"canonical": "mac", "frequency": 5},
+                        ]
+                    }
+                },
+            },
+            tie_break_ratio=2.5,
+        )
+        with patch("nlp.diacritics.DiacriticsTable.load", autospec=True) as load_mock:
+            load_mock.return_value = dummy_table
+            normalize_input("galatasaray mac", cfg=cfg, input_source="voice")
+            load_mock.assert_called_once_with(tie_break_ratio=cfg.nlp_diacritic_tie_break_ratio_voice)
+
 
 class TestStep1LengthCap:
     """Step 1: reject inputs exceeding cfg.nlp_input_max_codepoints."""
@@ -221,6 +256,49 @@ class TestPhase1030Normalization:
         joined = " ".join(result.tokens)
         for ch in ("\u2060", "\uFE0F", "\uE000", "\u0378"):
             assert ch not in joined
+
+    def test_voice_input_strips_asr_fillers(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("eee galatasaray maçını tahmin et", input_source="voice")
+        assert "eee" not in result.tokens
+        assert "galatasaray" in result.tokens
+
+    def test_keyboard_input_preserves_yani(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("yani galatasaray maçını tahmin et", input_source="keyboard")
+        assert "yani" in result.tokens
+
+    def test_voice_input_strips_yani(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("yani galatasaray maçını tahmin et", input_source="voice")
+        assert "yani" not in result.tokens
+
+    def test_voice_question_split_relaxed_without_punctuation(self) -> None:
+        from nlp.normalize import split_questions
+
+        tokens = "galatasaray kazandi mi fenerbahce ne zaman oynar simdi".split()
+        assert split_questions(tokens, input_source="voice") == [
+            ["galatasaray", "kazandi", "mi"],
+            ["fenerbahce", "ne", "zaman", "oynar", "simdi"],
+        ]
+
+    def test_split_questions_is_noop_for_keyboard_input(self) -> None:
+        from nlp.normalize import split_questions
+
+        tokens = "galatasaray kazandi mi fenerbahce ne zaman oynar simdi".split()
+        assert split_questions(tokens, input_source="keyboard") == [tokens]
+
+    def test_voice_question_split_active_ve_boundary(self) -> None:
+        from nlp.normalize import split_questions
+
+        tokens = "fenerbahce ne zaman oynar ve galatasaray kazanacak mu".split()
+        assert split_questions(tokens, input_source="voice") == [
+            ["fenerbahce", "ne", "zaman", "oynar", "ve"],
+            ["galatasaray", "kazanacak", "mu"],
+        ]
 
 
 class TestStep4TurkishLowercase:

@@ -1392,7 +1392,9 @@ class QaRequestV1:
     request_id: str
     sanitized_text: str
     locale: str
+    answer_format: str | None = None
     sec_verdict: str
+    input_source: str | None = None
     sec_steps_run: list[str] = field(default_factory=list)
     client_id: str | None = None
     conversation_id: str | None = None
@@ -1404,9 +1406,31 @@ class QaRequestV1:
                 f"QaRequestV1.sec_verdict={self.sec_verdict!r} not in "
                 f"{sorted(_ALLOWED_QA_VERDICTS)}"
             )
+        if self.answer_format is not None and self.answer_format not in {
+            "plain",
+            "markdown_safe",
+            "screen_reader",
+        }:
+            raise ValueError(
+                f"QaRequestV1.answer_format={self.answer_format!r} not in "
+                "{'plain','markdown_safe','screen_reader'}"
+            )
+        if self.input_source is not None and self.input_source not in {
+            "keyboard",
+            "voice",
+            "paste",
+            "unknown",
+        }:
+            raise ValueError(
+                f"QaRequestV1.input_source={self.input_source!r} not in "
+                "{'keyboard','voice','paste','unknown'}"
+            )
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        if result.get("answer_format") is None:
+            result.pop("answer_format", None)
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "QaRequestV1":
@@ -1414,7 +1438,9 @@ class QaRequestV1:
             request_id=str(data["request_id"]),
             sanitized_text=str(data["sanitized_text"]),
             locale=str(data["locale"]),
+            answer_format=str(data["answer_format"]) if data.get("answer_format") is not None else None,
             sec_verdict=str(data["sec_verdict"]),
+            input_source=str(data["input_source"]) if data.get("input_source") is not None else None,
             sec_steps_run=[str(s) for s in (data.get("sec_steps_run") or [])],
             client_id=data.get("client_id"),
             conversation_id=data.get("conversation_id"),

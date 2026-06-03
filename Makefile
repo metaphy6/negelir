@@ -322,6 +322,14 @@ nlp.compat-validate: ## Phase 10 §10.25.4 — validate NLP compatibility matrix
 nlp.eval-diff: ## Phase 10 §10.18 — Regression diff: compare intent/entity/render outcomes vs BASELINE sha (usage: make nlp.eval-diff BASELINE=<sha>)
 	@$(XOPS)/nlp.py nlp.eval-diff $(BASELINE)
 
+.PHONY: nlp.canary-promote
+nlp.canary-promote: ## Phase 10 §10.23 — gate canary rollout to 100% only when shadow metrics and eval harness gates pass
+	@$(XOPS)/nlp.py nlp.canary-promote $(ARGS)
+
+.PHONY: nlp.canary-rollback
+nlp.canary-rollback: ## Phase 10 §10.23 — rollback canary pods with a single operator command and emit nlp.alert.v1
+	@$(XOPS)/nlp.py nlp.canary-rollback $(ARGS)
+
 .PHONY: verify.nlp-lexicons
 verify.nlp-lexicons: ## Phase 10 §10.2 — assert (a) canonical_id resolves (b) no uncovered alias collision (c) normalize round-trip
 	@$(XOPS)/nlp.py verify.nlp-lexicons

@@ -9,6 +9,8 @@ Key doctrines:
 - No external dependencies -- stdlib only.
 """
 from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
 
 # Explicit codepoint translation table for Turkish case mapping.
 #
@@ -126,6 +128,147 @@ def suffix_harmony_ok(construction: str) -> bool:
     suffix_is_front = suffix_first_vowel in _FRONT_VOWELS
 
     return stem_is_front == suffix_is_front
+
+
+@dataclass(frozen=True)
+class MorphCandidate:
+    root: str
+    suffix_class: str
+    pos: str
+    confidence: float
+    ambiguity_class: str = "unique"
+
+
+def normalize_morph_candidates(
+    candidates: list[MorphCandidate],
+    topk: int = 3,
+    min_confidence: float = 0.55,
+) -> list[MorphCandidate]:
+    """Retain deterministic top-K morphology candidates with ambiguity flags.
+
+    This helper supports §10.26.1 by making candidate selection stable and by
+    marking low-confidence parses as high ambiguity without silently dropping
+    them from the morphology stage.
+    """
+    if topk < 1:
+        raise ValueError("topk must be >= 1")
+
+    sorted_candidates = sorted(
+        candidates,
+        key=lambda c: (-c.confidence, c.root, c.suffix_class, c.pos),
+    )
+    retained = sorted_candidates[:topk]
+    if not retained:
+        return []
+
+    result: list[MorphCandidate] = []
+    for candidate in retained:
+        if candidate.confidence < min_confidence:
+            ambiguity_class = "high"
+        elif len(retained) == 1:
+            ambiguity_class = "unique"
+        else:
+            ambiguity_class = "low"
+        result.append(
+            MorphCandidate(
+                root=candidate.root,
+                suffix_class=candidate.suffix_class,
+                pos=candidate.pos,
+                confidence=candidate.confidence,
+                ambiguity_class=ambiguity_class,
+            )
+        )
+    return result
+
+
+_MORPH_POS_PREFERENCES_PATH: Path = (
+    Path(__file__).resolve().parents[2]
+    / "nlp"
+    / "lang_tr"
+    / "morph_pos_preferences.tr.yaml"
+)
+_MORPH_POS_PREFERENCES_CACHE: dict[str, list[str]] | None = None
+
+
+def load_morph_pos_preferences(path: Path | None = None) -> dict[str, list[str]]:
+    """Load the closed POS-preference table used by morphology arbitration."""
+    global _MORPH_POS_PREFERENCES_CACHE
+    if path is None and _MORPH_POS_PREFERENCES_CACHE is not None:
+        return _MORPH_POS_PREFERENCES_CACHE
+
+    effective = path or _MORPH_POS_PREFERENCES_PATH
+    if not _YAML_AVAILABLE:
+        return {}
+
+    with open(effective, "r", encoding="utf-8") as fh:
+        data = _yaml.safe_load(fh) or {}
+
+    table: dict[str, list[str]] = {}
+    for entry in data.get("intent_pos_preferences", []):
+        if not isinstance(entry, dict):
+            continue
+        intent_class = entry.get("intent_class")
+        pos_order = entry.get("pos_order")
+        if isinstance(intent_class, str) and isinstance(pos_order, list):
+            table[intent_class] = [str(item) for item in pos_order if isinstance(item, str)]
+
+    if path is None:
+        _MORPH_POS_PREFERENCES_CACHE = table
+    return table
+
+
+def resolve_morph_candidates(
+    candidates: list[MorphCandidate],
+    gazetteer_roots: set[str] | None = None,
+    intent_class: str | None = None,
+    context_preferred_pos: str | None = None,
+    pos_preferences: dict[str, list[str]] | None = None,
+) -> list[MorphCandidate]:
+    """Rank candidate parses deterministically for §10.26.1 arbitration.
+
+    The ordering is:
+      1. Gazetteer cross-check wins.
+      2. Co-token context preference wins.
+      3. Intent-class POS preference wins.
+      4. Confidence rank wins.
+      5. Deterministic lexical tie-break by root/suffix/pos.
+    """
+    if not candidates:
+        return []
+
+    if pos_preferences is None:
+        pos_preferences = load_morph_pos_preferences()
+
+    def gazetteer_score(candidate: MorphCandidate) -> int:
+        if gazetteer_roots is None:
+            return 0
+        return 1 if candidate.root in gazetteer_roots else 0
+
+    def context_score(candidate: MorphCandidate) -> int:
+        return 1 if context_preferred_pos and candidate.pos == context_preferred_pos else 0
+
+    def intent_pos_score(candidate: MorphCandidate) -> int:
+        if intent_class is None:
+            return 0
+        order = pos_preferences.get(intent_class)
+        if not order:
+            return 0
+        if candidate.pos not in order:
+            return 0
+        return len(order) - order.index(candidate.pos)
+
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -gazetteer_score(candidate),
+            -context_score(candidate),
+            -intent_pos_score(candidate),
+            -candidate.confidence,
+            candidate.root,
+            candidate.suffix_class,
+            candidate.pos,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -312,12 +455,18 @@ def _match_suffix_family(
     suffix_candidate: str,
     stem: str,
     families: "list[dict]",
+    *,
+    ignore_harmony: bool = False,
 ) -> "str | None":
     """Return the family name if *suffix_candidate* is a valid suffix for *stem*.
 
     The generalising rule is vowel-harmony: the suffix's first vowel must
     agree front/back with the stem's last vowel.  The YAML table provides all
     known surface forms; no literal suffix strings appear here.
+
+    When ``ignore_harmony=True``, a second-pass harmony-tolerant strip is
+    allowed for malformed suffix spellings that still belong to a known
+    grammatical family.
     """
     # Compute last vowel of stem (using lowercase_tr for correct TR mapping).
     stem_lower = lowercase_tr(stem)
@@ -327,7 +476,7 @@ def _match_suffix_family(
             last_vowel = ch
             break
 
-    if not _suffix_harmonizes(suffix_candidate, last_vowel):
+    if not ignore_harmony and not _suffix_harmonizes(suffix_candidate, last_vowel):
         return None
 
     # Check suffix against all known forms in each family (both stem-final
@@ -428,6 +577,25 @@ def strip_proper_noun_suffix(
         if not all(c in _SUFFIX_CHARS for c in suffix_part):
             continue  # Non-Turkish char in candidate suffix → skip
         family = _match_suffix_family(suffix_part, stem_part, families)
+        if family is not None:
+            return stem_part, family
+
+    # Second-pass harmony-tolerant strip (§10.24.1): if a trailing 1–4 char
+    # candidate belongs to a known suffix family but violates vowel harmony,
+    # accept it as malformed suffix spelling for proper-noun recovery.
+    for suffix_len in range(4, 0, -1):
+        if len(token) <= suffix_len:
+            continue
+        stem_part = token[:-suffix_len]
+        suffix_part = token[-suffix_len:]
+        if not all(c in _SUFFIX_CHARS for c in suffix_part):
+            continue
+        family = _match_suffix_family(
+            suffix_part,
+            stem_part,
+            families,
+            ignore_harmony=True,
+        )
         if family is not None:
             return stem_part, family
 

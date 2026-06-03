@@ -1,0 +1,8 @@
+Tüm maçları kapsayan bir özet hazırlanamadı; gelen tahminler aşağıda.
+{% if missing_fixtures %}
+Eksik maçlar:
+{% for fixture in missing_fixtures -%}
+- {{ fixture.label }} ({{ fixture.degraded_reason_tr }})
+{% endfor %}
+{% endif %}
+({{ returned_count }}/{{ total_count }} maç hazır)

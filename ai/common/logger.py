@@ -18,7 +18,7 @@ _THEME = Theme({
     "success": "bold green",
 })
 
-_console = Console(theme=_THEME, force_terminal=True)
+_console = Console(theme=_THEME, force_terminal=True, file=sys.stderr)
 
 # Map custom level names
 _LEVEL_ICONS = {

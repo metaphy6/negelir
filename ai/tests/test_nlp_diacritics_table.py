@@ -608,10 +608,22 @@ class TestAmbiguityPolicy:
         assert hasattr(cfg, "nlp_diacritic_tie_break_ratio")
         assert cfg.nlp_diacritic_tie_break_ratio == 1.5
 
+    def test_config_voice_key_present_with_correct_default(self) -> None:
+        """cfg.nlp_diacritic_tie_break_ratio_voice must default to 2.5."""
+        from common.config import cfg
+
+        assert hasattr(cfg, "nlp_diacritic_tie_break_ratio_voice")
+        assert cfg.nlp_diacritic_tie_break_ratio_voice == 2.5
+
     def test_config_key_in_env_example(self) -> None:
         """NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO must appear in .env.example."""
         env_example = (REPO_ROOT / "xops" / "env" / ".env.example").read_text(encoding="utf-8")
         assert "NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO" in env_example
+
+    def test_config_voice_key_in_env_example(self) -> None:
+        """NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE must appear in .env.example."""
+        env_example = (REPO_ROOT / "xops" / "env" / ".env.example").read_text(encoding="utf-8")
+        assert "NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE" in env_example
 
     def test_hard_call_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_diacritic_hard_call_min_freq must default to 10000."""
@@ -653,6 +665,23 @@ class TestAmbiguityPolicy:
                 os.environ.pop("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO", None)
             else:
                 os.environ["NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO"] = orig
+
+    def test_config_voice_boot_validator_rejects_below_one(self) -> None:
+        """Boot validator must reject nlp_diacritic_tie_break_ratio_voice < 1.0."""
+        import os
+        from common.config import Config
+
+        orig = os.environ.get("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE")
+        try:
+            os.environ["NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE"] = "0.5"
+            cfg_bad = Config()
+            issues = cfg_bad.validate()
+            assert any("nlp_diacritic_tie_break_ratio_voice" in i for i in issues), issues
+        finally:
+            if orig is None:
+                os.environ.pop("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE", None)
+            else:
+                os.environ["NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE"] = orig
 
     def test_hard_call_boot_validator_rejects_below_one(self) -> None:
         """Boot validator must reject nlp_diacritic_hard_call_min_freq < 1."""

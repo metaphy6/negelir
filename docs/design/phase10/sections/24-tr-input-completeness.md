@@ -42,7 +42,7 @@
 
 #### 10.24.1 Vowel-harmony-violation tolerance (wrong-suffix recovery)
 
-- [ ] **Real failure mode.** Native and non-native users routinely write
+- [x] **Real failure mode.** Native and non-native users routinely write
   suffixes that violate Turkish vowel harmony: *"Galatasaraye"* (should
   be *"Galatasaray'a"*), *"Fenerbahçeya"* (should be *"Fenerbahçe'ye"*),
   *"oynayacaklarmi"* (should be *"oynayacaklar mı"*), *"kazanmadi"*

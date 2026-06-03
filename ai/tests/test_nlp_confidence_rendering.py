@@ -42,7 +42,7 @@ _CTX: dict = {
     "degraded": False,
     "degraded_reason": "",
     "prediction_id": "pred-conf-1",
-    "produced_at_utc": "2026-05-27T12:00:00Z",
+    "produced_at_utc": "2026-05-27T12:00:00.000000Z",
     "model_versions": ["predictor-v2@2.0.0"],
     "calibration_version": "cal-v2",
 }
@@ -132,7 +132,7 @@ def test_citation_block_is_canonical_without_probability(tmpl: str) -> None:
     _, citation = extract_citation_block(text)
     assert citation is not None, f"No citation block in {tmpl!r}"
     assert "tahmin:pred-conf-1" in citation
-    assert "üretim:2026-05-27T12:00:00Z" in citation
+    assert "üretim:2026-05-27T12:00:00.000000Z" in citation
     assert "kalibrasyon:cal-v2" in citation
     assert "modeller:predictor-v2@2.0.0" in citation
     assert "0.78" not in citation

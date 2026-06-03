@@ -410,6 +410,7 @@ phase10:
   nlp_typo_max_edit_distance: 2           # NEGELIR_NLP_TYPO_MAX_EDIT_DISTANCE
   # Per-query fuzzy-lookup budget; when exceeded pipeline emits did_you_mean_offered (§10.3).
   nlp_typo_max_lookups_per_query: 8       # NEGELIR_NLP_TYPO_MAX_LOOKUPS_PER_QUERY
+  nlp_asr_filler_strip_max: 6             # NEGELIR_NLP_ASR_FILLER_STRIP_MAX
   # Diacritic ambiguity tie-break ratio (§10.3 Ambiguity policy). When top-2
   # candidates' frequencies are within this ratio, token is preserved unchanged.
   nlp_diacritic_tie_break_ratio: 1.5      # NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO

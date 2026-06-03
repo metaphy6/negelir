@@ -1,0 +1,8 @@
+intent_pos_preferences:
+  - intent_class: "predict.match_outcome"
+    pos_order:
+      - "noun_proper"
+      - "noun_common"
+  - intent_class: "data.player_card_risk"
+    pos_order:
+      - "noun_proper"

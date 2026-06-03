@@ -189,7 +189,7 @@ def test_render_citation_block_integration():
     
     citation_data = {
         "prediction_id": "pred-integration-1",
-        "produced_at_utc": "2026-05-27T14:00:00Z",
+        "produced_at_utc": "2026-05-27T14:00:00.000000Z",
         "model_versions": ["predictor-v2@2.0.0", "predictor-v1@1.0.0"],
         "calibration_version": 99,
     }
@@ -199,7 +199,7 @@ def test_render_citation_block_integration():
     
     # Verify it contains all fields in canonical order
     assert "tahmin:pred-integration-1" in block
-    assert "üretim:2026-05-27T14:00:00Z" in block
+    assert "üretim:2026-05-27T14:00:00.000000Z" in block
     assert "kalibrasyon:99" in block
     # model_versions should be sorted
     assert "modeller:predictor-v1@1.0.0, predictor-v2@2.0.0" in block

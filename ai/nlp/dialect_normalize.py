@@ -72,6 +72,9 @@ _DEFAULT_ABBREV_PATH: Path = (
 _DEFAULT_VOCATIVE_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "vocative_filler.tr.yaml"
 )
+_DEFAULT_ASR_VOCATIVE_PATH: Path = (
+    Path(__file__).parent / "lang_tr" / "asr" / "fillers.tr.yaml"
+)
 
 
 class DialectSchemaError(ValueError):
@@ -108,6 +111,12 @@ def load_abbreviations(
 
 def load_vocative_fillers(
     path: Path = _DEFAULT_VOCATIVE_PATH,
+) -> dict:
+    return _load_yaml(path, "vocative", VOCATIVE_SCHEMA_VERSION)
+
+
+def load_asr_fillers(
+    path: Path = _DEFAULT_ASR_VOCATIVE_PATH,
 ) -> dict:
     return _load_yaml(path, "vocative", VOCATIVE_SCHEMA_VERSION)
 
@@ -381,6 +390,7 @@ def _strip_vocatives(
     tokens: list[str],
     vocative_set: frozenset[str],
     sole_token_safe_set: frozenset[str],
+    max_strip: int | None = None,
 ) -> tuple[list[str], list[str]]:
     """Remove vocative/filler tokens; return (kept_tokens, stripped_tokens)."""
     if not tokens:
@@ -396,6 +406,11 @@ def _strip_vocatives(
             stripped.append(tok)  # tentatively strip
         else:
             kept.append(tok)
+
+    if max_strip is not None and len(stripped) > max_strip:
+        # Over-cap on ASR filler stripping; preserve the raw token stream
+        # rather than risk abusive repeated filler tokens being removed.
+        return tokens, []
 
     # Restore strip_only_if_not_sole_token tokens if kept list would be empty.
     if not kept:
@@ -451,10 +466,14 @@ class _DialectNormalizer:
         dialect_path: Path = _DEFAULT_DIALECT_PATH,
         abbrev_path: Path = _DEFAULT_ABBREV_PATH,
         vocative_path: Path = _DEFAULT_VOCATIVE_PATH,
+        asr_filler_path: Path | None = None,
     ) -> None:
         dialect_data = load_dialect_rules(dialect_path)
         abbrev_data = load_abbreviations(abbrev_path)
         vocative_data = load_vocative_fillers(vocative_path)
+        asr_vocative_data: dict[str, list[dict[str, str]]] = {}
+        if asr_filler_path is not None:
+            asr_vocative_data = load_asr_fillers(asr_filler_path)
 
         phon_rules: list[dict] = dialect_data.get("phonological_rules", [])
         seed_entries: list[dict] = dialect_data.get("seed_entries", [])
@@ -466,9 +485,12 @@ class _DialectNormalizer:
         self._hard_map, self._soft_map = _build_abbrev_index(abbreviations)
 
         # Build vocative set
-        all_vocative: list[dict] = vocative_data.get(
-            "vocative", []
-        ) + vocative_data.get("fillers", [])
+        all_vocative: list[dict] = (
+            vocative_data.get("vocative", [])
+            + vocative_data.get("fillers", [])
+            + asr_vocative_data.get("vocative", [])
+            + asr_vocative_data.get("fillers", [])
+        )
         sole_token_safe: set[str] = set()
         all_voc: set[str] = set()
         for entry in all_vocative:
@@ -481,7 +503,7 @@ class _DialectNormalizer:
         )
         self._sole_token_safe_set: frozenset[str] = frozenset(sole_token_safe)
 
-    def normalize(self, tokens: list[str]) -> DialectResult:
+    def normalize(self, tokens: list[str], *, asr_filler_strip_max: int | None = None) -> DialectResult:
         """Apply all three sub-steps and return :class:`DialectResult`."""
         repairs: list[tuple[str, str]] = []
         expanded: list[tuple[str, str]] = []
@@ -495,7 +517,10 @@ class _DialectNormalizer:
 
         # Sub-step ii: vocative/filler stripping
         out, stripped = _strip_vocatives(
-            out, self._vocative_set, self._sole_token_safe_set
+            out,
+            self._vocative_set,
+            self._sole_token_safe_set,
+            max_strip=asr_filler_strip_max,
         )
 
         # Sub-step ii.b: offensive slur stripping (§10.22.9)
@@ -520,6 +545,7 @@ class _DialectNormalizer:
 
 # Module-level singleton (lazy-initialized on first use).
 _shared: Optional[_DialectNormalizer] = None
+_shared_asr: Optional[_DialectNormalizer] = None
 
 
 def _get_shared() -> _DialectNormalizer:
@@ -529,10 +555,19 @@ def _get_shared() -> _DialectNormalizer:
     return _shared
 
 
+def _get_shared_asr() -> _DialectNormalizer:
+    global _shared_asr
+    if _shared_asr is None:
+        _shared_asr = _DialectNormalizer(asr_filler_path=_DEFAULT_ASR_VOCATIVE_PATH)
+    return _shared_asr
+
+
 def apply_dialect_normalize(
     tokens: list[str],
     *,
     _normalizer: Optional[_DialectNormalizer] = None,
+    use_asr_fillers: bool = False,
+    asr_filler_strip_max: int | None = None,
 ) -> DialectResult:
     """Apply dialect normalization (step 8b) to a token list.
 
@@ -549,7 +584,12 @@ def apply_dialect_normalize(
     DialectResult
         Normalized token sequence plus repair metadata.
     """
-    normalizer = _normalizer if _normalizer is not None else _get_shared()
+    if _normalizer is not None:
+        normalizer = _normalizer
+    elif use_asr_fillers:
+        normalizer = _get_shared_asr()
+    else:
+        normalizer = _get_shared()
     return normalizer.normalize(tokens)
 
 

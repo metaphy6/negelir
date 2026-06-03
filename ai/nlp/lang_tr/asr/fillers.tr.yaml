@@ -1,0 +1,56 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-02T00:00:00Z"
+  source: "phase10-10.26.2"
+  notes: >
+    ASR-specific hesitation and filler tokens for voice input.
+    These tokens are stripped only on the ASR-tolerant voice path
+    so typed keyboard queries preserve potentially content-bearing
+    forms like "yani".
+
+vocative: []
+
+fillers:
+  - token: "ııı"
+    category: filler
+    note: "ASR hesitation token"
+  - token: "eee"
+    category: filler
+    note: "ASR hesitation token"
+  - token: "ee"
+    category: filler
+    note: "ASR hesitation token"
+  - token: "ıı"
+    category: filler
+    note: "ASR hesitation token"
+  - token: "mmm"
+    category: filler
+    note: "ASR hesitation token"
+  - token: "hmmm"
+    category: filler
+    note: "ASR hesitation token"
+  - token: "şey"
+    category: filler
+    note: "ASR hesitation / vague referent token"
+  - token: "yani"
+    category: filler
+    note: "ASR filler that is content-bearing on typed input"
+  - token: "aslında"
+    category: filler
+    note: "ASR filler token"
+  - token: "yaa"
+    category: filler
+    note: "ASR hesitation / elongated filler token"
+  - token: "işte"
+    category: filler
+    note: "ASR filler token"
+  - token: "falan"
+    category: filler
+    note: "ASR filler token"
+  - token: "falan filan"
+    category: filler
+    note: "ASR filler token"
+  - token: "ne bileyim"
+    category: filler
+    note: "ASR filler phrase"

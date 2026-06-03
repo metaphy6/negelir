@@ -9,6 +9,7 @@ Proves that under all_or_nothing mode:
 from pathlib import Path
 import hashlib
 import hmac
+import shutil
 import tempfile
 import time
 
@@ -119,6 +120,24 @@ entries:
     (lexicon_dir / "entities_negative.tr.yaml").write_text(entities_negative_content, encoding="utf-8")
     
     return lexicon_dir
+
+
+def test_nlp_lexicon_canary_pod_loads_canary_snapshot(temp_lexicon_dir, cfg, tmp_path):
+    canary_dir = tmp_path / "lexicon.canary"
+    canary_dir.mkdir()
+    for src_file in sorted(temp_lexicon_dir.glob("*.tr.yaml")):
+        shutil.copy2(src_file, canary_dir / src_file.name)
+
+    cfg.nlp_lexicon_dir = str(temp_lexicon_dir)
+    cfg.nlp_canary_pod = True
+    store = LexiconStore.from_cfg(cfg, reload_s=1, max_rss_mb=0)
+
+    assert store._dir.name.endswith(".canary")
+
+    alerts = store.maybe_reload()
+    assert not any(alert.get("kind") == "lexicon_unreadable" for alert in alerts)
+    assert store.is_loaded
+    assert store.lexicon_version_id
 
 
 def test_nlp_lexicon_swap_is_all_or_nothing(temp_lexicon_dir, cfg):

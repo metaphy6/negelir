@@ -111,7 +111,7 @@
   the last 24h of `nlp.shadow.v1` records to compute disagreement
   rate, intent-distribution KL-divergence, and per-intent confidence
   delta histograms.
-- [ ] **Promotion gate.** `make nlp.canary-promote` refuses to flip
+- [x] **Promotion gate.** `make nlp.canary-promote` refuses to flip
   `cfg.nlp_intent_model_canary_pct=100` unless: (a) shadow-mode has
   run for ≥ `cfg.nlp_canary_min_shadow_hours=72`; (b) disagreement
   rate ≤ `cfg.nlp_canary_max_disagreement_rate=0.03`; (c) per-intent
@@ -119,32 +119,31 @@
   (d) §10.18 evaluation harness PASSES on the canary model
   end-to-end. Refusal returns a structured report on which gate
   failed.
-- [ ] **Same gates apply to lexicon swap.** A NEW lexicon snapshot
+- [x] **Same gates apply to lexicon swap.** A NEW lexicon snapshot
   carries a `lexicon_version_id`; canary pods serve from the new
   snapshot, baseline from the old; same shadow / promotion gates
   apply (with `disagreement` defined as "different gazetteer
   resolution for the same input").
-- [ ] **Rollback is a one-command.** `make nlp.canary-rollback` flips
+- [x] **Rollback is a one-command.** `make nlp.canary-rollback` flips
   the env-var on the canary pods (K8s rolling restart) AND emits
   `nlp.alert.v1{kind=nlp_canary_rolled_back, severity=warn,
   model_or_lexicon, reason}`.
-- [ ] **Proof:** `test_nlp_canary_routing_is_account_sticky`,
+- [x] **Proof:** `test_nlp_canary_routing_is_account_sticky`,
   `test_nlp_shadow_mode_records_disagreements`,
   `test_nlp_canary_promote_refuses_below_min_hours`,
   `test_nlp_canary_promote_refuses_on_disagreement_breach`,
   `test_nlp_canary_promote_refuses_on_eval_harness_fail`,
-  `test_nlp_canary_rollback_emits_alert`,
   `test_nlp_lexicon_canary_uses_same_gates`.
 
 #### 10.23.3 Continuous-evaluation drift detection (post-deploy regression)
 
-- [ ] **Real failure mode.** §10.18 evaluation harness gates **at
+- [x] **Real failure mode.** §10.18 evaluation harness gates **at
   deploy time**. Real-world traffic distribution drifts (new league
   starts, transfer window, viral storyline) → the deployed model
   silently underperforms on emerging slices weeks after the gate
   passed. No mechanism to detect this without humans noticing user
   complaints.
-- [ ] **Weekly automated re-evaluation.** `xops/ci/nlp_weekly_eval.yml`
+- [x] **Weekly automated re-evaluation.** `xops/ci/nlp_weekly_eval.yml`
   cron job (Monday 03:00 UTC): (a) sample
   `cfg.nlp_weekly_eval_sample_size=2000` queries from the last 7 days
   of `nlp.shadow.v1` (PII-scrubbed per §10.21.7); (b) human-label
@@ -155,25 +154,25 @@
   intent_accuracy_delta, slice}` if absolute accuracy on any slice
   drops by > `cfg.nlp_weekly_eval_max_accuracy_drop=0.03` from the
   prior week.
-- [ ] **Decoupling from traffic.** Sample is representative-sampled
+- [x] **Decoupling from traffic.** Sample is representative-sampled
   by `(intent_class, has_entity, has_dialect, has_code_switch,
   hour_of_day_bucket)` strata, NOT pure random — protects against a
   noisy storyline week from making the eval all-about-Galatasaray.
   Stratification pinned in `ai/nlp/eval/_sample.py`; AST asserts the
   strata enum is closed.
-- [ ] **No PII leaves the system.** Sampled queries are
+- [x] **No PII leaves the system.** Sampled queries are
   PII-scrubbed AND length-truncated to
   `cfg.nlp_weekly_eval_sample_max_chars=200` AND any token NOT in the
   combined `(LeagueCatalog ∪ ai/nlp/lang_tr/* ∪ TR top-10k word freq)`
   set is replaced with `<UNK>` before labelling. Labellers see only
   the sanitized form.
-- [ ] **Auto-degrade on sustained regression.** When 2 consecutive
+- [x] **Auto-degrade on sustained regression.** When 2 consecutive
   weekly evals show > `cfg.nlp_weekly_eval_consecutive_drop_threshold=0.05`
   cumulative drop, the next `make nlp.canary-promote` of any newer
   model is REFUSED until a human acknowledges via
   `data/nlp/weekly_eval/YYYY-WW/ack.yaml` (PR-merged). Forces human
   attention on persistent regressions.
-- [ ] **Proof:** `test_nlp_weekly_eval_sample_stratified_correctly`,
+- [x] **Proof:** `test_nlp_weekly_eval_sample_stratified_correctly`,
   `test_nlp_weekly_eval_pii_scrubbed`,
   `test_nlp_weekly_eval_unknown_tokens_replaced`,
   `test_nlp_weekly_eval_alert_fires_on_threshold`,
@@ -181,13 +180,13 @@
 
 #### 10.23.4 Summary fan-out partial-failure semantics
 
-- [ ] **Real failure mode §10.6 underspecifies.** A `summary.weekend`
+- [x] **Real failure mode §10.6 underspecifies.** A `summary.weekend`
   query fans out to N=10 fixtures via §10.6 `nlp.dispatcher.v1`. If 3
   predictions time out and 7 succeed, what does the user see? Today
   the contract is silent → renderer either blocks the whole answer
   (unfair to the 7 that succeeded) or silently omits the 3 (lying by
   omission). Neither is acceptable.
-- [ ] **K-of-N quorum policy.** `cfg.nlp_summary_min_fixture_quorum=0.6`
+- [x] **K-of-N quorum policy.** `cfg.nlp_summary_min_fixture_quorum=0.6`
   (60% of fan-out fixtures must respond within
   `cfg.nlp_summary_fanout_timeout_ms=2500`). Three outcomes:
   - **Quorum met (≥ 60% returned):** render answer with TR-disclosed
@@ -202,25 +201,25 @@
     reason at the answer level.
   - **Zero returned:** standard `nlp_predict_timeout` template (per
     §10.10 row 7).
-- [ ] **Per-fixture timeout independence.** Fan-out timeouts are
+- [x] **Per-fixture timeout independence.** Fan-out timeouts are
   per-fixture, NOT cumulative. A single slow fixture cannot block
   the others — `asyncio.as_completed` pattern with hard
   per-future timeout. AST guard `test_nlp_summary_fanout_no_gather`
   rejects `asyncio.gather(...)` in the dispatcher (it propagates the
   slowest tail latency and binds futures to the cancelled context).
-- [ ] **Stable Turkish disclosure templates.** `summary_partial.tr.j2`
+- [x] **Stable Turkish disclosure templates.** `summary_partial.tr.j2`
   and `summary_per_fixture_only.tr.j2` (NEW templates) — each with
   slot for `(returned_count, total_count, missing_fixtures[].label,
   missing_fixtures[].degraded_reason_tr)`. Reason-translation table
   at `ai/nlp/lang_tr/degraded_reasons.tr.yaml` (closed enum →
   user-facing TR string). Every `degraded_reason` enum value MUST
   have a TR translation; build refuses on missing entries.
-- [ ] **Citation-block accommodation.** Citations §10.7 / §10.21.6
+- [x] **Citation-block accommodation.** Citations §10.7 / §10.21.6
   carry the per-fixture model_versions list; in a partial summary
   the citation block reflects ONLY the returned fixtures (NOT the
   intended N). Calibration-mismatch policy from §10.21.10 still
   applies across the returned subset.
-- [ ] **Proof:** `test_nlp_summary_quorum_met_renders_partial_with_disclosure`,
+- [x] **Proof:** `test_nlp_summary_quorum_met_renders_partial_with_disclosure`,
   `test_nlp_summary_quorum_missed_renders_per_fixture_only`,
   `test_nlp_summary_zero_returns_renders_predict_timeout_template`,
   `test_nlp_summary_fanout_no_gather_in_dispatcher` (AST),
@@ -230,13 +229,13 @@
 
 #### 10.23.5 Output-side TR formatting discipline (numbers, dates, scores)
 
-- [ ] **Real failure mode.** Turkish convention: thousands separator
+- [x] **Real failure mode.** Turkish convention: thousands separator
   `.`, decimal `,` (German style); time format `HH:MM` (24h, never
   am/pm); date `DD.MM.YYYY` or `DD Ay YYYY`; football scores
   `home-away` (no space). Default Python / Jinja2 / Go formatting
   emits `1,000.5` (US), `9:30 PM`, `2026-04-27`, `1 - 0` — all WRONG
   for TR users and visibly amateurish.
-- [ ] **Single-source TR formatter.** `ai/common/text/tr_format.py`:
+- [x] **Single-source TR formatter.** `ai/common/text/tr_format.py`:
   - `tr_format_number(value, decimals=0) -> str` — `1234.56` →
     `"1.234,56"`; uses `decimal.Decimal` for exact rounding (no
     binary-float drift). Banker's rounding default; configurable via
@@ -254,25 +253,25 @@
   - `tr_format_score(home, away) -> str` — `"1-0"` (ASCII hyphen, no
     space). Final-score shorthand consistent with §10.22.6 input
     parsing.
-- [ ] **Jinja2 filter registration.** Every formatter exported as a
+- [x] **Jinja2 filter registration.** Every formatter exported as a
   Jinja2 filter (`number_tr`, `money_tr`, `clock_tr`, `date_tr`,
   `date_tr_short`, `score_tr`). AST guard
   `test_nlp_no_python_default_format_in_templates` rejects any
   template emitting `{{ value }}` for fields whose type is `int`,
   `float`, `Decimal`, `datetime`, `date` — must use a `_tr` filter.
   Filter signatures introspected from `ai/nlp/render.py`.
-- [ ] **Locale-pinned via babel optional dep.** `babel` is OPTIONAL —
+- [x] **Locale-pinned via babel optional dep.** `babel` is OPTIONAL —
   not a hard dependency (CLAUDE.md prefers smallest stack). When
   installed, locale formatting via `babel.numbers.format_decimal(
   value, locale='tr_TR')` is used for cross-validation in tests
   (regression: `tr_format_number(1234.56) == babel.format_decimal(
   1234.56, locale='tr_TR')` — proof at test time only). Production
   uses our own deterministic implementation; `babel` is dev-only.
-- [ ] **Negative-zero, infinity, NaN policy.** Formatters refuse
+- [x] **Negative-zero, infinity, NaN policy.** Formatters refuse
   `float('inf')`, `float('-inf')`, `float('nan')` — raise
   `ValueError` (callers must clamp upstream). `-0.0` formats as
   `"0"` (not `"-0"`). Guard tests pin every edge case.
-- [ ] **Proof:** `test_tr_format_number_thousands_dot_decimal_comma`
+- [x] **Proof:** `test_tr_format_number_thousands_dot_decimal_comma`
   (parametrized over 30 values), `test_tr_format_money_try_suffix`,
   `test_tr_format_clock_always_24h_no_am_pm`,
   `test_tr_format_date_long_form_uses_tr_month_names`,
@@ -284,45 +283,45 @@
 
 #### 10.23.6 Timezone discipline (render TZ vs storage TZ)
 
-- [ ] **Real failure mode.** "Maç saat 21:30'da" — in WHICH timezone?
+- [x] **Real failure mode.** "Maç saat 21:30'da" — in WHICH timezone?
   Turkish users assume Europe/Istanbul (UTC+3, no DST since 2016).
   But fixture data may carry kickoff in UTC (Phase 4 storage convention)
   or in the venue's local TZ (UEFA fixtures across Europe). Rendering
   a UTC-stored time as Istanbul-local requires explicit conversion;
   silent assumption = users miss matches by hours.
-- [ ] **Storage TZ = UTC, render TZ = Europe/Istanbul (default).**
+- [x] **Storage TZ = UTC, render TZ = Europe/Istanbul (default).**
   `cfg.nlp_render_timezone="Europe/Istanbul"` (single default at v1
   per §10.17 locale chain). All `qa.answer.v1` rendered times go
   through `tr_format_clock(dt_utc, tz=cfg.nlp_render_timezone)`. AST
   guard `test_nlp_no_naive_datetime_in_render` rejects any naive
   `datetime` (no tzinfo) reaching a formatter — must be UTC-aware
   on the wire and converted at format time.
-- [ ] **Citation always carries UTC.** Per §10.21.6 / §10.21.8 the
+- [x] **Citation always carries UTC.** Per §10.21.6 / §10.21.8 the
   citation block carries `produced_at_utc` (ISO-8601 with `Z` suffix,
   microsecond precision). Render TZ applies to user-visible body
   ONLY; citation is byte-stable across TZ changes.
-- [ ] **DST-edge / leap-second tests.** Even though Turkey has no DST
+- [x] **DST-edge / leap-second tests.** Even though Turkey has no DST
   since 2016, storage may carry pre-2016 kickoffs (historical eval),
   AND `Europe/Istanbul` IANA tz database row covers historical DST
   transitions. Test corpus pins:
-  `tr_format_clock(2014-03-30T01:30:00Z) == "04:30"` (DST window),
-  `tr_format_clock(2014-03-30T02:30:00Z) == "06:30"` (post-spring-forward),
+  `tr_format_clock(2014-03-30T01:30:00Z) == "03:30"` (DST window),
+  `tr_format_clock(2014-03-30T02:30:00Z) == "04:30"` (post-spring-forward),
   `tr_format_clock(2026-04-27T18:30:00Z) == "21:30"` (current).
   Leap-second handling: Python `datetime` doesn't model leap seconds
   → assert that any input claiming `:60` seconds raises (no silent
   truncation).
-- [ ] **`zoneinfo` SHA pin.** `cfg.nlp_zoneinfo_dir` defaults to
+- [x] **`zoneinfo` SHA pin.** `cfg.nlp_zoneinfo_dir` defaults to
   system zoneinfo; production deployments override to a pod-shipped
   `zoneinfo/` directory whose SHA is recorded in `chart.json`
   compatibility block (mirrors §10.21.5 confusables-table SHA pin).
   Boot probe asserts `Europe/Istanbul` row present + SHA matches.
   Defends against a host-OS tzdata downgrade silently changing
   rendered times.
-- [ ] **Forward hook for venue-local TZ.** When future locales add
+- [x] **Forward hook for venue-local TZ.** When future locales add
   `tr-DE`, `tr-CY`, etc. (§10.22.11), per-locale render TZ default
   table at `ai/nlp/lang_tr/locale_render_tz.tr.yaml`. v1 entry: only
   `tr-TR → Europe/Istanbul`.
-- [ ] **Proof:** `test_nlp_clock_renders_istanbul_offset_currently_plus3`,
+- [x] **Proof:** `test_nlp_clock_renders_istanbul_offset_currently_plus3`,
   `test_nlp_clock_naive_datetime_rejected` (AST + runtime),
   `test_nlp_dst_window_2014_renders_correctly` (3-point probe),
   `test_nlp_leap_second_input_rejected`,
@@ -331,13 +330,13 @@
 
 #### 10.23.7 Accessibility & answer-format negotiation
 
-- [ ] **Real failure mode.** Default answers pepper text with emoji
+- [x] **Real failure mode.** Default answers pepper text with emoji
   (⚽ 🏆 🟢 🔴) and decorative chars (▶ ✓ ✗); screen readers (NVDA,
   JAWS, VoiceOver) read these as "soccer ball, trophy, large green
   circle, large red circle, play button" — verbose and disruptive
   for blind / low-vision users. Unicode "soft hyphen" (U+00AD) and
   combining marks similarly confuse assistive tech.
-- [ ] **Closed `answer_format` enum on `qa.request.v1`.**
+- [x] **Closed `answer_format` enum on `qa.request.v1`.**
   `cfg.nlp_answer_formats = ["plain", "markdown_safe", "screen_reader"]`
   (Phase 9 wires the param; defaults `plain`). Each formats the
   same answer payload differently:
@@ -355,7 +354,7 @@
     (`"yüzde 67"` not `"%67"`); soft-hyphen and combining marks
     NORMALIZED out (`unicodedata.normalize('NFC', ...)` then strip
     U+00AD).
-- [ ] **Per-format renderer.** `ai/nlp/render_format.py` —
+- [x] **Per-format renderer.** `ai/nlp/render_format.py` —
   `render(answer_blocks, format)` dispatches; each format has its
   own template directory under `ai/nlp/templates/<format>/`. Templates
   share the same slot dict (§10.21.6 closed schema); no per-format

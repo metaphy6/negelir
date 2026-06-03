@@ -513,6 +513,35 @@ class LexiconStore:
         self._logger = get_logger(__name__)
         # §10.21.3 Bounded swap latency: track the last lock hold time for testing.
         self._last_lock_hold_ms: float = 0.0
+        # Lexicon snapshot identifier (§10.23.2 / §10.23.9).
+        self._lexicon_version_id: str = ""
+
+    @classmethod
+    def _resolve_lexicon_dir(cls, cfg: object, *, canary: bool = False) -> Path:
+        base_dir = Path(getattr(cfg, "nlp_lexicon_dir", "ai/nlp/lexicon"))
+        if canary or getattr(cfg, "nlp_canary_pod", False):
+            return base_dir.with_name(base_dir.name + ".canary")
+        return base_dir
+
+    @classmethod
+    def from_cfg(cls, cfg: object, *, canary: bool = False, **kwargs) -> "LexiconStore":
+        return cls(cls._resolve_lexicon_dir(cfg, canary=canary), **kwargs)
+
+    @property
+    def lexicon_version_id(self) -> str:
+        """Return the current lexicon snapshot identifier."""
+        with self._lock:
+            return self._lexicon_version_id
+
+    @staticmethod
+    def _compute_snapshot_id(data: dict[str, "_LoadedFile"]) -> str:
+        items = sorted(
+            f"{filename}:{loaded.meta.lexicon_version}"
+            for filename, loaded in data.items()
+        )
+        if not items:
+            return ""
+        return hashlib.sha256("|".join(items).encode("utf-8")).hexdigest()
 
     # ── Public interface ───────────────────────────────────────────────────
 
@@ -790,6 +819,7 @@ class LexiconStore:
         # current lexicon snapshot; on lexicon swap, REBUILT (not mutated).
         # Build from union of all aliases across all loaded lexicon files.
         new_symspell = self._build_symspell_index(shadow)
+        new_lexicon_version_id = self._compute_snapshot_id(shadow)
 
         # ── Atomic swap under lock ─────────────────────────────────────────
         # §10.21.2 Old-generation eviction contract: capture old generation,
@@ -814,6 +844,7 @@ class LexiconStore:
             # Atomic swap (data + SymSpellIndex).
             self._data = shadow
             self._symspell = new_symspell
+            self._lexicon_version_id = new_lexicon_version_id
             
             # in_flight_count proxy: number of old generations currently
             # retained (each represents a snapshot still potentially

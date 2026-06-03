@@ -47,10 +47,12 @@ Boundary invariants (all asserted by Rule 11 in
 from __future__ import annotations
 
 import datetime as _dt
+import functools
 import hashlib as _hashlib
 import hmac as _hmac
 import locale
 import logging
+import math
 import re
 import threading as _threading
 import time as _time
@@ -84,7 +86,7 @@ from nlp.conversation import ConversationStore
 from ._log_filter import PIIScrubFilter, add_log_filter
 from nlp.aspectual_stack import detect_aspectual_stack
 from nlp.quotative import detect_quotative_frame
-from nlp.render import _resolve_locale_tag
+from nlp.render import _resolve_locale_tag, build_environment, render
 
 # ── internal helpers ──────────────────────────────────────────────────────
 
@@ -93,6 +95,27 @@ _FIXTURE_ENTITY_KINDS = frozenset({"team", "competition"})
 
 # Summary intents that fan-out to multiple predict.request.v1 messages.
 _SUMMARY_INTENTS = frozenset({"summary.next_week", "summary.matchday"})
+
+@functools.lru_cache(maxsize=1)
+def _load_degraded_reason_translations() -> dict[str, str]:
+    try:
+        import yaml
+
+        path = Path(__file__).resolve().parents[3] / "nlp" / "lang_tr" / "degraded_reasons.tr.yaml"
+        with open(path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        if not isinstance(data, dict):
+            return {}
+        return {str(k): str(v) for k, v in data.items()}
+    except Exception:
+        return {}
+
+
+def _translate_degraded_reason_tr(reason: str) -> str:
+    translations = _load_degraded_reason_translations()
+    if reason not in translations:
+        raise KeyError(f"Missing degraded_reason translation for {reason!r}")
+    return translations[reason]
 
 # Maximum number of dedup keys held in each NLP agent's LRU (structural cap;
 # not a config knob because it is a data-structure bound, not a tunable
@@ -147,6 +170,29 @@ def _redact_value_with_pii_patterns(value: object) -> object:
 
 def _sha256_hex(value: str) -> str:
     return _hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+_ASR_HESITATION_PHRASES = (
+    "falan filan",
+    "ne bileyim",
+)
+_ASR_HESITATION_TOKENS = frozenset(
+    {
+        "ııı",
+        "eee",
+        "ee",
+        "ıı",
+        "mmm",
+        "hmmm",
+        "şey",
+        "yani",
+        "aslında",
+        "yaa",
+        "işte",
+        "falan",
+        "bileyim",
+    }
+)
+_ASR_TEXT_TOKEN_RE = re.compile(r"\b[^\W\d_]+\b", flags=re.UNICODE)
 
 
 def _canonical_lexicon_snapshot_sha(lexicon_versions: object) -> str:
@@ -610,6 +656,12 @@ class NlpIntentAgent:
             max_buckets=10_000,
             clock=self._monotonic,
         )
+        self._asr_input_event_debouncer = AlertDebouncer(
+            ttl_s=60,
+            max_buckets=1_000,
+            critical_bypass=False,
+            clock=self._monotonic,
+        )
         # §10.13 producer-side deduper (lazy-init from cfg).
         self._deduper = deduper
         self._deduper_lock = _threading.Lock()
@@ -641,6 +693,33 @@ class NlpIntentAgent:
             },
             producer=self.name,
         )
+
+    def _make_asr_input_auto_detected_event(self, request_id: str) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "asr_input_auto_detected",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "input_source": "voice",
+                "emitted_at": _utc_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _is_asr_input_text(self, text: str) -> bool:
+        normalized = text.lower()
+        if "?" in normalized or "," in normalized or len(normalized) < 40:
+            return False
+        hesitation_count = 0
+        for phrase in _ASR_HESITATION_PHRASES:
+            count = normalized.count(phrase)
+            hesitation_count += count
+            if count:
+                normalized = normalized.replace(phrase, " ")
+        tokens = _ASR_TEXT_TOKEN_RE.findall(normalized)
+        hesitation_count += sum(1 for token in tokens if token in _ASR_HESITATION_TOKENS)
+        return hesitation_count >= 2
 
     def _with_tr_pii_alerts(self, results: list[Message], payload: dict[str, object]) -> list[Message]:
         alerts: list[Message] = []
@@ -694,7 +773,24 @@ class NlpIntentAgent:
                     ],
                     msg.payload,
                 )
-            return self._with_tr_pii_alerts([], msg.payload)
+
+            input_source = msg.payload.get("input_source")
+            input_source = str(input_source).strip().lower() if isinstance(input_source, str) else ""
+            if input_source not in {"keyboard", "voice", "paste", "unknown"}:
+                input_source = ""
+
+            results: list[Message] = []
+            if not input_source and self._is_asr_input_text(str(msg.payload.get("sanitized_text", ""))):
+                decision = self._asr_input_event_debouncer.decide(
+                    kind="asr_input_auto_detected",
+                    subject="",
+                    severity="warn",
+                    reason="asr_input_auto_detected",
+                )
+                if decision.emit:
+                    results.append(self._make_asr_input_auto_detected_event(request_id))
+
+            return self._with_tr_pii_alerts(results, msg.payload)
 
         return []
 
@@ -1879,7 +1975,7 @@ class NlpAnswerAgent:
             output_payload["conversation_id"] = conversation_id
         return Message.new(
             topic=QA_ANSWER_V1,
-            payload=payload,
+            payload=output_payload,
             producer=self.name,
         )
 
@@ -1934,6 +2030,7 @@ class NlpAnswerAgent:
         # §10.16 calibration version stamping: group predictions by
         # calibration_version; emit one citation entry per unique version.
         calibration_groups: dict[int, int] = {}
+        model_versions_by_calibration: dict[int, set[str]] = {}
         prediction_links: list[str] = []
         
         for pred in agg.predictions:
@@ -1947,18 +2044,80 @@ class NlpAnswerAgent:
             # Track calibration_version from predict.approved.v1 (top-level).
             cal_ver = int(pred.get("calibration_version", 1))
             calibration_groups[cal_ver] = calibration_groups.get(cal_ver, 0) + 1
+            model_versions = final.get("contributing_models")
+            if isinstance(model_versions, list):
+                model_versions_by_calibration.setdefault(cal_ver, set()).update(
+                    str(m) for m in model_versions if m is not None
+                )
             prediction_id = str(pred.get("prediction_id") or "").strip()
             if prediction_id:
                 prediction_links.append(f"/tahmin/{prediction_id}")
         
         degraded = timeout_degraded or prediction_degraded
-        
+
+        quorum_met = True
+        if agg.expected > 0:
+            quota = math.ceil(cfg.nlp_summary_min_fixture_quorum * agg.expected)
+            quota = max(1, quota)
+            quorum_met = received >= quota
+
         if timeout_degraded:
             degraded_reasons.insert(
                 0, f"{received}/{agg.expected} predictions received before timeout"
             )
-        
-        if degraded:
+
+        if received == 0:
+            return Message.new(
+                topic=QA_ANSWER_V1,
+                payload={
+                    "request_id": agg.qa_request_id,
+                    "qa_correlation_id": agg.qa_correlation_id,
+                    "intent": "predict.timeout",
+                    "answer_text": "Tahmin zaman aşımına uğradı.",
+                    "kind": "predict.timeout",
+                    "degraded": True,
+                    "degraded_reason": "summary_quorum_zero_received",
+                    "citations": [],
+                    "emitted_at": self._clock_iso(),
+                },
+                producer=self.name,
+            )
+
+        missing_count = max(0, agg.expected - received)
+        missing_fixtures: list[dict[str, str]] = []
+        if missing_count > 0:
+            reason_tr = _translate_degraded_reason_tr("predict_timeout")
+            missing_fixtures = [
+                {
+                    "label": f"Maç #{received + idx + 1}",
+                    "degraded_reason_tr": reason_tr,
+                }
+                for idx in range(missing_count)
+            ]
+
+        if not quorum_met:
+            degraded = True
+            degraded_reasons.append("summary quorum not met")
+            answer_text = render(
+                "summary_per_fixture_only.tr.j2",
+                {
+                    "returned_count": received,
+                    "total_count": agg.expected,
+                    "missing_fixtures": missing_fixtures,
+                },
+                env=build_environment(),
+            )
+        elif missing_fixtures:
+            answer_text = render(
+                "summary_partial.tr.j2",
+                {
+                    "returned_count": received,
+                    "total_count": agg.expected,
+                    "missing_fixtures": missing_fixtures,
+                },
+                env=build_environment(),
+            )
+        elif degraded:
             answer_text = (
                 f"{received} / {agg.expected} maç hazır. "
                 "Bazı tahminler henüz tamamlanmadı."
@@ -1991,9 +2150,11 @@ class NlpAnswerAgent:
         citations = []
         for cal_ver in sorted(calibration_groups.keys()):
             count = calibration_groups[cal_ver]
+            model_versions = sorted(model_versions_by_calibration.get(cal_ver, []))
             entry: dict = {
                 "calibration_version": cal_ver,
                 "prediction_count": count,
+                "model_versions": model_versions,
             }
             if multiple_versions:
                 entry["note"] = f"{count} tahmin için kalibrasyon güncellendi"

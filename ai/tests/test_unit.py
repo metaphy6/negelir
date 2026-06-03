@@ -6,6 +6,7 @@ L1 answer cache (Phase 10 §10.12), NLP structured logs (Phase 10 §10.14).
 import sys
 import os
 import math
+import json
 
 import numpy as np
 import pytest
@@ -175,6 +176,47 @@ def test_cache_agent_handles_qa_answer_v1_predict_intent():
     result = list(agent.handle(msg))
     assert result == []
     assert len(backend) == 1
+
+
+def test_cache_agent_caches_streamed_qa_answer_as_one_shot_payload():
+    """Streamed qa.answer.v1 cache entries must preserve the assembled final answer."""
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+
+    payload = {
+        "intent": "predict.match_outcome",
+        "entity_hash": "entity-streamed",
+        "fixture_window_bucket": "2026-05-30",
+        "model_versions_hash": "modelXYZ",
+        "calibration_version": "v2.0",
+        "answer_text": "Bu bir taslaktır.",
+        "streaming_chunks": ["Bu bir taslaktır.", " Ek cümle."],
+        "final_answer": "Bu bir taslaktır. Ek cümle.",
+    }
+    envelope = Envelope(topic=Topic("qa.answer.v1"))
+    msg = Message(envelope=envelope, payload=payload)
+
+    result = list(agent.handle(msg))
+    assert result == []
+    assert len(backend) == 1
+
+    key = make_answer_key(
+        intent=payload["intent"],
+        entity_hash=payload["entity_hash"],
+        fixture_window_bucket=payload["fixture_window_bucket"],
+        model_versions_hash=payload["model_versions_hash"],
+        calibration_version=payload["calibration_version"],
+    )
+    cached = backend.get(key)
+    assert cached is not None
+
+    cache_value = json.loads(cached)
+    assert cache_value["streamed"] is True
+    assert cache_value["chunks"] == payload["streaming_chunks"]
+    assert cache_value["final"] == payload["final_answer"]
+    assert cache_value["payload"]["answer_text"] == payload["final_answer"]
+    assert "streaming_chunks" not in cache_value["payload"]
+    assert "final_answer" not in cache_value["payload"]
 
 
 def test_cache_agent_handles_malformed_qa_answer_v1():
