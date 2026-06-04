@@ -1,0 +1,8 @@
+{"⚽": {hint: sport_football},
+ "🏆": {hint: market_outcome_win},
+ "🔴": {hint: team_color, team_color: [red]},
+ "🟡": {hint: team_color, team_color: [yellow]},
+ "❤️": {hint: team_color},
+ "😂": {hint: generic_decoration},
+ "✨": {hint: generic_decoration},
+ "🙏": {hint: generic_decoration}}

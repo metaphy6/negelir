@@ -136,7 +136,7 @@
   low-frequency tokens; we accept more aggressive restoration on the
   voice path because the user's spoken input genuinely contained
   them).
-- [ ] **Capitalization signal disabled on voice.** §10.22.2
+- [x] **Capitalization signal disabled on voice.** §10.22.2
   proper-noun detection MUST NOT short-circuit on capitalization
   alone when `input_source=voice` — ASR commonly lowercases
   everything OR over-capitalizes the first token of every

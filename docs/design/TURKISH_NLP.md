@@ -129,3 +129,60 @@ import in singleflight and NLP dispatcher modules.
 shared state across pods. This trades marginal redundant work (when the same
 query hits different pods simultaneously) for zero Redis dependency on the
 hot path.
+
+### Capacity model (§10.23.10)
+
+**Purpose:** Give operators a concrete per-pod throughput ceiling so capacity
+decisions are based on modelled behaviour, not guesswork.
+
+- `throughput_pod = parallelism / avg_latency`
+- Per-stage parallelism:
+  - Normalize / lexicon / intent / entity / dispatcher = CPU-bound,
+    parallelism = `cfg.nlp_intake_workers=8` (default; sized for 4 vCPU pod).
+  - Humanizer = GPU-lease serialized, parallelism = `1` (per pod).
+- Per-stage avg latency:
+  - normalize 5ms
+  - intent 25ms
+  - entity 40ms
+  - render 30ms
+  - humanizer 300ms (when used)
+  - proofreader 15ms
+- Throughput ceiling (without humanizer): `8 / 0.115s ≈ 70 QPS`
+
+### Output formatting (§10.23.5)
+
+**Purpose:** Make Turkish answers accessible across device modes and
+normalize rendering semantics so operator-facing output is deterministic.
+
+- `answer_format=screen_reader` renders a single, emoji-free Turkish answer
+  that is stable at the byte level for automated regression checks.
+- `markdown_safe` is a production-safe variant that escapes inline HTML and
+  preserves Turkish suffix forms.
+- `plain` remains the default path for standard conversational output.
+
+### Accessibility (§10.23.7)
+
+**Purpose:** Ensure NLP output works for screen readers and other assistive
+clients without changing the answer semantics.
+
+- Screen-reader output strips decorative emoji, normalizes combining marks,
+  and renders percent expressions as words.
+- The same Turkish text is exposed in a deterministic, line-oriented form to
+  support byte-stable comparison in operator smoke tests.
+
+### Tenant-Fairness (§10.23.1)
+
+**Purpose:** Prevent a noisy tenant from consuming all NLP intake capacity
+while still keeping all tenants live in the same pod.
+
+- Per-tenant intake slots are isolated by `cfg.nlp_per_tenant_inflight_max`.
+- Deterministic round-robin dispatch across non-empty tenant queues keeps a
+  noisy tenant from monopolizing concurrent NLP work.
+- Tenant abuse detection emits `nlp_tenant_intake_abuse` when a tenant
+  exceeds `cfg.nlp_tenant_abuse_qps_threshold` over the configured window.
+
+**Outcome:** This section anchors the Phase 10 rollout guidance and makes the
+new QM path visible in operator documentation.
+
+**Outcome:** This section anchors operator guidance in `docs/design/TURKISH_NLP.md`
+and closes the failure mode where capacity advice would otherwise be guessed.

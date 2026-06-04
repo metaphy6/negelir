@@ -84,6 +84,16 @@ class TestStripProperNounSuffix:
         assert stem == "Fenerbahçe"
         assert cls == "dative"
 
+    def test_strip_tolerant_rejects_canonical_entity_prefix(self) -> None:
+        """Harmony-tolerant strip must not split a canonical entity token."""
+        stem, cls = strip_proper_noun_suffix(
+            "Edirne",
+            assume_proper=True,
+            no_strip_canonicals={"edirne"},
+        )
+        assert stem == "Edirne"
+        assert cls is None
+
     def test_strip_preserves_non_proper(self) -> None:
         """A lowercase token without assume_proper → (token, None)."""
         token = "galatasaray"

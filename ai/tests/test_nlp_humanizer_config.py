@@ -15,6 +15,7 @@ Per CLAUDE.md forbidden patterns: NEVER use *-latest model IDs.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -126,6 +127,277 @@ class TestHumanizerInPipelineInequality:
         assert ineq == [], (
             f"Pipeline timeout=1350 should satisfy constraint when humanize=true, "
             f"but got: {ineq}"
+        )
+
+
+class TestNlpIntakeWorkersBootValidator:
+    """Phase 10 §10.23.10 boot validator for intake worker sizing."""
+
+    def test_default_nlp_intake_workers_is_eight(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_intake_workers == 8, (
+            "Default nlp_intake_workers must be 8 per Phase 10 §10.23.10"
+        )
+
+    def test_intake_workers_under_minimum_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_INTAKE_WORKERS", "1")
+        with pytest.raises(ValueError, match="nlp_intake_workers"):
+            Config().validate(strict=True)
+
+    def test_intake_workers_oversubscription_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_INTAKE_WORKERS", "9")
+        monkeypatch.setattr(os, "cpu_count", lambda: 4)
+        with pytest.raises(ValueError, match="nlp_intake_workers"):
+            Config().validate(strict=True)
+
+    def test_intake_workers_at_cpu_double_bound_is_allowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_INTAKE_WORKERS", "8")
+        monkeypatch.setattr(os, "cpu_count", lambda: 4)
+        cfg = Config()
+        issues = cfg.validate()
+        assert not [i for i in issues if "nlp_intake_workers" in i]
+
+    def test_nlp_intake_workers_validated_at_boot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_INTAKE_WORKERS", "1")
+        with pytest.raises(ValueError, match="nlp_intake_workers"):
+            Config().validate(strict=True)
+
+
+class TestHumanizerTokenBudget:
+    """Phase 10 §10.23.8 per-request humanizer token budget tests."""
+
+    def test_default_per_request_budget_is_120(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_max_humanizer_tokens_per_request == 120, (
+            "Default nlp_max_humanizer_tokens_per_request must be 120 "
+            "per §10.23.8"
+        )
+
+    def test_per_request_budget_can_be_overridden_via_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST", "80")
+        cfg = Config()
+        assert cfg.nlp_max_humanizer_tokens_per_request == 80, (
+            "NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST must override the default"
+        )
+
+    def test_default_tenant_humanizer_budget_is_2400(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_max_humanizer_tokens_per_tenant_per_min == 2400, (
+            "Default nlp_max_humanizer_tokens_per_tenant_per_min must be 2400 per §10.23.8"
+        )
+
+    def test_tier_humanizer_budget_map_can_be_parsed_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv(
+            "NEGELIR_NLP_TIER_HUMANIZER_TOKENS_PER_MIN",
+            '{"free": 2400, "pro": 4800}',
+        )
+        cfg = Config()
+        assert cfg.nlp_tier_humanizer_tokens_per_min == {"free": 2400, "pro": 4800}
+
+    def test_default_pod_humanizer_budget_is_720000(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_max_humanizer_tokens_per_pod_per_hour == 720000, (
+            "Default nlp_max_humanizer_tokens_per_pod_per_hour must be 720000 per §10.23.8"
+        )
+
+    def test_default_humanizer_pod_cooldown_is_300(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_humanizer_pod_cooldown_s == 300, (
+            "Default nlp_humanizer_pod_cooldown_s must be 300 per §10.23.8"
+        )
+
+    def test_tenant_humanizer_budget_can_be_overridden_via_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_TENANT_PER_MIN", "2000")
+        cfg = Config()
+        assert cfg.nlp_max_humanizer_tokens_per_tenant_per_min == 2000, (
+            "NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_TENANT_PER_MIN must override the default"
+        )
+
+    def test_pod_humanizer_budget_can_be_overridden_via_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_POD_PER_HOUR", "100000")
+        cfg = Config()
+        assert cfg.nlp_max_humanizer_tokens_per_pod_per_hour == 100000, (
+            "NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_POD_PER_HOUR must override the default"
+        )
+
+    def test_pod_humanizer_cooldown_can_be_overridden_via_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_POD_COOLDOWN_S", "180")
+        cfg = Config()
+        assert cfg.nlp_humanizer_pod_cooldown_s == 180, (
+            "NEGELIR_NLP_HUMANIZER_POD_COOLDOWN_S must override the default"
+        )
+
+    def test_effective_humanizer_token_cap_is_the_minimum_of_budget_and_decode_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+        from nlp.humanizer import humanizer_max_allowed_new_tokens
+
+        monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_MAX_NEW_TOKENS", "150")
+        monkeypatch.setenv("NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST", "120")
+        cfg = Config()
+        assert humanizer_max_allowed_new_tokens(cfg=cfg) == 120, (
+            "Effective humanizer token cap must be the minimum of "
+            "nlp_humanizer_max_new_tokens and nlp_max_humanizer_tokens_per_request"
+        )
+
+    def test_humanizer_request_budget_has_reasonable_upper_bound(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST", "1025")
+        with pytest.raises(ValueError, match="nlp_max_humanizer_tokens_per_request"):
+            Config().validate(strict=True)
+
+
+class TestNlpPhase10Knobs:
+    def test_default_format_number_rounding_is_bankers(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_format_number_rounding == "bankers", (
+            "Default nlp_format_number_rounding must be bankers per §10.23"
+        )
+
+    def test_format_number_rounding_can_be_overridden_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_FORMAT_NUMBER_ROUNDING", "ceil")
+        cfg = Config()
+        assert cfg.nlp_format_number_rounding == "ceil", (
+            "NEGELIR_NLP_FORMAT_NUMBER_ROUNDING must override the default"
+        )
+
+    def test_default_humanizer_request_rate_is_point_six(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_humanizer_request_rate == 0.6, (
+            "Default nlp_humanizer_request_rate must be 0.6 per §10.23"
+        )
+
+    def test_humanizer_request_rate_can_be_overridden_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_REQUEST_RATE", "0.3")
+        cfg = Config()
+        assert cfg.nlp_humanizer_request_rate == 0.3, (
+            "NEGELIR_NLP_HUMANIZER_REQUEST_RATE must override the default"
+        )
+
+    def test_default_humanizer_budget_redis_key_prefix(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_humanizer_budget_redis_key_prefix == "nlp:humanizer:budget:", (
+            "Default nlp_humanizer_budget_redis_key_prefix must match Phase 10 inventory"
+        )
+
+    def test_humanizer_budget_redis_key_prefix_can_be_overridden_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_BUDGET_REDIS_KEY_PREFIX", "nlp:humanizer:test:")
+        cfg = Config()
+        assert cfg.nlp_humanizer_budget_redis_key_prefix == "nlp:humanizer:test:", (
+            "NEGELIR_NLP_HUMANIZER_BUDGET_REDIS_KEY_PREFIX must override the default"
+        )
+
+    def test_default_pod_id_is_local(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_pod_id == "local", (
+            "Default nlp_pod_id must be local for single-node development"
+        )
+
+    def test_pod_id_can_be_overridden_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_POD_ID", "pod-42")
+        cfg = Config()
+        assert cfg.nlp_pod_id == "pod-42", (
+            "NEGELIR_NLP_POD_ID must override the default"
+        )
+
+    def test_default_l0_cache_ttl_is_300(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_l0_cache_ttl_s == 300, (
+            "Default nlp_l0_cache_ttl_s must be 300 per §10.23"
+        )
+
+    def test_l0_cache_ttl_can_be_overridden_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_L0_CACHE_TTL_S", "600")
+        cfg = Config()
+        assert cfg.nlp_l0_cache_ttl_s == 600, (
+            "NEGELIR_NLP_L0_CACHE_TTL_S must override the default"
+        )
+
+    def test_default_l1_answer_cache_ttl_is_600(self) -> None:
+        from common.config import Config
+
+        cfg = Config()
+        assert cfg.nlp_l1_answer_cache_ttl_s == 600, (
+            "Default nlp_l1_answer_cache_ttl_s must be 600 per §10.23"
+        )
+
+    def test_l1_answer_cache_ttl_can_be_overridden_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+
+        monkeypatch.setenv("NEGELIR_NLP_L1_ANSWER_CACHE_TTL_S", "900")
+        cfg = Config()
+        assert cfg.nlp_l1_answer_cache_ttl_s == 900, (
+            "NEGELIR_NLP_L1_ANSWER_CACHE_TTL_S must override the default"
         )
 
 

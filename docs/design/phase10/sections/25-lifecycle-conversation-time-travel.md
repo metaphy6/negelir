@@ -114,7 +114,7 @@
 
 #### 10.25.3 Time-travel audit re-render bundle (forensic reproducibility)
 
-- [ ] **Real gap §10.14 / §10.21.7 misses.** Sampled audit captures the
+- [x] **Real gap §10.14 / §10.21.7 misses.** Sampled audit captures the
   answer text but not the artifact-snapshot needed to re-render it 6
   months later for legal / regulatory / drift-investigation purposes.
   Re-deriving requires: lexicon snapshot SHAs (all 6+1 files at swap
@@ -157,7 +157,7 @@
 
 #### 10.25.4 Cross-artifact compatibility matrix (lexicon × intent × CRF × calibration × template)
 
-- [ ] **Real bug §10.21.1 / §10.21.2 / §10.21.4 misses.** Each artifact
+- [x] **Real bug §10.21.1 / §10.21.2 / §10.21.4 misses.** Each artifact
   is SHA-pinned individually but nothing pins their *compatible
   product*. A new `intent.tr.bin` trained on a lexicon snapshot that
   introduced a new market alias may classify queries into a market enum
@@ -188,11 +188,11 @@
   touches `ai/nlp/lexicon/`, `intent.tr.bin*`, `crf.tr.model*`,
   `ai/nlp/templates/`, or the humanizer pin in chart.json. Refuses
   merge if a new artifact lands without a matching new matrix row.
-- [ ] **Lockstep with `pipeline_version`.** §10.23.9 cache key already
+- [x] **Lockstep with `pipeline_version`.** §10.23.9 cache key already
   includes `pipeline_version`; the matrix bumps `pipeline_version` on
   every quartet change → cache naturally evicts. AST guard:
   `test_nlp_pipeline_version_bumped_when_quartet_changed`.
-- [ ] **Proof:** `test_nlp_compat_matrix_loaded_at_boot`,
+- [x] **Proof:** `test_nlp_compat_matrix_loaded_at_boot`,
   `test_nlp_compat_quartet_mismatch_refuses_boot`,
   `test_nlp_calibration_out_of_range_degrades_to_template_for_intent_group`,
   `test_nlp_compat_matrix_append_only_no_row_mutation` (AST),
@@ -200,85 +200,81 @@
 
 #### 10.25.5 Intent-model retraining lifecycle (data sourcing, gating, rollback)
 
-- [ ] **Real gap §10.4 misses.** Treats `intent.tr.bin` as an immutable
+- [x] **Real gap §10.4 misses.** Treats `intent.tr.bin` as an immutable
   SHA-pinned blob. Reality: classifier accuracy decays as fan slang
   evolves; we need a documented retraining loop with safety gates.
-- [ ] **Data sourcing.** Training corpus assembled from `nlp.shadow.v1`
+- [x] **Data sourcing.** Training corpus assembled from `nlp.shadow.v1`
   weekly continuous-eval samples (§10.23.3) — already PII-scrubbed,
   trunc 200, UNK-replaced, 3-of-5 labelled. NEVER from raw audit logs;
   NEVER from `qa.request.v1` text directly; NEVER from a user-supplied
   upload. Boundary AST: `test_nlp_intent_trainer_imports_only_shadow_v1`.
-- [ ] **`make nlp.intent-train`** (operator-driven, NEVER CI-auto-trains
+- [x] **`make nlp.intent-train`** (operator-driven, NEVER CI-auto-trains
   prod) writes a candidate `intent.tr.bin.candidate`; runs §10.18 eval
   harness; refuses to label as candidate if ANY of the §10.18 gates
   regress (intent acc, entity F1, did-you-mean coverage, adversarial
   block, suffix harmony golden) by > `cfg.nlp_intent_retrain_max_regression=0.005`
   on the held-out slice + dialect/code-switch/honorific/negation slices
   added by §10.24.
-- [ ] **Canary promotion.** Mirrors §10.23.2 model-canary: pod-level env
+- [x] **Canary promotion.** Mirrors §10.23.2 model-canary: pod-level env
   flag, 10% sticky on `(account_id // 1000)`; shadow-mode at 1%; 72h
   observation window; promote on `make nlp.intent-promote` only if
   shadow disagreement ≤ 0.03 AND |Δp95 confidence| ≤ 0.05 AND
   continuous-eval (§10.23.3) shows no regression.
-- [ ] **Rollback runbook.** `make nlp.intent-rollback` swaps the active
+- [x] **Rollback runbook.** `make nlp.intent-rollback` swaps the active
   symlink back to the prior SHA-pinned blob; readiness drops + reboots
   pods; emits `maint.event.v1{kind=nlp_intent_rolled_back, from_sha,
   to_sha, reason}`. Time budget: ≤ 15 min from operator decision to
   full cluster on prior model.
-- [ ] **Calibration coupling.** Every new intent model triggers a
+- [x] **Calibration coupling.** Every new intent model triggers a
   Platt-recalibration pass on the same shadow slice; the new
   `intent.tr.calibration.json` is pinned in the §10.25.4 compat row.
-- [ ] **Proof:** `test_nlp_intent_train_refuses_on_regression`,
+- [x] **Proof:** `test_nlp_intent_train_refuses_on_regression`,
   `test_nlp_intent_canary_blocks_promote_on_disagreement`,
   `test_nlp_intent_rollback_reverts_within_budget` (compose-mode mock),
-  `test_nlp_intent_trainer_data_source_is_shadow_only` (AST).
+  `test_nlp_intent_trainer_data_source_is_shadow_only` (AST),
+  `test_nlp_intent_train_writes_candidate_calibration`.
 
 #### 10.25.6 Lexicon contributor governance (PR-gated alias delta, two-reviewer rule)
 
-- [ ] **Real gap §10.2 misses.** Says "build pipeline regenerates from
-  LeagueCatalog + per-league preset modules + a hand-curated alias
-  delta file" but doesn't say **who** writes the delta, **how**
-  conflicts are reviewed, **what** review is required for the
-  highest-leverage tables (markets, entities_negative — corruption
-  here mis-routes every betting query per §10.22.12 doctrine).
-- [ ] **`ai/nlp/lexicon/_aliases_delta.tr.yaml`** is the only file
+- [x] **Real gap §10.2 misses.** Added explicit governance: `_aliases_delta.tr.yaml` entries now include `kind`, `source`, `added_by_pr`, and `added_at_utc`; `make nlp.lexicon-build` validates the closed source set and refuses unknown canonical IDs.
+- [x] **`ai/nlp/lexicon/_aliases_delta.tr.yaml`** is the only file
   humans edit; CODEOWNERS requires ≥ 1 reviewer for routine adds.
   `markets.tr.yaml` + `entities_negative.tr.yaml` + `dialect.tr.yaml` +
   `phonetic_aliases.tr.yaml` + `offensive.tr.yaml` are
   GENERATED-OR-HIGH-LEVERAGE: any direct edit requires **2 reviewers
   (CODEOWNERS rule)**, one of whom carries the `nlp-curator` GitHub
   team membership. CI: `make verify.nlp-codeowners` enforces.
-- [ ] **`source` annotation per delta entry.** Every alias_delta row
+- [x] **`source` annotation per delta entry.** Every alias_delta row
   carries `{alias, canonical_id, kind, source: <free_text>, added_by_pr,
   added_at_utc}`. `source` must be one of: `tff_official`, `mackolik`,
   `nesine`, `openfootball`, `fan_corpus_<n>`, `operator_curation`. CI
   refuses unknown sources. Catches "someone made up an alias" bugs.
-- [ ] **Conflict review.** `make nlp.lexicon-build` runs the §10.21.3
+- [x] **Conflict review.** `make nlp.lexicon-build` runs the §10.21.3
   cross-file referential validator BEFORE producing the build artifact.
   Any new alias that maps to a canonical not in LeagueCatalog →
   refuses build. New alias that collides with an existing alias under
   a *different* canonical → refuses build unless a corresponding
   `entities_negative` disambiguator is added in the same PR.
-- [ ] **Acceptance corpus regression.** `make nlp.lexicon-eval`
+- [x] **Acceptance corpus regression.** `make nlp.lexicon-eval`
   re-runs the §10.18 evaluation harness after lexicon-build but
   BEFORE accepting the diff. Any regression > 0.5% on entity F1 fails
   the PR. Same pattern as intent-model retraining gate (§10.25.5).
-- [ ] **Per-league quota.** `cfg.nlp_lexicon_max_aliases_per_canonical=12`
+- [x] **Per-league quota.** `cfg.nlp_lexicon_max_aliases_per_canonical=12`
   hard cap — defends against "quoting the manager's nickname graph"
   bloat that hurts Symspell precision. Over-quota → CI fail with
   message naming the offending canonical.
-- [ ] **Proof:** `test_nlp_alias_delta_source_in_closed_set` (CI),
+- [x] **Proof:** `test_nlp_alias_delta_source_in_closed_set` (CI),
   `test_nlp_high_leverage_files_require_two_reviewers` (CODEOWNERS
   parse), `test_nlp_alias_collision_without_negative_disambiguator_fails_build`,
   `test_nlp_lexicon_eval_regression_blocks_pr`, `test_nlp_alias_per_canonical_quota_enforced`.
 
 #### 10.25.7 Did-you-mean feedback loop (active learning, no PII echo)
 
-- [ ] **Real gap §10.4 / §10.6 misses.** "Did-you-mean" abstention is a
+- [x] **Real gap §10.4 / §10.6 misses.** "Did-you-mean" abstention is a
   one-way door — the system never learns from which suggestion the
   user accepted. Over time, the same correctable inputs keep hitting
   the abstention path.
-- [ ] **`qa.feedback.v1`** (data-plane, additive). Producer = API
+- [x] **`qa.feedback.v1`** (data-plane, additive). Producer = API
   gateway (Phase 9, when the user clicks a suggestion or re-types
   within 30s of a `did-you-mean`); consumer = `nlp.dispatcher.v1` →
   active-learning queue. Schema:
@@ -286,26 +282,26 @@
   null if user retyped instead), original_qa_correlation_id,
   schema_version=1}`. NEVER carries text — accepted_intent is one of
   the closed enum values.
-- [ ] **Active-learning queue.** Bounded ring buffer
+- [x] **Active-learning queue.** Bounded ring buffer
   `cfg.nlp_active_learning_queue_max=10000` per pod; oldest evicted
   when full + `nlp.event.v1{kind=active_learning_queue_overflow}`
   debounced. Spilled to disk weekly via `make nlp.active-learning-spill`
   (operator-driven, mirrors §10.23.3 weekly cron).
-- [ ] **Active-learning data hygiene.** Spilled rows are PII-scrubbed
+- [x] **Active-learning data hygiene.** Spilled rows are PII-scrubbed
   identically to §10.23.3 shadow rows; same 3-of-5 labeller agreement
   required before promotion into intent-retrain corpus (§10.25.5).
   Active-learning data is ONLY one input among many — never the sole
   source for a retrain (defends against feedback loops where an early
   classifier mistake re-trains itself).
-- [ ] **Suggestion provenance.** `did_you_mean_offered_intents[]` MUST
+- [x] **Suggestion provenance.** `did_you_mean_offered_intents[]` MUST
   match exactly what was rendered to the user; mismatch in
   `qa.feedback.v1` (e.g., user accepted an intent that wasn't offered)
   → drop + `nlp.alert.v1{kind=feedback_provenance_mismatch, severity=warn}`.
   Defends against client-side tampering.
-- [ ] **NEVER personalise.** Feedback signal aggregates across users
+- [x] **NEVER personalise.** Feedback signal aggregates across users
   only (no per-user adaptation in v1). AST guard:
   `test_nlp_feedback_processor_does_not_branch_on_user_id`.
-- [ ] **Proof:** `test_nlp_feedback_v1_schema_round_trip`,
+- [x] **Proof:** `test_nlp_feedback_v1_schema_round_trip`,
   `test_nlp_feedback_provenance_mismatch_dropped`,
   `test_nlp_feedback_queue_overflow_evicts_oldest`,
   `test_nlp_feedback_processor_does_not_branch_on_user_id` (AST),
@@ -563,7 +559,7 @@
 - [ ] **New `qa.context.v1` topic** registered in §3.5 wire authority
   (additive). Producer set bounded to `nlp.dispatcher.v1`; consumer
   bounded to `nlp.intent.v1`. `additionalProperties:false` schema.
-- [ ] **New `qa.feedback.v1` topic** registered in §3.5 wire authority
+- [x] **New `qa.feedback.v1` topic** registered in §3.5 wire authority
   (additive). Producer set bounded to `api.gateway.v1`; consumer
   bounded to `nlp.dispatcher.v1`. `additionalProperties:false` schema.
 - [ ] **New `nlp.event.v1` kinds** (open-enum, registered):

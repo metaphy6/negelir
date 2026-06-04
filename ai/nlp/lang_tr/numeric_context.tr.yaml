@@ -1,0 +1,14 @@
+# Phase 10 §10.24.11 numeric context disambiguation rules
+market_line_context:
+  - üst
+  - alt
+  - ust
+  - alt
+score_line_context:
+  - skor
+  - sonuç
+  - score
+  - biten
+  - ilk
+  - yarı
+  - iy

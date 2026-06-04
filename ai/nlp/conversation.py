@@ -17,6 +17,7 @@ class ConversationStore:
 
     def __init__(self) -> None:
         self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._meta_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._max_entries = 1024
 
     def _redis_client(self):
@@ -44,6 +45,16 @@ class ConversationStore:
         self._cache[conversation_id] = payload
         while len(self._cache) > self._max_entries:
             self._cache.popitem(last=False)
+
+    def _insert_local_meta(self, conversation_id: str, payload: dict[str, Any]) -> None:
+        if conversation_id in self._meta_cache:
+            self._meta_cache.move_to_end(conversation_id)
+        self._meta_cache[conversation_id] = payload
+        while len(self._meta_cache) > self._max_entries:
+            self._meta_cache.popitem(last=False)
+
+    def _redis_meta_key(self, conversation_id: str) -> str:
+        return f"{self._redis_key(conversation_id)}:meta"
 
     def _parse_expires_at(self, expires_at: str) -> datetime | None:
         try:
@@ -90,6 +101,38 @@ class ConversationStore:
         except Exception:
             return payload
 
+    def load_metadata(self, conversation_id: str) -> dict[str, Any] | None:
+        if not conversation_id:
+            return None
+
+        payload = self._meta_cache.get(conversation_id)
+        if payload is not None:
+            return payload
+
+        try:
+            client = self._redis_client()
+            raw = client.get(self._redis_meta_key(conversation_id))
+            if not raw:
+                return None
+            payload = json.loads(raw)
+            self._insert_local_meta(conversation_id, payload)
+            return payload
+        except Exception:
+            return payload
+
+    def save_metadata(self, conversation_id: str, payload: dict[str, Any]) -> None:
+        if not conversation_id:
+            return
+
+        stored = dict(payload)
+        ttl = int(cfg.nlp_conversation_idle_ttl_s)
+        self._insert_local_meta(conversation_id, stored)
+        try:
+            client = self._redis_client()
+            client.setex(self._redis_meta_key(conversation_id), ttl, json.dumps(stored))
+        except Exception:
+            pass
+
     def save(self, payload: dict[str, Any]) -> None:
         conversation_id = str(payload.get("conversation_id", ""))
         if not conversation_id:
@@ -111,8 +154,10 @@ class ConversationStore:
         if not conversation_id:
             return
         self._cache.pop(conversation_id, None)
+        self._meta_cache.pop(conversation_id, None)
         try:
             client = self._redis_client()
             client.delete(self._redis_key(conversation_id))
+            client.delete(self._redis_meta_key(conversation_id))
         except Exception:
             pass

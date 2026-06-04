@@ -118,7 +118,12 @@ class TestAliasHitType:
         assert hit.lexicon_version == "1.0.0"
 
     def test_field_names(self) -> None:
-        assert AliasHit._fields == ("canonical_id", "kind", "lexicon_version")
+        assert AliasHit._fields == (
+            "canonical_id",
+            "kind",
+            "lexicon_version",
+            "historical_alias_season",
+        )
 
     def test_is_immutable(self) -> None:
         hit = AliasHit(canonical_id="gs", kind="team", lexicon_version="1.0.0")
@@ -189,6 +194,44 @@ class TestBuildAliasIndex:
         assert index["Fenerbahce"].canonical_id == "fb"
         assert index["sari-lacivert"].canonical_id == "fb"
 
+    def test_affix_prefix_stripped_alias_is_indexed(self) -> None:
+        entries = [
+            {
+                "canonical_id": "mke_ankaragucu",
+                "names": ["MKE Ankaragücü"],
+                "aliases": [],
+                "affixes": {"prefix": ["MKE"]},
+            }
+        ]
+        index = _build_alias_index(entries, "1.0.0", "team")
+        assert "MKE Ankaragücü" in index
+        assert "Ankaragücü" in index
+        assert index["Ankaragücü"].canonical_id == "mke_ankaragucu"
+
+    def test_affix_prefixes_filtered_by_active_season(self) -> None:
+        entries = [
+            {
+                "canonical_id": "fb",
+                "names": ["YapiKredi Fenerbahce"],
+                "aliases": ["Fenerbahce"],
+                "affixes": {
+                    "prefix": [
+                        {"value": "Migros", "valid_until_season": "2024-2025"},
+                        {"value": "YapiKredi", "valid_from_season": "2025-2026"},
+                    ]
+                },
+                "historical_aliases": [
+                    {"value": "Migros Fenerbahce", "season": "2024-2025"}
+                ],
+            }
+        ]
+        index = _build_alias_index(entries, "1.0.0", "team", active_season="2025-2026")
+        assert "YapiKredi Fenerbahce" in index
+        assert "Fenerbahce" in index
+        assert "Migros Fenerbahce" in index
+        assert index["Migros Fenerbahce"].historical_alias_season == "2024-2025"
+        assert index["YapiKredi Fenerbahce"].historical_alias_season is None
+
 
 # ── get_alias_index integration ───────────────────────────────────────────
 
@@ -226,6 +269,34 @@ class TestGetAliasIndex:
     def test_not_loaded_returns_none(self, tmp_path: Path) -> None:
         store = LexiconStore(tmp_path, max_rss_mb=0)
         assert store.get_alias_index("teams.tr.yaml") is None
+
+    def test_historical_aliases_indexed_with_season_metadata(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NEGELIR_LEAGUE_CATALOG_ACTIVE_SEASON", "2025-2026")
+        teams_content = (
+            _VALID_META
+            + "entries:\n"
+            + "  - canonical_id: fb\n"
+            + "    names:\n"
+            + "      - YapiKredi Fenerbahce\n"
+            + "    aliases:\n"
+            + "      - Fenerbahce\n"
+            + "    affixes:\n"
+            + "      prefix:\n"
+            + "        - value: Migros\n"
+            + "          valid_until_season: 2024-2025\n"
+            + "        - value: YapiKredi\n"
+            + "          valid_from_season: 2025-2026\n"
+            + "    historical_aliases:\n"
+            + "      - value: Migros Fenerbahce\n"
+            + "        season: 2024-2025\n"
+        )
+        lexdir = _write_lexicon_dir(tmp_path, teams_content=teams_content)
+        store = LexiconStore(lexdir, max_rss_mb=0)
+        store.maybe_reload()
+        index = store.get_alias_index("teams.tr.yaml")
+        assert index is not None
+        assert index["Migros Fenerbahce"].historical_alias_season == "2024-2025"
+        assert index["YapiKredi Fenerbahce"].historical_alias_season is None
 
 
 # ── RSS budget ─────────────────────────────────────────────────────────────

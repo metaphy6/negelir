@@ -105,7 +105,7 @@
 
 #### 10.31.1 Sarcasm & ironic-praise detection (refusal, never re-route)
 
-- [ ] **Closed `sarcasm_markers.tr.yaml`** lists Turkish sarcasm
+- [x] **Closed `sarcasm_markers.tr.yaml`** lists Turkish sarcasm
   cues that football fans use systematically: opinion-shaped
   superlative + recent-defeat context (`harika oynadılar`,
   `muhteşem maç`, `şahane defans`, `efsane gol` after a loss);
@@ -120,7 +120,7 @@
   *requires_context* flag — most cues require a co-occurring
   recent-negative-event token (loss, defeat-score, red card,
   manager-firing) within `nlp_sarcasm_context_window_tokens=10`.
-- [ ] **Sarcasm-detector stage in dispatch.** New deterministic
+- [x] **Sarcasm-detector stage in dispatch.** New deterministic
   stage runs AFTER §10.30.5 politeness-strip and AFTER §10.30.3
   idiom-expansion, BEFORE classifier. Detection → set
   `intent_modifier=sarcastic` (additive enum value joining

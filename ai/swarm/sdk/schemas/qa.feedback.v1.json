@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.feedback.v1",
+  "title": "qa.feedback.v1",
+  "description": "Phase 10 §10.25.7 feedback loop payload for accepted did-you-mean suggestions or typed corrections. Never carries raw text or user PII.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "original_qa_correlation_id",
+    "did_you_mean_offered_intents",
+    "accepted_intent"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "original_qa_correlation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "did_you_mean_offered_intents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "accepted_intent": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

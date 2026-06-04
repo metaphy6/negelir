@@ -36,6 +36,19 @@ _NLP_EVENT_V1_KNOWN_KINDS = frozenset({
     "confusables_resolved",
     "singleflight_event_swept",
     "lexicon_old_generation_evicted",
+    "fairness_key_evicted",
+    "cache_signature_dropped",
+    "safe_mode_engaged",
+    "safe_mode_exited",
+    "feedback_provenance_mismatch",
+    "active_learning_queue_overflow",
+    "canary_shadow_disagreement",
+    "suffix_harmony_repaired",
+    "digit_letter_confusable_folded",
+    "historical_alias_used",
+    "compound_query_split",
+    "empty_input_floor_response",
+    "garden_path_backtrack_succeeded",
     "phonetic_alias_resolved_with_confusion_warning",
     "locale_fallback_used",
     "dialect_expanded",
@@ -284,6 +297,24 @@ class TestNlpEventV1Schema:
         errors = bus_schemas.validate_kind(self.TOPIC, payload)
         assert errors == [], errors
 
+    def test_happy_feedback_provenance_mismatch(self):
+        payload = _valid_nlp_event("feedback_provenance_mismatch", {
+            "producer": "nlp.dispatcher.v1",
+            "offered_intents": ["predict.match_outcome", "predict.btts"],
+            "accepted_intent": "predict.score_grid",
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_active_learning_queue_overflow(self):
+        payload = _valid_nlp_event("active_learning_queue_overflow", {
+            "producer": "nlp.dispatcher.v1",
+            "queue_size": 10000,
+            "max_size": 10000,
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
     def test_happy_cold_start_stage(self):
         payload = _valid_nlp_event("cold_start_stage", {
             "stage_index": 2,
@@ -315,6 +346,59 @@ class TestNlpEventV1Schema:
             "generation_id": "gen-20260531T095955Z",
             "remaining_generations": 2,
         })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_fairness_key_evicted(self):
+        payload = _valid_nlp_event("fairness_key_evicted", {
+            "fairness_key": "account_id:1234",
+            "evicted_count": 3,
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_cache_signature_dropped(self):
+        payload = _valid_nlp_event("cache_signature_dropped", {
+            "cache_signature": "hmac_abc123",
+            "reason": "signature mismatch on reload",
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_safe_mode_engaged(self):
+        payload = _valid_nlp_event("safe_mode_engaged", {
+            "safe_mode_snapshot": "safe-lexicon-v1",
+            "reason": "primary lexicon failed validation",
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_safe_mode_exited(self):
+        payload = _valid_nlp_event("safe_mode_exited", {
+            "recovery_reason": "primary lexicon recovered",
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    def test_happy_canary_shadow_disagreement(self):
+        payload = _valid_nlp_event("canary_shadow_disagreement", {
+            "canary_target": "intent_model",
+            "disagreement_rate": 0.07,
+            "shadow_sample_rate": 0.01,
+        })
+        errors = bus_schemas.validate_kind(self.TOPIC, payload)
+        assert errors == [], errors
+
+    @pytest.mark.parametrize("kind", [
+        "suffix_harmony_repaired",
+        "digit_letter_confusable_folded",
+        "historical_alias_used",
+        "compound_query_split",
+        "empty_input_floor_response",
+        "garden_path_backtrack_succeeded",
+    ])
+    def test_happy_new_nlp_event_kinds(self, kind: str) -> None:
+        payload = _valid_nlp_event(kind)
         errors = bus_schemas.validate_kind(self.TOPIC, payload)
         assert errors == [], errors
 
@@ -429,6 +513,12 @@ class TestNlpAlertV1Schema:
             "nlp_slur_in_input",
             "nlp_lexicon_feed_signature_invalid",
             "nlp_repair_density_anomaly",
+            "nlp_tenant_intake_abuse",
+            "nlp_canary_rolled_back",
+            "nlp_weekly_eval_regression",
+            "nlp_humanizer_pod_budget_exceeded",
+            "nlp_l1_cache_signature_invalid",
+            "nlp_safe_mode_active",
         }
         missing = sorted(kind for kind in expected_kinds if kind not in description)
         assert not missing, f"§10.21.13 known kinds missing from schema docs: {missing}"

@@ -61,6 +61,80 @@ rule relaxations.
 6. Build the updated lexicon with `make nlp.lexicon-build` and confirm the dashboard
    normalizes the sample query properly.
 
+## Disaster recovery drill
+
+Use a staging pod and a copy of the lexicon feed to rehearse a full lexicon corruption
+recovery without impacting production.
+
+1. Corrupt a copy of the primary lexicon snapshot in the staging pod's directory.
+2. Confirm the staging pod enters safe mode and emits an `nlp_safe_mode_active`
+   alert while staying healthy enough to serve readiness probes.
+3. Restore the primary lexicon snapshot and wait for the next
+   `cfg.nlp_lexicon_reload_s + 5s` cycle.
+4. Confirm the staging pod exits safe mode and resumes serving from the recovered
+   primary lexicon.
+5. Run `make nlp.dr-drill --confirm` to create the report stub before the drill,
+   then update `docs/reports/nlp_dr_drill_YYYY-Q.md` with the drill outcome.
+6. Record the drill outcome in `docs/reports/nlp_dr_drill_YYYY-Q.md`.
+
+## Canary rollout playbook
+
+Use canary pods and shadow-mode telemetry to stage new NLP changes before
+wider promotion.
+
+1. Enable canary routing with `NEGELIR_NLP_CANARY_POD=1` and set the rollout
+   percentage with `NEGELIR_NLP_INTENT_MODEL_CANARY_PCT`.
+2. Enable shadow-mode with `NEGELIR_NLP_INTENT_SHADOW_MODE=on` and a sampling
+   fraction via `NEGELIR_NLP_SHADOW_SAMPLE_RATE`.
+3. Monitor `nlp_canary_rolled_back` warnings and `nlp_intent_shadow_mode`
+   telemetry for disagreement rate drift.
+4. Keep canary traffic narrow until the disagreement rate is consistently below
+   `cfg.nlp_canary_max_disagreement_rate` and confidence drift is within
+   `cfg.nlp_canary_max_confidence_drift`.
+5. Promote the change only after the canary has accrued the minimum required
+   shadow hours and no regression is observed.
+
+## Weekly-eval triage
+
+Use the weekly evaluation pipeline to catch regressions before they affect
+production traffic.
+
+- Confirm the weekly NLP evaluation workflow completes without regressions.
+- Investigate `nlp_weekly_eval_regression` warnings immediately.
+- If the weekly evaluation identifies a drift, open a fix PR and mark the
+  issue with `phase:10` and `cve`/`nlp` labels as appropriate.
+- Use the weekly evaluation results to tune the `nlp.summary` and
+  `nlp.fairness` thresholds.
+
+## Cost-budget tuning
+
+Keep serving cost within the Phase 10 budget by tuning the model and
+intake parameters.
+
+- Track `nlp_humanizer_request_rate` and `nlp_max_humanizer_tokens_per_tenant_per_min`.
+- Adjust `cfg.nlp_intake_workers` only after verifying CPU and latency impact.
+- Use the `nlp_humanizer_pod_budget_exceeded` alert as the first signal to
+  throttle new tenant intake or reduce humanizer usage.
+- Prefer incremental threshold changes rather than broad capacity bumps.
+
+## Dependency CVE response
+
+The NLP plane must detect and respond to dependency advisories for any pinned
+Python package that directly or transitively affects the NLP execution path.
+
+- Run `xops/ci/nlp_cve_scan.yml` daily. It installs `pip-audit` and scans
+  `ai/requirements.txt` to detect active advisories for the current pinned deps.
+- If any advisory is classified as **Critical** or **High**, open a GitHub issue
+  tagged `phase:10` and `cve`, then page the on-call channel.
+- Document the response timelines here:
+  - **Critical (CVSS ≥ 9.0):** patch ship target ≤ 24h.
+  - **High (CVSS 7.0–8.9):** patch ship target ≤ 7 days.
+  - **Medium / Low:** bundle into the next regular dependency-bump cycle.
+- Keep `ai/nlp/security/mitigations.md` updated with the defense-in-depth measures
+  that reduce exposure for the dependency classes used by the NLP plane.
+- If the advisory affects a transitive runtime library, treat the closest direct
+  dependency as the owner for response coordination.
+
 ## Feed and key-rotation events
 
 If you observe an `nlp_lexicon_feed_signature_invalid` alert:

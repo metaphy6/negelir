@@ -207,6 +207,28 @@ class TestClassifyBelowThreshold:
         assert all(isinstance(s, IntentScore) for s in result.suggestions)
         assert result.suggestions[0].label == "predict.match_outcome"
 
+    def test_random_token_flood_abstains(self, tmp_path):
+        from nlp.intent import IntentAbstention
+
+        clf = _make_clf(tmp_path)
+        clf = _patch_distribution(
+            clf,
+            [
+                ("predict.match_outcome", 0.12, 0.12),
+                ("data.standings", 0.08, 0.08),
+                ("predict.btts", 0.05, 0.05),
+            ],
+        )
+        random_token_flood = " ".join(
+            [
+                "qwert", "zxcvb", "asdfg", "12345", "vvvxx",
+                "kjhgf", "plmko", "poiuy", "mnbvc", "lkjhg",
+            ] * 5
+        )
+        result = clf.classify(random_token_flood, min_conf=0.55)
+        assert isinstance(result, IntentAbstention)
+        assert result.top_conf < 0.55
+
     def test_min_conf_one_always_abstains(self, tmp_path):
         from nlp.intent import IntentAbstention
 

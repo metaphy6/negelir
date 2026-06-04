@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 
 
 HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON = "humanizer_tenant_budget_exceeded"
+HUMANIZER_POD_BUDGET_EXCEEDED_REASON = "humanizer_pod_budget_exceeded"
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,38 @@ class TenantHumanizerBudget:
         self._tokens_by_key: dict[str, float] = {}
         self._last_refill_ts_by_key: dict[str, float] = {}
 
+    def try_acquire(
+        self,
+        attrs: dict[str, object] | None = None,
+        token_count: int = 1,
+    ) -> HumanizerAdmissionDecision:
+        """Try to admit a humanizer request paying *token_count* humanizer tokens."""
+        if token_count < 1:
+            raise ValueError("token_count must be >= 1")
+
+        key = self._resolve_key(attrs)
+        now = float(self._now_fn())
+        effective_budget_per_min = self._resolve_tenant_budget_per_min(attrs)
+        effective_burst = min(self._burst, max(1, int(effective_budget_per_min)))
+        effective_refill_per_s = float(effective_budget_per_min) / 60.0
+
+        with self._lock:
+            tokens = self._tokens_by_key.get(key, float(effective_burst))
+            last = self._last_refill_ts_by_key.get(key, now)
+            elapsed = max(0.0, now - last)
+            refilled = min(float(effective_burst), tokens + elapsed * effective_refill_per_s)
+
+            self._last_refill_ts_by_key[key] = now
+            if refilled >= float(token_count):
+                self._tokens_by_key[key] = min(refilled - float(token_count), float(effective_burst))
+                return HumanizerAdmissionDecision(allowed=True, degraded_reason=None)
+
+            self._tokens_by_key[key] = min(refilled, float(effective_burst))
+            return HumanizerAdmissionDecision(
+                allowed=False,
+                degraded_reason=HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON,
+            )
+
     def _resolve_key(self, attrs: dict[str, object] | None) -> str:
         attrs = attrs or {}
 
@@ -105,29 +138,60 @@ class TenantHumanizerBudget:
             return account_id or ip_bucket
         return ip_bucket
 
+    def _resolve_tenant_budget_per_min(self, attrs: dict[str, object] | None) -> int:
+        if self._cfg.api_tier_enforcement_enabled and attrs is not None:
+            tier_id = str(attrs.get("tier_id_required") or "").strip()
+            if tier_id:
+                tier_budget = self._cfg.nlp_tier_humanizer_tokens_per_min.get(tier_id)
+                if tier_budget is not None:
+                    return tier_budget
+        return self._cfg.nlp_max_humanizer_tokens_per_tenant_per_min
+
+
+class PodHumanizerBudget:
+    """Per-pod hourly humanizer token ceiling (§10.23.8)."""
+
+    def __init__(
+        self,
+        *,
+        cfg: Config,
+        now_fn: callable | None = None,
+    ) -> None:
+        self._cfg = cfg
+        self._now_fn = now_fn if now_fn is not None else monotonic
+        self._lock = Lock()
+        self._window_start = float(self._now_fn())
+        self._tokens_used = 0.0
+        self._cooldown_until = 0.0
+
     def try_acquire(
         self,
-        attrs: dict[str, object] | None = None,
+        token_count: int = 1,
     ) -> HumanizerAdmissionDecision:
-        """Try to admit one humanizer request for the resolved key."""
-        key = self._resolve_key(attrs)
+        """Try to admit humanizer tokens against the pod hourly ceiling."""
+        if token_count < 1:
+            raise ValueError("token_count must be >= 1")
+
         now = float(self._now_fn())
-
         with self._lock:
-            tokens = self._tokens_by_key.get(key, float(self._burst))
-            last = self._last_refill_ts_by_key.get(key, now)
-            elapsed = max(0.0, now - last)
-            refilled = min(float(self._burst), tokens + elapsed * self._refill_per_s)
+            if now < self._cooldown_until:
+                return HumanizerAdmissionDecision(
+                    allowed=False,
+                    degraded_reason=HUMANIZER_POD_BUDGET_EXCEEDED_REASON,
+                )
 
-            self._last_refill_ts_by_key[key] = now
-            if refilled >= 1.0:
-                self._tokens_by_key[key] = refilled - 1.0
+            if now - self._window_start >= 3600.0:
+                self._window_start = now
+                self._tokens_used = 0.0
+
+            if self._tokens_used + float(token_count) <= self._cfg.nlp_max_humanizer_tokens_per_pod_per_hour:
+                self._tokens_used += float(token_count)
                 return HumanizerAdmissionDecision(allowed=True, degraded_reason=None)
 
-            self._tokens_by_key[key] = refilled
+            self._cooldown_until = now + float(self._cfg.nlp_humanizer_pod_cooldown_s)
             return HumanizerAdmissionDecision(
                 allowed=False,
-                degraded_reason=HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON,
+                degraded_reason=HUMANIZER_POD_BUDGET_EXCEEDED_REASON,
             )
 
 
@@ -148,7 +212,7 @@ def humanize(
 
     Decoding constraints:
       - temperature=0.3, top_p=0.9, repetition_penalty=1.05
-      - max_new_tokens <= cfg.nlp_humanizer_max_new_tokens (default 120)
+      - max_new_tokens <= humanizer_max_allowed_new_tokens(cfg=cfg)
       - Stop sequences: citation block delimiter (CITATION_DELIMITER)
       - Logit bias: against numerals/teams not in source, EN words from blocklist
 
@@ -204,6 +268,15 @@ def humanize(
     # finally:
     #     _release_gpu_lease(lease_token)  # Lease swap → patcher can acquire
     return templated_answer
+
+
+def humanizer_max_allowed_new_tokens(*, cfg: Config) -> int:
+    """Return the effective per-request humanizer output token cap.
+
+    This is the smaller of the model's decode cap and the explicit per-request
+    budget defined by cfg.nlp_max_humanizer_tokens_per_request.
+    """
+    return min(cfg.nlp_humanizer_max_new_tokens, cfg.nlp_max_humanizer_tokens_per_request)
 
 
 def _check_drift_guard(

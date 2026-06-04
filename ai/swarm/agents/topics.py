@@ -198,6 +198,7 @@ PREDICT_CANCEL_V1 = Topic("predict.cancel.v1")
 # ``data.request.v1``  — emitted by ``nlp.dispatcher.v1`` (§10.6) to
 #                         query Phase 4 storage for fixtures/standings.
 QA_INTENT_V1 = Topic("qa.intent.v1")
+QA_FEEDBACK_V1 = Topic("qa.feedback.v1")
 QA_ANSWER_V1 = Topic("qa.answer.v1")
 QA_CONTEXT_V1 = Topic("qa.context.v1")
 NLP_EVENT_V1 = Topic("nlp.event.v1")
@@ -218,6 +219,7 @@ __all__ = [
     "PREDICT_REQUEST_V1",
     "QA_ANSWER_V1",
     "QA_CONTEXT_V1",
+    "QA_FEEDBACK_V1",
     "QA_INTENT_V1",
     "FRESHNESS_EVENTS",
     "MAINT_ACK",

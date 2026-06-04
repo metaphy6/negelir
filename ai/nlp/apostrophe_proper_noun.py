@@ -4,11 +4,15 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 import yaml
 
-from common.text.turkish import lowercase_tr, strip_proper_noun_suffix
+from common.text.turkish import (
+    lowercase_tr,
+    strip_proper_noun_suffix,
+    is_harmony_tolerant_suffix_candidate,
+)
 
 _DEFAULT_APOSTROPHE_RULE_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "apostrophe_proper_noun.tr.yaml"
@@ -20,7 +24,7 @@ _DEFAULT_SPEC_PATH: Path = (
     Path(__file__).resolve().parents[1] / "common" / "text" / "proper_noun_apostrophe_spec.json"
 )
 
-_APOSTROPHE_TOKEN_SPLIT_RE = re.compile(r"[\s,\.\?!\:\;\(\)\[\]/|]+")
+_APOSTROPHE_TOKEN_SPLIT_RE = re.compile(r"[\s,\.\?!\:\;\(\)\[\]/|\-]+")
 _MISSING_APOSTROPHE_SUFFIXES = (
     "nün",
     "nun",
@@ -78,6 +82,26 @@ def load_proper_noun_apostrophe_spec(path: Path | None = None) -> dict:
     return _load_json(path or _DEFAULT_SPEC_PATH)
 
 
+def _emit_suffix_harmony_repair_event(
+    repaired: str,
+    event_sink: Callable[[dict[str, str]], None] | None,
+) -> None:
+    if event_sink is None or "'" not in repaired:
+        return
+    resolved_suffix_class = is_harmony_tolerant_suffix_candidate(repaired)
+    if resolved_suffix_class is None:
+        return
+
+    original_suffix = repaired.rsplit("'", 1)[1]
+    event_sink(
+        {
+            "kind": "suffix_harmony_repaired",
+            "original_suffix": original_suffix,
+            "resolved_suffix_class": resolved_suffix_class,
+        }
+    )
+
+
 def repair_apostrophe_proper_noun(
     text: str,
     *,
@@ -85,6 +109,8 @@ def repair_apostrophe_proper_noun(
     no_insert_path: Path | None = None,
     spec_path: Path | None = None,
     original_text: str | None = None,
+    event_sink: Callable[[dict[str, str]], None] | None = None,
+    input_source: str = "keyboard",
 ) -> tuple[str, tuple[ApostropheRepair, ...]]:
     raw_text = text.strip()
     if not raw_text:
@@ -121,6 +147,8 @@ def repair_apostrophe_proper_noun(
             original_token,
             internal_allowlist,
             no_insert_allowlist,
+            input_source=input_source,
+            event_sink=event_sink,
         )
         repaired_tokens.append(repaired)
         if repair is not None:
@@ -140,6 +168,9 @@ def _repair_token(
     original_token: str,
     internal_allowlist: set[str],
     no_insert_allowlist: set[str],
+    *,
+    input_source: str = "keyboard",
+    event_sink: Callable[[dict[str, str]], None] | None = None,
 ) -> tuple[str, ApostropheRepair | None]:
     if token in internal_allowlist:
         return token, None
@@ -147,7 +178,12 @@ def _repair_token(
     if "'" in original_token:
         if _is_valid_apostrophe_token(token):
             return token, None
-        repaired = _repair_misplaced_apostrophe(token, internal_allowlist, no_insert_allowlist)
+        repaired = _repair_misplaced_apostrophe(
+            token,
+            internal_allowlist,
+            no_insert_allowlist,
+            event_sink=event_sink,
+        )
         if repaired is not None:
             return repaired, ApostropheRepair(
                 original=lowercase_tr(original_token),
@@ -157,13 +193,24 @@ def _repair_token(
             )
         return token, None
 
-    if not original_token or not original_token[0].isupper():
+    if not original_token:
+        return token, None
+
+    if input_source == "voice":
+        return token, None
+
+    if not original_token[0].isupper():
         return token, None
 
     if len(token) < 7 or token in no_insert_allowlist:
         return token, None
 
-    repaired = _repair_missing_apostrophe(token, internal_allowlist, no_insert_allowlist)
+    repaired = _repair_missing_apostrophe(
+        token,
+        internal_allowlist,
+        no_insert_allowlist,
+        event_sink=event_sink,
+    )
     if repaired is not None:
         return repaired, ApostropheRepair(
             original=token,
@@ -177,7 +224,11 @@ def _repair_token(
 
 
 def _is_valid_apostrophe_token(token: str) -> bool:
-    _, suffix = strip_proper_noun_suffix(token, assume_proper=True)
+    _, suffix = strip_proper_noun_suffix(
+        token,
+        assume_proper=True,
+        allow_harmony_tolerance=True,
+    )
     return suffix is not None
 
 
@@ -185,6 +236,7 @@ def _repair_missing_apostrophe(
     token: str,
     internal_allowlist: set[str],
     no_insert_allowlist: set[str],
+    event_sink: Callable[[dict[str, str]], None] | None = None,
 ) -> str | None:
     candidates: list[tuple[int, str]] = []
     for suffix in _MISSING_APOSTROPHE_SUFFIXES:
@@ -203,7 +255,9 @@ def _repair_missing_apostrophe(
     best_length = max(length for length, _ in candidates)
     unique_best = {candidate for length, candidate in candidates if length == best_length}
     if len(unique_best) == 1:
-        return unique_best.pop()
+        repaired = unique_best.pop()
+        _emit_suffix_harmony_repair_event(repaired, event_sink)
+        return repaired
     return None
 
 
@@ -211,6 +265,7 @@ def _repair_misplaced_apostrophe(
     token: str,
     internal_allowlist: set[str],
     no_insert_allowlist: set[str],
+    event_sink: Callable[[dict[str, str]], None] | None = None,
 ) -> str | None:
     raw = token.replace("'", "")
     if len(raw) < 7:
@@ -234,5 +289,7 @@ def _repair_misplaced_apostrophe(
     best_length = candidates[0][0]
     best_candidates = [candidate for length, candidate in candidates if length == best_length]
     if len(best_candidates) == 1:
-        return best_candidates[0]
+        repaired = best_candidates[0]
+        _emit_suffix_harmony_repair_event(repaired, event_sink)
+        return repaired
     return None

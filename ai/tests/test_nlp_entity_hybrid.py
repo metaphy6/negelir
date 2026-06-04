@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from common.config import cfg
+
 import pytest
 
 from nlp.entity import (
@@ -39,6 +41,7 @@ from nlp.entity import (
     _resolve_conflicts,
     gazetteer_pass,
     PhoneticAliasMatch,
+    resolve_polarity,
 )
 from nlp.lexicon_loader import AliasHit, LexiconStore
 
@@ -132,6 +135,145 @@ def test_default_kind_priority_covers_all_kinds() -> None:
     assert all_kinds == set(DEFAULT_KIND_PRIORITY)
 
 
+def test_honorific_table_loaded_with_role_classes(tmp_path: Path) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "players.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: buruk_id
+    names:
+      - Buruk
+    aliases:
+      - Buruk
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries: []
+""",
+        encoding="utf-8",
+    )
+    honorifics_path = tmp_path / "honorifics.tr.yaml"
+    honorifics_path.write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-01-01T00:00:00Z"
+entries:
+  - honorific: hoca
+    role_class: manager
+    aliases:
+      - teknik direktör
+      - antrenör
+""",
+        encoding="utf-8",
+    )
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+    extractor = EntityExtractor(store, honorifics_path=honorifics_path)
+
+    result = extractor.extract(["hoca", "Buruk", "istifa"])
+    kinds = [span.kind for span in result.spans]
+    assert kinds == ["role_prefix", "player"]
+    assert result.spans[0].canonical_id == "manager"
+    assert result.spans[1].canonical_id == "buruk_id"
+
+
+def test_nlp_lastname_resolution_prefers_currently_active_player(tmp_path: Path) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "teams.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: gs
+    names:
+      - Galatasaray
+    aliases:
+      - gs
+  - canonical_id: fb
+    names:
+      - Fenerbahçe
+    aliases:
+      - fb
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "players.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: gs_player_id
+    team_canonical_id: gs
+    names:
+      - Ali Yilmaz
+    aliases:
+      - Ali
+      - Yilmaz
+  - canonical_id: fb_player_id
+    team_canonical_id: fb
+    names:
+      - Mehmet Yilmaz
+    aliases:
+      - Mehmet
+      - Yilmaz
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries: []
+""",
+        encoding="utf-8",
+    )
+    honorifics_path = tmp_path / "honorifics.tr.yaml"
+    honorifics_path.write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-01-01T00:00:00Z"
+entries:
+  - honorific: hoca
+    role_class: manager
+""",
+        encoding="utf-8",
+    )
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+    extractor = EntityExtractor(store, honorifics_path=honorifics_path)
+
+    result = extractor.extract(["hoca", "Yilmaz", "Galatasaray"])
+    player_ids = [span.canonical_id for span in result.spans if span.kind == "player"]
+    assert player_ids == ["gs_player_id"]
+
+
 # ── Gazetteer pass: single-token match ────────────────────────────────────
 
 def test_gazetteer_single_token_match() -> None:
@@ -180,6 +322,37 @@ def test_gazetteer_longest_match_wins() -> None:
     assert spans[0].span_end == 2
 
 
+def test_affix_tolerant_team_name_enters_gazetteer_via_lexicon_store(tmp_path: Path) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "teams.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: mke_ankaragucu
+    names:
+      - MKE Ankaragücü
+    aliases: []
+    affixes:
+      prefix:
+        - MKE
+""",
+        encoding="utf-8",
+    )
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+    extractor = EntityExtractor(store)
+
+    result = extractor.extract(["ankaragücü", "maç"])
+    assert len(result.spans) == 1
+    assert result.spans[0].kind == "team"
+    assert result.spans[0].canonical_id == "mke_ankaragucu"
+
+
 def test_gazetteer_non_overlapping_multiple_matches() -> None:
     """Two non-overlapping spans are both kept."""
     alias_index = _make_alias_index({
@@ -192,6 +365,118 @@ def test_gazetteer_non_overlapping_multiple_matches() -> None:
     assert spans[0].canonical_id == "gs_id"
     assert spans[1].canonical_id == "fb_id"
 
+def test_nlp_kara_kartal_compound_resolves_to_besiktas_after_backtrack(tmp_path: Path) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "teams.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: besiktas_jk
+    names:
+      - Beşiktaş
+    aliases:
+      - besiktas
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries: []
+""",
+        encoding="utf-8",
+    )
+    team_nicknames_path = tmp_path / "team_nicknames.tr.yaml"
+    team_nicknames_path.write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  source: "phase10-10.24.12"
+aliases:
+  - alias_form: "kara kartal"
+    canonical_id: "besiktas_jk"
+    requires_co_token: false
+""",
+        encoding="utf-8",
+    )
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+
+    extractor = EntityExtractor(store, team_nicknames_path=team_nicknames_path)
+    result = extractor.extract(["kara", "kartal", "puan", "durumu"])
+
+    assert len(result.spans) == 1
+    span = result.spans[0]
+    assert span.kind == "team"
+    assert span.canonical_id == "besiktas_jk"
+    assert span.span_start == 0
+    assert span.span_end == 2
+
+
+def test_nlp_backtrack_capped_at_one_retry(tmp_path: Path, monkeypatch: Any) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "teams.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: besiktas_jk
+    names:
+      - Beşiktaş
+    aliases:
+      - besiktas
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries: []
+""",
+        encoding="utf-8",
+    )
+    team_nicknames_path = tmp_path / "team_nicknames.tr.yaml"
+    team_nicknames_path.write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  source: "phase10-10.24.12"
+aliases:
+  - alias_form: "kara kartal"
+    canonical_id: "besiktas_jk"
+    requires_co_token: false
+""",
+        encoding="utf-8",
+    )
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+
+    monkeypatch.setattr(cfg, "nlp_backtrack_max_attempts", 0)
+    extractor = EntityExtractor(store, team_nicknames_path=team_nicknames_path)
+    result = extractor.extract(["kara", "kartal", "puan", "durumu"])
+
+    assert all(span.canonical_id != "besiktas_jk" for span in result.spans)
 
 # ── Gazetteer pass: kind priority tie-breaking ────────────────────────────
 
@@ -225,7 +510,7 @@ def test_gazetteer_kind_priority_tiebreak() -> None:
 def test_negative_rule_suppresses_standalone_token() -> None:
     """'fener' alone should be suppressed if 'bahçe' is absent."""
     alias_index = _make_alias_index({"fener": ("fb_id", "team", "1.0")})
-    rules = [_NegativeRule(token="fener", requires_cotoken="bahçe")]
+    rules = [_NegativeRule(token="fener", requires_cotokens=frozenset({"bahçe"}))]
     spans = gazetteer_pass(["fener", "maç"], alias_index, rules, DEFAULT_KIND_PRIORITY)
     assert spans == []
 
@@ -233,10 +518,65 @@ def test_negative_rule_suppresses_standalone_token() -> None:
 def test_negative_rule_allows_match_with_cotoken() -> None:
     """'fener bahçe' should NOT be suppressed because 'bahçe' is present."""
     alias_index = _make_alias_index({"fener": ("fb_id", "team", "1.0")})
-    rules = [_NegativeRule(token="fener", requires_cotoken="bahçe")]
+    rules = [_NegativeRule(token="fener", requires_cotokens=frozenset({"bahçe"}))]
     spans = gazetteer_pass(["fener", "bahçe", "maç"], alias_index, rules, DEFAULT_KIND_PRIORITY)
     assert len(spans) == 1
     assert spans[0].canonical_id == "fb_id"
+
+
+def test_nlp_bare_city_rize_requires_co_token_for_club() -> None:
+    alias_index = _make_alias_index({"rize": ("rizespor", "team", "1.0")})
+    rules = [
+        _NegativeRule(
+            token="rize",
+            requires_cotokens=frozenset({"maç", "skor", "kadro", "fikstür", "puan", "forma", "hocası", "teknik"}),
+            requires_cotoken_radius=4,
+            ambiguous_between=("rize_city", "rizespor"),
+        )
+    ]
+
+    ambiguous: list[AmbiguousHit] = []
+    spans = gazetteer_pass(["rize", "maç"], alias_index, rules, DEFAULT_KIND_PRIORITY, out_ambiguous=ambiguous)
+    assert len(spans) == 1
+    assert spans[0].canonical_id == "rizespor"
+    assert ambiguous == []
+
+    ambiguous.clear()
+    spans = gazetteer_pass(["rize", "yeni", "haber"], alias_index, rules, DEFAULT_KIND_PRIORITY, out_ambiguous=ambiguous)
+    assert spans == []
+    assert len(ambiguous) == 1
+    assert ambiguous[0].alias == "rize"
+    assert ambiguous[0].candidates == ("rize_city", "rizespor")
+
+
+def test_gazetteer_negation_marker_extracts_token_span() -> None:
+    alias_index = _make_alias_index({"değil": ("", "negation", "1.0")})
+    spans = gazetteer_pass(["o", "değil", "mi"], alias_index, [], DEFAULT_KIND_PRIORITY)
+    assert len(spans) == 1
+    assert spans[0].kind == "negation"
+    assert spans[0].span_start == 1
+    assert spans[0].span_end == 2
+
+
+def test_gazetteer_verbal_negation_suffix_is_recognized() -> None:
+    alias_index = _make_alias_index({})
+    spans = gazetteer_pass(["kazanmadı", "mi"], alias_index, [], DEFAULT_KIND_PRIORITY)
+    assert len(spans) == 1
+    assert spans[0].kind == "negation"
+    assert spans[0].span_start == 0
+    assert spans[0].span_end == 1
+
+
+def test_resolve_polarity_uses_double_negation_patterns() -> None:
+    tokens = ["kazanmadı", "değil", "mi"]
+    entities = [EntitySpan(0, 1, "negation", "", 1.0, "", "gazetteer")]
+    assert resolve_polarity(entities, tokens) == "affirm"
+
+
+def test_resolve_polarity_returns_negate_for_single_negation() -> None:
+    tokens = ["kazanmadı", "mi"]
+    entities = [EntitySpan(0, 1, "negation", "", 1.0, "", "gazetteer")]
+    assert resolve_polarity(entities, tokens) == "negate"
 
 
 # ── BIO → spans conversion ─────────────────────────────────────────────────
@@ -506,13 +846,47 @@ entries:
     assert rules[0].ambiguous_between == ()
 
 
+def test_load_negative_rules_accepts_cotoken_list_and_radius(tmp_path: Path) -> None:
+    from nlp.lexicon_loader import LexiconStore
+
+    lexdir = tmp_path / "lex"
+    lexdir.mkdir()
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - token: rize
+    requires_cotoken:
+      - maç
+      - skor
+    requires_cotoken_radius: 4
+    ambiguous_between:
+      - rize_city
+      - rizespor
+""",
+        encoding="utf-8",
+    )
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+    rules = _load_negative_rules(store)
+    assert len(rules) == 1
+    assert rules[0].token == "rize"
+    assert rules[0].requires_cotokens == frozenset({"maç", "skor"})
+    assert rules[0].requires_cotoken_radius == 4
+    assert rules[0].ambiguous_between == ("rize_city", "rizespor")
+
+
 def test_gazetteer_pass_out_ambiguous_populated_on_suppression() -> None:
     """When a negative rule with ambiguous_between fires, out_ambiguous is filled."""
     alias_index = _make_alias_index({"fener": ("fb_id", "team", "1.0")})
     rules = [
         _NegativeRule(
             token="fener",
-            requires_cotoken="bahçe",
+            requires_cotokens=frozenset({"bahçe"}),
             ambiguous_between=("fenerbahce_sk", "fenerbahce_beko"),
         )
     ]
@@ -535,7 +909,7 @@ def test_gazetteer_pass_no_out_ambiguous_when_cotoken_present() -> None:
     rules = [
         _NegativeRule(
             token="fener",
-            requires_cotoken="bahçe",
+            requires_cotokens=frozenset({"bahçe"}),
             ambiguous_between=("fenerbahce_sk", "fenerbahce_beko"),
         )
     ]
@@ -553,7 +927,7 @@ def test_gazetteer_pass_no_out_ambiguous_when_cotoken_present() -> None:
 def test_gazetteer_pass_no_ambiguous_hit_without_ambiguous_between() -> None:
     """Suppression without ambiguous_between declaration → out_ambiguous stays empty."""
     alias_index = _make_alias_index({"fener": ("fb_id", "team", "1.0")})
-    rules = [_NegativeRule(token="fener", requires_cotoken="bahçe")]
+    rules = [_NegativeRule(token="fener", requires_cotokens=frozenset({"bahçe"}))]
     out: list[AmbiguousHit] = []
     spans = gazetteer_pass(
         ["fener", "maçı"], alias_index, rules, DEFAULT_KIND_PRIORITY,
@@ -569,7 +943,7 @@ def test_gazetteer_pass_out_ambiguous_none_does_not_crash() -> None:
     rules = [
         _NegativeRule(
             token="fener",
-            requires_cotoken="bahçe",
+            requires_cotokens=frozenset({"bahçe"}),
             ambiguous_between=("fenerbahce_sk", "fenerbahce_beko"),
         )
     ]

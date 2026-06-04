@@ -1,0 +1,9 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  generator: negation-support
+entries:
+  - tokens: ["kazanmadı", "değil", "mi"]
+  - tokens: ["yok", "değil"]
+  - tokens: ["hiç", "değil"]
+  - tokens: ["asla", "değil"]

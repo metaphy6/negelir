@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 385,
+    "build": 482,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.71.15",
+      "version": "1.93.0",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-03T07:45:56+00:00",
+      "last_changed": "2026-06-03T17:46:55+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.45.5",
+      "version": "1.45.7",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-03T05:13:14+00:00",
+      "last_changed": "2026-06-03T14:28:10+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.43.7",
+      "version": "3.50.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-02T21:21:13+00:00"
+      "last_changed": "2026-06-03T15:10:42+00:00"
     },
     "docs": {
-      "version": "1.93.1",
+      "version": "1.105.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-03T07:10:04+00:00"
+      "last_changed": "2026-06-03T17:56:09+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -88,9 +88,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.50.10",
+      "version": "0.51.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-05-25T08:57:53+00:00",
+      "last_changed": "2026-06-03T11:00:20+00:00",
       "min_compatible_with": {
         "ai": "1.5.0"
       }
@@ -200,7 +200,7 @@
         "comment": "Phase 10 §10.32.2 aspectual stack table used by ai/nlp/aspectual_stack.py and the dispatcher to prevent predict.* leakage on stacked Turkish modality forms."
       },
       "zoneinfo_file": {
-        "source_spec": "IANA tzdata Europe/Istanbul zoneinfo file, pinned for Phase 10 §10.23.6 TZ render consistency.",
+        "source_spec": "IANA tzdata Europe/Istanbul zoneinfo file, pinned for Phase 10 §10.23.6 TZ render consistency. Baseline: 2026a.",
         "sha256": "d92d00fdfed5c6fc84ac930c08fa8adf7002840dbd21590caf5a3e4a932d3319",
         "path": "zoneinfo/Europe/Istanbul"
       }
@@ -10682,6 +10682,879 @@
       "from": "1.71.14",
       "to": "1.71.15",
       "build": 385
+    },
+    {
+      "timestamp": "2026-06-03T08:12:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "screen_reader normalization and markdown_safe HTML guard landed",
+      "from": "1.71.15",
+      "to": "1.71.16",
+      "build": 386
+    },
+    {
+      "timestamp": "2026-06-03T08:22:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 baseline §10.21 aggregator ticked",
+      "from": "1.93.1",
+      "to": "1.94.0",
+      "build": 387
+    },
+    {
+      "timestamp": "2026-06-03T08:29:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "add per-request humanizer token budget",
+      "from": "1.71.16",
+      "to": "1.71.17",
+      "build": 388
+    },
+    {
+      "timestamp": "2026-06-03T08:38:08+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Add Phase 10 humanizer per-tenant/per-pod token budgets",
+      "from": "1.71.17",
+      "to": "1.72.0",
+      "build": 389
+    },
+    {
+      "timestamp": "2026-06-03T08:46:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.23.1 tier-based humanizer tenant budget override",
+      "from": "1.72.0",
+      "to": "1.72.1",
+      "build": 390
+    },
+    {
+      "timestamp": "2026-06-03T08:53:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add Phase 10 humanizer telemetry metric",
+      "from": "1.72.1",
+      "to": "1.72.2",
+      "build": 391
+    },
+    {
+      "timestamp": "2026-06-03T09:04:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.23.9 NLP cache key versioning fix",
+      "from": "1.72.2",
+      "to": "1.72.3",
+      "build": 392
+    },
+    {
+      "timestamp": "2026-06-03T09:17:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.23.9 versioned NLP cache keys",
+      "from": "1.72.3",
+      "to": "1.72.4",
+      "build": 393
+    },
+    {
+      "timestamp": "2026-06-03T09:35:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 atomic NLP version snapshot implementation",
+      "from": "1.72.4",
+      "to": "1.72.5",
+      "build": 394
+    },
+    {
+      "timestamp": "2026-06-03T09:35:02+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 operability docs checkbox update",
+      "from": "1.94.0",
+      "to": "1.94.1",
+      "build": 395
+    },
+    {
+      "timestamp": "2026-06-03T09:47:22+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.23.9 cache TTL doc alignment",
+      "from": "1.94.1",
+      "to": "1.95.0",
+      "build": 396
+    },
+    {
+      "timestamp": "2026-06-03T09:56:37+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Add NLP L1 answer cache HMAC signing for Phase 10 §10.23.9 cache poisoning defense",
+      "from": "1.72.5",
+      "to": "1.73.0",
+      "build": 397
+    },
+    {
+      "timestamp": "2026-06-03T10:03:10+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.23.9 singleflight cache stampede bullet ticked",
+      "from": "1.95.0",
+      "to": "1.95.1",
+      "build": 398
+    },
+    {
+      "timestamp": "2026-06-03T10:08:27+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Add Phase 10 §10.23.10 intake-worker boot guard",
+      "from": "1.95.1",
+      "to": "1.96.0",
+      "build": 399
+    },
+    {
+      "timestamp": "2026-06-03T10:14:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Document Phase 10 capacity planning model in TURKISH_NLP.md",
+      "from": "1.96.0",
+      "to": "1.96.1",
+      "build": 400
+    },
+    {
+      "timestamp": "2026-06-03T10:20:32+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Add NLP capacity-report generator",
+      "from": "3.43.7",
+      "to": "3.44.0",
+      "build": 401
+    },
+    {
+      "timestamp": "2026-06-03T10:26:08+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "add nlp.spike-test operator rehearsal target",
+      "from": "3.44.0",
+      "to": "3.45.0",
+      "build": 402
+    },
+    {
+      "timestamp": "2026-06-03T10:26:08+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "tick Phase 10 §10.23.10 spike rehearsal design doc",
+      "from": "1.96.1",
+      "to": "1.96.2",
+      "build": 403
+    },
+    {
+      "timestamp": "2026-06-03T10:28:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add Phase 10 §10.23.10 proof tests for nlp intake validation and capacity report docs.",
+      "from": "1.73.0",
+      "to": "1.73.1",
+      "build": 404
+    },
+    {
+      "timestamp": "2026-06-03T10:46:08+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "add NLP safe-mode lexicon boot fallback",
+      "from": "1.73.1",
+      "to": "1.74.0",
+      "build": 405
+    },
+    {
+      "timestamp": "2026-06-03T10:50:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "add politeness drift telemetry support",
+      "from": "1.74.0",
+      "to": "1.74.1",
+      "build": 406
+    },
+    {
+      "timestamp": "2026-06-03T10:54:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add NLP safe-mode recovery exit and DR runbook proof coverage",
+      "from": "1.74.1",
+      "to": "1.74.2",
+      "build": 407
+    },
+    {
+      "timestamp": "2026-06-03T10:57:30+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Added Phase 10 safe-mode recovery proof tests",
+      "from": "1.74.2",
+      "to": "1.74.3",
+      "build": 408
+    },
+    {
+      "timestamp": "2026-06-03T11:00:20+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "nlp dispatcher search operator refusal route",
+      "from": "0.50.10",
+      "to": "0.51.0",
+      "build": 409
+    },
+    {
+      "timestamp": "2026-06-03T11:05:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix search operator detection and add Phase 10.30.6 proof tests",
+      "from": "1.74.3",
+      "to": "1.74.4",
+      "build": 410
+    },
+    {
+      "timestamp": "2026-06-03T11:08:15+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Closed Phase 10.30.7 anaphora table gate",
+      "from": "1.96.2",
+      "to": "1.97.0",
+      "build": 411
+    },
+    {
+      "timestamp": "2026-06-03T11:15:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.30.7 cross-turn anaphora antecedent search and type-constraint guard",
+      "from": "1.74.4",
+      "to": "1.74.5",
+      "build": 412
+    },
+    {
+      "timestamp": "2026-06-03T11:25:01+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10: anaphora eviction event for stale antecedents",
+      "from": "1.74.5",
+      "to": "1.74.6",
+      "build": 413
+    },
+    {
+      "timestamp": "2026-06-03T11:25:01+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design doc update for anaphora stack staleness gate",
+      "from": "1.97.0",
+      "to": "1.97.1",
+      "build": 414
+    },
+    {
+      "timestamp": "2026-06-03T11:33:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.30.7 multi-pronoun anaphora composition",
+      "from": "1.74.6",
+      "to": "1.74.7",
+      "build": 415
+    },
+    {
+      "timestamp": "2026-06-03T11:33:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.30.7 anaphora checklist update",
+      "from": "1.97.1",
+      "to": "1.97.2",
+      "build": 416
+    },
+    {
+      "timestamp": "2026-06-03T11:37:00+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Close Phase 10.30.7 anaphora cache-key salt doc bullet",
+      "from": "1.97.2",
+      "to": "1.98.0",
+      "build": 417
+    },
+    {
+      "timestamp": "2026-06-03T11:37:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add anaphora-antecedent namespace to L0 NLP intent cache key",
+      "from": "1.74.7",
+      "to": "1.74.8",
+      "build": 418
+    },
+    {
+      "timestamp": "2026-06-03T11:43:45+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10.30.8 ASR punctuation voice normalization",
+      "from": "1.74.8",
+      "to": "1.75.0",
+      "build": 419
+    },
+    {
+      "timestamp": "2026-06-03T11:48:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Implemented Phase 10.30.8 voice-number context tie-break",
+      "from": "1.75.0",
+      "to": "1.75.1",
+      "build": 420
+    },
+    {
+      "timestamp": "2026-06-03T11:48:15+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Closed Phase 10.30.8 design checklist in Phase 10 docs",
+      "from": "1.98.0",
+      "to": "1.98.1",
+      "build": 421
+    },
+    {
+      "timestamp": "2026-06-03T11:55:46+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 repeated-query detector",
+      "from": "1.75.1",
+      "to": "1.76.0",
+      "build": 422
+    },
+    {
+      "timestamp": "2026-06-03T11:55:46+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.30 docs checkbox flip",
+      "from": "1.98.1",
+      "to": "1.98.2",
+      "build": 423
+    },
+    {
+      "timestamp": "2026-06-03T12:02:23+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 repeated-query summary-mode escalation",
+      "from": "1.76.0",
+      "to": "1.77.0",
+      "build": 424
+    },
+    {
+      "timestamp": "2026-06-03T12:02:23+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 repeated-query summary bullet updates",
+      "from": "1.98.2",
+      "to": "1.98.3",
+      "build": 425
+    },
+    {
+      "timestamp": "2026-06-03T12:08:43+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Added nlp.dr-drill command scaffold for Phase 10 DR drill cadence",
+      "from": "3.45.0",
+      "to": "3.46.0",
+      "build": 426
+    },
+    {
+      "timestamp": "2026-06-03T12:13:16+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Added Phase 10 NLP CVE response CI workflow and operator runbook section",
+      "from": "1.77.0",
+      "to": "1.78.0",
+      "build": 427
+    },
+    {
+      "timestamp": "2026-06-03T12:18:35+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Add Phase 10 NLP SBOM emission command",
+      "from": "1.78.0",
+      "to": "1.79.0",
+      "build": 428
+    },
+    {
+      "timestamp": "2026-06-03T12:22:41+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Add NLP license attribution report generator",
+      "from": "3.46.0",
+      "to": "3.47.0",
+      "build": 429
+    },
+    {
+      "timestamp": "2026-06-03T12:35:54+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 NLP config inventory",
+      "from": "1.79.0",
+      "to": "1.80.0",
+      "build": 430
+    },
+    {
+      "timestamp": "2026-06-03T12:43:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "register Phase 10 §10.23 nlp event/alert kinds",
+      "from": "1.80.0",
+      "to": "1.80.1",
+      "build": 431
+    },
+    {
+      "timestamp": "2026-06-03T12:46:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "add new NLP degraded_reason translations for Phase 10 build guard",
+      "from": "1.80.1",
+      "to": "1.80.2",
+      "build": 432
+    },
+    {
+      "timestamp": "2026-06-03T12:50:48+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.23 build artifacts added",
+      "from": "1.98.3",
+      "to": "1.99.0",
+      "build": 433
+    },
+    {
+      "timestamp": "2026-06-03T12:56:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added Phase 10 §10.23 proof coverage regression test",
+      "from": "1.80.2",
+      "to": "1.80.3",
+      "build": 434
+    },
+    {
+      "timestamp": "2026-06-03T13:00:09+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.23 chart compatibility pins landed",
+      "from": "1.99.0",
+      "to": "1.99.1",
+      "build": 435
+    },
+    {
+      "timestamp": "2026-06-03T13:12:00+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "extend swarm.demo.nlp for Phase 10 §10.23 demo coverage",
+      "from": "3.47.0",
+      "to": "3.48.0",
+      "build": 436
+    },
+    {
+      "timestamp": "2026-06-03T13:12:00+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "add Phase 10 §10.23 Turkish NLP docs & runbook extensions",
+      "from": "1.99.1",
+      "to": "1.99.2",
+      "build": 437
+    },
+    {
+      "timestamp": "2026-06-03T13:15:31+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 docs: closed §10.24.1 fallback suffix-stripper checklist item",
+      "from": "1.99.2",
+      "to": "1.100.0",
+      "build": 438
+    },
+    {
+      "timestamp": "2026-06-03T13:17:42+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.25.3 audit bundle checkbox closed",
+      "from": "1.100.0",
+      "to": "1.101.0",
+      "build": 439
+    },
+    {
+      "timestamp": "2026-06-03T13:22:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 compatibility matrix validation + tests",
+      "from": "1.80.3",
+      "to": "1.80.4",
+      "build": 440
+    },
+    {
+      "timestamp": "2026-06-03T13:28:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.24 suffix-strip canonical guard",
+      "from": "1.80.4",
+      "to": "1.80.5",
+      "build": 441
+    },
+    {
+      "timestamp": "2026-06-03T13:28:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.24 checklist update",
+      "from": "1.101.0",
+      "to": "1.101.1",
+      "build": 442
+    },
+    {
+      "timestamp": "2026-06-03T13:38:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "suffix harmony repair event for Phase 10 10.24.1",
+      "from": "1.80.5",
+      "to": "1.80.6",
+      "build": 443
+    },
+    {
+      "timestamp": "2026-06-03T13:46:41+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.25.5 operator intent retrain command added",
+      "from": "1.80.6",
+      "to": "1.81.0",
+      "build": 444
+    },
+    {
+      "timestamp": "2026-06-03T13:46:41+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.25.5 docs checkbox update for intent retrain command",
+      "from": "1.101.1",
+      "to": "1.102.0",
+      "build": 445
+    },
+    {
+      "timestamp": "2026-06-03T13:55:11+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "added Phase 10 repeated-character repeat-collapse normalization",
+      "from": "1.81.0",
+      "to": "1.82.0",
+      "build": 446
+    },
+    {
+      "timestamp": "2026-06-03T14:06:33+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.24.3 digit-letter fold added",
+      "from": "1.82.0",
+      "to": "1.83.0",
+      "build": 447
+    },
+    {
+      "timestamp": "2026-06-03T14:06:33+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.24.3 checklist updated",
+      "from": "1.102.0",
+      "to": "1.102.1",
+      "build": 448
+    },
+    {
+      "timestamp": "2026-06-03T14:10:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "restrict intent training to configured shadow-only corpus source",
+      "from": "1.83.0",
+      "to": "1.83.1",
+      "build": 449
+    },
+    {
+      "timestamp": "2026-06-03T14:14:36+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Add nlp.intent-promote and nlp.intent-rollback aliases for Phase 10 intent rollout",
+      "from": "3.48.0",
+      "to": "3.49.0",
+      "build": 450
+    },
+    {
+      "timestamp": "2026-06-03T14:21:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix Turkish dotted-i normalization",
+      "from": "1.83.1",
+      "to": "1.83.2",
+      "build": 451
+    },
+    {
+      "timestamp": "2026-06-03T14:21:22+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "fix Turkish dotted-i normalization",
+      "from": "1.45.5",
+      "to": "1.45.6",
+      "build": 452
+    },
+    {
+      "timestamp": "2026-06-03T14:28:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Turkish combining-mark strip sweep",
+      "from": "1.83.2",
+      "to": "1.83.3",
+      "build": 453
+    },
+    {
+      "timestamp": "2026-06-03T14:28:10+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Turkish lowercase parity for lingering combining marks",
+      "from": "1.45.6",
+      "to": "1.45.7",
+      "build": 454
+    },
+    {
+      "timestamp": "2026-06-03T14:35:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 voice subquery metadata in normalize_input",
+      "from": "1.83.3",
+      "to": "1.83.4",
+      "build": 455
+    },
+    {
+      "timestamp": "2026-06-03T14:42:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix qa.answer.v1 payload emitted_at and kind fields for dispatcher",
+      "from": "1.83.4",
+      "to": "1.83.5",
+      "build": 456
+    },
+    {
+      "timestamp": "2026-06-03T14:49:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added NLP compound subquery anti-amplification cap",
+      "from": "1.83.5",
+      "to": "1.83.6",
+      "build": 457
+    },
+    {
+      "timestamp": "2026-06-03T14:56:31+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 intent retrain calibration coupling",
+      "from": "1.83.6",
+      "to": "1.84.0",
+      "build": 458
+    },
+    {
+      "timestamp": "2026-06-03T15:05:19+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.24.6 negation-aware intent support",
+      "from": "1.84.0",
+      "to": "1.85.0",
+      "build": 459
+    },
+    {
+      "timestamp": "2026-06-03T15:05:19+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.24.6 design doc checklist update",
+      "from": "1.102.1",
+      "to": "1.102.2",
+      "build": 460
+    },
+    {
+      "timestamp": "2026-06-03T15:10:42+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Lexicon alias delta governance validation",
+      "from": "3.49.0",
+      "to": "3.50.0",
+      "build": 461
+    },
+    {
+      "timestamp": "2026-06-03T15:10:42+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 lexicon governance checklist update",
+      "from": "1.102.2",
+      "to": "1.103.0",
+      "build": 462
+    },
+    {
+      "timestamp": "2026-06-03T15:15:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added affix-tolerant Turkish team alias support",
+      "from": "1.85.0",
+      "to": "1.85.1",
+      "build": 463
+    },
+    {
+      "timestamp": "2026-06-03T15:28:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.24.7 sponsor-rotation lexicon affix indexing",
+      "from": "1.85.1",
+      "to": "1.85.2",
+      "build": 464
+    },
+    {
+      "timestamp": "2026-06-03T15:36:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added sarcasm modifier routing and stage for Phase 10 pragmatics",
+      "from": "1.85.2",
+      "to": "1.85.3",
+      "build": 465
+    },
+    {
+      "timestamp": "2026-06-03T15:45:56+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fix bare city club disambiguation for Turkish NLP",
+      "from": "1.85.3",
+      "to": "1.85.4",
+      "build": 466
+    },
+    {
+      "timestamp": "2026-06-03T15:53:48+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Added Phase 10 honorific role-prefix extraction",
+      "from": "1.85.4",
+      "to": "1.86.0",
+      "build": 467
+    },
+    {
+      "timestamp": "2026-06-03T16:04:33+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 honorific manager intent narrowing and person-name fallback chain",
+      "from": "1.86.0",
+      "to": "1.87.0",
+      "build": 468
+    },
+    {
+      "timestamp": "2026-06-03T16:04:33+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 doc checkbox updates for §10.24.8",
+      "from": "1.103.0",
+      "to": "1.103.1",
+      "build": 469
+    },
+    {
+      "timestamp": "2026-06-03T16:13:24+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 emoji hint extraction and input hygiene",
+      "from": "1.87.0",
+      "to": "1.88.0",
+      "build": 470
+    },
+    {
+      "timestamp": "2026-06-03T16:18:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.24 default answer emoji stripping",
+      "from": "1.88.0",
+      "to": "1.88.1",
+      "build": 471
+    },
+    {
+      "timestamp": "2026-06-03T16:24:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fixed Phase 10 voice-path capitalization short-circuit in apostrophe repair",
+      "from": "1.88.1",
+      "to": "1.88.2",
+      "build": 472
+    },
+    {
+      "timestamp": "2026-06-03T16:35:00+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.24.10 hashtag/mention/URL hygiene",
+      "from": "1.88.2",
+      "to": "1.89.0",
+      "build": 473
+    },
+    {
+      "timestamp": "2026-06-03T16:50:10+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.24.11 numeric disambiguation",
+      "from": "1.89.0",
+      "to": "1.90.0",
+      "build": 474
+    },
+    {
+      "timestamp": "2026-06-03T17:00:33+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 team-nickname backtracking support",
+      "from": "1.90.0",
+      "to": "1.91.0",
+      "build": 475
+    },
+    {
+      "timestamp": "2026-06-03T17:06:53+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Added Phase 10 lexicon governance and nlp.lexicon-eval gate",
+      "from": "1.91.0",
+      "to": "1.92.0",
+      "build": 476
+    },
+    {
+      "timestamp": "2026-06-03T17:11:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Closed Phase 10 §10.24.12 abstention corpus floor",
+      "from": "1.103.1",
+      "to": "1.104.0",
+      "build": 477
+    },
+    {
+      "timestamp": "2026-06-03T17:20:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 NLP empty-input floor gate",
+      "from": "1.92.0",
+      "to": "1.92.1",
+      "build": 478
+    },
+    {
+      "timestamp": "2026-06-03T17:33:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 NLP knob inventory",
+      "from": "1.92.1",
+      "to": "1.92.2",
+      "build": 479
+    },
+    {
+      "timestamp": "2026-06-03T17:46:55+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Add qa.feedback.v1 feedback topic and NLP active-learning queue support",
+      "from": "1.92.2",
+      "to": "1.93.0",
+      "build": 480
+    },
+    {
+      "timestamp": "2026-06-03T17:52:35+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.24.14 nlp.event.v1 kind registration",
+      "from": "1.104.0",
+      "to": "1.105.0",
+      "build": 481
+    },
+    {
+      "timestamp": "2026-06-03T17:56:09+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.24 docs: register nlp.alert.v1 excessive_combining_marks",
+      "from": "1.105.0",
+      "to": "1.105.1",
+      "build": 482
     }
   ]
 }

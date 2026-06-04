@@ -3,7 +3,7 @@ _meta:
   generated_by: "phase10_30"
   description: "Patterns that indicate search-operator style queries or quoted exact-match search input."
 patterns:
-  - '\b(veya|ya da|yada)\b'
+  - '(?-i:\b(?:OR|AND|VE|VEYA|YADA|YA DA)\b)'
   - '(?:^|\s)(?:\+|\-)\w+'
   - '(?:^|\s)"[^"]+"'
   - '(?:^|\s)(?:site:|inurl:|intitle:)'

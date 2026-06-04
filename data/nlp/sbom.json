@@ -1,0 +1,143 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:00000000-0000-0000-0000-000000000000",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-03T12:49:49.301737+00:00",
+    "tools": [
+      {
+        "vendor": "negelir",
+        "name": "nlp.sbom",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "negelir-nlp",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:pypi/apscheduler",
+      "type": "library",
+      "name": "apscheduler",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/beautifulsoup4",
+      "type": "library",
+      "name": "beautifulsoup4",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/fasttext",
+      "type": "library",
+      "name": "fasttext",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/hypothesis",
+      "type": "library",
+      "name": "hypothesis",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/jsonschema",
+      "type": "library",
+      "name": "jsonschema",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/lightgbm",
+      "type": "library",
+      "name": "lightgbm",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/lxml",
+      "type": "library",
+      "name": "lxml",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/numpy",
+      "type": "library",
+      "name": "numpy",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pandas",
+      "type": "library",
+      "name": "pandas",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/prometheus_client",
+      "type": "library",
+      "name": "prometheus_client",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/psycopg2-binary",
+      "type": "library",
+      "name": "psycopg2-binary",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic",
+      "type": "library",
+      "name": "pydantic",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pytest",
+      "type": "library",
+      "name": "pytest",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/python-crfsuite",
+      "type": "library",
+      "name": "python-crfsuite",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pyyaml",
+      "type": "library",
+      "name": "pyyaml",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/redis",
+      "type": "library",
+      "name": "redis",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/requests",
+      "type": "library",
+      "name": "requests",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/rich",
+      "type": "library",
+      "name": "rich",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/scikit-learn",
+      "type": "library",
+      "name": "scikit-learn",
+      "version": "0.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/xgboost",
+      "type": "library",
+      "name": "xgboost",
+      "version": "0.0.0"
+    }
+  ]
+}

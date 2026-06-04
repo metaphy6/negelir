@@ -451,7 +451,14 @@ class TestAuditKeyVersioning:
         cal_v = "2.0.0"
 
         key = cache_key_for_intent(
-            intent, entity_hash, fixture_window, model_versions_hash, model_v, cal_v
+            intent,
+            entity_hash,
+            fixture_window,
+            model_versions_hash,
+            model_v,
+            "lex-sha-1",
+            cal_v,
+            "10.0.0",
         )
 
         assert isinstance(key, str)
@@ -459,25 +466,66 @@ class TestAuditKeyVersioning:
 
         # Different model version should produce different cache key
         key2 = cache_key_for_intent(
-            intent, entity_hash, fixture_window, model_versions_hash, "1.0.1", cal_v
+            intent,
+            entity_hash,
+            fixture_window,
+            model_versions_hash,
+            "1.0.1",
+            "lex-sha-1",
+            cal_v,
+            "10.0.0",
         )
         assert key != key2
 
-        # Different calibration version should produce different cache key
+        # Different lexicon snapshot should produce different cache key
         key3 = cache_key_for_intent(
-            intent, entity_hash, fixture_window, model_versions_hash, model_v, "2.0.1"
+            intent,
+            entity_hash,
+            fixture_window,
+            model_versions_hash,
+            model_v,
+            "lex-sha-2",
+            cal_v,
+            "10.0.0",
         )
         assert key != key3
+
+        # Different pipeline version should produce different cache key
+        key4 = cache_key_for_intent(
+            intent,
+            entity_hash,
+            fixture_window,
+            model_versions_hash,
+            model_v,
+            "lex-sha-1",
+            cal_v,
+            "10.1.0",
+        )
+        assert key != key4
 
     def test_cache_key_stable_across_calls(self) -> None:
         """Cache key is deterministic for same inputs."""
         from swarm.agents.nlp import cache_key_for_intent
 
         key1 = cache_key_for_intent(
-            "predict.match_outcome", "hash1", "2026-05-27", "mv1", "1.0.0", "2.0.0"
+            "predict.match_outcome",
+            "hash1",
+            "2026-05-27",
+            "mv1",
+            "1.0.0",
+            "lex-sha-1",
+            "2.0.0",
+            "10.0.0",
         )
         key2 = cache_key_for_intent(
-            "predict.match_outcome", "hash1", "2026-05-27", "mv1", "1.0.0", "2.0.0"
+            "predict.match_outcome",
+            "hash1",
+            "2026-05-27",
+            "mv1",
+            "1.0.0",
+            "lex-sha-1",
+            "2.0.0",
+            "10.0.0",
         )
 
         assert key1 == key2

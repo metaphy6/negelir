@@ -69,6 +69,11 @@ def test_tr_format_score_no_space_ascii_hyphen():
     assert tr_format_score(1, 0) == "1-0"
 
 
+def test_tr_format_decimal_and_thousands_use_tr_locale():
+    assert tr_format_number("1234.5", decimals=1) == "1.234,5"
+    assert tr_format_number(12345.67, decimals=2) == "12.345,67"
+
+
 def test_tr_format_negative_zero_renders_zero():
     assert tr_format_number(-0.0, decimals=0) == "0"
 

@@ -1,0 +1,10 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Closed legal co-occurrence patterns for multi-pronoun Turkish anaphora composition."
+entries:
+  - pronouns: [onlar, orası]
+  - pronouns: [onlar, oraya]
+  - pronouns: [bunlar, orası]
+  - pronouns: [o, oraya]
+  - pronouns: [kendisi, oraya]

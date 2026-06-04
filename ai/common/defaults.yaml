@@ -115,6 +115,17 @@ nlp:
   # Proofreader gate 3: length bounds (§10.9 bullet 2)
   min_answer_chars: 20       # NEGELIR_NLP_MIN_ANSWER_CHARS
   max_answer_chars: 600      # NEGELIR_NLP_MAX_ANSWER_CHARS
+  # §10.24.2 repeated-character collapse token-length cap.
+  repeat_collapse_max_len: 64  # NEGELIR_NLP_REPEAT_COLLAPSE_MAX_LEN
+  repeat_collapse_min_freq: 100  # NEGELIR_NLP_REPEAT_COLLAPSE_MIN_FREQ
+  digit_letter_fold_enabled: true  # NEGELIR_NLP_DIGIT_LETTER_FOLD_ENABLED
+  negation_enabled: true  # NEGELIR_NLP_NEGATION_ENABLED
+  compound_query_enabled: true  # NEGELIR_NLP_COMPOUND_QUERY_ENABLED
+  emoji_hint_enabled: true  # NEGELIR_NLP_EMOJI_HINT_ENABLED
+  hashtag_handling_enabled: true  # NEGELIR_NLP_HASHTAG_HANDLING_ENABLED
+  at_mention_handling_enabled: true  # NEGELIR_NLP_AT_MENTION_HANDLING_ENABLED
+  html_unescape_enabled: true  # NEGELIR_NLP_HTML_UNESCAPE_ENABLED
+  harmony_tolerant_strip_enabled: true  # NEGELIR_NLP_HARMONY_TOLERANT_STRIP_ENABLED
   # §10.19 backpressure
   queue_pressure_threshold: 100  # NEGELIR_NLP_QUEUE_PRESSURE_THRESHOLD
   pressure_humanize_off_s: 60    # NEGELIR_NLP_PRESSURE_HUMANIZE_OFF_S
@@ -359,6 +370,19 @@ phase10:
   nlp_humanize: false                      # NEGELIR_NLP_HUMANIZE
   # Decoding constraints for humanizer LLM (§10.8).
   nlp_humanizer_max_new_tokens: 120        # NEGELIR_NLP_HUMANIZER_MAX_NEW_TOKENS
+  # Upper bound on humanizer tokens allowed per request (Phase 10 §10.23.8).
+  nlp_max_humanizer_tokens_per_request: 120 # NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST
+  # Upper bound on humanizer tokens allowed per tenant per minute (Phase 10 §10.23.8).
+  nlp_max_humanizer_tokens_per_tenant_per_min: 2400 # NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_TENANT_PER_MIN
+  nlp_humanizer_request_rate: 0.6            # NEGELIR_NLP_HUMANIZER_REQUEST_RATE
+  nlp_humanizer_budget_redis_key_prefix: "nlp:humanizer:budget:"  # NEGELIR_NLP_HUMANIZER_BUDGET_REDIS_KEY_PREFIX
+  # JSON mapping tier id -> allowed humanizer tokens per tenant per minute when monetization
+  # is enabled. Default free-tier floor is nlp_max_humanizer_tokens_per_tenant_per_min.
+  nlp_tier_humanizer_tokens_per_min: {} # NEGELIR_NLP_TIER_HUMANIZER_TOKENS_PER_MIN
+  # Upper bound on humanizer tokens allowed per pod per hour (Phase 10 §10.23.8).
+  nlp_max_humanizer_tokens_per_pod_per_hour: 720000 # NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_POD_PER_HOUR
+  # Cooldown duration after this pod budget is exhausted.
+  nlp_humanizer_pod_cooldown_s: 300 # NEGELIR_NLP_HUMANIZER_POD_COOLDOWN_S
   nlp_humanizer_temperature: 0.3           # NEGELIR_NLP_HUMANIZER_TEMPERATURE
   nlp_humanizer_top_p: 0.9                 # NEGELIR_NLP_HUMANIZER_TOP_P
   nlp_humanizer_repetition_penalty: 1.05   # NEGELIR_NLP_HUMANIZER_REPETITION_PENALTY
@@ -384,6 +408,9 @@ phase10:
   nlp_lang_tr_reload_s: 30                 # NEGELIR_NLP_LANG_TR_RELOAD_S
   # Max entries per lexicon file (§10.2 Cardinality cap). Over-cap → dictionary_overflow warn + refuse load.
   nlp_lexicon_max_entries_per_file: 50000  # NEGELIR_NLP_LEXICON_MAX_ENTRIES_PER_FILE
+  # Max aliases per canonical in the aliased lexicon build path (§10.25.6).
+  #   Defends against alias-graph bloat and Symspell precision loss.
+  nlp_lexicon_max_aliases_per_canonical: 12  # NEGELIR_NLP_LEXICON_MAX_ALIASES_PER_CANONICAL
   # RSS budget for all lexicons (§10.2 Bounded memory). 0 = disable check.
   nlp_lexicon_max_rss_mb: 128             # NEGELIR_NLP_LEXICON_MAX_RSS_MB
   # Max retired snapshots retained for in-flight requests (§10.21.2 Old-gen eviction).
@@ -455,9 +482,14 @@ phase10:
   # §10.12 — L0 intent cache (in-process LRU with TTL).
   nlp_intent_cache_max_entries: 10000     # NEGELIR_NLP_INTENT_CACHE_MAX_ENTRIES
   nlp_intent_cache_ttl_s: 300             # NEGELIR_NLP_INTENT_CACHE_TTL_S
+  # Phase 10 §10.12 per-pod salt for the L0 intent cache key and associated
+  # cache shards. Defaults to local for single-node development.
+  nlp_pod_id: "local"                    # NEGELIR_NLP_POD_ID
   # Phase 10 §10.12 L1 answer cache
   nlp_answer_cache_ttl_data_s: 120        # NEGELIR_NLP_ANSWER_CACHE_TTL_DATA_S
   nlp_answer_cache_ttl_predict_s: 60      # NEGELIR_NLP_ANSWER_CACHE_TTL_PREDICT_S
+  nlp_l0_cache_ttl_s: 300                 # NEGELIR_NLP_L0_CACHE_TTL_S
+  nlp_l1_answer_cache_ttl_s: 600         # NEGELIR_NLP_L1_ANSWER_CACHE_TTL_S
 
   # §10.5 — Entity extraction (gazetteer + CRF hybrid pipeline)
   nlp_entity_kind_priority: "team,player,league,competition,market,date,time,weekday,ordinal,money_amount,score"  # NEGELIR_NLP_ENTITY_KIND_PRIORITY

@@ -370,6 +370,45 @@ class TestQaAnswerV1LocaleEnum:
         )
 
 
+def _valid_qa_feedback() -> dict:
+    """Minimal valid qa.feedback.v1 payload."""
+    return {
+        "schema_version": 1,
+        "request_id": "req-001",
+        "original_qa_correlation_id": "corr-001",
+        "did_you_mean_offered_intents": ["predict.match_outcome", "predict.btts"],
+        "accepted_intent": "predict.match_outcome",
+    }
+
+
+class TestQaFeedbackV1Schema:
+    TOPIC = "qa.feedback.v1"
+
+    def test_schema_file_exists_and_has_correct_id(self):
+        path = SCHEMA_DIR / f"{self.TOPIC}.json"
+        assert path.exists(), f"Schema file missing: {path}"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["$id"] == f"negelir/swarm/{self.TOPIC}"
+
+    def test_additional_properties_false(self):
+        schema = bus_schemas.load(self.TOPIC)
+        assert schema.get("additionalProperties") is False
+
+    def test_happy_minimal_payload(self):
+        errors = bus_schemas.validate(self.TOPIC, _valid_qa_feedback())
+        assert errors == [], f"{self.TOPIC} validation failed: {errors}"
+
+    def test_accepted_intent_null_accepted(self):
+        payload = {**_valid_qa_feedback(), "accepted_intent": None}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"{self.TOPIC} validation failed for null accepted_intent: {errors}"
+
+    def test_extra_field_rejected(self):
+        payload = {**_valid_qa_feedback(), "user_id": "user-1"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors, "qa.feedback.v1 must reject extra properties"
+
+
 # ── Phase 10 §10.19 schema parity gate ───────────────────────────────────
 
 class TestNlpSchemaParityGate:
@@ -455,6 +494,28 @@ class TestNlpSchemaParityGate:
         errors = bus_schemas.validate("qa.answer.v1", payload)
         assert errors == [], f"qa.answer.v1 validation failed for screen_reader: {errors}"
 
+    def test_qa_answer_v1_accepts_compound_parts_with_schema_version_2(self):
+        payload = {
+            **_valid_qa_answer(),
+            "schema_version": 2,
+            "parts": [
+                {
+                    "intent": "predict.match_outcome",
+                    "body": "Galatasaray maçı kazanacak.",
+                    "citation": {
+                        "kind": "prediction",
+                        "prediction_id": "pred-001",
+                        "produced_at_utc": "2026-05-26T10:00:00Z",
+                        "model_versions": ["predictor@1.2.3"],
+                        "calibration_version": "1.0.0",
+                    },
+                    "subquery_correlation_id": "subquery-001",
+                }
+            ],
+        }
+        errors = bus_schemas.validate("qa.answer.v1", payload)
+        assert errors == [], f"qa.answer.v1 validation failed for compound parts: {errors}"
+
     def test_nlp_event_v1_can_validate_minimal_payload(self):
         """nlp.event.v1 schema accepts a minimal valid payload."""
         payload = {
@@ -469,4 +530,10 @@ class TestNlpSchemaParityGate:
         """nlp.alert.v1 schema accepts a minimal valid payload."""
         errors = bus_schemas.validate("nlp.alert.v1", _valid_nlp_alert())
         assert errors == [], f"nlp.alert.v1 validation failed: {errors}"
+
+    def test_nlp_alert_v1_description_includes_excessive_combining_marks(self):
+        """The nlp.alert.v1 schema docs must document the Phase 10 alert kind."""
+        alert_schema = bus_schemas.load("nlp.alert.v1")
+        description = alert_schema["properties"]["kind"]["description"]
+        assert "excessive_combining_marks" in description
 

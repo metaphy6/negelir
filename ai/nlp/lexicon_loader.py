@@ -44,6 +44,7 @@ import yaml
 
 from common.config import Config
 from common.logger import get_logger
+from common.text.turkish import lowercase_tr
 
 if TYPE_CHECKING:
     from nlp.vendor.symspell import SymSpellIndex
@@ -89,11 +90,16 @@ class AliasHit(NamedTuple):
         market | dialect | entity_negative | unknown``.
     lexicon_version:
         SemVer string from the ``_meta.lexicon_version`` of the source file.
+    historical_alias_season:
+        Optional season label for a historical alias entry.  Present only when
+        the alias comes from an old sponsor name that should surface an
+        operator-facing historical-alias event instead of a current-season hit.
     """
 
     canonical_id: str
     kind: str
     lexicon_version: str
+    historical_alias_season: str | None = None
 
 
 # ── Loader ─────────────────────────────────────────────────────────────────
@@ -101,6 +107,18 @@ class AliasHit(NamedTuple):
 def _compute_sha256(data: bytes) -> str:
     """Return the SHA-256 hex digest of *data*."""
     return hashlib.sha256(data).hexdigest()
+
+_SAFE_MODE_ACTIVE: bool = False
+
+
+def is_safe_mode_active() -> bool:
+    """Return whether the NLP pipeline is currently running in lexicon safe mode."""
+    return _SAFE_MODE_ACTIVE
+
+
+def _set_safe_mode_active(active: bool) -> None:
+    global _SAFE_MODE_ACTIVE
+    _SAFE_MODE_ACTIVE = bool(active)
 
 
 def _parse_lexicon_raw(
@@ -314,6 +332,15 @@ def _load_markets_ids(path: Path | None) -> frozenset[str]:
         return frozenset()
 
 
+def _infer_safe_mode_dir(lexicon_dir: Path) -> Path:
+    """Infer the built-in safe-mode lexicon directory from the lexicon dir."""
+    if lexicon_dir.name.endswith(".canary"):
+        return lexicon_dir.with_name(lexicon_dir.name + "_safe_mode")
+    if lexicon_dir.name == "lexicon":
+        return lexicon_dir.parent / "lexicon_safe_mode"
+    return lexicon_dir.parent / (lexicon_dir.name + "_safe_mode")
+
+
 # ── LexiconStore ───────────────────────────────────────────────────────────
 
 # Map from lexicon filename to the ``kind`` string embedded in AliasHit.
@@ -325,6 +352,7 @@ _KIND_FOR_FILE: dict[str, str] = {
     "leagues.tr.yaml": "league",
     "competitions.tr.yaml": "competition",
     "markets.tr.yaml": "market",
+    "negation_markers.tr.yaml": "negation",
     "dialects.tr.yaml": "dialect",
     "entities_negative.tr.yaml": "entity_negative",
     # Locale-keyed variants (§10.19 — symlinks for forward compatibility):
@@ -333,21 +361,132 @@ _KIND_FOR_FILE: dict[str, str] = {
     "leagues.tr-TR.yaml": "league",
     "competitions.tr-TR.yaml": "competition",
     "markets.tr-TR.yaml": "market",
+    "negation_markers.tr-TR.yaml": "negation",
     "dialects.tr-TR.yaml": "dialect",
     "entities_negative.tr-TR.yaml": "entity_negative",
 }
+
+
+def _normalize_affix_value(value: Any) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        return text if text else None
+    if isinstance(value, dict):
+        raw = value.get("value")
+        if isinstance(raw, str):
+            text = raw.strip()
+            return text if text else None
+    return None
+
+
+def _normalize_season_value(value: Any) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        return text if text else None
+    return None
+
+
+def _is_valid_for_active_season(
+    item: Any,
+    active_season: str | None,
+) -> bool:
+    if active_season is None or not active_season.strip():
+        return True
+    if not isinstance(item, dict):
+        return True
+    valid_from = _normalize_season_value(item.get("valid_from_season"))
+    valid_until = _normalize_season_value(item.get("valid_until_season"))
+    if valid_from and active_season < valid_from:
+        return False
+    if valid_until and active_season > valid_until:
+        return False
+    return True
+
+
+def _extract_affix_values(
+    entry: dict[str, Any],
+    active_season: str | None,
+) -> tuple[list[str], list[str]]:
+    prefixes: list[str] = []
+    suffixes: list[str] = []
+    affixes = entry.get("affixes")
+    if not isinstance(affixes, dict):
+        return prefixes, suffixes
+
+    for side in ("prefix", "suffix"):
+        raw_values = affixes.get(side)
+        if not isinstance(raw_values, list):
+            continue
+        target = prefixes if side == "prefix" else suffixes
+        for item in raw_values:
+            if not _is_valid_for_active_season(item, active_season):
+                continue
+            normalized = _normalize_affix_value(item)
+            if normalized:
+                target.append(normalized)
+    return prefixes, suffixes
+
+
+def _build_affix_stripped_variants(
+    alias: str,
+    prefixes: list[str],
+    suffixes: list[str],
+) -> list[str]:
+    alias_str = alias.strip()
+    if not alias_str:
+        return []
+
+    variants: list[str] = []
+    alias_norm = lowercase_tr(alias_str)
+
+    for prefix in prefixes:
+        prefix_norm = lowercase_tr(prefix)
+        prefix_marker = f"{prefix_norm} "
+        if alias_norm.startswith(prefix_marker):
+            variants.append(alias_str[len(prefix) :].lstrip())
+
+    for suffix in suffixes:
+        suffix_norm = lowercase_tr(suffix)
+        suffix_marker = f" {suffix_norm}"
+        if alias_norm.endswith(suffix_marker):
+            variants.append(alias_str[: -len(suffix)].rstrip())
+
+    for prefix in prefixes:
+        prefix_norm = lowercase_tr(prefix)
+        prefix_marker = f"{prefix_norm} "
+        if not alias_norm.startswith(prefix_marker):
+            continue
+        inner = alias_str[len(prefix) :].lstrip()
+        inner_norm = lowercase_tr(inner)
+        for suffix in suffixes:
+            suffix_norm = lowercase_tr(suffix)
+            suffix_marker = f" {suffix_norm}"
+            if inner_norm.endswith(suffix_marker):
+                variants.append(inner[: -len(suffix)].rstrip())
+
+    # Deduplicate while preserving deterministic order.
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for variant in variants:
+        if variant and variant not in seen:
+            seen.add(variant)
+            deduped.append(variant)
+    return deduped
 
 
 def _build_alias_index(
     entries: list[dict[str, Any]],
     lexicon_version: str,
     kind: str,
+    active_season: str | None = None,
 ) -> "dict[str, AliasHit]":
     """Build a flat alias-string → :class:`AliasHit` lookup dict.
 
     Collects all strings from the ``names`` and ``aliases`` list-fields of
     each entry, plus the ``token`` field used by
     ``dialects.tr.yaml`` / ``entities_negative.tr.yaml``.
+    Sponsor-prefix affixes are filtered by ``active_season`` when present.
+    Historical aliases are indexed with ``historical_alias_season`` metadata.
     Non-dict entries and empty / non-string alias values are silently skipped.
     """
     index: dict[str, AliasHit] = {}
@@ -355,22 +494,59 @@ def _build_alias_index(
         if not isinstance(entry, dict):
             continue
         canonical_id = str(entry.get("canonical_id", ""))
-        hit = AliasHit(
+        prefixes, suffixes = _extract_affix_values(entry, active_season)
+
+        def _index_value(value: str, hit: AliasHit) -> None:
+            if not value:
+                return
+            index[value] = hit
+            for variant in _build_affix_stripped_variants(value, prefixes, suffixes):
+                index[variant] = hit
+
+        base_hit = AliasHit(
             canonical_id=canonical_id,
             kind=kind,
             lexicon_version=lexicon_version,
         )
+
         for field_name in ("names", "aliases"):
             for alias in entry.get(field_name, []) or []:
                 if alias and isinstance(alias, str):
                     stripped = alias.strip()
                     if stripped:
-                        index[stripped] = hit
+                        _index_value(stripped, base_hit)
+
+        historical_aliases = entry.get("historical_aliases")
+        if isinstance(historical_aliases, list):
+            for raw_alias in historical_aliases:
+                if isinstance(raw_alias, dict):
+                    alias_text = raw_alias.get("value")
+                    alias_season = _normalize_season_value(raw_alias.get("season"))
+                elif isinstance(raw_alias, str):
+                    alias_text = raw_alias
+                    alias_season = None
+                else:
+                    continue
+                if not isinstance(alias_text, str):
+                    continue
+                stripped = alias_text.strip()
+                if not stripped:
+                    continue
+                _index_value(
+                    stripped,
+                    AliasHit(
+                        canonical_id=canonical_id,
+                        kind=kind,
+                        lexicon_version=lexicon_version,
+                        historical_alias_season=alias_season,
+                    ),
+                )
+
         token = entry.get("token")
         if token and isinstance(token, str):
             stripped = token.strip()
             if stripped:
-                index[stripped] = hit
+                _index_value(stripped, base_hit)
     return index
 
 
@@ -418,8 +594,10 @@ class _LoadedFile:
 _NO_CANONICAL_ID_FILES: frozenset[str] = frozenset({
     "dialects.tr.yaml",
     "entities_negative.tr.yaml",
+    "negation_markers.tr.yaml",
     "dialects.tr-TR.yaml",
     "entities_negative.tr-TR.yaml",
+    "negation_markers.tr-TR.yaml",
 })
 
 # Debounce interval for repeated ``lexicon_unreadable`` alerts.
@@ -475,6 +653,8 @@ class LexiconStore:
         max_edit_distance: int = 2,
         markets_path: Path | None = None,
         league_catalog_ids: frozenset[str] | None = None,
+        safe_mode_dir: Path | None = None,
+        safe_mode_enabled: bool = True,
         clock_mono: Callable[[], float] | None = None,
         clock_iso: Callable[[], str] | None = None,
         new_id: Callable[[], str] | None = None,
@@ -488,6 +668,9 @@ class LexiconStore:
         self._max_edit_distance = max(1, min(2, int(max_edit_distance)))
         self._markets_path = markets_path
         self._league_catalog_ids = league_catalog_ids
+        self._safe_mode_dir = safe_mode_dir or _infer_safe_mode_dir(lexicon_dir)
+        self._safe_mode_enabled = bool(safe_mode_enabled)
+        self._safe_mode_active = False
         self._clock_mono = clock_mono if clock_mono is not None else time.monotonic
         self._clock_iso = clock_iso if clock_iso is not None else _utc_iso
         self._new_id = new_id if new_id is not None else _new_uuid
@@ -529,13 +712,29 @@ class LexiconStore:
 
     @classmethod
     def from_cfg(cls, cfg: object, *, canary: bool = False, **kwargs) -> "LexiconStore":
-        return cls(cls._resolve_lexicon_dir(cfg, canary=canary), **kwargs)
+        safe_mode_enabled = bool(getattr(cfg, "nlp_safe_mode_fallback_enabled", True))
+        safe_mode_dir = None
+        if safe_mode_enabled:
+            base_dir = Path(getattr(cfg, "nlp_lexicon_dir", "ai/nlp/lexicon"))
+            safe_mode_dir = base_dir.parent / (base_dir.name + "_safe_mode")
+        return cls(
+            cls._resolve_lexicon_dir(cfg, canary=canary),
+            safe_mode_dir=safe_mode_dir,
+            safe_mode_enabled=safe_mode_enabled,
+            **kwargs,
+        )
 
     @property
     def lexicon_version_id(self) -> str:
         """Return the current lexicon snapshot identifier."""
         with self._lock:
             return self._lexicon_version_id
+
+    @property
+    def safe_mode_active(self) -> bool:
+        """Return true when the store is currently serving the safe-mode lexicon."""
+        with self._lock:
+            return self._safe_mode_active
 
     @staticmethod
     def _compute_snapshot_id(data: dict[str, "_LoadedFile"]) -> str:
@@ -546,6 +745,108 @@ class LexiconStore:
         if not items:
             return ""
         return hashlib.sha256("|".join(items).encode("utf-8")).hexdigest()
+
+    def _load_shadow(
+        self,
+        directory: Path,
+        cfg: Config,
+        *,
+        skip_feed_signature: bool = False,
+    ) -> tuple[
+        dict[str, _LoadedFile],
+        list[str],
+        list[str],
+        list[str],
+        list[str],
+    ]:
+        """Load a shadow lexicon snapshot from *directory* without swapping it in."""
+        if not directory.exists():
+            return {}, [f"{directory}: directory does not exist"], [], [], []
+
+        yaml_files = sorted(
+            f for f in directory.glob("*.tr.yaml") if not f.name.startswith("_")
+        )
+        if not yaml_files:
+            return {}, [f"{directory}: no lexicon files found"], [], [], []
+
+        shadow: dict[str, _LoadedFile] = {}
+        load_errors: list[str] = []
+        schema_too_new_errors: list[str] = []
+        signature_warn_files: list[str] = []
+        signature_enforce_files: list[str] = []
+
+        hmac_keys = {}
+        if cfg.nlp_lexicon_source == "feed" and not skip_feed_signature:
+            hmac_keys = _load_lexicon_feed_hmac_keys(cfg)
+
+        for yaml_file in yaml_files:
+            try:
+                mtime_ns = yaml_file.stat().st_mtime_ns
+                raw_bytes = yaml_file.read_bytes()
+                sha256 = _compute_sha256(raw_bytes)
+                raw_text = raw_bytes.decode("utf-8")
+
+                effective_mode = "off" if skip_feed_signature else cfg.nlp_lexicon_feed_signature_required
+                if cfg.nlp_lexicon_source == "feed" and yaml_file.name in _SENSITIVE_LEXICON_FILES:
+                    effective_mode = "enforce"
+                if cfg.nlp_lexicon_source == "feed" and effective_mode != "off":
+                    signature = None
+                    signature_path = _signature_file_for(yaml_file)
+                    if signature_path.exists():
+                        try:
+                            signature = signature_path.read_text(encoding="utf-8").strip()
+                        except OSError:
+                            signature = None
+
+                    if signature is None or not _valid_hex_signature(signature):
+                        if effective_mode == "enforce":
+                            signature_enforce_files.append(yaml_file.name)
+                            load_errors.append(
+                                f"{yaml_file.name}: lexicon feed signature missing or malformed"
+                            )
+                            continue
+                        signature_warn_files.append(yaml_file.name)
+                    else:
+                        if not _verify_lexicon_feed_signature(raw_bytes, signature, hmac_keys):
+                            if effective_mode == "enforce":
+                                signature_enforce_files.append(yaml_file.name)
+                                load_errors.append(
+                                    f"{yaml_file.name}: lexicon feed signature invalid"
+                                )
+                                continue
+                            signature_warn_files.append(yaml_file.name)
+
+                meta, entries = _parse_lexicon_raw(
+                    yaml_file.name,
+                    raw_text,
+                    max_supported_schema_version=cfg.nlp_lexicon_feed_max_supported_schema_version,
+                )
+                kind = _KIND_FOR_FILE.get(yaml_file.name, "unknown")
+                alias_index = _build_alias_index(
+                    entries,
+                    meta.lexicon_version,
+                    kind,
+                    active_season=cfg.league_catalog_active_season.strip() or None,
+                )
+                shadow[yaml_file.name] = _LoadedFile(
+                    meta=meta,
+                    entries=entries,
+                    mtime_ns=mtime_ns,
+                    sha256=sha256,
+                    alias_index=alias_index,
+                )
+            except LexiconFeedSchemaTooNewError as exc:
+                schema_too_new_errors.append(f"{yaml_file.name}: {exc}")
+            except LexiconSchemaError as exc:
+                load_errors.append(f"{yaml_file.name}: {exc}")
+            except yaml.YAMLError as exc:
+                load_errors.append(f"{yaml_file.name}: YAML parse error: {exc}")
+            except UnicodeDecodeError as exc:
+                load_errors.append(f"{yaml_file.name}: UTF-8 decode error: {exc}")
+            except OSError as exc:
+                load_errors.append(f"{yaml_file.name}: I/O error: {exc}")
+
+        return shadow, load_errors, schema_too_new_errors, signature_warn_files, signature_enforce_files
 
     # ── Public interface ───────────────────────────────────────────────────
 
@@ -607,84 +908,38 @@ class LexiconStore:
         if not changed:
             return alerts
 
-        # ── Shadow load ───────────────────────────────────────────────────
-        # Read each file's bytes once: compute SHA256 and decode to text in a
-        # single pass. This avoids a second read_text() call inside
-        # load_lexicon_file and prevents TOCTOU races for the SHA capture.
         cfg = Config()
-        hmac_keys = _load_lexicon_feed_hmac_keys(cfg)
-        shadow: dict[str, _LoadedFile] = {}
-        load_errors: list[str] = []
-        schema_too_new_errors: list[str] = []
-        signature_warn_files: list[str] = []
-        signature_enforce_files: list[str] = []
+        shadow, load_errors, schema_too_new_errors, signature_warn_files, signature_enforce_files = (
+            self._load_shadow(self._dir, cfg, skip_feed_signature=False)
+        )
+        safe_mode_active = False
+        primary_failed = bool(load_errors or schema_too_new_errors or signature_enforce_files)
 
-        for yaml_file in yaml_files:
-            try:
-                mtime_ns = yaml_file.stat().st_mtime_ns
-                raw_bytes = yaml_file.read_bytes()
-                sha256 = _compute_sha256(raw_bytes)
-                raw_text = raw_bytes.decode("utf-8")
-
-                signature_path = _signature_file_for(yaml_file)
-                effective_mode = cfg.nlp_lexicon_feed_signature_required
-                if yaml_file.name in _SENSITIVE_LEXICON_FILES:
-                    effective_mode = "enforce"
-
-                if cfg.nlp_lexicon_source == "feed" and effective_mode != "off":
-                    signature = None
-                    if signature_path.exists():
-                        try:
-                            signature = signature_path.read_text(encoding="utf-8").strip()
-                        except OSError:
-                            signature = None
-
-                    if signature is None or not _valid_hex_signature(signature):
-                        if effective_mode == "enforce":
-                            signature_enforce_files.append(yaml_file.name)
-                            load_errors.append(
-                                f"{yaml_file.name}: lexicon feed signature missing or malformed"
-                            )
-                            continue
-                        signature_warn_files.append(yaml_file.name)
-                    else:
-                        if not _verify_lexicon_feed_signature(raw_bytes, signature, hmac_keys):
-                            if effective_mode == "enforce":
-                                signature_enforce_files.append(yaml_file.name)
-                                load_errors.append(
-                                    f"{yaml_file.name}: lexicon feed signature invalid"
-                                )
-                                continue
-                            signature_warn_files.append(yaml_file.name)
-
-                meta, entries = _parse_lexicon_raw(
-                    yaml_file.name,
-                    raw_text,
-                    max_supported_schema_version=cfg.nlp_lexicon_feed_max_supported_schema_version,
+        if primary_failed and self._safe_mode_enabled and not self.is_loaded:
+            safe_shadow, safe_load_errors, safe_schema_too_new_errors, _, safe_enforce_files = (
+                self._load_shadow(self._safe_mode_dir, cfg, skip_feed_signature=True)
+            )
+            if not (safe_load_errors or safe_schema_too_new_errors or safe_enforce_files):
+                shadow = safe_shadow
+                load_errors = []
+                schema_too_new_errors = []
+                signature_warn_files = []
+                signature_enforce_files = []
+                primary_failed = False
+                safe_mode_active = True
+                alert = self._maybe_emit_alert(
+                    kind="nlp_safe_mode_active",
+                    severity="critical",
+                    subject=self._safe_mode_dir.name,
+                    reason=(
+                        "primary lexicon snapshot failed to load; "
+                        "booted fallback safe-mode lexicon snapshot"
+                    ),
                 )
-                kind = _KIND_FOR_FILE.get(yaml_file.name, "unknown")
-                alias_index = _build_alias_index(
-                    entries, meta.lexicon_version, kind
-                )
-                shadow[yaml_file.name] = _LoadedFile(
-                    meta=meta,
-                    entries=entries,
-                    mtime_ns=mtime_ns,
-                    sha256=sha256,
-                    alias_index=alias_index,
-                )
-            except LexiconFeedSchemaTooNewError as exc:
-                schema_too_new_errors.append(f"{yaml_file.name}: {exc}")
-            except LexiconSchemaError as exc:
-                load_errors.append(f"{yaml_file.name}: {exc}")
-            except yaml.YAMLError as exc:
-                load_errors.append(f"{yaml_file.name}: YAML parse error: {exc}")
-            except UnicodeDecodeError as exc:
-                load_errors.append(f"{yaml_file.name}: UTF-8 decode error: {exc}")
-            except OSError as exc:
-                load_errors.append(f"{yaml_file.name}: I/O error: {exc}")
+                if alert:
+                    alerts.append(alert)
 
-        if signature_warn_files:
+        if signature_warn_files and not primary_failed:
             alert = self._maybe_emit_alert(
                 kind="nlp_lexicon_feed_signature_invalid",
                 severity="warn",
@@ -697,54 +952,138 @@ class LexiconStore:
             if alert:
                 alerts.append(alert)
 
-        if signature_enforce_files:
-            alert = self._maybe_emit_alert(
-                kind="nlp_lexicon_feed_signature_invalid",
-                severity="critical",
-                subject=",".join(sorted(set(signature_enforce_files))),
-                reason=(
-                    "lexicon feed signature missing, malformed, or invalid; "
-                    "valid HMAC required"
-                ),
-            )
-            if alert:
-                alerts.append(alert)
-            return alerts
-
-        if schema_too_new_errors:
-            alert = self._maybe_emit_alert(
-                kind="nlp_lexicon_feed_schema_too_new",
-                severity="warn",
-                subject=",".join(
-                    sorted({e.split(":")[0] for e in schema_too_new_errors})
-                ),
-                reason="lexicon feed schema too new: "
-                + "; ".join(schema_too_new_errors[:5]),
-            )
-            if alert:
-                alerts.append(alert)
-            return alerts
-
-        if load_errors:
-            alert = self._maybe_emit_alert(
-                kind="lexicon_unreadable",
-                severity="error",
-                subject=",".join(sorted({e.split(":")[0] for e in load_errors})),
-                reason="lexicon load failed: " + "; ".join(load_errors[:5]),
-            )
-            if alert:
-                alerts.append(alert)
-            return alerts
-
-        # ── Cardinality cap (§10.2) ────────────────────────────────────────
-        # Defends against Phase 19 long-tail explosion silently bloating memory.
-        cap_errors: list[str] = []
-        for fname, loaded in sorted(shadow.items()):
-            count = len(loaded.entries)
-            if count > self._max_entries_per_file:
-                cap_errors.append(
-                    f"{fname}: {count} entries exceeds cap {self._max_entries_per_file}"
+        if primary_failed:
+            if signature_warn_files:
+                alert = self._maybe_emit_alert(
+                    kind="nlp_lexicon_feed_signature_invalid",
+                    severity="warn",
+                    subject=",".join(sorted(set(signature_warn_files))),
+                    reason=(
+                        "lexicon feed signature missing, malformed, or invalid; "
+                        "valid HMAC required for enforce mode"
+                    ),
                 )
+                if alert:
+                    alerts.append(alert)
+
+            if signature_enforce_files:
+                alert = self._maybe_emit_alert(
+                    kind="nlp_lexicon_feed_signature_invalid",
+                    severity="critical",
+                    subject=",".join(sorted(set(signature_enforce_files))),
+                    reason=(
+                        "lexicon feed signature missing, malformed, or invalid; "
+                        "valid HMAC required"
+                    ),
+                )
+                if alert:
+                    alerts.append(alert)
+                return alerts
+
+            if schema_too_new_errors:
+                alert = self._maybe_emit_alert(
+                    kind="nlp_lexicon_feed_schema_too_new",
+                    severity="warn",
+                    subject=",".join(
+                        sorted({e.split(":")[0] for e in schema_too_new_errors})
+                    ),
+                    reason="lexicon feed schema too new: "
+                    + "; ".join(schema_too_new_errors[:5]),
+                )
+                if alert:
+                    alerts.append(alert)
+                return alerts
+
+            if load_errors:
+                alert = self._maybe_emit_alert(
+                    kind="lexicon_unreadable",
+                    severity="error",
+                    subject=",".join(sorted({e.split(":")[0] for e in load_errors})),
+                    reason="lexicon load failed: " + "; ".join(load_errors[:5]),
+                )
+                if alert:
+                    alerts.append(alert)
+                return alerts
+
+        if self._safe_mode_active and not safe_mode_active:
+            self._safe_mode_active = False
+            _set_safe_mode_active(False)
+            alert = self._maybe_emit_alert(
+                kind="nlp_safe_mode_exited",
+                severity="info",
+                subject=self._dir.name,
+                reason="primary lexicon snapshot recovered; exited safe-mode fallback",
+            )
+            if alert:
+                alerts.append(alert)
+
+        def _inspect_shadow(snapshot: dict[str, _LoadedFile]) -> tuple[list[str], list[str], list[str]]:
+            cap_errors: list[str] = []
+            for fname, loaded in sorted(snapshot.items()):
+                count = len(loaded.entries)
+                if count > self._max_entries_per_file:
+                    cap_errors.append(
+                        f"{fname}: {count} entries exceeds cap {self._max_entries_per_file}"
+                    )
+            if cap_errors:
+                return cap_errors, [], []
+
+            if self._max_rss_mb > 0:
+                rss_kb = self._rss_kb_fn()
+                if rss_kb > self._max_rss_mb * 1024:
+                    return [
+                        f"rss_budget: {rss_kb // 1024} MB > {self._max_rss_mb} MB"
+                    ], [], []
+
+            markets_ids = self._get_markets_ids()
+            validation_errors: list[str] = []
+            for fname, loaded in sorted(snapshot.items()):
+                errs = self._validate_entries(fname, loaded.entries, markets_ids)
+                validation_errors.extend(errs)
+
+            xref_errors: list[str] = []
+            if cfg.nlp_lexicon_swap_atomicity == "all_or_nothing":
+                from nlp.lexicon._xref import validate_xref  # noqa: PLC0415
+                xref_errors = validate_xref(snapshot)
+
+            return cap_errors, validation_errors, xref_errors
+
+        cap_errors, validation_errors, xref_errors = _inspect_shadow(shadow)
+        if (
+            (cap_errors or validation_errors or xref_errors)
+            and self._safe_mode_enabled
+            and not self.is_loaded
+            and not safe_mode_active
+        ):
+            safe_shadow, safe_load_errors, safe_schema_too_new_errors, _, safe_enforce_files = (
+                self._load_shadow(self._safe_mode_dir, cfg, skip_feed_signature=True)
+            )
+            if not (safe_load_errors or safe_schema_too_new_errors or safe_enforce_files):
+                safe_cap_errors, safe_validation_errors, safe_xref_errors = _inspect_shadow(
+                    safe_shadow
+                )
+                if not (safe_cap_errors or safe_validation_errors or safe_xref_errors):
+                    shadow = safe_shadow
+                    safe_mode_active = True
+                    load_errors = []
+                    schema_too_new_errors = []
+                    signature_warn_files = []
+                    signature_enforce_files = []
+                    cap_errors = safe_cap_errors
+                    validation_errors = safe_validation_errors
+                    xref_errors = safe_xref_errors
+                    alert = self._maybe_emit_alert(
+                        kind="nlp_safe_mode_active",
+                        severity="critical",
+                        subject=self._safe_mode_dir.name,
+                        reason=(
+                            "primary lexicon snapshot failed validation at boot; "
+                            "booted fallback safe-mode lexicon snapshot"
+                        ),
+                    )
+                    if alert:
+                        alerts.append(alert)
+
         if cap_errors:
             alert = self._maybe_emit_alert(
                 kind="dictionary_overflow",
@@ -755,33 +1094,6 @@ class LexiconStore:
             if alert:
                 alerts.append(alert)
             return alerts
-
-        # ── RSS budget check (§10.2 Bounded memory) ───────────────────────
-        # Validate total process RSS after shadow alias indices are in memory.
-        # max_rss_mb=0 disables the check (useful in tests and CI without
-        # tight memory constraints).
-        if self._max_rss_mb > 0:
-            rss_kb = self._rss_kb_fn()
-            if rss_kb > self._max_rss_mb * 1024:
-                alert = self._maybe_emit_alert(
-                    kind="dictionary_overflow",
-                    severity="error",
-                    subject="rss_budget",
-                    reason=(
-                        f"lexicon RSS budget exceeded: "
-                        f"{rss_kb // 1024} MB > {self._max_rss_mb} MB"
-                    ),
-                )
-                if alert:
-                    alerts.append(alert)
-                return alerts
-
-        # ── Validate canonical IDs ─────────────────────────────────────────
-        markets_ids = self._get_markets_ids()
-        validation_errors: list[str] = []
-        for fname, loaded in sorted(shadow.items()):
-            errs = self._validate_entries(fname, loaded.entries, markets_ids)
-            validation_errors.extend(errs)
 
         if validation_errors:
             alert = self._maybe_emit_alert(
@@ -797,27 +1109,21 @@ class LexiconStore:
                 alerts.append(alert)
             return alerts
 
-        # ── Cross-file referential integrity validation (§10.21.3) ────────
-        # Under all_or_nothing swap mode, validate cross-file references
-        # (player→team, team→league, competition→parent, dialects→entities,
-        # entities_negative→all) before committing the shadow snapshot.
-        if cfg.nlp_lexicon_swap_atomicity == "all_or_nothing":
-            from nlp.lexicon._xref import validate_xref  # noqa: PLC0415
-            xref_errors = validate_xref(shadow)
-            if xref_errors:
-                alert = self._maybe_emit_alert(
-                    kind="nlp_lexicon_atomic_swap_failed",
-                    severity="error",
-                    subject=",".join(
-                        sorted({e.split(".")[0] for e in xref_errors})
-                    ),
-                    reason="cross-file referential integrity failed: "
-                    + "; ".join(xref_errors[:5]),
-                )
-                if alert:
-                    alerts.append(alert)
-                return alerts
+        if xref_errors:
+            alert = self._maybe_emit_alert(
+                kind="nlp_lexicon_atomic_swap_failed",
+                severity="error",
+                subject=",".join(
+                    sorted({e.split(".")[0] for e in xref_errors})
+                ),
+                reason="cross-file referential integrity failed: "
+                + "; ".join(xref_errors[:5]),
+            )
+            if alert:
+                alerts.append(alert)
+            return alerts
 
+        # ── Build SymSpellIndex ────────────────────────────────────────────
         # ── Build SymSpellIndex ────────────────────────────────────────────
         # §10.21.2 Symspell dictionary lifetime: built once at boot from
         # current lexicon snapshot; on lexicon swap, REBUILT (not mutated).
@@ -849,7 +1155,9 @@ class LexiconStore:
             self._data = shadow
             self._symspell = new_symspell
             self._lexicon_version_id = new_lexicon_version_id
-            
+            self._safe_mode_active = safe_mode_active
+            _set_safe_mode_active(safe_mode_active)
+
             # in_flight_count proxy: number of old generations currently
             # retained (each represents a snapshot still potentially
             # referenced by in-flight requests).

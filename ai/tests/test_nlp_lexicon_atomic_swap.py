@@ -16,7 +16,8 @@ import time
 import pytest
 
 from common.config import Config
-from nlp.lexicon_loader import LexiconStore
+from nlp.lexicon_loader import LexiconStore, _set_safe_mode_active, is_safe_mode_active
+from swarm.agents.nlp import NlpAnswerAgent
 
 
 @pytest.fixture
@@ -212,6 +213,239 @@ entries:
     # Version should also be old
     assert current_players[0].lexicon_version == "1.0.0", \
         f"Expected old version 1.0.0, got {current_players[0].lexicon_version}"
+
+
+def _create_safe_mode_snapshot(base_dir: Path, safe_mode_dir: Path) -> None:
+    safe_mode_dir.mkdir()
+    for src_file in sorted(base_dir.glob("*.tr.yaml")):
+        shutil.copy2(src_file, safe_mode_dir / src_file.name)
+
+
+def test_nlp_safe_mode_boot_falls_back_on_initial_primary_failure(
+    temp_lexicon_dir,
+    cfg,
+    tmp_path,
+):
+    primary_dir = tmp_path / "primary_lexicon"
+    primary_dir.mkdir()
+    for src_file in sorted(temp_lexicon_dir.glob("*.tr.yaml")):
+        shutil.copy2(src_file, primary_dir / src_file.name)
+
+    # Corrupt players file so the primary snapshot cannot load.
+    bad_players_content = """_meta:
+  schema_version: 1
+  lexicon_version: "1.0.0"
+  generated_at_utc: "2026-05-31T12:00:00Z"
+  generator: "test"
+entries:
+  - canonical_id: "icardi"
+    team_canonical_id: "nonexistent_team"
+    names: ["Mauro Icardi"]
+"""
+    (primary_dir / "players.tr.yaml").write_text(bad_players_content, encoding="utf-8")
+
+    safe_mode_dir = tmp_path / "primary_lexicon_safe_mode"
+    _create_safe_mode_snapshot(temp_lexicon_dir, safe_mode_dir)
+
+    cfg.nlp_lexicon_dir = str(primary_dir)
+    cfg.nlp_safe_mode_fallback_enabled = True
+
+    store = LexiconStore.from_cfg(cfg, reload_s=1, max_rss_mb=0)
+    try:
+        alerts = store.maybe_reload()
+
+        assert store.is_loaded, f"Safe mode load should succeed, got alerts={alerts}"
+        assert store.safe_mode_active
+        assert is_safe_mode_active()
+
+        assert any(alert["kind"] == "nlp_safe_mode_active" for alert in alerts), (
+            f"Expected safe mode operator alert, got {alerts}"
+        )
+        assert store.get("players.tr.yaml") is not None
+    finally:
+        _set_safe_mode_active(False)
+
+
+def test_nlp_safe_mode_exits_atomically_on_primary_recovery(
+    temp_lexicon_dir,
+    cfg,
+    tmp_path,
+) -> None:
+    primary_dir = tmp_path / "primary_lexicon"
+    primary_dir.mkdir()
+    for src_file in sorted(temp_lexicon_dir.glob("*.tr.yaml")):
+        shutil.copy2(src_file, primary_dir / src_file.name)
+
+    bad_players_content = """_meta:
+  schema_version: 1
+  lexicon_version: "1.0.0"
+  generated_at_utc: "2026-05-31T12:00:00Z"
+  generator: "test"
+entries:
+  - canonical_id: "icardi"
+    team_canonical_id: "nonexistent_team"
+    names: ["Mauro Icardi"]
+"""
+    (primary_dir / "players.tr.yaml").write_text(bad_players_content, encoding="utf-8")
+
+    safe_mode_dir = tmp_path / "primary_lexicon_safe_mode"
+    _create_safe_mode_snapshot(temp_lexicon_dir, safe_mode_dir)
+
+    cfg.nlp_lexicon_dir = str(primary_dir)
+    cfg.nlp_safe_mode_fallback_enabled = True
+
+    store = LexiconStore.from_cfg(cfg, reload_s=1, max_rss_mb=0)
+    try:
+        alerts = store.maybe_reload()
+
+        assert store.is_loaded, f"Safe mode load should succeed, got alerts={alerts}"
+        assert store.safe_mode_active
+        assert is_safe_mode_active()
+        assert any(alert["kind"] == "nlp_safe_mode_active" for alert in alerts), (
+            f"Expected safe mode operator alert, got {alerts}"
+        )
+
+        time.sleep(0.2)
+        recovered_players_content = """_meta:
+  schema_version: 1
+  lexicon_version: "1.0.1"
+  generated_at_utc: "2026-05-31T13:00:00Z"
+  generator: "test"
+entries:
+  - canonical_id: "icardi"
+    team_canonical_id: "galatasaray"
+    names: ["Mauro Icardi"]
+"""
+        (primary_dir / "players.tr.yaml").write_text(
+            recovered_players_content,
+            encoding="utf-8",
+        )
+
+        time.sleep(1.1)
+        recovery_alerts = store.maybe_reload()
+
+        assert not store.safe_mode_active
+        assert not is_safe_mode_active()
+        assert any(alert["kind"] == "nlp_safe_mode_exited" for alert in recovery_alerts), (
+            f"Expected safe mode exit alert, got {recovery_alerts}"
+        )
+
+        players_meta, players = store.get("players.tr.yaml")
+        assert players_meta.lexicon_version == "1.0.1"
+        assert len(players) == 1
+        assert players[0]["canonical_id"] == "icardi"
+    finally:
+        _set_safe_mode_active(False)
+
+
+def test_nlp_safe_mode_engages_when_primary_lexicon_corrupt(
+    temp_lexicon_dir,
+    cfg,
+    tmp_path,
+) -> None:
+    test_nlp_safe_mode_boot_falls_back_on_initial_primary_failure(
+        temp_lexicon_dir,
+        cfg,
+        tmp_path,
+    )
+
+
+def test_nlp_safe_mode_serves_with_degraded_flag() -> None:
+    test_nlp_safe_mode_sets_degraded_flag_on_qa_answers()
+
+
+def test_nlp_safe_mode_lexicon_size_bounded(
+    temp_lexicon_dir,
+    cfg,
+    tmp_path,
+) -> None:
+    safe_mode_dir = tmp_path / "primary_lexicon_safe_mode"
+    _create_safe_mode_snapshot(temp_lexicon_dir, safe_mode_dir)
+
+    team_file = safe_mode_dir / "teams.tr.yaml"
+    assert team_file.exists(), "Safe-mode lexicon must include teams.tr.yaml"
+    team_count = sum(
+        1
+        for line in team_file.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("- canonical_id:")
+    )
+    assert team_count <= 100, f"Safe-mode lexicon must contain at most 100 teams, got {team_count}"
+
+    total_size = sum(
+        p.stat().st_size
+        for p in safe_mode_dir.rglob("*")
+        if p.is_file()
+    )
+    assert total_size <= 1 << 20, f"Safe-mode lexicon snapshot must be ≤ 1 MiB, got {total_size} bytes"
+
+    primary_dir = tmp_path / "primary_lexicon"
+    primary_dir.mkdir()
+    for src_file in sorted(temp_lexicon_dir.glob("*.tr.yaml")):
+        shutil.copy2(src_file, primary_dir / src_file.name)
+
+    # Corrupt the primary lexicon to force fallback.
+    bad_players_content = """_meta:
+  schema_version: 1
+  lexicon_version: "1.0.0"
+  generated_at_utc: "2026-05-31T12:00:00Z"
+  generator: "test"
+entries:
+  - canonical_id: "icardi"
+    team_canonical_id: "nonexistent_team"
+    names: ["Mauro Icardi"]
+"""
+    (primary_dir / "players.tr.yaml").write_text(bad_players_content, encoding="utf-8")
+
+    cfg.nlp_lexicon_dir = str(primary_dir)
+    cfg.nlp_safe_mode_fallback_enabled = True
+
+    store = LexiconStore.from_cfg(cfg, reload_s=1, max_rss_mb=0)
+    try:
+        alerts = store.maybe_reload()
+        assert store.is_loaded, f"Safe mode load should succeed, got alerts={alerts}"
+        assert store.safe_mode_active
+        assert is_safe_mode_active()
+        assert any(alert["kind"] == "nlp_safe_mode_active" for alert in alerts), (
+            f"Expected safe mode operator alert, got {alerts}"
+        )
+    finally:
+        _set_safe_mode_active(False)
+
+
+def test_nlp_safe_mode_sets_degraded_flag_on_qa_answers() -> None:
+    class _FakeAnswerAgent:
+        _apply_safe_mode_degradation = NlpAnswerAgent._apply_safe_mode_degradation
+
+    _set_safe_mode_active(True)
+    try:
+        payload = {
+            "request_id": "req-1",
+            "qa_correlation_id": "corr-1",
+            "intent": "summary",
+            "answer_text": "foo",
+            "kind": "summary",
+            "degraded": False,
+            "degraded_reason": "",
+            "citations": [],
+            "emitted_at": "2026-06-01T00:00:00Z",
+        }
+        agent = _FakeAnswerAgent()
+        agent._apply_safe_mode_degradation(payload)
+
+        assert payload["degraded"] is True
+        assert payload["degraded_reason"] == "lexicon_safe_mode_active"
+    finally:
+        _set_safe_mode_active(False)
+
+
+def test_nlp_dr_drill_runbook_sections_present() -> None:
+    from pathlib import Path
+
+    runbook = Path("docs/guides/nlp_runbook.md")
+    text = runbook.read_text(encoding="utf-8")
+    assert "Disaster recovery drill" in text
+    assert "Confirm the staging pod enters safe mode" in text
+    assert "Record the drill outcome in `docs/reports/nlp_dr_drill_YYYY-Q.md`" in text
 
 
 def test_nlp_refuses_lexicon_swap_on_feed_schema_too_new(

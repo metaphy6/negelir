@@ -5,17 +5,53 @@ _meta:
 entries:
   - context: time
     resolution: digit
+    keywords:
+      - saat
+      - dakika
+      - saniye
+      - ne zaman
+      - kaçta
   - context: scoring
     resolution: ordinal
+    keywords:
+      - gol
+      - skor
+      - puan
+      - maç skoru
   - context: cardinality
     resolution: raw_number
+    keywords:
+      - kaç
+      - kaç tane
+      - adet
+      - toplam
   - context: year
     resolution: year
+    keywords:
+      - yıl
+      - sezon
+      - tarih
+      - miladi
   - context: temperature
     resolution: digit
+    keywords:
+      - derece
+      - sıcaklık
   - context: attendance
     resolution: digit
+    keywords:
+      - seyirci
+      - katılım
+      - tribün
   - context: period
     resolution: ordinal
+    keywords:
+      - yarı
+      - devre
+      - tur
   - context: distance
     resolution: digit
+    keywords:
+      - kilometre
+      - metre
+      - mil

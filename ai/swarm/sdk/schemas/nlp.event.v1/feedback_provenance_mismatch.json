@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/feedback_provenance_mismatch",
+  "title": "nlp.event.v1{kind=feedback_provenance_mismatch}",
+  "description": "A qa.feedback.v1 payload was rejected because the accepted intent did not match the offered did-you-mean suggestions.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "offered_intents",
+    "accepted_intent"
+  ],
+  "properties": {
+    "kind": {
+      "const": "feedback_provenance_mismatch"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.dispatcher.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    },
+    "offered_intents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "accepted_intent": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

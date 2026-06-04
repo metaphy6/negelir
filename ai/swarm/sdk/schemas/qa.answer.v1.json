@@ -28,6 +28,11 @@
       "minLength": 1,
       "description": "Dispatch correlation id (§10.6); used for fan-out aggregation."
     },
+    "schema_version": {
+      "type": "integer",
+      "enum": [1, 2],
+      "description": "Envelope schema version. v2 adds optional compound-answer support via `parts`."
+    },
     "locale": {
       "type": "string",
       "enum": ["tr-TR"],
@@ -132,6 +137,86 @@
               "null"
             ],
             "description": "Calibration version semver for kind=prediction (§10.16)."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "parts": {
+      "type": "array",
+      "description": "Optional compound-answer parts for multi-subquery requests. Legacy consumers may ignore this and use the first part's body as the top-level answer_text.",
+      "items": {
+        "type": "object",
+        "required": [
+          "intent",
+          "body",
+          "citation"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "Intent for the subquery part."
+          },
+          "body": {
+            "type": "string",
+            "description": "Rendered Turkish answer text for the subquery part."
+          },
+          "citation": {
+            "type": "object",
+            "required": [
+              "kind",
+              "produced_at_utc"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "prediction",
+                  "fact",
+                  "fixture",
+                  "source"
+                ],
+                "description": "Citation kind for the subquery part."
+              },
+              "prediction_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Optional prediction id for kind=prediction citations."
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Optional source id for kind=source citations."
+              },
+              "produced_at_utc": {
+                "type": "string",
+                "description": "ISO-8601 UTC timestamp when the cited artifact was produced."
+              },
+              "model_versions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Optional predictor model versions for kind=prediction citations."
+              },
+              "calibration_version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Optional calibration version for kind=prediction citations."
+              }
+            },
+            "additionalProperties": false
+          },
+          "subquery_correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Traceable correlation id for the subquery result."
           }
         },
         "additionalProperties": false

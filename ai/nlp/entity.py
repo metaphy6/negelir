@@ -31,9 +31,14 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Sequence
+
+import yaml
+
+from common.config import cfg
 
 # CRF is optional (gracefully absent when pycrfsuite not installed or model missing)
 try:
@@ -50,7 +55,7 @@ from common.security.patterns import detect_pii
 
 # Entity kinds produced exclusively by the gazetteer
 GAZETTEER_KINDS: frozenset[str] = frozenset(
-    {"team", "player", "league", "competition", "market"}
+    {"team", "player", "league", "competition", "market", "role_prefix", "negation"}
 )
 
 # Entity kinds produced exclusively by the CRF
@@ -62,9 +67,11 @@ CRF_KINDS: frozenset[str] = frozenset(
 DEFAULT_KIND_PRIORITY: list[str] = [
     "team",
     "player",
+    "role_prefix",
     "league",
     "competition",
     "market",
+    "negation",
     "date",
     "time",
     "weekday",
@@ -94,9 +101,15 @@ _GAZETTEER_FILES: tuple[str, ...] = (
     "leagues.tr.yaml",
     "competitions.tr.yaml",
     "markets.tr.yaml",
+    "negation_markers.tr.yaml",
 )
 
 _NEGATIVE_FILE: str = "entities_negative.tr.yaml"
+_DOUBLE_NEGATION_PATH = Path(__file__).resolve().parent / "lang_tr" / "double_negation.tr.yaml"
+
+_NEGATION_SUFFIX_RE = re.compile(
+    r".*(?:mad[ıiue]|med[ıiue]|maz|mez|mıyor|miyor|muyor|mayacak|meyecek|mayan|meyen)$"
+)
 
 
 # ── Public types ───────────────────────────────────────────────────────────
@@ -178,6 +191,10 @@ class EntitySpan(NamedTuple):
         CRF spans).
     source:
         ``"gazetteer"`` or ``"crf"``.
+    historical_alias_season:
+        Optional season label for a historical alias entry.  Present only when
+        the span was matched against a historical sponsor alias and the caller
+        may emit an operator-facing event.
     """
 
     span_start: int
@@ -187,6 +204,7 @@ class EntitySpan(NamedTuple):
     confidence: float
     lexicon_version: str
     source: str
+    historical_alias_season: str = ""
 
 
 # ── Negative-rule index ────────────────────────────────────────────────────
@@ -195,8 +213,9 @@ class EntitySpan(NamedTuple):
 class _NegativeRule:
     """Parsed entry from entities_negative.tr.yaml."""
 
-    token: str             # normalized; trigger alias
-    requires_cotoken: str  # normalized; must be present for a hit to survive
+    token: str                # normalized; trigger alias
+    requires_cotokens: frozenset[str]  # normalized tokens that must appear for a hit to survive
+    requires_cotoken_radius: int = 0  # optional radius for the co-token search
     # Canonical IDs that this alias is ambiguous between (may be empty).
     # When non-empty and the rule fires, the alias is an AmbiguousHit.
     ambiguous_between: tuple[str, ...] = ()
@@ -213,28 +232,105 @@ def _load_negative_rules(store: LexiconStore) -> list[_NegativeRule]:
         if not isinstance(entry, dict):
             continue
         token = entry.get("token")
-        cotoken = entry.get("requires_cotoken")
-        if token and cotoken and isinstance(token, str) and isinstance(cotoken, str):
-            raw_ambig = entry.get("ambiguous_between")
-            ambig: tuple[str, ...] = ()
-            if isinstance(raw_ambig, list):
-                ambig = tuple(
-                    str(c) for c in raw_ambig if isinstance(c, str) and c.strip()
-                )
-            rules.append(
-                _NegativeRule(
-                    token=lowercase_tr(token.strip()),
-                    requires_cotoken=lowercase_tr(cotoken.strip()),
-                    ambiguous_between=ambig,
-                )
+        raw_cotoken = entry.get("requires_cotoken")
+        if not isinstance(token, str) or not token.strip() or raw_cotoken is None:
+            continue
+
+        cotokens: frozenset[str] = frozenset()
+        if isinstance(raw_cotoken, str):
+            normalized = lowercase_tr(raw_cotoken.strip())
+            if normalized:
+                cotokens = frozenset({normalized})
+        elif isinstance(raw_cotoken, list):
+            cotokens = frozenset(
+                lowercase_tr(str(tok).strip())
+                for tok in raw_cotoken
+                if isinstance(tok, str) and tok.strip()
             )
+
+        if not cotokens:
+            continue
+
+        raw_radius = entry.get("requires_cotoken_radius")
+        requires_cotoken_radius = 0
+        if isinstance(raw_radius, int) and raw_radius > 0:
+            requires_cotoken_radius = raw_radius
+
+        raw_ambig = entry.get("ambiguous_between")
+        ambig: tuple[str, ...] = ()
+        if isinstance(raw_ambig, list):
+            ambig = tuple(
+                str(c) for c in raw_ambig if isinstance(c, str) and c.strip()
+            )
+        rules.append(
+            _NegativeRule(
+                token=lowercase_tr(token.strip()),
+                requires_cotokens=cotokens,
+                requires_cotoken_radius=requires_cotoken_radius,
+                ambiguous_between=ambig,
+            )
+        )
     return rules
 
 
 # ── Gazetteer pass ─────────────────────────────────────────────────────────
 
+def _load_honorific_alias_index(path: Path | None = None) -> dict[str, AliasHit]:
+    """Load honorific role-prefix aliases from the Turkish language rule table."""
+    actual_path = Path(path) if path is not None else Path(cfg.nlp_lang_tr_dir) / "honorifics.tr.yaml"
+    if not actual_path.exists():
+        return {}
+
+    try:
+        raw = yaml.safe_load(actual_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+
+    if not isinstance(raw, dict):
+        return {}
+
+    meta = raw.get("_meta")
+    if not isinstance(meta, dict) or meta.get("schema_version") != 1:
+        return {}
+
+    table_version = str(meta.get("table_version", "1.0.0")).strip() or "1.0.0"
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        return {}
+
+    index: dict[str, AliasHit] = {}
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        role_class = item.get("role_class")
+        if not isinstance(role_class, str) or not role_class.strip():
+            continue
+        role_class = role_class.strip()
+
+        honorifics: list[str] = []
+        primary = item.get("honorific")
+        if isinstance(primary, str) and primary.strip():
+            honorifics.append(primary.strip())
+        aliases = item.get("aliases")
+        if isinstance(aliases, list):
+            for alias in aliases:
+                if isinstance(alias, str) and alias.strip():
+                    honorifics.append(alias.strip())
+
+        for honorific in honorifics:
+            key = " ".join(lowercase_tr(honorific).split())
+            if key:
+                index[key] = AliasHit(
+                    canonical_id=role_class,
+                    kind="role_prefix",
+                    lexicon_version=table_version,
+                )
+    return index
+
+
 def _build_combined_alias_index(
     store: LexiconStore,
+    honorific_aliases: dict[str, AliasHit] | None = None,
 ) -> dict[str, AliasHit]:
     """Merge alias indices from all gazetteer lexicon files into one dict.
 
@@ -242,7 +338,7 @@ def _build_combined_alias_index(
     input is consistent (§10.1 pipeline already lowercases tokens).
 
     In case of collision the first file in ``_GAZETTEER_FILES`` wins (order is
-    ``teams → players → leagues → competitions → markets``).
+    ``teams → players → leagues → competitions → markets → negation``).
     """
     combined: dict[str, AliasHit] = {}
     for fname in reversed(_GAZETTEER_FILES):  # reversed so first file wins on conflict
@@ -253,10 +349,130 @@ def _build_combined_alias_index(
             key = lowercase_tr(alias.strip())
             if key:
                 combined[key] = hit
+    if honorific_aliases is not None:
+        for alias, hit in sorted(honorific_aliases.items()):
+            key = lowercase_tr(alias.strip())
+            if key and key not in combined:
+                combined[key] = hit
     return combined
 
 
+def _player_entries(store: LexiconStore) -> list[dict[str, Any]]:
+    result = store.get("players.tr.yaml")
+    if result is None:
+        result = store.get("players.tr-TR.yaml")
+    if result is None:
+        return []
+    _, entries = result
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _player_candidate_ids(token: str, entries: list[dict[str, Any]], by_last_name: bool = False) -> set[str]:
+    normalized = lowercase_tr(token).strip()
+    if not normalized:
+        return set()
+
+    candidates: set[str] = set()
+    for entry in entries:
+        canonical_id = str(entry.get("canonical_id", "")).strip()
+        if not canonical_id:
+            continue
+
+        for field_name in ("names", "aliases"):
+            raw_values = entry.get(field_name, [])
+            if not isinstance(raw_values, list):
+                continue
+            for value in raw_values:
+                if not isinstance(value, str):
+                    continue
+                alias = lowercase_tr(value.strip())
+                if not alias:
+                    continue
+                if by_last_name:
+                    tokens = alias.split()
+                    if tokens and tokens[-1] == normalized:
+                        candidates.add(canonical_id)
+                elif alias == normalized:
+                    candidates.add(canonical_id)
+
+        if not by_last_name:
+            token_value = entry.get("token")
+            if isinstance(token_value, str) and lowercase_tr(token_value.strip()) == normalized:
+                candidates.add(canonical_id)
+
+    return candidates
+
+
+def _choose_player_candidate(
+    candidate_ids: set[str],
+    team_ids: set[str],
+    entries: list[dict[str, Any]],
+) -> str | None:
+    if len(candidate_ids) == 1:
+        return next(iter(candidate_ids))
+    if not team_ids:
+        return None
+
+    team_matched: list[str] = []
+    for entry in entries:
+        canonical_id = str(entry.get("canonical_id", "")).strip()
+        if canonical_id not in candidate_ids:
+            continue
+        team_id = str(entry.get("team_canonical_id", "")).strip()
+        if team_id in team_ids:
+            team_matched.append(canonical_id)
+
+    if len(team_matched) == 1:
+        return team_matched[0]
+    return None
+
+
+def _resolve_player_for_role_prefix(
+    tokens: Sequence[str],
+    spans: list[EntitySpan],
+    store: LexiconStore,
+) -> str | None:
+    role_span = next((span for span in spans if span.kind == "role_prefix"), None)
+    if role_span is None:
+        return None
+
+    candidate_index = role_span.span_end
+    if candidate_index >= len(tokens):
+        return None
+    if any(
+        span.span_start <= candidate_index < span.span_end and span.kind != "player"
+        for span in spans
+    ):
+        return None
+
+    player_entries = _player_entries(store)
+    if not player_entries:
+        return None
+
+    team_ids = {
+        str(span.canonical_id)
+        for span in spans
+        if span.kind == "team" and span.canonical_id
+    }
+
+    exact_ids = _player_candidate_ids(tokens[candidate_index], player_entries, by_last_name=False)
+    chosen = _choose_player_candidate(exact_ids, team_ids, player_entries)
+    if chosen is not None:
+        return chosen
+
+    last_name_ids = _player_candidate_ids(tokens[candidate_index], player_entries, by_last_name=True)
+    return _choose_player_candidate(last_name_ids, team_ids, player_entries)
+
 _PHONETIC_ALIASES_PATH = Path(__file__).resolve().parent / "lang_tr" / "phonetic_aliases.tr.yaml"
+_TEAM_NICKNAMES_PATH = Path(__file__).resolve().parent / "lang_tr" / "team_nicknames.tr.yaml"
+
+
+@dataclass(frozen=True)
+class TeamNickname:
+    alias_form: str
+    canonical_id: str
+    requires_co_token: bool
+    table_version: str
 
 
 @dataclass(frozen=True)
@@ -316,6 +532,231 @@ def _load_phonetic_aliases(path: Path | None = None) -> tuple[PhoneticAlias, ...
             )
         )
     return tuple(aliases)
+
+
+def _load_team_nicknames(path: Path | None = None) -> tuple[TeamNickname, ...]:
+    """Load the curated team nickname allow-list for §10.24.12."""
+    path = path or _TEAM_NICKNAMES_PATH
+    if not path.exists():
+        return ()
+
+    try:
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, ImportError, yaml.YAMLError):
+        return ()
+    if not isinstance(data, dict):
+        return ()
+
+    meta = data.get("_meta")
+    if not isinstance(meta, dict):
+        return ()
+    if meta.get("schema_version") != 1:
+        return ()
+
+    table_version = str(meta.get("table_version", "1.0.0")).strip() or "1.0.0"
+    aliases: list[TeamNickname] = []
+    for item in data.get("aliases", []) if isinstance(data.get("aliases", []), list) else []:
+        if not isinstance(item, dict):
+            continue
+        alias_form = item.get("alias_form")
+        canonical_id = item.get("canonical_id")
+        if not isinstance(alias_form, str) or not alias_form.strip():
+            continue
+        if not isinstance(canonical_id, str) or not canonical_id.strip():
+            continue
+        requires_co_token = bool(item.get("requires_co_token", False))
+        aliases.append(
+            TeamNickname(
+                alias_form=alias_form.strip(),
+                canonical_id=canonical_id.strip(),
+                requires_co_token=requires_co_token,
+                table_version=table_version,
+            )
+        )
+    return tuple(aliases)
+
+
+def _build_team_nickname_map(
+    team_nicknames: tuple[TeamNickname, ...],
+    store: LexiconStore,
+) -> dict[str, TeamNickname]:
+    """Build a small alias map for off-line team nickname backtracking."""
+    canonical_kind = _canonical_kind_map(store)
+    result: dict[str, TeamNickname] = {}
+    for alias in team_nicknames:
+        if canonical_kind.get(alias.canonical_id) != "team":
+            continue
+        normalized = " ".join(lowercase_tr(alias.alias_form).split())
+        if not normalized or " " not in normalized:
+            continue
+        result[normalized] = alias
+        folded = _ascii_fold_tr(normalized)
+        if folded != normalized:
+            result[folded] = alias
+    return result
+
+
+def _inject_team_nicknames(
+    alias_index: dict[str, AliasHit],
+    store: LexiconStore,
+    team_nicknames: tuple[TeamNickname, ...],
+) -> dict[str, TeamNickname]:
+    """Merge the team-nickname allow-list into the gazetteer alias index."""
+    canonical_kind = _canonical_kind_map(store)
+    matches: dict[str, TeamNickname] = {}
+    for alias in team_nicknames:
+        if canonical_kind.get(alias.canonical_id) != "team":
+            continue
+        normalized = " ".join(lowercase_tr(alias.alias_form).split())
+        if not normalized:
+            continue
+        alias_index[normalized] = AliasHit(
+            canonical_id=alias.canonical_id,
+            kind="team",
+            lexicon_version=alias.table_version,
+        )
+        matches[normalized] = alias
+        folded = _ascii_fold_tr(normalized)
+        if folded != normalized:
+            alias_index[folded] = AliasHit(
+                canonical_id=alias.canonical_id,
+                kind="team",
+                lexicon_version=alias.table_version,
+            )
+            matches[folded] = alias
+    return matches
+
+
+def _find_team_nickname_candidate(
+    tokens: list[str],
+    team_nickname_map: dict[str, TeamNickname],
+    spans: list[EntitySpan],
+) -> tuple[int, int, TeamNickname] | None:
+    """Pick the longest unmatched multi-token team nickname candidate."""
+    candidates: list[tuple[int, int, TeamNickname]] = []
+    n = len(tokens)
+    for start in range(n):
+        for end in range(n, start + 1, -1):
+            window = " ".join(lowercase_tr(tok) for tok in tokens[start:end])
+            alias = team_nickname_map.get(window)
+            if alias is None:
+                continue
+            if any(
+                span.kind == "team"
+                and span.span_start <= start
+                and span.span_end >= end
+                and span.canonical_id == alias.canonical_id
+                for span in spans
+            ):
+                continue
+            candidates.append((start, end, alias))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (-(item[1] - item[0]), item[0]))
+    return candidates[0]
+
+
+def _decompress_backtracked_spans(
+    spans: list[EntitySpan],
+    merged_token_index: int,
+    original_start: int,
+    original_end: int,
+    merged_length: int,
+) -> list[EntitySpan]:
+    """Translate spans from merged-token indexes back to original token indexes."""
+    delta = (original_end - original_start) - 1
+    original_index_for_merged: list[int] = []
+    for idx in range(merged_length):
+        if idx < merged_token_index:
+            original_index_for_merged.append(idx)
+        elif idx == merged_token_index:
+            original_index_for_merged.append(original_start)
+        else:
+            original_index_for_merged.append(idx + delta)
+
+    decompressed: list[EntitySpan] = []
+    for span in spans:
+        span_end = span.span_end
+        if span_end == merged_token_index + 1:
+            mapped_end = original_end
+        else:
+            mapped_end = original_index_for_merged[span_end - 1] + 1
+        decompressed.append(
+            EntitySpan(
+                original_index_for_merged[span.span_start],
+                mapped_end,
+                span.kind,
+                span.canonical_id,
+                span.confidence,
+                span.lexicon_version,
+                span.source,
+                span.historical_alias_season,
+            )
+        )
+    decompressed.sort(key=lambda s: s.span_start)
+    return decompressed
+
+
+def _backtrack_team_nickname_gazetteer(
+    token_list: list[str],
+    raw_token_list: list[str],
+    alias_index: dict[str, AliasHit],
+    team_nickname_map: dict[str, TeamNickname],
+    team_nicknames: tuple[TeamNickname, ...],
+    store: LexiconStore,
+    negative_rules: list[_NegativeRule],
+    ascii_negative_rules: list[_NegativeRule],
+    kind_priority: list[str],
+    current_spans: list[EntitySpan],
+) -> list[EntitySpan] | None:
+    candidate = _find_team_nickname_candidate(token_list, team_nickname_map, current_spans)
+    if candidate is None:
+        return None
+
+    start, end, alias = candidate
+    merged_token = " ".join(token_list[start:end])
+    merged_tokens = token_list[:start] + [merged_token] + token_list[end:]
+    merged_raw_tokens = raw_token_list[:start] + [" ".join(raw_token_list[start:end])] + raw_token_list[end:]
+
+    merged_alias_index = dict(alias_index)
+    _inject_team_nicknames(merged_alias_index, store, team_nicknames)
+    merged_ascii_alias_index = _build_ascii_alias_index(merged_alias_index)
+    merged_ascii_tokens = [_ascii_fold_tr(t) for t in merged_raw_tokens]
+
+    ambiguous: list[AmbiguousHit] = []
+    ascii_spans = gazetteer_pass(
+        merged_ascii_tokens,
+        merged_ascii_alias_index,
+        ascii_negative_rules,
+        kind_priority,
+        out_ambiguous=ambiguous,
+    )
+    if _has_ascii_primary_hit(ascii_spans):
+        merged_gazetteer_spans = ascii_spans
+    else:
+        restored_spans = gazetteer_pass(
+            merged_tokens,
+            merged_alias_index,
+            negative_rules,
+            kind_priority,
+            out_ambiguous=ambiguous,
+        )
+        merged_gazetteer_spans = _merge_two_pass_gazetteer(
+            ascii_spans,
+            restored_spans,
+            kind_priority=kind_priority,
+            restored_margin=0.2,
+        )
+
+    return _decompress_backtracked_spans(
+        merged_gazetteer_spans,
+        merged_token_index=start,
+        original_start=start,
+        original_end=end,
+        merged_length=len(merged_tokens),
+    )
 
 
 def _canonical_kind_map(store: LexiconStore) -> dict[str, str]:
@@ -441,6 +882,67 @@ def _merge_two_pass_gazetteer(
     return [span for _, span in sorted(selected, key=lambda item: item[1].span_start)]
 
 
+def _load_double_negation_patterns() -> list[list[str]]:
+    """Load a closed table of double-negation token sequences."""
+    try:
+        import yaml
+
+        raw = yaml.safe_load(_DOUBLE_NEGATION_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        return []
+
+    patterns: list[list[str]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        tokens = entry.get("tokens")
+        if not isinstance(tokens, list):
+            continue
+        normalized_tokens: list[str] = []
+        for token in tokens:
+            if isinstance(token, str) and token.strip():
+                normalized_tokens.append(lowercase_tr(token.strip()))
+        if normalized_tokens:
+            patterns.append(normalized_tokens)
+    return patterns
+
+
+def _is_double_negation(tokens: Sequence[str], negation_spans: Sequence[EntitySpan]) -> bool:
+    """Detect closed-table double-negation patterns in the token stream."""
+    norm_tokens = [lowercase_tr(tok) for tok in tokens]
+    patterns = _load_double_negation_patterns()
+    for pat in patterns:
+        if len(pat) > len(norm_tokens):
+            continue
+        for start in range(len(norm_tokens) - len(pat) + 1):
+            if norm_tokens[start:start + len(pat)] == pat:
+                return True
+    return False
+
+
+def _is_negation_token(token: str) -> bool:
+    """Return True for Turkish verb forms and explicit negation markers."""
+    return bool(_NEGATION_SUFFIX_RE.fullmatch(lowercase_tr(token)))
+
+
+def resolve_polarity(entities: list[EntitySpan], tokens: Sequence[str] | None = None) -> str:
+    """Resolve the answer polarity for a Turkish query.
+
+    Returns ``affirm`` by default, ``negate`` when a negation marker is present,
+    and ``affirm`` again when a recognized double-negation pattern matches.
+    """
+    negation_spans = [s for s in entities if s.kind == "negation"]
+    if not negation_spans:
+        return "affirm"
+    if tokens is not None and _is_double_negation(tokens, negation_spans):
+        return "affirm"
+    return "negate"
+
+
 def _fold_negative_rules_to_ascii(rules: Sequence[_NegativeRule]) -> list[_NegativeRule]:
     """Fold negative-rule trigger/co-token strings for the ASCII pass."""
     folded: list[_NegativeRule] = []
@@ -448,7 +950,8 @@ def _fold_negative_rules_to_ascii(rules: Sequence[_NegativeRule]) -> list[_Negat
         folded.append(
             _NegativeRule(
                 token=_ascii_fold_tr(rule.token),
-                requires_cotoken=_ascii_fold_tr(rule.requires_cotoken),
+                requires_cotokens=frozenset(_ascii_fold_tr(tok) for tok in rule.requires_cotokens),
+                requires_cotoken_radius=rule.requires_cotoken_radius,
                 ambiguous_between=rule.ambiguous_between,
             )
         )
@@ -466,6 +969,28 @@ def _dedupe_ambiguous_hits(hits: Sequence[AmbiguousHit]) -> list[AmbiguousHit]:
         seen.add(key)
         out.append(hit)
     return out
+
+
+def _cotoken_within_radius(
+    required: frozenset[str],
+    normalized_tokens: list[str],
+    span_start: int,
+    span_end: int,
+    radius: int,
+) -> bool:
+    """Return True when a required co-token exists within the configured radius."""
+    for idx, tok in enumerate(normalized_tokens):
+        if tok not in required:
+            continue
+        if idx < span_start:
+            distance = span_start - idx
+        elif idx >= span_end:
+            distance = idx - (span_end - 1)
+        else:
+            distance = 0
+        if distance <= radius:
+            return True
+    return False
 
 
 def gazetteer_pass(
@@ -487,7 +1012,7 @@ def gazetteer_pass(
     4. Greedy non-overlapping selection with tie-breaking by kind_priority.
     5. Apply negative rules: suppress a span if its matched alias token is
        in the negative list AND the required co-token is absent from the
-       full token list.
+       full token list or outside the configured radius.
 
     Parameters
     ----------
@@ -524,10 +1049,21 @@ def gazetteer_pass(
             if hit is not None and hit.kind in GAZETTEER_KINDS:
                 candidates.append((i, j, hit))
 
+        # Recognize Turkish verbal negation forms even when the token is not in
+        # a lexicon file. This covers examples like "kazanmadı".
+        tok = norm_tokens[i]
+        if _is_negation_token(tok):
+            candidates.append(
+                (i, i + 1, AliasHit(canonical_id="", kind="negation", lexicon_version=""))
+            )
+
     # Apply negative rules before conflict resolution
     # Build negative lookups: trigger_token → required_cotoken / ambiguous_between
-    neg_cotoken_map: dict[str, str] = {
-        r.token: r.requires_cotoken for r in negative_rules
+    neg_cotoken_map: dict[str, frozenset[str]] = {
+        r.token: r.requires_cotokens for r in negative_rules
+    }
+    neg_cotoken_radius_map: dict[str, int] = {
+        r.token: r.requires_cotoken_radius for r in negative_rules
     }
     neg_ambiguous_map: dict[str, tuple[str, ...]] = {
         r.token: r.ambiguous_between
@@ -540,8 +1076,17 @@ def gazetteer_pass(
         suppressed = False
         for tok in norm_tokens[i:j]:
             cotoken_required = neg_cotoken_map.get(tok)
-            if cotoken_required is not None and cotoken_required not in token_set:
+            if cotoken_required is None:
+                continue
+
+            radius = neg_cotoken_radius_map.get(tok, 0)
+            if radius > 0:
+                if not _cotoken_within_radius(cotoken_required, norm_tokens, i, j, radius):
+                    suppressed = True
+            elif not cotoken_required & token_set:
                 suppressed = True
+
+            if suppressed:
                 # §10.5 Ambiguity policy: surface candidates when declared
                 if out_ambiguous is not None:
                     ambig = neg_ambiguous_map.get(tok)
@@ -585,6 +1130,7 @@ def gazetteer_pass(
                 confidence=1.0,
                 lexicon_version=hit.lexicon_version,
                 source="gazetteer",
+                historical_alias_season=hit.historical_alias_season or "",
             )
         )
 
@@ -815,6 +1361,8 @@ class EntityExtractor:
         crf: CrfExtractor | None = None,
         ascii_vs_restored_margin: float = 0.2,
         phonetic_aliases_path: Path | None = None,
+        team_nicknames_path: Path | None = None,
+        honorifics_path: Path | None = None,
     ) -> None:
         self._store = store
         self._kind_priority = kind_priority if kind_priority is not None else list(DEFAULT_KIND_PRIORITY)
@@ -822,6 +1370,9 @@ class EntityExtractor:
         self._ascii_vs_restored_margin = ascii_vs_restored_margin
         self._phonetic_aliases_path = phonetic_aliases_path
         self._phonetic_aliases = _load_phonetic_aliases(phonetic_aliases_path)
+        self._team_nicknames_path = team_nicknames_path
+        self._team_nicknames = _load_team_nicknames(team_nicknames_path)
+        self._honorific_aliases = _load_honorific_alias_index(honorifics_path)
 
     def extract(
         self,
@@ -850,12 +1401,15 @@ class EntityExtractor:
         token_list = list(tokens)
 
         # 1. Build gazetteer alias index + negative rules from current store snapshot
-        alias_index = _build_combined_alias_index(self._store)
+        alias_index = _build_combined_alias_index(self._store, honorific_aliases=self._honorific_aliases)
         phonetic_alias_map: dict[str, PhoneticAlias] = {}
         if self._phonetic_aliases:
             phonetic_alias_map = _inject_phonetic_aliases(
                 alias_index, self._store, self._phonetic_aliases
             )
+        team_nickname_map: dict[str, TeamNickname] = {}
+        if self._team_nicknames:
+            team_nickname_map = _build_team_nickname_map(self._team_nicknames, self._store)
         ascii_alias_index = _build_ascii_alias_index(alias_index)
         negative_rules = _load_negative_rules(self._store)
         ascii_negative_rules = _fold_negative_rules_to_ascii(negative_rules)
@@ -880,6 +1434,49 @@ class EntityExtractor:
                 restored_spans,
                 kind_priority=self._kind_priority,
                 restored_margin=self._ascii_vs_restored_margin,
+            )
+
+        if self._team_nicknames and cfg.nlp_backtrack_max_attempts > 0:
+            backtracked_spans = _backtrack_team_nickname_gazetteer(
+                token_list,
+                raw_token_list,
+                alias_index,
+                team_nickname_map,
+                self._team_nicknames,
+                self._store,
+                negative_rules,
+                ascii_negative_rules,
+                self._kind_priority,
+                gazetteer_spans,
+            )
+            if backtracked_spans is not None:
+                gazetteer_spans = backtracked_spans
+
+        role_prefix_player_id = _resolve_player_for_role_prefix(token_list, gazetteer_spans, self._store)
+        if role_prefix_player_id is not None:
+            candidate_index = next(
+                span.span_end
+                for span in gazetteer_spans
+                if span.kind == "role_prefix"
+            )
+            existing_player_spans = [
+                span for span in gazetteer_spans
+                if span.kind == "player" and span.span_start == candidate_index and span.span_end == candidate_index + 1
+            ]
+            gazetteer_spans = [
+                span for span in gazetteer_spans
+                if not (span.kind == "player" and span.span_start == candidate_index and span.span_end == candidate_index + 1)
+            ]
+            gazetteer_spans.append(
+                EntitySpan(
+                    candidate_index,
+                    candidate_index + 1,
+                    "player",
+                    role_prefix_player_id,
+                    1.0,
+                    self._store.lexicon_version_id or "",
+                    "gazetteer",
+                )
             )
 
         # 3. CRF pass — then filter out any span whose text matches a PII

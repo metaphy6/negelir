@@ -134,7 +134,15 @@ scrape: env ## Scrape & cache real match data (LEAGUE=super_lig)
 
 .PHONY: nlp.audit-rerender
 nlp.audit-rerender: env ## Operator-only runbook for NLP audit bundle re-render
-	@$(XOPS)/makefile/nlp.py nlp.audit-rerender
+	@$(XOPS)/nlp.py nlp.audit-rerender
+
+.PHONY: nlp.sbom
+nlp.sbom: env ## Generate NLP SBOM and write data/nlp/sbom.json
+	@$(XOPS)/nlp.py nlp.sbom
+
+.PHONY: nlp.license-attribution
+nlp.license-attribution: env ## Generate NLP license attribution report at data/nlp/build_reports/license_attribution.md
+	@$(XOPS)/nlp.py nlp.license-attribution
 
 .PHONY: bootstrap
 bootstrap: env ## Scrape + validate cache (gate before training)
@@ -294,13 +302,29 @@ nlp.bench: ## Phase 10 §10.1 — normalize_input p95 latency gate (≤5 ms on n
 nlp.entity-bench: ## Phase 10 §10.5 — EntityExtractor.extract p95 latency gate (≤8 ms on cap-length token list)
 	@$(XOPS)/nlp.py nlp.entity-bench
 
+.PHONY: nlp.spike-test
+nlp.spike-test: ## Phase 10 §10.23.10 — operator-facing 3× spike rehearsal target for NLP spike-run drill
+	@$(XOPS)/nlp.py nlp.spike-test
+
+.PHONY: nlp.dr-drill
+nlp.dr-drill: ## Phase 10 §10.23.11 — human-only NLP disaster-recovery drill helper and report stub
+	@$(XOPS)/nlp.py nlp.dr-drill
+
 .PHONY: nlp.intent-pin
 nlp.intent-pin: ## Phase 10 §10.4 — SHA256-pin the fastText intent model (hashes model file, writes sha to chart.json)
 	@$(XOPS)/nlp.py nlp.intent-pin
 
+.PHONY: nlp.intent-train
+nlp.intent-train: ## Phase 10 §10.25.5 — operator-driven intent model retrain from shadow samples and write a candidate model
+	@$(XOPS)/nlp.py nlp.intent-train $(ARGS)
+
 .PHONY: nlp.lexicon-build
 nlp.lexicon-build: ## Phase 10 §10.2 — apply _aliases_delta.tr.yaml onto lexicons, bump patch version
 	@$(XOPS)/nlp.py nlp.lexicon-build
+
+.PHONY: nlp.lexicon-eval
+nlp.lexicon-eval: ## Phase 10 §10.25.6 — run lexicon acceptance corpus regression check after lexicon build
+	@$(XOPS)/nlp.py nlp.lexicon-eval $(ARGS)
 
 .PHONY: nlp.diacritics-build
 nlp.diacritics-build: ## Phase 10 §10.3 — generate _diacritics.tr.yaml from tr_word_freq.txt + lexicon union
@@ -313,6 +337,10 @@ nlp.rotate-citation-key: ## Phase 10 §10.21.8 — rotate predict citation HMAC 
 .PHONY: nlp.template-lint
 nlp.template-lint: ## Phase 10 §10.15 — AST-assert no {{ free_text }} slot in any template (hallucination guard)
 	@$(XOPS)/nlp.py nlp.template-lint
+
+.PHONY: nlp.capacity-report
+nlp.capacity-report: ## Phase 10 §10.23.10 — generate the NLP capacity report artifact at data/nlp/capacity_report.md
+	@$(XOPS)/nlp.py nlp.capacity-report
 
 .PHONY: nlp.compat-validate
 nlp.compat-validate: ## Phase 10 §10.25.4 — validate NLP compatibility matrix and artifact quartet before merge

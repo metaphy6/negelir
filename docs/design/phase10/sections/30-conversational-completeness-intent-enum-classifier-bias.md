@@ -275,11 +275,11 @@
   runs the same query twice (one polite, one curt) and asserts
   byte-identical `qa.answer.v1.parts[1:]` (data block) with
   potentially-different `parts[0]` (rendered template only).
-- [ ] **Drift telemetry.** Per-week distribution of politeness_class
+- [x] **Drift telemetry.** Per-week distribution of politeness_class
   (proportion polite / very_polite / curt) is exported as a
   Prometheus histogram; > 10pp shift week-over-week → `nlp.alert.v1{kind=politeness_distribution_drift, severity=info}`
   (informational; could be a UI change, not necessarily a problem).
-- [ ] **Proof:** `test_politeness_marker_table_complete_for_zemberek_suffixal_forms`,
+- [x] **Proof:** `test_politeness_marker_table_complete_for_zemberek_suffixal_forms`,
   `test_politeness_tokens_absent_from_classifier_input`,
   `test_politeness_class_only_used_by_template_selector_ast`,
   `test_politeness_class_does_not_change_answer_payload`,
@@ -296,7 +296,7 @@
   different — paste hygiene strips quotes; this addendum *honors*
   them as exact-match assertions). Detection is an OR over all
   patterns; any hit → `query_style=search`.
-- [ ] **v1 contract: refuse, never reinterpret.** `query_style=search`
+- [x] **v1 contract: refuse, never reinterpret.** `query_style=search`
   → short-circuit dispatch to `meta.search_syntax_unsupported`
   with closed Turkish template *"Bu sistem doğal dilde sorulara
   yanıt veriyor; arama operatörleri (+, -, OR, AND, tırnak) şu an
@@ -304,7 +304,7 @@
   against `+galatasaray` being misread as the literal token
   `+galatasaray` (Symspell-corrected to garbage) or as natural
   emphasis (silently misinterpreting the user's intent).
-- [ ] **Quoted-exact-match exception (forward hook).** Reserved
+- [x] **Quoted-exact-match exception (forward hook).** Reserved
   enum value `query_style=quoted_exact_search` (dormant at v1) for
   future support of `"şampiyonlar ligi"` as exact-string entity
   resolution. Schema lands now; route returns
@@ -316,7 +316,7 @@
   expensive classifier / extractor work (cost containment + no
   search-style query reaches the classifier and contributes to
   intent-distribution drift).
-- [ ] **Proof:** `test_search_operator_patterns_detect_plus_minus`,
+- [x] **Proof:** `test_search_operator_patterns_detect_plus_minus`,
   `test_search_operator_detects_ve_veya_uppercase_only`,
   `test_search_operator_detects_field_prefix`,
   `test_quoted_exact_match_route_is_reserved_enum`,
@@ -325,7 +325,7 @@
 
 #### 10.30.7 Cross-turn anaphora resolver (`onlar` / `bunlar` / `kendisi` / `orası`)
 
-- [ ] **Closed `anaphora_pronouns.tr.yaml`** lists Turkish anaphoric
+- [x] **Closed `anaphora_pronouns.tr.yaml`** lists Turkish anaphoric
   pronouns and their type-constraints: `onlar`/`bunlar`/`şunlar`
   (plural; antecedent must be a *set* of teams or players —
   fixture-set, derby-week multi-fixture, top-N standings list);
@@ -336,7 +336,7 @@
   plural-resident; team or supporter group). Each entry carries
   the type-constraint as a closed enum so antecedent search is
   constrained.
-- [ ] **Cross-turn antecedent search.** Conversation context
+- [x] **Cross-turn antecedent search.** Conversation context
   (§10.25.1) ships a per-conversation entity-mention stack
   (insertion-ordered, capped at `nlp_anaphora_lookback_turns=5`,
   `nlp_anaphora_lookback_seconds=900` whichever fires first).
@@ -348,29 +348,29 @@
   disambiguation answer (closed template *"Hangi takımı / oyuncuyu
   kastettiğinizi netleştirir misiniz? Son konuşmada şu adlar
   geçti: A, B, C."*) — never silently pick.
-- [ ] **Type-constraint AST guard.**
+- [x] **Type-constraint AST guard.**
   `test_anaphora_resolver_respects_type_constraint_ast` runs a
   golden fixture stack and asserts the resolver only matches
   type-compatible candidates (`orası` cannot resolve to a team).
-- [ ] **Stack staleness gate.** Antecedents older than
+- [x] **Stack staleness gate.** Antecedents older than
   `nlp_anaphora_lookback_seconds` are silently evicted but the
   fact of eviction is recorded as
   `nlp.event.v1{kind=anaphora_antecedent_evicted}` (rate-limited
   per conversation per `nlp_anaphora_eviction_event_ratelimit_s=60`)
   for drift observability.
-- [ ] **Multi-pronoun composition.** *"Onlar oraya gidecek mi?"*
+- [x] **Multi-pronoun composition.** *"Onlar oraya gidecek mi?"*
   carries TWO anaphora (`onlar` = team-set; `oraya` = venue).
   Both must resolve independently; either ambiguous → single
   disambiguation answer covering both slots. Closed
   `anaphora_compose.yaml` lists the legal pronoun-cooccurrence
   patterns.
-- [ ] **Cache-key salt.** L0 / L1 cache keys for anaphora-resolved
+- [x] **Cache-key salt.** L0 / L1 cache keys for anaphora-resolved
   queries include the resolved-antecedent IDs (NOT just the
   pronouns) so two different conversations with the same surface
   text but different antecedents do not cross-cache. Defends
   against the §10.30.12 cache-collision class for the
   conversational variant.
-- [ ] **Proof:** `test_anaphora_pronoun_table_covers_all_zemberek_anaphora_lemmas`,
+- [x] **Proof:** `test_anaphora_pronoun_table_covers_all_zemberek_anaphora_lemmas`,
   `test_anaphora_resolver_respects_type_constraint_ast`,
   `test_anaphora_resolver_below_confidence_emits_disambiguation`,
   `test_anaphora_eviction_event_emitted_with_ratelimit`,
@@ -379,7 +379,7 @@
 
 #### 10.30.8 ASR-delivered punctuation-words & numeric tie-break (`virgül` / `yirmi bir`)
 
-- [ ] **Closed `asr_punctuation_words.tr.yaml`** lists Turkish words
+- [x] **Closed `asr_punctuation_words.tr.yaml`** lists Turkish words
   for punctuation that ASR transcribes literally: `virgül`,
   `nokta`, `noktalı virgül`, `iki nokta`, `soru işareti`,
   `ünlem işareti`, `tire`, `parantez`, `tırnak`. Detection: only
@@ -390,7 +390,7 @@
   context) → strip silently and emit
   `nlp.event.v1{kind=asr_punctuation_word_stripped}` for drift
   observability.
-- [ ] **Voice number-word ↔ digit tie-break table.** Closed
+- [x] **Voice number-word ↔ digit tie-break table.** Closed
   `voice_number_context.tr.yaml` resolves the
   number-word-vs-digit ambiguity from §10.26.4 with input-modality
   context: `(voice, time-context)` → digit interpretation; `(voice,
@@ -399,13 +399,13 @@
   words concatenate to a year-like value. Resolves the conflict
   from §10.26.4 where the same surface form had two valid
   interpretations.
-- [ ] **AST guard: voice-only branches gated.**
+- [x] **AST guard: voice-only branches gated.**
   `test_asr_punctuation_word_stripping_only_in_voice_modality_ast`
   walks the normalize pipeline and asserts the punctuation-word
   branch is dead code when `input_modality != voice`. Defends
   against typed input containing the literal word `virgül`
   (e.g., a player nicknamed *Virgül*) being silently stripped.
-- [ ] **Proof:** `test_asr_punctuation_words_stripped_only_in_voice_modality`,
+- [x] **Proof:** `test_asr_punctuation_words_stripped_only_in_voice_modality`,
   `test_asr_punctuation_word_emits_event_when_standalone`,
   `test_voice_number_tiebreak_resolves_time_to_digit`,
   `test_voice_number_tiebreak_resolves_score_to_ordinal`,
@@ -414,20 +414,20 @@
 
 #### 10.30.9 Repeated-query within-conversation acknowledgement & summary-mode escalation
 
-- [ ] **Repeated-query detector.** Same `(intent_id, primary_entity_set,
+- [x] **Repeated-query detector.** Same `(intent_id, primary_entity_set,
   modifier)` triple within the same conversation, within
   `nlp_repeated_query_window_s=300`, count > `nlp_repeated_query_threshold=3`
   → prepend closed-template ack *"Az önce sorduğunuz [X] için
   güncel cevap: ..."* (humanizer-bypassed; mirrors §10.27.3
   forensic-bundle template-discipline). Defends against the
   silent re-fetch hiding the user's confusion signal.
-- [ ] **Escalation to summary-mode.** Repeat count >
+- [x] **Escalation to summary-mode.** Repeat count >
   `nlp_repeated_query_summary_threshold=5` within the same window →
   emit closed-template *"Bu konuyu birkaç kez sordunuz. Belki
   şunu denemek istersiniz: özet modu (yaz: 'özet')."* with a
   forward-hook intent_id `data.conversation_summary` (reserved
   enum, dormant at v1).
-- [ ] **Telemetry & abuse-resilience link.**
+- [x] **Telemetry & abuse-resilience link.**
   `nlp.event.v1{kind=repeated_query_threshold_crossed, repeat_count, window_s}`
   emitted on every threshold crossing; per-conversation rolling
   window aggregated into the §10.27.6 coordinated-abuse detector
@@ -438,7 +438,7 @@
   (NOT the regular cache TTL — repeat-context demands tighter
   freshness); else re-fetch even on cache hit. Mitigates the
   user-asks-because-the-answer-felt-stale case.
-- [ ] **Proof:** `test_repeated_query_ack_template_prepended_at_threshold`,
+- [x] **Proof:** `test_repeated_query_ack_template_prepended_at_threshold`,
   `test_repeated_query_summary_mode_template_at_higher_threshold`,
   `test_repeated_query_ack_humanizer_bypassed`,
   `test_repeated_query_threshold_event_emitted`,

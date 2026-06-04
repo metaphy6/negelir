@@ -1,0 +1,5 @@
+_meta:
+  schema_version: 1
+  source: "phase10-10.24.1 no-strip canonicals"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+no_strip_canonicals: []

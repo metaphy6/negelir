@@ -162,6 +162,23 @@ def _lexicon_snapshot_sha() -> str:
         digest.update(path.read_bytes())
     return digest.hexdigest()
 
+
+def _load_humanizer_chart_sha() -> str | None:
+    chart_path = Path(__file__).resolve().parents[2] / 'xops' / 'versioning' / 'chart.json'
+    if not chart_path.exists():
+        return None
+    try:
+        chart = json.loads(chart_path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError:
+        return None
+    return (
+        chart.get('compatibility', {})
+        .get('data_files', {})
+        .get('humanizer_llm', {})
+        .get('sha256')
+    )
+
+
 def validate_compatibility_matrix(path: str | Path | None = None) -> None:
     matrix = load_compatibility_matrix(path)
     row = _current_row(matrix, cfg.nlp_pipeline_version)
@@ -194,6 +211,13 @@ def validate_compatibility_matrix(path: str | Path | None = None) -> None:
         if crf_path.exists() and _hash_file(crf_path) != row["crf_model_sha"]:
             raise CompatibilityMatrixError(
                 "entity CRF model SHA mismatch between compatibility matrix and deployed model"
+            )
+
+    humanizer_chart_sha = _load_humanizer_chart_sha()
+    if humanizer_chart_sha is not None and row["humanizer_model_sha"]:
+        if row["humanizer_model_sha"] != humanizer_chart_sha:
+            raise CompatibilityMatrixError(
+                "humanizer model SHA mismatch between compatibility matrix and chart.json"
             )
 
     if cfg.nlp_intent_calibration_path:

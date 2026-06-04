@@ -1,0 +1,16 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  source: "phase10-10.24.10"
+  domain: football
+  notes: "Closed allow-list of known team social handles for Phase 10 mention hygiene."
+
+# Mapping from lowercased social handle to canonical entity ID.
+# Unknown handles are dropped from the classifier input.
+
+galatasaray: "galatasaray"
+fenerbahce: "fenerbahce"
+besiktas: "besiktas"
+trabzonspor: "trabzonspor"
+basaksehir: "başakşehir"

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/canary_shadow_disagreement",
+  "title": "nlp.event.v1{kind=canary_shadow_disagreement}",
+  "description": "A canary shadow route produced disagreement beyond the configured tolerance.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "canary_target",
+    "disagreement_rate",
+    "shadow_sample_rate"
+  ],
+  "properties": {
+    "kind": {"const": "canary_shadow_disagreement"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.answer.v1", "nlp.proofreader.v1"]
+    },
+    "request_id": {"type": ["string", "null"]},
+    "emitted_at": {"type": "string", "description": "ISO-8601 UTC."},
+    "canary_target": {"type": "string", "minLength": 1},
+    "disagreement_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+    "shadow_sample_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+  },
+  "additionalProperties": false
+}

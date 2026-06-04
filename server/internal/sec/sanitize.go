@@ -117,6 +117,32 @@ func isStripped(r rune) bool {
 	return false
 }
 
+const combiningDotAbove = '\u0307'
+const combiningMarkStart = '\u0300'
+const combiningMarkEnd = '\u036F'
+
+func composeTurkishDottedI(s string) string {
+	runes := []rune(s)
+	out := make([]rune, 0, len(runes))
+	for i := 0; i < len(runes); {
+		if i+1 < len(runes) && runes[i+1] == combiningDotAbove {
+			switch runes[i] {
+			case 'I':
+				out = append(out, 'İ')
+			case 'i', 'J':
+				out = append(out, runes[i])
+			default:
+				out = append(out, runes[i])
+			}
+			i += 2
+			continue
+		}
+		out = append(out, runes[i])
+		i++
+	}
+	return string(out)
+}
+
 // LowercaseTurkish applies a Turkish-aware lowercase: 'I' → 'ı' and
 // 'İ' → 'i' (the dotted/dotless-i contract that breaks naive
 // `strings.ToLower`). Used by the deterministic-pattern path so a
@@ -126,10 +152,24 @@ func isStripped(r rune) bool {
 // Doctrine: this function is NEVER applied to the password field
 // (per ROADMAP §7.1 password-field carve-out). Callers route
 // password bytes around the entire sec pipeline.
+func stripTurkishCombiningMarks(s string) string {
+	runes := []rune(s)
+	out := make([]rune, 0, len(runes))
+	for _, r := range runes {
+		if r >= combiningMarkStart && r <= combiningMarkEnd {
+			continue
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
 func LowercaseTurkish(s string) string {
 	if s == "" {
 		return s
 	}
+	s = composeTurkishDottedI(s)
+	s = stripTurkishCombiningMarks(s)
 	runes := []rune(s)
 	for i, r := range runes {
 		switch r {

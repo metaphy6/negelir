@@ -147,8 +147,11 @@ class TestCostCeilingTimeout:
         cfg = _fake_cfg(timeout_ms=20)
         result = normalize_input("galatasaray mac", cfg=cfg, _clock=slow_clock)
         expected = (
-            "length_cap", "canonical_normalize", "lowercase_tr",
-            "punct_normalize", "diacritic_restore", "tokenize", "typo_correct",
+            "length_cap", "canonical_normalize", "confusables_fold", "digit_letter_fold", "lowercase_tr",
+            "punct_normalize", "diacritic_restore", "regional_dialect_normalize",
+            "apostrophe_proper_noun_repair", "tokenize", "repeat_collapse",
+            "particle_normalize", "postposition_stack", "dialect_normalize",
+            "typo_correct",
         )
         assert result.steps_run == expected, (
             f"steps_run mismatch: {result.steps_run}"

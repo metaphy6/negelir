@@ -84,7 +84,11 @@ class TestDeltaFileExists:
         data = yaml.safe_load(DELTA_FILE.read_text(encoding="utf-8"))
         for i, d in enumerate(data.get("deltas", [])):
             assert "file" in d, f"delta[{i}] missing 'file'"
+            assert "kind" in d, f"delta[{i}] missing 'kind'"
             assert "canonical_id" in d, f"delta[{i}] missing 'canonical_id'"
+            assert "source" in d, f"delta[{i}] missing 'source'"
+            assert "added_by_pr" in d, f"delta[{i}] missing 'added_by_pr'"
+            assert "added_at_utc" in d, f"delta[{i}] missing 'added_at_utc'"
             assert "add_aliases" in d, f"delta[{i}] missing 'add_aliases'"
             assert isinstance(d["add_aliases"], list), f"delta[{i}].add_aliases must be a list"
 
@@ -93,6 +97,65 @@ class TestDeltaFileExists:
         for d in data.get("deltas", []):
             target = LEXICON_DIR / d["file"]
             assert target.exists(), f"delta references missing file: {d['file']}"
+
+
+class TestAliasDeltaMetadataGovernance:
+    def test_delta_entries_include_source_and_pr_metadata(self) -> None:
+        data = yaml.safe_load(DELTA_FILE.read_text(encoding="utf-8"))
+        for i, d in enumerate(data.get("deltas", [])):
+            assert isinstance(d.get("source"), str) and d["source"].strip(), (
+                f"delta[{i}] missing or invalid 'source'"
+            )
+            assert isinstance(d.get("added_by_pr"), str) and d["added_by_pr"].strip(), (
+                f"delta[{i}] missing or invalid 'added_by_pr'"
+            )
+            assert isinstance(d.get("added_at_utc"), str) and d["added_at_utc"].strip(), (
+                f"delta[{i}] missing or invalid 'added_at_utc'"
+            )
+
+    def test_delta_source_allowlist(self) -> None:
+        from xops.makefile.nlp import _validate_alias_delta_entries
+
+        invalid = [
+            {
+                "file": "teams.tr.yaml",
+                "kind": "team",
+                "canonical_id": "galatasaray_sk",
+                "add_aliases": ["yeni aslan"],
+                "source": "random_source",
+                "added_by_pr": "PR-9999",
+                "added_at_utc": "2026-06-01T12:00:00Z",
+            }
+        ]
+
+        errors = _validate_alias_delta_entries(invalid)
+        assert any("source 'random_source' is not in the allowed source set" in e for e in errors)
+
+    def test_delta_unknown_canonical_id_is_rejected(self, tmp_path) -> None:
+        from xops.makefile.nlp import _validate_alias_delta_entries
+
+        lexicon_dir = tmp_path / "ai" / "nlp" / "lexicon"
+        lexicon_dir.mkdir(parents=True, exist_ok=True)
+        file_path = lexicon_dir / "teams.tr.yaml"
+        file_path.write_text(
+            "_meta:\n  schema_version: 1\n  lexicon_version: \"1.0.0\"\nentries:\n  - canonical_id: galatasaray_sk\n    names: [Galatasaray]\n    aliases: [Galatasaray]\n",
+            encoding="utf-8",
+        )
+
+        invalid = [
+            {
+                "file": "teams.tr.yaml",
+                "kind": "team",
+                "canonical_id": "unknown_team",
+                "add_aliases": ["yeni aslan"],
+                "source": "operator_curation",
+                "added_by_pr": "PR-9999",
+                "added_at_utc": "2026-06-01T12:00:00Z",
+            }
+        ]
+
+        errors = _validate_alias_delta_entries(invalid, lexicon_dir)
+        assert any("canonical_id 'unknown_team' not found" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -472,3 +535,36 @@ class TestPhoneticAliasBuildReport:
         report_text = report_path.read_text(encoding="utf-8")
         assert "Bayer Münih -> bayern_munich" in report_text
         assert "confused_with=[bayer_leverkusen]" in report_text
+
+
+class TestLexiconGovernanceExtras:
+    def test_nlp_lexicon_eval_command_simulates_regression_gate(self) -> None:
+        from xops.makefile.nlp import cmd_nlp_lexicon_eval
+
+        assert cmd_nlp_lexicon_eval(["--eval-harness", "pass"]) == 0
+        assert cmd_nlp_lexicon_eval(["--eval-harness", "fail"]) == 1
+
+    def test_nlp_lexicon_alias_quota_helper_detects_over_quota(self) -> None:
+        from xops.makefile.nlp import _check_lexicon_alias_quota
+
+        entries = [
+            {
+                "canonical_id": "galatasaray_sk",
+                "aliases": ["aslan", "aslan", "new aslan", "aslan_3"],
+            }
+        ]
+
+        errors = _check_lexicon_alias_quota(entries, 2, "teams.tr.yaml")
+
+        assert errors == [
+            "teams.tr.yaml: canonical_id 'galatasaray_sk' has 3 aliases, exceeds max 2"
+        ]
+
+    def test_nlp_lexicon_max_aliases_per_canonical_default(self) -> None:
+        from common.config import cfg
+
+        assert cfg.nlp_lexicon_max_aliases_per_canonical == 12
+
+    def test_nlp_lexicon_max_aliases_per_canonical_in_env_example(self) -> None:
+        env_example = Path(__file__).parents[2] / "xops" / "env" / ".env.example"
+        assert "NEGELIR_NLP_LEXICON_MAX_ALIASES_PER_CANONICAL=12" in env_example.read_text()

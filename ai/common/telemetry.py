@@ -99,6 +99,21 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["offense_class"],
     )
 
+    # nlp_humanizer_tokens_emitted_total{tenant_class, intent} — counter of humanizer tokens emitted
+    NLP_HUMANIZER_TOKENS_EMITTED_TOTAL = Counter(
+        "nlp_humanizer_tokens_emitted_total",
+        "Humanizer tokens emitted by tenant class and intent",
+        labelnames=["tenant_class", "intent"],
+    )
+
+    # nlp_politeness_class_distribution{politeness_class} — histogram of politeness class observations
+    NLP_POLITENESS_CLASS_DISTRIBUTION = Histogram(
+        "nlp_politeness_class_distribution",
+        "Distribution of politeness classes observed in NLP inputs",
+        labelnames=["politeness_class"],
+        buckets=(1.0,),
+    )
+
     # nlp_lexicon_version{file} — info gauge
     NLP_LEXICON_VERSION = Info(
         "nlp_lexicon_version",
@@ -109,6 +124,7 @@ else:
     NLP_INTENT_CONFIDENCE = None
     NLP_HUMANIZER_BREAKER_STATE = None
     NLP_PROOFREADER_BLOCK_TOTAL = None
+    NLP_HUMANIZER_TOKENS_EMITTED_TOTAL = None
     NLP_LEXICON_VERSION = None
 
 
@@ -411,6 +427,43 @@ class TelemetrySink:
         if _PROMETHEUS_AVAILABLE and NLP_OFFENSIVE_INPUT_TOTAL:
             try:
                 NLP_OFFENSIVE_INPUT_TOTAL.labels(offense_class=offense_class).inc(count)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_humanizer_tokens_emitted(
+        self,
+        tenant_class: str,
+        intent: str,
+        count: int = 1,
+    ) -> None:
+        """
+        Record the number of humanizer tokens emitted for the given tenant class and intent.
+
+        Args:
+            tenant_class: One of the closed-set tenant classes from cfg.nlp_tenant_class_enum.
+            intent: Closed-set NLP intent identifier.
+            count: Number of tokens emitted. Must be > 0.
+        """
+        if count <= 0:
+            return
+        if _PROMETHEUS_AVAILABLE and NLP_HUMANIZER_TOKENS_EMITTED_TOTAL:
+            try:
+                NLP_HUMANIZER_TOKENS_EMITTED_TOTAL.labels(
+                    tenant_class=tenant_class,
+                    intent=intent,
+                ).inc(count)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_politeness_class(self, politeness_class: str) -> None:
+        """
+        Record the observed politeness class for an NLP input.
+        """
+        if _PROMETHEUS_AVAILABLE and NLP_POLITENESS_CLASS_DISTRIBUTION:
+            try:
+                NLP_POLITENESS_CLASS_DISTRIBUTION.labels(
+                    politeness_class=politeness_class,
+                ).observe(1.0)
             except Exception:  # noqa: BLE001
                 pass  # non-blocking
 

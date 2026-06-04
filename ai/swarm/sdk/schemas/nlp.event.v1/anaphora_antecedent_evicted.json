@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/anaphora_antecedent_evicted",
+  "title": "nlp.event.v1{kind=anaphora_antecedent_evicted}",
+  "description": "A stale conversational anaphora antecedent was evicted from the mention stack.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "conversation_id",
+    "evicted_count",
+    "evicted_canonical_ids"
+  ],
+  "properties": {
+    "kind": { "const": "anaphora_antecedent_evicted" },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evicted_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "evicted_canonical_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    }
+  },
+  "additionalProperties": false
+}

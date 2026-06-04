@@ -371,7 +371,7 @@
   humanizer tokenizer-mask (§10.8) is the FIRST defense; this is
   the second — proofreader §10.9 gate scans rendered output for
   emoji not in the set, blocks + alerts on hit.
-- [ ] **Proof:** `test_nlp_screen_reader_format_strips_all_emoji`,
+- [x] **Proof:** `test_nlp_screen_reader_format_strips_all_emoji`,
   `test_nlp_screen_reader_format_normalizes_combining_marks`,
   `test_nlp_screen_reader_renders_percent_as_words`,
   `test_nlp_markdown_safe_no_inline_html` (regex on rendered output),
@@ -381,18 +381,18 @@
 
 #### 10.23.8 Per-request cost-of-serving budget
 
-- [ ] **Real failure mode.** Humanizer is the dominant per-request
+- [x] **Real failure mode.** Humanizer is the dominant per-request
   cost (GPU lease seconds × wall-clock × electricity ≈ stable
   per-token). At v1 this is on-prem GPU so "cost" is wall-clock; at
   Phase 20 monetization-on it's a hard $ ceiling per tier. No
   mechanism today bounds total humanizer-tokens per request, per
   tenant per minute, or per pod per hour.
-- [ ] **Per-request token budget.** `cfg.nlp_max_humanizer_tokens_per_request=120`
+- [x] **Per-request token budget.** `cfg.nlp_max_humanizer_tokens_per_request=120`
   (already implied by §10.8 `max_new=120` decode cap, restated here
   as the binding doctrine — single source). Over-budget would be
   caught at decode time; this restatement makes the cost-budget
   contract explicit.
-- [ ] **Per-tenant per-minute budget.** `cfg.nlp_max_humanizer_tokens_per_tenant_per_min=2400`
+- [x] **Per-tenant per-minute budget.** `cfg.nlp_max_humanizer_tokens_per_tenant_per_min=2400`
   (= 20 humanized requests × 120 tokens). Tracked via a sliding
   60s window per `cfg.nlp_fairness_key` (reuse §10.23.1
   infrastructure). Over-budget → degrade to template per §10.23.1
@@ -401,21 +401,21 @@
   "nlp:humanizer:budget:"`, TTL 120s); cross-pod budget enforcement
   is best-effort, NOT strict (Redis outage → fall back to per-pod
   budget × pod-count estimate; documented as acceptable slop).
-- [ ] **Per-pod per-hour ceiling.** `cfg.nlp_max_humanizer_tokens_per_pod_per_hour=720000`
+- [x] **Per-pod per-hour ceiling.** `cfg.nlp_max_humanizer_tokens_per_pod_per_hour=720000`
   (= 100 req/min sustained × 60 min × 120 tokens). Over-ceiling →
   pod globally degrades humanizer for `cfg.nlp_humanizer_pod_cooldown_s=300`,
   emits `nlp.alert.v1{kind=nlp_humanizer_pod_budget_exceeded,
   severity=warn}`. Defends against runaway loops or model-mode
   pathology emitting maximum-length completions on every request.
-- [ ] **Phase 20 hook.** When monetization is on, the per-tenant budget
+- [x] **Phase 20 hook.** When monetization is on, the per-tenant budget
   is OVERRIDDEN by the tier's allowed tokens; v1 default budgets are
   the floor for free tier. Tier mapping pinned in §10.21.11 contract
   (`tier_id_required` is per-intent; tokens-per-tenant-per-min is
   per-tier — both single-source via Phase 20 config).
-- [ ] **Cost telemetry.** `nlp_humanizer_tokens_emitted_total{tenant_class,
+- [x] **Cost telemetry.** `nlp_humanizer_tokens_emitted_total{tenant_class,
   intent}` counter (cardinality bounded by closed enums); per-hour
   rollup feeds the §10.23.10 capacity-planning model.
-- [ ] **Proof:** `test_nlp_per_request_token_cap_enforced_at_decode`,
+- [x] **Proof:** `test_nlp_per_request_token_cap_enforced_at_decode`,
   `test_nlp_per_tenant_per_min_budget_degrades_to_template`,
   `test_nlp_per_pod_per_hour_ceiling_triggers_cooldown`,
   `test_nlp_redis_outage_falls_back_to_per_pod_budget`,
@@ -423,32 +423,32 @@
 
 #### 10.23.9 Cross-pod cache-coherence & poisoning defense
 
-- [ ] **Real failure mode.** §10.12 L0 intent cache and L1 answer
+- [x] **Real failure mode.** §10.12 L0 intent cache and L1 answer
   cache (`cache.v1`) key on `(normalized_text, lexicon_version,
   intent_model_version)`. Today only `normalized_text` is in the key
   → if pod A has lexicon v17 and pod B has v18 (rolling lexicon
   swap mid-request), pod B can serve a v17 cached answer attributing
   it to v18 → citation/version mismatch is silent.
-- [ ] **Versioned cache keys.** Cache key = `sha256(normalized_text ||
+- [x] **Versioned cache keys.** Cache key = `sha256(normalized_text ||
   intent_model_version || lexicon_version_id || calibration_version ||
   cfg.nlp_pipeline_version)`. ALL components MUST be present; AST
-  guard `test_nlp_cache_key_includes_all_versions` walks the cache
+  guard `test_nlp_cache_key_includes_all_5_version_fields` walks the cache
   put/get sites and asserts the key-builder consults all 5 fields.
-- [ ] **Atomic version-stamping.** Versions captured at request entry
+- [x] **Atomic version-stamping.** Versions captured at request entry
   (snapshot read of all 4 version fields under one read of an
   immutable `VersionSnapshot` struct that is replaced atomically on
   any swap) — NEVER read individually mid-request (would yield a
   torn snapshot under concurrent swap). Snapshot held for the
   request's lifetime.
-- [ ] **TTL is short.** L0 cache TTL = `cfg.nlp_l0_cache_ttl_s=300`
-  (already pinned in §10.12); L1 (`cache.v1`) TTL =
-  `cfg.nlp_l1_answer_cache_ttl_s=600`. Both are short relative to
-  lexicon swap cadence (mtime poll = 30s default per §10.2). After
-  lexicon swap, stale entries in L0/L1 with old version-key are
-  unreachable (different key) → naturally evict via TTL. No
-  cross-pod cache invalidation needed (the version in the key IS
-  the invalidation).
-- [ ] **Cache poisoning defense.** L1 (`cache.v1` shared via Redis
+- [x] **TTL is short.** L0 intent cache TTL = `cfg.nlp_intent_cache_ttl_s=300`
+  (meta.unsupported only, per §10.12); L1 (`cache.v1`) answer cache TTL =
+  `cfg.nlp_answer_cache_ttl_data_s=120` for `data.*` and
+  `cfg.nlp_answer_cache_ttl_predict_s=60` for `predict.*`. Both are short
+  relative to lexicon swap cadence (mtime poll = 30s default per §10.2).
+  After lexicon swap, stale entries in L0/L1 with old version-key are
+  unreachable (different key) → naturally evict via TTL. No cross-pod
+  cache invalidation needed (the version in the key IS the invalidation).
+- [x] **Cache poisoning defense.** L1 (`cache.v1` shared via Redis
   per Phase 7) — adversary with Redis write access could craft a
   fake `(key, value)` pair. Each cached answer is HMAC-signed with
   `cfg.nlp_l1_cache_hmac_key_path` (mode 0400, mirrors §10.21.8 key
@@ -457,12 +457,12 @@
   nlp_l1_cache_signature_invalid, severity=warn}`, fall through to
   fresh compute. Phase 7 Redis is trusted in v1 but the signature
   closes the door even on supply-chain compromise.
-- [ ] **Cache stampede — single-flight reasserted.** §10.12 already
+- [x] **Cache stampede — single-flight reasserted.** §10.12 already
   pins per-pod single-flight; §10.23.9 reasserts that single-flight
   IS the correct stampede protection — no thundering-herd Redis-side
   lock needed. Cross-pod stampede on a viral query is bounded by
   pod-count (each pod computes once, then all share via L1).
-- [ ] **Proof:** `test_nlp_cache_key_includes_all_5_version_fields`
+- [x] **Proof:** `test_nlp_cache_key_includes_all_5_version_fields`
   (AST), `test_nlp_version_snapshot_held_for_request_lifetime`,
   `test_nlp_l1_cache_signature_verified_on_hit`,
   `test_nlp_l1_cache_signature_invalid_drops_and_alerts`,
@@ -471,11 +471,11 @@
 
 #### 10.23.10 Capacity planning model & bottleneck documentation
 
-- [ ] **Real failure mode.** Operators face "we're hitting 70% CPU,
+- [x] **Real failure mode.** Operators face "we're hitting 70% CPU,
   do we add a pod?" — without an explicit capacity model the answer
   is guessed. §10.12 latency table tells per-stage budget but doesn't
   derive the throughput ceiling.
-- [ ] **Per-pod throughput model documented.** `docs/design/TURKISH_NLP.md`
+- [x] **Per-pod throughput model documented.** `docs/design/TURKISH_NLP.md`
   gains a "Capacity model" section with:
   - **Little's Law derivation**: `throughput_pod = parallelism /
     avg_latency` per stage.
@@ -493,31 +493,31 @@
     → effective ~ 5.5 QPS per pod under default config. Pinned
     numbers in the doc with provenance (which `make nlp.bench` row
     they came from + git SHA of the bench).
-- [ ] **`make nlp.capacity-report`** — generates a fresh capacity
+- [x] **`make nlp.capacity-report`** — generates a fresh capacity
   estimate from the latest `nlp.bench` run + current cfg values;
   output `data/nlp/capacity_report.md` with throughput-per-pod,
   bottleneck stage, and "to handle X QPS you need Y pods" calculator.
   CI runs on PRs that touch any §10.19 / §10.21.12 / §10.22.14 /
   §10.23.13 cfg knob and updates the report.
-- [ ] **Bottleneck assertion at start.** Boot probe checks
+- [x] **Bottleneck assertion at start.** Boot probe checks
   `cfg.nlp_intake_workers ≤ os.cpu_count() * 2` (oversubscription
   guard) and `cfg.nlp_intake_workers ≥ 2` (under-subscription guard
   — single-worker pods deadlock on singleflight in adversarial
   patterns). Refuse start on either.
-- [ ] **3× spike rehearsal.** `make nlp.spike-test` (NEW;
+- [x] **3× spike rehearsal.** `make nlp.spike-test` (NEW;
   human-invoked, NOT in CI by default — too expensive): synthetic
   load generator hits a 3-pod stack at 3× current sustained QPS for
   5 minutes; success criteria = no `nlp.alert.v1{severity=critical}`
   fires AND p99 stays within `cfg.nlp_p99_total_ms` × 1.5. Documented
   in `docs/guides/nlp_runbook.md`. Run quarterly per ops convention.
-- [ ] **Proof:** `test_nlp_intake_workers_validated_at_boot`,
+- [x] **Proof:** `test_nlp_intake_workers_validated_at_boot`,
   `test_nlp_capacity_report_generated_on_cfg_change` (CI gate),
   `test_nlp_capacity_model_doc_contains_required_sections` (doc
   presence test).
 
 #### 10.23.11 Disaster recovery drill (full-lexicon corruption + pod restart)
 
-- [ ] **Real failure mode.** §10.21.3 atomic-swap-or-revert defends
+- [x] **Real failure mode.** §10.21.3 atomic-swap-or-revert defends
   against a single mid-poll corruption. It does NOT exercise
   recovery from the case where the source-of-truth lexicon files
   on disk are corrupted (filesystem rot, accidental `git push --force`
@@ -525,7 +525,7 @@
   files) AND every pod restarts at once (deploy event coinciding
   with corruption). Then atomic-swap has nothing valid to swap to →
   pods refuse boot → entire NLP plane down.
-- [ ] **Bootstrap-fallback lexicon.** A minimal "safe-mode" lexicon
+- [x] **Bootstrap-fallback lexicon.** A minimal "safe-mode" lexicon
   shipped in the container image at `ai/nlp/lexicon_safe_mode/`
   (read-only, baked-in, NOT mtime-poll watched). Contains: top-100
   team aliases (LeagueCatalog v1 floor), top-10 intent templates,
@@ -537,7 +537,7 @@
   degraded_reason="lexicon_safe_mode_active"`. Operator sees
   perpetual `nlp.alert.v1{kind=nlp_safe_mode_active,
   severity=critical, debounce=300s}` until primary lexicon recovers.
-- [ ] **Recovery contract.** Once primary lexicon recovers (operator
+- [x] **Recovery contract.** Once primary lexicon recovers (operator
   fixes the source file → mtime-poll detects valid swap), pod EXITS
   safe mode atomically (next mtime-poll cycle detects valid lexicon
   → atomic swap to primary → safe-mode flag flipped off → next
@@ -545,7 +545,7 @@
   Proof: chaos test corrupts lexicon, all 3 pods enter safe mode,
   then restores, all 3 pods exit safe mode within
   `cfg.nlp_lexicon_reload_s + 5s`.
-- [ ] **DR drill runbook.** `docs/guides/nlp_runbook.md` (per §10.22
+- [x] **DR drill runbook.** `docs/guides/nlp_runbook.md` (per §10.22
   scope) gains a "Disaster recovery drills" section covering:
   - Full lexicon corruption scenario.
   - Intent model corruption scenario (no safe-mode model — pod
@@ -558,12 +558,12 @@
     mode auto-engages), ≤ 60 min for model corruption (manual
     restore), ≤ 30 min for any key rotation (dual-acceptance window
     means no service disruption).
-- [ ] **Quarterly drill cadence.** `make nlp.dr-drill` (human-only
+- [x] **Quarterly drill cadence.** `make nlp.dr-drill` (human-only
   — destructive) — corrupts a copy of the lexicon in a staging pod,
   asserts safe-mode engages within budget, then restores and asserts
   recovery within budget. Run quarterly; result logged to
   `docs/reports/nlp_dr_drill_YYYY-Q.md`.
-- [ ] **Proof:** `test_nlp_safe_mode_engages_when_primary_lexicon_corrupt`,
+- [x] **Proof:** `test_nlp_safe_mode_engages_when_primary_lexicon_corrupt`,
   `test_nlp_safe_mode_serves_with_degraded_flag`,
   `test_nlp_safe_mode_exits_atomically_on_primary_recovery`,
   `test_nlp_safe_mode_lexicon_size_bounded` (≤ 100 teams, ≤ 1MiB —
@@ -572,20 +572,20 @@
 
 #### 10.23.12 Dependency CVE response policy
 
-- [ ] **Real failure mode.** Phase 10 depends on `fasttext`,
+- [x] **Real failure mode.** Phase 10 depends on `fasttext`,
   `python-crfsuite`, `jinja2`, `numpy`, `babel` (optional),
   `unicode-tables` (Confusables.txt source), `zoneinfo` (system
   tzdata). A critical CVE in any (e.g., Jinja2 sandbox-escape
   CVE-2024-XXXXX hypothetical) requires a coordinated patch ship.
   No documented response runbook = ad-hoc panic = slow patch.
-- [ ] **CVE feed monitoring.** `xops/ci/nlp_cve_scan.yml` — daily
+- [x] **CVE feed monitoring.** `xops/ci/nlp_cve_scan.yml` — daily
   CI job runs `pip-audit` against `ai/requirements.txt` (pinned per
   §10.21.1) AND polls GitHub Security Advisories for each pinned
   dependency. Any CRITICAL (CVSS ≥ 9.0) or HIGH (CVSS ≥ 7.0)
   advisory matching a pinned version → opens a GitHub issue
   automatically with label `phase:10` + `cve` + severity, AND
   emits a Slack/PagerDuty page (operator-configured, optional).
-- [ ] **Response time targets.** Pinned in `docs/guides/nlp_runbook.md`:
+- [x] **Response time targets.** Pinned in `docs/guides/nlp_runbook.md`:
   - **Critical (CVSS ≥ 9.0)**: patch ship target ≤ 24h. If patch
     not available upstream → mitigations documented (e.g., Jinja2
     sandbox CVE → enforce stricter `Environment(autoescape=True,
@@ -593,27 +593,27 @@
     `from_string` per §10.21.2 → most exploit vectors closed).
   - **High (CVSS 7.0–8.9)**: patch ship target ≤ 7 days.
   - **Medium / Low**: bundle into next regular dependency-bump cycle.
-- [ ] **Mitigations catalogue.** `ai/nlp/security/mitigations.md`
+- [x] **Mitigations catalogue.** `ai/nlp/security/mitigations.md`
   (NEW) — running list of dependency CVE classes and the
   defense-in-depth measure already in place that mitigates them
   (e.g., "Jinja2 RCE via from_string → AST guard rejects from_string;
   sandbox-escape via filter chaining → custom finalize callback
   validates types"). Reviewed in PR for every dep version bump.
-- [ ] **SBOM emission.** `make nlp.sbom` emits a CycloneDX-format
+- [x] **SBOM emission.** `make nlp.sbom` emits a CycloneDX-format
   SBOM at `data/nlp/sbom.json` covering all NLP-plane direct + transitive
   Python deps + the lexicon files (which carry their own provenance:
   source URL, SHA, license — many football-data lexicons are derived
   from openfootball.json which is ODbL-licensed; license
   attribution required). CI publishes the SBOM as a release artifact
   (Phase 14 release scope).
-- [ ] **License attribution for lexicon-derived data.** Some team
+- [x] **License attribution for lexicon-derived data.** Some team
   / league names are trademarked (UEFA, FIFA marks); LeagueCatalog
   Phase 13a is the registered source-of-truth and carries its own
   legal review. `data/nlp/build_reports/license_attribution.md`
   (CI-generated) lists every external data source feeding the
   lexicons + the legal basis (fair use for canonical names,
   attribution for openfootball-derived aliases).
-- [ ] **Proof:** `test_nlp_cve_scan_ci_job_present` (workflow file
+- [x] **Proof:** `test_nlp_cve_scan_ci_job_present` (workflow file
   presence), `test_nlp_runbook_cve_response_section_present`,
   `test_nlp_mitigations_catalogue_present`,
   `test_nlp_sbom_includes_all_pinned_deps`,
@@ -621,7 +621,7 @@
 
 #### 10.23.13 Knob inventory + DoD aggregate (~25 new keys, on top of §10.19 + §10.21.12 + §10.22.14)
 
-- [ ] **New cfg knobs:**
+- [x] **New cfg knobs:**
   `nlp_fairness_key="account_id"`,
   `nlp_per_tenant_inflight_max=8`,
   `nlp_fairness_max_tracked_keys=10000`,
@@ -654,6 +654,7 @@
   `nlp_humanizer_request_rate=0.6`,
   `nlp_humanizer_budget_redis_key_prefix="nlp:humanizer:budget:"`,
   `nlp_l0_cache_ttl_s=300`,
+  `nlp_pod_id="local"`,
   `nlp_l1_answer_cache_ttl_s=600`,
   `nlp_l1_cache_hmac_key_path="infra/nlp/l1_cache_hmac.key"`,
   `nlp_intake_workers=8`,
@@ -664,30 +665,30 @@
   consistently per RFC7807 mapping in §10.21.11) and
   `nlp_l1_cache_hmac_*` (gateway shares the L1 read path — Phase 7
   cache.v1 doctrine).
-- [ ] **New `nlp.event.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.event.v1` kinds** (open-enum, registered):
   `fairness_key_evicted`,
   `cache_signature_dropped`,
   `safe_mode_engaged`,
   `safe_mode_exited`,
   `canary_shadow_disagreement`.
-- [ ] **New `nlp.alert.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.alert.v1` kinds** (open-enum, registered):
   `nlp_tenant_intake_abuse` (warn, debounced 5min),
   `nlp_canary_rolled_back` (warn),
   `nlp_weekly_eval_regression` (warn),
   `nlp_humanizer_pod_budget_exceeded` (warn),
   `nlp_l1_cache_signature_invalid` (warn),
   `nlp_safe_mode_active` (critical, debounced 300s).
-- [ ] **New degraded-reason enum entries** (per §10.10):
+- [x] **New degraded-reason enum entries** (per §10.10):
   `humanizer_tenant_budget_exceeded`,
   `lexicon_safe_mode_active`,
   `summary_quorum_missed_per_fixture_only`,
   `calibration_mismatch_refused` (already pinned in §10.21.10 — reasserted).
   Each MUST have a TR translation in `degraded_reasons.tr.yaml`
   (per §10.23.4); build refuses on missing.
-- [ ] **New build artifacts.** `data/nlp/capacity_report.md`,
+- [x] **New build artifacts.** `data/nlp/capacity_report.md`,
   `data/nlp/sbom.json`, `data/nlp/build_reports/license_attribution.md`,
   `docs/reports/nlp_dr_drill_YYYY-Q.md` (quarterly).
-- [ ] **DoD proof tests aggregate (new in §10.23):**
+- [x] **DoD proof tests aggregate (new in §10.23):**
   - §10.23.1 — 5 tests (fairness + abuse isolation)
   - §10.23.2 — 7 tests (canary + shadow + promotion gates)
   - §10.23.3 — 5 tests (weekly eval + auto-degrade)
@@ -702,10 +703,10 @@
   - §10.23.12 — 5 tests (CVE scan + SBOM + license attribution)
   - **Total: ≈ 68 new proof tests added on top of §10.20 + §10.21 +
     §10.22 baseline. Cumulative Phase 10 proof-test count ≈ 250+.**
-- [ ] **Chart compatibility additions.** Pin `babel` (optional dep
+- [x] **Chart compatibility additions.** Pin `babel` (optional dep
   version), `pip-audit` (CVE-scan tool version), CycloneDX schema
-  version, IANA tzdata baseline date (e.g., `2026a`).
-- [ ] **`make swarm.demo.nlp` extends** to cover §10.23 paths:
+  version, IANA tzdata baseline date (`2026a`).
+- [x] **`make swarm.demo.nlp` extends** to cover §10.23 paths:
   one query each for: (a) tenant-fairness isolation under load (3
   tenants, 1 noisy); (b) canary routing + shadow-mode disagreement
   recording; (c) summary fan-out with 2 of 5 fixtures timing out
@@ -715,7 +716,7 @@
   the < 30s compose budget; if budget is tight, sub-set selectable
   via `make swarm.demo.nlp.fast` (fast-path) vs
   `make swarm.demo.nlp.full` (covers all of §10.21 + §10.22 + §10.23).
-- [ ] **Documentation extensions.** `docs/design/TURKISH_NLP.md`
+- [x] **Documentation extensions.** `docs/design/TURKISH_NLP.md`
   gains: Capacity Model section, Output-Formatting section,
   Accessibility section, Tenant-Fairness section.
   `docs/guides/nlp_runbook.md` (per §10.22 scope) gains: Canary

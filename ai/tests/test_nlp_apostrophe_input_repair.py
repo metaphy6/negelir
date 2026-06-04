@@ -21,6 +21,15 @@ def test_missing_apostrophe_suffix_rewrites_proper_noun() -> None:
     )
 
 
+def test_voice_path_does_not_short_circuit_on_capitalization_alone() -> None:
+    normalized, repairs = repair_apostrophe_proper_noun(
+        "Galatasaraya",
+        input_source="voice",
+    )
+    assert normalized == "galatasaraya"
+    assert repairs == ()
+
+
 def test_normalize_input_records_apostrophe_inference_event() -> None:
     from nlp.normalize import normalize_input
 

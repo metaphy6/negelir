@@ -36,11 +36,16 @@ without going through the bus.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
+import hmac
 import json
 import logging
+import stat
 import threading
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
 from common.config import cfg
@@ -50,6 +55,8 @@ from .payloads import MatchStored, PredictApproved
 from .topics import MATCH_STORED, PREDICT_APPROVED, QA_ANSWER_V1
 
 _log = logging.getLogger(__name__)
+
+_MOCK_NLP_L1_CACHE_HMAC_KEY: bytes = b"negelir:mock:nlp:l1:cache:hmac:v1"
 
 
 class CacheBackend(Protocol):
@@ -90,6 +97,82 @@ class InMemoryCacheBackend:
             return len(self._data)
 
 
+@dataclass(frozen=True)
+class VersionSnapshot:
+    """Immutable snapshot of the version fields used to build an NLP answer cache key."""
+
+    normalized_text: str
+    intent_model_version: str
+    lexicon_snapshot_sha: str
+    calibration_version: str
+    pipeline_version: str
+
+
+def _nlp_l1_cache_hmac_key_id(key: bytes) -> str:
+    return hashlib.sha256(key).hexdigest()[:16]
+
+@functools.lru_cache(maxsize=1)
+def _load_nlp_l1_cache_hmac_key() -> bytes:
+    key_path = str(getattr(cfg, "nlp_l1_cache_hmac_key_path", "") or "").strip()
+    if key_path:
+        path = Path(key_path).expanduser()
+        try:
+            mode = stat.S_IMODE(path.stat().st_mode)
+            if mode != 0o400:
+                _log.warning(
+                    "%s: nlp L1 cache HMAC key mode should be 0400; got %o for %s",
+                    CacheAgent.name,
+                    mode,
+                    path,
+                )
+            key = path.read_bytes().strip()
+            if key:
+                return key
+        except OSError:
+            pass
+    if str(getattr(cfg, "profile", "mock")).lower() == "mock":
+        return _MOCK_NLP_L1_CACHE_HMAC_KEY
+    raise RuntimeError(
+        "nlp L1 cache HMAC key missing; set NEGELIR_NLP_L1_CACHE_HMAC_KEY_PATH"
+    )
+
+
+def _compute_cache_signature(payload_json: str, key: bytes) -> str:
+    return hmac.new(key, payload_json.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _wrap_cache_payload(payload: dict[str, object]) -> str:
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    key = _load_nlp_l1_cache_hmac_key()
+    signature = _compute_cache_signature(payload_json, key)
+    return json.dumps({"payload": payload, "signature": signature}, separators=(",", ":"), sort_keys=True)
+
+
+def _verify_cache_entry(serialized: str) -> dict[str, object]:
+    wrapper = json.loads(serialized)
+    if not isinstance(wrapper, dict):
+        raise ValueError("invalid cache entry")
+    signature = wrapper.get("signature")
+    payload = wrapper.get("payload")
+    if not isinstance(signature, str) or not isinstance(payload, dict):
+        raise ValueError("invalid cache entry")
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    expected = _compute_cache_signature(payload_json, _load_nlp_l1_cache_hmac_key())
+    if not hmac.compare_digest(signature, expected):
+        raise ValueError("invalid cache entry signature")
+    return payload
+
+
+def _capture_version_snapshot(payload: dict[str, object]) -> VersionSnapshot:
+    return VersionSnapshot(
+        normalized_text=str(payload.get("normalized_text", "")),
+        intent_model_version=str(payload.get("intent_model_version", "")),
+        lexicon_snapshot_sha=str(payload.get("lexicon_snapshot_sha", "")),
+        calibration_version=str(payload.get("calibration_version", "")),
+        pipeline_version=str(payload.get("nlp_pipeline_version", "")),
+    )
+
+
 def make_record_key(source: str, key_id: str, record_type: str) -> str:
     """Build the canonical cache key for a normalized record.
 
@@ -116,29 +199,39 @@ def make_prediction_key(match_id: str, market: str, prediction_id: str) -> str:
 
 
 def make_answer_key(
+    normalized_text: str,
     intent: str,
     entity_hash: str,
     fixture_window_bucket: str,
     model_versions_hash: str,
+    intent_model_version: str,
+    lexicon_snapshot_sha: str,
     calibration_version: str,
+    pipeline_version: str,
 ) -> str:
     """Build the canonical cache key for an L1 NLP answer (Phase 10 §10.12).
 
-    Key = ``sha256(intent|entity_hash|fixture_window_bucket|model_versions_hash|calibration_version)``.
+    Key = ``sha256(normalized_text|intent|entity_hash|fixture_window_bucket|
+                 model_versions_hash|intent_model_version|lexicon_snapshot_sha|
+                 calibration_version|pipeline_version)``.
 
-    The stable hash ensures that two requests with identical intent +
-    entities + fixture window + model versions + calibration produce the
-    same cache key, enabling efficient hit rate on repeated queries.
+    The stable hash ensures that two requests with identical request text +
+    intent + entities + fixture window + model versions + intent model version +
+    lexicon version + calibration + pipeline produce the same cache key.
 
     Returns:
         Prefixed cache key string: ``answer:<64-hex-sha256>``.
     """
     components = "|".join([
+        normalized_text,
         intent,
         entity_hash,
         fixture_window_bucket,
         model_versions_hash,
+        intent_model_version,
+        lexicon_snapshot_sha,
         calibration_version,
+        pipeline_version,
     ])
     stable_hash = hashlib.sha256(components.encode("utf-8")).hexdigest()
     return f"answer:{stable_hash}"
@@ -219,7 +312,9 @@ class CacheAgent:
     def _handle_answer(self, msg: Message) -> Iterable[Message]:
         """Cache qa.answer.v1 per Phase 10 §10.12 L1 answer cache.
 
-        Key = sha256(intent|entity_hash|fixture_window_bucket|model_versions_hash|calibration_version).
+        Key = sha256(normalized_text|intent|entity_hash|fixture_window_bucket|model_versions_hash|
+                     intent_model_version|lexicon_snapshot_sha|calibration_version|
+                     pipeline_version).
         TTL is intent-class-based:
           - 120s for `data.*` intents
           - 60s for `predict.*` intents
@@ -229,14 +324,8 @@ class CacheAgent:
         """
         payload = msg.payload
         try:
+            snapshot = _capture_version_snapshot(payload)
             intent = str(payload["intent"])
-            # Entity hash, fixture window bucket, model versions hash, and
-            # calibration version are all expected to be present in the
-            # payload per §10.12 spec. If any are missing, skip cache write.
-            entity_hash = str(payload.get("entity_hash", ""))
-            fixture_window_bucket = str(payload.get("fixture_window_bucket", ""))
-            model_versions_hash = str(payload.get("model_versions_hash", ""))
-            calibration_version = str(payload.get("calibration_version", ""))
         except (KeyError, TypeError, ValueError) as exc:
             _log.warning("%s: malformed qa.answer.v1 cache fields: %s", self.name, exc)
             return ()
@@ -251,11 +340,15 @@ class CacheAgent:
             ttl = int(cfg.nlp_answer_cache_ttl_data_s)
 
         key = make_answer_key(
+            snapshot.normalized_text,
             intent,
-            entity_hash,
-            fixture_window_bucket,
-            model_versions_hash,
-            calibration_version,
+            str(payload.get("entity_hash", "")),
+            str(payload.get("fixture_window_bucket", "")),
+            str(payload.get("model_versions_hash", "")),
+            snapshot.intent_model_version,
+            snapshot.lexicon_snapshot_sha,
+            snapshot.calibration_version,
+            snapshot.pipeline_version,
         )
 
         if (
@@ -286,7 +379,7 @@ class CacheAgent:
 
         self.backend.set(
             key,
-            json.dumps(cache_value, separators=(",", ":"), sort_keys=True),
+            _wrap_cache_payload(cache_value),
             ttl_sec=ttl,
         )
         return ()

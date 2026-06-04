@@ -482,6 +482,197 @@ def _run_phase10_nlp_demo_extensions() -> None:
         )
     ok("swarm.demo.nlp: citation-signature warn-mode missing-key exercised")
 
+    # (f) §10.23 tenant fairness, canary/shadow, partial summary, screen-reader,
+    # and safe-mode recovery paths.
+    from nlp.intake_fair_queue import NlpIntakeFairQueue  # noqa: E402
+    from nlp.intent import IntentClassifier  # noqa: E402
+    from nlp.render import build_environment, render as nlp_render  # noqa: E402
+    from nlp.lexicon_loader import LexiconStore  # noqa: E402
+    from swarm.agents.nlp import _SummaryAgg, NlpAnswerAgent  # noqa: E402
+
+    fairness = NlpIntakeFairQueue[int](
+        fairness_key="tenant_id",
+        per_tenant_inflight_max=1,
+        max_tracked_keys=100,
+        tenant_abuse_qps_threshold=10.0,
+        tenant_abuse_window_s=10,
+        clock=lambda: 0.0,
+    )
+    for idx, tenant_id in enumerate(
+        ["tenant-alpha", "tenant-alpha", "tenant-alpha", "tenant-beta", "tenant-gamma"],
+        1,
+    ):
+        fairness.enqueue(idx, {"tenant_id": tenant_id})
+    first_three: list[str] = []
+    for _ in range(3):
+        dispatch = fairness.dequeue()
+        if dispatch is None:
+            raise AssertionError("phase10 demo: fairness queue returned no dispatch")
+        first_three.append(dispatch.key)
+        fairness.complete(dispatch.key)
+    if first_three != ["tenant-alpha", "tenant-beta", "tenant-gamma"]:
+        raise AssertionError(
+            f"phase10 demo: fairness queue did not isolate noisy tenant; got {first_three!r}"
+        )
+    ok("swarm.demo.nlp: tenant-fairness isolation under load exercised")
+
+    class _StubIntentModel:
+        def __init__(self, model_version: str, intent: str, confidence: float) -> None:
+            self.model_version = model_version
+            self._intent = intent
+            self._confidence = confidence
+
+        def predict_intent(self, text: str) -> tuple[str, float]:
+            return self._intent, self._confidence
+
+    prev_canary_pod = getattr(cfg, "nlp_canary_pod", False)
+    prev_canary_pct = getattr(cfg, "nlp_intent_model_canary_pct", 0)
+    prev_canary_bucket = getattr(cfg, "nlp_canary_account_bucket_size", 1000)
+    prev_shadow_mode = getattr(cfg, "nlp_intent_shadow_mode", "off")
+    prev_shadow_rate = getattr(cfg, "nlp_shadow_sample_rate", 0.01)
+    try:
+        cfg.nlp_canary_pod = True
+        cfg.nlp_intent_model_canary_pct = 100
+        cfg.nlp_canary_account_bucket_size = 1000
+        cfg.nlp_intent_shadow_mode = "on"
+        cfg.nlp_shadow_sample_rate = 1.0
+        if not IntentClassifier.should_route_to_canary("acct-123", cfg):
+            raise AssertionError(
+                "phase10 demo: canary routing did not select the expected account"
+            )
+        baseline = _StubIntentModel("baseline-v1", "predict.1x2", 0.82)
+        canary = _StubIntentModel("canary-v2", "predict.2.5", 0.32)
+        shadow_payload = IntentClassifier.shadow_payload_for_request(
+            "Galatasaray maç",
+            baseline,
+            canary,
+            cfg,
+            request_id="demo-shadow-1",
+        )
+        if shadow_payload is None:
+            raise AssertionError("phase10 demo: shadow-mode did not produce payload")
+        if shadow_payload["agreement"] is not False:
+            raise AssertionError(
+                "phase10 demo: shadow-mode disagreement was not recorded as expected"
+            )
+        ok(
+            "swarm.demo.nlp: canary routing + shadow-mode disagreement recording exercised"
+        )
+    finally:
+        cfg.nlp_canary_pod = prev_canary_pod
+        cfg.nlp_intent_model_canary_pct = prev_canary_pct
+        cfg.nlp_canary_account_bucket_size = prev_canary_bucket
+        cfg.nlp_intent_shadow_mode = prev_shadow_mode
+        cfg.nlp_shadow_sample_rate = prev_shadow_rate
+
+    agent = NlpAnswerAgent(
+        clock_iso=lambda: "2026-05-31T10:00:00+00:00",
+        monotonic=lambda: 0.0,
+    )
+    agg = _SummaryAgg(
+        expected=5,
+        qa_request_id="demo-req-2",
+        qa_correlation_id="demo-summary-2",
+        deadline=0.0,
+    )
+    for index in range(3):
+        agg.predictions.append(
+            {
+                "prediction_id": f"demo-p{index}",
+                "qa_request_id": "demo-req-2",
+                "qa_correlation_id": "demo-summary-2",
+                "summary_correlation_id": "demo-summary-2",
+                "calibration_version": 1,
+                "final": {
+                    "prediction_id": f"demo-p{index}",
+                    "contributing_models": ["model-demo"],
+                    "produced_at": "2026-05-31T10:00:00+00:00",
+                    "degraded": False,
+                    "degraded_reason": None,
+                },
+            }
+        )
+    summary_answer = agent._build_summary_answer(agg, "demo-summary-2", received=3)
+    if summary_answer.payload["kind"] != "summary":
+        raise AssertionError("phase10 demo: summary partial-render did not produce a summary answer")
+    if not summary_answer.payload["degraded"]:
+        raise AssertionError("phase10 demo: partial summary answer should be degraded")
+    if "3/5 maç" not in summary_answer.payload["answer_text"]:
+        raise AssertionError(
+            "phase10 demo: partial summary answer text did not include missing fixtures count"
+        )
+    ok("swarm.demo.nlp: summary fan-out partial-render path exercised")
+
+    with tempfile.TemporaryDirectory(prefix="swarm-demo-nlp-screen-reader-") as sample_tmp:
+        sample_dir = Path(sample_tmp)
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        sample_template = sample_dir / "screen_reader_emoji.tr.j2"
+        sample_template.write_text(
+            "Tahmin % 67 ✓ ⚽ 🏟️ ▶\n",
+            encoding="utf-8",
+        )
+        env = build_environment(template_dir=sample_dir)
+        text1 = nlp_render(
+            "screen_reader_emoji.tr.j2",
+            {},
+            env=env,
+            answer_format="screen_reader",
+        )
+        text2 = nlp_render(
+            "screen_reader_emoji.tr.j2",
+            {},
+            env=env,
+            answer_format="screen_reader",
+        )
+        if text1.encode("utf-8") != text2.encode("utf-8"):
+            raise AssertionError("phase10 demo: screen_reader output is not byte-stable")
+        if any(ch in text1 for ch in ["✓", "⚽", "🏟️", "▶"]):
+            raise AssertionError("phase10 demo: screen_reader output contained decorative emoji")
+    ok("swarm.demo.nlp: answer_format=screen_reader byte-stable rendering exercised")
+
+    with tempfile.TemporaryDirectory(prefix="swarm-demo-nlp-safe-mode-") as safe_tmp:
+        primary_dir = Path(safe_tmp) / "lexicon"
+        safe_mode_dir = primary_dir.parent / "lexicon_safe_mode"
+        primary_dir.mkdir(parents=True, exist_ok=True)
+        safe_mode_dir.mkdir(parents=True, exist_ok=True)
+        safe_yaml = """_meta:\n  schema_version: 1\n  lexicon_version: 1.0.0\n  generated_at_utc: '2026-06-02T00:00:00Z'\n  generator: test\nentries:\n- canonical_id: galatasaray\n  names:\n  - Galatasaray\n  aliases:\n  - Galatasaray\n"""
+        primary_valid_yaml = """_meta:\n  schema_version: 1\n  lexicon_version: 1.0.0\n  generated_at_utc: '2026-06-02T00:00:00Z'\n  generator: test\nentries:\n- canonical_id: fenerbahce\n  names:\n  - Fenerbahçe\n  aliases:\n  - Fenerbahce\n"""
+        (safe_mode_dir / "teams.tr.yaml").write_text(safe_yaml, encoding="utf-8")
+        primary_file = primary_dir / "teams.tr.yaml"
+        primary_file.write_text("entries: [", encoding="utf-8")
+        class _Clock:
+            def __init__(self) -> None:
+                self.value = 0.0
+
+            def now(self) -> float:
+                return self.value
+
+        prev_lex_dir = getattr(cfg, "nlp_lexicon_dir", "ai/nlp/lexicon")
+        prev_safe_enabled = getattr(cfg, "nlp_safe_mode_fallback_enabled", True)
+        cfg.nlp_lexicon_dir = str(primary_dir)
+        cfg.nlp_safe_mode_fallback_enabled = True
+        clock = _Clock()
+        try:
+            safe_store = LexiconStore.from_cfg(
+                cfg, reload_s=1, max_rss_mb=0, clock_mono=clock.now
+            )
+            alerts = safe_store.maybe_reload()
+            if not safe_store.safe_mode_active:
+                raise AssertionError("phase10 demo: safe-mode did not activate on corrupted primary lexicon")
+            if not any(a.get("kind") == "nlp_safe_mode_active" for a in alerts):
+                raise AssertionError("phase10 demo: safe-mode activation alert missing")
+            primary_file.write_text(primary_valid_yaml, encoding="utf-8")
+            clock.value = 2.0
+            exit_alerts = safe_store.maybe_reload()
+            if safe_store.safe_mode_active:
+                raise AssertionError("phase10 demo: safe-mode did not exit after primary lexicon recovery")
+            if not any(a.get("kind") == "nlp_safe_mode_exited" for a in exit_alerts):
+                raise AssertionError("phase10 demo: safe-mode exit alert missing")
+        finally:
+            cfg.nlp_lexicon_dir = prev_lex_dir
+            cfg.nlp_safe_mode_fallback_enabled = prev_safe_enabled
+    ok("swarm.demo.nlp: safe-mode engage/exit via injected lexicon corruption exercised")
+
     # (e) §10.22 Turkish robustness paths.
     from nlp.entity import EntityExtractor  # noqa: E402
     from nlp.lexicon_loader import LexiconStore  # noqa: E402

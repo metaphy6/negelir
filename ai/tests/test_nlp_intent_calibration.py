@@ -32,6 +32,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
+from common.config import cfg
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +317,38 @@ class TestPhase1030Tables:
         assert should_fire_wh_prior_drift_alert(0.5, 0.529)
         assert not should_fire_wh_prior_drift_alert(0.0, 0.019)
 
+    def test_politeness_distribution_drift_alert_fires_above_threshold(self) -> None:
+        from nlp.phase10_30 import should_fire_politeness_distribution_drift_alert
+
+        assert should_fire_politeness_distribution_drift_alert(
+            {
+                "neutral": 0.80,
+                "polite": 0.10,
+                "very_polite": 0.05,
+                "curt": 0.05,
+            },
+            {
+                "neutral": 0.65,
+                "polite": 0.20,
+                "very_polite": 0.10,
+                "curt": 0.05,
+            },
+        )
+        assert not should_fire_politeness_distribution_drift_alert(
+            {
+                "neutral": 0.80,
+                "polite": 0.10,
+                "very_polite": 0.07,
+                "curt": 0.03,
+            },
+            {
+                "neutral": 0.78,
+                "polite": 0.11,
+                "very_polite": 0.06,
+                "curt": 0.05,
+            },
+        )
+
     def test_wh_token_not_consulted_post_classifier_ast(self) -> None:
         from pathlib import Path
 
@@ -349,6 +382,29 @@ class TestPhase1030Tables:
         assert not violations, (
             "WH prior helpers must be consulted only from nlp.intent; "
             f"found in: {violations}"
+        )
+
+    def test_search_operator_detection_pre_classifier_ast(self) -> None:
+        from pathlib import Path
+
+        normalize_path = Path(__file__).resolve().parents[1] / "nlp" / "normalize.py"
+        source = normalize_path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(normalize_path))
+
+        search_line = None
+        particle_line = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == "detect_search_operator_syntax_in_text":
+                    search_line = node.lineno
+                elif node.func.id == "_normalize_particles":
+                    particle_line = node.lineno
+
+        assert search_line is not None, "normalize.py must call detect_search_operator_syntax_in_text"
+        assert particle_line is not None, "normalize.py must call _normalize_particles"
+        assert search_line < particle_line, (
+            "Search-operator detection must happen before expensive token/extraction work "
+            f"in normalize.py (line {search_line} before {particle_line})"
         )
 
     def test_politeness_helpers_not_consulted_by_routing_or_proofreader_ast(self) -> None:
@@ -392,6 +448,62 @@ class TestPhase1030Tables:
         from nlp.phase10_30 import GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
 
         assert "idioms.tr.yaml" in GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
+
+    def test_anaphora_pronoun_table_covers_expected_pronouns(self) -> None:
+        from nlp.phase10_30 import load_anaphora_pronouns
+
+        entries = load_anaphora_pronouns()
+        assert len(entries) >= 10
+        assert entries["onlar"].type_constraint == "team_set"
+        assert entries["orası"].type_constraint == "venue"
+        assert entries["kendisi"].type_constraint == "person"
+        assert entries["oradakiler"].type_constraint == "venue_or_group"
+
+    def test_anaphora_pronoun_table_schema_is_valid(self) -> None:
+        from nlp.phase10_30 import load_anaphora_pronouns
+
+        pronouns = load_anaphora_pronouns()
+        assert all(isinstance(entry.pronoun, str) and entry.pronoun for entry in pronouns.values())
+        assert all(isinstance(entry.type_constraint, str) and entry.type_constraint for entry in pronouns.values())
+
+    def test_anaphora_compose_table_schema_is_valid(self) -> None:
+        from nlp.phase10_30 import load_anaphora_compose
+
+        patterns = load_anaphora_compose()
+        assert len(patterns) >= 1
+        assert frozenset({"onlar", "orası"}) in patterns
+
+    def test_anaphora_resolver_respects_type_constraint_ast(self) -> None:
+        from nlp.phase10_30 import resolve_anaphora_pronoun
+
+        mention_stack = [
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 0.99,
+                "name": "Galatasaray",
+                "mentioned_turn": 0,
+                "mentioned_at": "2026-01-01T00:00:00+00:00",
+            }
+        ]
+        resolved, score = resolve_anaphora_pronoun(
+            "orası",
+            mention_stack,
+            current_turn_index=1,
+            current_time_iso="2026-01-01T00:01:00+00:00",
+        )
+        assert resolved is None
+        assert score < float(cfg.nlp_anaphora_min_antecedent_confidence)
+
+        resolved_team, team_score = resolve_anaphora_pronoun(
+            "onlar",
+            mention_stack,
+            current_turn_index=1,
+            current_time_iso="2026-01-01T00:01:00+00:00",
+        )
+        assert resolved_team is not None
+        assert resolved_team["canonical_id"] == "gs"
+        assert team_score >= float(cfg.nlp_anaphora_min_antecedent_confidence)
 
     def test_politeness_marker_table_includes_suffixal_forms(self) -> None:
         from nlp.phase10_30 import load_politeness_markers

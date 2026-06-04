@@ -40,6 +40,22 @@ entries:
       - istanbul_city
     reason: "istanbul alone is not an entity; requires basaksehir to resolve to the club"
 
+  - token: rize
+    requires_cotoken:
+      - maç
+      - skor
+      - kadro
+      - fikstür
+      - puan
+      - forma
+      - hocası
+      - teknik
+    requires_cotoken_radius: 4
+    ambiguous_between:
+      - rize_city
+      - rizespor
+    reason: "rize alone is ambiguous between the city and Rizespor; club resolution requires a nearby fixture-specific co-token"
+
   - token: kanarya
     requires_cotoken: null
     ambiguous_between:

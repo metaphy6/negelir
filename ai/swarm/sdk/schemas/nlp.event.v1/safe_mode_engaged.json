@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/safe_mode_engaged",
+  "title": "nlp.event.v1{kind=safe_mode_engaged}",
+  "description": "The NLP pipeline entered safe mode due to an operational failure.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "safe_mode_snapshot",
+    "reason"
+  ],
+  "properties": {
+    "kind": {"const": "safe_mode_engaged"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.answer.v1", "nlp.proofreader.v1"]
+    },
+    "request_id": {"type": ["string", "null"]},
+    "emitted_at": {"type": "string", "description": "ISO-8601 UTC."},
+    "safe_mode_snapshot": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

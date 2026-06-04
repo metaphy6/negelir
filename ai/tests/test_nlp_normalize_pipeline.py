@@ -15,14 +15,22 @@ import pytest
 # ---------------------------------------------------------------------------
 _EXPECTED_STEPS = (
     "length_cap",
+    "html_entity_unescape",
     "canonical_normalize",
+    "compose_turkish_dotted_i",
     "confusables_fold",
+    "digit_letter_fold",
     "lowercase_tr",
     "punct_normalize",
+    "social_hygiene",
+    "emoji_hint_extract",
     "diacritic_restore",
     "regional_dialect_normalize",
     "apostrophe_proper_noun_repair",
     "tokenize",
+    "split_questions",
+    "strip_combining_marks",
+    "repeat_collapse",
     "particle_normalize",   # step 8a §10.22.4
     "postposition_stack",  # step 8a.5 §10.32.3
     "consonant_alternation",  # step 8a.1 §10.28.1
@@ -58,6 +66,97 @@ class TestBindingStepOrder:
         text = "galatasaray"
         result = normalize_input(text)
         assert result.original_codepoint_count == len(text)
+
+    def test_emoji_hints_are_extracted_and_stripped_before_tokenization(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("🔴🟡 maç ne zaman")
+        joined = " ".join(result.tokens)
+        assert "🔴" not in joined
+        assert "🟡" not in joined
+        assert result.emoji_hints == (
+            {"emoji": "🔴", "hint": "team_color", "team_color": ["red"]},
+            {"emoji": "🟡", "hint": "team_color", "team_color": ["yellow"]},
+        )
+
+    def test_html_entity_unescape_runs_before_canonical_normalize(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray &amp; fenerbahce")
+        assert result.steps_run[1] == "html_entity_unescape"
+        assert "&amp;" not in " ".join(result.tokens)
+        assert "amp" not in " ".join(result.tokens)
+
+    def test_html_entity_unescape_can_be_disabled(self) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        cfg = Config()
+        cfg.nlp_html_unescape_enabled = False
+        result = normalize_input("galatasaray &amp; fenerbahce", cfg=cfg)
+        assert any("&amp" in tok for tok in result.tokens)
+        assert "galatasaray" in result.tokens
+        assert "fenerbahce" in result.tokens
+
+    def test_emoji_hint_extraction_can_be_disabled(self) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        cfg = Config()
+        cfg.nlp_emoji_hint_enabled = False
+        result = normalize_input("🔴🟡 maç ne zaman", cfg=cfg)
+        assert result.emoji_hints == ()
+        assert "🔴" in " ".join(result.tokens)
+        assert "🟡" in " ".join(result.tokens)
+
+    def test_hashtag_handling_can_be_disabled(self) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        cfg = Config()
+        cfg.nlp_hashtag_handling_enabled = False
+        result = normalize_input("#GSFB maç", cfg=cfg)
+        assert "#gsfb" in " ".join(result.tokens)
+        assert "galatasaray" not in result.tokens
+
+    def test_hashtag_gsfb_resolves_to_match_pair(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("#GSFB maç")
+        assert "galatasaray" in result.tokens
+        assert "fenerbahce" in result.tokens
+        assert "#gsfb" not in result.tokens
+
+    def test_at_mention_galatasaray_strong_hint(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("@galatasaray maç")
+        assert "galatasaray" in result.tokens
+        assert "@galatasaray" not in result.tokens
+
+    def test_unknown_at_mention_is_dropped(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("@unknownhandle maç")
+        joined = " ".join(result.tokens)
+        assert "unknownhandle" not in joined
+        assert "@unknownhandle" not in joined
+
+    def test_url_is_stripped_and_domain_recorded(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("https://example.com/fb maç")
+        joined = " ".join(result.tokens)
+        assert "https://example.com/fb" not in joined
+        assert any(event.get("kind") == "url_stripped" and event.get("domain") == "example.com" for event in result.normalization_events)
+
+    def test_generic_decorative_emoji_are_stripped_without_hints(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray 😂 maç")
+        joined = " ".join(result.tokens)
+        assert "😂" not in joined
+        assert all(hint["emoji"] != "😂" for hint in result.emoji_hints)
 
     def test_voice_input_uses_voice_diacritic_ratio(self) -> None:
         from unittest.mock import patch
@@ -137,6 +236,85 @@ class TestStep1LengthCap:
         fake_cfg = type("FakeCfg", (), {"nlp_input_max_codepoints": 5, "nlp_normalize_stage_timeout_ms": 200})()
         with pytest.raises(InputTooLongError):
             normalize_input("toolonginput", cfg=fake_cfg)
+
+
+class TestRepeatCollapseNormalization:
+    """Phase 10 §10.24.2 repeat-collapse behavior and downstream integration."""
+
+    def test_repeat_collapse_runs_before_typo_correction(self) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        observed: list[list[str]] = []
+
+        def mock_typo(tokens: list[str]) -> tuple[list[str], bool]:
+            observed.append(tokens)
+            return ["evet" if tok == "evett" else tok for tok in tokens], False
+
+        cfg = Config()
+        result = normalize_input("evettttt mac", cfg=cfg, _typo_correct=mock_typo)
+
+        assert observed == [["evett", "mac"]]
+        assert "evet" in result.tokens
+
+    def test_repeat_collapse_preserves_intentional_doubles(self) -> None:
+        from nlp.normalize import normalize_input
+
+        observed: list[list[str]] = []
+
+        def mock_typo(tokens: list[str]) -> tuple[list[str], bool]:
+            observed.append(tokens)
+            return tokens, False
+
+        normalize_input("saat maç", _typo_correct=mock_typo)
+        assert observed == [["saat", "maç"]]
+
+    def test_repeat_collapse_drops_overlong_tokens_as_garbage(self) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        calls: list[list[str]] = []
+
+        def mock_typo(tokens: list[str]) -> tuple[list[str], bool]:
+            calls.append(tokens)
+            return tokens, False
+
+        cfg = Config()
+        cfg.nlp_repeat_collapse_max_len = 10
+        normalize_input("galatasarayabcdefgh mac", cfg=cfg, _typo_correct=mock_typo)
+
+        assert calls == [["mac"]]
+
+    def test_repeat_collapse_idempotent(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result1 = normalize_input("hayııır")
+        result2 = normalize_input(" ".join(result1.tokens))
+
+        assert result1.tokens == result2.tokens
+
+
+class TestDigitLetterConfusableFold:
+    """Phase 10 §10.24.3 digit-letter confusable folding behavior."""
+
+    def test_digit_letter_fold_folds_leetspeak_tokens(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("g4latasaray mac")
+        assert "galatasaray" in result.tokens
+
+    def test_digit_letter_fold_preserves_year_suffix_allowlist(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("BJK1903 maç")
+        assert "bjk1903" in result.tokens
+        assert "bjkiioe" not in result.tokens
+
+    def test_digit_letter_fold_does_not_fold_score_lines(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("1-0 galatasaray")
+        assert "1-0" in result.tokens
 
 
 class TestSteps23CanonicalNormalize:
@@ -226,11 +404,35 @@ class TestPhase1030Normalization:
         result = normalize_input("galatasaray kazanırsa fenerbahçeden önde mi olur")
         assert result.intent_modifier == ("conditional", "comparative")
 
+    def test_sarcasm_modifier_set_on_cue_plus_context(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray harika oynadılar ama son maçta 0-5 kaybetti")
+        assert result.intent_modifier == "sarcastic"
+
     def test_search_operator_patterns_detect_plus_minus(self) -> None:
         from nlp.normalize import normalize_input
 
         result = normalize_input("+galatasaray -fenerbahçe")
         assert result.query_style == "search"
+
+    def test_search_operator_detects_ve_veya_uppercase_only(self) -> None:
+        from nlp.normalize import normalize_input
+
+        search_upper = normalize_input("GALATASARAY VEYA FENERBAHÇE")
+        assert search_upper.query_style == "search"
+
+        natural = normalize_input("galatasaray veya fenerbahçe")
+        assert natural.query_style == "natural"
+
+    def test_search_operator_detects_or_and_uppercase_only(self) -> None:
+        from nlp.normalize import normalize_input
+
+        search_or = normalize_input("GALATASARAY OR FENERBAHÇE")
+        assert search_or.query_style == "search"
+
+        natural_or = normalize_input("galatasaray or fenerbahçe")
+        assert natural_or.query_style == "natural"
 
     def test_search_operator_detects_field_prefix(self) -> None:
         from nlp.normalize import normalize_input
@@ -332,6 +534,52 @@ class TestPhase1030Normalization:
         result = normalize_input("yani galatasaray maçını tahmin et", input_source="voice")
         assert "yani" not in result.tokens
 
+    def test_asr_punctuation_words_stripped_only_in_voice_modality(self) -> None:
+        from nlp.normalize import normalize_input
+
+        voice_result = normalize_input("virgül galatasaray", input_source="voice")
+        assert "virgül" not in voice_result.tokens
+        assert any(event["kind"] == "asr_punctuation_word_stripped" for event in voice_result.normalization_events)
+
+        keyboard_result = normalize_input("virgül galatasaray", input_source="keyboard")
+        assert "virgül" in keyboard_result.tokens
+        assert not keyboard_result.normalization_events
+
+    def test_asr_punctuation_word_replaces_adjacent_number_words_with_literal_punctuation(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("yirmi virgül beş", input_source="voice")
+        assert result.tokens == ("20,5",)
+
+    def test_nlp_suffix_harmony_repaired_event_emitted_with_debounce(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Besiktase")
+        assert any(
+            event["kind"] == "suffix_harmony_repaired"
+            and event["original_suffix"] == "e"
+            and event["resolved_suffix_class"] == "dative"
+            for event in result.suffix_harmony_repair_events
+        )
+
+    def test_voice_number_tiebreak_resolves_time_to_digit(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("saat yirmi bir", input_source="voice")
+        assert result.tokens == ("saat", "21")
+
+    def test_voice_number_tiebreak_resolves_score_to_ordinal(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("gol yirmi bir", input_source="voice")
+        assert result.tokens == ("gol", "21.")
+
+    def test_voice_number_tiebreak_resolves_year_to_four_digit(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("iki bin yirmi bir sezon", input_source="voice")
+        assert result.tokens == ("2021", "sezon")
+
     def test_voice_question_split_relaxed_without_punctuation(self) -> None:
         from nlp.normalize import split_questions
 
@@ -355,6 +603,48 @@ class TestPhase1030Normalization:
             ["fenerbahce", "ne", "zaman", "oynar", "ve"],
             ["galatasaray", "kazanacak", "mu"],
         ]
+
+    def test_normalize_input_records_voice_subqueries(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input(
+            "galatasaray kazandi mi fenerbahce ne zaman oynar simdi",
+            input_source="voice",
+        )
+        assert result.subqueries == (
+            ("galatasaray", "kazandi", "mi"),
+            ("fenerbahçe", "ne", "zaman", "oynar", "simdi"),
+        )
+        assert "split_questions" in result.steps_run
+
+    def test_normalize_input_caps_voice_subqueries_to_cfg_max_subqueries(
+        self, monkeypatch
+    ) -> None:
+        from common.config import cfg
+        from nlp.normalize import normalize_input
+
+        monkeypatch.setattr(cfg, "nlp_max_subqueries", 1)
+        result = normalize_input(
+            "galatasaray kazandi mi fenerbahce ne zaman oynar simdi",
+            cfg=cfg,
+            input_source="voice",
+        )
+
+        assert result.subqueries == (("galatasaray", "kazandi", "mi"),)
+        assert any(
+            event.get("kind") == "subquery_cap_applied"
+            for event in result.compound_split_events
+        )
+
+    def test_normalize_input_does_not_split_keyboard_input(self) -> None:
+        from nlp.normalize import normalize_input
+
+        query = "galatasaray kazandi mi fenerbahce ne zaman oynar simdi"
+        result = normalize_input(query, input_source="keyboard")
+        assert result.subqueries == (
+            tuple(query.split()),
+        )
+        assert "split_questions" in result.steps_run
 
 
 class TestStep4TurkishLowercase:
@@ -419,6 +709,35 @@ class TestStep4TurkishLowercase:
         for upper, lower in mapping.items():
             result = lowercase_tr(upper)
             assert result == lower, f"lowercase_tr({upper!r}) -> {result!r}, expected {lower!r}"
+
+    def test_decomposed_capital_i_recomposes_to_dotted_i(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("I\u0307stanbul")
+        assert "istanbul" in result.tokens
+
+    def test_decomposed_lowercase_i_drops_stray_dot(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("i\u0307stanbul")
+        assert "istanbul" in result.tokens
+
+    def test_combining_dot_above_tail_strip_removes_extra_marks(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("I\u0307\u0307stanbul")
+        assert "istanbul" in result.tokens
+        assert not any("\u0307" in tok for tok in result.tokens)
+
+    def test_excessive_combining_marks_drops_token_with_alert(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray x\u0304\u0308\u0301\u0302\u0303")
+        assert result.tokens == ("galatasaray",)
+        assert any(
+            event["kind"] == "excessive_combining_marks" and event["token_dropped"]
+            for event in result.normalization_events
+        )
 
 
 class TestStep5PunctNormalize:

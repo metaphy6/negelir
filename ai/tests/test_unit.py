@@ -13,6 +13,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from ai.common.config import Config
+
 
 # ── Phase 10 §10.14 — NLP Structured Logs (PII-clean) ────────────────────────
 
@@ -107,18 +109,26 @@ from swarm.sdk.types import Envelope, Message, Topic
 def test_make_answer_key_stable_hash():
     """make_answer_key produces deterministic SHA256-based cache keys."""
     key1 = make_answer_key(
+        normalized_text="gs maçı tahmin",
         intent="predict.match_outcome",
         entity_hash="abc123",
         fixture_window_bucket="2026-05-29T00:00:00Z",
         model_versions_hash="def456",
+        intent_model_version="1.0.0",
+        lexicon_snapshot_sha="lex-sha-1",
         calibration_version="v1.2",
+        pipeline_version="10.0.0",
     )
     key2 = make_answer_key(
+        normalized_text="gs maçı tahmin",
         intent="predict.match_outcome",
         entity_hash="abc123",
         fixture_window_bucket="2026-05-29T00:00:00Z",
         model_versions_hash="def456",
+        intent_model_version="1.0.0",
+        lexicon_snapshot_sha="lex-sha-1",
         calibration_version="v1.2",
+        pipeline_version="10.0.0",
     )
     assert key1 == key2
     assert key1.startswith("answer:")
@@ -128,9 +138,161 @@ def test_make_answer_key_stable_hash():
 
 def test_make_answer_key_different_inputs():
     """Different inputs produce different keys."""
-    key1 = make_answer_key("predict.match_outcome", "abc", "2026-05-29", "def", "v1")
-    key2 = make_answer_key("data.fixture_lookup", "abc", "2026-05-29", "def", "v1")
+    key1 = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+    )
+    key2 = make_answer_key(
+        "gs maçı tahmin",
+        "data.fixture_lookup",
+        "abc",
+        "2026-05-29",
+        "def",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+    )
     assert key1 != key2
+
+
+def test_nlp_cache_key_includes_all_5_version_fields() -> None:
+    import ast
+    from pathlib import Path
+
+    cache_path = Path(__file__).resolve().parents[1] / "swarm" / "agents" / "cache.py"
+    source = cache_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(cache_path))
+
+    handle_answer = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "_handle_answer"
+        ),
+        None,
+    )
+    assert handle_answer is not None
+
+    required_fields = {
+        "normalized_text",
+        "intent_model_version",
+        "lexicon_snapshot_sha",
+        "calibration_version",
+        "nlp_pipeline_version",
+    }
+    found_fields: set[str] = set()
+    for node in ast.walk(handle_answer):
+        if isinstance(node, ast.Subscript):
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                found_fields.add(node.slice.value)
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                if (
+                    isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "payload"
+                    and node.func.attr == "get"
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                ):
+                    found_fields.add(node.args[0].value)
+
+    missing = required_fields - found_fields
+    if missing:
+        capture_snapshot = next(
+            (
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "_capture_version_snapshot"
+            ),
+            None,
+        )
+        assert capture_snapshot is not None, (
+            "_handle_answer must consult all required cache key fields either directly "
+            "or by calling _capture_answer_version_snapshot"
+        )
+        for node in ast.walk(capture_snapshot):
+            if isinstance(node, ast.Subscript):
+                if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                    found_fields.add(node.slice.value)
+            elif isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute):
+                    if (
+                        isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "payload"
+                        and node.func.attr == "get"
+                        and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)
+                    ):
+                        found_fields.add(node.args[0].value)
+        missing = required_fields - found_fields
+    assert not missing, (
+        "_handle_answer must consult all required cache key fields; "
+        f"missing: {sorted(missing)}"
+    )
+
+    make_key = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "make_answer_key"
+        ),
+        None,
+    )
+    assert make_key is not None
+    assert any(arg.arg == "normalized_text" for arg in make_key.args.args), (
+        "make_answer_key must accept normalized_text"
+    )
+    assert any(
+        isinstance(node, ast.Name) and node.id == "normalized_text"
+        for node in ast.walk(make_key)
+    ), (
+        "make_answer_key must use normalized_text in its implementation"
+    )
+
+
+def test_nlp_version_snapshot_held_for_request_lifetime() -> None:
+    from swarm.agents.cache import VersionSnapshot, _capture_version_snapshot
+
+    payload = {
+        "normalized_text": "gs maçı tahmin",
+        "intent_model_version": "1.0.0",
+        "lexicon_snapshot_sha": "lex-sha-1",
+        "calibration_version": "v1.0",
+        "nlp_pipeline_version": "10.0.0",
+        "intent": "predict.match_outcome",
+    }
+
+    snapshot = _capture_version_snapshot(payload)
+    assert isinstance(snapshot, VersionSnapshot)
+    assert snapshot.normalized_text == "gs maçı tahmin"
+    assert snapshot.intent_model_version == "1.0.0"
+    assert snapshot.lexicon_snapshot_sha == "lex-sha-1"
+    assert snapshot.calibration_version == "v1.0"
+    assert snapshot.pipeline_version == "10.0.0"
+
+    payload["intent_model_version"] = "2.0.0"
+    payload["lexicon_snapshot_sha"] = "lex-sha-2"
+    payload["calibration_version"] = "v2.0"
+    payload["nlp_pipeline_version"] = "11.0.0"
+
+    assert snapshot.intent_model_version == "1.0.0"
+    assert snapshot.lexicon_snapshot_sha == "lex-sha-1"
+    assert snapshot.calibration_version == "v1.0"
+    assert snapshot.pipeline_version == "10.0.0"
+
+    with pytest.raises(AttributeError):
+        snapshot.intent_model_version = "should_fail"
 
 
 def test_cache_agent_handles_qa_answer_v1_data_intent():
@@ -139,11 +301,15 @@ def test_cache_agent_handles_qa_answer_v1_data_intent():
     agent = CacheAgent(backend=backend)
 
     payload = {
+        "normalized_text": "gs maçı tahmin",
         "intent": "data.fixture_lookup",
         "entity_hash": "entity123",
         "fixture_window_bucket": "2026-05-29",
         "model_versions_hash": "model456",
+        "intent_model_version": "1.0.0",
+        "lexicon_snapshot_sha": "lex-sha-1",
         "calibration_version": "v1.0",
+        "nlp_pipeline_version": "10.0.0",
         "answer_text": "Galatasaray bugün 21:00'de oynayacak.",
     }
     envelope = Envelope(topic=Topic("qa.answer.v1"))
@@ -163,11 +329,15 @@ def test_cache_agent_handles_qa_answer_v1_predict_intent():
     agent = CacheAgent(backend=backend)
 
     payload = {
+        "normalized_text": "gs maçı tahmin",
         "intent": "predict.match_outcome",
         "entity_hash": "entity789",
         "fixture_window_bucket": "2026-05-30",
         "model_versions_hash": "modelXYZ",
+        "intent_model_version": "1.0.0",
+        "lexicon_snapshot_sha": "lex-sha-1",
         "calibration_version": "v2.0",
+        "nlp_pipeline_version": "10.0.0",
         "answer_text": "Galatasaray %65 olasılıkla kazanacak.",
     }
     envelope = Envelope(topic=Topic("qa.answer.v1"))
@@ -178,17 +348,32 @@ def test_cache_agent_handles_qa_answer_v1_predict_intent():
     assert len(backend) == 1
 
 
+def test_nlp_cache_ttls_are_short():
+    cfg = Config()
+
+    assert cfg.nlp_intent_cache_ttl_s == 300
+    assert cfg.nlp_answer_cache_ttl_data_s == 120
+    assert cfg.nlp_answer_cache_ttl_predict_s == 60
+    assert cfg.nlp_intent_cache_ttl_s <= 600
+    assert cfg.nlp_answer_cache_ttl_data_s <= 600
+    assert cfg.nlp_answer_cache_ttl_predict_s <= 600
+
+
 def test_cache_agent_caches_streamed_qa_answer_as_one_shot_payload():
     """Streamed qa.answer.v1 cache entries must preserve the assembled final answer."""
     backend = InMemoryCacheBackend()
     agent = CacheAgent(backend=backend)
 
     payload = {
+        "normalized_text": "gs maçı tahmin",
         "intent": "predict.match_outcome",
         "entity_hash": "entity-streamed",
         "fixture_window_bucket": "2026-05-30",
         "model_versions_hash": "modelXYZ",
+        "intent_model_version": "1.0.0",
+        "lexicon_snapshot_sha": "lex-sha-1",
         "calibration_version": "v2.0",
+        "nlp_pipeline_version": "10.0.0",
         "answer_text": "Bu bir taslaktır.",
         "streaming_chunks": ["Bu bir taslaktır.", " Ek cümle."],
         "final_answer": "Bu bir taslaktır. Ek cümle.",
@@ -200,23 +385,42 @@ def test_cache_agent_caches_streamed_qa_answer_as_one_shot_payload():
     assert result == []
     assert len(backend) == 1
 
+    from swarm.agents.cache import _verify_cache_entry
+
     key = make_answer_key(
+        normalized_text=payload["normalized_text"],
         intent=payload["intent"],
         entity_hash=payload["entity_hash"],
         fixture_window_bucket=payload["fixture_window_bucket"],
         model_versions_hash=payload["model_versions_hash"],
+        intent_model_version=payload["intent_model_version"],
+        lexicon_snapshot_sha=payload["lexicon_snapshot_sha"],
         calibration_version=payload["calibration_version"],
+        pipeline_version=payload["nlp_pipeline_version"],
     )
     cached = backend.get(key)
     assert cached is not None
 
-    cache_value = json.loads(cached)
+    wrapper = json.loads(cached)
+    assert wrapper["signature"] and isinstance(wrapper["signature"], str)
+    cache_value = _verify_cache_entry(cached)
     assert cache_value["streamed"] is True
     assert cache_value["chunks"] == payload["streaming_chunks"]
     assert cache_value["final"] == payload["final_answer"]
     assert cache_value["payload"]["answer_text"] == payload["final_answer"]
     assert "streaming_chunks" not in cache_value["payload"]
     assert "final_answer" not in cache_value["payload"]
+
+
+def test_verify_cache_entry_rejects_invalid_signature() -> None:
+    from swarm.agents.cache import _wrap_cache_payload, _verify_cache_entry
+
+    good = {"a": 1, "b": "ok"}
+    wrapped = _wrap_cache_payload(good)
+    bad = wrapped.replace("ok", "nope")
+
+    with pytest.raises(ValueError, match="invalid cache entry"):
+        _verify_cache_entry(bad)
 
 
 def test_cache_agent_handles_malformed_qa_answer_v1():
@@ -3381,6 +3585,27 @@ def test_record_proofreader_block():
     sink.record_proofreader_block(reason="pii_redacted")
 
 
+def test_record_humanizer_tokens_emitted():
+    """TelemetrySink.record_nlp_humanizer_tokens_emitted increments the humanizer token counter."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    sink.record_nlp_humanizer_tokens_emitted(
+        tenant_class="account_free",
+        intent="predict.match_outcome",
+        count=42,
+    )
+
+
+def test_record_politeness_class_distribution():
+    """TelemetrySink.record_nlp_politeness_class records politeness class telemetry."""
+    from common.telemetry import TelemetrySink
+    
+    sink = TelemetrySink()
+    sink.record_nlp_politeness_class(politeness_class="polite")
+    sink.record_nlp_politeness_class(politeness_class="curt")
+
+
 def test_set_humanizer_breaker_state():
     """TelemetrySink.set_humanizer_breaker_state sets gauge metric."""
     from common.telemetry import TelemetrySink
@@ -3436,6 +3661,7 @@ def test_prometheus_metrics_cardinality_bounded():
         NLP_PIPELINE_LATENCY,
         NLP_INTENT_CONFIDENCE,
         NLP_HUMANIZER_BREAKER_STATE,
+        NLP_HUMANIZER_TOKENS_EMITTED_TOTAL,
         NLP_PROOFREADER_BLOCK_TOTAL,
         _PROMETHEUS_AVAILABLE,
     )
@@ -3456,6 +3682,11 @@ def test_prometheus_metrics_cardinality_bounded():
     assert "state" in NLP_HUMANIZER_BREAKER_STATE._labelnames
     assert len(NLP_HUMANIZER_BREAKER_STATE._labelnames) == 1
     
+    # Humanizer tokens emitted: tenant_class + intent
+    assert "tenant_class" in NLP_HUMANIZER_TOKENS_EMITTED_TOTAL._labelnames
+    assert "intent" in NLP_HUMANIZER_TOKENS_EMITTED_TOTAL._labelnames
+    assert len(NLP_HUMANIZER_TOKENS_EMITTED_TOTAL._labelnames) == 2
+
     # Proofreader block: reason (7 reasons per §10.9)
     assert "reason" in NLP_PROOFREADER_BLOCK_TOTAL._labelnames
     assert len(NLP_PROOFREADER_BLOCK_TOTAL._labelnames) == 1

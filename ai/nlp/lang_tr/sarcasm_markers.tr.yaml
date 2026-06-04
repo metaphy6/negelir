@@ -1,0 +1,15 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Turkish sarcasm cue phrases used by the Phase 10 sarcasm detector."
+markers:
+  - harika oynadılar
+  - muhteşem maç
+  - şahane gol
+  - takımcığımız
+  - hocacığımız
+  - tabii ya
+  - ne güzel
+  - helal olsun
+  - hayırlısı
+  - çok iyiydiler

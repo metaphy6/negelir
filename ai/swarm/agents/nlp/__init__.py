@@ -56,17 +56,21 @@ import math
 import re
 import threading as _threading
 import time as _time
-from typing import Callable, Iterable
+from collections import deque
+from typing import Any, Callable, Iterable
 import os
 from pathlib import Path
 import stat
 from uuid import uuid4
 
+from common.config import cfg
 from common.security.patterns import PII_PATTERNS
 from common.security.tr_pii import parse_redacted_tr_pii
 
 from ...sdk import AlertDebouncer
 from ...sdk.types import Message
+from nlp.lexicon_loader import is_safe_mode_active
+from nlp.normalize import assert_minimum_signal
 from ..topics import (
     DATA_REQUEST_V1,
     NLP_ALERT_V1,
@@ -77,6 +81,7 @@ from ..topics import (
     PREDICT_REQUEST_V1,
     QA_ANSWER_V1,
     QA_CONTEXT_V1,
+    QA_FEEDBACK_V1,
     QA_INTENT_V1,
     QA_REQUEST_V1,
 )
@@ -85,7 +90,12 @@ from nlp.compat import validate_compatibility_matrix
 from nlp.conversation import ConversationStore
 from ._log_filter import PIIScrubFilter, add_log_filter
 from nlp.aspectual_stack import detect_aspectual_stack
-from nlp.phase10_30 import detect_conditional_modifier
+from nlp.phase10_30 import (
+    detect_anaphora_pronouns,
+    detect_conditional_modifier,
+    is_legal_anaphora_composition,
+    resolve_anaphora_pronoun,
+)
 from nlp.quotative import detect_quotative_frame
 from nlp.render import _resolve_locale_tag, build_environment, render
 
@@ -110,6 +120,57 @@ def _load_degraded_reason_translations() -> dict[str, str]:
         return {str(k): str(v) for k, v in data.items()}
     except Exception:
         return {}
+
+
+def _make_qa_answer_payload(
+    request_id: str,
+    qa_correlation_id: str,
+    intent: str,
+    kind: str,
+    answer_text: str,
+    *,
+    answer_format: str = "plain",
+    degraded: bool = False,
+    degraded_reason: str | None = None,
+    tier_id_required: str | None = None,
+    citations: list[dict[str, object]] | None = None,
+    humanizer_used: bool = False,
+    proofreader_status: str = "pass",
+    parts: list[dict[str, object]] | None = None,
+    schema_version: int = 2,
+    conversation_id: str | None = None,
+    emitted_at_utc: str | None = None,
+    nlp_pipeline_version: str | None = None,
+) -> dict[str, object]:
+    if emitted_at_utc is None:
+        emitted_at_utc = _utc_iso()
+    if nlp_pipeline_version is None:
+        nlp_pipeline_version = str(cfg.nlp_pipeline_version)
+
+    payload: dict[str, object] = {
+        "request_id": request_id,
+        "qa_correlation_id": qa_correlation_id,
+        "schema_version": schema_version,
+        "locale": "tr-TR",
+        "intent": intent,
+        "kind": kind,
+        "answer_text": answer_text,
+        "answer_format": answer_format,
+        "degraded": degraded,
+        "degraded_reason": degraded_reason,
+        "humanizer_used": humanizer_used,
+        "proofreader_status": proofreader_status,
+        "tier_id_required": tier_id_required,
+        "citations": citations if citations is not None else [],
+        "emitted_at": emitted_at_utc,
+        "emitted_at_utc": emitted_at_utc,
+        "nlp_pipeline_version": nlp_pipeline_version,
+    }
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
+    if parts is not None:
+        payload["parts"] = parts
+    return payload
 
 
 def _translate_degraded_reason_tr(reason: str) -> str:
@@ -349,18 +410,22 @@ def cache_key_for_intent(
     fixture_window_bucket: str,
     model_versions_hash: str,
     intent_model_version: str,
+    lexicon_snapshot_sha: str,
     calibration_version: str,
+    pipeline_version: str,
 ) -> str:
     """§10.12 L1 answer cache key including model/calibration versions per §10.13.
 
     Key = sha256(intent | entity_hash | fixture_window_bucket | model_versions_hash |
-                 intent_model_version | calibration_version).
+                 intent_model_version | lexicon_snapshot_sha | calibration_version |
+                 pipeline_version).
 
     Returns a 16-hex-char sha256 prefix.
     """
     components = (
         f"{intent}|{entity_hash}|{fixture_window_bucket}|{model_versions_hash}|"
-        f"{intent_model_version}|{calibration_version}"
+        f"{intent_model_version}|{lexicon_snapshot_sha}|{calibration_version}|"
+        f"{pipeline_version}"
     )
     return _hashlib.sha256(components.encode()).hexdigest()[:16]
 
@@ -780,8 +845,21 @@ class NlpIntentAgent:
             if input_source not in {"keyboard", "voice", "paste", "unknown"}:
                 input_source = ""
 
+            sanitized_text = str(msg.payload.get("sanitized_text", ""))
+            floor_kind, greeting_echo = assert_minimum_signal(sanitized_text, cfg=cfg)
+            if floor_kind != "ok":
+                return self._with_tr_pii_alerts(
+                    self._make_floor_response(
+                        request_id=request_id,
+                        conversation_id=conversation_id or None,
+                        floor_kind=floor_kind,
+                        greeting_echo=greeting_echo,
+                    ),
+                    msg.payload,
+                )
+
             results: list[Message] = []
-            if not input_source and self._is_asr_input_text(str(msg.payload.get("sanitized_text", ""))):
+            if not input_source and self._is_asr_input_text(sanitized_text):
                 decision = self._asr_input_event_debouncer.decide(
                     kind="asr_input_auto_detected",
                     subject="",
@@ -794,6 +872,45 @@ class NlpIntentAgent:
             return self._with_tr_pii_alerts(results, msg.payload)
 
         return []
+
+    def _make_floor_response(
+        self,
+        request_id: str,
+        conversation_id: str | None,
+        floor_kind: str,
+        greeting_echo: str | None,
+    ) -> list[Message]:
+        if greeting_echo:
+            greeting = greeting_echo[0].upper() + greeting_echo[1:]
+            answer_text = f"{greeting}! Bana bir maç ya da takım sorabilirsin."
+        else:
+            answer_text = "Merhaba! Bana bir maç ya da takım sorabilirsin."
+
+        event_payload = {
+            "kind": floor_kind,
+            "producer": self.name,
+            "request_id": request_id or None,
+            "emitted_at": _utc_iso(),
+        }
+        if floor_kind == "meta.unsupported_too_short":
+            event_payload["severity"] = "warn"
+        else:
+            event_payload["severity"] = "info"
+
+        answer_payload = _make_qa_answer_payload(
+            request_id=request_id,
+            qa_correlation_id=_new_id(),
+            intent="meta.help",
+            kind="meta.help",
+            answer_text=answer_text,
+            conversation_id=conversation_id,
+            emitted_at_utc=_utc_iso(),
+        )
+
+        return [
+            Message.new(topic=NLP_EVENT_V1, payload=event_payload, producer=self.name),
+            Message.new(topic=QA_ANSWER_V1, payload=answer_payload, producer=self.name),
+        ]
 
     def _make_locale_fallback_event(
         self,
@@ -842,7 +959,7 @@ class NlpDispatcherAgent:
     """
 
     name = "nlp.dispatcher.v1"
-    subscribes = [QA_INTENT_V1]
+    subscribes = [QA_INTENT_V1, QA_FEEDBACK_V1]
     publishes = [
         PREDICT_REQUEST_V1,
         DATA_REQUEST_V1,
@@ -871,10 +988,17 @@ class NlpDispatcherAgent:
             max_buckets=1_000,
             clock=self._monotonic,
         )
+        self._anaphora_eviction_event_debouncer = AlertDebouncer(
+            ttl_s=int(cfg.nlp_anaphora_eviction_event_ratelimit_s),
+            max_buckets=1_000,
+            critical_bypass=False,
+            clock=self._monotonic,
+        )
         self._conversation_explicit_override_kinds = self._load_explicit_override_kinds()
         # §10.6 idempotency: lazy-init deduper (cfg not available at class load).
         self._deduper = deduper  # None → created on first handle() call
         self._deduper_lock = _threading.Lock()
+        self._feedback_queue = deque(maxlen=int(cfg.nlp_active_learning_queue_max))
 
     def _get_deduper(self) -> object:
         """Return the dispatcher deduper, lazily creating it from cfg."""
@@ -889,6 +1013,91 @@ class NlpDispatcherAgent:
                         clock=self._monotonic,
                     )
         return self._deduper
+
+    def _make_feedback_provenance_mismatch_event(
+        self,
+        request_id: str,
+        offered_intents: list[str],
+        accepted_intent: str | None,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "feedback_provenance_mismatch",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "offered_intents": offered_intents,
+                "accepted_intent": accepted_intent,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _make_active_learning_queue_overflow_event(
+        self,
+        request_id: str,
+        queue_size: int,
+        max_size: int,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "active_learning_queue_overflow",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "queue_size": queue_size,
+                "max_size": max_size,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _sanitize_feedback_payload(self, payload: dict[str, object]) -> dict[str, object]:
+        offered = payload.get("did_you_mean_offered_intents")
+        offered_intents = [
+            str(item)
+            for item in offered
+            if isinstance(item, str)
+        ] if isinstance(offered, list) else []
+        accepted_intent_raw = payload.get("accepted_intent")
+        accepted_intent = (
+            str(accepted_intent_raw)
+            if isinstance(accepted_intent_raw, str)
+            else None
+        )
+        return {
+            "request_id": str(payload.get("request_id", "")),
+            "original_qa_correlation_id": str(payload.get("original_qa_correlation_id", "")),
+            "did_you_mean_offered_intents": offered_intents,
+            "accepted_intent": accepted_intent,
+        }
+
+    def _is_valid_feedback_payload(self, payload: dict[str, object]) -> bool:
+        if not isinstance(payload.get("request_id"), str) or not payload["request_id"].strip():
+            return False
+        if not isinstance(payload.get("original_qa_correlation_id"), str) or not payload["original_qa_correlation_id"].strip():
+            return False
+        offered = payload.get("did_you_mean_offered_intents")
+        if not isinstance(offered, list) or not offered:
+            return False
+        if not all(isinstance(item, str) and item.strip() for item in offered):
+            return False
+        accepted_intent = payload.get("accepted_intent")
+        if accepted_intent is not None and not (isinstance(accepted_intent, str) and accepted_intent.strip()):
+            return False
+        return True
+
+    def _enqueue_feedback(self, payload: dict[str, object], request_id: str) -> Message | None:
+        if len(self._feedback_queue) >= self._feedback_queue.maxlen:
+            overflow_event = self._make_active_learning_queue_overflow_event(
+                request_id=request_id,
+                queue_size=len(self._feedback_queue),
+                max_size=self._feedback_queue.maxlen,
+            )
+            self._feedback_queue.append(payload)
+            return overflow_event
+        self._feedback_queue.append(payload)
+        return None
 
     def _load_explicit_override_kinds(self) -> frozenset[str]:
         try:
@@ -952,6 +1161,135 @@ class NlpDispatcherAgent:
         merged_entities.extend(current_entities)
         return merged_entities, override_occurred
 
+    def _append_anaphora_mentions(
+        self,
+        previous_mentions: list[dict[str, object]],
+        entities: list[dict[str, object]],
+        turn_index: int,
+        conversation_id: str | None = None,
+        request_id: str = "",
+    ) -> tuple[list[dict[str, object]], Message | None]:
+        from common.config import cfg as _cfg
+
+        now = self._clock_iso()
+        pruned_mentions, evicted = self._prune_anaphora_mentions(
+            list(previous_mentions),
+            turn_index,
+            now,
+            _cfg,
+        )
+        for entity in entities:
+            canonical_id = entity.get("canonical_id")
+            kind = entity.get("kind")
+            if not isinstance(canonical_id, str) or not isinstance(kind, str):
+                continue
+            mention: dict[str, object] = {
+                "canonical_id": canonical_id,
+                "kind": kind,
+                "confidence": float(entity.get("confidence", 0.5)) if isinstance(entity.get("confidence"), (float, int)) else 0.5,
+                "name": entity.get("name") or canonical_id,
+                "mentioned_turn": turn_index,
+                "mentioned_at": now,
+            }
+            pruned_mentions.append(mention)
+        event: Message | None = None
+        if evicted and conversation_id:
+            decision = self._anaphora_eviction_event_debouncer.decide(
+                kind="anaphora_antecedent_evicted",
+                subject=conversation_id,
+                severity="info",
+                reason="anaphora_antecedent_evicted",
+            )
+            if decision.emit:
+                event = self._make_anaphora_antecedent_evicted_event(
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    evicted_count=len(evicted),
+                    canonical_ids=[str(mention.get("canonical_id")) for mention in evicted if isinstance(mention.get("canonical_id"), str)],
+                )
+        return pruned_mentions, event
+
+    def _prune_anaphora_mentions(
+        self,
+        mention_stack: list[dict[str, object]],
+        current_turn_index: int,
+        current_time_iso: str,
+        cfg: object,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        pruned: list[dict[str, object]] = []
+        try:
+            now_dt = _dt.datetime.fromisoformat(current_time_iso)
+        except ValueError:
+            now_dt = None
+
+        lookback_turns = int(cfg.nlp_anaphora_lookback_turns)
+        lookback_seconds = int(cfg.nlp_anaphora_lookback_seconds)
+        evicted: list[dict[str, object]] = []
+
+        for mention in mention_stack:
+            mention_turn = mention.get("mentioned_turn")
+            if isinstance(mention_turn, int) and lookback_turns >= 0:
+                age_turns = current_turn_index - mention_turn
+                if age_turns >= lookback_turns:
+                    evicted.append(mention)
+                    continue
+            if now_dt is not None and isinstance(mention.get("mentioned_at"), str):
+                try:
+                    mention_at = _dt.datetime.fromisoformat(mention["mentioned_at"])
+                    age_seconds = (now_dt - mention_at).total_seconds()
+                except ValueError:
+                    age_seconds = 0.0
+                if age_seconds >= lookback_seconds:
+                    evicted.append(mention)
+                    continue
+            pruned.append(mention)
+        return pruned, evicted
+
+    def _make_anaphora_disambiguation(
+        self,
+        request_id: str,
+        intent: str,
+        qa_correlation_id: str,
+        conversation_id: str | None = None,
+        mention_stack: list[dict[str, object]] | None = None,
+    ) -> list[Message]:
+        qa_correlation = self._new_id()
+        tier_id_required = self._tier_id_required_for_intent(intent, cfg)
+        names = []
+        if mention_stack:
+            names = [str(mention.get("name")) for mention in mention_stack if mention.get("name")]
+            kinds = {str(mention.get("kind")) for mention in mention_stack if mention.get("kind")}
+        else:
+            kinds = set()
+        if not names:
+            recent_text = "önceki konuşmadaki varlıkları"
+        else:
+            recent_text = ", ".join(names[:3])
+
+        if "venue" in kinds and kinds.intersection({"team", "player", "person", "coach", "referee"}):
+            ask_text = "Hangi takımı / oyuncuyu ya da mekanı kastettiğinizi netleştirir misiniz? "
+        elif "venue" in kinds:
+            ask_text = "Hangi mekanı kastettiğinizi netleştirir misiniz? "
+        else:
+            ask_text = "Hangi takımı / oyuncuyu kastettiğinizi netleştirir misiniz? "
+
+        answer_text = ask_text + f"Son konuşmada şu adlar geçti: {recent_text}."
+        payload = {
+            "request_id": request_id,
+            "qa_correlation_id": qa_correlation,
+            "answer_text": answer_text,
+            "intent": intent,
+            "kind": "disambiguation",
+            "degraded": False,
+            "degraded_reason": None,
+            "tier_id_required": tier_id_required,
+            "citations": [],
+            "emitted_at": self._clock_iso(),
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        return [Message.new(topic=QA_ANSWER_V1, payload=payload, producer=self.name)]
+
     def _make_conversation_entity_overridden_event(
         self,
         request_id: str,
@@ -982,6 +1320,92 @@ class NlpDispatcherAgent:
             producer=self.name,
         )
 
+    def _normalize_intent_modifier(self, modifier: object | None) -> str:
+        if modifier is None:
+            return "none"
+        if isinstance(modifier, (list, tuple)):
+            return ",".join(str(item) for item in modifier)
+        return str(modifier) if str(modifier).strip() else "none"
+
+    def _make_repeated_query_signature(
+        self,
+        intent: str,
+        entities: list[dict[str, object]],
+        intent_modifier: object | None,
+    ) -> str:
+        return "|".join(
+            [
+                intent,
+                _entity_hash(entities),
+                self._normalize_intent_modifier(intent_modifier),
+            ]
+        )
+
+    def _make_repeated_query_threshold_event(
+        self,
+        request_id: str,
+        conversation_id: str,
+        repeat_count: int,
+        window_s: int,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "repeated_query_threshold_crossed",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "conversation_id": conversation_id,
+                "repeat_count": repeat_count,
+                "window_s": window_s,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _make_repeated_query_summary_offer(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        conversation_id: str | None = None,
+    ) -> Message:
+        tier_id_required = self._tier_id_required_for_intent("data.conversation_summary", cfg)
+        payload = {
+            "request_id": request_id,
+            "qa_correlation_id": qa_correlation_id,
+            "intent": "data.conversation_summary",
+            "answer_text": "Bu konuyu birkaç kez sordunuz. Belki şunu denemek istersiniz: özet modu (yaz: 'özet').",
+            "kind": "summary_offer",
+            "degraded": False,
+            "degraded_reason": None,
+            "tier_id_required": tier_id_required,
+            "citations": [],
+            "emitted_at": self._clock_iso(),
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        return Message.new(topic=QA_ANSWER_V1, payload=payload, producer=self.name)
+
+    def _make_anaphora_antecedent_evicted_event(
+        self,
+        request_id: str,
+        conversation_id: str,
+        evicted_count: int,
+        canonical_ids: list[str],
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "anaphora_antecedent_evicted",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "conversation_id": conversation_id,
+                "evicted_count": evicted_count,
+                "evicted_canonical_ids": canonical_ids,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
     def handle(self, msg: Message) -> Iterable[Message]:
         """Route qa.intent.v1 to the appropriate downstream action.
 
@@ -996,6 +1420,30 @@ class NlpDispatcherAgent:
         from common.config import cfg  # local import avoids circular at module load
 
         payload = msg.payload
+        if msg.topic == QA_FEEDBACK_V1:
+            feedback_payload = self._sanitize_feedback_payload(payload)
+            request_id = feedback_payload["request_id"]
+            if not self._is_valid_feedback_payload(payload):
+                return [
+                    self._make_feedback_provenance_mismatch_event(
+                        request_id=request_id,
+                        offered_intents=feedback_payload["did_you_mean_offered_intents"],
+                        accepted_intent=feedback_payload["accepted_intent"],
+                    )
+                ]
+            offered_intents = feedback_payload["did_you_mean_offered_intents"]
+            accepted_intent = feedback_payload["accepted_intent"]
+            if accepted_intent is not None and accepted_intent not in offered_intents:
+                return [
+                    self._make_feedback_provenance_mismatch_event(
+                        request_id=request_id,
+                        offered_intents=offered_intents,
+                        accepted_intent=accepted_intent,
+                    )
+                ]
+            event = self._enqueue_feedback(feedback_payload, request_id=request_id)
+            return [event] if event is not None else []
+
         intent: str = str(payload.get("intent", ""))
         entities: list = list(payload.get("entities", []))
         request_id: str = str(payload.get("request_id", ""))
@@ -1004,6 +1452,14 @@ class NlpDispatcherAgent:
         context_msg: Message | None = None
 
         override_event: Message | None = None
+        repeated_query_event: Message | None = None
+        repeated_query_summary_offer: Message | None = None
+        context_msg: Message | None = None
+        previous_entities: list[dict[str, object]] = []
+        previous_anaphora_mentions: list[dict[str, object]] = []
+        turn_index = 0
+        qa_corr_in: str = str(payload.get("qa_correlation_id") or "")
+
         if conversation_id:
             context = self._conversation_store.load(conversation_id)
             turn_index = 0 if context is None else int(context.get("turn_index", -1)) + 1
@@ -1013,6 +1469,7 @@ class NlpDispatcherAgent:
                 turn_index = 0
 
             previous_entities = list(context.get("entities", [])) if context else []
+            previous_anaphora_mentions = list(context.get("anaphora_mentions", [])) if context else []
             merged_entities, override_occurred = self._merge_conversation_entities(
                 previous_entities,
                 entities,
@@ -1028,32 +1485,107 @@ class NlpDispatcherAgent:
                     conversation_id=conversation_id,
                     overridden_kinds=overridden_kinds,
                 )
+            entities = merged_entities
 
+            history_metadata = self._conversation_store.load_metadata(conversation_id) or {}
+            repeated_history = [
+                item
+                for item in history_metadata.get("repeated_query_history", [])
+                if isinstance(item, dict)
+            ]
+            window_s = int(cfg.nlp_repeated_query_window_s)
+            now_s = _dt.datetime.now(_dt.timezone.utc).timestamp()
+            pruned_history: list[dict[str, object]] = []
+            previous_same = 0
+            signature = self._make_repeated_query_signature(
+                intent,
+                entities,
+                payload.get("intent_modifier"),
+            )
+            for item in repeated_history:
+                ts = item.get("ts")
+                if isinstance(ts, (int, float)) and now_s - float(ts) <= window_s:
+                    pruned_history.append(item)
+                    if item.get("signature") == signature:
+                        previous_same += 1
+
+            pruned_history.append({
+                "signature": signature,
+                "ts": now_s,
+            })
+            history_metadata["repeated_query_history"] = pruned_history
+            self._conversation_store.save_metadata(conversation_id, history_metadata)
+
+            threshold = int(cfg.nlp_repeated_query_threshold)
+            summary_threshold = int(cfg.nlp_repeated_query_summary_threshold)
+            current_count = previous_same + 1
+            if current_count > summary_threshold:
+                repeated_query_summary_offer = self._make_repeated_query_summary_offer(
+                    request_id=request_id,
+                    qa_correlation_id=qa_corr_in,
+                    conversation_id=conversation_id or None,
+                )
+            if previous_same == threshold:
+                repeated_query_event = self._make_repeated_query_threshold_event(
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    repeat_count=current_count,
+                    window_s=window_s,
+                )
+
+        def _build_context_msg() -> Message | None:
+            if not conversation_id:
+                return None
+            mention_stack, eviction_event = self._append_anaphora_mentions(
+                previous_anaphora_mentions,
+                entities,
+                turn_index,
+                conversation_id=conversation_id,
+                request_id=request_id,
+            )
             context_payload = {
                 "schema_version": 1,
                 "conversation_id": conversation_id,
                 "turn_index": turn_index,
-                "entities": merged_entities,
+                "entities": entities,
                 "intent": intent,
+                "anaphora_mentions": mention_stack,
                 "expires_at_utc": self._clock_iso(),
             }
             self._conversation_store.save(context_payload)
-            context_msg = Message.new(
+            if eviction_event is not None:
+                nonlocal eviction_event_message
+                eviction_event_message = eviction_event
+            return Message.new(
                 topic=QA_CONTEXT_V1,
                 payload=context_payload,
                 producer=self.name,
             )
 
+        eviction_event_message: Message | None = None
+
         def _with_context(results: Iterable[Message]) -> list[Message]:
+            nonlocal context_msg
             out = list(results)
             if override_event is not None:
                 out.append(override_event)
+            if repeated_query_event is not None:
+                out.append(repeated_query_event)
+            if repeated_query_summary_offer is not None:
+                out.append(repeated_query_summary_offer)
             if context_msg is not None:
                 out.append(context_msg)
+            elif conversation_id:
+                context_msg = _build_context_msg()
+                if context_msg is not None:
+                    out.append(context_msg)
+            if eviction_event_message is not None:
+                out.append(eviction_event_message)
             return out
 
-        # ── §10.6 idempotency — dedup before any routing ───────────────────
         qa_corr_in: str = str(payload.get("qa_correlation_id") or "")
+
+        # ── §10.6 idempotency — dedup before any routing ───────────────────
         dedup_key = f"{qa_corr_in}:{intent}:{_entity_hash(entities)}"
         if self._get_deduper().seen(dedup_key):  # type: ignore[union-attr]
             return _with_context([])
@@ -1101,6 +1633,77 @@ class NlpDispatcherAgent:
             return _with_context(out)
 
         normalized_text = str(payload.get("normalized_text", ""))
+        query_style = str(payload.get("query_style", "natural"))
+
+        if conversation_id:
+            pronouns = detect_anaphora_pronouns(normalized_text)
+            if pronouns:
+                if len(pronouns) > 1 and not is_legal_anaphora_composition(pronouns):
+                    return _with_context(self._make_anaphora_disambiguation(
+                        request_id,
+                        intent,
+                        qa_corr_in,
+                        conversation_id=conversation_id or None,
+                        mention_stack=previous_anaphora_mentions,
+                    ))
+
+                resolved_antecedents: list[dict[str, object]] = []
+                for pronoun in pronouns:
+                    candidate, score = resolve_anaphora_pronoun(
+                        pronoun,
+                        previous_anaphora_mentions,
+                        current_turn_index=turn_index,
+                        current_time_iso=self._clock_iso(),
+                    )
+                    if candidate is None:
+                        return _with_context(self._make_anaphora_disambiguation(
+                            request_id,
+                            intent,
+                            qa_corr_in,
+                            conversation_id=conversation_id or None,
+                            mention_stack=previous_anaphora_mentions,
+                        ))
+                    resolved_antecedents.append(candidate)
+
+                seen: set[str] = set()
+                for resolved_antecedent in resolved_antecedents:
+                    canonical_id = str(resolved_antecedent.get("canonical_id"))
+                    if canonical_id in seen:
+                        continue
+                    seen.add(canonical_id)
+                    entities.append({
+                        "kind": resolved_antecedent["kind"],
+                        "canonical_id": resolved_antecedent["canonical_id"],
+                        "confidence": float(resolved_antecedent.get("confidence", 0.5)),
+                    })
+
+        if query_style in {"search", "quoted_exact_search"}:
+            return _with_context([
+                self._make_meta_answer(
+                    request_id,
+                    qa_corr_in,
+                    "meta.search_syntax_unsupported",
+                    "Bu sistem doğal dilde sorulara yanıt veriyor; arama operatörleri (+, -, OR, AND, tırnak) şu an desteklenmiyor. Lütfen sorunuzu cümle olarak yazınız.",
+                    conversation_id=conversation_id or None,
+                )
+            ])
+
+        intent_modifier = payload.get("intent_modifier")
+        has_sarcastic_modifier = (
+            intent_modifier == "sarcastic"
+            or (isinstance(intent_modifier, (list, tuple)) and "sarcastic" in intent_modifier)
+        )
+        if has_sarcastic_modifier and intent != "meta.opinion_unsupported":
+            if intent.startswith("predict.") or intent == "data.sentiment":
+                return _with_context([
+                    self._make_meta_answer(
+                        request_id,
+                        qa_corr_in,
+                        "meta.opinion_unsupported",
+                        "Yorum içerir görünen ifadeler için cevap üretmiyorum; somut bir veri sorusu yöneltirseniz yardımcı olabilirim.",
+                        conversation_id=conversation_id or None,
+                    )
+                ])
 
         # ── §10.22.5 composite-abbreviation match separator ────────────────
         if intent == "data.fixture_lookup":
@@ -1148,6 +1751,8 @@ class NlpDispatcherAgent:
         if conditional_result is not None:
             return _with_context(conditional_result)
         intent = routed_intent
+
+        intent = self._narrow_role_prefix_manager_intent(intent, entities)
 
         if intent.startswith("data.") and intent != "data.fixture_lookup":
             return _with_context(self._make_data_request(request_id, qa_corr_in, intent))
@@ -1284,20 +1889,16 @@ class NlpDispatcherAgent:
             f"Hangi maç için tahmin istiyorsunuz? "
             f"Önümüzdeki {window_h} saat içindeki maçları listeleyebilirim."
         )
-        payload = {
-            "request_id": request_id,
-            "qa_correlation_id": qa_correlation_id,
-            "answer_text": answer_text,
-            "intent": intent,
-            "kind": "disambiguation",
-            "degraded": False,
-            "degraded_reason": None,
-            "tier_id_required": tier_id_required,
-            "citations": [],
-            "emitted_at": self._clock_iso(),
-        }
-        if conversation_id:
-            payload["conversation_id"] = conversation_id
+        payload = _make_qa_answer_payload(
+            request_id=request_id,
+            qa_correlation_id=qa_correlation_id,
+            intent=intent,
+            kind="disambiguation",
+            answer_text=answer_text,
+            tier_id_required=tier_id_required,
+            conversation_id=conversation_id,
+            emitted_at_utc=self._clock_iso(),
+        )
         return [
             Message.new(
                 topic=QA_ANSWER_V1,
@@ -1305,6 +1906,22 @@ class NlpDispatcherAgent:
                 producer=self.name,
             )
         ]
+
+    def _narrow_role_prefix_manager_intent(
+        self,
+        intent: str,
+        entities: list[dict[str, object]],
+    ) -> str:
+        if intent != "data.player_card_risk":
+            return intent
+        for entity in entities:
+            if (
+                isinstance(entity.get("kind"), str)
+                and entity["kind"] == "role_prefix"
+                and str(entity.get("canonical_id", "")) == "manager"
+            ):
+                return "data.team_management_state"
+        return intent
 
     def _apply_conditional_routing(
         self,
@@ -1392,23 +2009,21 @@ class NlpDispatcherAgent:
         intent: str,
         answer_text: str,
         conversation_id: str | None = None,
+        parts: list[dict[str, object]] | None = None,
     ) -> Message:
         qa_corr = qa_correlation_id or self._new_id()
         kind = intent.split(".", 1)[1]
-        payload = {
-            "request_id": request_id,
-            "qa_correlation_id": qa_corr,
-            "intent": intent,
-            "answer_text": answer_text,
-            "kind": kind,
-            "degraded": False,
-            "degraded_reason": None,
-            "tier_id_required": None,
-            "citations": [],
-            "emitted_at": self._clock_iso(),
-        }
-        if conversation_id:
-            payload["conversation_id"] = conversation_id
+        payload = _make_qa_answer_payload(
+            request_id=request_id,
+            qa_correlation_id=qa_corr,
+            intent=intent,
+            kind=kind,
+            answer_text=answer_text,
+            tier_id_required=None,
+            conversation_id=conversation_id,
+            parts=parts,
+            emitted_at_utc=self._clock_iso(),
+        )
         return Message.new(
             topic=QA_ANSWER_V1,
             payload=payload,
@@ -2017,26 +2632,32 @@ class NlpAnswerAgent:
             or payload.get("summary_correlation_id")
             or self._new_id()
         )
-        output_payload = {
-            "request_id": request_id,
-            "qa_correlation_id": qa_correlation_id,
-            "intent": "predict.timeout",
-            "answer_text": "Tahmin zaman aşımına uğradı.",
-            "kind": "predict.timeout",
-            "degraded": True,
-            "degraded_reason": "citation_signature_verification_failed",
-            "tier_id_required": None,
-            "citations": [],
-            "emitted_at": self._clock_iso(),
-        }
+        output_payload = _make_qa_answer_payload(
+            request_id=request_id,
+            qa_correlation_id=qa_correlation_id,
+            intent="predict.timeout",
+            kind="predict.timeout",
+            answer_text="Tahmin zaman aşımına uğradı.",
+            degraded=True,
+            degraded_reason="citation_signature_verification_failed",
+            tier_id_required=None,
+            emitted_at_utc=self._clock_iso(),
+        )
         conversation_id = str(payload.get("conversation_id") or "")
         if conversation_id:
             output_payload["conversation_id"] = conversation_id
+        self._apply_safe_mode_degradation(output_payload)
         return Message.new(
             topic=QA_ANSWER_V1,
             payload=output_payload,
             producer=self.name,
         )
+
+    def _apply_safe_mode_degradation(self, payload: dict[str, Any]) -> None:
+        """Apply safe-mode answer degradation to outgoing QA answer payloads."""
+        if is_safe_mode_active():
+            payload["degraded"] = True
+            payload["degraded_reason"] = "lexicon_safe_mode_active"
 
     def _on_summary_prediction_arrived(
         self, payload: dict, summary_corr: str
@@ -2128,17 +2749,17 @@ class NlpAnswerAgent:
         if received == 0:
             return Message.new(
                 topic=QA_ANSWER_V1,
-                payload={
-                    "request_id": agg.qa_request_id,
-                    "qa_correlation_id": agg.qa_correlation_id,
-                    "intent": "predict.timeout",
-                    "answer_text": "Tahmin zaman aşımına uğradı.",
-                    "kind": "predict.timeout",
-                    "degraded": True,
-                    "degraded_reason": "summary_quorum_zero_received",
-                    "citations": [],
-                    "emitted_at": self._clock_iso(),
-                },
+                payload=_make_qa_answer_payload(
+                    request_id=agg.qa_request_id,
+                    qa_correlation_id=agg.qa_correlation_id,
+                    intent="predict.timeout",
+                    kind="predict.timeout",
+                    answer_text="Tahmin zaman aşımına uğradı.",
+                    degraded=True,
+                    degraded_reason="summary_quorum_zero_received",
+                    citations=[],
+                    emitted_at_utc=self._clock_iso(),
+                ),
                 producer=self.name,
             )
 
@@ -2219,22 +2840,21 @@ class NlpAnswerAgent:
                 entry["note"] = f"{count} tahmin için kalibrasyon güncellendi"
             citations.append(entry)
         
+        payload = _make_qa_answer_payload(
+            request_id=agg.qa_request_id,
+            qa_correlation_id=agg.qa_correlation_id,
+            intent="summary",
+            kind="summary",
+            answer_text=answer_text,
+            degraded=degraded,
+            degraded_reason=combined_reason,
+            citations=citations,
+            emitted_at_utc=self._clock_iso(),
+        )
+        self._apply_safe_mode_degradation(payload)
         return Message.new(
             topic=QA_ANSWER_V1,
-            payload={
-                "request_id": agg.qa_request_id,
-                # §10.6 invariant: use the dispatch qa_correlation_id that was
-                # carried through predict.approved.v1, not the raw summary_corr
-                # key (they may differ once Phase 5 additive field is live).
-                "qa_correlation_id": agg.qa_correlation_id,
-                "intent": "summary",
-                "answer_text": answer_text,
-                "kind": "summary",
-                "degraded": degraded,
-                "degraded_reason": combined_reason,
-                "citations": citations,
-                "emitted_at": self._clock_iso(),
-            },
+            payload=payload,
             producer=self.name,
         )
 
@@ -2290,11 +2910,12 @@ class NlpProofreaderAgent:
         if self._get_deduper().seen(request_id):  # type: ignore[union-attr]
             return []
 
-        out: list[Message] = [msg]
+        out: list[Message] = []
         if str(msg.payload.get("kind", "")) == "proofreader_blocked":
             conversation_id = str(msg.payload.get("conversation_id", ""))
             if conversation_id:
                 self._conversation_store.clear(conversation_id)
+            out = [msg]
             out.append(self._build_conversation_context_cleared_alert(
                 request_id=request_id,
                 qa_correlation_id=str(msg.payload.get("qa_correlation_id", "")) or None,

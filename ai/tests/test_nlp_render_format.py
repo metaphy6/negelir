@@ -4,6 +4,8 @@ import pathlib
 import jinja2
 from jinja2 import meta
 
+from nlp import render_format
+from nlp.render import build_environment, render as nlp_render
 from nlp.render_format import render
 
 
@@ -46,3 +48,143 @@ def test_nlp_per_format_templates_share_slots() -> None:
             f"Slot mismatch in {template_name}: "
             f"{dict(zip(formats, slot_sets))}"
         )
+
+
+def test_nlp_screen_reader_format_strips_all_emoji(tmp_path: pathlib.Path) -> None:
+    sample_dir = tmp_path / "templates"
+    sample_dir.mkdir()
+    sample_template = sample_dir / "screen_reader_emoji.tr.j2"
+    sample_template.write_text(
+        "Tahmin % 67 ✓ ⚽ 🏟️ ▶\n",
+        encoding="utf-8",
+    )
+
+    env = build_environment(template_dir=sample_dir)
+    text = nlp_render(
+        "screen_reader_emoji.tr.j2",
+        {},
+        env=env,
+        answer_format="screen_reader",
+    )
+
+    assert "✓" not in text
+    assert "⚽" not in text
+    assert "🏟️" not in text
+    assert "▶" not in text
+    assert "evet" in text
+
+
+def test_nlp_screen_reader_renders_percent_as_words(tmp_path: pathlib.Path) -> None:
+    sample_dir = tmp_path / "templates"
+    sample_dir.mkdir()
+    sample_template = sample_dir / "screen_reader_percent.tr.j2"
+    sample_template.write_text(
+        "Tahmin %67\n",
+        encoding="utf-8",
+    )
+
+    env = build_environment(template_dir=sample_dir)
+    text = nlp_render(
+        "screen_reader_percent.tr.j2",
+        {},
+        env=env,
+        answer_format="screen_reader",
+    )
+
+    assert "yüzde 67" in text
+
+
+def test_nlp_plain_format_strips_all_emoji_by_default(tmp_path: pathlib.Path, monkeypatch) -> None:
+    sample_dir = tmp_path / "templates"
+    sample_dir.mkdir()
+    plain_dir = sample_dir / "plain"
+    plain_dir.mkdir()
+    sample_template = plain_dir / "plain_emoji.tr.j2"
+    sample_template.write_text(
+        "Galatasaray ⚽ kazandı ✓\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(render_format, "_TEMPLATES_BASE", sample_dir)
+
+    text = render(
+        {
+            "template_name": "plain_emoji.tr.j2",
+            "context": {},
+        },
+        answer_format="plain",
+    )
+
+    assert "⚽" not in text
+    assert "✓" not in text
+    assert "Galatasaray" in text
+
+
+def test_nlp_markdown_safe_strips_all_emoji_by_default(tmp_path: pathlib.Path, monkeypatch) -> None:
+    sample_dir = tmp_path / "templates"
+    sample_dir.mkdir()
+    markdown_dir = sample_dir / "markdown_safe"
+    markdown_dir.mkdir()
+    sample_template = markdown_dir / "markdown_safe_emoji.tr.j2"
+    sample_template.write_text(
+        "<b>Skor</b> ⚽ ✓\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(render_format, "_TEMPLATES_BASE", sample_dir)
+
+    text = render(
+        {
+            "template_name": "markdown_safe_emoji.tr.j2",
+            "context": {},
+        },
+        answer_format="markdown_safe",
+    )
+
+    assert "⚽" not in text
+    assert "✓" not in text
+    assert "&lt;b&gt;" in text
+
+
+def test_nlp_screen_reader_format_normalizes_combining_marks(tmp_path: pathlib.Path) -> None:
+    sample_dir = tmp_path / "templates"
+    sample_dir.mkdir()
+    sample_template = sample_dir / "screen_reader_combining.tr.j2"
+    sample_template.write_text(
+        "ȧ ȩ ✓\n",
+        encoding="utf-8",
+    )
+
+    env = build_environment(template_dir=sample_dir)
+    text = nlp_render(
+        "screen_reader_combining.tr.j2",
+        {},
+        env=env,
+        answer_format="screen_reader",
+    )
+
+    assert "̇" not in text
+    assert "̧" not in text
+    assert "✓" not in text
+    assert "evet" in text
+
+
+def test_nlp_markdown_safe_no_inline_html(tmp_path: pathlib.Path) -> None:
+    sample_dir = tmp_path / "templates"
+    sample_dir.mkdir()
+    sample_template = sample_dir / "markdown_safe_inline_html.tr.j2"
+    sample_template.write_text(
+        "HTML etiketi <b>yasak</b> metin\n",
+        encoding="utf-8",
+    )
+
+    env = build_environment(template_dir=sample_dir)
+    text = nlp_render(
+        "markdown_safe_inline_html.tr.j2",
+        {},
+        env=env,
+        answer_format="markdown_safe",
+    )
+
+    assert "<b>" not in text
+    assert "</b>" not in text
+    assert "&lt;b&gt;" in text
+    assert "yasak" in text

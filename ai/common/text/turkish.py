@@ -9,6 +9,7 @@ Key doctrines:
 - No external dependencies -- stdlib only.
 """
 from __future__ import annotations
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,54 @@ def lowercase_tr(text: str) -> str:
     "\u0131" (correct for Turkish context).
     """
     return text.translate(_TR_LOWER_TABLE).lower()
+
+
+_REPEAT_COLLAPSE_RE = re.compile(r"(.)\1{2,}")
+
+_REPEAT_ALLOWLIST_PATH: Path = (
+    Path(__file__).resolve().parents[2]
+    / "nlp"
+    / "lang_tr"
+    / "repeat_allowlist.tr.yaml"
+)
+
+_REPEAT_ALLOWLIST_CACHE: set[str] | None = None
+
+
+def load_repeat_allowlist(path: Path | None = None) -> set[str]:
+    """Load the closed triple-char allowlist used by repeat-collapse."""
+    global _REPEAT_ALLOWLIST_CACHE
+    if path is None and _REPEAT_ALLOWLIST_CACHE is not None:
+        return _REPEAT_ALLOWLIST_CACHE
+
+    effective = path or _REPEAT_ALLOWLIST_PATH
+    if not _YAML_AVAILABLE or not effective.exists():
+        return set()
+
+    with open(effective, "r", encoding="utf-8") as fh:
+        data = _yaml.safe_load(fh) or {}
+
+    allowlist = {
+        str(item)
+        for item in data.get("allowlist", [])
+        if isinstance(item, str)
+    }
+    if path is None:
+        _REPEAT_ALLOWLIST_CACHE = allowlist
+    return allowlist
+
+
+def collapse_repeated_chars(token: str, allowlist: set[str] | None = None) -> str:
+    """Collapse excessive repeated chars in a Turkish token to at most two.
+
+    This preserves intentional Turkish doubles like "saat" and "dikkat",
+    while reducing emphatic runs like "evettttt" -> "evett".
+    """
+    if allowlist is None:
+        allowlist = load_repeat_allowlist()
+    if token in allowlist:
+        return token
+    return _REPEAT_COLLAPSE_RE.sub(r"\1\1", token)
 
 
 # Turkish vowel harmony tables for suffix checking (§10.9 gate 6).
@@ -298,6 +347,17 @@ _SUFFIX_FAMILIES_PATH: _pathlib.Path = (
 # Module-level cache; populated on first call.
 _SUFFIX_FAMILIES_CACHE: "list[dict] | None" = None
 
+_NO_STRIP_CANONICALS_PATH: _pathlib.Path = (
+    _pathlib.Path(__file__).parent  # ai/common/text/
+    .parent                          # ai/common/
+    .parent                          # ai/
+    / "nlp"
+    / "lang_tr"
+    / "_no_strip_canonicals.tr.yaml"
+)
+
+_NO_STRIP_CANONICALS_CACHE: "set[str] | None" = None
+
 # Characters valid as suffix candidates per spec regex [a-zçğıiöşü].
 # Using a broad set covering all Turkish lowercase letters + ASCII lowercase.
 _SUFFIX_CHARS: frozenset = frozenset("abcçdefgğhıijklmnoöprsştuüvyz")
@@ -327,6 +387,127 @@ def _load_suffix_families(
     if path is None:
         _SUFFIX_FAMILIES_CACHE = families
     return families
+
+
+def _load_no_strip_canonicals(
+    path: "_pathlib.Path | None" = None,
+) -> "set[str]":
+    """Load the canonical-prefix guard list for harmony-tolerant suffix stripping."""
+    global _NO_STRIP_CANONICALS_CACHE
+    if path is None and _NO_STRIP_CANONICALS_CACHE is not None:
+        return _NO_STRIP_CANONICALS_CACHE
+    effective = path or _NO_STRIP_CANONICALS_PATH
+    if not _YAML_AVAILABLE or not effective.exists():  # pragma: no cover
+        canonicals: set[str] = set()
+    else:
+        with open(effective, "r", encoding="utf-8") as fh:
+            data = _yaml.safe_load(fh) or {}
+        raw = data.get("no_strip_canonicals", [])
+        canonicals = {
+            lowercase_tr(str(item).strip())
+            for item in raw
+            if isinstance(item, str) and item.strip()
+        }
+    if path is None:
+        _NO_STRIP_CANONICALS_CACHE = canonicals
+    return canonicals
+
+
+_DIGIT_LETTER_CONFUSABLES_PATH: _pathlib.Path = (
+    _pathlib.Path(__file__).parent
+    .parent
+    .parent
+    / "nlp"
+    / "lang_tr"
+    / "digit_letter_confusables.tr.yaml"
+)
+_DIGIT_LETTER_CONFUSABLES_CACHE: "dict[str, str] | None" = None
+
+_YEAR_SUFFIX_ALLOWLIST_PATH: _pathlib.Path = (
+    _pathlib.Path(__file__).parent
+    .parent
+    .parent
+    / "nlp"
+    / "lang_tr"
+    / "year_suffix_allowlist.tr.yaml"
+)
+_YEAR_SUFFIX_ALLOWLIST_CACHE: "set[str] | None" = None
+
+_DIGIT_LETTER_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def load_digit_letter_confusables(path: _pathlib.Path | None = None) -> "dict[str, str]":
+    """Load the digit-letter confusables table for Phase 10 §10.24.3."""
+    global _DIGIT_LETTER_CONFUSABLES_CACHE
+    if path is None and _DIGIT_LETTER_CONFUSABLES_CACHE is not None:
+        return _DIGIT_LETTER_CONFUSABLES_CACHE
+
+    effective = path or _DIGIT_LETTER_CONFUSABLES_PATH
+    if not _YAML_AVAILABLE or not effective.exists():  # pragma: no cover
+        mapping: dict[str, str] = {}
+    else:
+        with open(effective, "r", encoding="utf-8") as fh:
+            data = _yaml.safe_load(fh) or {}
+        raw_map = data.get("mapping", {})
+        mapping = {
+            str(k): str(v)
+            for k, v in raw_map.items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
+    if path is None:
+        _DIGIT_LETTER_CONFUSABLES_CACHE = mapping
+    return mapping
+
+
+def load_year_suffix_allowlist(path: _pathlib.Path | None = None) -> "dict[str, str]":
+    """Load the allowed year-suffix tokens that must survive digit folding."""
+    global _YEAR_SUFFIX_ALLOWLIST_CACHE
+    if path is None and _YEAR_SUFFIX_ALLOWLIST_CACHE is not None:
+        return _YEAR_SUFFIX_ALLOWLIST_CACHE
+
+    effective = path or _YEAR_SUFFIX_ALLOWLIST_PATH
+    if not _YAML_AVAILABLE or not effective.exists():  # pragma: no cover
+        allowlist: dict[str, str] = {}
+    else:
+        with open(effective, "r", encoding="utf-8") as fh:
+            data = _yaml.safe_load(fh) or {}
+        raw = data.get("year_suffix_allowlist", [])
+        allowlist = {}
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            abbr = entry.get("abbreviation")
+            year = entry.get("year")
+            canonical_id = entry.get("canonical_id")
+            if isinstance(abbr, str) and isinstance(year, str) and isinstance(canonical_id, str):
+                allowlist[f"{abbr}{year}".lower()] = canonical_id
+    if path is None:
+        _YEAR_SUFFIX_ALLOWLIST_CACHE = allowlist
+    return allowlist
+
+
+def digit_letter_confusable_fold(
+    text: str,
+    fold_map: "dict[str, str] | None" = None,
+    year_suffix_allowlist: "dict[str, str] | None" = None,
+) -> str:
+    """Fold digit-letter confusables in Turkish input while preserving year suffixes."""
+    if fold_map is None:
+        fold_map = load_digit_letter_confusables()
+    if year_suffix_allowlist is None:
+        year_suffix_allowlist = load_year_suffix_allowlist()
+
+    def _replace(match: "re.Match[str]") -> str:
+        token = match.group(0)
+        if token.lower() in year_suffix_allowlist:
+            return token
+        if not any(ch.isdigit() for ch in token):
+            return token
+        if not any(ch.isalpha() for ch in token):
+            return token
+        return "".join(fold_map.get(ch, ch) for ch in token)
+
+    return _DIGIT_LETTER_TOKEN_RE.sub(_replace, text)
 
 
 _NUMBER_WORDS_PATH: _pathlib.Path = (
@@ -492,11 +673,36 @@ def _match_suffix_family(
     return None
 
 
+def is_harmony_tolerant_suffix_candidate(
+    candidate: str,
+    *,
+    _families: "list[dict] | None" = None,
+) -> "str | None":
+    """Return the suffix family when *candidate* is valid only in ignore-harmony mode.
+
+    This is used to detect harmony-tolerant repairs such as ``Fenerbahçe'ya``.
+    Returns ``None`` when the candidate is either not a valid suffix or it is
+    harmonically valid already.
+    """
+    if "'" not in candidate:
+        return None
+
+    stem, suffix = candidate.rsplit("'", 1)
+    families = _families if _families is not None else _load_suffix_families()
+
+    if _match_suffix_family(suffix, stem, families, ignore_harmony=False) is not None:
+        return None
+
+    return _match_suffix_family(suffix, stem, families, ignore_harmony=True)
+
+
 def strip_proper_noun_suffix(
     token: str,
     assume_proper: bool = False,
     *,
+    no_strip_canonicals: "set[str] | None" = None,
     _families: "list[dict] | None" = None,
+    allow_harmony_tolerance: bool = False,
 ) -> "tuple[str, str | None]":
     """Strip a Turkish grammatical suffix from a proper-noun token.
 
@@ -546,6 +752,11 @@ def strip_proper_noun_suffix(
         return token, None
 
     families = _families if _families is not None else _load_suffix_families()
+    no_strip_canonicals = (
+        no_strip_canonicals
+        if no_strip_canonicals is not None
+        else _load_no_strip_canonicals()
+    )
 
     # ── Case 1: token contains an apostrophe ─────────────────────────────────
     # Expected form: <STEM>'<suffix> — only the LAST apostrophe is authoritative.
@@ -561,7 +772,22 @@ def strip_proper_noun_suffix(
         ):
             family = _match_suffix_family(suffix_part, stem_part, families)
             if family is not None:
+                candidate_canonical = lowercase_tr(stem_part + suffix_part)
+                if candidate_canonical in no_strip_canonicals:
+                    return token, None
                 return stem_part, family
+            if allow_harmony_tolerance:
+                family = _match_suffix_family(
+                    suffix_part,
+                    stem_part,
+                    families,
+                    ignore_harmony=True,
+                )
+                if family is not None:
+                    candidate_canonical = lowercase_tr(stem_part + suffix_part)
+                    if candidate_canonical in no_strip_canonicals:
+                        return token, None
+                    return stem_part, family
         # Apostrophe present but split did not yield a valid suffix
         # (e.g. misplaced apostrophe like "Galata'sarayın").  Return as-is.
         return token, None
@@ -578,6 +804,9 @@ def strip_proper_noun_suffix(
             continue  # Non-Turkish char in candidate suffix → skip
         family = _match_suffix_family(suffix_part, stem_part, families)
         if family is not None:
+            candidate_canonical = lowercase_tr(stem_part + suffix_part)
+            if candidate_canonical in no_strip_canonicals:
+                continue
             return stem_part, family
 
     # Second-pass harmony-tolerant strip (§10.24.1): if a trailing 1–4 char
@@ -597,6 +826,9 @@ def strip_proper_noun_suffix(
             ignore_harmony=True,
         )
         if family is not None:
+            candidate_canonical = lowercase_tr(stem_part + suffix_part)
+            if candidate_canonical in no_strip_canonicals:
+                continue
             return stem_part, family
 
     return token, None

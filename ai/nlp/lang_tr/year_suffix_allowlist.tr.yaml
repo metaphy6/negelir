@@ -1,0 +1,10 @@
+year_suffix_allowlist:
+  - abbreviation: BJK
+    year: "1903"
+    canonical_id: bjk
+  - abbreviation: GS
+    year: "1905"
+    canonical_id: gs
+  - abbreviation: FB
+    year: "1907"
+    canonical_id: fb

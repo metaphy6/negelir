@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import datetime as dt
+import html
 import json
 import pathlib
 import re
@@ -165,6 +166,29 @@ def _resolve_template_name(template_name: str, locale: "str | None" = None) -> s
     return f"{template_name}.{locale}.j2"
 
 
+_EMOJI_STRIP_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F5FF"
+    "\U0001F600-\U0001F64F"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F700-\U0001F77F"
+    "\U0001F780-\U0001F7FF"
+    "\U0001F800-\U0001F8FF"
+    "\U0001F900-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U00002600-\U000026FF"
+    "\U0001F1E6-\U0001F1FF"
+    "\uFE0F"
+    "\u200D"
+    "]"
+)
+
+
+def _strip_emoji(text: str) -> str:
+    """Remove emoji-related codepoints from rendered answer text."""
+    return _EMOJI_STRIP_RE.sub("", text)
+
+
 def _normalize_screen_reader_answer(text: str) -> str:
     """Normalize rendered answer text for screen-reader-friendly output."""
     text = unicodedata.normalize("NFC", text)
@@ -172,12 +196,21 @@ def _normalize_screen_reader_answer(text: str) -> str:
     text = text.replace("✓", " evet ").replace("✗", " hayır ").replace("▶", " ")
     result: list[str] = []
     for ch in text:
-        if unicodedata.category(ch) in {"So", "Cf"}:
+        category = unicodedata.category(ch)
+        if category in {"So", "Cf"} or category.startswith("M"):
             continue
         result.append(ch)
     normalized = "".join(result)
     normalized = re.sub(r"\s{2,}", " ", normalized).strip()
     return normalized
+
+
+def _sanitize_markdown_safe_answer(text: str) -> str:
+    """Escape inline HTML in markdown_safe rendered output."""
+    # Markdown safe output may include literal angle brackets as text,
+    # but inline HTML tags are not permitted in the output. Escaping
+    # the rendered string preserves the original content safely.
+    return html.escape(text)
 
 # ---------------------------------------------------------------------------
 # Citation block contract (§10.7 binding)
@@ -260,6 +293,7 @@ def _warm_fixture_context() -> dict[str, Any]:
         "fixtures": [{"home": "Galatasaray", "away": "Fenerbahçe", "kickoff_utc": "2026-05-31T18:00:00Z"}],
         "collected_count": 1,
         "total_count": 1,
+        "polarity": "affirm",
     }
 
 
@@ -455,6 +489,17 @@ def render(
         rendered = tmpl.render(**render_context)
         if answer_format == "screen_reader":
             return _normalize_screen_reader_answer(rendered)
+
+        from common.config import cfg
+
+        if answer_format == "markdown_safe":
+            rendered = _sanitize_markdown_safe_answer(rendered)
+            if not cfg.nlp_answer_decorative_emoji_enabled:
+                rendered = _strip_emoji(rendered)
+            return rendered
+
+        if not cfg.nlp_answer_decorative_emoji_enabled:
+            rendered = _strip_emoji(rendered)
         return rendered
     except jinja2.UndefinedError as exc:
         # Missing slot: route to meta.unsupported.
@@ -465,6 +510,8 @@ def render(
             )
             if answer_format == "screen_reader":
                 return _normalize_screen_reader_answer(result)
+            if answer_format == "markdown_safe":
+                return _sanitize_markdown_safe_answer(result)
             return result
         except Exception:  # noqa: BLE001 — absolute last resort
             return "\u00dczg\u00fcn\u00fcm, bu soruyu yan\u0131tlayam\u0131yorum."

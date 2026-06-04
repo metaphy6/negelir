@@ -238,6 +238,49 @@ def test_l0_cache_key_uses_128bit_prefix_not_64bit():
     assert len(key) == 32
 
 
+def test_l0_cache_key_includes_resolved_anaphora_antecedent_ids():
+    """Resolved antecedent canonical IDs must namespace the L0 cache key."""
+    cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
+    cache.put(
+        normalized_text="onlar oraya gidecek mi?",
+        locale="tr-TR",
+        intent="meta.unsupported",
+        intent_confidence=0.4,
+        entity_hash="hash",
+        schema_version=4,
+        calibration_version="1.0",
+        resolved_antecedent_ids=("team:galatasaray",),
+    )
+
+    assert cache.get(
+        "onlar oraya gidecek mi?",
+        "tr-TR",
+        schema_version=4,
+        calibration_version="1.0",
+        resolved_antecedent_ids=("team:galatasaray",),
+    ) is not None
+    assert cache.get(
+        "onlar oraya gidecek mi?",
+        "tr-TR",
+        schema_version=4,
+        calibration_version="1.0",
+        resolved_antecedent_ids=("team:fenerbahce",),
+    ) is None
+    assert cache._make_key(
+        "onlar oraya gidecek mi?",
+        "tr-TR",
+        4,
+        "1.0",
+        resolved_antecedent_ids=("team:galatasaray",),
+    ) != cache._make_key(
+        "onlar oraya gidecek mi?",
+        "tr-TR",
+        4,
+        "1.0",
+        resolved_antecedent_ids=("team:fenerbahce",),
+    )
+
+
 def test_l0_cache_namespaced_by_schema_version():
     """Same surface query under different schema or calibration versions miss each other."""
     cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
@@ -253,6 +296,50 @@ def test_l0_cache_namespaced_by_schema_version():
 
     assert cache.get("hello", "tr-TR", schema_version=4, calibration_version="1.0") is None
     assert cache.get("hello", "tr-TR", schema_version=3, calibration_version="1.0") is not None
+
+
+def test_l0_cache_namespaced_by_pipeline_version():
+    """Same cache key under different pipeline versions miss each other."""
+    cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
+    key1 = cache._make_key(
+        "hello",
+        "tr-TR",
+        4,
+        "1.0",
+        lexicon_version="",
+        pipeline_version="10.0.0",
+    )
+    key2 = cache._make_key(
+        "hello",
+        "tr-TR",
+        4,
+        "1.0",
+        lexicon_version="",
+        pipeline_version="10.1.0",
+    )
+    assert key1 != key2
+
+
+def test_l0_cache_namespaced_by_lexicon_version():
+    """Same cache key under different lexicon versions miss each other."""
+    cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
+    key1 = cache._make_key(
+        "hello",
+        "tr-TR",
+        4,
+        "1.0",
+        lexicon_version="lex-1",
+        pipeline_version="10.0.0",
+    )
+    key2 = cache._make_key(
+        "hello",
+        "tr-TR",
+        4,
+        "1.0",
+        lexicon_version="lex-2",
+        pipeline_version="10.0.0",
+    )
+    assert key1 != key2
 
 
 def test_l0_cache_collision_emits_critical_alert_and_redo_rpc():

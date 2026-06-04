@@ -1,0 +1,25 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  source: "phase10-10.24.8"
+  notes: >
+    Closed list of Turkish football honorifics that signal a role prefix
+    for downstream entity resolution and intent narrowing.
+entries:
+  - honorific: hoca
+    role_class: manager
+    aliases:
+      - teknik direktör
+      - antrenör
+      - teknik adam
+  - honorific: başkan
+    role_class: president
+  - honorific: kaptan
+    role_class: captain
+  - honorific: kaleci antrenörü
+    role_class: goalkeeper_coach
+  - honorific: scout
+    role_class: scout
+  - honorific: oyuncu
+    role_class: player_generic

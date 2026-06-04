@@ -137,16 +137,31 @@ class IntentCache:
     def _subject_key(self, normalized_text: str, locale: str) -> str:
         return f"{normalized_text}|{locale}"
 
+    def _antecedent_ids_payload(self, antecedent_ids: tuple[str, ...] | None) -> str:
+        if not antecedent_ids:
+            return ""
+        normalized_ids = "|".join(sorted(str(i) for i in antecedent_ids))
+        return f"|{normalized_ids}"
+
     def _make_key(
         self,
         normalized_text: str,
         locale: str,
         schema_version: int,
         calibration_version: str,
+        lexicon_version: str = "",
+        pipeline_version: str | None = None,
+        resolved_antecedent_ids: tuple[str, ...] | None = None,
     ) -> str:
         """Return 16-byte truncated sha256 hex digest of the request key."""
+        if pipeline_version is None:
+            from common.config import Config
+
+            pipeline_version = Config().nlp_pipeline_version
         payload = (
-            f"{self._pod_id}|{normalized_text}|{locale}|{schema_version}|{calibration_version}"
+            f"{self._pod_id}|{normalized_text}|{locale}|"
+            f"{schema_version}|{calibration_version}|{lexicon_version}|"
+            f"{pipeline_version}{self._antecedent_ids_payload(resolved_antecedent_ids)}"
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
@@ -156,9 +171,18 @@ class IntentCache:
         locale: str,
         schema_version: int,
         calibration_version: str,
+        lexicon_version: str = "",
+        pipeline_version: str | None = None,
+        resolved_antecedent_ids: tuple[str, ...] | None = None,
     ) -> str:
+        if pipeline_version is None:
+            from common.config import Config
+
+            pipeline_version = Config().nlp_pipeline_version
         payload = (
-            f"{self._pod_id}|{normalized_text}|{locale}|{schema_version}|{calibration_version}"
+            f"{self._pod_id}|{normalized_text}|{locale}|"
+            f"{schema_version}|{calibration_version}|{lexicon_version}|"
+            f"{pipeline_version}{self._antecedent_ids_payload(resolved_antecedent_ids)}"
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -168,6 +192,9 @@ class IntentCache:
         locale: str,
         schema_version: int = 4,
         calibration_version: str = "",
+        lexicon_version: str = "",
+        pipeline_version: str | None = None,
+        resolved_antecedent_ids: tuple[str, ...] | None = None,
     ) -> Optional[Tuple[str, float, str]]:
         """Retrieve cached intent result if present and not expired.
         
@@ -175,9 +202,23 @@ class IntentCache:
             ``(intent, intent_confidence, entity_hash)`` if cached and fresh,
             else ``None``.
         """
-        key = self._make_key(normalized_text, locale, schema_version, calibration_version)
+        key = self._make_key(
+            normalized_text,
+            locale,
+            schema_version,
+            calibration_version,
+            lexicon_version,
+            pipeline_version,
+            resolved_antecedent_ids=resolved_antecedent_ids,
+        )
         expected_full_sha = self._make_subject_key_full_sha(
-            normalized_text, locale, schema_version, calibration_version
+            normalized_text,
+            locale,
+            schema_version,
+            calibration_version,
+            lexicon_version,
+            pipeline_version,
+            resolved_antecedent_ids=resolved_antecedent_ids,
         )
         now = self._clock()
 
@@ -211,6 +252,9 @@ class IntentCache:
         entity_hash: str,
         schema_version: int = 4,
         calibration_version: str = "",
+        lexicon_version: str = "",
+        pipeline_version: str | None = None,
+        resolved_antecedent_ids: tuple[str, ...] | None = None,
     ) -> None:
         """Store intent result in cache.
         
@@ -224,9 +268,23 @@ class IntentCache:
         if intent != "meta.unsupported":
             return
 
-        key = self._make_key(normalized_text, locale, schema_version, calibration_version)
+        key = self._make_key(
+            normalized_text,
+            locale,
+            schema_version,
+            calibration_version,
+            lexicon_version,
+            pipeline_version,
+            resolved_antecedent_ids=resolved_antecedent_ids,
+        )
         subject_key_full_sha256 = self._make_subject_key_full_sha(
-            normalized_text, locale, schema_version, calibration_version
+            normalized_text,
+            locale,
+            schema_version,
+            calibration_version,
+            lexicon_version,
+            pipeline_version,
+            resolved_antecedent_ids=resolved_antecedent_ids,
         )
         now = self._clock()
         expire_at = now + self._ttl_s

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import math
 import re
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Any
 
 import yaml
 from common.config import cfg
+from common.text.turkish import parse_number_word
 
 _LANG_TR_DIR = Path(__file__).parent / "lang_tr"
 
@@ -88,6 +90,201 @@ def load_wh_words(path: Path | None = None) -> list[str]:
     return [str(w) for w in words if isinstance(w, str) and w]
 
 
+@dataclass(frozen=True)
+class AsrPunctuationEntry:
+    phrase: tuple[str, ...]
+    replacement: str
+
+
+_ASR_PUNCTUATION_REPLACEMENTS: dict[str, str] = {
+    "virgül": ",",
+    "nokta": ".",
+    "noktalı virgül": ";",
+    "iki nokta": ":",
+    "soru işareti": "?",
+    "ünlem işareti": "!",
+    "tire": "-",
+    "kısa çizgi": "-",
+    "parantez": "(",
+    "tırnak": '"',
+}
+
+
+def load_asr_punctuation_words(path: Path | None = None) -> list[AsrPunctuationEntry]:
+    actual_path = path or _LANG_TR_DIR / "asr_punctuation_words.tr.yaml"
+    if not actual_path.exists():
+        return []
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+    result: list[AsrPunctuationEntry] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        word = entry.get("word")
+        if not isinstance(word, str) or not word:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid word entry")
+        replacement = _ASR_PUNCTUATION_REPLACEMENTS.get(word.lower())
+        if replacement is None:
+            raise Phase10SchemaError(
+                f"{actual_path.name}: unsupported punctuation word {word!r}"
+            )
+        phrase = tuple(word.lower().split())
+        result.append(AsrPunctuationEntry(phrase=phrase, replacement=replacement))
+    return result
+
+
+def _parse_voice_number_token(token: str | None) -> str | None:
+    if token is None:
+        return None
+    if token.isdigit():
+        return token
+    parsed = parse_number_word(token)
+    if parsed is not None:
+        return str(parsed)
+    return None
+
+
+def apply_asr_punctuation_words(
+    tokens: list[str], *,
+    input_source: str = "keyboard",
+) -> tuple[list[str], list[dict[str, Any]]]:
+    if input_source != "voice":
+        return tokens, []
+
+    entries = sorted(
+        load_asr_punctuation_words(),
+        key=lambda entry: len(entry.phrase),
+        reverse=True,
+    )
+    if not entries:
+        return tokens, []
+
+    out: list[str] = []
+    events: list[dict[str, Any]] = []
+    i = 0
+    while i < len(tokens):
+        matched = False
+        for entry in entries:
+            phrase_len = len(entry.phrase)
+            if i + phrase_len > len(tokens):
+                continue
+            if tuple(tokens[i : i + phrase_len]) == entry.phrase:
+                left_value = _parse_voice_number_token(out[-1]) if out else None
+                right_token = tokens[i + phrase_len] if i + phrase_len < len(tokens) else None
+                right_value = _parse_voice_number_token(right_token)
+                if left_value is not None and right_value is not None:
+                    out[-1] = f"{left_value}{entry.replacement}{right_value}"
+                    i += phrase_len + 1
+                else:
+                    events.append(
+                        {
+                            "kind": "asr_punctuation_word_stripped",
+                            "punctuation_phrase": " ".join(entry.phrase),
+                        }
+                    )
+                    i += phrase_len
+                matched = True
+                break
+        if not matched:
+            out.append(tokens[i])
+            i += 1
+    return out, events
+
+
+@dataclass(frozen=True)
+class VoiceNumberContextEntry:
+    context: str
+    resolution: str
+    keywords: tuple[str, ...] = ()
+
+
+def load_voice_number_context(path: Path | None = None) -> dict[str, VoiceNumberContextEntry]:
+    actual_path = path or _LANG_TR_DIR / "voice_number_context.tr.yaml"
+    if not actual_path.exists():
+        return {}
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+    result: dict[str, VoiceNumberContextEntry] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        context = entry.get("context")
+        resolution = entry.get("resolution")
+        keywords = entry.get("keywords", [])
+        if not isinstance(context, str) or not context:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid context entry")
+        if not isinstance(resolution, str) or not resolution:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid resolution for {context!r}")
+        if not isinstance(keywords, list):
+            raise Phase10SchemaError(f"{actual_path.name}: invalid keywords list for {context!r}")
+        keyword_tuple = tuple(
+            str(keyword).lower()
+            for keyword in keywords
+            if isinstance(keyword, str) and keyword.strip()
+        )
+        result[context] = VoiceNumberContextEntry(
+            context=context,
+            resolution=resolution,
+            keywords=keyword_tuple,
+        )
+    return result
+
+
+def detect_voice_number_context(tokens: list[str], path: Path | None = None) -> str | None:
+    table = load_voice_number_context(path)
+    if not table:
+        return None
+    lower_tokens = [token.lower() for token in tokens]
+    joined = " ".join(lower_tokens)
+    for entry in table.values():
+        for keyword in entry.keywords:
+            if " " in keyword:
+                if keyword in joined:
+                    return entry.context
+            elif keyword in lower_tokens:
+                return entry.context
+    return None
+
+
+def resolve_voice_number_context(tokens: list[str], *, input_source: str = "keyboard") -> list[str]:
+    if input_source != "voice":
+        return tokens
+    context = detect_voice_number_context(tokens)
+    if not context:
+        return tokens
+    entry = load_voice_number_context().get(context)
+    if entry is None:
+        return tokens
+    out: list[str] = []
+    i = 0
+    while i < len(tokens):
+        matched = False
+        for j in range(min(len(tokens), i + 5), i, -1):
+            phrase = " ".join(tokens[i:j])
+            parsed = parse_number_word(phrase)
+            if parsed is None:
+                continue
+            if entry.resolution == "ordinal":
+                replacement = f"{parsed}."
+            elif entry.resolution == "year":
+                replacement = str(parsed) if (j - i == 4 and 1000 <= parsed <= 2999) else None
+            else:
+                replacement = str(parsed)
+            if replacement is not None:
+                out.append(replacement)
+                i = j
+                matched = True
+                break
+        if not matched:
+            out.append(tokens[i])
+            i += 1
+    return out
+
+
 def _prob_to_logit(prob: float) -> float:
     p = min(max(prob, 1e-15), 1.0 - 1e-15)
     return math.log(p / (1.0 - p))
@@ -140,6 +337,21 @@ def should_fire_wh_prior_drift_alert(previous_week_mean: float, current_week_mea
     """Return True when WH prior drift exceeds the configured threshold in percentage points."""
     drift_pp = abs(current_week_mean - previous_week_mean) * 100.0
     return drift_pp > float(cfg.nlp_wh_prior_drift_alert_pp)
+
+
+def should_fire_politeness_distribution_drift_alert(
+    previous_week_distribution: dict[str, float],
+    current_week_distribution: dict[str, float],
+) -> bool:
+    """Return True when politeness class distribution drift exceeds the configured threshold in percentage points."""
+    all_classes = set(previous_week_distribution) | set(current_week_distribution)
+    if not all_classes:
+        return False
+    drift_pp = max(
+        abs(current_week_distribution.get(politeness_class, 0.0) - previous_week_distribution.get(politeness_class, 0.0)) * 100.0
+        for politeness_class in all_classes
+    )
+    return drift_pp > float(cfg.nlp_politeness_distribution_drift_pp)
 
 
 def load_politeness_markers(path: Path | None = None) -> dict[str, str]:
@@ -234,6 +446,72 @@ def load_conditional_markers(path: Path | None = None) -> list[str]:
     return [str(item) for item in entries if isinstance(item, str)]
 
 
+def load_sarcasm_markers(path: Path | None = None) -> list[str]:
+    actual_path = path or _LANG_TR_DIR / "sarcasm_markers.tr.yaml"
+    if not actual_path.exists():
+        return []
+    raw = _load_yaml(actual_path)
+    entries = raw.get("markers")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing 'markers' list")
+    return [str(item) for item in entries if isinstance(item, str)]
+
+
+_SARCASM_CONTEXT_WINDOW_TOKENS = 10
+_SARCASM_NEGATIVE_PHRASES = [
+    "mağlubiyet",
+    "kaybetti",
+    "yenilgi",
+    "kırmızı kart",
+    "kovuldu",
+    "ayrıldı",
+    "sakatlık",
+    "penaltı kaçırdı",
+    "dağıldı",
+    "çöktü",
+    "hata",
+]
+
+
+def _find_phrase_positions(tokens: list[str], phrase: str) -> list[int]:
+    phrase_tokens = tuple(phrase.split())
+    if not phrase_tokens:
+        return []
+    positions: list[int] = []
+    for idx in range(len(tokens) - len(phrase_tokens) + 1):
+        if tuple(tokens[idx : idx + len(phrase_tokens)]) == phrase_tokens:
+            positions.append(idx)
+    return positions
+
+
+def detect_sarcastic_modifier(tokens: list[str]) -> str:
+    markers = load_sarcasm_markers()
+    if not markers:
+        return "none"
+
+    lower_tokens = [token.lower() for token in tokens]
+    cue_positions: list[int] = []
+    for marker in markers:
+        cue_positions.extend(_find_phrase_positions(lower_tokens, marker.lower()))
+
+    if not cue_positions:
+        return "none"
+
+    negative_positions: list[int] = []
+    for phrase in _SARCASM_NEGATIVE_PHRASES:
+        negative_positions.extend(_find_phrase_positions(lower_tokens, phrase))
+
+    if not negative_positions:
+        return "none"
+
+    for cue_pos in cue_positions:
+        for neg_pos in negative_positions:
+            if abs(cue_pos - neg_pos) <= _SARCASM_CONTEXT_WINDOW_TOKENS:
+                return "sarcastic"
+
+    return "none"
+
+
 def detect_conditional_modifier(tokens: list[str]) -> tuple[str | tuple[str, ...], str]:
     markers = load_conditional_markers()
     token_text = " ".join(tokens).lower()
@@ -249,6 +527,167 @@ def detect_conditional_modifier(tokens: list[str]) -> tuple[str | tuple[str, ...
     if future:
         return modifier, "future"
     return modifier, "present"
+
+
+@dataclass(frozen=True)
+class AnaphoraPronounEntry:
+    pronoun: str
+    type_constraint: str
+
+
+ANAPHORA_TYPE_CONSTRAINTS: dict[str, frozenset[str] | None] = {
+    "team_set": frozenset({"team", "player"}),
+    "ambiguous": None,
+    "person": frozenset({"player", "person", "coach", "referee"}),
+    "venue": frozenset({"venue"}),
+    "venue_direction": frozenset({"venue"}),
+    "venue_or_group": frozenset({"venue", "team", "player"}),
+}
+
+
+def load_anaphora_pronouns(path: Path | None = None) -> dict[str, AnaphoraPronounEntry]:
+    actual_path = path or _LANG_TR_DIR / "anaphora_pronouns.tr.yaml"
+    if not actual_path.exists():
+        return {}
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+    result: dict[str, AnaphoraPronounEntry] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        pronoun = entry.get("pronoun")
+        type_constraint = entry.get("type_constraint")
+        if not isinstance(pronoun, str) or not pronoun:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid pronoun")
+        if not isinstance(type_constraint, str) or not type_constraint:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid type_constraint for {pronoun!r}")
+        if pronoun in result:
+            raise Phase10SchemaError(f"{actual_path.name}: duplicate pronoun {pronoun!r}")
+        result[pronoun] = AnaphoraPronounEntry(pronoun=pronoun, type_constraint=type_constraint)
+    return result
+
+
+def detect_anaphora_pronouns(normalized_text: str) -> tuple[str, ...]:
+    table = load_anaphora_pronouns()
+    if not table:
+        return ()
+    lower = normalized_text.lower()
+    matches: list[tuple[int, str]] = []
+    for pronoun in sorted(table.keys(), key=len, reverse=True):
+        for m in re.finditer(rf"\b{re.escape(pronoun)}\b", lower):
+            matches.append((m.start(), pronoun))
+    matches.sort(key=lambda item: item[0])
+    return tuple(pronoun for _, pronoun in matches)
+
+
+def resolve_anaphora_pronoun(
+    pronoun: str,
+    mention_stack: list[dict[str, object]],
+    current_turn_index: int | None = None,
+    current_time_iso: str | None = None,
+) -> tuple[dict[str, object] | None, float]:
+    if not pronoun or not mention_stack:
+        return None, 0.0
+
+    entry = load_anaphora_pronouns().get(pronoun)
+    if entry is None:
+        return None, 0.0
+
+    allowed_kinds = ANAPHORA_TYPE_CONSTRAINTS.get(entry.type_constraint)
+    best_candidate: dict[str, object] | None = None
+    best_score = 0.0
+    now_dt = None
+    if current_time_iso is not None:
+        try:
+            now_dt = datetime.datetime.fromisoformat(current_time_iso)
+        except ValueError:
+            now_dt = None
+
+    for mention in reversed(mention_stack):
+        if not isinstance(mention, dict):
+            continue
+        kind = mention.get("kind")
+        canonical_id = mention.get("canonical_id")
+        if not isinstance(kind, str) or not isinstance(canonical_id, str):
+            continue
+        if allowed_kinds is not None and kind not in allowed_kinds:
+            continue
+
+        if current_turn_index is not None and isinstance(mention.get("mentioned_turn"), int):
+            age_turns = current_turn_index - mention["mentioned_turn"]
+            if age_turns < 0:
+                age_turns = 0
+            if age_turns >= int(cfg.nlp_anaphora_lookback_turns):
+                continue
+        else:
+            age_turns = 0
+
+        if now_dt is not None and isinstance(mention.get("mentioned_at"), str):
+            try:
+                when = datetime.datetime.fromisoformat(mention["mentioned_at"])
+                age_seconds = (now_dt - when).total_seconds()
+            except ValueError:
+                age_seconds = 0.0
+            if age_seconds >= int(cfg.nlp_anaphora_lookback_seconds):
+                continue
+        else:
+            age_seconds = 0.0
+
+        if int(cfg.nlp_anaphora_lookback_turns) > 0:
+            recency_weight = max(0.0, 1.0 - (age_turns / float(cfg.nlp_anaphora_lookback_turns)))
+        else:
+            recency_weight = 1.0
+
+        salience = 0.5
+        if isinstance(mention.get("confidence"), (float, int)):
+            salience = min(1.0, max(0.0, float(mention["confidence"])))
+
+        score = recency_weight * salience
+        if score > best_score:
+            best_score = score
+            best_candidate = mention
+
+    if best_score < float(cfg.nlp_anaphora_min_antecedent_confidence):
+        return None, best_score
+    return best_candidate, best_score
+
+
+def load_anaphora_compose(path: Path | None = None) -> set[frozenset[str]]:
+    actual_path = path or _LANG_TR_DIR / "anaphora_compose.yaml"
+    if not actual_path.exists():
+        return set()
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: set[frozenset[str]] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        pronouns = entry.get("pronouns")
+        if not isinstance(pronouns, list) or len(pronouns) < 2:
+            raise Phase10SchemaError(
+                f"{actual_path.name}: invalid pronouns list {pronouns!r}"
+            )
+        normalized = frozenset(str(item).strip().lower() for item in pronouns if isinstance(item, str) and item)
+        if len(normalized) != len(pronouns):
+            raise Phase10SchemaError(
+                f"{actual_path.name}: pronouns must be unique strings, got {pronouns!r}"
+            )
+        result.add(normalized)
+    return result
+
+
+def is_legal_anaphora_composition(pronouns: tuple[str, ...]) -> bool:
+    if len(pronouns) < 2:
+        return True
+    table = load_anaphora_compose()
+    if not table:
+        return False
+    return frozenset(pronouns) in table
 
 
 def load_idiom_phrasebook(path: Path | None = None) -> list[dict[str, Any]]:

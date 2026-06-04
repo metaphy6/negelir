@@ -96,6 +96,10 @@ func TestLowercaseTurkish(t *testing.T) {
 		{"İGNORE PREVİOUS", "ignore previous"},
 		{"IĞDIR", "ığdır"},
 		{"GALATASARAY", "galatasaray"},
+		{"I\u0307stanbul", "istanbul"},
+		{"I\u0307\u0307stanbul", "istanbul"},
+		{"i\u0307stanbul", "istanbul"},
+		{"J\u0307", "j"},
 		{"", ""},
 	}
 	for _, tc := range cases {

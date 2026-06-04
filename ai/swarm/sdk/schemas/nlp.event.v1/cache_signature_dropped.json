@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/cache_signature_dropped",
+  "title": "nlp.event.v1{kind=cache_signature_dropped}",
+  "description": "A cached signature was dropped due to invalid or missing verification metadata.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "cache_signature",
+    "reason"
+  ],
+  "properties": {
+    "kind": {"const": "cache_signature_dropped"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.answer.v1", "nlp.proofreader.v1"]
+    },
+    "request_id": {"type": ["string", "null"]},
+    "emitted_at": {"type": "string", "description": "ISO-8601 UTC."},
+    "cache_signature": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

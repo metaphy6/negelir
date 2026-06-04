@@ -252,3 +252,44 @@ def test_nlp_weekly_eval_workflow_exists() -> None:
     root = Path(__file__).resolve().parents[2]
     workflow = root / "xops" / "ci" / "nlp_weekly_eval.yml"
     assert workflow.exists(), "xops/ci/nlp_weekly_eval.yml must exist for weekly NLP evaluation"
+
+
+def test_nlp_cve_scan_ci_job_present() -> None:
+    """Verify the Phase 10 NLP CVE scan CI workflow file exists."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    workflow = root / "xops" / "ci" / "nlp_cve_scan.yml"
+    assert workflow.exists(), "xops/ci/nlp_cve_scan.yml must exist for NLP CVE scanning"
+
+
+def test_nlp_runbook_cve_response_section_present() -> None:
+    from pathlib import Path
+
+    runbook = Path("docs/guides/nlp_runbook.md")
+    text = runbook.read_text(encoding="utf-8")
+    assert "Dependency CVE response" in text
+    assert "patch ship target ≤ 24h" in text
+
+
+def test_nlp_phase10_23_docs_extensions_present() -> None:
+    from pathlib import Path
+
+    doc = Path("docs/design/TURKISH_NLP.md").read_text(encoding="utf-8")
+    runbook = Path("docs/guides/nlp_runbook.md").read_text(encoding="utf-8")
+
+    assert "Output formatting (§10.23.5)" in doc
+    assert "Accessibility (§10.23.7)" in doc
+    assert "Tenant-Fairness (§10.23.1)" in doc
+    assert "Canary rollout playbook" in runbook
+    assert "Weekly-eval triage" in runbook
+    assert "Cost-budget tuning" in runbook
+
+
+def test_nlp_mitigations_catalogue_present() -> None:
+    from pathlib import Path
+
+    mitigations = Path("ai/nlp/security/mitigations.md")
+    text = mitigations.read_text(encoding="utf-8")
+    assert mitigations.exists(), "ai/nlp/security/mitigations.md must exist"
+    assert "Jinja2 / template rendering" in text

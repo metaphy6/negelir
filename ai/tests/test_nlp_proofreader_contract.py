@@ -260,6 +260,19 @@ def test_gate5_decorative_emoji_not_in_set_blocks():
     assert result.block_reason == "decorative_emoji"
 
 
+def test_nlp_decorative_set_closed_at_render() -> None:
+    cfg = Config()
+    answer = "Bugün maç var ⚽ 🏆 ve bu bir uzunluk kontrolü testidir."
+    result = proofread_answer(
+        answer,
+        intent="data.fixture_lookup",
+        citation_sha256_expected=None,
+        cfg=cfg,
+    )
+    assert result.passed is True
+    assert result.block_reason is None
+
+
 def test_gate6_suffix_harmony_violation_blocks():
     """Gate 6: suffix harmony violation → blocked."""
     cfg = Config()

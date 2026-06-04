@@ -1,0 +1,20 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-03T00:00:00Z"
+  source: "phase10-10.24.12"
+  notes: >
+    Curated team nickname allow-list for Phase 10 §10.24.12.
+aliases:
+  - alias_form: "kara kartal"
+    canonical_id: "besiktas_jk"
+    requires_co_token: false
+  - alias_form: "sarı kanaryalar"
+    canonical_id: "fenerbahce_sk"
+    requires_co_token: false
+  - alias_form: "cim bom"
+    canonical_id: "galatasaray_sk"
+    requires_co_token: false
+  - alias_form: "bordo maviler"
+    canonical_id: "trabzonspor"
+    requires_co_token: false
