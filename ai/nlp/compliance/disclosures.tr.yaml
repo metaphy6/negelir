@@ -1,0 +1,22 @@
+_meta:
+  schema_version: 1
+  lexicon_version: "1.0.0"
+  generated_at_utc: "2026-06-01T00:00:00Z"
+  generator: "phase10.27"
+disclosures:
+  - disclosure_id: "kvkk_user_rights_footer_first_per_conversation"
+    version: 1
+    effective_from_utc: "2026-06-01T00:00:00Z"
+    text: "KVKK Art 11 uyarınca kişisel verilerinizi inceleme, düzeltme ve silme hakkınız vardır."
+  - disclosure_id: "gambling_law_disclaimer_band"
+    version: 1
+    effective_from_utc: "2026-06-01T00:00:00Z"
+    text: "Bu bir tahmindir; kesin sonuçlar garanti edilmez."
+  - disclosure_id: "automated_decision_notice"
+    version: 1
+    effective_from_utc: "2026-06-01T00:00:00Z"
+    text: "Bu sonuç tamamen otomatik bir sistem tarafından üretildi, insan uzman görüşü içermez."
+  - disclosure_id: "eighteen_plus_gate"
+    version: 1
+    effective_from_utc: "2026-06-01T00:00:00Z"
+    text: "Bu içeriği görüntülemek için 18 yaşında veya üzerinde olduğunuzu onaylamanız gerekmektedir."

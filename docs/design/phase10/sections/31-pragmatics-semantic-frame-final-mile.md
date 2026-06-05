@@ -131,7 +131,7 @@
   içerir görünen ifadeler için cevap üretmiyorum; somut bir
   veri sorusu yöneltirseniz yardımcı olabilirim."* Defends
   against the *answer-the-praise-as-if-genuine* class.
-- [ ] **Tier-blind invariant.** AST guard ensures the
+- [x] **Tier-blind invariant.** AST guard ensures the
   sarcasm-detector output (`intent_modifier=sarcastic` and the
   detector's internal cue-evidence list) is consulted ONLY by
   the dispatcher refusal path; never by the classifier
@@ -141,7 +141,7 @@
   is the post-strip canonical form, so the same praise query
   in a non-sarcastic context (e.g. asked the day after a 5-0
   win) routes correctly through the regular path.
-- [ ] **False-positive guardrail.** Cues without context
+- [x] **False-positive guardrail.** Cues without context
   (`harika oynadılar` immediately after a real win) → no
   modifier set; emit `nlp.event.v1{kind=sarcasm_cue_no_context,
   cue_id}` for false-positive observability and PR-time

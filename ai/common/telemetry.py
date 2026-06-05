@@ -85,6 +85,14 @@ if _PROMETHEUS_AVAILABLE:
         buckets=(0.001, 0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0),
     )
 
+    # nlp_dialect_normalization_rate{dialect_class} — histogram of dialect normalization observations per class
+    NLP_DIALECT_NORMALIZATION_RATE = Histogram(
+        "nlp_dialect_normalization_rate",
+        "NLP dialect normalization observations by class",
+        labelnames=["dialect_class"],
+        buckets=(1.0,),
+    )
+
     # nlp_disambiguation_offered_total{cause} — counter of disambiguation offers
     NLP_DISAMBIGUATION_OFFERED_TOTAL = Counter(
         "nlp_disambiguation_offered_total",
@@ -403,6 +411,18 @@ class TelemetrySink:
         if _PROMETHEUS_AVAILABLE and NLP_INPUT_REPAIR_DENSITY:
             try:
                 NLP_INPUT_REPAIR_DENSITY.observe(ratio)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_dialect_normalization(self, dialect_class: str, count: int = 1) -> None:
+        """
+        Record a regional dialect normalization observation by dialect class.
+        """
+        if count <= 0:
+            return
+        if _PROMETHEUS_AVAILABLE and NLP_DIALECT_NORMALIZATION_RATE:
+            try:
+                NLP_DIALECT_NORMALIZATION_RATE.labels(dialect_class=dialect_class).observe(float(count))
             except Exception:  # noqa: BLE001
                 pass  # non-blocking
 

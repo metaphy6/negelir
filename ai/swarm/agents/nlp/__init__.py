@@ -64,11 +64,13 @@ import stat
 from uuid import uuid4
 
 from common.config import cfg
+from common.fixture_state import FixtureState
 from common.security.patterns import PII_PATTERNS
 from common.security.tr_pii import parse_redacted_tr_pii
 
 from ...sdk import AlertDebouncer
 from ...sdk.types import Message
+from nlp.compliance import disclosures_snapshot_sha, load_disclosures
 from nlp.lexicon_loader import is_safe_mode_active
 from nlp.normalize import assert_minimum_signal
 from ..topics import (
@@ -86,6 +88,8 @@ from ..topics import (
     QA_REQUEST_V1,
 )
 from ._bus_circuit_breaker import NlpBusCircuitBreaker
+from .abuse import NlpAbuseAgent
+from .shadow_writer import NlpShadowWriter
 from nlp.compat import validate_compatibility_matrix
 from nlp.conversation import ConversationStore
 from ._log_filter import PIIScrubFilter, add_log_filter
@@ -141,6 +145,8 @@ def _make_qa_answer_payload(
     conversation_id: str | None = None,
     emitted_at_utc: str | None = None,
     nlp_pipeline_version: str | None = None,
+    disclosures: list[dict[str, object]] | None = None,
+    request_metadata: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if emitted_at_utc is None:
         emitted_at_utc = _utc_iso()
@@ -170,6 +176,10 @@ def _make_qa_answer_payload(
         payload["conversation_id"] = conversation_id
     if parts is not None:
         payload["parts"] = parts
+    if disclosures is not None:
+        payload["disclosures"] = disclosures
+    if request_metadata is not None:
+        payload["request_metadata"] = request_metadata
     return payload
 
 
@@ -178,6 +188,111 @@ def _translate_degraded_reason_tr(reason: str) -> str:
     if reason not in translations:
         raise KeyError(f"Missing degraded_reason translation for {reason!r}")
     return translations[reason]
+
+
+def _load_disclosure_texts(locale: str) -> tuple[list[dict[str, object]], str]:
+    disclosures, used_locale = load_disclosures(locale)
+    return disclosures, used_locale
+
+
+def _build_disclosures_metadata(disclosures: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [
+        {
+            "disclosure_id": d["disclosure_id"],
+            "version": d["version"],
+            "disclosure_sha8": d["disclosure_sha8"],
+        }
+        for d in disclosures
+    ]
+
+
+def _collapse_parts_for_v1(payload: dict[str, object]) -> None:
+    parts = payload.get("parts")
+    if isinstance(parts, list) and parts:
+        first = parts[0]
+        if isinstance(first, dict) and isinstance(first.get("body"), str):
+            payload["answer_text"] = first["body"]
+    payload.pop("parts", None)
+    payload.pop("envelope_signature", None)
+
+
+def _strip_fields(payload: dict[str, object], field_paths: list[str]) -> None:
+    for path in field_paths:
+        if path == "parts":
+            payload.pop("parts", None)
+            continue
+        if path == "envelope_signature":
+            payload.pop("envelope_signature", None)
+            continue
+        parts = path.split(".")
+        current = payload
+        for part in parts[:-1]:
+            if not isinstance(current, dict):
+                current = None
+                break
+            current = current.get(part)
+        if isinstance(current, dict):
+            current.pop(parts[-1], None)
+
+
+def _load_downgrade_matrix() -> dict[str, dict[str, list[str]]]:
+    path = Path(__file__).resolve().parents[3] / "swarm" / "sdk" / "schemas" / "qa.answer.v1.downgrade_matrix.json"
+    try:
+        import json
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def downgrade_qa_answer_v1(payload: dict[str, object], target_version: int) -> dict[str, object]:
+    current_version = int(payload.get("schema_version") or 1)
+    if target_version >= current_version:
+        return dict(payload)
+    matrix = _load_downgrade_matrix()
+    from_version = str(current_version)
+    to_version = str(target_version)
+    if from_version not in matrix or to_version not in matrix[from_version]:
+        raise ValueError(f"unsupported downgrade path {from_version} -> {to_version}")
+    output = dict(payload)
+    strip_fields = matrix[from_version][to_version] or []
+    _strip_fields(output, strip_fields)
+    if current_version >= 2 and target_version == 1:
+        _collapse_parts_for_v1(output)
+    output["schema_version"] = target_version
+    return output
+
+
+class FixtureStateLookup:
+    """Phase 10 §10.27.1 fixture-state lookup contract for the dispatcher."""
+
+    @staticmethod
+    def get(
+        match_id: str,
+        request_id: str,
+        qa_correlation_id: str,
+        timeout_ms: int,
+    ) -> tuple[str, str, str, Message]:
+        """Build a fixture-state lookup request and return a default degraded state.
+
+        In the current Phase 10 skeleton, the actual data-plane reply is not
+        yet wired through. The contract is preserved by emitting the
+        data.request.v1{kind=fixture_state} request and treating a missing
+        response as UNKNOWN rather than defaulting to scheduled.
+        """
+        request_msg = Message.new(
+            topic=DATA_REQUEST_V1,
+            payload={
+                "schema_version": 1,
+                "kind": "fixture_state",
+                "match_id": match_id,
+                "request_id": request_id,
+                "qa_correlation_id": qa_correlation_id,
+                "timeout_ms": timeout_ms,
+                "emitted_at": _utc_iso(),
+            },
+            producer="nlp.dispatcher.v1",
+        )
+        return FixtureState.UNKNOWN.value, _utc_iso(), "fallback", request_msg
 
 # Maximum number of dedup keys held in each NLP agent's LRU (structural cap;
 # not a config knob because it is a data-structure bound, not a tunable
@@ -1609,24 +1724,35 @@ class NlpDispatcherAgent:
             max_f = cfg.nlp_summary_max_fixtures
             capped = fixture_entities[:max_f]
             summary_corr = self._new_id()
-            expected_count = len(capped)
             out: list[Message] = []
+            routed_payloads: list[dict[str, object]] = []
             for entity in capped:
+                match_id = str(entity["canonical_id"])
+                _, _, _, lookup_req = FixtureStateLookup.get(
+                    match_id=match_id,
+                    request_id=request_id,
+                    qa_correlation_id=qa_corr_in,
+                    timeout_ms=int(cfg.nlp_fixture_state_lookup_timeout_ms),
+                )
+                out.append(lookup_req)
+                routed_payloads.append({
+                    "match_id": match_id,
+                    "market": "1x2",
+                    "request_id": self._new_id(),
+                    "qa_correlation_id": summary_corr,
+                    "qa_request_id": request_id,
+                    "summary_correlation_id": summary_corr,
+                    "league_id": entity.get("league_id"),
+                    "profile_id": None,
+                    "emitted_at": self._clock_iso(),
+                })
+            expected_count = len(routed_payloads)
+            for payload in routed_payloads:
+                payload["summary_expected_count"] = expected_count
                 out.append(
                     Message.new(
                         topic=PREDICT_REQUEST_V1,
-                        payload={
-                            "match_id": entity["canonical_id"],
-                            "market": "1x2",
-                            "request_id": self._new_id(),
-                            "qa_correlation_id": summary_corr,
-                            "qa_request_id": request_id,
-                            "summary_correlation_id": summary_corr,
-                            "summary_expected_count": expected_count,
-                            "league_id": entity.get("league_id"),
-                            "profile_id": None,
-                            "emitted_at": self._clock_iso(),
-                        },
+                        payload=payload,
                         producer=self.name,
                     )
                 )
@@ -1861,15 +1987,38 @@ class NlpDispatcherAgent:
         # ── §10.6 deterministic backoff ────────────────────────────────────
         if intent.startswith("predict."):
             # Check for fixture-anchoring entities (team or competition).
-            has_fixture_entity = any(
-                e.get("kind") in _FIXTURE_ENTITY_KINDS and e.get("canonical_id")
-                for e in entities
-            )
-            if not has_fixture_entity:
+            fixture_entities = [
+                e for e in entities
+                if e.get("kind") in _FIXTURE_ENTITY_KINDS and e.get("canonical_id")
+            ]
+            if not fixture_entities:
                 # §10.6 deterministic backoff — never guess a headline match.
                 return _with_context(self._make_disambiguation(request_id, intent, cfg, conversation_id=conversation_id or None))
-            # predict.* with resolvable fixture: routing to predict.request.v1
-            # implemented in subsequent §10.6 bullets.
+            match_id = str(fixture_entities[0]["canonical_id"])
+            _, _, _, lookup_req = FixtureStateLookup.get(
+                match_id=match_id,
+                request_id=request_id,
+                qa_correlation_id=qa_corr_in,
+                timeout_ms=int(cfg.nlp_fixture_state_lookup_timeout_ms),
+            )
+            # predict.* with resolvable fixture: emit fixture-state lookup and
+            # then route to predict.request.v1 as the state reply is handled by
+            # the downstream Phase 10 circuit.
+            return _with_context([
+                lookup_req,
+                Message.new(
+                    topic=PREDICT_REQUEST_V1,
+                    payload={
+                        "match_id": match_id,
+                        "market": "1x2",
+                        "request_id": self._new_id(),
+                        "qa_correlation_id": qa_corr_in,
+                        "qa_request_id": request_id,
+                        "emitted_at": self._clock_iso(),
+                    },
+                    producer=self.name,
+                ),
+            ])
 
         # data.*, meta.*, and resolvable predict.* routing: future bullets.
         return _with_context([])
@@ -2010,6 +2159,8 @@ class NlpDispatcherAgent:
         answer_text: str,
         conversation_id: str | None = None,
         parts: list[dict[str, object]] | None = None,
+        degraded: bool = False,
+        degraded_reason: str | None = None,
     ) -> Message:
         qa_corr = qa_correlation_id or self._new_id()
         kind = intent.split(".", 1)[1]
@@ -2022,6 +2173,8 @@ class NlpDispatcherAgent:
             tier_id_required=None,
             conversation_id=conversation_id,
             parts=parts,
+            degraded=degraded,
+            degraded_reason=degraded_reason,
             emitted_at_utc=self._clock_iso(),
         )
         return Message.new(
@@ -2363,6 +2516,11 @@ class NlpAnswerAgent:
         self._audit_today_count = 0
         self._audit_date = ""
         self._audit_lock = _threading.Lock()
+        # §10.27.8 regulatory disclosures emitted once per conversation.
+        self._conversation_disclosures_emitted: set[str] = set()
+        # §10.27.5 preview operator token budgets.
+        self._preview_token_usage: dict[str, int] = {}
+        self._preview_token_lock = _threading.Lock()
 
     def _get_deduper(self) -> object:
         """Return the answer deduper, lazily creating it from cfg."""
@@ -2658,6 +2816,168 @@ class NlpAnswerAgent:
         if is_safe_mode_active():
             payload["degraded"] = True
             payload["degraded_reason"] = "lexicon_safe_mode_active"
+
+    def _make_disclosure_emitted_event(
+        self,
+        request_id: str,
+        conversation_id: str | None,
+        disclosure_id: str,
+        disclosure_version: int,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "disclosure_emitted",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "conversation_id": conversation_id,
+                "disclosure_id": disclosure_id,
+                "disclosure_version": disclosure_version,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _make_disclosure_locale_fallback_event(
+        self,
+        request_id: str,
+        requested_locale: str,
+        resolved_locale: str,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "disclosure_locale_fallback",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "requested_locale": requested_locale,
+                "resolved_locale": resolved_locale,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _preview_budget_available(self, operator_id_h: str, estimate_tokens: int) -> bool:
+        with self._preview_token_lock:
+            used = self._preview_token_usage.get(operator_id_h, 0)
+            return used + estimate_tokens <= int(cfg.nlp_preview_token_budget_per_operator_per_h)
+
+    def _consume_preview_tokens(self, operator_id_h: str, estimate_tokens: int) -> None:
+        with self._preview_token_lock:
+            self._preview_token_usage[operator_id_h] = (
+                self._preview_token_usage.get(operator_id_h, 0) + estimate_tokens
+            )
+
+    def _append_disclosures(
+        self,
+        payload: dict[str, Any],
+        request_metadata: dict[str, Any] | None,
+        conversation_id: str | None,
+    ) -> list[Message]:
+        disclosure_messages: list[Message] = []
+        intent = str(payload.get("intent") or "")
+        if not intent.startswith("predict."):
+            return disclosure_messages
+
+        locale = str(payload.get("locale") or "tr-TR")
+        disclosures, used_locale = _load_disclosure_texts(locale)
+        if used_locale != locale:
+            disclosure_messages.append(
+                self._make_disclosure_locale_fallback_event(
+                    request_id=str(payload.get("request_id") or ""),
+                    requested_locale=locale,
+                    resolved_locale=used_locale,
+                )
+            )
+
+        body = str(payload.get("answer_text") or "")
+        appended: list[str] = []
+        preview_age_attestation = None
+        if isinstance(request_metadata, dict):
+            preview_age_attestation = request_metadata.get("user_age_attestation")
+
+        if disclosures:
+            disclaimer = next(
+                (d for d in disclosures if d["disclosure_id"] == "gambling_law_disclaimer_band"),
+                None,
+            )
+            age_gate = None
+            if cfg.nlp_age_gating_enabled and not preview_age_attestation:
+                age_gate = next(
+                    (d for d in disclosures if d["disclosure_id"] == "eighteen_plus_gate"),
+                    None,
+                )
+            footer = None
+            auto_notice = next(
+                (d for d in disclosures if d["disclosure_id"] == "automated_decision_notice"),
+                None,
+            )
+            first_conversation = bool(conversation_id and conversation_id not in self._conversation_disclosures_emitted)
+            if disclaimer:
+                appended.append(disclaimer["text"])
+            if age_gate:
+                appended.append(age_gate["text"])
+            appended.append(body)
+            used_disclosures: list[dict[str, object]] = []
+            if disclaimer:
+                appended.append(disclaimer["text"])
+                used_disclosures.append(disclaimer)
+            if age_gate:
+                appended.append(age_gate["text"])
+                used_disclosures.append(age_gate)
+            if first_conversation and conversation_id:
+                footer = next(
+                    (d for d in disclosures if d["disclosure_id"] == "kvkk_user_rights_footer_first_per_conversation"),
+                    None,
+                )
+                if footer:
+                    appended.append(footer["text"])
+                    used_disclosures.append(footer)
+            if first_conversation and auto_notice:
+                appended.append(auto_notice["text"])
+                used_disclosures.append(auto_notice)
+            if first_conversation and conversation_id:
+                self._conversation_disclosures_emitted.add(conversation_id)
+
+            payload["answer_text"] = " ".join(appended)
+            payload["disclosures"] = _build_disclosures_metadata(used_disclosures)
+            for disclosure in used_disclosures:
+                disclosure_messages.append(
+                    self._make_disclosure_emitted_event(
+                        request_id=str(payload.get("request_id") or ""),
+                        conversation_id=conversation_id,
+                        disclosure_id=disclosure["disclosure_id"],
+                        disclosure_version=disclosure["version"],
+                    )
+                )
+        return disclosure_messages
+
+    def _validate_calibration_horizon(
+        self,
+        payload: dict[str, Any],
+    ) -> tuple[bool, Message | None]:
+        horizon = str(payload.get("calibration_state_horizon") or "prematch")
+        schema_version = int(payload.get("schema_version") or 1)
+        if schema_version <= 1 and cfg.nlp_calibration_horizon_strict and horizon != "prematch":
+            alert = Message.new(
+                topic=NLP_ALERT_V1,
+                payload={
+                    "schema_version": 1,
+                    "alert_id": self._new_id(),
+                    "kind": "calibration_horizon_mismatch",
+                    "severity": "error",
+                    "source": self.name,
+                    "request_id": str(payload.get("qa_request_id") or payload.get("request_id") or "") or None,
+                    "details": {
+                        "horizon": horizon,
+                        "schema_version": schema_version,
+                    },
+                    "emitted_at": self._clock_iso(),
+                },
+                producer=self.name,
+            )
+            return False, alert
+        return True, None
 
     def _on_summary_prediction_arrived(
         self, payload: dict, summary_corr: str

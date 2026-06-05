@@ -410,6 +410,19 @@ class TestPhase1030Normalization:
         result = normalize_input("galatasaray harika oynadılar ama son maçta 0-5 kaybetti")
         assert result.intent_modifier == "sarcastic"
 
+    def test_sarcasm_cue_without_context_emits_no_context_event(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray harika oynadılar")
+        events = [event for event in result.normalization_events if event.get("kind") == "sarcasm_cue_no_context"]
+        assert len(events) == 1
+        assert events[0]["cue_id"] == "harika oynadılar"
+        assert events[0]["cue_phrase"] == "harika oynadılar"
+        assert events[0]["span"] == (1, 3)
+
+        result_with_context = normalize_input("galatasaray harika oynadılar ama son maçta 0-5 kaybetti")
+        assert not any(event.get("kind") == "sarcasm_cue_no_context" for event in result_with_context.normalization_events)
+
     def test_search_operator_patterns_detect_plus_minus(self) -> None:
         from nlp.normalize import normalize_input
 

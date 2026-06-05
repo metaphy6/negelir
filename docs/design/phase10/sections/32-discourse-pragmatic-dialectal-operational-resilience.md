@@ -181,7 +181,7 @@
     Dutch-Turkish: *"voetbalcı"*; UK-Turkish: *"premier liglerde"*) —
     code-mixing inside single token via §10.32.4 vs. across-token
     via existing §10.26.10 bilingual football vocab
-- [ ] **Closed `regional_dialect_normalization.tr.yaml`** — 4
+- [x] **Closed `regional_dialect_normalization.tr.yaml`** — 4
   dialect families × ~30 entries each = ~120 deterministic
   `dialect_form → standard_form` rewrites (closed table; never
   fuzzy). Per-rule `dialect_class ∈ {aegean, black_sea, cypriot,
@@ -202,15 +202,15 @@
   *"Schalke"* the team name as German-Turkish diaspora variant).
   Closed `dialect_no_rewrite_canonicals.tr.yaml` allow-list for
   edge cases.
-- [ ] **Per-dialect coverage telemetry** — `nlp_dialect_normalization_rate`
+- [x] **Per-dialect coverage telemetry** — `nlp_dialect_normalization_rate`
   histogram per `dialect_class`; threshold `nlp_dialect_class_min_recall=0.80`
   on the §10.18 evaluation harness's per-dialect slice (NEW
   ≥ 30-row slice per dialect family); below → warn alert
   `dialect_class_recall_below_floor` for lexicon-curator action.
-- [ ] **Two-reviewer rule extension** — `regional_dialect_normalization.tr.yaml`
+- [x] **Two-reviewer rule extension** — `regional_dialect_normalization.tr.yaml`
   added to §10.25.6 high-leverage governance list; CODEOWNERS
   requires `nlp-curator` + new `nlp-dialect-curator` group.
-- [ ] **Proof tests** — 4 × 30-row dialect golden corpora with
+- [x] **Proof tests** — 4 × 30-row dialect golden corpora with
   per-dialect intent accuracy ≥ 0.85 + entity F1 ≥ 0.85 (slightly
   relaxed from main §10.18 floors of 0.92 / 0.90 — dialects are
   long-tail). Adversarial `dialect_squat` test: 20-row corpus
@@ -252,7 +252,7 @@
 - [x] **Detection ordering** — runs as new §10.1 **step 6.7**
   AFTER §10.32.4 dialect normalize AFTER §10.29.1 geminate
   restoration BEFORE §10.5 entity extraction. AST guard.
-- [ ] **Cross-language consistency with §10.31.8 output-side** —
+- [x] **Cross-language consistency with §10.31.8 output-side** —
   the *closed canonical apostrophe-insertion table* (which suffix
   triggers apostrophe per Turkish proper-noun rule, e.g. consonant
   vs. vowel-final stem) is shared single-source via NEW
@@ -261,7 +261,7 @@
   spec; cross-language SHA pin (Python NLP + Go sec layer); boot-
   refuse on drift (mirrors §10.29.11 `tr_normalize_spec.json`
   doctrine).
-- [ ] **Proof tests** — 60-row golden (20 missing-apostrophe + 20
+- [x] **Proof tests** — 60-row golden (20 missing-apostrophe + 20
   misplaced + 20 legitimate-internal); 100% correct repair on the
   first two classes; 100% non-touch on the third class; Hypothesis
   property: every LeagueCatalog canonical with every valid Turkish

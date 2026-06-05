@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Iterable, NamedTuple
+from typing import Callable, Iterable, NamedTuple
 
 import yaml
 
@@ -92,6 +92,7 @@ def apply_regional_dialect_normalize(
     no_rewrite_canonicals: set[str] | None = None,
     rule_path: Path | None = None,
     allowlist_path: Path | None = None,
+    event_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> tuple[str, tuple[RegionalDialectRewrite, ...], tuple[tuple[str, str], ...]]:
     """Apply regional dialect rewrite rules to normalized text.
 
@@ -130,6 +131,17 @@ def apply_regional_dialect_normalize(
                     canonical=rule.canonical,
                 )
             )
+            if rule.audit_only and event_sink is not None:
+                event_sink(
+                    {
+                        "kind": "dialect_normalized",
+                        "dialect_class": rule.dialect_class,
+                        "rule_id": rule.rule_id,
+                        "original": rule.spoken,
+                        "canonical": rule.canonical,
+                        "audit_only": rule.audit_only,
+                    }
+                )
             if not rule.audit_only:
                 dialect_alternatives.append((rule.canonical, rule.spoken))
 

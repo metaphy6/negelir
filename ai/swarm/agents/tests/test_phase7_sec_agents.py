@@ -69,6 +69,19 @@ def _msg(topic: str, payload: dict, *, producer: str = "test") -> Message:
     return Message.new(topic, payload, producer=producer)
 
 
+def _iter_message_strings(value: object) -> Iterator[str]:
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_message_strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _iter_message_strings(item)
+    elif isinstance(value, str):
+        yield value
+    elif value is not None:
+        yield str(value)
+
+
 # ── SecAlertDebouncer ─────────────────────────────────────────────
 
 
@@ -799,6 +812,68 @@ def test_sec_input_redacts_tr_pii_before_classification_and_records_step() -> No
     parsed = QaRequestV1.from_dict(v1.payload)
     assert parsed.sec_steps_run[0] == "tr_pii_redaction"
     assert parsed.sec_verdict == "sanitized"
+
+
+def test_nlp_tr_pii_runs_before_length_cap() -> None:
+    import common.config as _cfg_mod
+
+    _cfg_mod.cfg.sec_input_max_len = 8192
+    seen: list[str] = []
+
+    def classifier(text: str) -> tuple[str, str]:
+        seen.append(text)
+        return ("pass", "ok")
+
+    clock = _FakeClock()
+    agent = SecInputAgent(
+        classifier=classifier,
+        debouncer=SecAlertDebouncer(ttl_s=60, clock=clock.mono),
+        clock_iso=clock.iso,
+        new_id=_next_id_factory(),
+    )
+    raw = "Lütfen 0555 123 4567 arayın"
+    req = QaRequest(request_id="r-cap", raw_text=raw, ip="1.2.3.4")
+    out = list(agent.handle(_msg(QA_REQUEST, req.as_dict())))
+
+    assert len(seen) == 1
+    assert seen[0] != raw
+    assert "[REDACTED:PHONE_TR:" in seen[0]
+    assert seen[0].count("0555") == 0
+    v1 = next(m for m in out if m.envelope.topic == QA_REQUEST_V1)
+    parsed = QaRequestV1.from_dict(v1.payload)
+    assert parsed.sec_steps_run[0] == "tr_pii_redaction"
+    assert parsed.sec_verdict == "sanitized"
+    assert "0555" not in parsed.sanitized_text
+
+
+def test_nlp_tr_pii_redacts_inplace_no_leak() -> None:
+    import common.config as _cfg_mod
+
+    _cfg_mod.cfg.sec_input_max_len = 8192
+
+    def classifier(text: str) -> tuple[str, str]:
+        return ("pass", "ok")
+
+    clock = _FakeClock()
+    agent = SecInputAgent(
+        classifier=classifier,
+        debouncer=SecAlertDebouncer(ttl_s=60, clock=clock.mono),
+        clock_iso=clock.iso,
+        new_id=_next_id_factory(),
+    )
+    raw = "Lütfen 0555 123 4567 arayın"
+    req = QaRequest(request_id="r-no-leak", raw_text=raw, ip="1.2.3.4")
+    out = list(agent.handle(_msg(QA_REQUEST, req.as_dict())))
+
+    raw_pii = "0555 123 4567"
+    all_strings = []
+    for msg in out:
+        all_strings.extend(_iter_message_strings(msg.envelope.as_dict()))
+        all_strings.extend(_iter_message_strings(msg.payload))
+
+    assert raw_pii not in "\n".join(all_strings)
+    assert not any("0555" in s for s in all_strings)
+    assert any("[REDACTED:PHONE_TR:" in s for s in all_strings)
 
 
 # ── Producer-side quarantine overflow guard (§7.5) ───────────────

@@ -418,6 +418,20 @@ phase10:
   # Swap policy: "all_or_nothing" (default) or "per_file" (§10.21.3 Atomic swap policy).
   # Under "all_or_nothing", cross-file referential validator runs before swap.
   nlp_lexicon_swap_atomicity: all_or_nothing  # NEGELIR_NLP_LEXICON_SWAP_ATOMICITY
+  nlp_lexicon_swap_grace_s: 120  # NEGELIR_NLP_LEXICON_SWAP_GRACE_S
+  nlp_lexicon_swap_max_lag_s: 600  # NEGELIR_NLP_LEXICON_SWAP_MAX_LAG_S
+  # Default root directory for complaint trace output.
+  nlp_complaint_trace_dir: "data/nlp/complaint_traces"  # NEGELIR_NLP_COMPLAINT_TRACE_DIR
+  nlp_complaint_trace_default_window_h: 24  # NEGELIR_NLP_COMPLAINT_TRACE_DEFAULT_WINDOW_H
+  # Rolling abuse detector window in hours.
+  nlp_abuse_window_h: 168  # NEGELIR_NLP_ABUSE_WINDOW_H
+  nlp_abuse_dym_acceptance_anomaly_ratio: 4.0  # NEGELIR_NLP_ABUSE_DYM_ACCEPTANCE_ANOMALY_RATIO
+  nlp_abuse_style_shift_kl: 0.6  # NEGELIR_NLP_ABUSE_STYLE_SHIFT_KL
+  nlp_abuse_shadow_concentration_distinct_buckets_min: 5  # NEGELIR_NLP_ABUSE_SHADOW_CONCENTRATION_DISTINCT_BUCKETS_MIN
+  nlp_abuse_account_farm_jaccard_min: 0.5  # NEGELIR_NLP_ABUSE_ACCOUNT_FARM_JACCARD_MIN
+  nlp_abuse_account_farm_account_count_min: 100  # NEGELIR_NLP_ABUSE_ACCOUNT_FARM_ACCOUNT_COUNT_MIN
+  nlp_intent_train_max_rows_per_subject_bucket: 500  # NEGELIR_NLP_INTENT_TRAIN_MAX_ROWS_PER_SUBJECT_BUCKET
+  nlp_qa_answer_min_supported_version: 1  # NEGELIR_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION
   # Maximum lexicon feed schema this NLP build supports; higher feed versions
   # are refused at reload time and prior generation stays active.
   nlp_lexicon_feed_max_supported_schema_version: 1  # NEGELIR_NLP_LEXICON_FEED_MAX_SUPPORTED_SCHEMA_VERSION

@@ -19,7 +19,7 @@
 
 #### 10.27.1 Fixture-state machine (binding closed enum) and dispatch routing
 
-- [ ] **Closed enum.** `ai/common/fixture_state.py::FixtureState`
+- [x] **Closed enum.** `ai/common/fixture_state.py::FixtureState`
   ∈ `{scheduled, prematch_locked, in_play_first_half, halftime,
   in_play_second_half, in_play_extra_time, penalty_shootout,
   finished, postponed, suspended, abandoned, cancelled, awarded,
@@ -31,7 +31,7 @@
   alone (real bug class: a 21:00 kickoff with a 90-minute delayed
   start would otherwise be silently treated as "scheduled" at
   21:30 and route to pre-match predictors).
-- [ ] **Lookup contract.** `nlp.dispatcher.v1` calls
+- [x] **Lookup contract.** `nlp.dispatcher.v1` calls
   `FixtureStateLookup.get(match_id) → (state, as_of_utc, source)`
   via `data.request.v1{kind=fixture_state}` (NEW kind under the
   closed `data.request.v1` kind enum — additive). Reply MUST

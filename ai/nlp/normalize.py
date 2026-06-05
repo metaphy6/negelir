@@ -72,6 +72,7 @@ from nlp.phase10_30 import (
     detect_search_operator_syntax_in_text,
     detect_sarcastic_modifier,
     expand_idioms,
+    find_sarcasm_cues_without_context,
     resolve_voice_number_context,
     strip_politeness_markers,
 )
@@ -693,6 +694,10 @@ def _record_nlp_input_repair_metrics(
     if result.dialect_repairs:
         sink.record_nlp_input_repair("dialect_expanded", len(result.dialect_repairs))
 
+    if result.regional_dialect_rewrites:
+        for rewrite in result.regional_dialect_rewrites:
+            sink.record_nlp_dialect_normalization(rewrite.dialect_class)
+
     if result.abbreviations_expanded:
         sink.record_nlp_input_repair("abbreviation_expanded", len(result.abbreviations_expanded))
 
@@ -886,7 +891,10 @@ def normalize_input(
     steps.append("diacritic_restore")
 
     # -- Step 6.5: Regional / diaspora dialect normalization (§10.32.4) -----
-    normalized, regional_dialect_rewrites, dialect_alternatives = apply_regional_dialect_normalize(normalized)
+    normalized, regional_dialect_rewrites, dialect_alternatives = apply_regional_dialect_normalize(
+        normalized,
+        event_sink=normalization_events.append,
+    )
     steps.append("regional_dialect_normalize")
 
     # -- Step 6.7: Apostrophe repair for proper nouns (§10.32.5) ------------
@@ -1167,6 +1175,9 @@ def normalize_input(
             intent_modifier = sarcasm_modifier
         elif intent_modifier != sarcasm_modifier:
             intent_modifier = (intent_modifier, sarcasm_modifier)
+    else:
+        for cue_event in find_sarcasm_cues_without_context(idiom_tokens):
+            normalization_events.append(cue_event)
 
     # -- Step 8: Token-level typo correction (§10.3 hook) -------------------
     budget_exhausted = False

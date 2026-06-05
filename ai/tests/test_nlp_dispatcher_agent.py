@@ -109,6 +109,21 @@ def test_nlp_feedback_processor_does_not_branch_on_user_id_ast() -> None:
                 violations.append(f"{source}:{node.lineno}: user_id usage in dispatcher logic")
     assert violations == [], "\n".join(violations)
 
+
+def test_sarcasm_modifier_only_used_by_dispatcher_refusal_path_ast() -> None:
+    root = Path(__file__).resolve().parents[2]
+    banned_paths = [
+        root / "ai" / "nlp" / "intent.py",
+        root / "ai" / "nlp" / "proofreader.py",
+        root / "ai" / "swarm" / "agents" / "cache.py",
+    ]
+    violations: list[str] = []
+    for path in banned_paths:
+        source = path.read_text(encoding="utf-8")
+        if "intent_modifier" in source:
+            violations.append(f"{path}:intent_modifier usage outside dispatcher refusal path")
+    assert violations == [], "\n".join(violations)
+
 # ── helpers ──────────────────────────────────────────────────────────────────────────
 
 _BASE_INTENT_PAYLOAD = {
@@ -430,8 +445,9 @@ class TestNlpDispatcherDeterministicBackoff:
         """predict.* WITH a team entity must NOT trigger the backoff path."""
         msg = _make_intent_msg({"entities": [_make_team_entity()]})
         results = list(agent.handle(msg))
-        # Fixture is resolvable → no disambiguation; routing stub returns [].
-        assert results == []
+        assert len(results) == 2
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[1].envelope.topic == PREDICT_REQUEST_V1
 
     def test_predict_with_competition_entity_no_backoff(
         self, agent: NlpDispatcherAgent
@@ -439,7 +455,58 @@ class TestNlpDispatcherDeterministicBackoff:
         """predict.* WITH a competition entity must NOT trigger the backoff path."""
         msg = _make_intent_msg({"entities": [_make_competition_entity()]})
         results = list(agent.handle(msg))
-        assert results == []
+        assert len(results) == 2
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[1].envelope.topic == PREDICT_REQUEST_V1
+
+    def test_predict_with_team_entity_emits_fixture_state_lookup_before_predict(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg({"entities": [_make_team_entity()]})
+        results = list(agent.handle(msg))
+
+        assert len(results) == 2
+
+        lookup_req = results[0]
+        assert lookup_req.envelope.topic == DATA_REQUEST_V1
+        assert lookup_req.payload["kind"] == "fixture_state"
+        assert lookup_req.payload["match_id"] == "gs"
+        assert lookup_req.payload["timeout_ms"] == _cfg.nlp_fixture_state_lookup_timeout_ms
+        assert lookup_req.payload["qa_correlation_id"] == ""
+
+        predict_req = results[1]
+        assert predict_req.envelope.topic == PREDICT_REQUEST_V1
+        assert predict_req.payload["match_id"] == "gs"
+        assert predict_req.payload["qa_request_id"] == "req-001"
+
+    def test_nlp_dispatcher_consults_fixture_state_before_predict_request_ast(self) -> None:
+        source = Path(__file__).resolve().parents[2] / "ai" / "swarm" / "agents" / "nlp" / "__init__.py"
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        handle_def = None
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == "NlpDispatcherAgent":
+                for member in node.body:
+                    if isinstance(member, ast.FunctionDef) and member.name == "handle":
+                        handle_def = member
+                        break
+                break
+        assert handle_def is not None, "NlpDispatcherAgent.handle not found"
+
+        lookup_lineno = []
+        predict_lineno = []
+        for node in ast.walk(handle_def):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "FixtureStateLookup" and node.func.attr == "get":
+                    lookup_lineno.append(node.lineno)
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "Message" and node.func.attr == "new":
+                    for keyword in node.keywords:
+                        if keyword.arg == "topic" and isinstance(keyword.value, ast.Name) and keyword.value.id == "PREDICT_REQUEST_V1":
+                            predict_lineno.append(node.lineno)
+        assert lookup_lineno, "No FixtureStateLookup.get call found in dispatcher.handle"
+        assert predict_lineno, "No Message.new(PREDICT_REQUEST_V1) found in dispatcher.handle"
+        assert min(lookup_lineno) < min(predict_lineno), (
+            "FixtureStateLookup.get must appear before the first PREDICT_REQUEST_V1 route in dispatcher.handle"
+        )
 
     def test_predict_with_conversation_id_emits_context(self, agent: NlpDispatcherAgent) -> None:
         msg = _make_intent_msg({
@@ -1291,7 +1358,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
     ) -> None:
         """summary.matchday with 3 team entities → 3 predict.request.v1 messages."""
         msg = _make_summary_intent_msg(entities=_make_team_entities(3))
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         assert len(results) == 3
         for r in results:
             assert r.envelope.topic == PREDICT_REQUEST_V1
@@ -1303,7 +1370,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
         msg = _make_summary_intent_msg(
             intent="summary.next_week", entities=_make_team_entities(2)
         )
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         assert len(results) == 2
         assert all(r.envelope.topic == PREDICT_REQUEST_V1 for r in results)
 
@@ -1312,7 +1379,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
     ) -> None:
         """All fan-out messages share the same summary_correlation_id."""
         msg = _make_summary_intent_msg(entities=_make_team_entities(3))
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         corr_ids = {r.payload["summary_correlation_id"] for r in results}
         assert len(corr_ids) == 1, "All messages must share one summary_correlation_id"
 
@@ -1321,7 +1388,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
     ) -> None:
         """Every fan-out message carries summary_expected_count = N (total sent)."""
         msg = _make_summary_intent_msg(entities=_make_team_entities(3))
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         for r in results:
             assert r.payload["summary_expected_count"] == 3
 
@@ -1333,7 +1400,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
 
         entities = _make_team_entities(cfg.nlp_summary_max_fixtures + 5)
         msg = _make_summary_intent_msg(entities=entities)
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         assert len(results) == cfg.nlp_summary_max_fixtures
 
     def test_summary_fan_out_carries_match_id(
@@ -1342,7 +1409,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
         """Each fan-out message carries match_id = canonical_id from entity."""
         entities = _make_team_entities(2)
         msg = _make_summary_intent_msg(entities=entities)
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         match_ids = [r.payload["match_id"] for r in results]
         assert "team-0" in match_ids
         assert "team-1" in match_ids
@@ -1352,7 +1419,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
     ) -> None:
         """Each fan-out message carries qa_request_id referencing the original request."""
         msg = _make_summary_intent_msg(entities=_make_team_entities(2))
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         for r in results:
             assert r.payload["qa_request_id"] == "req-summary-001"
 
@@ -1391,7 +1458,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
     ) -> None:
         """Both summary intents fan out to predict.request.v1."""
         msg = _make_summary_intent_msg(intent=intent, entities=_make_team_entities(1))
-        results = list(agent.handle(msg))
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         assert len(results) == 1
         assert results[0].envelope.topic == PREDICT_REQUEST_V1
 

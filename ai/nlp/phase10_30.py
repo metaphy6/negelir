@@ -512,6 +512,41 @@ def detect_sarcastic_modifier(tokens: list[str]) -> str:
     return "none"
 
 
+def find_sarcasm_cues_without_context(tokens: list[str]) -> list[dict[str, object]]:
+    markers = load_sarcasm_markers()
+    if not markers:
+        return []
+
+    lower_tokens = [token.lower() for token in tokens]
+    cue_positions: list[tuple[str, int, int]] = []
+    for marker in markers:
+        phrase_tokens = marker.lower().split()
+        if not phrase_tokens:
+            continue
+        for idx in range(len(lower_tokens) - len(phrase_tokens) + 1):
+            if tuple(lower_tokens[idx : idx + len(phrase_tokens)]) == tuple(phrase_tokens):
+                cue_positions.append((marker, idx, len(phrase_tokens)))
+
+    if not cue_positions:
+        return []
+
+    negative_positions: list[int] = []
+    for phrase in _SARCASM_NEGATIVE_PHRASES:
+        negative_positions.extend(_find_phrase_positions(lower_tokens, phrase))
+
+    if negative_positions:
+        return []
+
+    return [
+        {
+            "kind": "sarcasm_cue_no_context",
+            "cue_id": marker,
+            "cue_phrase": marker,
+            "span": (pos, pos + length),
+        }
+        for marker, pos, length in cue_positions
+    ]
+
 def detect_conditional_modifier(tokens: list[str]) -> tuple[str | tuple[str, ...], str]:
     markers = load_conditional_markers()
     token_text = " ".join(tokens).lower()

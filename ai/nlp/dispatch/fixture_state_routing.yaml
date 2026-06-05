@@ -1,0 +1,59 @@
+# Phase 10.27.1 fixture-state routing matrix.
+# Each row controls how the dispatcher routes by fixture state.
+routing:
+  scheduled:
+    predict: normal
+    data: normal
+    summary: normal
+  prematch_locked:
+    predict: normal
+    data: normal
+    summary: normal
+  in_play_first_half:
+    predict: refuse
+    data: live_state
+    summary: partial
+  halftime:
+    predict: refuse
+    data: live_state
+    summary: partial
+  in_play_second_half:
+    predict: refuse
+    data: live_state
+    summary: partial
+  in_play_extra_time:
+    predict: refuse
+    data: live_state
+    summary: partial
+  penalty_shootout:
+    predict: refuse
+    data: live_state
+    summary: partial
+  finished:
+    predict: h2h
+    data: normal
+    summary: normal
+  postponed:
+    predict: refuse
+    data: fixture_lookup
+    summary: exclude
+  suspended:
+    predict: refuse
+    data: fixture_lookup
+    summary: exclude
+  abandoned:
+    predict: refuse
+    data: fixture_lookup
+    summary: exclude
+  cancelled:
+    predict: refuse
+    data: fixture_lookup
+    summary: exclude
+  awarded:
+    predict: refuse
+    data: fixture_lookup
+    summary: exclude
+  unknown:
+    predict: refuse
+    data: degraded
+    summary: refuse

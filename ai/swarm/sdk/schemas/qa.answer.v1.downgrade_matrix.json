@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.answer.v1.downgrade_matrix",
+  "title": "qa.answer.v1 downgrade matrix",
+  "description": "Field removal matrix used by the QA answer downgrade handler.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "3": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "2": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "1": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "2": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "1": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

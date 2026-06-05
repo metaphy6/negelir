@@ -134,13 +134,13 @@
   (port `server/internal/sec/tr_pii.go`); byte-parity test with the Python reference
   on a 200-row corpus (positives + negatives + boundary cases: 11-digit numbers that
   are NOT valid TC because checksum fails).
-- [ ] **AST guards.** (a) `test_nlp_tr_pii_runs_before_length_cap` asserts step
+- [x] **AST guards.** (a) `test_nlp_tr_pii_runs_before_length_cap` asserts step
   ordering. (b) `test_nlp_tr_pii_redacts_inplace_no_leak` walks every downstream
   payload (`qa.intent.v1`, `qa.answer.v1`, audit rows, spool envelopes, log strings)
   and asserts no surviving raw PII byte sequence with hypothesis ≥ 1000 examples.
   (c) `test_nlp_tr_pii_idempotent` — re-running detector on already-redacted text
   is a no-op.
-- [ ] **Proof tests.** ≥ 60-row golden `tr_pii_corpus.json` (12 per kind × 5 kinds)
+- [x] **Proof tests.** ≥ 60-row golden `tr_pii_corpus.json` (12 per kind × 5 kinds)
   with positive and adversarial-near-miss examples; CI 100%.
 
 #### 10.28.5 Loan-word transliteration unification (`ofsayt/offside/ofsayd/ofsait`)

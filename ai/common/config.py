@@ -785,6 +785,9 @@ class Config:
     # nlp_repeat_collapse_min_freq: frequency threshold for collapsed tokens to
     #   be accepted by the repeated-character repair path (§10.24.2).
     nlp_repeat_collapse_min_freq: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_REPEAT_COLLAPSE_MIN_FREQ", "100")))
+    # nlp_dialect_class_min_recall: recall floor for per-dialect coverage telemetry
+    #   in the Phase 10 §10.32.4 evaluation harness.
+    nlp_dialect_class_min_recall: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_DIALECT_CLASS_MIN_RECALL", "0.80")))
     # nlp_request_dedup_window_s: NLP dedup window lower-bounded by
     #   qa_request_v1_dedup_window_s + 30 s (boot validator §10.0).
     nlp_request_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S", "330")))
@@ -1521,6 +1524,12 @@ class Config:
     nlp_default_fixture_window_h: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_DEFAULT_FIXTURE_WINDOW_H", "48"
     )))
+    # nlp_fixture_state_lookup_timeout_ms: deadline for the fixture-state lookup
+    #   request emitted by nlp.dispatcher.v1. On timeout, dispatcher degrades to
+    #   UNKNOWN rather than assuming scheduled.
+    nlp_fixture_state_lookup_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_FIXTURE_STATE_LOOKUP_TIMEOUT_MS", "250"
+    )))
     # nlp_summary_max_fixtures: maximum number of fixtures to fan-out in a
     #   summary.next_week / summary.matchday request.  The dispatcher emits
     #   at most this many predict.request.v1 messages per summary intent.
@@ -1565,9 +1574,92 @@ class Config:
     nlp_summary_calibration_mismatch_policy: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_NLP_SUMMARY_CALIBRATION_MISMATCH_POLICY", "note"
     ).strip().lower())
-    # nlp_active_learning_queue_max: maximum active-learning feedback rows
-    #   held in the dispatcher queue. Oldest entries are evicted when full.
-    #   Default = 10000.
+    # nlp_calibration_horizon_strict: if true, reject any Phase 5 / v1
+    #   approved prediction whose calibration_state_horizon != prematch.
+    #   Default = true for Phase 10 v1 delivery.
+    nlp_calibration_horizon_strict: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_CALIBRATION_HORIZON_STRICT", "true"
+    ).lower() in ("true", "1", "yes"))
+    # nlp_age_gating_enabled: enable 18+ gating when user age attestation is absent.
+    #   Default false at Phase 10 v1 until self-registration ships.
+    nlp_age_gating_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_AGE_GATING_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    # nlp_disclosure_locale_fallback_chain: locale fallback chain for disclosure texts.
+    #   Default is tr-TR only at Phase 10 v1.
+    nlp_disclosure_locale_fallback_chain: list[str] = field(default_factory=lambda: [
+        loc.strip() for loc in os.getenv(
+            "NEGELIR_NLP_DISCLOSURE_LOCALE_FALLBACK_CHAIN", "tr-TR"
+        ).split(",") if loc.strip()
+    ])
+    # nlp_preview_token_budget_per_operator_per_h: per-operator preview token budget.
+    #   Defends against runaway operator-driven preview sessions.
+    nlp_preview_token_budget_per_operator_per_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_PREVIEW_TOKEN_BUDGET_PER_OPERATOR_PER_H", "2400"
+    )))
+    # nlp_complaint_trace_default_window_h: audit scan window centered on
+    #   the request timestamp when resolving a complaint trace.
+    nlp_complaint_trace_default_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_COMPLAINT_TRACE_DEFAULT_WINDOW_H", "24"
+    )))
+    # nlp_complaint_trace_dir: root directory for complaint trace output.
+    nlp_complaint_trace_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_COMPLAINT_TRACE_DIR", "data/nlp/complaint_traces"
+    ))
+    # nlp_abuse_window_h: rolling abuse detection window in hours.
+    nlp_abuse_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_ABUSE_WINDOW_H", "168"
+    )))
+    # nlp_abuse_dym_acceptance_anomaly_ratio: threshold for did-you-mean abuse.
+    nlp_abuse_dym_acceptance_anomaly_ratio: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_NLP_ABUSE_DYM_ACCEPTANCE_ANOMALY_RATIO", "4.0"
+    )))
+    # nlp_abuse_style_shift_kl: KL divergence threshold for style-shift alerts.
+    nlp_abuse_style_shift_kl: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_NLP_ABUSE_STYLE_SHIFT_KL", "0.6"
+    )))
+    # nlp_abuse_shadow_concentration_distinct_buckets_min: minimum distinct
+    #   subject buckets before concentration alert can fire.
+    nlp_abuse_shadow_concentration_distinct_buckets_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_ABUSE_SHADOW_CONCENTRATION_DISTINCT_BUCKETS_MIN", "5"
+    )))
+    # nlp_abuse_account_farm_jaccard_min: minimum Jaccard similarity for account
+    #   farm detection.
+    nlp_abuse_account_farm_jaccard_min: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_NLP_ABUSE_ACCOUNT_FARM_JACCARD_MIN", "0.5"
+    )))
+    # nlp_abuse_account_farm_account_count_min: minimum account count before
+    #   account-farm anomaly can fire.
+    nlp_abuse_account_farm_account_count_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_ABUSE_ACCOUNT_FARM_ACCOUNT_COUNT_MIN", "100"
+    )))
+    # nlp_intent_train_max_rows_per_subject_bucket: per-subject bucket cap for
+    #   high-risk shadow rows eligible for intent training.
+    nlp_intent_train_max_rows_per_subject_bucket: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_INTENT_TRAIN_MAX_ROWS_PER_SUBJECT_BUCKET", "500"
+    )))
+    # nlp_qa_answer_min_supported_version: minimum client schema version accepted.
+    #   Older clients should receive 426 if unsupported.
+    nlp_qa_answer_min_supported_version: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION", "1"
+    )))
+    # nlp_lexicon_swap_grace_s: cross-pod lexicon swap coordination window.
+    #   Files are not activated until now_utc() >= swap_at_utc.
+    nlp_lexicon_swap_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_LEXICON_SWAP_GRACE_S", "120"
+    )))
+    # nlp_lexicon_swap_max_lag_s: maximum allowed lag after swap_at_utc.
+    #   If a pod sees the new file too late, it warns and may refuse traffic.
+    nlp_lexicon_swap_max_lag_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_LEXICON_SWAP_MAX_LAG_S", "600"
+    )))
+    # nlp_kill_pattern_arm_max_concurrent: operator kill-pattern arm capacity.
+    #   Used by Phase 8/10 tooling.
+    nlp_kill_pattern_arm_max_concurrent: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_KILL_PATTERN_ARM_MAX_CONCURRENT", "8"
+    )))
+    # nlp_summary_fanout_timeout_ms: per-fixture fan-out timeout in the
+    #   summary dispatcher.  Default = 2500 ms.
     nlp_active_learning_queue_max: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_ACTIVE_LEARNING_QUEUE_MAX", "10000")
     ))

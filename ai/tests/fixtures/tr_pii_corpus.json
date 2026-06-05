@@ -1,0 +1,242 @@
+[
+  {
+    "kind": "tc_kimlik",
+    "text": "TC kimliğim 10000000078"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "Bana 10000000146 numara yazmıştım"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "10000000214 lütfen sil"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "Geçerli kimlik no 10000000382"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "Sistem 10000000450 diye gördü"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "ID: 10000000528"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "kaydım 10000000696 numaralı"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "yahut 10000000764"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "vergi 10000000832"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "hesap 10000000900"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "kart 10000001068"
+  },
+  {
+    "kind": "tc_kimlik",
+    "text": "tckn 10000001136"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR54000610000000000000000001"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "Hesabım TR27000610000000000000000002"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "Gönder TR97000610000000000000000003"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "ALTIN: TR70000610000000000000000004"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "IBAN TR43000610000000000000000005"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR16000610000000000000000006"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR86000610000000000000000007"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR59000610000000000000000008"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR32000610000000000000000009"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR05000610000000000000000010"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "hesabım TR75000610000000000000000011"
+  },
+  {
+    "kind": "iban_tr",
+    "text": "TR48000610000000000000000012"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0555-123-4567"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0 555 123 45 67"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0090 555 123 45 67"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "+90 555 123 45 67"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "05551234567"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0555 1234567"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0 555-123-4567"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0090 555-123-4567"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "+90 555-123-45-67"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0555 123 4567"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0555-123 45 67"
+  },
+  {
+    "kind": "phone_tr",
+    "text": "0 555 123-45-67"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "34 ABC 1234"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "06 DEF 2345"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "35 GHI 3456"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "07 JKL 4567"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "16 MNO 5678"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "01 PQR 6789"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "55 STU 7890"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "58 VWX 8901"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "61 YZA 9012"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "09 BCD 123"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "80 EFG 234"
+  },
+  {
+    "kind": "plate_tr",
+    "text": "10 HIJ 345"
+  },
+  {
+    "kind": "vkn",
+    "text": "VKN 1000000009"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000014"
+  },
+  {
+    "kind": "vkn",
+    "text": "numaram 1000000028"
+  },
+  {
+    "kind": "vkn",
+    "text": "Vergi 1000000033"
+  },
+  {
+    "kind": "vkn",
+    "text": "hesabım 1000000047"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000052"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000066"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000071"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000085"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000090"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000108"
+  },
+  {
+    "kind": "vkn",
+    "text": "1000000113"
+  }
+]
