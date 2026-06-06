@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.gossip.v1",
+  "title": "nlp.gossip.v1",
+  "description": "Periodic cross-pod NLP gossip payload used for lexicon-state divergence detection.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "pod_instance_id",
+    "lexicon_set_sha",
+    "intent_sha",
+    "crf_sha",
+    "calibration_version",
+    "template_git_sha",
+    "pipeline_version",
+    "emitted_at_utc"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["nlp_lexicon_state_gossip"],
+      "description": "Gossip event kind. Only nlp_lexicon_state_gossip is valid for this topic. Known nlp alert kinds referenced in Phase 10 §10.21.13 docs include: nlp_intent_model_sha_mismatch, nlp_lexicon_atomic_swap_failed, nlp_singleflight_overflow, nlp_template_render_used_raw_user_text, nlp_spool_replay_text_unavailable, nlp_citation_signature_verify_failed, nlp_cold_start_timeout, nlp_lexicon_feed_schema_too_new, nlp_slur_in_input, nlp_lexicon_feed_signature_invalid, nlp_repair_density_anomaly, nlp_tenant_intake_abuse, nlp_abuse_did_you_mean_anomaly, nlp_abuse_style_shift, nlp_abuse_shadow_concentration, nlp_abuse_account_farm, nlp_canary_rolled_back, nlp_weekly_eval_regression, nlp_humanizer_pod_budget_exceeded, nlp_l1_cache_signature_invalid, nlp_safe_mode_active, nlp_consensus_smoke_failed, humanizer_subprocess_died, nlp_compatibility_quartet_mismatch, conversation_context_cleared_after_block, streaming_humanizer_chunk_blocked."
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "pod_instance_id": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "lexicon_set_sha": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "intent_sha": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "crf_sha": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "calibration_version": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "template_git_sha": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "pipeline_version": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "emitted_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

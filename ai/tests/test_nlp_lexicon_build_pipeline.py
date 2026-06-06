@@ -158,8 +158,120 @@ class TestAliasDeltaMetadataGovernance:
         assert any("canonical_id 'unknown_team' not found" in e for e in errors)
 
 
-# ---------------------------------------------------------------------------
-# Assertion (a): canonical_id resolution
+class TestLexiconDeltaTyposquatDetection:
+    def test_typosquat_alias_is_rejected(self, tmp_path) -> None:
+        from xops.makefile.nlp import _validate_alias_delta_entries
+
+        lexicon_dir = tmp_path / "ai" / "nlp" / "lexicon"
+        lexicon_dir.mkdir(parents=True, exist_ok=True)
+        file_path = lexicon_dir / "teams.tr.yaml"
+        file_path.write_text(
+            "_meta:\n  schema_version: 1\n  lexicon_version: \"1.0.0\"\nentries:\n"
+            "  - canonical_id: fenerbahce_sk\n"
+            "    names: [Fenerbahçe]\n"
+            "    aliases: [Fenerbahce]\n"
+            "  - canonical_id: besiktas_jk\n"
+            "    names: [Beşiktaş]\n"
+            "    aliases: [Besiktas]\n",
+            encoding="utf-8",
+        )
+
+        invalid = [
+            {
+                "file": "teams.tr.yaml",
+                "kind": "team",
+                "canonical_id": "besiktas_jk",
+                "add_aliases": ["Fenerbahçe"],
+                "source": "operator_curation",
+                "added_by_pr": "PR-9999",
+                "added_at_utc": "2026-06-01T12:00:00Z",
+                "min_corpus_appearances": 3,
+            }
+        ]
+
+        errors = _validate_alias_delta_entries(invalid, lexicon_dir)
+        assert any("typo-squat" in e for e in errors)
+
+    def test_typosquat_alias_override_allows_conflict(self, tmp_path) -> None:
+        from xops.makefile.nlp import _validate_alias_delta_entries
+
+        lexicon_dir = tmp_path / "ai" / "nlp" / "lexicon"
+        lexicon_dir.mkdir(parents=True, exist_ok=True)
+        file_path = lexicon_dir / "teams.tr.yaml"
+        file_path.write_text(
+            "_meta:\n  schema_version: 1\n  lexicon_version: \"1.0.0\"\nentries:\n"
+            "  - canonical_id: fenerbahce_sk\n"
+            "    names: [Fenerbahçe]\n"
+            "    aliases: [Fenerbahce]\n"
+            "  - canonical_id: besiktas_jk\n"
+            "    names: [Beşiktaş]\n"
+            "    aliases: [Besiktas]\n",
+            encoding="utf-8",
+        )
+
+        valid = [
+            {
+                "file": "teams.tr.yaml",
+                "kind": "team",
+                "canonical_id": "besiktas_jk",
+                "add_aliases": ["Fenerbahçe"],
+                "source": "operator_curation",
+                "added_by_pr": "PR-9999",
+                "added_at_utc": "2026-06-01T12:00:00Z",
+                "min_corpus_appearances": 3,
+                "overrides": [
+                    {
+                        "canonical_ids": ["besiktas_jk", "fenerbahce_sk"],
+                        "justification": "Legitimate near-collision covered by review",
+                    }
+                ],
+            }
+        ]
+
+        errors = _validate_alias_delta_entries(valid, lexicon_dir)
+        assert not errors
+
+
+class TestLexiconDiffVerification:
+    def test_parse_git_numstat_counts_added_rows(self) -> None:
+        from xops.makefile.nlp import _parse_git_numstat
+
+        result = _parse_git_numstat(
+            "12\t3\tai/nlp/lexicon/teams.tr.yaml\n"
+            "0\t0\tai/nlp/lexicon/markets.tr.yaml\n"
+        )
+        assert result["ai/nlp/lexicon/teams.tr.yaml"] == (12, 3)
+        assert result["ai/nlp/lexicon/markets.tr.yaml"] == (0, 0)
+
+    def test_verify_nlp_lexicon_diff_fails_when_over_threshold(self, monkeypatch) -> None:
+        from xops.makefile.nlp import cmd_verify_nlp_lexicon_diff
+
+        class DummyResult:
+            def __init__(self):
+                self.returncode = 0
+                self.stdout = "201\t0\tai/nlp/lexicon/teams.tr.yaml\n"
+                self.stderr = ""
+
+        monkeypatch.setenv("GITHUB_ACTOR", "lexicon-build-bot")
+        monkeypatch.setattr("xops.makefile.nlp.subprocess.run", lambda *args, **kwargs: DummyResult())
+
+        rc = cmd_verify_nlp_lexicon_diff(["--base", "HEAD~1"])
+        assert rc == 1
+
+    def test_verify_nlp_lexicon_diff_allows_small_diffs(self, monkeypatch) -> None:
+        from xops.makefile.nlp import cmd_verify_nlp_lexicon_diff
+
+        class DummyResult:
+            def __init__(self):
+                self.returncode = 0
+                self.stdout = "35\t0\tai/nlp/lexicon/teams.tr.yaml\n"
+                self.stderr = ""
+
+        monkeypatch.setenv("GITHUB_ACTOR", "lexicon-build-bot")
+        monkeypatch.setattr("xops.makefile.nlp.subprocess.run", lambda *args, **kwargs: DummyResult())
+
+        rc = cmd_verify_nlp_lexicon_diff(["--base", "HEAD~1"])
+        assert rc == 0
 # ---------------------------------------------------------------------------
 
 class TestVerifyCanonicalIdResolution:
@@ -255,7 +367,10 @@ class TestVerifyAliasUniqueness:
         """The check must flag aliases shared between two canonicals with no
         entities_negative token."""
         alias_to_owners: dict[str, list[tuple[str, str]]] = {
-            "gs": [("teams.tr.yaml", "galatasaray_sk"), ("leagues.tr.yaml", "fake_league_gs")],
+            "gs": [
+                ("teams.tr.yaml", "galatasaray_sk"),
+                ("leagues.tr.yaml", "fake_league_gs"),
+            ],
         }
         neg_tokens: set[str] = set()  # empty -> no coverage
         violations: list[str] = []
@@ -286,6 +401,44 @@ class TestVerifyAliasUniqueness:
                 if not covered:
                     violations.append(alias_str)
         assert not violations
+
+
+class TestVerifyGeminateRestorationCoverage:
+    def test_validate_player_geminate_restoration_coverage_passes_for_known_rule(self) -> None:
+        from xops.makefile.nlp import _validate_player_geminate_restoration_coverage
+
+        entries = {
+            "players.tr.yaml": [
+                {
+                    "canonical_id": "hak_kamil",
+                    "names": ["Hakkı Kamil"],
+                    "aliases": ["hakkı"],
+                }
+            ]
+        }
+
+        errors = _validate_player_geminate_restoration_coverage(entries)
+        assert errors == []
+
+    def test_validate_player_geminate_restoration_coverage_fails_if_rule_missing(self, monkeypatch) -> None:
+        import nlp.geminate_restoration as geminate_module
+
+        monkeypatch.setattr(geminate_module, "load_geminate_restorations", lambda: ())
+        from xops.makefile.nlp import _validate_player_geminate_restoration_coverage
+
+        entries = {
+            "players.tr.yaml": [
+                {
+                    "canonical_id": "hak_kamil",
+                    "names": ["Hakkı Kamil"],
+                    "aliases": ["hakkı"],
+                }
+            ]
+        }
+
+        errors = _validate_player_geminate_restoration_coverage(entries)
+        assert errors
+        assert any("geminate form" in error for error in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +606,98 @@ class TestAsciiAliasIndexHelpers:
         assert "fener" in uncovered
 
 
+class TestTransliterationVariantBuildHelpers:
+    def test_load_transliteration_variants(self, tmp_path) -> None:
+        from xops.makefile.nlp import _load_transliteration_variants
+
+        path = tmp_path / "transliteration_variants.tr.yaml"
+        path.write_text(
+            """_meta:\n  schema_version: 1\n  table_version: \"1.0.0\"\nvariants:\n  - canonical: en_premier_league\n    variants:\n      - premier lig\n      - premierlig\n    domain: football\n    source: corpus\n""",
+            encoding="utf-8",
+        )
+
+        variants = _load_transliteration_variants(path)
+
+        assert variants == [
+            {
+                "canonical": "en_premier_league",
+                "domain": "football",
+                "source": "corpus",
+                "variants": ["premier lig", "premierlig"],
+            }
+        ]
+
+    def test_validate_transliteration_variants_rejects_top_1000_without_override(self) -> None:
+        from xops.makefile.nlp import _validate_transliteration_variants
+
+        variants = [
+            {
+                "canonical": "en_premier_league",
+                "domain": "football",
+                "source": "corpus",
+                "variants": ["set"],
+            }
+        ]
+        word_freq = {"set": 100000, "fenerbahce": 500}
+        errors = _validate_transliteration_variants(variants, word_freq, set())
+
+        assert errors
+        assert any("top-1000 Turkish token" in error for error in errors)
+
+    def test_validate_transliteration_variants_detects_domain_collision(self) -> None:
+        from xops.makefile.nlp import _validate_transliteration_variants
+
+        variants = [
+            {
+                "canonical": "en_premier_league",
+                "domain": "football",
+                "source": "corpus",
+                "variants": ["premier lig"],
+            },
+            {
+                "canonical": "galatasaray_sk",
+                "domain": "generic",
+                "source": "corpus",
+                "variants": ["premier lig"],
+            },
+        ]
+        word_freq = {"premier lig": 0}
+        errors = _validate_transliteration_variants(variants, word_freq, set())
+
+        assert errors
+        assert any("collides across canonicals" in error for error in errors)
+
+    def test_inject_transliteration_variants_into_lexicon_data_adds_aliases(self) -> None:
+        from xops.makefile.nlp import _inject_transliteration_variants_into_lexicon_data
+
+        lex_path = Path("leagues.tr.yaml")
+        data = {
+            "entries": [
+                {
+                    "canonical_id": "en_premier_league",
+                    "names": ["Premier Lig"],
+                    "aliases": ["İngiltere ligi"],
+                }
+            ]
+        }
+        lexicon_data = {lex_path: data}
+        variants = [
+            {
+                "canonical": "en_premier_league",
+                "domain": "football",
+                "source": "corpus",
+                "variants": ["premier lig", "premierlig"],
+            }
+        ]
+
+        changed, errors = _inject_transliteration_variants_into_lexicon_data(lexicon_data, variants)
+
+        assert not errors
+        assert changed == {lex_path}
+        assert "premier lig" in data["entries"][0]["aliases"]
+        assert "premierlig" in data["entries"][0]["aliases"]
+
+
 class TestLexiconBuildNonLatinValidation:
     """§10.22.10: Non-Latin lexicon entries require a Latin transliteration sibling."""
 
@@ -568,3 +813,17 @@ class TestLexiconGovernanceExtras:
     def test_nlp_lexicon_max_aliases_per_canonical_in_env_example(self) -> None:
         env_example = Path(__file__).parents[2] / "xops" / "env" / ".env.example"
         assert "NEGELIR_NLP_LEXICON_MAX_ALIASES_PER_CANONICAL=12" in env_example.read_text()
+
+    def test_new_nlp_config_keys_have_defaults(self) -> None:
+        from common.config import cfg
+
+        assert cfg.nlp_conversation_index_backend == "redis"
+        assert cfg.nlp_intent_retrain_max_regression == 0.005
+        assert cfg.nlp_erase_scan_batch == 500
+
+    def test_new_nlp_config_keys_in_env_example(self) -> None:
+        env_example = Path(__file__).parents[2] / "xops" / "env" / ".env.example"
+        env_text = env_example.read_text()
+        assert "NEGELIR_NLP_CONVERSATION_INDEX_BACKEND=redis" in env_text
+        assert "NEGELIR_NLP_INTENT_RETRAIN_MAX_REGRESSION=0.005" in env_text
+        assert "NEGELIR_NLP_ERASE_SCAN_BATCH=500" in env_text

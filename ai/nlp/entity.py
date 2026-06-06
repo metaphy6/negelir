@@ -48,14 +48,16 @@ except ImportError:
     _CRFSUITE_AVAILABLE = False
 
 from nlp.lexicon_loader import AliasHit, LexiconStore
-from common.text.turkish import lowercase_tr
+from nlp.pronouns_irregular import PronounIrregularEntry, load_pronouns_irregular_map
+from nlp.verbal_nouns import VerbalNounEntry, load_verbal_noun_map
+from common.text.turkish import lowercase_tr, strip_proper_noun_suffix
 from common.security.patterns import detect_pii
 
 # ── Public constants ───────────────────────────────────────────────────────
 
 # Entity kinds produced exclusively by the gazetteer
 GAZETTEER_KINDS: frozenset[str] = frozenset(
-    {"team", "player", "league", "competition", "market", "role_prefix", "negation"}
+    {"team", "player", "league", "competition", "venue", "market", "role_prefix", "pronoun", "negation"}
 )
 
 # Entity kinds produced exclusively by the CRF
@@ -68,8 +70,10 @@ DEFAULT_KIND_PRIORITY: list[str] = [
     "team",
     "player",
     "role_prefix",
+    "pronoun",
     "league",
     "competition",
+    "venue",
     "market",
     "negation",
     "date",
@@ -101,8 +105,11 @@ _GAZETTEER_FILES: tuple[str, ...] = (
     "leagues.tr.yaml",
     "competitions.tr.yaml",
     "markets.tr.yaml",
+    "venues.tr.yaml",
     "negation_markers.tr.yaml",
 )
+
+_VENUE_TABLE_PATH: Path = Path(__file__).resolve().parent / "lang_tr" / "venues.tr.yaml"
 
 _NEGATIVE_FILE: str = "entities_negative.tr.yaml"
 _DOUBLE_NEGATION_PATH = Path(__file__).resolve().parent / "lang_tr" / "double_negation.tr.yaml"
@@ -191,6 +198,10 @@ class EntitySpan(NamedTuple):
         CRF spans).
     source:
         ``"gazetteer"`` or ``"crf"``.
+    syntactic_role:
+        Optional syntactic role inferred from verbal-noun constructions.
+        Used by Phase 10 dispatcher routing to avoid silent guesses on
+        ambiguous nominalisation cases.
     historical_alias_season:
         Optional season label for a historical alias entry.  Present only when
         the span was matched against a historical sponsor alias and the caller
@@ -204,6 +215,7 @@ class EntitySpan(NamedTuple):
     confidence: float
     lexicon_version: str
     source: str
+    syntactic_role: str = ""
     historical_alias_season: str = ""
 
 
@@ -273,6 +285,80 @@ def _load_negative_rules(store: LexiconStore) -> list[_NegativeRule]:
     return rules
 
 
+def _mark_pronoun_spans(
+    tokens: list[str],
+    pronoun_map: dict[str, object],
+) -> tuple[list[EntitySpan], set[int]]:
+    pronoun_spans: list[EntitySpan] = []
+    pronoun_token_indices: set[int] = set()
+    for idx, token in enumerate(tokens):
+        key = lowercase_tr(token).strip()
+        entry = pronoun_map.get(key)
+        if entry is None:
+            continue
+        pronoun_spans.append(
+            EntitySpan(
+                idx,
+                idx + 1,
+                "pronoun",
+                entry.canonical,
+                1.0,
+                "",
+                "pronoun",
+            )
+        )
+        pronoun_token_indices.add(idx)
+    return pronoun_spans, pronoun_token_indices
+
+
+def _find_verbal_noun_token(
+    token: str,
+    verbal_nouns: dict[str, VerbalNounEntry],
+) -> VerbalNounEntry | None:
+    normalized = lowercase_tr(token).strip()
+    if not normalized:
+        return None
+    for suffix, entry in verbal_nouns.items():
+        if normalized.endswith(suffix) and len(normalized) > len(suffix):
+            return entry
+    return None
+
+
+def _has_genitive_marker(token: str) -> bool:
+    _, suffix_class = strip_proper_noun_suffix(token, assume_proper=True)
+    return suffix_class == "genitive"
+
+
+def _annotate_syntactic_roles(
+    tokens: list[str],
+    spans: list[EntitySpan],
+    verbal_nouns: dict[str, VerbalNounEntry],
+) -> list[EntitySpan]:
+    if not verbal_nouns:
+        return spans
+
+    annotated: list[EntitySpan] = []
+    for span in spans:
+        role = ""
+        if span.kind in {"team", "player", "league", "competition"}:
+            next_token_index = span.span_end
+            if next_token_index < len(tokens):
+                verbal_entry = _find_verbal_noun_token(tokens[next_token_index], verbal_nouns)
+                if verbal_entry is not None:
+                    if verbal_entry.kind == "infinitive":
+                        role = "entity_object"
+                    elif verbal_entry.kind == "nominalisation":
+                        if _has_genitive_marker(tokens[span.span_end - 1]):
+                            role = "entity_subject"
+                        else:
+                            role = "ambiguous"
+        if role:
+            annotated.append(span._replace(syntactic_role=role))
+        else:
+            annotated.append(span)
+    return annotated
+
+
 # ── Gazetteer pass ─────────────────────────────────────────────────────────
 
 def _load_honorific_alias_index(path: Path | None = None) -> dict[str, AliasHit]:
@@ -328,6 +414,41 @@ def _load_honorific_alias_index(path: Path | None = None) -> dict[str, AliasHit]
     return index
 
 
+def _load_venue_alias_index(path: Path | None = None) -> dict[str, AliasHit]:
+    actual_path = path or _VENUE_TABLE_PATH
+    if not actual_path.exists():
+        return {}
+    try:
+        raw = yaml.safe_load(actual_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return {}
+    meta = raw.get("_meta")
+    lexicon_version = ""
+    if isinstance(meta, dict):
+        lexicon_version = str(meta.get("lexicon_version", "")).strip()
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        return {}
+
+    index: dict[str, AliasHit] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        canonical_id = str(entry.get("canonical_slug", "")).strip()
+        if not canonical_id:
+            continue
+        hit = AliasHit(canonical_id=canonical_id, kind="venue", lexicon_version=lexicon_version)
+        name = entry.get("name")
+        if isinstance(name, str) and name.strip():
+            index[name.strip()] = hit
+        aliases = entry.get("aliases")
+        if isinstance(aliases, list):
+            for alias in aliases:
+                if isinstance(alias, str) and alias.strip():
+                    index[alias.strip()] = hit
+    return index
+
+
 def _build_combined_alias_index(
     store: LexiconStore,
     honorific_aliases: dict[str, AliasHit] | None = None,
@@ -338,11 +459,14 @@ def _build_combined_alias_index(
     input is consistent (§10.1 pipeline already lowercases tokens).
 
     In case of collision the first file in ``_GAZETTEER_FILES`` wins (order is
-    ``teams → players → leagues → competitions → markets → negation``).
+    ``teams → players → leagues → competitions → markets → venues → negation``).
     """
     combined: dict[str, AliasHit] = {}
     for fname in reversed(_GAZETTEER_FILES):  # reversed so first file wins on conflict
-        idx = store.get_alias_index(fname)
+        if fname == "venues.tr.yaml":
+            idx = _load_venue_alias_index()
+        else:
+            idx = store.get_alias_index(fname)
         if idx is None:
             continue
         for alias, hit in sorted(idx.items()):
@@ -763,7 +887,10 @@ def _canonical_kind_map(store: LexiconStore) -> dict[str, str]:
     """Return a canonical_id → kind map from the current lexicon snapshot."""
     kind_map: dict[str, str] = {}
     for fname in _GAZETTEER_FILES:
-        idx = store.get_alias_index(fname)
+        if fname == "venues.tr.yaml":
+            idx = _load_venue_alias_index()
+        else:
+            idx = store.get_alias_index(fname)
         if idx is None:
             continue
         for hit in idx.values():
@@ -1363,6 +1490,8 @@ class EntityExtractor:
         phonetic_aliases_path: Path | None = None,
         team_nicknames_path: Path | None = None,
         honorifics_path: Path | None = None,
+        pronouns_path: Path | None = None,
+        verbal_nouns_path: Path | None = None,
     ) -> None:
         self._store = store
         self._kind_priority = kind_priority if kind_priority is not None else list(DEFAULT_KIND_PRIORITY)
@@ -1371,8 +1500,13 @@ class EntityExtractor:
         self._phonetic_aliases_path = phonetic_aliases_path
         self._phonetic_aliases = _load_phonetic_aliases(phonetic_aliases_path)
         self._team_nicknames_path = team_nicknames_path
-        self._team_nicknames = _load_team_nicknames(team_nicknames_path)
+        self._team_nicknames = _build_team_nickname_map(
+            _load_team_nicknames(team_nicknames_path),
+            self._store,
+        )
         self._honorific_aliases = _load_honorific_alias_index(honorifics_path)
+        self._pronouns_irregular: dict[str, PronounIrregularEntry] = load_pronouns_irregular_map(pronouns_path)
+        self._verbal_nouns: dict[str, VerbalNounEntry] = load_verbal_noun_map(verbal_nouns_path)
 
     def extract(
         self,
@@ -1399,6 +1533,11 @@ class EntityExtractor:
             no ambiguity was detected.
         """
         token_list = list(tokens)
+
+        pronoun_spans, pronoun_token_indices = _mark_pronoun_spans(
+            token_list,
+            self._pronouns_irregular,
+        )
 
         # 1. Build gazetteer alias index + negative rules from current store snapshot
         alias_index = _build_combined_alias_index(self._store, honorific_aliases=self._honorific_aliases)
@@ -1452,6 +1591,15 @@ class EntityExtractor:
             if backtracked_spans is not None:
                 gazetteer_spans = backtracked_spans
 
+        if pronoun_token_indices:
+            gazetteer_spans = [
+                span for span in gazetteer_spans
+                if not (set(range(span.span_start, span.span_end)) & pronoun_token_indices)
+            ]
+
+        gazetteer_spans = pronoun_spans + gazetteer_spans
+        gazetteer_spans = _annotate_syntactic_roles(token_list, gazetteer_spans, self._verbal_nouns)
+
         role_prefix_player_id = _resolve_player_for_role_prefix(token_list, gazetteer_spans, self._store)
         if role_prefix_player_id is not None:
             candidate_index = next(
@@ -1486,6 +1634,8 @@ class EntityExtractor:
         crf_spans: list[EntitySpan] = []
         pii_dropped: list[EntitySpan] = []
         for span in crf_spans_raw:
+            if pronoun_token_indices and set(range(span.span_start, span.span_end)) & pronoun_token_indices:
+                continue
             span_text = " ".join(token_list[span.span_start:span.span_end])
             if detect_pii(span_text) is not None:
                 pii_dropped.append(span)

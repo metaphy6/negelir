@@ -11,6 +11,7 @@ from nlp.consonant_alternation import (
     ConsonantAlternationRule,
     load_consonant_alternations,
     tolerate_consonant_alternation,
+    validate_consonant_alternation_coverage,
 )
 from nlp.normalize import normalize_input
 from nlp.vendor.symspell import SymSpellIndex
@@ -20,7 +21,7 @@ from nlp.lexicon_loader import AliasHit
 class TestConsonantAlternationRuleLoading:
     def test_rules_load_successfully(self) -> None:
         rules = load_consonant_alternations()
-        assert len(rules) == 5
+        assert len(rules) == 6
         assert {rule.stem for rule in rules} == {
             "kitap",
             "ağaç",
@@ -28,6 +29,10 @@ class TestConsonantAlternationRuleLoading:
             "yaprak",
             "kılıç",
         }
+        assert any(
+            rule.stem == "renk" and rule.soften_to == "g" and rule.preceding_char == "n"
+            for rule in rules
+        )
 
 
 class TestConsonantAlternationRepair:
@@ -63,6 +68,22 @@ class TestConsonantAlternationRepair:
         assert repaired.consonant_alternation_events[0]["kind"] == "consonant_softening_repaired"
         assert repaired.tokens[0] == "kitabı"
 
+    def test_tolerates_nk_to_ng_softening(self) -> None:
+        idx = SymSpellIndex(max_edit_distance=2)
+        idx.add_term("rengi", AliasHit("rengi", "unknown", "1.0.0"))
+
+        repaired, event = tolerate_consonant_alternation(
+            "renki",
+            idx.lookup,
+            no_strip_canonicals=set(),
+            alternations=load_consonant_alternations(),
+        )
+        assert repaired == "rengi"
+        assert event is not None
+        assert event["kind"] == "consonant_softening_repaired"
+        assert event["original"] == "renki"
+        assert event["repaired"] == "rengi"
+
     def test_skips_no_strip_canonical_tokens(self, symspell: SymSpellIndex) -> None:
         repaired = normalize_input(
             "eşikç",
@@ -71,6 +92,19 @@ class TestConsonantAlternationRepair:
         )
         assert repaired.consonant_alternation_repairs == ()
         assert repaired.consonant_alternation_events == ()
+
+    def test_does_not_soften_k_after_n_without_special_rule(self) -> None:
+        idx = SymSpellIndex(max_edit_distance=2)
+        idx.add_term("bankı", AliasHit("bankı", "unknown", "1.0.0"))
+
+        repaired, event = tolerate_consonant_alternation(
+            "bankı",
+            idx.lookup,
+            no_strip_canonicals=set(),
+            alternations=load_consonant_alternations(),
+        )
+        assert repaired == "bankı"
+        assert event is None
 
     @given(st.sampled_from(load_consonant_alternations()))
     @settings(max_examples=500)
@@ -131,4 +165,19 @@ class TestConsonantAlternationCorpus:
         assert "consonant_alternation" in result.steps_run
         assert result.consonant_alternation_repairs
         assert result.consonant_alternation_events[0]["kind"] == "consonant_softening_repaired"
+
+
+class TestConsonantAlternationCoverage:
+    def test_validate_consonant_alternation_coverage_passes_for_existing_stems(self) -> None:
+        stems = ["kitap", "ağaç", "renk", "yaprak", "kılıç"]
+        errors = validate_consonant_alternation_coverage(stems)
+        assert errors == []
+
+    def test_validate_consonant_alternation_coverage_reports_missing_entries(self) -> None:
+        stems = ["kitap", "gaziantep", "eyüp"]
+        errors = validate_consonant_alternation_coverage(stems)
+        assert errors == [
+            "consonant_alternations.tr.yaml missing required LeagueCatalog stem 'eyüp'",
+            "consonant_alternations.tr.yaml missing required LeagueCatalog stem 'gaziantep'",
+        ]
 

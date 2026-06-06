@@ -53,3 +53,29 @@
     - "15 temmuzda"
   date_kind: fixed_gregorian
   fixed_md: "07-15"
+- key: ramazan_bayrami
+  name_tr: "Ramazan Bayramı"
+  name_aliases:
+    - "ramazan bayramı"
+    - "ramazan bayramında"
+    - "şeker bayramı"
+    - "şeker bayramında"
+  date_kind: fixed_hijri_observed
+  hijri_year_lookup: "ramazan_bayrami"
+- key: kurban_bayrami
+  name_tr: "Kurban Bayramı"
+  name_aliases:
+    - "kurban bayramı"
+    - "kurban bayramında"
+    - "kurban bayramı"
+    - "kurban bayramında"
+  date_kind: fixed_hijri_observed
+  hijri_year_lookup: "kurban_bayrami"
+- key: milli_mac_haftasi
+  name_tr: "Milli Maç Haftası"
+  name_aliases:
+    - "milli maç haftası"
+    - "milli maç haftasında"
+    - "fifa maç haftası"
+  date_kind: fifa_window
+  fifa_window_lookup: "milli_mac_haftasi"

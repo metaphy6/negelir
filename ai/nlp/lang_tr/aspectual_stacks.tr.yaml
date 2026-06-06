@@ -12,6 +12,7 @@ stack_rules:
       - "\\b(yenmiş|gelmiş|kazanmış|bitmiş) olacak(?:sa|se)?\\b"
       - "\\b(oynamış|kazanmış|gelmiş|bitmiş) olacak(?:sa|se)?\\b"
       - "\\b((yerleşmiş|görülmüş) olacak)\\b"
+      - "\\b(yenmiş olur)\\b"
   - inner_aspect: evidential
     outer_aspect: potential
     modality_class: perfect_modal_potential
@@ -44,11 +45,45 @@ stack_rules:
       - "\\b(oynayacak olan|girecek olan|kazanacak olan|gelecek olan|bitecek olan|bitirecek olan|yapacak olan)\\b"
       - "\\b(oynayacak olan kim|girecek olan kim|bitirecek olan kim|yapacak olan kim)\\b"
       - "\\b(kazanacak olan kim|gelecek olan kim|bitirecek olan kim|yapacak olan kim)\\b"
-  - inner_aspect: inferential
-    outer_aspect: progressive
-    modality_class: progressive_inferential
-    confidence: 0.86
+  - inner_aspect: past
+    outer_aspect: inferential
+    modality_class: inferential_past
+    confidence: 0.88
     patterns:
       - "\\b(oynamış olur|kazanmış olur|gelmiş olur|bitmiş olur)(?:sa|se)?\\b"
       - "\\b(oynamış olur mu|kazanmış olur mu)\\b"
       - "\\b(gelmiş olur|bitmiş olur)\\b"
+  - inner_aspect: past
+    outer_aspect: counterfactual
+    modality_class: counterfactual_past
+    confidence: 0.92
+    patterns:
+      - "\\b(olsaydı|yenseydi|kazansaydı|oynarsa?ydı|kazanmış olsaydı|gelmiş olsaydı|bitmiş olsaydı|oynamış olsaydı)\\b"
+  - inner_aspect: epistemic
+    outer_aspect: potential
+    modality_class: epistemic_potential
+    confidence: 0.88
+    patterns:
+      - "\\b(oynayabilir|kazanabilir|olabilir|gelebilir|alabilir|girebilir)\\b"
+      - "\\b(gidebilir|yapabilir|alayabilir|atabilir)\\b"
+  - inner_aspect: evidential
+    outer_aspect: potential
+    modality_class: epistemic_potential
+    confidence: 0.88
+    patterns:
+      - "\\b(olabilirmiş|kazanabilirmiş|gelebilirmiş|girebilirmiş|oynayabilirmiş)\\b"
+  - inner_aspect: obligative
+    outer_aspect: deontic
+    modality_class: obligative
+    confidence: 0.90
+    patterns:
+      - "\\b(oynamalı|kazanmalı|olmalı|gelmeli|gitmeli|girmeli)\\b"
+      - "\\b(oynamalıymış|kazanmalıymış|olmalıymış|gelmeliymış|gitmeliymış|girmeliymış)\\b"
+      - "\\b(yapmalı|almalı|atmalı|beklemeli)\\b"
+  - inner_aspect: evidential
+    outer_aspect: hearsay
+    modality_class: evidential_hearsay
+    confidence: 0.85
+    patterns:
+      - "\\b(oynamış|kazanmış|gelmiş|bitmiş|diyorlar)\\b"
+      - "\\b(kazanmışmış|gelmişmiş|oynamışmış)\\b"

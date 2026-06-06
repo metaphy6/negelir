@@ -46,6 +46,7 @@ from xops.opsctl.subcommands import (
     allowlist_show,
     backup_now,
     backup_rotate_key,
+    nlp_kill_pattern,
     restore,
     retrain_approve,
     rotate_allowlist_key,
@@ -292,6 +293,115 @@ class TestRestore(unittest.TestCase):
             _, out_no = _capture(restore, args_no)
             token_without = out_no["expected_confirm_token"]
             self.assertNotEqual(token_with, token_without)
+
+
+class TestNlpKillPattern(unittest.TestCase):
+    def test_dry_run_emits_expected_payload(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="op-h",
+                pattern_pack_sha8="pksha8",
+                ttl_s=3600,
+                reason="fix offensive token",
+                dry_run=True,
+                json=True,
+            )
+            rc, out = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertEqual(out["payload"]["operator_id_h"], "op-h")
+            self.assertEqual(out["payload"]["pattern_pack_sha8"], "pksha8")
+            self.assertEqual(out["payload"]["ttl_s"], 3600)
+            self.assertEqual(out["payload"]["reason"], "fix offensive token")
+            self.assertEqual(out["payload"]["target"], "nlp.kill_pattern")
+
+    def test_dry_run_includes_optional_filters(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="op-h",
+                pattern_pack_sha8="pksha8",
+                ttl_s=60,
+                reason="emergency",
+                match_id="match-1",
+                intent_class="predict.goal.v1",
+                template_id="tmpl-1",
+                dry_run=True,
+                json=True,
+            )
+            rc, out = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertEqual(out["payload"]["match_id"], "match-1")
+            self.assertEqual(out["payload"]["intent_class"], "predict.goal.v1")
+            self.assertEqual(out["payload"]["template_id"], "tmpl-1")
+
+    def test_real_publish_without_confirm_is_allowed(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="op-h",
+                pattern_pack_sha8="pksha8",
+                ttl_s=60,
+                reason="emergency",
+                dry_run=False,
+            )
+            rc, _ = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+
+    def test_bad_ttl_rejected_before_publish(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="op-h",
+                pattern_pack_sha8="pksha8",
+                ttl_s=0,
+                reason="bad ttl",
+                dry_run=False,
+            )
+            rc, _ = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, 64)
+
+    def test_dry_run_emits_no_body_substring_by_default(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="op-h",
+                pattern_pack_sha8="pksha8",
+                ttl_s=60,
+                reason="emergency",
+                dry_run=True,
+                json=True,
+            )
+            rc, out = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, int(ExitCode.OK))
+            self.assertNotIn("body_substring_sha8", out["payload"])
+
+    def test_dry_run_errors_on_missing_required_fields(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="",
+                pattern_pack_sha8="",
+                ttl_s=60,
+                reason="",
+                dry_run=False,
+            )
+            rc, _ = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, 64)
+
+    def test_dry_run_permissions_smoke(self) -> None:
+        with TemporaryDirectory() as tmp, _Env(tmp):
+            args = _ns(
+                target="nlp.kill_pattern",
+                operator_id_h="op-h",
+                pattern_pack_sha8="pksha8",
+                ttl_s=60,
+                reason="emergency",
+                dry_run=True,
+                json=False,
+            )
+            rc, out = _capture(nlp_kill_pattern, args)
+            self.assertEqual(rc, int(ExitCode.OK))
 
 
 # ────────────────────────────────────────────────────────────────────

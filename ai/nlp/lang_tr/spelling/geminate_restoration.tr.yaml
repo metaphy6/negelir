@@ -1,0 +1,26 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-05T00:00:00Z"
+  source: "phase10-10.29.1"
+  notes: >
+    Closed geminate restoration table for §10.29.1. This file governs
+    Arabic/Persian-origin geminate stem forms that are allowed to preserve
+    the doubled consonant before a vowel-initial suffix.
+
+geminate_restorations:
+  - stem: "hak"
+    doubled_form: "hakk"
+    source: "arabic"
+  - stem: "sır"
+    doubled_form: "sırr"
+    source: "arabic"
+  - stem: "his"
+    doubled_form: "hiss"
+    source: "arabic"
+  - stem: "zan"
+    doubled_form: "zann"
+    source: "arabic"
+  - stem: "şık"
+    doubled_form: "şıkk"
+    source: "arabic"

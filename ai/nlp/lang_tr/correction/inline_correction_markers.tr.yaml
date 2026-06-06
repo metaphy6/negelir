@@ -1,0 +1,22 @@
+_meta:
+  schema_version: 1
+stutter_repeat:
+  - "yok yok"
+  - "pardon"
+  - "affedersin"
+  - "aslında"
+  - "daha doğrusu"
+  - "yanlış"
+verbal_self_correction:
+  - "yok"
+  - "yok yok"
+  - "pardon"
+  - "affedersin"
+  - "aslında"
+  - "daha doğrusu"
+  - "yanlış"
+restart_marker:
+  - "tamam"
+  - "başa dön"
+  - "unut"
+  - "bırak"

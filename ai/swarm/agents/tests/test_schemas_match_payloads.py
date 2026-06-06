@@ -253,10 +253,10 @@ def _example_qa_request_v1() -> dict:
     # Phase 7 §7.1 data-plane (sanitized; sec_verdict ∈ {pass, sanitized}).
     return QaRequestV1(
         request_id="qa-1",
-        sanitized_text="Bugün Galatasaray nasıl oynadı?",
+        sanitized_text="bugün galatasaray nasıl oynadı?",
         locale="tr",
         sec_verdict="pass",
-        sec_steps_run=["nfc", "strip_control"],
+        sec_steps_run=["nfc", "strip_control", "lowercase_tr"],
         client_id=None,
         emitted_at="2026-04-28T12:00:00+00:00",
     ).as_dict()

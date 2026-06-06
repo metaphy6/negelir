@@ -3,13 +3,17 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/metaphy6/negelir/server/internal/config"
 	"github.com/metaphy6/negelir/server/internal/sec"
 )
 
@@ -17,9 +21,16 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-func newTestRouter(gate *sec.QAInputGate) *gin.Engine {
+func newTestRouter(gate *sec.QAInputGate, cfgs ...*config.Config) *gin.Engine {
+	cfg := &config.Config{
+		QAAnswerMinSupportedVersion: 1,
+		QAAnswerSunsetWindowDays:    182,
+	}
+	if len(cfgs) > 0 && cfgs[0] != nil {
+		cfg = cfgs[0]
+	}
 	r := gin.New()
-	r.POST("/v1/qa", qaHandler(gate))
+	r.POST("/v1/qa", qaHandler(gate, cfg))
 	return r
 }
 
@@ -108,6 +119,20 @@ func TestQAHandlerRejectsUnsupportedAnswerFormatQueryParam(t *testing.T) {
 	}
 }
 
+func TestResolveAnswerFormatAcceptsWhatsapp4096QueryParam(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa?answer_format=whatsapp_4096", nil)
+
+	format, err := resolveAnswerFormat(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if format != "whatsapp_4096" {
+		t.Fatalf("expected whatsapp_4096, got %q", format)
+	}
+}
+
 func TestResolveAnswerFormatPrefersQueryParamOverAccept(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -150,6 +175,193 @@ func TestResolveAnswerFormatDefaultsToPlain(t *testing.T) {
 	if format != "plain" {
 		t.Fatalf("expected plain, got %q", format)
 	}
+}
+
+func TestResolveQAAnswerSchemaVersionDefaultsToCurrent(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+
+	version, err := resolveQAAnswerSchemaVersion(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if version != 3 {
+		t.Fatalf("expected 3, got %d", version)
+	}
+}
+
+func TestResolveQAAnswerSchemaVersionFromAcceptHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	c.Request.Header.Set("Accept", "application/vnd.negelir.qa-answer+json; version=2")
+
+	version, err := resolveQAAnswerSchemaVersion(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if version != 2 {
+		t.Fatalf("expected 2, got %d", version)
+	}
+}
+
+func TestResolveQAAnswerSchemaVersionClampsToSupported(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	c.Request.Header.Set("Accept", "application/vnd.negelir.qa-answer+json; version=4")
+
+	version, err := resolveQAAnswerSchemaVersion(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if version != 3 {
+		t.Fatalf("expected 3, got %d", version)
+	}
+}
+
+func TestResolveQAAnswerSchemaVersionRejectsInvalidVersion(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	c.Request.Header.Set("Accept", "application/vnd.negelir.qa-answer+json; version=abc")
+
+	_, err := resolveQAAnswerSchemaVersion(c)
+	if err == nil {
+		t.Fatal("expected error for invalid version")
+	}
+}
+
+func TestResolveRequestMetadataIncludesClientFormatMaxVersion(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	c.Request.Header.Set("Accept", "application/vnd.negelir.qa-answer+json; version=2|3")
+
+	metadata, err := resolveRequestMetadata(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if metadata == nil {
+		t.Fatal("expected metadata, got nil")
+	}
+	if got, ok := metadata["client_format_max_version"].(int); !ok || got != 3 {
+		t.Fatalf("expected client_format_max_version=3, got %v", metadata["client_format_max_version"])
+	}
+}
+
+func TestResolveRequestMetadataHonoursPreviewOnlyOverMTLS(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	req.Header.Set("X-NLP-Preview", "true")
+	req.TLS = &tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{{}}}}
+	c.Request = req
+
+	metadata, err := resolveRequestMetadata(c)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if metadata == nil {
+		t.Fatal("expected metadata, got nil")
+	}
+	if preview, ok := metadata["preview"].(bool); !ok || !preview {
+		t.Fatalf("expected preview=true, got %v", metadata["preview"])
+	}
+}
+
+func TestResolveRequestMetadataIgnoresShoutHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	req.Header.Set("X-NLP-Shout", "true")
+	c.Request = req
+
+	metadata, err := resolveRequestMetadata(c)
+	if err != nil {
+		t.Fatalf("expected no error for unknown shout header, got %v", err)
+	}
+	if metadata != nil {
+		t.Fatalf("expected shout header to be ignored, got %v", metadata)
+	}
+}
+
+func TestResolveRequestMetadataRejectsPreviewWithoutMTLS(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/qa", nil)
+	c.Request.Header.Set("X-NLP-Preview", "true")
+
+	_, err := resolveRequestMetadata(c)
+	if err == nil {
+		t.Fatal("expected error for X-NLP-Preview without mTLS")
+	}
+}
+
+func TestQAHandlerEmitsSunsetHeaderForDeprecatedClientVersion(t *testing.T) {
+	gate := sec.NewQAInputGate(nil, 8192)
+	cfg := &config.Config{
+		QAAnswerMinSupportedVersion: 2,
+		QAAnswerSunsetOnUTC:         time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339),
+		QAAnswerSunsetWindowDays:    182,
+	}
+	r := newTestRouter(gate, cfg)
+
+	body := strings.NewReader(`{"q":"Fenerbahçe ne zaman kazandı?","locale":"tr-TR"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/qa", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/vnd.negelir.qa-answer+json; version=1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d; body: %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Deprecation") != "true" {
+		t.Fatalf("expected Deprecation header on deprecated QA answer version")
+	}
+	if w.Header().Get("Sunset") == "" {
+		t.Fatal("expected Sunset header on deprecated QA answer version")
+	}
+}
+
+func TestQAHandlerRejectsDeprecatedClientVersionAfterSunset(t *testing.T) {
+	gate := sec.NewQAInputGate(nil, 8192)
+	cfg := &config.Config{
+		QAAnswerMinSupportedVersion: 2,
+		QAAnswerSunsetOnUTC:         time.Now().UTC().AddDate(0, -7, 0).Format(time.RFC3339),
+		QAAnswerSunsetWindowDays:    182,
+	}
+	r := newTestRouter(gate, cfg)
+
+	body := strings.NewReader(`{"q":"Galatasaray maçı ne zaman?","locale":"tr-TR"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/qa", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/vnd.negelir.qa-answer+json; version=1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUpgradeRequired {
+		t.Fatalf("expected 426, got %d; body: %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Deprecation") != "true" {
+		t.Fatalf("expected Deprecation header on rejected deprecated QA answer version")
+	}
+	if w.Header().Get("Sunset") == "" {
+		t.Fatal("expected Sunset header on rejected deprecated QA answer version")
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatalf("failed to decode problem body: %v", err)
+	}
+	if typ, _ := problem["type"].(string); !strings.Contains(typ, "upgrade_required") {
+		t.Fatalf("expected problem type to contain upgrade_required, got %q", typ)
+	}
+}
+
+func TestQAAnswerV1MinSupported426AtDeadline(t *testing.T) {
+	TestQAHandlerRejectsDeprecatedClientVersionAfterSunset(t)
 }
 
 // TestQAHandlerReturnsQACorrelationID — boundary (§9.15): 202 response MUST

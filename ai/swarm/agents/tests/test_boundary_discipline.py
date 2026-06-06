@@ -39,6 +39,7 @@ from swarm.agents.proofreader.replicas import (
 )
 from swarm.agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from swarm.agents.storage import StorageAgent
+from swarm.sdk import Message
 from swarm.agents.topics import (
     API_REQUEST_V1,
     API_RESPONSE_V1,
@@ -48,13 +49,16 @@ from swarm.agents.topics import (
     MATCH_OUTCOME,
     NLP_ALERT_V1,
     NLP_EVENT_V1,
+    NLP_GOSSIP_V1,
     NLP_SHADOW_V1,
+    NLP_PROBER_V1,
     PREDICT_APPROVED,
     PREDICT_FINAL,
     PREDICT_REQUEST_V1,
     PROOF_FLAG,
     PROOFREADER_VERDICT,
     QA_ANSWER_V1,
+    QA_CONTEXT_EXTENSION_V1,
     QA_CONTEXT_V1,
     QA_INTENT_V1,
     QA_REQUEST,
@@ -859,8 +863,9 @@ def test_telemetry_watches_phase9_api_audit_topics() -> None:
 #     Only ``predict.approved.v1`` (Phase 6 proofreader-gated).
 #  c) NLP NEVER publishes to ``sec.*``, ``maint.*``, ``auth.*``,
 #     ``payment.*``, ``patcher.*``.  Outbound topics bounded to
-#     ``{qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1,
-#       predict.request.v1, data.request.v1}``.
+#     ``{qa.intent.v1, qa.answer.v1, qa.context.v1, qa.context_extension.v1,
+#       nlp.event.v1, nlp.alert.v1, nlp.gossip.v1, nlp.shadow.v1,
+#       predict.request.v1, data.request.v1, nlp.prober.v1}``.
 #  d) ``nlp.event.v1`` / ``nlp.alert.v1`` producer set is bounded
 #     to the three NLP agents in
 #     ``NLP_EVENT_V1_ALLOWED_PRODUCERS`` /
@@ -877,8 +882,11 @@ _NLP_OUTBOUND_ALLOWED = frozenset({
     QA_INTENT_V1,
     QA_ANSWER_V1,
     QA_CONTEXT_V1,
+    QA_CONTEXT_EXTENSION_V1,
     NLP_EVENT_V1,
     NLP_ALERT_V1,
+    NLP_GOSSIP_V1,
+    NLP_PROBER_V1,
     NLP_SHADOW_V1,
     PREDICT_REQUEST_V1,
     DATA_REQUEST_V1,
@@ -999,6 +1007,36 @@ def test_nlp_agents_do_not_publish_to_forbidden_prefixes() -> None:
     )
 
 
+def test_nlp_plane_does_not_import_storage_agent_directly() -> None:
+    """§10.27 boundary: NLP never imports the Phase 4 storage agent.
+
+    The storage agent must be reached only via `data.request.v1`, not by
+    importing the storage module directly into the NLP package.
+    """
+    import importlib.util
+    import pkgutil
+    from pathlib import Path
+
+    import swarm.agents.nlp as nlp  # noqa: PLC0415
+
+    offenders: list[str] = []
+    for modinfo in pkgutil.walk_packages(nlp.__path__, prefix=nlp.__name__ + "."):
+        spec = importlib.util.find_spec(modinfo.name)
+        if spec is None or spec.origin is None:
+            continue
+        if not spec.origin.endswith(".py"):
+            continue
+        source = Path(spec.origin).read_text(encoding="utf-8")
+        if "from swarm.agents.storage" in source or "import swarm.agents.storage" in source:
+            offenders.append(modinfo.name)
+
+    assert offenders == [], (
+        "NLP plane modules must not import swarm.agents.storage directly. "
+        "Use DATA_REQUEST_V1 / data.request.v1 as the bus boundary instead. "
+        f"Offenders: {offenders}."
+    )
+
+
 def test_nlp_event_v1_producer_set_bounded() -> None:
     """§10.0 wire-authority: ``nlp.event.v1`` producer set in the live
     registry must be a subset of ``NLP_EVENT_V1_ALLOWED_PRODUCERS``.
@@ -1076,6 +1114,102 @@ def test_nlp_dispatcher_publishes_qa_context_v1() -> None:
         "nlp.dispatcher.v1 must publish qa.context.v1 for conversation "
         "context updates."
     )
+
+
+def test_nlp_intent_agent_publishes_nlp_gossip_v1() -> None:
+    """§10.32.12 positive: nlp.intent.v1 must emit periodic lexicon gossip."""
+    from swarm.agents.nlp import NlpIntentAgent  # noqa: PLC0415
+
+    assert NLP_GOSSIP_V1 in tuple(NlpIntentAgent.publishes), (
+        "nlp.intent.v1 must publish nlp.gossip.v1 for cross-pod lexicon "
+        "state gossip."
+    )
+
+
+def test_nlp_gossip_aggregator_subscribes_to_nlp_gossip_v1() -> None:
+    """§10.32.12 positive: nlp.gossip_aggregator.v1 must consume nlp.gossip.v1."""
+    from swarm.agents.nlp import NlpGossipAggregatorAgent  # noqa: PLC0415
+
+    assert NLP_GOSSIP_V1 in tuple(NlpGossipAggregatorAgent.subscribes), (
+        "nlp.gossip_aggregator.v1 must subscribe to nlp.gossip.v1 to process "
+        "cross-pod gossip."
+    )
+
+    assert NLP_ALERT_V1 in tuple(NlpGossipAggregatorAgent.publishes), (
+        "nlp.gossip_aggregator.v1 must publish nlp.alert.v1 for divergence alerts."
+    )
+
+
+def test_nlp_gossip_aggregator_emits_divergence_alert_with_auto_quarantine() -> None:
+    """§10.32.12 proof: persistent wrong-state gossip emits critical alert."""
+    from swarm.agents.nlp import NlpGossipAggregatorAgent  # noqa: PLC0415
+
+    def make_gossip_message(
+        pod_instance_id: str,
+        lexicon_set_sha: str,
+        intent_sha: str,
+        crf_sha: str,
+        calibration_version: str,
+        template_git_sha: str,
+        pipeline_version: str,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_GOSSIP_V1,
+            payload={
+                "kind": "nlp_lexicon_state_gossip",
+                "producer": "nlp.intent.v1",
+                "pod_instance_id": pod_instance_id,
+                "lexicon_set_sha": lexicon_set_sha,
+                "intent_sha": intent_sha,
+                "crf_sha": crf_sha,
+                "calibration_version": calibration_version,
+                "template_git_sha": template_git_sha,
+                "pipeline_version": pipeline_version,
+                "emitted_at_utc": "2026-06-06T00:00:00Z",
+            },
+            producer="nlp.intent.v1",
+        )
+
+    agent = NlpGossipAggregatorAgent()
+
+    good = (
+        "lex-1",
+        "intent-1",
+        "crf-1",
+        "cal-1",
+        "tmpl-1",
+        "pipe-1",
+    )
+    bad = (
+        "lex-2",
+        "intent-2",
+        "crf-2",
+        "cal-1",
+        "tmpl-1",
+        "pipe-1",
+    )
+
+    # Round 1: establish modal tuple on two pods.
+    agent.handle(make_gossip_message("pod-A", *good))
+    agent.handle(make_gossip_message("pod-B", *good))
+    assert not any(
+        msg.payload.get("kind") == "lexicon_state_divergence"
+        for msg in agent.handle(make_gossip_message("pod-C", *bad))
+    )
+
+    # Round 2: send a good tuple again so the modal tuple stays good,
+    # then a second bad tuple from pod-C should trigger persistent divergence.
+    agent.handle(make_gossip_message("pod-A", *good))
+    events = agent.handle(make_gossip_message("pod-C", *bad))
+
+    assert len(events) == 1
+    alert = events[0]
+    assert alert.envelope.topic == NLP_ALERT_V1
+    assert alert.payload["kind"] == "lexicon_state_divergence"
+    assert alert.payload["severity"] == "critical"
+    assert alert.payload["details"]["auto_quarantine"] is True
+    assert alert.payload["details"]["observed_lexicon_state"]["lexicon_set_sha"] == "lex-2"
+    assert alert.payload["details"]["expected_lexicon_state"]["lexicon_set_sha"] == "lex-1"
 
 
 def test_nlp_answer_agent_subscribes_to_predict_approved_not_final() -> None:

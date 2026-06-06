@@ -1,0 +1,25 @@
+failure_classes:
+  - id: url_only_input
+    template_name: meta.url_only_input.tr.j2
+    reason_code: meta.url_only_input
+    description: "URL-only inputs are declined with a user-facing Turkish refusal."
+
+  - id: fragment_detected
+    template_name: meta.fragment_detected.tr.j2
+    reason_code: meta.fragment_detected
+    description: "Fragmentary or incomplete input is declined with a Turkish notice."
+
+  - id: rhetorical_dismissive
+    template_name: meta.rhetorical_dismissive.tr.j2
+    reason_code: meta.rhetorical_dismissive
+    description: "Rhetorical or dismissive inputs are handled via a fixed Turkish refusal template."
+
+  - id: opinion_unsupported
+    template_name: meta.opinion_unsupported.tr.j2
+    reason_code: meta.opinion_unsupported
+    description: "Unsupported opinion-seeking inputs are declined with a Turkish template."
+
+  - id: compliance_refused
+    template_name: meta.compliance_refused.tr.j2
+    reason_code: meta.compliance_refused
+    description: "Compliance-blocked inputs are declined through the Turkish compliance refusal template."

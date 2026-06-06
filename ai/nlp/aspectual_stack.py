@@ -103,11 +103,15 @@ def detect_aspectual_stack(text: str, max_depth: int = 3) -> Optional[AspectualS
         return candidates[0]
 
     priority = [
+        "counterfactual_past",
         "future_perfect_evidential",
         "perfect_modal_potential",
-        "future_relative_clause_attributive",
+        "obligative",
+        "evidential_hearsay",
         "progressive_epistemic",
-        "progressive_inferential",
+        "epistemic_potential",
+        "future_relative_clause_attributive",
+        "inferential_past",
         "imminent_progressive",
     ]
     candidates.sort(

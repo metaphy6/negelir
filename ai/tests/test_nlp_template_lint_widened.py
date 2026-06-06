@@ -79,6 +79,42 @@ Kullanıcı girişi: {{ entity.original_text }}
     assert ("entity", "original_text", "entity.original_text") in violations
 
 
+def test_nlp_templates_do_not_access_shout_flag() -> None:
+    """§10.28.8: reply templates must not branch on a shout metadata flag."""
+    from pathlib import Path
+
+    template_dir = Path(__file__).resolve().parents[2] / "ai" / "nlp" / "templates"
+    if not template_dir.exists():
+        return
+
+    def extract_accesses(node):
+        accesses = []
+        if isinstance(node, nodes.Name):
+            accesses.append((node.name, "", node.name))
+        elif isinstance(node, nodes.Getattr):
+            base_name = None
+            if isinstance(node.node, nodes.Name):
+                base_name = node.node.name
+            elif isinstance(node.node, nodes.Getattr):
+                nested = extract_accesses(node.node)
+                accesses.extend(nested)
+                if nested:
+                    base_name = nested[-1][2]
+            if base_name is not None:
+                accesses.append((base_name, node.attr, f"{base_name}.{node.attr}"))
+        for child in node.iter_child_nodes():
+            accesses.extend(extract_accesses(child))
+        return accesses
+
+    for template_path in sorted(template_dir.glob("*.tr.j2")):
+        ast = jinja2.Environment().parse(template_path.read_text(encoding="utf-8"))
+        accesses = extract_accesses(ast)
+        assert not any(
+            attr == "shout" or path.endswith(".shout")
+            for _, attr, path in accesses
+        ), f"Template {template_path.name} must not branch on shout metadata"
+
+
 if __name__ == "__main__":
     test_nlp_template_lint_rejects_entity_original_text()
     print("✓ test_nlp_template_lint_rejects_entity_original_text passed")

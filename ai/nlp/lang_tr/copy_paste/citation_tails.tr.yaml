@@ -1,0 +1,13 @@
+patterns:
+  - "[via X]"
+  - "(via X)"
+  - "kaynak: X"
+  - "source: X"
+  - "kaynak:"
+  - "source:"
+  - "[1]"
+  - "[2]"
+  - "(1)"
+  - "(2)"
+  - "[3]"
+  - "(3)"

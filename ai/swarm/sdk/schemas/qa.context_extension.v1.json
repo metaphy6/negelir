@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/qa.context_extension.v1",
+  "title": "qa.context_extension.v1",
+  "description": "Phase 10 §10.32.11 system-uttered entity capture envelope.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "conversation_id",
+    "entities",
+    "emitted_at_utc"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Envelope schema version for qa.context_extension.v1."
+    },
+    "conversation_id": {
+      "type": ["string", "null"],
+      "description": "Conversation identifier minted by the API gateway; null means no conversation context is available."
+    },
+    "entities": {
+      "type": "array",
+      "description": "Canonical entity identifiers referenced by the system's prior answer.",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "canonical_id",
+          "confidence",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Entity kind."
+          },
+          "canonical_id": {
+            "type": "string",
+            "description": "Resolved canonical identifier."
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "source": {
+            "type": "string",
+            "description": "Source of the system mention; should be a system-side signal."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "emitted_at_utc": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp when the extension was emitted."
+    }
+  },
+  "additionalProperties": false
+}

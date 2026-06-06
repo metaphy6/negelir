@@ -158,6 +158,11 @@ def _apply_single_pass(
             stem = tok[:-vlen]
             if not _is_valid_stem(stem, mi_min_stem, all_vowels):
                 continue
+            # Avoid misclassifying noun/adjective forms that already contain
+            # a Turkish suffix before a base question particle.
+            # Example: "durumu" is root "durum" + accusative "u", not "dur" + "mu".
+            if vlen == 2 and len(stem) == 4 and stem[-1] in all_vowels:
+                continue
             last_v = _last_vowel(stem, all_vowels)
             if last_v is None:
                 continue

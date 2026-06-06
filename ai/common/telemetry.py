@@ -18,10 +18,12 @@ Phase 10 §10.14 W3C tracing:
     render, humanize, proofread
 """
 
+import collections
+import hashlib
 import json
 import time
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Callable
 
 from common.config import Config
 from common.logger import get_logger
@@ -78,11 +80,41 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["repair_class"],
     )
 
+    # nlp_input_shout_total — counter of normalized shout input observations
+    NLP_INPUT_SHOUT_TOTAL = Counter(
+        "nlp_input_shout_total",
+        "NLP shout input events",
+    )
+
     # nlp_input_repair_density — histogram of repairs/token-count per query
     NLP_INPUT_REPAIR_DENSITY = Histogram(
         "nlp_input_repair_density",
         "NLP input repair density per query",
         buckets=(0.001, 0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0),
+    )
+
+    # nlp_empty_input_rate_per_subject{subject} — histogram of per-subject empty-input abuse rate
+    NLP_EMPTY_INPUT_RATE_PER_SUBJECT = Histogram(
+        "nlp_empty_input_rate_per_subject",
+        "Per-subject empty-input rate for NLP abuse detection",
+        labelnames=["subject"],
+        buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0),
+    )
+
+    # nlp_lexicon_coverage{intent_class} — histogram of resolvable lexicon hit fraction per query
+    NLP_LEXICON_COVERAGE = Histogram(
+        "nlp_lexicon_coverage",
+        "NLP lexicon coverage per intent class",
+        labelnames=["intent_class"],
+        buckets=(0.0, 0.25, 0.5, 0.75, 1.0),
+    )
+
+    # nlp_classifier_extractor_skew{intent} — histogram of classifier vs extractor skew per intent
+    NLP_CLASSIFIER_EXTRACTOR_SKEW = Histogram(
+        "nlp_classifier_extractor_skew",
+        "Classifier-extractor skew per NLP intent",
+        labelnames=["intent"],
+        buckets=(0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0),
     )
 
     # nlp_dialect_normalization_rate{dialect_class} — histogram of dialect normalization observations per class
@@ -105,6 +137,14 @@ if _PROMETHEUS_AVAILABLE:
         "nlp_offensive_input_total",
         "Offensive input tokens by class",
         labelnames=["offense_class"],
+    )
+
+    # nlp_sarcasm_cue_fire_rate{cue_id} — histogram of sarcasm cue observations
+    NLP_SARCASM_CUE_FIRE_RATE = Histogram(
+        "nlp_sarcasm_cue_fire_rate",
+        "NLP sarcasm cue fire rate by cue id",
+        labelnames=["cue_id"],
+        buckets=(1.0,),
     )
 
     # nlp_humanizer_tokens_emitted_total{tenant_class, intent} — counter of humanizer tokens emitted
@@ -134,6 +174,7 @@ else:
     NLP_PROOFREADER_BLOCK_TOTAL = None
     NLP_HUMANIZER_TOKENS_EMITTED_TOTAL = None
     NLP_LEXICON_VERSION = None
+    NLP_CLASSIFIER_EXTRACTOR_SKEW = None
 
 
 class TelemetrySink:
@@ -150,10 +191,35 @@ class TelemetrySink:
     _QID_STREAM = "negelir:qid:snapshots"
     _DEFAULT_MAX_STREAM_LEN = 50_000  # auto-trim oldest entries
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: Config | None = None, clock: Callable[[], float] | None = None):
         self._redis = None
         cfg = config or Config()
+        self._clock = clock or time.monotonic
         self._max_stream_len = getattr(cfg, "telemetry_max_stream_len", self._DEFAULT_MAX_STREAM_LEN)
+        self._unresolved_token_counts: collections.Counter[str] = collections.Counter()
+        self._unresolved_token_window_start: float = self._clock()
+        self._unresolved_token_top_k = max(1, int(getattr(cfg, "nlp_unresolved_token_top_k", 50)))
+        self._unresolved_token_window_s = max(1, int(getattr(cfg, "nlp_unresolved_token_rolling_window_s", 3600)))
+        self._unresolved_token_max_unredacted_len = max(1, int(getattr(cfg, "nlp_log_max_unredacted_str_len", 64)))
+        self._alert_callback: Callable[[dict[str, Any]], None] | None = None
+        self._nlp_lexicon_coverage_samples: dict[str, list[tuple[float, float]]] = {}
+        self._nlp_lexicon_coverage_breach_start: dict[str, float] = {}
+        self._nlp_lexicon_coverage_last_alert: dict[str, float] = {}
+        self._nlp_lexicon_coverage_window_s = 3600.0
+        self._nlp_empty_input_samples: dict[str, list[tuple[float, int]]] = {}
+        self._nlp_empty_input_last_alert: dict[str, float] = {}
+        self._nlp_empty_input_window_s = float(getattr(cfg, "nlp_empty_input_anomaly_window_s", 300))
+        self._nlp_empty_input_threshold = float(getattr(cfg, "nlp_empty_input_anomaly_threshold", 0.3))
+        self._nlp_shout_samples: dict[str, list[tuple[float, int]]] = {}
+        self._nlp_shout_last_alert: dict[str, float] = {}
+        self._nlp_shout_window_s = float(getattr(cfg, "nlp_shout_rate_alert_window_s", 300))
+        self._nlp_shout_threshold = float(getattr(cfg, "nlp_shout_rate_alert_threshold", 0.5))
+        self._nlp_shout_min_requests = int(getattr(cfg, "nlp_shout_rate_alert_min_requests", 20))
+        self._nlp_shout_alert_cooldown_s = float(getattr(cfg, "nlp_shout_rate_alert_cooldown_s", 600))
+        self._nlp_sarcasm_cue_samples: dict[str, list[float]] = {}
+        self._nlp_sarcasm_cue_last_alert: dict[str, float] = {}
+        self._nlp_sarcasm_cue_window_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_window_s", 7 * 24 * 3600))
+        self._nlp_sarcasm_cue_alert_cooldown_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_alert_cooldown_s", 7 * 24 * 3600))
         try:
             import redis
             self._redis = redis.Redis(
@@ -413,6 +479,283 @@ class TelemetrySink:
                 NLP_INPUT_REPAIR_DENSITY.observe(ratio)
             except Exception:  # noqa: BLE001
                 pass  # non-blocking
+
+    def record_nlp_empty_input_rate(self, subject: str, is_empty: bool) -> None:
+        """
+        Track per-subject empty-input rate and emit an alert when the abuse
+        threshold is exceeded.
+        """
+        if not isinstance(subject, str) or not subject.strip():
+            subject = "unknown"
+        now = self._clock()
+        samples = self._nlp_empty_input_samples.setdefault(subject, [])
+        samples.append((now, 1 if is_empty else 0))
+        cutoff = now - self._nlp_empty_input_window_s
+        samples = [(ts, value) for ts, value in samples if ts >= cutoff]
+        self._nlp_empty_input_samples[subject] = samples
+        total_requests = len(samples)
+        if total_requests == 0:
+            return
+        empty_requests = sum(value for _, value in samples)
+        rate = empty_requests / float(total_requests)
+        if _PROMETHEUS_AVAILABLE and NLP_EMPTY_INPUT_RATE_PER_SUBJECT:
+            try:
+                NLP_EMPTY_INPUT_RATE_PER_SUBJECT.labels(subject=subject).observe(rate)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+        if total_requests < 20:
+            return
+        if rate <= self._nlp_empty_input_threshold:
+            return
+        last_alert = self._nlp_empty_input_last_alert.get(subject, float("-inf"))
+        if now - last_alert < 600.0:
+            return
+        self._maybe_emit_nlp_alert(
+            {
+                "kind": "nlp_empty_input_anomaly_per_subject",
+                "severity": "warn",
+                "subject": subject,
+                "reason": (
+                    f"Empty input rate {rate:.3f} over the last "
+                    f"{int(self._nlp_empty_input_window_s)}s for subject={subject}."
+                ),
+                "details": {
+                    "rate": round(rate, 3),
+                    "total_requests": total_requests,
+                    "empty_requests": empty_requests,
+                    "window_s": int(self._nlp_empty_input_window_s),
+                },
+                "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        )
+        self._nlp_empty_input_last_alert[subject] = now
+
+    def record_nlp_input_shout(self, subject: str, is_shout: bool) -> tuple[bool, dict[str, object]]:
+        """
+        Track per-subject shout input rate and return alert details when the
+        shout threshold is exceeded.
+        """
+        if not isinstance(subject, str) or not subject.strip():
+            subject = "unknown"
+        if not is_shout:
+            return False, {}
+        now = self._clock()
+        samples = self._nlp_shout_samples.setdefault(subject, [])
+        samples.append((now, 1))
+        cutoff = now - self._nlp_shout_window_s
+        samples = [(ts, value) for ts, value in samples if ts >= cutoff]
+        self._nlp_shout_samples[subject] = samples
+        total_requests = len(samples)
+        shout_requests = sum(value for _, value in samples)
+        if _PROMETHEUS_AVAILABLE and NLP_INPUT_SHOUT_TOTAL:
+            try:
+                NLP_INPUT_SHOUT_TOTAL.inc()
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+        if total_requests < self._nlp_shout_min_requests:
+            return False, {}
+        rate = shout_requests / float(total_requests)
+        if rate <= self._nlp_shout_threshold:
+            return False, {}
+        last_alert = self._nlp_shout_last_alert.get(subject, float("-inf"))
+        if now - last_alert < self._nlp_shout_alert_cooldown_s:
+            return False, {}
+        details = {
+            "rate": round(rate, 3),
+            "total_requests": total_requests,
+            "shout_requests": shout_requests,
+            "window_s": int(self._nlp_shout_window_s),
+        }
+        self._maybe_emit_nlp_alert(
+            {
+                "kind": "nlp_shout_rate_anomaly_per_subject",
+                "severity": "warn",
+                "subject": subject,
+                "reason": (
+                    f"Shout rate {rate:.3f} over the last {int(self._nlp_shout_window_s)}s for subject={subject}."
+                ),
+                "details": details,
+                "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        )
+        self._nlp_shout_last_alert[subject] = now
+        return True, details
+
+    def record_nlp_sarcasm_cue(self, cue_id: str) -> None:
+        """
+        Record a sarcasm cue observation and emit a week-over-week drift alert.
+        """
+        if not isinstance(cue_id, str) or not cue_id.strip():
+            cue_id = "unknown"
+        if _PROMETHEUS_AVAILABLE and NLP_SARCASM_CUE_FIRE_RATE:
+            try:
+                NLP_SARCASM_CUE_FIRE_RATE.labels(cue_id=cue_id).observe(1.0)
+            except Exception:  # noqa: BLE001
+                pass
+
+        now = self._clock()
+        samples = self._nlp_sarcasm_cue_samples.setdefault(cue_id, [])
+        samples.append(now)
+        cutoff = now - 2.0 * self._nlp_sarcasm_cue_window_s
+        samples = [ts for ts in samples if ts >= cutoff]
+        self._nlp_sarcasm_cue_samples[cue_id] = samples
+
+        prior_window_end = now - self._nlp_sarcasm_cue_window_s
+        previous_count = sum(1 for ts in samples if cutoff <= ts < prior_window_end)
+        current_count = sum(1 for ts in samples if ts >= prior_window_end)
+        if previous_count < 5 or current_count < 5:
+            return
+
+        drift_ratio = abs(current_count - previous_count) / float(previous_count)
+        if drift_ratio <= 0.5:
+            return
+
+        last_alert = self._nlp_sarcasm_cue_last_alert.get(cue_id, float("-inf"))
+        if now - last_alert < self._nlp_sarcasm_cue_alert_cooldown_s:
+            return
+
+        self._maybe_emit_nlp_alert(
+            {
+                "kind": "sarcasm_cue_rate_drift",
+                "severity": "info",
+                "subject": cue_id,
+                "reason": (
+                    f"Week-over-week cue count for {cue_id!r} shifted "
+                    f"from {previous_count} to {current_count}."
+                ),
+                "details": {
+                    "cue_id": cue_id,
+                    "previous_week_count": previous_count,
+                    "current_week_count": current_count,
+                    "drift_ratio": round(drift_ratio, 3),
+                    "window_s": int(self._nlp_sarcasm_cue_window_s),
+                },
+                "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        )
+        self._nlp_sarcasm_cue_last_alert[cue_id] = now
+
+    def record_nlp_lexicon_coverage(self, intent_class: str, coverage_ratio: float) -> None:
+        """
+        Record lexicon coverage for a single NLP query by intent class.
+
+        Args:
+            intent_class: Closed-set NLP intent class label.
+            coverage_ratio: Fraction of resolvable tokens that hit the lexicon,
+                expected in [0.0, 1.0].
+        """
+        if coverage_ratio < 0.0 or coverage_ratio > 1.0:
+            return
+        if _PROMETHEUS_AVAILABLE and NLP_LEXICON_COVERAGE:
+            try:
+                NLP_LEXICON_COVERAGE.labels(intent_class=intent_class).observe(coverage_ratio)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+        self._record_nlp_lexicon_coverage_sample(intent_class, coverage_ratio)
+
+    def register_nlp_alert_callback(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        """Register a callback to receive NLP alert payloads from telemetry monitors."""
+        self._alert_callback = callback
+
+    def _maybe_emit_nlp_alert(self, payload: dict[str, Any]) -> None:
+        if self._alert_callback is None:
+            return
+        try:
+            self._alert_callback(payload)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Telemetry alert callback failed: %s", exc)
+
+    def _record_nlp_lexicon_coverage_sample(self, intent_class: str, coverage_ratio: float) -> None:
+        now = self._clock()
+        samples = self._nlp_lexicon_coverage_samples.setdefault(intent_class, [])
+        samples.append((now, coverage_ratio))
+        cutoff = now - self._nlp_lexicon_coverage_window_s
+        self._nlp_lexicon_coverage_samples[intent_class] = [
+            (ts, ratio) for ts, ratio in samples if ts >= cutoff
+        ]
+        values = sorted(ratio for _, ratio in self._nlp_lexicon_coverage_samples[intent_class])
+        if not values:
+            return
+        p50 = values[(len(values) - 1) // 2]
+        floor = float(getattr(Config(), "nlp_lexicon_coverage_p50_floor", 0.6))
+        if p50 < floor:
+            breach_start = self._nlp_lexicon_coverage_breach_start.get(intent_class)
+            if breach_start is None:
+                self._nlp_lexicon_coverage_breach_start[intent_class] = now
+                return
+            if now - breach_start < 1800.0:
+                return
+            last_alert = self._nlp_lexicon_coverage_last_alert.get(intent_class, float("-inf"))
+            if now - last_alert < 1800.0:
+                return
+            breaching = [
+                c
+                for c, start in self._nlp_lexicon_coverage_breach_start.items()
+                if start is not None and now - start >= 1800.0
+            ]
+            severity = "error" if len(breaching) >= 2 else "warn"
+            self._maybe_emit_nlp_alert(
+                {
+                    "kind": "lexicon_coverage_below_floor",
+                    "severity": severity,
+                    "subject": intent_class,
+                    "reason": (
+                        f"Lexicon coverage p50 for intent_class={intent_class} "
+                        f"is {p50:.2f}, below floor {floor:.2f} over the last hour."
+                    ),
+                    "details": {
+                        "intent_class": intent_class,
+                        "observed_p50": round(p50, 3),
+                        "window_s": self._nlp_lexicon_coverage_window_s,
+                    },
+                    "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+            )
+            self._nlp_lexicon_coverage_last_alert[intent_class] = now
+        else:
+            self._nlp_lexicon_coverage_breach_start.pop(intent_class, None)
+
+    def record_nlp_unresolved_token(self, token: str) -> None:
+        """
+        Track an unresolved token for the hourly top-k report.
+
+        Token values longer than the configured unredacted threshold are
+        replaced with a sha8-prefixed redaction placeholder to avoid PII
+        leakage.
+        """
+        if not token:
+            return
+        try:
+            now = time.monotonic()
+            if now - self._unresolved_token_window_start >= self._unresolved_token_window_s:
+                self._unresolved_token_counts.clear()
+                self._unresolved_token_window_start = now
+
+            if len(token) >= self._unresolved_token_max_unredacted_len:
+                token = f"[REDACTED:len={len(token)}:sha8={hashlib.sha256(token.encode('utf-8')).hexdigest()[:8].upper()}]"
+
+            self._unresolved_token_counts[token] += 1
+            if len(self._unresolved_token_counts) > self._unresolved_token_top_k:
+                self._prune_unresolved_tokens()
+        except Exception:  # noqa: BLE001
+            pass  # non-blocking
+
+    def _prune_unresolved_tokens(self) -> None:
+        """Keep only the top-k unresolved token counts.
+
+        This protects the in-memory rolling window from unbounded growth.
+        """
+        if len(self._unresolved_token_counts) <= self._unresolved_token_top_k:
+            return
+        self._unresolved_token_counts = collections.Counter(
+            dict(self._unresolved_token_counts.most_common(self._unresolved_token_top_k))
+        )
+
+    def get_nlp_unresolved_top_k(self, k: int | None = None) -> list[tuple[str, int]]:
+        """Return the current unresolved token top-k list."""
+        if k is None:
+            k = self._unresolved_token_top_k
+        return self._unresolved_token_counts.most_common(k)
 
     def record_nlp_dialect_normalization(self, dialect_class: str, count: int = 1) -> None:
         """

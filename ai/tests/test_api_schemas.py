@@ -13,6 +13,32 @@ from ai.swarm.sdk import schemas as bus_schemas
 
 SCHEMA_DIR = Path(__file__).parent.parent / "swarm" / "sdk" / "schemas"
 
+def _assert_additional_properties_false_at_nested_objects(schema: dict, path: str = "") -> None:
+    if isinstance(schema, dict):
+        is_object_schema = schema.get("type") == "object" or "properties" in schema
+        if is_object_schema:
+            is_open_kind_root = (
+                path and schema.get("properties", {}).get("kind", {}).get("x-enum-open")
+                and schema.get("additionalProperties") is not False
+            )
+            if not is_open_kind_root:
+                assert schema.get("additionalProperties") is False, (
+                    f"Schema node {path or '<root>'} must set additionalProperties=false"
+                )
+        for key, value in schema.items():
+            if key == "$ref":
+                continue
+            _assert_additional_properties_false_at_nested_objects(
+                value,
+                f"{path}/{key}" if path else key,
+            )
+    elif isinstance(schema, list):
+        for index, item in enumerate(schema):
+            _assert_additional_properties_false_at_nested_objects(
+                item,
+                f"{path}[{index}]",
+            )
+
 
 # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -289,10 +315,152 @@ class TestQaRequestV1AnswerFormatEnum:
         errors = bus_schemas.validate(self.TOPIC, payload)
         assert errors == [], f"Unexpected errors: {errors}"
 
+    def test_answer_format_whatsapp_4096_accepted(self):
+        payload = {**_valid_qa_request(), "answer_format": "whatsapp_4096"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_answer_format_sms_160_accepted(self):
+        payload = {**_valid_qa_request(), "answer_format": "sms_160"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_answer_format_tts_neutral_accepted(self):
+        payload = {**_valid_qa_request(), "answer_format": "tts_neutral"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
     def test_answer_format_invalid_rejected(self):
         payload = {**_valid_qa_request(), "answer_format": "html"}
         errors = bus_schemas.validate(self.TOPIC, payload)
         assert any("answer_format" in e.lower() or "enum" in e.lower() for e in errors)
+
+
+class TestQaRequestV1KeyboardHintEnum:
+    """Optional request metadata hint for keyboard layout detection."""
+    TOPIC = "qa.request.v1"
+
+    def test_keyboard_hint_q_accepted(self):
+        payload = {**_valid_qa_request(), "keyboard_hint": "q"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_keyboard_hint_unknown_accepted(self):
+        payload = {**_valid_qa_request(), "keyboard_hint": "unknown"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_keyboard_hint_invalid_rejected(self):
+        payload = {**_valid_qa_request(), "keyboard_hint": "dvorak"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert any("keyboard_hint" in e.lower() or "enum" in e.lower() for e in errors)
+
+
+class TestQaRequestV1RequestMetadata:
+    """Optional request metadata audit object on qa.request.v1."""
+    TOPIC = "qa.request.v1"
+
+    def test_request_metadata_accepted(self):
+        payload = {
+            **_valid_qa_request(),
+            "request_metadata": {
+                "input_source": "paste",
+                "keyboard_hint": "q",
+                "shout": True,
+                "stripped_tail": "source: twitter",
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_request_metadata_schema_is_closed(self):
+        schema = bus_schemas.load(self.TOPIC)
+        request_metadata = schema["properties"]["request_metadata"]
+        assert request_metadata.get("additionalProperties") is False
+
+    def test_request_metadata_preview_accepted(self):
+        payload = {
+            **_valid_qa_request(),
+            "request_metadata": {
+                "preview": True,
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_request_metadata_user_preferences_favorite_team_accepted(self):
+        payload = {
+            **_valid_qa_request(),
+            "request_metadata": {
+                "user_preferences": {
+                    "favorite_team": "gs",
+                },
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_request_metadata_client_format_max_version_accepted(self):
+        payload = {
+            **_valid_qa_request(),
+            "request_metadata": {
+                "client_format_max_version": 2,
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+
+class TestQaIntentV1RequestMetadata:
+    """Optional request metadata on qa.intent.v1 for downstream provenance."""
+    TOPIC = "qa.intent.v1"
+
+    def test_request_metadata_preview_accepted(self):
+        payload = {
+            "schema_version": 4,
+            "request_id": "req-001",
+            "qa_correlation_id": "corr-001",
+            "intent": "predict.match_outcome",
+            "intent_confidence": 0.92,
+            "entities": [],
+            "intent_distribution": [
+                {"intent": "predict.match_outcome", "probability": 0.92}
+            ],
+            "intent_model_version": "1.0.0",
+            "intent_calibration_version": "1.0.0",
+            "lexicon_versions": {},
+            "normalized_text": "gs maçı tahmin",
+            "confusables_resolved_count": 0,
+            "locale": "tr-TR",
+            "resolved_at_utc": "2026-05-27T10:00:00Z",
+            "request_metadata": {
+                "preview": True,
+                "shout": True,
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+
+class TestQaAnswerV1RequestMetadata:
+    """Optional request metadata on qa.answer.v1 for downstream provenance."""
+    TOPIC = "qa.answer.v1"
+
+    def test_request_metadata_preview_accepted(self):
+        payload = {
+            **_valid_qa_answer(),
+            "request_metadata": {
+                "preview": True,
+                "shout": True,
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_request_metadata_schema_is_closed(self):
+        schema = bus_schemas.load(self.TOPIC)
+        request_metadata = schema["properties"]["request_metadata"]
+        assert request_metadata.get("additionalProperties") is False
 
 
 # ── qa.intent.v1 locale enum (§10.17) ───────────────────────────────────
@@ -300,7 +468,7 @@ class TestQaRequestV1AnswerFormatEnum:
 def _valid_qa_intent() -> dict:
     """Minimal valid qa.intent.v1 payload."""
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "request_id": "req-001",
         "qa_correlation_id": "corr-001",
         "intent": "predict.match_outcome",
@@ -333,6 +501,41 @@ class TestQaIntentV1LocaleEnum:
         assert any("locale" in e.lower() or "enum" in e.lower() for e in errors), (
             f"Expected locale enum violation, got: {errors}"
         )
+
+    def test_qa_intent_v1_accepts_pragmatic_class(self) -> None:
+        payload = {**_valid_qa_intent(), "pragmatic_class": "confirmation_seeking"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"qa.intent.v1 validation failed: {errors}"
+
+    def test_qa_intent_v1_accepts_request_metadata_user_preferences(self) -> None:
+        payload = {
+            **_valid_qa_intent(),
+            "request_metadata": {
+                "user_preferences": {
+                    "favorite_team": "gs",
+                },
+            },
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"qa.intent.v1 validation failed: {errors}"
+
+    def test_qa_intent_v1_accepts_entity_syntactic_role(self) -> None:
+        payload = {
+            **_valid_qa_intent(),
+            "entities": [
+                {
+                    "span_start": 0,
+                    "span_end": 1,
+                    "kind": "team",
+                    "canonical_id": "gs",
+                    "confidence": 1.0,
+                    "source": "gazetteer",
+                    "syntactic_role": "ambiguous",
+                }
+            ],
+        }
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], f"qa.intent.v1 validation failed: {errors}"
 
 
 # ── qa.answer.v1 locale enum (§10.17) ───────────────────────────────────
@@ -494,6 +697,26 @@ class TestNlpSchemaParityGate:
         errors = bus_schemas.validate("qa.answer.v1", payload)
         assert errors == [], f"qa.answer.v1 validation failed for screen_reader: {errors}"
 
+    def test_qa_answer_v1_accepts_pragmatic_class_in_request_metadata(self) -> None:
+        payload = {
+            **_valid_qa_answer(),
+            "request_metadata": {"pragmatic_class": "confirmation_seeking"},
+        }
+        errors = bus_schemas.validate("qa.answer.v1", payload)
+        assert errors == [], f"qa.answer.v1 validation failed for pragmatic_class request_metadata: {errors}"
+
+    def test_qa_answer_v1_accepts_request_metadata_user_preferences(self) -> None:
+        payload = {
+            **_valid_qa_answer(),
+            "request_metadata": {
+                "user_preferences": {
+                    "favorite_team": "gs",
+                },
+            },
+        }
+        errors = bus_schemas.validate("qa.answer.v1", payload)
+        assert errors == [], f"qa.answer.v1 validation failed for user_preferences request_metadata: {errors}"
+
     def test_qa_answer_v1_accepts_compound_parts_with_schema_version_2(self):
         payload = {
             **_valid_qa_answer(),
@@ -510,6 +733,7 @@ class TestNlpSchemaParityGate:
                         "calibration_version": "1.0.0",
                     },
                     "subquery_correlation_id": "subquery-001",
+                    "polarity": "affirm",
                 }
             ],
         }
@@ -525,6 +749,18 @@ class TestNlpSchemaParityGate:
         }
         errors = bus_schemas.validate("nlp.event.v1", payload)
         assert errors == [], f"nlp.event.v1 validation failed: {errors}"
+
+    def test_nlp_event_v1_accepts_pro_drop_resolved(self):
+        payload = {
+            "kind": "pro_drop_resolved",
+            "producer": "nlp.dispatcher.v1",
+            "request_id": "req-pro-drop",
+            "source": "anaphora",
+            "resolved_entity_id": "gs",
+            "emitted_at": "2026-05-26T10:00:00Z",
+        }
+        errors = bus_schemas.validate("nlp.event.v1", payload)
+        assert errors == [], f"nlp.event.v1 validation failed for pro_drop_resolved: {errors}"
     
     def test_nlp_alert_v1_can_validate_minimal_payload(self):
         """nlp.alert.v1 schema accepts a minimal valid payload."""
@@ -536,4 +772,18 @@ class TestNlpSchemaParityGate:
         alert_schema = bus_schemas.load("nlp.alert.v1")
         description = alert_schema["properties"]["kind"]["description"]
         assert "excessive_combining_marks" in description
+
+
+class TestWireSchemasNestedAdditionalPropertiesFalse:
+    def test_qa_and_nlp_schemas_have_additional_properties_false_at_every_object(self):
+        topics = sorted(
+            topic
+            for topic in bus_schemas.known_topics()
+            if topic.startswith("qa.") or topic.startswith("nlp.")
+        )
+        assert topics, "expected qa.* and nlp.* topics in known_topics()"
+
+        for topic in topics:
+            schema = bus_schemas.load(topic)
+            _assert_additional_properties_false_at_nested_objects(schema, path=topic)
 

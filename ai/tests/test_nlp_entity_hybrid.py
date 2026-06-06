@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import yaml
 from common.config import cfg
 
 import pytest
@@ -37,6 +38,7 @@ from nlp.entity import (
     _build_combined_alias_index,
     _bio_to_spans,
     _load_negative_rules,
+    _load_venue_alias_index,
     _merge_two_pass_gazetteer,
     _resolve_conflicts,
     gazetteer_pass,
@@ -44,6 +46,7 @@ from nlp.entity import (
     resolve_polarity,
 )
 from nlp.lexicon_loader import AliasHit, LexiconStore
+from nlp.pronouns_irregular import load_pronouns_irregular_map
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -135,6 +138,22 @@ def test_default_kind_priority_covers_all_kinds() -> None:
     assert all_kinds == set(DEFAULT_KIND_PRIORITY)
 
 
+def test_venue_table_entries_can_be_loaded_and_extracted(tmp_path: Path) -> None:
+    store = _make_store_with_teams(tmp_path)
+    extractor = EntityExtractor(store=store)
+    result = extractor.extract(["türk", "telekom", "stadyumu"])
+    assert any(
+        span.kind == "venue" and span.canonical_id == "galatasaray"
+        for span in result.spans
+    )
+
+
+def test_load_venue_alias_index_reads_lang_tr_table() -> None:
+    index = _load_venue_alias_index()
+    assert index.get("Türk Telekom Stadyumu") is not None
+    assert index.get("Vodafone Park") is not None
+
+
 def test_honorific_table_loaded_with_role_classes(tmp_path: Path) -> None:
     lexdir = tmp_path / "lexicon"
     lexdir.mkdir()
@@ -190,6 +209,154 @@ entries:
     assert kinds == ["role_prefix", "player"]
     assert result.spans[0].canonical_id == "manager"
     assert result.spans[1].canonical_id == "buruk_id"
+
+
+def test_pronoun_irregular_table_loads() -> None:
+    pronoun_map = load_pronouns_irregular_map()
+    assert pronoun_map["bana"].canonical == "ben"
+    assert pronoun_map["bana"].case == "dative"
+
+
+def test_nlp_pronouns_skip_lexicon(tmp_path: Path) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "teams.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: \"2026-01-01T00:00:00Z\"
+  generator: test
+entries:
+  - canonical_id: bana_team
+    names:
+      - Bana FC
+    aliases:
+      - bana
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: \"2026-01-01T00:00:00Z\"
+  generator: test
+entries: []
+""",
+        encoding="utf-8",
+    )
+    pronoun_dir = tmp_path / "pronoun"
+    pronoun_dir.mkdir()
+    (pronoun_dir / "pronouns_irregular.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: \"1.0.0\"
+  generated_at_utc: \"2026-06-06T00:00:00Z\"
+  generator: test
+entries:
+  - pronoun: ben
+    case: dative
+    surface: bana
+    canonical: ben
+""",
+        encoding="utf-8",
+    )
+
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+    mock_crf = MagicMock(spec=CrfExtractor)
+    mock_crf.extract.return_value = [
+        EntitySpan(0, 1, "date", "", 1.0, "", "crf"),
+    ]
+    extractor = EntityExtractor(
+        store=store,
+        crf=mock_crf,
+        pronouns_path=pronoun_dir / "pronouns_irregular.tr.yaml",
+    )
+    result = extractor.extract(["bana"])
+
+    assert result.spans == [
+        EntitySpan(0, 1, "pronoun", "ben", 1.0, "", "pronoun"),
+    ]
+    assert result.ambiguous == []
+    assert result.pii_dropped == []
+
+
+def test_nlp_verbal_noun_ambiguity_subject_polarity(tmp_path: Path) -> None:
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir()
+    (lexdir / "teams.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries:
+  - canonical_id: gs
+    names:
+      - Galatasaray
+    aliases:
+      - galatasaray
+""",
+        encoding="utf-8",
+    )
+    (lexdir / "entities_negative.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-01-01T00:00:00Z"
+  generator: test
+entries: []
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "verbal_nouns.tr.yaml").write_text(
+        """\
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-06T00:00:00Z"
+  generator: test
+entries:
+  - suffix: mak
+    kind: infinitive
+    source: manual
+  - suffix: mek
+    kind: infinitive
+    source: manual
+  - suffix: ma
+    kind: nominalisation
+    source: manual
+  - suffix: me
+    kind: nominalisation
+    source: manual
+""",
+        encoding="utf-8",
+    )
+
+    store = LexiconStore(lexdir, reload_s=9999, max_rss_mb=0)
+    store.maybe_reload()
+    extractor = EntityExtractor(store, verbal_nouns_path=tmp_path / "verbal_nouns.tr.yaml")
+
+    result_subject = extractor.extract(["galatasarayın", "oynaması"])
+    assert result_subject.spans == [
+        EntitySpan(0, 1, "team", "gs", 1.0, "", "gazetteer", "entity_subject"),
+    ]
+
+    result_object = extractor.extract(["galatasaray", "oynamak"])
+    assert result_object.spans == [
+        EntitySpan(0, 1, "team", "gs", 1.0, "", "gazetteer", "entity_object"),
+    ]
+
+    result_ambiguous = extractor.extract(["galatasaray", "oynaması"])
+    assert result_ambiguous.spans == [
+        EntitySpan(0, 1, "team", "gs", 1.0, "", "gazetteer", "ambiguous"),
+    ]
 
 
 def test_nlp_lastname_resolution_prefers_currently_active_player(tmp_path: Path) -> None:

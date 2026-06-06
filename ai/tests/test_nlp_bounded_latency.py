@@ -91,20 +91,31 @@ class TestBuildPayload:
 class TestCmdNlpBench:
     """Test exit codes under injected timing conditions."""
 
-    def _run_with_fake_timings(self, timings_ms: List[float]) -> int:
-        """Run cmd_nlp_bench with perf_counter mocked to emit *timings_ms*."""
-        # Convert ms to s pairs for perf_counter: each call tick returns
-        # the accumulated time so that t1 - t0 == timing_s per iteration.
+    def _run_with_fake_timings(
+        self,
+        keyboard_timings_ms: List[float],
+        voice_timings_ms: list[float] | None = None,
+    ) -> int:
+        """Run cmd_nlp_bench with perf_counter mocked to emit timing pairs."""
+        if voice_timings_ms is None:
+            voice_timings_ms = keyboard_timings_ms
+        if len(voice_timings_ms) != len(keyboard_timings_ms):
+            raise ValueError("keyboard_timings_ms and voice_timings_ms must match length")
+
         times_s: List[float] = []
         accumulated = 0.0
-        for t_ms in timings_ms:
-            times_s.append(accumulated)          # t0
-            accumulated += t_ms / 1_000.0
-            times_s.append(accumulated)          # t1
+        for keyboard_ms in keyboard_timings_ms:
+            times_s.append(accumulated)          # keyboard t0
+            accumulated += keyboard_ms / 1_000.0
+            times_s.append(accumulated)          # keyboard t1
+        for voice_ms in voice_timings_ms:
+            times_s.append(accumulated)          # voice t0
+            accumulated += voice_ms / 1_000.0
+            times_s.append(accumulated)          # voice t1
         # Pad with zeros so repeated calls beyond our list don't raise.
         times_s.extend([accumulated] * 4)
 
-        iter_count = len(timings_ms)
+        iter_count = len(keyboard_timings_ms)
         with patch("xops.makefile.nlp._ITERATIONS", iter_count):
             with patch("time.perf_counter", side_effect=times_s):
                 return cmd_nlp_bench([])
@@ -128,6 +139,16 @@ class TestCmdNlpBench:
         # 96 fast + 4 at 4.9 ms (just under threshold): p95 < 5 ms.
         timings = [0.1] * 96 + [4.9] * 4
         assert self._run_with_fake_timings(timings) == 0
+
+    def test_voice_overhead_allowed_returns_0(self) -> None:
+        keyboard = [0.5] * 100
+        voice = [2.0] * 100
+        assert self._run_with_fake_timings(keyboard, voice) == 0
+
+    def test_voice_overhead_exceeds_returns_1(self) -> None:
+        keyboard = [0.5] * 100
+        voice = [4.0] * 100
+        assert self._run_with_fake_timings(keyboard, voice) == 1
 
 
 # ---------------------------------------------------------------------------

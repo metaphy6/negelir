@@ -1,0 +1,11 @@
+version: 1
+intents:
+  predict.match_outcome:
+    - kind: team
+      count: 2
+    - kind: kickoff_or_recent
+      count: 1
+  data.kickoff_time:
+    - kind: team
+      count: 2
+  meta.help: []

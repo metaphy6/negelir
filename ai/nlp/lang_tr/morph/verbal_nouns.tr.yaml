@@ -1,0 +1,18 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-06T00:00:00Z"
+  generator: manual
+entries:
+  - suffix: mak
+    kind: infinitive
+    source: manual
+  - suffix: mek
+    kind: infinitive
+    source: manual
+  - suffix: ma
+    kind: nominalisation
+    source: manual
+  - suffix: me
+    kind: nominalisation
+    source: manual

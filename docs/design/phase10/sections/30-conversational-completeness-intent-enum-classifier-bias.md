@@ -433,7 +433,7 @@
   window aggregated into the §10.27.6 coordinated-abuse detector
   signal set as a soft input (high repeat-rate from a single
   client_id across conversations is a rate-limit-evasion signal).
-- [ ] **Cache-vs-fresh decision.** Repeat-detected → serve from
+- [x] **Cache-vs-fresh decision.** Repeat-detected → serve from
   cache IF `qa.answer.v1.cached_at` is within `nlp_repeated_query_cache_max_age_s=60`
   (NOT the regular cache TTL — repeat-context demands tighter
   freshness); else re-fetch even on cache hit. Mitigates the
@@ -447,7 +447,7 @@
 
 #### 10.30.10 Slur-obfuscation defense (`s*ktir`, `am*na`, `o.ç`)
 
-- [ ] **Closed `offensive_obfuscated.tr.yaml`** lists ≥ 80 known
+- [x] **Closed `offensive_obfuscated.tr.yaml`** lists ≥ 80 known
   obfuscation patterns for Turkish slurs (asterisk-replacement,
   dot-replacement, leetspeak, cyrillic-homoglyph variants beyond
   §10.21.5 confusables, intentional-typo `şktir`). Each row pairs
@@ -455,12 +455,12 @@
   regex-allowed-context (slurs in football commentary about an
   *event* — *"hakem o.ç gibi davrandı"* — are still slurs;
   no whitelist for "context").
-- [ ] **Detection runs AFTER §10.21.5 confusables fold + §10.28.x
+- [x] **Detection runs AFTER §10.21.5 confusables fold + §10.28.x
   PII redaction, BEFORE classifier.** Match → token replaced with
   canonical slur form, then routed via §10.22.9 offensive gate
   (existing closed refusal template). Defends against the
   user-evades-by-asterisk class.
-- [ ] **PR-time review gate.** `offensive_obfuscated.tr.yaml` is
+- [x] **PR-time review gate.** `offensive_obfuscated.tr.yaml` is
   in the §10.25.6 high-leverage table; CODEOWNERS requires
   `nlp-curator` + `nlp-compliance` (existing roles, no new role
   needed). The CI gate `test_offensive_obfuscated_pattern_min_coverage`
@@ -468,12 +468,12 @@
   (the source of canonical slurs) has at least 2 obfuscation
   variants in this file (one asterisk-style, one
   dot/separator-style minimum).
-- [ ] **False-positive guardrail.** Pattern `o.ç` could match
+- [x] **False-positive guardrail.** Pattern `o.ç` could match
   legitimate text *"3 üst, 2.5 ç(eyrek)"* etc.; each pattern row
   carries a `context_negation_regex` that vetoes the match. Any
   veto → emit `nlp.event.v1{kind=obfuscated_slur_negated, pattern_id}`
   for false-positive observability and future tuning.
-- [ ] **Proof:** `test_obfuscated_slur_table_min_coverage_per_canonical`,
+- [x] **Proof:** `test_obfuscated_slur_table_min_coverage_per_canonical`,
   `test_obfuscated_slur_detected_after_confusables_fold`,
   `test_obfuscated_slur_routes_through_offensive_gate`,
   `test_obfuscated_slur_context_negation_vetoes_match`,
@@ -491,18 +491,18 @@
   context emits `nlp.event.v1{kind=historical_venue_mentioned}`),
   plus all Süper Lig + 1. Lig home venues. Sponsor-renamed entries
   carry `aka` aliases (per §10.24.7 sponsor-seasonality).
-- [ ] **Inference confidence cap.** Venue-only mention (no explicit
+- [x] **Inference confidence cap.** Venue-only mention (no explicit
   team) infers home team but caps `entity.team.confidence ≤ nlp_venue_inferred_team_confidence_cap=0.70`;
   the dispatcher cross-checks against
   `data.fixture_lookup{venue, date_range}` BEFORE committing
   (the venue could host a neutral-ground fixture — a cup final,
   Milli Takım match). Mismatch → ask disambiguation, never silent
   pick.
-- [ ] **Cross-language byte parity.** `venues.tr.yaml` is consumed by
+- [x] **Cross-language byte parity.** `venues.tr.yaml` is consumed by
   Phase 9 gateway venue-search endpoint AND by NLP entity
   extractor; SHA-pinned with cross-language gate (mirrors
   §10.30.1 intent-enum pattern).
-- [ ] **Proof:** `test_venue_table_covers_all_active_super_lig_venues`,
+- [x] **Proof:** `test_venue_table_covers_all_active_super_lig_venues`,
   `test_venue_inference_confidence_capped`,
   `test_venue_inference_cross_checks_fixture_lookup`,
   `test_venue_inference_disambiguates_on_neutral_ground_fixture`,
@@ -536,7 +536,7 @@
 
 #### 10.30.13 Cross-conversation entity-graph staleness (re-resolve before answer)
 
-- [ ] **Per-conversation entity-state TTL.** Each entity in the
+- [x] **Per-conversation entity-state TTL.** Each entity in the
   conversation context (§10.25.1) carries
   `last_resolved_state_at` and `state_class ∈ {pre_match, live,
   post_match, postponed, cancelled}`. On every subsequent turn
@@ -546,49 +546,49 @@
   - `pre_match` entity, age > `nlp_entity_pre_match_max_stale_s=300` (5 min) → re-resolve via `data.request.v1{kind=fixture_state}`
   - `live` entity, age > `nlp_entity_live_max_stale_s=30` (30 sec) → re-resolve
   - `post_match` entity, age > `nlp_entity_post_match_max_stale_s=3600` (1 hr) → re-resolve
-- [ ] **State-change disclosure.** If re-resolution returns a
+- [x] **State-change disclosure.** If re-resolution returns a
   state-class-different value (`pre_match → live`, `pre_match →
   postponed`, `live → post_match`), prepend closed-template
   Turkish disclosure *"Bahsettiğiniz [X] maçının durumu değişmiş:
   şimdi [Y]."* before the answer. Defends against the silent
   served-stale-tense answer.
-- [ ] **State-change cache invalidation.** State-change → invalidate
+- [x] **State-change cache invalidation.** State-change → invalidate
   L0 + L1 cache entries for that entity (subject_key prefix scan
   on Redis L1 via §9.17.6 keyspace-notification, in-process
   iteration on L0). Mirrors right-to-erasure §10.25.9 pattern.
-- [ ] **Proof:** `test_entity_state_ttl_per_class`,
+- [x] **Proof:** `test_entity_state_ttl_per_class`,
   `test_entity_state_change_disclosure_template_prepended`,
   `test_entity_state_change_invalidates_caches`,
   `test_entity_state_change_invalidation_uses_keyspace_notification`.
 
 #### 10.30.14 Boot-time corpus regression test (dev / CI only)
 
-- [ ] **200-row golden corpus** (`ai/swarm/agents/nlp/tests/data/boot_regression_corpus.jsonl`)
+- [x] **200-row golden corpus** (`ai/swarm/agents/nlp/tests/data/boot_regression_corpus.jsonl`)
   curated from PII-scrubbed, anonymized prior production traffic
   (per §10.27.x training-data exclusion rules — rows MUST come
   from approved, non-degraded, non-quarantined emissions; the
   curation pipeline is the same as eval-set §10.18). Each row
   carries the input + expected `(intent_id, top_3_entities,
   intent_modifier)` baseline.
-- [ ] **Boot probe runs in dev / CI only** (`NEGELIR_PROFILE in
+- [x] **Boot probe runs in dev / CI only** (`NEGELIR_PROFILE in
   {dev, ci}`); never in prod (cost + boot-time concerns). Replay
   every row through the full normalize → classifier → extractor
   pipeline; any drift on `(intent_id)` or top-1 entity → boot
   failure (CI) / boot warning (dev). Drift on top-2 / top-3
   entity or modifier → warning only.
-- [ ] **Curation-vs-CI separation.** The boot-corpus is NEVER
+- [x] **Curation-vs-CI separation.** The boot-corpus is NEVER
   used as classifier training data (§10.27.x training-vs-eval
   membership manifest invariant carries through). The corpus is
   versioned with its own `boot_corpus_version` (semver) and is
   refreshed on a quarterly cadence; refresh requires
   `nlp-curator` + `nlp-compliance` two-reviewer rule.
-- [ ] **Drift-tolerance schedule.** v1 ships with strict
+- [x] **Drift-tolerance schedule.** v1 ships with strict
   zero-tolerance on `intent_id`; allows `top_1_entity` drift at
   ≤ 2 rows out of 200 (one classifier minor-version retrain can
   legitimately shift one or two boundary cases). Tolerance
   ratchets down to ≤ 1 row at v2 and 0 at v3; tracked in
   ROADMAP §10.30.14 sub-bullet.
-- [ ] **Proof:** `test_boot_corpus_min_row_count`,
+- [x] **Proof:** `test_boot_corpus_min_row_count`,
   `test_boot_corpus_intent_drift_zero_tolerance`,
   `test_boot_corpus_top1_entity_drift_within_tolerance`,
   `test_boot_corpus_not_in_classifier_training_data_manifest`,
@@ -596,7 +596,7 @@
 
 #### 10.30.15 Cross-phase impact, configuration knobs, and event/alert kinds
 
-- [ ] **Cross-phase impact.**
+- [x] **Cross-phase impact.**
   - Phase 9 gateway: consumes `intent_enum_spec.json` (§10.30.1) +
     `venues.tr.yaml` (§10.30.11) cross-language; refuses boot on
     SHA mismatch.
@@ -626,7 +626,7 @@
     §10.30.13 disclosure prepend); `chaos.repeated-query-burst`
     (validates §10.30.9 thresholds without false-firing the
     coordinated-abuse detector).
-- [ ] **Configuration knobs (~22 new keys, §10.19 triangle update).**
+- [x] **Configuration knobs (~22 new keys, §10.19 triangle update).**
   | Key | Default | Purpose |
   |---|---|---|
   | `nlp_intent_enum_v4_enabled` | `true` | Hard cutover guard for the additive intent-enum bump. |
@@ -651,7 +651,7 @@
   | `nlp_entity_live_max_stale_s` | `30` | Live entity-state TTL. |
   | `nlp_entity_post_match_max_stale_s` | `3600` | Post-match entity-state TTL. |
   | `nlp_boot_corpus_top1_entity_drift_max_rows` | `2` | v1 drift tolerance. |
-- [ ] **Event/alert kind inventory (additive-only, CODEOWNERS-protected
+- [x] **Event/alert kind inventory (additive-only, CODEOWNERS-protected
   closed enums per §10.27.6 / §10.28.13).**
   - `nlp.event.v1` new kinds: `intent_decision_breakdown`,
     `idiom_expansion`, `idiom_ambiguous`, `asr_punctuation_word_stripped`,
@@ -660,7 +660,7 @@
   - `nlp.alert.v1` new kinds: `wh_prior_drift` (warn),
     `politeness_distribution_drift` (info),
     `cache_subject_key_collision` (critical).
-- [ ] **CODEOWNERS additions.** New file group:
+- [x] **CODEOWNERS additions.** New file group:
   `ai/common/nlp/intent_enum_spec.json`,
   `ai/nlp/lang_tr/wh_intent_map.tr.yaml`,
   `ai/nlp/lang_tr/idioms.tr.yaml`,
@@ -680,11 +680,11 @@
   `nlp-compliance`. `intent_enum_spec.json` additionally
   requires Go owner (cross-language single-source per §10.30.1).
   `make verify.nlp-codeowners` CI-gated.
-- [ ] **Versioning.** `swarm` minor (additive intent-enum bump +
+- [x] **Versioning.** `swarm` minor (additive intent-enum bump +
   new closed tables + new `intent_modifier=conditional` enum
   value) + `docs` minor in same commit. Chart compatibility
   block re-pinned (no new third-party deps; uses existing
   Zemberek + Symspell + python-crfsuite stack).
-- [ ] **Tracker row + ROADMAP checkbox flips** per AGENTS.md §3 + §3.4
+- [x] **Tracker row + ROADMAP checkbox flips** per AGENTS.md §3 + §3.4
   — every checkbox in §10.30.1–§10.30.15 flipped to `[x]` at landing,
   with §10.20 DoD item 28 also flipped.

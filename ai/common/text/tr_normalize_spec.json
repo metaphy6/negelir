@@ -1,0 +1,14 @@
+{
+  "spec_version": 1,
+  "description": "Phase 10 cross-language TR normalize parity specification.",
+  "steps": [
+    "nfc",
+    "strip_control",
+    "lowercase_tr"
+  ],
+  "mappings": {
+    "I": "ı",
+    "İ": "i"
+  },
+  "length_cap_key": "nlp_input_max_codepoints"
+}

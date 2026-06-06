@@ -310,6 +310,13 @@ type Config struct {
 	// invalidation on this value. Must be ≥ 1. Default 1.
 	APISchemaVersion int `env:"NEGELIR_API_SCHEMA_VERSION" default:"1"`
 
+	// Phase 10 §10.27.7 — minimum supported QA answer schema version.
+	// Older clients are warned with Sunset/Deprecation headers and eventually
+	// refused with 426 Upgrade Required.
+	QAAnswerMinSupportedVersion int    `env:"NEGELIR_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION" default:"1"`
+	QAAnswerSunsetOnUTC         string `env:"NEGELIR_NLP_QA_ANSWER_SUNSET_ON_UTC" default:""`
+	QAAnswerSunsetWindowDays    int    `env:"NEGELIR_NLP_QA_ANSWER_SUNSET_WINDOW_DAYS" default:"182"`
+
 	// Phase 9 §9.12 — §9.12 knob inventory additions.
 	// Maximum number of days ahead a fixture query may request. Requests
 	// outside this window are rejected with 400 fixture_window_exceeded.
@@ -814,6 +821,18 @@ func (c *Config) Validate() error {
 	if c.APISchemaVersion < 1 {
 		return fmt.Errorf("NEGELIR_API_SCHEMA_VERSION=%d must be ≥ 1", c.APISchemaVersion)
 	}
+	// §10.27.7 — QA answer minimum supported version must be a positive integer.
+	if c.QAAnswerMinSupportedVersion < 1 {
+		return fmt.Errorf("NEGELIR_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION=%d must be ≥ 1", c.QAAnswerMinSupportedVersion)
+	}
+	if c.QAAnswerSunsetWindowDays < 1 {
+		return fmt.Errorf("NEGELIR_NLP_QA_ANSWER_SUNSET_WINDOW_DAYS=%d must be ≥ 1", c.QAAnswerSunsetWindowDays)
+	}
+	if c.QAAnswerSunsetOnUTC != "" {
+		if _, err := time.Parse(time.RFC3339, c.QAAnswerSunsetOnUTC); err != nil {
+			return fmt.Errorf("NEGELIR_NLP_QA_ANSWER_SUNSET_ON_UTC=%q must be RFC3339 UTC: %v", c.QAAnswerSunsetOnUTC, err)
+		}
+	}
 	// §9.17.1 — Go runtime tuning validators.
 	if c.APIGoMemLimitMiB < 0 {
 		return fmt.Errorf("NEGELIR_API_GO_MEM_LIMIT_MIB=%d must be ≥ 0 (0 = derive from cgroup)", c.APIGoMemLimitMiB)
@@ -1055,8 +1074,12 @@ func (c *Config) specs() []fieldSpec {
 		// Phase 9 §9.11 — deprecation window.
 		{name: "NEGELIR_API_DEPRECATION_WINDOW_DAYS", dflt: "90", intDst: &c.APIDeprecationWindowDays},
 
-		// Phase 9 §9.11 — schema-version stamp.
-		{name: "NEGELIR_API_SCHEMA_VERSION", dflt: "1", intDst: &c.APISchemaVersion},
+	// Phase 10 §10.27.7 — minimum supported QA answer schema version.
+	// Older clients are warned with Sunset/Deprecation headers and eventually
+	// refused with 426 Upgrade Required.
+	{name: "NEGELIR_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION", dflt: "1", intDst: &c.QAAnswerMinSupportedVersion},
+	{name: "NEGELIR_NLP_QA_ANSWER_SUNSET_ON_UTC", dflt: "", stringDst: &c.QAAnswerSunsetOnUTC},
+	{name: "NEGELIR_NLP_QA_ANSWER_SUNSET_WINDOW_DAYS", dflt: "182", intDst: &c.QAAnswerSunsetWindowDays},
 
 		// Phase 9 §9.12 — fixture window, allowed markets, trusted proxy list.
 		{name: "NEGELIR_API_FIXTURE_WINDOW_MAX_DAYS", dflt: "14",  intDst:    &c.APIFixtureWindowMaxDays},

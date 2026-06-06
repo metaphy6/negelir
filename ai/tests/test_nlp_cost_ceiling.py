@@ -9,6 +9,11 @@ Per AGENTS.md Rule 10: happy paths + adversarial / timeout paths.
 from __future__ import annotations
 
 import itertools
+import os
+import signal
+import time
+
+import pytest
 from typing import Iterator
 
 
@@ -16,12 +21,41 @@ from typing import Iterator
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _fake_cfg(timeout_ms: int):
-    """Return a minimal config stub with only the fields normalize needs."""
-    return type("FakeCfg", (), {
-        "nlp_input_max_codepoints": 512,
-        "nlp_normalize_stage_timeout_ms": timeout_ms,
-    })()
+def _fake_cfg(
+    timeout_ms: int,
+    cpu_budget_ms: int = 200,
+    cpu_budget_with_humanizer_ms: int = 800,
+    cpu_budget_min_ms: int = 50,
+    rss_budget_mb: int = 128,
+    rss_budget_swap_grace_mb: int = 0,
+):
+    """Return a test config instance with the requested NLP budget overrides."""
+    from common.config import Config
+
+    cfg = Config()
+    cfg.nlp_normalize_stage_timeout_ms = timeout_ms
+    cfg.nlp_per_request_cpu_budget_ms = cpu_budget_ms
+    cfg.nlp_per_request_cpu_budget_with_humanizer_ms = cpu_budget_with_humanizer_ms
+    cfg.nlp_per_request_cpu_budget_min_ms = cpu_budget_min_ms
+    cfg.nlp_per_request_rss_budget_mb = rss_budget_mb
+    cfg.nlp_per_request_rss_budget_swap_grace_mb = rss_budget_swap_grace_mb
+    return cfg
+
+
+def test_nlp_request_grace_during_lexicon_swap_window() -> None:
+    from nlp.runtime.budget import RequestBudget
+    from nlp.lexicon_loader import _set_last_lexicon_rebuild_start_mono, _set_last_lexicon_rebuild_complete_mono
+
+    now = time.monotonic()
+    _set_last_lexicon_rebuild_start_mono(now)
+    _set_last_lexicon_rebuild_complete_mono(now)
+    try:
+        cfg = _fake_cfg(timeout_ms=20_000, rss_budget_mb=1, rss_budget_swap_grace_mb=64)
+        with RequestBudget(cfg=cfg) as budget:
+            assert budget._rss_budget_mb == 65
+    finally:
+        _set_last_lexicon_rebuild_start_mono(None)
+        _set_last_lexicon_rebuild_complete_mono(None)
 
 
 def _infinite_clock(step_ms: float = 0.0) -> Iterator[float]:
@@ -147,11 +181,17 @@ class TestCostCeilingTimeout:
         cfg = _fake_cfg(timeout_ms=20)
         result = normalize_input("galatasaray mac", cfg=cfg, _clock=slow_clock)
         expected = (
-            "length_cap", "canonical_normalize", "confusables_fold", "digit_letter_fold", "lowercase_tr",
-            "punct_normalize", "diacritic_restore", "regional_dialect_normalize",
-            "apostrophe_proper_noun_repair", "tokenize", "repeat_collapse",
-            "particle_normalize", "postposition_stack", "dialect_normalize",
-            "typo_correct",
+            "length_cap", "html_entity_unescape", "canonical_normalize",
+            "compose_turkish_dotted_i", "confusables_fold", "digit_letter_fold",
+            "lowercase_tr", "obfuscated_slur_normalize", "punct_normalize",
+            "citation_tail_strip", "social_hygiene", "emoji_hint_extract",
+            "diacritic_restore", "strip_preamble", "regional_dialect_normalize",
+            "apostrophe_proper_noun_repair", "tokenize", "split_questions",
+            "strip_combining_marks", "repeat_collapse", "reduplication_collapse",
+            "predictive_overshoot", "inline_self_correction", "compound_split", "particle_normalize",
+            "assimilation_fold", "postposition_stack", "consonant_alternation",
+            "vowel_drop_before_suffix", "loanword_singularisation",
+            "geminate_restoration", "dialect_normalize", "typo_correct",
         )
         assert result.steps_run == expected, (
             f"steps_run mismatch: {result.steps_run}"
@@ -205,6 +245,97 @@ class TestCostCeilingStep8Timeout:
         return lambda: next(gen)
 
 
+class TestRequestBudgetRuntimeGuard:
+    """Budget enforcement for per-request NLP execution."""
+
+    def test_request_budget_raises_when_cpu_budget_exceeded(self) -> None:
+        from nlp.normalize import normalize_input
+        from nlp.runtime.budget import BudgetExceeded
+
+        from nlp.runtime.budget import BudgetExceeded, RequestBudget
+
+        cfg = _fake_cfg(timeout_ms=20_000, cpu_budget_ms=1, rss_budget_mb=1_000_000)
+        with pytest.raises(BudgetExceeded):
+            with RequestBudget(cfg=cfg, humanizer=False):
+                for _ in range(10_000_000):
+                    pass
+
+    def test_request_budget_uses_humanizer_budget_when_humanizer_true(self) -> None:
+        from nlp.runtime.budget import BudgetExceeded, RequestBudget
+
+        cfg = _fake_cfg(
+            timeout_ms=20_000,
+            cpu_budget_ms=1_000,
+            cpu_budget_with_humanizer_ms=1,
+            rss_budget_mb=1_000_000,
+        )
+        with pytest.raises(BudgetExceeded):
+            with RequestBudget(cfg=cfg, humanizer=True):
+                for _ in range(10_000_000):
+                    pass
+
+    def test_request_budget_restores_signal_timer_and_handler(self) -> None:
+        from nlp.runtime.budget import RequestBudget
+
+        cfg = _fake_cfg(timeout_ms=20_000)
+        old_handler = signal.getsignal(signal.SIGPROF)
+        old_timer = signal.getitimer(signal.ITIMER_PROF)
+        try:
+            with RequestBudget(cfg=cfg, humanizer=False):
+                assert signal.getsignal(signal.SIGPROF) != old_handler
+                current_timer = signal.getitimer(signal.ITIMER_PROF)
+                assert current_timer[0] > 0.0
+            assert signal.getsignal(signal.SIGPROF) == old_handler
+            restored_timer = signal.getitimer(signal.ITIMER_PROF)
+            assert restored_timer[0] == pytest.approx(old_timer[0], abs=0.05)
+            assert restored_timer[1] == pytest.approx(old_timer[1], abs=0.05)
+        finally:
+            signal.signal(signal.SIGPROF, old_handler)
+            signal.setitimer(signal.ITIMER_PROF, *old_timer)
+
+
+class TestBudgetExhaustionDegradedPath:
+    """BudgetExceeded must degrade gracefully to template-only mode."""
+
+    def test_nlp_runaway_normalize_cpu_budget_kicks(self) -> None:
+        from nlp.normalize import normalize_input
+
+        cfg = _fake_cfg(timeout_ms=20_000, cpu_budget_ms=1, rss_budget_mb=1_000_000)
+
+        def busy_restore(text: str) -> str:
+            x = 0
+            while x < 5_000_000:
+                x += 1
+            return text
+
+        result = normalize_input(
+            "galatasaray mac",
+            cfg=cfg,
+            _diacritic_restore=busy_restore,
+        )
+        assert result.budget_exhausted_reason == "cpu_budget_exceeded"
+        assert result.budget_exhausted_stage == "diacritic_restore"
+        assert result.stage_timed_out is False
+        assert any(event.get("kind") == "request_budget_exhausted" for event in result.normalization_events)
+
+    def test_nlp_rss_budget_kicks_on_lexicon_pathological_load(self) -> None:
+        from nlp.normalize import normalize_input
+
+        cfg = _fake_cfg(timeout_ms=20_000, cpu_budget_ms=200, rss_budget_mb=1)
+
+        def oom_restore(text: str) -> str:
+            raise MemoryError("simulated rss exhaustion")
+
+        result = normalize_input(
+            "galatasaray mac",
+            cfg=cfg,
+            _diacritic_restore=oom_restore,
+        )
+        assert result.budget_exhausted_reason == "rss_budget_exceeded"
+        assert result.budget_exhausted_stage == "diacritic_restore"
+        assert any(event.get("kind") == "request_budget_exhausted" for event in result.normalization_events)
+
+
 # ---------------------------------------------------------------------------
 # Config validator
 # ---------------------------------------------------------------------------
@@ -241,3 +372,17 @@ class TestCostCeilingConfigValidator:
             assert cfg.nlp_normalize_stage_timeout_ms == 50
         finally:
             del os.environ["NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS"]
+
+    def test_request_budget_cpu_below_min_rejected(self) -> None:
+        from common.config import Config
+
+        os.environ["NEGELIR_NLP_PER_REQUEST_CPU_BUDGET_MS"] = "10"
+        os.environ["NEGELIR_NLP_PER_REQUEST_CPU_BUDGET_MIN_MS"] = "50"
+        try:
+            issues = Config().validate()
+            assert any("nlp_per_request_cpu_budget_ms" in i for i in issues), (
+                f"Expected nlp_per_request_cpu_budget_ms validation issue, got: {issues}"
+            )
+        finally:
+            del os.environ["NEGELIR_NLP_PER_REQUEST_CPU_BUDGET_MS"]
+            del os.environ["NEGELIR_NLP_PER_REQUEST_CPU_BUDGET_MIN_MS"]

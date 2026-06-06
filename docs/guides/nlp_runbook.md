@@ -44,6 +44,73 @@ Create operator-facing panels that show:
 - **Escalate** if `nlp_disambiguation_offered_total{cause=ambiguous_match_pair}` climbs
   while overall intent confidence drops.
 
+## Repair-density triage by class
+
+This section points operators at the §10.22.13 telemetry counters extended in
+§10.24 and helps distinguish a narrow rule/lexicon gap from wider input drift.
+
+- `nlp_input_repair_total{class=...}` is the primary Phase 10.24 counter family.
+  The extended classes include:
+  `suffix_harmony_repaired`, `repeated_char_normalized`, `digit_letter_confusable_folded`,
+  `turkish_i_normalized`, `multi_question_split`, `negation_disambiguated`,
+  `compound_name_normalized`, `honorific_normalized`, `emoji_signal_ignored`,
+  `social_handle_hygiene`, `score_numeric_disambiguated`,
+  `garden_path_backtracked`, and `pathological_input_handled`.
+- Use the `nlp_input_repair_density` p50/p95 trend together with class-level
+  counts to decide whether the drift is caused by a single noisy input class.
+- Prioritize follow-up on spikes in `digit_letter_confusable_folded` and
+  `turkish_i_normalized` for orthographic noise, `compound_name_normalized` and
+  `honorific_normalized` for entity-resolution gaps, and
+  `garden_path_backtracked` for phrase-structure ambiguity.
+- When a single repair class dominates the spike, treat it as a narrow
+  lexicon or rule gap; when multiple classes rise together, the issue is more
+  likely a broader Turkish-input distribution or training drift.
+- For Phase 10.24-specific triage, prefer a narrow alias or hygiene rule fix
+  over broad threshold relaxations.
+
+## Morphology ambiguity-rate triage
+
+- Watch `nlp_morph_ambiguity_rate_high` and related ambiguity telemetry.
+- If the rate exceeds the configured threshold, inspect whether proper-noun
+  bypass or gazetteer cross-check thresholds are too aggressive.
+- Confirm the offending queries emit `nlp.event.v1{kind=morph_parse_ambiguous}`
+  and that the fallback path is not silently discarding valid team or player
+  names.
+- Adjust the morphology ambiguity floor only after a review of the closed
+  gazetteer tables in `ai/nlp/lexicon` and the parse confidence thresholds.
+
+## Voice-path diacritic-aggression triage
+
+- Watch `nlp_voice_path_diacritic_overaggressive` and voice-path restoration
+  rates in Grafana.
+- If this alert fires, verify whether voice input is being over-normalized and
+  whether the system is restoring diacritics in cases where the user likely
+  intended a bare ASCII query.
+- Tune the voice-path thresholds, not the downstream intent classification,
+  unless the signal is consistently misrouted.
+- Confirm that `autocorrect_cascade_repaired` and `asr_input_auto_detected`
+  events are still emitted for diagnostics.
+
+## Lexicon PR-flood incident response
+
+- If `nlp_lexicon_pr_diff_oversize` or `nlp_lexicon_typo_squat_detected` is
+  raised, pause lexicon merges and review the PR diff size and canonical ID
+  provenance.
+- Validate every alias against the closed canonical table and confirm there are
+  at least three provenance entries for each new alias when required.
+- Run `make verify.nlp-lexicons` and `make nlp.lexicon-build` after fixing the
+  alias set.
+- Prefer narrow lexicon delta fixes over broad new alias additions.
+
+## Envelope-HMAC key rotation
+
+- If `nlp_answer_envelope_signature_invalid` alerts, rotate the answer envelope
+  HMAC key with `make nlp.rotate-answer-hmac-key`.
+- Maintain the dual-acceptance grace window so answers signed with the previous
+  key remain valid for a short overlap period.
+- Confirm that `qa.answer.v1.envelope_signature_key_id` is populated and that the
+  produced `envelope_signature` verifies before enforcement is tightened.
+
 ## Lexicon swap
 
 If the issue is lexicon-related, update `ai/nlp/lexicon/_aliases_delta.tr.yaml`
@@ -60,6 +127,74 @@ rule relaxations.
 5. Run `make verify.nlp-lexicons` to validate the lexicon change.
 6. Build the updated lexicon with `make nlp.lexicon-build` and confirm the dashboard
    normalizes the sample query properly.
+
+## Intent rollback runbook
+
+When an intent retrain or model drift incident occurs, rollback the intent
+package and confirm that any in-flight summaries still use the prior calibration.
+
+1. Identify the offending intent version via `nlp.intent.promote` metadata and
+   `nlp.event.v1{kind=nlp_intent_rolled_back}` events.
+2. Promote the previous intent package into canary mode and monitor for
+   `nlp_canary_rolled_back` warnings.
+3. If a rollback is required, keep the humanizer and proofreader versions
+   unchanged until the new intent package is validated.
+4. Document the rollback in the incident ticket and update the model regression
+   blockers for the next training cycle.
+
+## Right-to-erasure runbook
+
+If a user exercises deletion rights, ensure the NLP audit trail and spool
+data propagate the erase across the observability pipeline.
+
+1. Verify `qa.request.v1` and `qa.answer.v1` audit bundle references for the
+   request ID targeted by the erasure.
+2. Remove or redact the corresponding spool payload entries and replace
+   `sanitized_text` with `sanitized_text_sha256` in the spooled envelope.
+3. Confirm the bus replay path can still correlate the erased request via
+   `request_id` while preserving the privacy contract.
+4. If the original text is unavailable during replay, drop the envelope and
+   emit `nlp.alert.v1{kind=nlp_spool_replay_text_unavailable}`.
+
+## Compliance ban-list operator workflow
+
+Use the compliance ban-list to block or degrade content in regulated
+jurisdictions without changing the underlying intent model.
+
+1. Review the current ban-list overlay and the per-tenant compliance rules in
+   `cfg.nlp_compliance_reload_s`.
+2. When a new phrase or content class must be banned, add it to the overlay and
+   validate it with `make nlp.template-lint` and the relevant policy tests.
+3. Reload the compliance overlay with the configured watch path.
+4. Monitor `nlp.alert.v1{kind=compliance_refusal_triggered}` and confirm the
+   rendered output uses the compliance-safe template.
+
+## Cold-start consensus-smoke triage
+
+When boot latency or readiness issues occur, validate the NLP boot consensus
+smoke path before permitting production traffic.
+
+1. Check `nlp.event.v1{kind=cold_start_stage}` events to see which boot stage
+   last completed.
+2. If boot stage 6 is not reached within `cfg.nlp_boot_budget_s`, the pod stays
+   503 and emits `nlp.alert.v1{kind=nlp_cold_start_timeout}`.
+3. Verify that the readiness probe is not satisfied until the final Jinja warm
+   stage completes.
+4. Use the consensus-smoke signal to decide whether to restart the pod or
+   accept a longer boot-budget window for the current release.
+
+## GPU-lease leak recovery
+
+If the humanizer subprocess or GPU lease path fails, recover without leaking
+the lease or dropping unrelated requests.
+
+1. Detect `nlp.event.v1{kind=humanizer_disabled}` or
+   `nlp.alert.v1{kind=humanizer_subprocess_died}` events.
+2. Gracefully stop accepting new humanizer requests while preserving template
+   fallbacks.
+3. Drain in-flight requests and release the GPU lease before restarting the
+   subprocess.
+4. Confirm the next pod startup does not reuse a stale lease token.
 
 ## Disaster recovery drill
 

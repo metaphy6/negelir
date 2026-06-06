@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/nlp_pii_recovered_for_trace",
+  "title": "nlp.event.v1{kind=nlp_pii_recovered_for_trace}",
+  "description": "Operator-attested PII recovery during complaint trace workflow; also emitted as maint.event.v1 for audit.",
+  "type": "object",
+  "required": ["kind", "producer", "request_id", "operator_id_h", "emitted_at"],
+  "properties": {
+    "kind": {"const": "nlp_pii_recovered_for_trace"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.dispatcher.v1", "nlp.answer.v1", "nlp.proofreader.v1", "nlp.abuse.v1"]
+    },
+    "request_id": {"type": "string", "minLength": 1},
+    "operator_id_h": {"type": "string", "minLength": 1},
+    "reason_text_sha8": {"type": ["string", "null"], "minLength": 1},
+    "qa_correlation_id": {"type": ["string", "null"]},
+    "emitted_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}

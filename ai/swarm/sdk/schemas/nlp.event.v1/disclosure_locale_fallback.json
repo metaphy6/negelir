@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/disclosure_locale_fallback",
+  "title": "nlp.event.v1{kind=disclosure_locale_fallback}",
+  "description": "A disclosure locale fallback was used when the requested locale text was unavailable.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "requested_locale",
+    "resolved_locale",
+    "emitted_at"
+  ],
+  "properties": {
+    "kind": {
+      "const": "disclosure_locale_fallback"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.answer.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "requested_locale": {
+      "type": "string"
+    },
+    "resolved_locale": {
+      "type": "string"
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    }
+  },
+  "additionalProperties": false
+}

@@ -126,6 +126,19 @@ nlp:
   at_mention_handling_enabled: true  # NEGELIR_NLP_AT_MENTION_HANDLING_ENABLED
   html_unescape_enabled: true  # NEGELIR_NLP_HTML_UNESCAPE_ENABLED
   harmony_tolerant_strip_enabled: true  # NEGELIR_NLP_HARMONY_TOLERANT_STRIP_ENABLED
+  preamble_strip_enabled: true  # NEGELIR_NLP_PREAMBLE_STRIP_ENABLED
+  consonant_alternation_enabled: true  # NEGELIR_NLP_CONSONANT_ALTERNATION_ENABLED
+  assimilation_fold_enabled: true  # NEGELIR_NLP_ASSIMILATION_FOLD_ENABLED
+  compound_split_enabled: true  # NEGELIR_NLP_COMPOUND_SPLIT_ENABLED
+  tr_pii_redact_enabled: true  # NEGELIR_NLP_TR_PII_REDACT_ENABLED
+  telegraphic_max_tokens: 4  # NEGELIR_NLP_TELEGRAPHIC_MAX_TOKENS
+  telegraphic_min_entity_confidence: 0.85  # NEGELIR_NLP_TELEGRAPHIC_MIN_ENTITY_CONFIDENCE
+  telegraphic_inference_enabled: true  # NEGELIR_NLP_TELEGRAPHIC_INFERENCE_ENABLED
+  ki_context_disambiguation: true  # NEGELIR_NLP_KI_CONTEXT_DISAMBIGUATION
+  tr_normalize_spec_path: "ai/common/text/tr_normalize_spec.json"  # NEGELIR_NLP_TR_NORMALIZE_SPEC_PATH
+  tr_normalize_spec_required: enforce  # NEGELIR_NLP_TR_NORMALIZE_SPEC_REQUIRED
+  loanword_variants_enabled: true  # NEGELIR_NLP_LOANWORD_VARIANTS_ENABLED
+  loanword_singularisation_enabled: true  # NEGELIR_NLP_LOANWORD_SINGULARISATION_ENABLED
   # §10.19 backpressure
   queue_pressure_threshold: 100  # NEGELIR_NLP_QUEUE_PRESSURE_THRESHOLD
   pressure_humanize_off_s: 60    # NEGELIR_NLP_PRESSURE_HUMANIZE_OFF_S
@@ -133,9 +146,13 @@ nlp:
   answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
   answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP
   audit_bundle_retention_days: 2555  # NEGELIR_NLP_AUDIT_BUNDLE_RETENTION_DAYS
+  default_answer_format: "plain"  # NEGELIR_NLP_DEFAULT_ANSWER_FORMAT
+  answer_formats: "plain,markdown_safe,screen_reader,whatsapp_4096,sms_160,tts_neutral"  # NEGELIR_NLP_ANSWER_FORMATS
+  answer_format_enabled: '{"plain": true, "markdown_safe": true, "screen_reader": true, "whatsapp_4096": false, "sms_160": false, "tts_neutral": false}'  # NEGELIR_NLP_ANSWER_FORMAT_ENABLED
   template_git_sha: ""           # NEGELIR_NLP_TEMPLATE_GIT_SHA
   pipeline_version: "10.0.0"     # NEGELIR_NLP_PIPELINE_VERSION
   compatibility_matrix_path: "ai/nlp/_compat/compatibility_matrix.json"  # NEGELIR_NLP_COMPATIBILITY_MATRIX_PATH
+  system_capability_template_path: ""  # NEGELIR_NLP_SYSTEM_CAPABILITY_TEMPLATE_PATH
   # §10.21.9 boot-time readiness budget and liveness restart grace
   boot_budget_s: 30              # NEGELIR_NLP_BOOT_BUDGET_S
   boot_liveness_grace_s: 60      # NEGELIR_NLP_BOOT_LIVENESS_GRACE_S
@@ -420,6 +437,7 @@ phase10:
   nlp_lexicon_swap_atomicity: all_or_nothing  # NEGELIR_NLP_LEXICON_SWAP_ATOMICITY
   nlp_lexicon_swap_grace_s: 120  # NEGELIR_NLP_LEXICON_SWAP_GRACE_S
   nlp_lexicon_swap_max_lag_s: 600  # NEGELIR_NLP_LEXICON_SWAP_MAX_LAG_S
+  nlp_preview_dir: "data/nlp/preview"  # NEGELIR_NLP_PREVIEW_DIR
   # Default root directory for complaint trace output.
   nlp_complaint_trace_dir: "data/nlp/complaint_traces"  # NEGELIR_NLP_COMPLAINT_TRACE_DIR
   nlp_complaint_trace_default_window_h: 24  # NEGELIR_NLP_COMPLAINT_TRACE_DEFAULT_WINDOW_H
@@ -633,6 +651,7 @@ phase8:
   opsctl_ack_timeout_ms: 5000                      # NEGELIR_OPSCTL_ACK_TIMEOUT_MS
   opsctl_ack_timeout_ms_live_demo: 1000            # NEGELIR_OPSCTL_ACK_TIMEOUT_MS_LIVE_DEMO
   opsctl_spool_max_entries: 1024                   # NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES
+  opsctl_nlp_kill_max_ttl_s: 3600                   # NEGELIR_OPSCTL_NLP_KILL_MAX_TTL_S
   opsctl_critical_agents: "consensus.v1,sec.rate.v1,maint.backup.v1"  # NEGELIR_OPSCTL_CRITICAL_AGENTS
   opsctl_audit_path: ""                           # NEGELIR_OPSCTL_AUDIT_PATH
   opsctl_spool_dir: ""                            # NEGELIR_OPSCTL_SPOOL_DIR

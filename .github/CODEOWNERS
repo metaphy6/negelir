@@ -1,0 +1,15 @@
+# Phase 10 high-leverage NLP file ownership.
+# New files under ai/common/nlp and ai/nlp/lang_tr require explicit phase-10 review.
+/ai/common/nlp/intent_enum_spec.json @go-owner @nlp-curator
+/ai/nlp/lang_tr/wh_intent_map.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/idioms.tr.yaml @nlp-curator @nlp-domain-football
+/ai/nlp/lang_tr/idiom_context.tr.yaml @nlp-curator @nlp-domain-football
+/ai/nlp/lang_tr/conditional_markers.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/politeness_markers.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/search_operator_patterns.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/anaphora_pronouns.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/anaphora_compose.yaml @nlp-curator
+/ai/nlp/lang_tr/asr_punctuation_words.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/voice_number_context.tr.yaml @nlp-curator
+/ai/nlp/lang_tr/offensive_obfuscated.tr.yaml @nlp-curator @nlp-compliance
+/ai/nlp/lang_tr/venues.tr.yaml @nlp-curator

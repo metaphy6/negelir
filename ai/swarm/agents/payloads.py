@@ -864,7 +864,8 @@ class PredictApproved:
     quorum: int                       # threshold this prediction crossed
     final: dict[str, Any]             # full PredictFinal payload, verbatim
     calibration_version: int = 0
-    schema_version: int = 1           # Phase 10 §10.19: 1 = legacy, 2 = with qa_correlation_id
+    calibration_state_horizon: str | None = None
+    schema_version: int = 1           # Phase 10 §10.19: 1 = legacy, 2 = with qa_correlation_id, 3 = with citation_signature and optional calibration_state_horizon
     qa_correlation_id: str | None = None  # Phase 10 §10.19: NLP QA dispatch correlation id
     citation_signature: str | None = None  # Phase 10 §10.21.8: HMAC signature over citation identity tuple
     citation_key_id: str | None = None  # Phase 10 §10.21.8: 16-hex key id used to generate citation_signature
@@ -916,6 +917,10 @@ class PredictApproved:
             quorum=int(data["quorum"]),
             final=dict(data["final"]),
             calibration_version=int(data.get("calibration_version", 0)),
+            calibration_state_horizon=(
+                None if data.get("calibration_state_horizon") is None
+                else str(data.get("calibration_state_horizon"))
+            ),
             schema_version=int(data.get("schema_version", 1)),
             qa_correlation_id=data.get("qa_correlation_id"),
             citation_signature=(
@@ -947,6 +952,8 @@ _ALLOWED_MAINT_KINDS: frozenset[str] = frozenset({
     "denylist_clear",       # sec.rate.v1 consumer (§7.3 operator override)
     "baseline_reset",       # sec.scrape.v1 consumer (§7.2 redesign reset)
     "quarantine_erase",     # maint.backup.v1 consumer (§8.3 right-to-erasure; ops_console publisher)
+    "nlp_kill_pattern_armed",    # Phase 10 operator kill-pattern arm for NLP in-flight/cached answers
+    "nlp_kill_pattern_disarmed", # Phase 10 operator kill-pattern disarm
 })
 
 _ALLOWED_DRIFT_REASONS: frozenset[str] = frozenset({
@@ -1395,9 +1402,11 @@ class QaRequestV1:
     sec_verdict: str
     answer_format: str | None = None
     input_source: str | None = None
+    keyboard_hint: str | None = None
     sec_steps_run: list[str] = field(default_factory=list)
     client_id: str | None = None
     conversation_id: str | None = None
+    request_metadata: dict[str, object] | None = None
     emitted_at: str = ""
 
     def __post_init__(self) -> None:
@@ -1406,14 +1415,25 @@ class QaRequestV1:
                 f"QaRequestV1.sec_verdict={self.sec_verdict!r} not in "
                 f"{sorted(_ALLOWED_QA_VERDICTS)}"
             )
+        if self.locale == "tr":
+            object.__setattr__(self, "locale", "tr-TR")
+        if self.locale not in {"tr-TR"}:
+            raise ValueError(
+                f"QaRequestV1.locale={self.locale!r} not in {{'tr-TR'}}"
+            )
+        if self.request_metadata is not None and not isinstance(self.request_metadata, dict):
+            raise ValueError("QaRequestV1.request_metadata must be a dict or None")
         if self.answer_format is not None and self.answer_format not in {
             "plain",
             "markdown_safe",
             "screen_reader",
+            "whatsapp_4096",
+            "sms_160",
+            "tts_neutral",
         }:
             raise ValueError(
                 f"QaRequestV1.answer_format={self.answer_format!r} not in "
-                "{'plain','markdown_safe','screen_reader'}"
+                "{'plain','markdown_safe','screen_reader','whatsapp_4096','sms_160','tts_neutral'}"
             )
         if self.input_source is not None and self.input_source not in {
             "keyboard",
@@ -1425,12 +1445,38 @@ class QaRequestV1:
                 f"QaRequestV1.input_source={self.input_source!r} not in "
                 "{'keyboard','voice','paste','unknown'}"
             )
+        if self.keyboard_hint is not None and self.keyboard_hint not in {
+            "q",
+            "f",
+            "swipe",
+            "unknown",
+        }:
+            raise ValueError(
+                f"QaRequestV1.keyboard_hint={self.keyboard_hint!r} not in "
+                "{'q','f','swipe','unknown'}"
+            )
 
     def as_dict(self) -> dict[str, Any]:
         result = asdict(self)
         if result.get("answer_format") is None:
             result.pop("answer_format", None)
+        if result.get("request_metadata") is None:
+            result.pop("request_metadata", None)
         return result
+
+    @property
+    def keyboard_hint_class(self) -> str:
+        return self.keyboard_hint if self.keyboard_hint in {"q", "f", "swipe"} else "unknown"
+
+    def safe_log_payload(self) -> dict[str, Any]:
+        return {
+            "request_id": self.request_id,
+            "locale": self.locale,
+            "input_source": self.input_source,
+            "keyboard_hint_class": self.keyboard_hint_class,
+            "conversation_id": self.conversation_id,
+            "answer_format": self.answer_format,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "QaRequestV1":
@@ -1441,9 +1487,11 @@ class QaRequestV1:
             answer_format=str(data["answer_format"]) if data.get("answer_format") is not None else None,
             sec_verdict=str(data["sec_verdict"]),
             input_source=str(data["input_source"]) if data.get("input_source") is not None else None,
+            keyboard_hint=str(data["keyboard_hint"]).strip().lower() if data.get("keyboard_hint") is not None else None,
             sec_steps_run=[str(s) for s in (data.get("sec_steps_run") or [])],
             client_id=data.get("client_id"),
             conversation_id=data.get("conversation_id"),
+            request_metadata=dict(data["request_metadata"]) if isinstance(data.get("request_metadata"), dict) else None,
             emitted_at=str(data.get("emitted_at", "")),
         )
 

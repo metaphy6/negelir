@@ -87,6 +87,9 @@ def rerender_bundle(
     request_payload = _load_json(request_backup_dir / f"{request_id}.json")
     predict_payload = _load_json(predict_backup_dir / f"{request_id}.json")
     audit_row, audit_path = _find_audit_row(request_id, audit_root)
+    conversation_graph_path = bundle_root / bundle_sha / "conversation_entity_graph.json"
+    if conversation_graph_path.exists():
+        request_payload["conversation_entity_graph"] = _load_json(conversation_graph_path)
 
     rendered = render_func(predict_payload, request_payload)
     expected = audit_row.get("answer_text_redacted")

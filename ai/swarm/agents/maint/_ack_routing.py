@@ -106,6 +106,9 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # allowlist HMAC key rotation surfaces.
     "allowlist_rehash":  frozenset(),
     "allowlist_rotate_key": frozenset(),
+    # Phase 10 §10.27 — NLP operator kill-pattern arm/disarm.
+    "nlp_kill_pattern_armed": frozenset({"nlp.answer.v1"}),
+    "nlp_kill_pattern_disarmed": frozenset({"nlp.answer.v1"}),
     # ── Notification-only kinds (Phase 8.2 + 8.5) ────────────────────
     # These are emitted BY maint reactors as side-effect telemetry.
     # They carry NO ``request_id`` (or carry one but expect no acks)
@@ -296,6 +299,9 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     "scale_throttled",
     "manual_scale_pin_expired",
     "maint_scaler_default_applied",
+    # Phase 10 §10.27 — NLP operator kill-pattern arm/disarm are notification-only.
+    "nlp_kill_pattern_armed",
+    "nlp_kill_pattern_disarmed",
     # Phase 8 §8.15.1 — clock-source boot validation + suspend detection.
     "maint_clock_source_changed",
     "dlq_replayed",

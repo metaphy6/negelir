@@ -1,0 +1,16 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+loanword_singularisation:
+  - loan_form: link
+    accepted_plural: linkler
+    decision: singular
+    source: corpus
+  - loan_form: data
+    accepted_plural: datalar
+    decision: singular
+    source: corpus
+  - loan_form: mail
+    accepted_plural: mailler
+    decision: singular
+    source: corpus

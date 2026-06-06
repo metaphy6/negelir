@@ -28,6 +28,25 @@ def test_render_format_dispatches_to_format_specific_template_dir() -> None:
     assert "Bu bir test önerisidir" in text
 
 
+def test_format_unsupported_returns_meta_template(monkeypatch) -> None:
+    import common.config as config
+
+    monkeypatch.setattr(
+        config.cfg,
+        "_nlp_answer_format_enabled_raw",
+        '{"plain": true, "markdown_safe": true, "screen_reader": true, "whatsapp_4096": false, "sms_160": false, "tts_neutral": false}',
+    )
+
+    text = nlp_render(
+        "meta.unsupported.tr.j2",
+        {},
+        answer_format="whatsapp_4096",
+    )
+
+    assert "Üzgünüm" in text
+    assert "desteklenmiyor" in text
+
+
 def test_nlp_per_format_templates_share_slots() -> None:
     base = pathlib.Path("ai/nlp/templates")
     formats = ["plain", "markdown_safe", "screen_reader"]

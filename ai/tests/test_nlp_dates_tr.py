@@ -22,7 +22,7 @@ from typing import Callable
 
 import pytest
 
-from nlp.dates_tr import DateTimeResolution, DateTimeResolver, _word_in
+from nlp.dates_tr import DateTimeResolution, DateTimeResolver, _word_in, number_word_to_int
 
 UTC = datetime.timezone.utc
 
@@ -197,6 +197,104 @@ def test_explicit_other_month() -> None:
     _assert_day(res, datetime.date(2026, 9, 15))
 
 
+def test_number_word_to_int_parses_long_prefixes() -> None:
+    assert number_word_to_int(["iki", "bin", "yirmi", "dört"]) == (2024, 4)
+    assert number_word_to_int(["yirmi", "bir", "kasım"]) == (21, 2)
+    assert number_word_to_int(["sıfır", "yıl"]) == (0, 1)
+
+
+def test_parse_ordinal_phrase_handles_closed_forms() -> None:
+    resolver = _resolver()
+    assert resolver.parse_ordinal_phrase(["birinci"]) == (1, "forward", 1)
+    assert resolver.parse_ordinal_phrase(["üçüncü"]) == (3, "forward", 1)
+    assert resolver.parse_ordinal_phrase(["3'üncü"]) == (3, "forward", 1)
+    assert resolver.parse_ordinal_phrase(["3."]) == (3, "forward", 1)
+    assert resolver.parse_ordinal_phrase(["sonuncu"]) == (-1, "reverse", 1)
+
+
+def test_gecen_ay_resolves_to_previous_month() -> None:
+    res = _resolver().resolve("geçen ay")
+    assert res is not None
+    assert res.granularity == "month"
+    assert res.polarity == "past"
+    assert res.start_utc == datetime.datetime(2026, 2, 28, 21, 0, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2026, 3, 31, 21, 0, tzinfo=UTC)
+
+
+def test_gecen_yil_resolves_to_previous_year() -> None:
+    res = _resolver().resolve("geçen yıl")
+    assert res is not None
+    assert res.granularity == "year"
+    assert res.polarity == "past"
+    assert res.start_utc == datetime.datetime(2024, 12, 31, 21, 0, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2025, 12, 31, 21, 0, tzinfo=UTC)
+
+
+def test_dunden_once_resolves_to_two_days_ago() -> None:
+    res = _resolver().resolve("dünden önce")
+    assert res is not None
+    assert res.granularity == "day"
+    assert res.polarity == "past"
+    assert res.start_utc == datetime.datetime(2026, 4, 26, 21, 0, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2026, 4, 28, 21, 0, tzinfo=UTC)
+
+
+def test_iki_gun_sonra_resolves_future_day() -> None:
+    res = _resolver().resolve("iki gün sonra")
+    assert res is not None
+    assert res.granularity == "day"
+    assert res.polarity == "future"
+    assert res.start_utc == datetime.datetime(2026, 4, 30, 21, 0, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2026, 5, 1, 21, 0, tzinfo=UTC)
+
+
+def test_hafta_sonu_resolves_to_upcoming_weekend() -> None:
+    res = _resolver().resolve("hafta sonu")
+    assert res is not None
+    assert res.granularity == "week"
+    assert res.polarity == "future"
+    assert res.start_utc == datetime.datetime(2026, 5, 1, 21, 0, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2026, 5, 3, 21, 0, tzinfo=UTC)
+
+
+def test_fractional_time_yarim_saat_sonra_is_future_hour_minute() -> None:
+    res = _resolver().resolve("yarım saat sonra")
+    assert res is not None
+    assert res.granularity == "hour_minute"
+    assert res.polarity == "future"
+    assert res.start_utc == _FIXED_NOW + datetime.timedelta(minutes=30)
+    assert res.end_utc == _FIXED_NOW + datetime.timedelta(hours=2, minutes=30)
+
+
+def test_fractional_time_iki_bucuk_saat_sonra_is_future_hour_minute() -> None:
+    res = _resolver().resolve("iki buçuk saat sonra")
+    assert res is not None
+    assert res.granularity == "hour_minute"
+    assert res.polarity == "future"
+    assert res.start_utc == _FIXED_NOW + datetime.timedelta(hours=2, minutes=30)
+    assert res.end_utc == _FIXED_NOW + datetime.timedelta(hours=4, minutes=30)
+
+
+def test_bucukta_without_hour_returns_none() -> None:
+    assert _resolver().resolve("iki buçukta") is None
+
+
+def test_gecen_yil_dst_crossing_2015_uses_istanbul_tz() -> None:
+    clock = lambda: datetime.datetime(2016, 3, 1, 12, 0, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("geçen yıl")
+    assert res is not None
+    assert res.polarity == "past"
+    assert res.start_utc == datetime.datetime(2014, 12, 31, 22, 0, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2015, 12, 31, 22, 0, tzinfo=UTC)
+
+
+def test_number_word_to_int_parses_long_prefixes() -> None:
+    assert number_word_to_int(["iki", "bin", "yirmi", "dört"]) == (2024, 4)
+    assert number_word_to_int(["yirmi", "bir", "kasım"]) == (21, 2)
+    assert number_word_to_int(["sıfır", "yıl"]) == (0, 1)
+
+
 def test_fixed_holiday_name_resolves_to_cumhuriyet_bayrami() -> None:
     res = _resolver().resolve("Cumhuriyet Bayramı")
     _assert_day(res, datetime.date(2026, 10, 29))
@@ -205,6 +303,62 @@ def test_fixed_holiday_name_resolves_to_cumhuriyet_bayrami() -> None:
 def test_fixed_holiday_name_with_time_resolves() -> None:
     res = _resolver().resolve("Cumhuriyet Bayramı saat 20:00")
     _assert_hour_minute(res, datetime.date(2026, 10, 29), 20, 0)
+
+
+def test_resolves_ramazan_bayrami_2026_from_hijri_table() -> None:
+    clock = lambda: datetime.datetime(2026, 1, 1, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("Ramazan Bayramı")
+    _assert_day(res, datetime.date(2026, 4, 11))
+
+
+def test_resolves_kurban_bayrami_2027_from_hijri_table() -> None:
+    clock = lambda: datetime.datetime(2027, 1, 1, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("Kurban Bayramı")
+    _assert_day(res, datetime.date(2027, 6, 6))
+
+
+def test_holiday_apostrophe_alias_resolves_cumhuriyet_bayrami() -> None:
+    res = _resolver().resolve("Cumhuriyet Bayramı'nda kim oynar")
+    _assert_day(res, datetime.date(2026, 10, 29))
+
+
+def test_generic_bayramda_resolves_next_bayram() -> None:
+    clock = lambda: datetime.datetime(2026, 4, 29, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("bayramda maç var mı")
+    _assert_day(res, datetime.date(2026, 5, 19))
+
+
+def test_generic_bayramda_after_gencler_bayrami_resolves_kurban_bayrami() -> None:
+    clock = lambda: datetime.datetime(2026, 5, 20, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("bayramda maç var mı")
+    _assert_day(res, datetime.date(2026, 6, 18))
+
+
+def test_hijri_table_sha_pinned_in_chart() -> None:
+    from nlp.dates.hijri import VENDORED_HIJRI_TABLE_SHA, compute_table_sha
+
+    assert compute_table_sha() == VENDORED_HIJRI_TABLE_SHA
+
+
+def test_resolves_fifa_window_from_openfootball_cache() -> None:
+    clock = lambda: datetime.datetime(2026, 3, 1, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("milli maç haftası")
+    assert res is not None
+    assert res.granularity == "week"
+    assert res.start_utc == datetime.datetime(2026, 3, 16, tzinfo=UTC)
+    assert res.end_utc == datetime.datetime(2026, 3, 23, tzinfo=UTC)
+
+
+def test_diyanet_override_table_respected() -> None:
+    # The vendored Hijri table says 2026 Kurban Bayramı is 2026-06-17,
+    # but the Diyanet override table should update the next observed date.
+    res = _resolver().resolve("Kurban Bayramı")
+    _assert_day(res, datetime.date(2026, 6, 18))
 
 
 def test_holiday_beyond_horizon_returns_none() -> None:

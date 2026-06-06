@@ -116,7 +116,7 @@ counter-example, and states the binding correction. Tests live in
       curated 200-row corpus of apostrophe-dropped real fan input and
       asserts ≥ 95% recall on entity extraction.
 
-- [ ] **Assumption (§10.4 / §10.30.5):** "Politeness markers stripped
+- [x] **Assumption (§10.4 / §10.30.5):** "Politeness markers stripped
       BEFORE classifier so they cannot bias routing."
       **Counter-example:** The strip set (`lütfen`, `acaba`, `mümkünse`,
       `rica etsem`, `-yebilir misiniz`) does not cover the **second-
@@ -133,7 +133,7 @@ counter-example, and states the binding correction. Tests live in
       `test_politeness_strip_conditional_polite_chain` (40 rows). The
       stripped form must route identically to the bare form.
 
-- [ ] **Assumption (§10.31.6 score notation):** "Home-team-first in
+- [x] **Assumption (§10.31.6 score notation):** "Home-team-first in
       written reports, winner-first in spoken commentary."
       **Counter-example:** This dichotomy is true **only** for Turkish
       sports media. User-generated content on social media (the bulk
@@ -150,7 +150,7 @@ counter-example, and states the binding correction. Tests live in
       150-row two-turn corpus where the score-notation reading depends
       on which team the user mentioned in turn 1.
 
-- [ ] **Assumption (§10.32.4 dialect normalization):** "≥ 120-rule
+- [x] **Assumption (§10.32.4 dialect normalization):** "≥ 120-rule
       closed table covers Aegean / Black Sea / Cypriot / diaspora."
       **Counter-example:** The dialect map's closed-table assumption
       is empirically false for **diaspora code-mixing** specifically:
@@ -171,7 +171,7 @@ counter-example, and states the binding correction. Tests live in
       Test: `test_diaspora_code_switch_route` exercises 40 rows from
       the residue.
 
-- [ ] **Assumption (§10.5 / §10.26.1 morphology):** "Stem-final consonant
+- [x] **Assumption (§10.5 / §10.26.1 morphology):** "Stem-final consonant
       mutation handled (`-k → -ğ`, `-p → -b`, `-t → -d`, `-ç → -c`)."
       **Counter-example:** Mutation is **conditional** on the suffix
       starting with a vowel **and** the stem being polysyllabic of
@@ -191,7 +191,7 @@ counter-example, and states the binding correction. Tests live in
       (80 rows), `test_mutation_loan_resist` (60 rows),
       `test_mutation_polysyllabic_ck_to_g` (100 rows).
 
-- [ ] **Assumption (§10.7 templates):** "Templates parameterised on
+- [x] **Assumption (§10.7 templates):** "Templates parameterised on
       slot values via Turkish-morphology-aware suffix bindings."
       **Counter-example:** The current binding library covers ablative,
       dative, locative, accusative, genitive on **noun** slots, but
@@ -213,19 +213,21 @@ Each item adds an end-to-end proof test that closes a previously-
 unverified `[ ]` claim. Tests live in
 `ai/swarm/agents/nlp/tests/proof/` and are CI-required.
 
-- [ ] **§10.0 boundary discipline.**
+- [x] **§10.0 boundary discipline.**
       `test_nlp_boundary_discipline_outbound_set` walks the registry
       and asserts the NLP outbound topic set is **exactly** the
-      enumerated set in §10.0 (`{qa.intent.v1, qa.answer.v1,
-      nlp.event.v1, nlp.alert.v1, nlp.gossip.v1, nlp.prober.v1,
-      qa.context_extension.v1, predict.request.v1, data.request.v1}`).
+      enumerated set in §10.0
+      (`{qa.intent.v1, qa.answer.v1, qa.context.v1,
+      qa.context_extension.v1, nlp.event.v1, nlp.alert.v1,
+      nlp.gossip.v1, nlp.shadow.v1, nlp.prober.v1,
+      predict.request.v1, data.request.v1}`).
       Today the claim is in prose; this test makes it executable.
-- [ ] **§10.10 graceful degradation matrix.**
+- [x] **§10.10 graceful degradation matrix.**
       `test_degradation_matrix_every_failure_class_has_user_visible_template`
       walks `degradation_matrix.yaml` and asserts every failure class
       has a corresponding closed Turkish template AND a `meta.*`
       reason code from the §10.31.9 enum.
-- [ ] **§10.11 wire schemas.**
+- [x] **§10.11 wire schemas.**
       `test_wire_schemas_additional_properties_false` walks every
       `qa.*.v1.json` / `nlp.*.v1.json` schema and asserts
       `additionalProperties: false` at every nested object level (not
@@ -354,7 +356,7 @@ passes treated as edge cases.
       Test: `test_mojibake_recovery_corpus` (300 rows, Turkish-class
       mis-encoded as Latin-1).
 
-- [ ] **Smart-quote / em-dash / ellipsis paste.** WhatsApp / iOS /
+- [x] **Smart-quote / em-dash / ellipsis paste.** WhatsApp / iOS /
       macOS auto-correct injects U+2018, U+2019, U+201C, U+201D,
       U+2013, U+2014, U+2026 into pasted Turkish football queries. The
       §10.32.5 apostrophe spec assumes U+0027. Normalize MUST collapse
@@ -429,7 +431,7 @@ passes treated as edge cases.
       `test_qf_layout_slip_corpus` (80 rows of real QF-slipped input
       asserts ≥ 80% canonicalization to the lexicon).
 
-- [ ] **Apostrophe-vs-suffix collision on imported player names.**
+- [x] **Apostrophe-vs-suffix collision on imported player names.**
       §10.32.5 covers Turkish proper nouns. Imported player names
       with embedded apostrophes (`O'Neill`, `D'Ambrosio`, `N'Golo`)
       collide with the §10.32.5 apostrophe-as-suffix-marker rule.
@@ -452,7 +454,7 @@ passes treated as edge cases.
       digit. Test: `test_numeric_voice_disambiguation` (100 rows
       across all 4 modalities × 5 surface forms).
 
-- [ ] **Emoji + ZWJ sequence handling in player nicknames.**
+- [x] **Emoji + ZWJ sequence handling in player nicknames.**
       Player nicknames in fan posts include emoji (`Mertens 🐉`,
       `Mauro 👑`) and emoji-ZWJ sequences (`👨‍👨‍👦`). Today emoji
       survive the §10.1 normalize but are treated as content tokens
@@ -472,7 +474,7 @@ passes treated as edge cases.
       `@token` that contains `Cf` characters with
       `nlp.alert.v1{kind=mention_bidi_attack_blocked, severity=warn}`.
 
-- [ ] **Cross-paste boundary leak.** When a user pastes input from a
+- [x] **Cross-paste boundary leak.** When a user pastes input from a
       mixed source (e.g. WhatsApp message + URL), the paste often
       contains a stray URL `https://...` that the §10.21.7 PII
       redactor leaves alone (URLs aren't PII) but that disrupts the
@@ -483,7 +485,7 @@ passes treated as edge cases.
       telemetry. cfg `nlp_strip_urls=true` (added §10.33-knob-7).
       Test: `test_url_strip_preserves_intent` (80 rows).
 
-- [ ] **Generic-broken JSON/code-fence paste.** Power users sometimes
+- [x] **Generic-broken JSON/code-fence paste.** Power users sometimes
       paste a multi-line JSON or markdown-code-fenced block thinking
       the system will reason about it. Today the pipeline tries to
       classify the intent of the entire blob, occasionally

@@ -1,0 +1,11 @@
+_meta:
+  schema_version: 1
+particles:
+  - form: "ya da"
+    polarity: "disjunctive"
+  - form: "veya"
+    polarity: "disjunctive"
+  - form: "ya...ya"
+    polarity: "inclusive"
+  - form: "veyahut"
+    polarity: "disjunctive"

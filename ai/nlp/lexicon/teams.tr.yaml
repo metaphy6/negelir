@@ -62,6 +62,17 @@ entries:
   aliases:
   - timsah
   - yeşil beyazlılar
+- canonical_id: genclerbirligi
+  names:
+  - Gençlerbirliği
+  aliases:
+  - genclerbirligi
+  - gençlerbirliği
+- canonical_id: goztepe
+  names:
+  - Göztepe
+  aliases:
+  - goztepe
 - canonical_id: sivasspor
   names:
   - Sivasspor

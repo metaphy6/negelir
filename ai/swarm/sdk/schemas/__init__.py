@@ -13,6 +13,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+import re
 
 _SCHEMA_DIR = Path(__file__).parent
 
@@ -184,6 +185,27 @@ def _accepts(spec: dict[str, Any], value: Any) -> bool:
     return False
 
 
+def _satisfies_schema(spec: dict[str, Any], value: Any) -> bool:
+    if not _accepts(spec, value):
+        return False
+    if "const" in spec and value != spec["const"]:
+        return False
+    if "pattern" in spec and isinstance(value, str):
+        if re.search(spec["pattern"], value) is None:
+            return False
+    enum = spec.get("enum")
+    if enum is not None and value is not None and value not in enum:
+        return False
+    min_length = spec.get("minLength")
+    if min_length is not None and isinstance(value, str) and len(value) < min_length:
+        return False
+    if "anyOf" in spec:
+        return any(_satisfies_schema(subspec, value) for subspec in spec["anyOf"])
+    if "allOf" in spec:
+        return all(_satisfies_schema(subspec, value) for subspec in spec["allOf"])
+    return True
+
+
 def validate(topic: str, payload: dict[str, Any]) -> list[str]:
     """Return a list of human-readable wire-contract errors for ``payload``.
 
@@ -234,21 +256,9 @@ def _validate_against_schema(
                 f"const {spec['const']!r}"
             )
             continue
-        if not _accepts(spec, value):
+        if not _satisfies_schema(spec, value):
             errors.append(
-                f"{label}.{key}: value {value!r} does not satisfy "
-                f"type={spec.get('type')!r}"
-            )
-        enum = spec.get("enum")
-        if enum is not None and value is not None and value not in enum:
-            errors.append(
-                f"{label}.{key}: value {value!r} not in declared enum {enum}"
-            )
-        min_length = spec.get("minLength")
-        if min_length is not None and isinstance(value, str) and len(value) < min_length:
-            errors.append(
-                f"{label}.{key}: string length {len(value)} below "
-                f"minLength={min_length}"
+                f"{label}.{key}: value {value!r} does not satisfy schema {spec}"
             )
 
     return errors

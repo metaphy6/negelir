@@ -698,7 +698,8 @@ def test_sec_input_sanitizer_strips_rtl_override_and_zero_width() -> None:
     for ch in ("\u202E", "\u2060", "\uFE0F", "\uE000", "\u0000"):
         assert ch not in clean, f"sanitizer left {ch!r} on the wire"
     assert "kim" in clean and "şampiyon" in clean and "olacak?" in clean
-    assert steps == ["nfc", "strip_control"]
+    assert steps == ["nfc", "strip_control", "lowercase_tr"]
+    assert clean == "kimşampiyonolacak?"
     # Idempotent.
     clean2, _, mutated2 = sanitize_text(clean)
     assert mutated2 is False
@@ -783,7 +784,7 @@ def test_sec_input_classifier_sees_sanitized_text_not_raw() -> None:
     assert "\u200B" not in seen[0] and "\u200C" not in seen[0], (
         "classifier must run on sanitized text — zero-widths still present"
     )
-    assert seen[0] == "Galatasaray maç tahmini"
+    assert seen[0] == "galatasaray maç tahmini"
 
 
 def test_sec_input_redacts_tr_pii_before_classification_and_records_step() -> None:
@@ -807,7 +808,7 @@ def test_sec_input_redacts_tr_pii_before_classification_and_records_step() -> No
     out = list(agent.handle(_msg(QA_REQUEST, req.as_dict())))
     assert len(seen) == 1
     assert "0555" not in seen[0]
-    assert "[REDACTED:PHONE_TR:" in seen[0]
+    assert "[redacted:phone_tr:" in seen[0]
     v1 = next(m for m in out if m.envelope.topic == QA_REQUEST_V1)
     parsed = QaRequestV1.from_dict(v1.payload)
     assert parsed.sec_steps_run[0] == "tr_pii_redaction"
@@ -837,7 +838,7 @@ def test_nlp_tr_pii_runs_before_length_cap() -> None:
 
     assert len(seen) == 1
     assert seen[0] != raw
-    assert "[REDACTED:PHONE_TR:" in seen[0]
+    assert "[redacted:phone_tr:" in seen[0]
     assert seen[0].count("0555") == 0
     v1 = next(m for m in out if m.envelope.topic == QA_REQUEST_V1)
     parsed = QaRequestV1.from_dict(v1.payload)
@@ -873,7 +874,7 @@ def test_nlp_tr_pii_redacts_inplace_no_leak() -> None:
 
     assert raw_pii not in "\n".join(all_strings)
     assert not any("0555" in s for s in all_strings)
-    assert any("[REDACTED:PHONE_TR:" in s for s in all_strings)
+    assert any("[redacted:phone_tr:" in s for s in all_strings)
 
 
 # ── Producer-side quarantine overflow guard (§7.5) ───────────────

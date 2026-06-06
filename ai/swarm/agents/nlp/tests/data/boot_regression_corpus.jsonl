@@ -1,0 +1,200 @@
+{"id": "boot-001", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-002", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-003", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-004", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-005", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-006", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-007", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-008", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-009", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-010", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-011", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-012", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-013", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-014", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-015", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-016", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-017", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-018", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-019", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-020", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-021", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-022", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-023", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-024", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-025", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-026", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-027", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-028", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-029", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-030", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-031", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-032", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-033", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-034", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-035", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-036", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-037", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-038", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-039", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-040", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-041", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-042", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-043", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-044", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-045", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-046", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-047", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-048", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-049", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-050", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-051", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-052", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-053", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-054", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-055", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-056", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-057", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-058", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-059", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-060", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-061", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-062", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-063", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-064", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-065", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-066", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-067", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-068", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-069", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-070", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-071", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-072", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-073", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-074", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-075", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-076", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-077", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-078", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-079", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-080", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-081", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-082", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-083", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-084", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-085", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-086", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-087", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-088", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-089", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-090", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-091", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-092", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-093", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-094", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-095", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-096", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-097", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-098", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-099", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-100", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-101", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-102", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-103", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-104", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-105", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-106", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-107", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-108", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-109", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-110", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-111", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-112", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-113", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-114", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-115", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-116", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-117", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-118", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-119", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-120", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-121", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-122", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-123", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-124", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-125", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-126", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-127", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-128", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-129", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-130", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-131", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-132", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-133", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-134", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-135", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-136", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-137", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-138", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-139", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-140", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-141", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-142", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-143", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-144", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-145", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-146", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-147", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-148", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-149", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-150", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-151", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-152", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-153", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-154", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-155", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-156", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-157", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-158", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-159", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-160", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-161", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-162", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-163", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-164", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-165", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-166", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-167", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-168", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-169", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-170", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-171", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-172", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-173", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-174", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-175", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-176", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-177", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-178", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-179", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-180", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}
+{"id": "boot-181", "text": "bu sezon gol kralı kim?", "expected_intent_id": "data.top_scorer", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-182", "text": "2026 yılında asist kralı kim?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-183", "text": "Bu hafta en az gol yiyen kaleci kim?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-184", "text": "Geçen sezon lig lideri kim?", "expected_intent_id": "data.table_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-185", "text": "küme düşme hattında kim var? lütfen", "expected_intent_id": "data.relegation_zone", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-186", "text": "muhtemel ilk 11 kimler? son durum", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-187", "text": "Sıradaki soru: açıklanan kadro nedir?", "expected_intent_id": "data.lineup_official", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-188", "text": "Şu anda sakat oyuncular kimler?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-189", "text": "kart cezalısı kimler? hakkında bilgi verir misin?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-190", "text": "maçın hakemi kim? gerçek mi?", "expected_intent_id": "data.referee_appointment", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-191", "text": "maç saatindeki hava nasıl olacak?", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-192", "text": "2026 yılında transfer dönemi açık mı?", "expected_intent_id": "data.transfer_window_status", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-193", "text": "Bu hafta tarihte beş maç önce ne oldu?", "expected_intent_id": "data.head_to_head_history", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-194", "text": "Geçen sezon Galatasaray kazanırsa lider olur mu?", "expected_intent_id": "predict.match_outcome.conditional", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-195", "text": "Fenerbahçe bu hafta kadroda kimler olabilir? lütfen", "expected_intent_id": "data.lineup_probable", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-196", "text": "Beşiktaş maçında hava tahmini nedir? son durum", "expected_intent_id": "data.weather_at_kickoff", "boot_corpus_version": "1.0.0", "expected_top_entities": ["besiktas_jk"]}
+{"id": "boot-197", "text": "Sıradaki soru: Ankaragücü sakat raporu nedir?", "expected_intent_id": "data.injury_list", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-198", "text": "Şu anda Bursaspor ceza listesi kimleri içeriyor?", "expected_intent_id": "data.suspension_list", "boot_corpus_version": "1.0.0", "expected_top_entities": ["bursaspor"]}
+{"id": "boot-199", "text": "Bu sezon en az gol yiyen kaleci kim? hakkında bilgi verir misin?", "expected_intent_id": "data.clean_sheets_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": []}
+{"id": "boot-200", "text": "Trabzonspor asist kralı kim? gerçek mi?", "expected_intent_id": "data.assist_leader", "boot_corpus_version": "1.0.0", "expected_top_entities": ["trabzonspor"]}

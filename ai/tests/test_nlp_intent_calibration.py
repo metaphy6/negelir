@@ -448,6 +448,7 @@ class TestPhase1030Tables:
         from nlp.phase10_30 import GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
 
         assert "idioms.tr.yaml" in GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
+        assert "offensive_obfuscated.tr.yaml" in GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES
 
     def test_anaphora_pronoun_table_covers_expected_pronouns(self) -> None:
         from nlp.phase10_30 import load_anaphora_pronouns
@@ -465,6 +466,92 @@ class TestPhase1030Tables:
         pronouns = load_anaphora_pronouns()
         assert all(isinstance(entry.pronoun, str) and entry.pronoun for entry in pronouns.values())
         assert all(isinstance(entry.type_constraint, str) and entry.type_constraint for entry in pronouns.values())
+
+    def test_complementary_anaphora_marker_table_schema_is_valid(self) -> None:
+        from nlp.phase10_30 import load_complementary_anaphora
+
+        markers = load_complementary_anaphora()
+        assert "öbür" in markers
+        assert "diğeri" in markers
+        assert "öteki" in markers
+
+    def test_anaphora_resolver_complementary_marker_resolves_other_system_mention(self) -> None:
+        from nlp.phase10_30 import resolve_anaphora_pronoun
+
+        mention_stack = [
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 0.9,
+                "name": "Galatasaray",
+                "mentioned_turn": 1,
+                "mentioned_at": "2026-01-01T00:00:00+00:00",
+                "mentioned_by": "system",
+            },
+            {
+                "canonical_id": "fb",
+                "kind": "team",
+                "confidence": 0.95,
+                "name": "Fenerbahçe",
+                "mentioned_turn": 2,
+                "mentioned_at": "2026-01-01T00:00:30+00:00",
+                "mentioned_by": "system",
+            },
+        ]
+
+        resolved, score = resolve_anaphora_pronoun(
+            "öbür",
+            mention_stack,
+            current_turn_index=3,
+            current_time_iso="2026-01-01T00:01:00+00:00",
+        )
+        assert resolved is not None
+        assert resolved["canonical_id"] == "gs"
+        assert score >= float(cfg.nlp_anaphora_min_antecedent_confidence)
+
+    def test_anaphora_resolver_complementary_marker_prefers_non_user_system_mention(self) -> None:
+        from nlp.phase10_30 import resolve_anaphora_pronoun
+
+        mention_stack = [
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 1.0,
+                "name": "Galatasaray",
+                "mentioned_turn": 1,
+                "mentioned_at": "2026-01-01T00:00:00+00:00",
+                "mentioned_by": "user",
+            },
+            {
+                "canonical_id": "fb",
+                "kind": "team",
+                "confidence": 0.95,
+                "name": "Fenerbahçe",
+                "mentioned_turn": 2,
+                "mentioned_at": "2026-01-01T00:00:30+00:00",
+                "mentioned_by": "system",
+            },
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 0.9,
+                "name": "Galatasaray",
+                "mentioned_turn": 2,
+                "mentioned_at": "2026-01-01T00:00:30+00:00",
+                "mentioned_by": "system",
+            },
+        ]
+
+        resolved, score = resolve_anaphora_pronoun(
+            "öbür",
+            mention_stack,
+            current_turn_index=4,
+            current_time_iso="2026-01-01T00:01:00+00:00",
+        )
+        assert resolved is not None
+        assert resolved["canonical_id"] == "fb"
+        assert resolved.get("mentioned_by") == "system"
+        assert score >= float(cfg.nlp_anaphora_min_antecedent_confidence)
 
     def test_anaphora_compose_table_schema_is_valid(self) -> None:
         from nlp.phase10_30 import load_anaphora_compose
@@ -505,11 +592,79 @@ class TestPhase1030Tables:
         assert resolved_team["canonical_id"] == "gs"
         assert team_score >= float(cfg.nlp_anaphora_min_antecedent_confidence)
 
+    def test_anaphora_resolver_prefers_user_mentions_over_system_mentions(self) -> None:
+        from nlp.phase10_30 import resolve_anaphora_pronoun
+
+        mention_stack = [
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 1.0,
+                "name": "Galatasaray",
+                "mentioned_turn": 2,
+                "mentioned_at": "2026-01-01T00:00:45+00:00",
+                "mentioned_by": "user",
+            },
+            {
+                "canonical_id": "fb",
+                "kind": "team",
+                "confidence": 0.95,
+                "name": "Fenerbahçe",
+                "mentioned_turn": 1,
+                "mentioned_at": "2026-01-01T00:00:30+00:00",
+                "mentioned_by": "system",
+            },
+        ]
+        resolved, score = resolve_anaphora_pronoun(
+            "onlar",
+            mention_stack,
+            current_turn_index=3,
+            current_time_iso="2026-01-01T00:01:00+00:00",
+        )
+        assert resolved is not None
+        assert resolved["canonical_id"] == "gs"
+        assert resolved.get("mentioned_by") == "user"
+        assert score >= float(cfg.nlp_anaphora_min_antecedent_confidence)
+
+    def test_anaphora_resolver_ambiguous_system_mentions_requires_disambiguation(self) -> None:
+        from nlp.phase10_30 import resolve_anaphora_pronoun
+
+        mention_stack = [
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 0.9,
+                "name": "Galatasaray",
+                "mentioned_turn": 1,
+                "mentioned_at": "2026-01-01T00:00:00+00:00",
+                "mentioned_by": "system",
+            },
+            {
+                "canonical_id": "fb",
+                "kind": "team",
+                "confidence": 0.95,
+                "name": "Fenerbahçe",
+                "mentioned_turn": 2,
+                "mentioned_at": "2026-01-01T00:00:30+00:00",
+                "mentioned_by": "system",
+            },
+        ]
+        resolved, score = resolve_anaphora_pronoun(
+            "o",
+            mention_stack,
+            current_turn_index=3,
+            current_time_iso="2026-01-01T00:01:00+00:00",
+        )
+        assert resolved is None
+        assert score == 0.0
+
     def test_politeness_marker_table_includes_suffixal_forms(self) -> None:
         from nlp.phase10_30 import load_politeness_markers
 
         markers = load_politeness_markers()
-        assert "yapabilir misiniz" in markers
+        assert "mısınız" in markers
+        assert "miydiniz" in markers
+        assert "musunuz" in markers
         assert "rica ediyorum" in markers
         assert "mümkünse" in markers
 

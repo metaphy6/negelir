@@ -1,0 +1,66 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Create lexicon alert tests",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cat > ai/tests/test_nlp_lexicon_alerts.py <<'PY'\n\"\"\"Phase 10 §10.25.8 — Lexicon alert coverage and stale support tests.\"\"\"\nfrom __future__ import annotations\n\nimport os\nimport time\nfrom pathlib import Path\n\nfrom common.telemetry import TelemetrySink\nfrom nlp.lexicon_loader import LexiconStore\n\n_VALID_META = (\n    \"_meta:\\n\"\n    \"  schema_version: 1\\n\"\n    \"  lexicon_version: 1.0.0\\n\"\n    '  generated_at_utc: \"2026-05-27T00:00:00Z\"\\n'\n    \"  generator: nlp.lexicon-build\\n\"\n)\n\n\ndef _make_teams_yaml(n_entries: int) -> str:\n    lines = [_VALID_META, \"entries:\"]\n    for i in range(n_entries):\n        lines.extend([\n            f\"  - canonical_id: team_{i}\",\n            \"    names:\",\n            f\"      - Team {i}\",\n            \"    aliases:\",\n            f\"      - t{i}\",\n        ])\n    return \"\\n\".join(lines) + \"\\n\"\n\n\ndef _make_markets_yaml() -> str:\n    return (\n        _VALID_META\n        + \"entries:\\n\"\n        + \"  - canonical_id: ms\\n\"\n        + \"    names:\\n\"\n        + \"      - Mac Sonucu\\n\"\n        + \"    aliases:\\n\"\n        + \"      - 1x2\\n\"\n    )\n\n\ndef _make_dialects_yaml() -> str:\n    return (\n        _VALID_META\n        + \"entries:\\n\"\n        + \"  - token: kl\\n\"\n        + \"    canonical_tokens:\\n\"\n        + \"      - Team 0\\n\"\n    )\n\n\ndef _make_entities_neg_yaml() -> str:\n    return (\n        _VALID_META\n        + \"entries:\\n\"\n        + \"  - token: fener\\n\"\n        + \"    requires_co_tokens:\\n\"\n        + \"      - bahce\\n\"\n    )\n\n\ndef _write_lexicon_dir(tmp_path: Path, *, teams_content: str) -> Path:\n    (tmp_path / \"teams.tr.yaml\").write_text(teams_content, encoding=\"utf-8\")\n    small = _make_teams_yaml(2)\n    for fname in (\"players.tr.yaml\", \"leagues.tr.yaml\", \"competitions.tr.yaml\"):\n        (tmp_path / fname).write_text(small, encoding=\"utf-8\")\n    (tmp_path / \"markets.tr.yaml\").write_text(_make_markets_yaml(), encoding=\"utf-8\")\n    (tmp_path / \"dialects.tr.yaml\").write_text(_make_dialects_yaml(), encoding=\"utf-8\")\n    (tmp_path / \"entities_negative.tr.yaml\").write_text(\n        _make_entities_neg_yaml(), encoding=\"utf-8\"\n    )\n    return tmp_path\n\n\nclass TestLexiconStaleAlert:\n    def test_old_lexicon_emits_stale_alert(self, tmp_path: Path) -> None:\n        lexdir = _write_lexicon_dir(tmp_path, teams_content=_make_teams_yaml(2))\n        now = time.time()\n        old_time = now - (15 * 24 * 3600)\n        for path in lexdir.glob(\"*.tr.yaml\"):\n            os.utime(path, (old_time, old_time))\n\n        store = LexiconStore(\n            lexdir,\n            reload_s=9999,\n            max_rss_mb=0,\n            clock_wall=lambda: now,\n            clock_mono=lambda: 0.0,\n        )\n\n        alerts = store.maybe_reload()\n        assert any(alert[\"kind\"] == \"lexicon_stale\" for alert in alerts), alerts\n\n    def test_recent_lexicon_does_not_emit_stale_alert(self, tmp_path: Path) -> None:\n        lexdir = _write_lexicon_dir(tmp_path, teams_content=_make_teams_yaml(2))\n        now = time.time()\n        store = LexiconStore(\n            lexdir,\n            reload_s=9999,\n            max_rss_mb=0,\n            clock_wall=lambda: now,\n            clock_mono=lambda: 0.0,\n        )\n\n        alerts = store.maybe_reload()\n        assert all(alert.get(\"kind\") != \"lexicon_stale\" for alert in alerts)\n\n\nclass TestLexiconCoverageAlerts:\n    def test_low_coverage_triggers_callback_after_grace_period(self) -> None:\n        times: list[float] = [0.0, 1800.1]\n        callbacks: list[dict[str, object]] = []\n\n        def current_time() -> float:\n            return times[0]\n\n        sink = TelemetrySink(clock=current_time)\n        sink.register_nlp_alert_callback(lambda payload: callbacks.append(payload))\n\n        sink.record_nlp_lexicon_coverage(\"team_query\", 0.5)\n        assert callbacks == []\n\n        times[0] = 1800.1\n        sink.record_nlp_lexicon_coverage(\"team_query\", 0.5)\n\n        assert len(callbacks) == 1\n        assert callbacks[0][\"kind\"] == \"lexicon_coverage_below_floor\"\n        assert callbacks[0][\"severity\"] == \"warn\"\n        assert callbacks[0][\"subject\"] == \"team_query\"\n\n    def test_coverage_above_floor_does_not_alert(self) -> None:\n        sink = TelemetrySink(clock=lambda: 0.0)\n        sink.register_nlp_alert_callback(lambda payload: (_ for _ in ()).throw(AssertionError(\"unexpected alert\")))\n        sink.record_nlp_lexicon_coverage(\"team_query\", 0.7)\n        sink.record_nlp_lexicon_coverage(\"team_query\", 0.8)\n        sink.record_nlp_lexicon_coverage(\"team_query\", 0.9)\n\n        # No alert should have been emitted for healthy coverage values.\n        assert True\nPY"
+			]
+		},
+		{
+			"label": "Run dispatcher tests",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/serhatakbak/code/mine/negelir && PYTHONPATH=ai python3 -m pytest ai/tests/test_nlp_dispatcher_agent.py -q"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$pytest"
+			]
+		},
+		{
+			"label": "Run dispatcher tests pass 2",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/serhatakbak/code/mine/negelir && PYTHONPATH=ai python3 -m pytest ai/tests/test_nlp_dispatcher_agent.py -q"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$pytest"
+			]
+		},
+		{
+			"label": "Run new entity state tests",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/serhatakbak/code/mine/negelir && PYTHONPATH=ai python3 -m pytest ai/tests/test_nlp_dispatcher_agent.py -q -k \"test_nlp_entity_state_ttl_per_class_triggers_refresh_and_disclosure or test_nlp_fresh_entity_state_reuses_cached_fixture_state_without_extra_lookup\""
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$pytest"
+			]
+		},
+		{
+			"label": "Run new entity state tests pass 2",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/serhatakbak/code/mine/negelir && PYTHONPATH=ai python3 -m pytest ai/tests/test_nlp_dispatcher_agent.py -q -k \"test_nlp_entity_state_ttl_per_class_triggers_refresh_and_disclosure or test_nlp_fresh_entity_state_reuses_cached_fixture_state_without_extra_lookup\""
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$pytest"
+			]
+		}
+	]
+}

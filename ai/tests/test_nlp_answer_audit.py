@@ -7,8 +7,10 @@ This test covers the sampled answer audit feature:
   4. I/O failure: audit errors do not block the user
   5. PII redaction: email and phone patterns are redacted before writing
 """
+import hashlib
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -16,6 +18,7 @@ from unittest import mock
 import pytest
 
 from common.config import Config, cfg
+from common.security.tr_pii import detect_tr_pii_spans
 from swarm.agents.nlp import AUDIT_REDACTION_WHITELIST, NlpAnswerAgent, NlpIntentAgent
 
 
@@ -40,17 +43,19 @@ def test_audit_config_keys_exist():
     assert "NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP" in env_text
     assert "NEGELIR_NLP_AUDIT_BUNDLE_RETENTION_DAYS" in env_text
     assert "NEGELIR_NLP_TEMPLATE_GIT_SHA" in env_text
-    
+    assert "NEGELIR_NLP_DEFAULT_ANSWER_FORMAT" in env_text
+    assert "NEGELIR_NLP_ANSWER_FORMATS" in env_text
+    assert "NEGELIR_NLP_ANSWER_FORMAT_ENABLED" in env_text
+
     # Check defaults.yaml documents them
     defaults_path = Path(__file__).parents[1] / "common" / "defaults.yaml"
     defaults_text = defaults_path.read_text(encoding="utf-8")
     assert "answer_sample_inverse: 1000" in defaults_text
     assert "answer_sample_daily_cap: 5000" in defaults_text
     assert "audit_bundle_retention_days: 2555" in defaults_text
-
-
-# ── Sampling rate ──────────────────────────────────────────────────────────
-
+    assert "default_answer_format: \"plain\"" in defaults_text
+    assert "answer_formats: \"plain,markdown_safe,screen_reader,whatsapp_4096,sms_160,tts_neutral\"" in defaults_text
+    assert "answer_format_enabled: '{\"plain\": true, \"markdown_safe\": true, \"screen_reader\": true, \"whatsapp_4096\": false, \"sms_160\": false, \"tts_neutral\": false}'" in defaults_text
 def test_audit_sampling_rate():
     """1-in-1000 sampling: mock random to verify sampling logic."""
     agent = NlpAnswerAgent()
@@ -182,6 +187,189 @@ def test_nlp_audit_row_carries_bundle_sha() -> None:
 
             assert "nlp_audit_bundle_sha" in data
             assert len(data["nlp_audit_bundle_sha"]) == 64
+
+
+def test_nlp_audit_bundle_includes_conversation_entity_graph_sha() -> None:
+    agent = NlpAnswerAgent()
+
+    with mock.patch("common.config.cfg") as mock_cfg:
+        mock_cfg.nlp_answer_sample_inverse = 1
+        mock_cfg.nlp_answer_sample_daily_cap = 1000
+        mock_cfg.nlp_intent_model_sha256 = "intent-sha"
+        mock_cfg.nlp_entity_crf_model_sha256 = "crf-sha"
+        mock_cfg.nlp_template_git_sha = "template-sha"
+
+        with mock.patch("swarm.agents.nlp.ConversationStore.load", return_value={
+            "conversation_id": "conv-1",
+            "turn_index": 1,
+            "entities": [
+                {
+                    "kind": "team",
+                    "canonical_id": "galatasaray",
+                    "account_id_h": "acct-1",
+                }
+            ],
+            "anaphora_mentions": [
+                {
+                    "kind": "team",
+                    "canonical_id": "galatasaray",
+                }
+            ],
+        }):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                original_join = os.path.join
+
+                def mock_join(*args):
+                    if len(args) >= 3 and args[0] == "data" and args[1] == "nlp":
+                        return original_join(tmpdir, *args[2:])
+                    return original_join(*args)
+
+                with mock.patch("os.path.join", side_effect=mock_join):
+                    with mock.patch("random.randint", return_value=1):
+                        agent._maybe_audit_answer(
+                            "NLP answer text",
+                            {
+                                "intent": "predict.final",
+                                "request_id": "req-1",
+                                "conversation_id": "conv-1",
+                                "calibration_version": "cal-v1",
+                                "nlp_pipeline_version": "10.0.0",
+                                "lexicon_versions": {
+                                    "players": "lex-sha-2",
+                                    "teams": "lex-sha-1",
+                                },
+                            },
+                            "qa_bundle_graph_test",
+                        )
+
+                audit_file = list((Path(tmpdir) / "audit").rglob("qa_bundle_graph_test.json"))[0]
+                bundle_sha = json.loads(audit_file.read_text(encoding="utf-8"))["nlp_audit_bundle_sha"]
+                bundle_root = Path(tmpdir) / "audit_bundles" / bundle_sha
+                manifest = json.loads((bundle_root / "manifest.json").read_text(encoding="utf-8"))
+                graph = json.loads((bundle_root / "conversation_entity_graph.json").read_text(encoding="utf-8"))
+
+                expected_graph_sha = hashlib.sha256(
+                    json.dumps(graph, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                ).hexdigest()
+                assert manifest["conversation_entity_graph_sha"] == expected_graph_sha
+                assert graph["conversation_id"] == "conv-1"
+                assert graph["entities"][0]["canonical_id"] == "galatasaray"
+
+
+def test_nlp_audit_rerender_with_conversation_context_byte_identical() -> None:
+    from nlp.audit_rerender import rerender_bundle
+
+    request_id = "qa_rerender_context_test"
+    bundle_sha = "deadbeef" * 8
+    expected_answer = "Üzgünüm, bu soruyu yanıtlayamıyorum."
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        backup_request_dir = Path(tmpdir) / "backup" / "qa.request.v1"
+        backup_predict_dir = Path(tmpdir) / "backup" / "predict.approved.v1"
+        audit_root = Path(tmpdir) / "data" / "nlp" / "audit"
+        bundle_root = Path(tmpdir) / "data" / "nlp" / "audit_bundles" / bundle_sha
+        maint_event_dir = Path(tmpdir) / "data" / "maint" / "nlp_audit_rerender_executed"
+        backup_request_dir.mkdir(parents=True)
+        backup_predict_dir.mkdir(parents=True)
+        audit_root.mkdir(parents=True)
+        bundle_root.mkdir(parents=True)
+
+        (backup_request_dir / f"{request_id}.json").write_text(
+            json.dumps({
+                "request_id": request_id,
+                "sanitized_text": "Galatasaray Fenerbahçe",
+                "locale": "tr",
+                "sec_verdict": "pass",
+                "emitted_at": "2026-06-01T12:00:00Z",
+            }),
+            encoding="utf-8",
+        )
+        (backup_predict_dir / f"{request_id}.json").write_text(
+            json.dumps({
+                "final": {
+                    "prediction_id": "pred-1",
+                    "intent": "meta.unsupported",
+                    "template_name": "meta.unsupported.tr.j2",
+                    "calibration_version": 1,
+                    "produced_at_utc": "2026-06-01T12:00:00Z",
+                    "model_versions": ["predictor-v1@1.0.0"],
+                }
+            }),
+            encoding="utf-8",
+        )
+        (audit_root / f"{request_id}.json").write_text(
+            json.dumps({
+                "qa_correlation_id": request_id,
+                "answer_text_redacted": expected_answer,
+            }),
+            encoding="utf-8",
+        )
+        (bundle_root / "manifest.json").write_text(
+            json.dumps({"bundle_sha": bundle_sha}), encoding="utf-8"
+        )
+        (bundle_root / "intent.tr.bin.sha256").write_text("intent-sha", encoding="utf-8")
+        (bundle_root / "crf.tr.model.sha256").write_text("crf-sha", encoding="utf-8")
+        (bundle_root / "conversation_entity_graph.json").write_text(
+            json.dumps({
+                "schema_version": 1,
+                "conversation_id": "conv-1",
+                "turn_index": 1,
+                "entities": [
+                    {
+                        "kind": "team",
+                        "canonical_id": "galatasaray",
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+
+        def render_func(predict_payload: dict[str, object], request_payload: dict[str, object]) -> str:
+            assert request_payload.get("conversation_entity_graph") is not None
+            assert request_payload["conversation_entity_graph"]["conversation_id"] == "conv-1"
+            return expected_answer
+
+        result = rerender_bundle(
+            bundle_sha,
+            request_id,
+            request_backup_dir=backup_request_dir,
+            predict_backup_dir=backup_predict_dir,
+            audit_root=audit_root,
+            bundle_root=bundle_root.parent,
+            maint_event_dir=maint_event_dir,
+            render_func=render_func,
+        )
+
+        assert result == expected_answer
+        assert (Path(tmpdir) / "data" / "maint" / "nlp_audit_rerender_executed" / f"{bundle_sha}_{request_id}.json").exists()
+
+
+def test_nlp_audit_erasure_drops_account_id_h_from_graph_file() -> None:
+    from swarm.agents.nlp import _erase_account_id_h_from_conversation_entity_graph
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        bundle_root = Path(tmpdir) / "bundle"
+        bundle_root.mkdir(parents=True)
+        graph_path = bundle_root / "conversation_entity_graph.json"
+        graph_path.write_text(
+            json.dumps({
+                "schema_version": 1,
+                "conversation_id": "conv-erase",
+                "entities": [
+                    {
+                        "kind": "team",
+                        "canonical_id": "fener",
+                        "account_id_h": "acct-erase",
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+
+        _erase_account_id_h_from_conversation_entity_graph(str(bundle_root), "acct-erase")
+
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        assert "account_id_h" not in graph["entities"][0]
 
 
 def test_nlp_bundle_quintet_canonical_form_byte_stable() -> None:
@@ -634,7 +822,62 @@ def test_audit_redacts_phone():
                     with open(audit_files[0], "r", encoding="utf-8") as fh:
                         data = json.load(fh)
                         assert "0555 123 45 67" not in data["answer_text_redacted"]
-                        assert "[REDACTED_PHONE]" in data["answer_text_redacted"]
+                        assert "[REDACTED:PHONE_TR" in data["answer_text_redacted"]
+
+
+def test_storage_no_unredacted_tr_pii_at_rest():
+    """Phase 4 boundary: persisted NLP audit rows must not contain raw TR PII."""
+    agent = NlpAnswerAgent()
+
+    with mock.patch("common.config.cfg") as mock_cfg:
+        mock_cfg.nlp_answer_sample_inverse = 1
+        mock_cfg.nlp_answer_sample_daily_cap = 1000
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_join = os.path.join
+
+            def mock_join(*args):
+                if len(args) >= 3 and args[0] == "data" and args[1] == "nlp":
+                    return original_join(tmpdir, *args[2:])
+                return original_join(*args)
+
+            with mock.patch("os.path.join", side_effect=mock_join):
+                with mock.patch("random.randint", return_value=1):
+                    agent._maybe_audit_answer(
+                        "TC kimlik: 10000000146, IBAN: TR33 0006 1005 1978 6457 8413 26, telefon: 0555 123 45 67",
+                        {
+                            "extra_text": "Lütfen 10000000146 kaydedin",
+                            "nested": {"iban": "TR33 0006 1005 1978 6457 8413 26"},
+                        },
+                        "qa_tr_pii_storage_test",
+                    )
+
+                    audit_files = list((Path(tmpdir) / "audit").rglob("*.json"))
+                    assert len(audit_files) == 1
+
+                    redacted_token_re = re.compile(r"\[REDACTED:[A-Z_]+:sha8=[0-9a-f]{8}\]")
+
+                    def _collect_strings(value):
+                        if isinstance(value, str):
+                            return [redacted_token_re.sub("", value)]
+                        if isinstance(value, list):
+                            strings: list[str] = []
+                            for item in value:
+                                strings.extend(_collect_strings(item))
+                            return strings
+                        if isinstance(value, dict):
+                            strings = []
+                            for item in value.values():
+                                strings.extend(_collect_strings(item))
+                            return strings
+                        return []
+
+                    with open(audit_files[0], "r", encoding="utf-8") as fh:
+                        audit = json.load(fh)
+
+                    strings_to_check = [redacted_token_re.sub("", audit["answer_text_redacted"])] + _collect_strings(audit["envelope"])
+                    for string in strings_to_check:
+                        assert detect_tr_pii_spans(string) == []
 
 
 def test_nlp_audit_whitelist_is_closed_set():
@@ -706,7 +949,7 @@ def test_audit_redacts_non_whitelisted_envelope_fields_with_same_pii_set():
             assert "support@negelir.com" not in written["entities"][0]["name"]
             assert "0555 123 45 67" not in written["entities"][0]["note"]
             assert "[REDACTED_EMAIL]" in written["entities"][0]["name"]
-            assert "[REDACTED_PHONE]" in written["entities"][0]["note"]
+            assert "[REDACTED:PHONE_TR" in written["entities"][0]["note"]
             assert "support@negelir.com" not in written["answer_text"]
             assert "help@negelir.com" not in written["debug"]["owner"]
 

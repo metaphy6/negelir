@@ -49,6 +49,9 @@ const (
 	// 422
 	CodeUnprocessable Code = "unprocessable"
 	CodeQAQuarantined Code = "qa_quarantined"
+	
+	// 426
+	CodeUpgradeRequired Code = "upgrade_required"
 
 	// 425
 	CodeTooEarly Code = "too_early"
@@ -97,6 +100,7 @@ var HTTPStatus = map[Code]int{
 	CodeUnsupportedMediaType:                  http.StatusUnsupportedMediaType,
 	CodeUnprocessable:                         http.StatusUnprocessableEntity,
 	CodeQAQuarantined:                         http.StatusUnprocessableEntity,
+	CodeUpgradeRequired:                      http.StatusUpgradeRequired,
 	CodeTooEarly:                              425,
 	CodeRateLimited:                           http.StatusTooManyRequests,
 	CodeTierQuotaExceeded:                     http.StatusTooManyRequests,
@@ -139,6 +143,7 @@ var titles = map[Code]string{
 	CodeUnsupportedMediaType:                  "Unsupported media type",
 	CodeUnprocessable:                         "Unprocessable entity",
 	CodeQAQuarantined:                         "Q&A input quarantined",
+	CodeUpgradeRequired:                      "Upgrade required",
 	CodeTooEarly:                              "Too early - consensus warming",
 	CodeRateLimited:                           "Rate limited",
 	CodeTierQuotaExceeded:                     "Tier quota exceeded",

@@ -35,11 +35,15 @@ output across CUDA / CPU within ε for tokens (deterministic decode required).
 """
 from __future__ import annotations
 
+import multiprocessing
 from dataclasses import dataclass
+from queue import Empty
 from threading import Lock
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
+from nlp._humanizer_breaker import HumanizerCircuitBreaker
+from nlp.runtime.budget import RequestBudget
 from nlp.vendor.symspell import _edit_distance
 
 if TYPE_CHECKING:
@@ -254,20 +258,38 @@ def humanize(
     """
     # Phase 10 stub: humanizer is documented but not integrated (Phase 11 §11.2).
     # When the LLM is integrated, apply drift guard to the output.
-    # For now, always return unchanged (no LLM call, no drift).
-    #
-    # Phase 11 §11.2 GPU sharing workflow (when LLM is active):
-    # lease_token = _acquire_gpu_lease(cfg=cfg)  # Round-robin scheduler
-    # try:
-    #     output = _call_llm(templated_answer, cfg=cfg)  # Uses leased GPU
-    #     if _check_drift_guard(templated_answer, output, cfg=cfg):
-    #         return output
-    #     else:
-    #         # emit nlp.alert.v1{kind=nlp_humanizer_drift, severity=warn}
-    #         return templated_answer
-    # finally:
-    #     _release_gpu_lease(lease_token)  # Lease swap → patcher can acquire
-    return templated_answer
+    # For now, the optional humanizer path remains a supervised subprocess stub
+    # that returns the template unchanged on failure.
+    if not cfg.nlp_humanize:
+        return templated_answer
+
+    breaker = HumanizerCircuitBreaker(cfg=cfg)
+    if breaker.is_open():
+        return templated_answer
+
+    lease_token: str | None = None
+    try:
+        lease_token = _acquire_gpu_lease(cfg=cfg)
+    except NotImplementedError:
+        lease_token = None
+
+    lease_release_callback = None
+    if lease_token is not None:
+        def _release_lease() -> None:
+            _release_gpu_lease(lease_token)
+        lease_release_callback = _release_lease
+
+    try:
+        result = _run_humanizer_subprocess(
+            templated_answer,
+            cfg=cfg,
+            lease_release_callback=lease_release_callback,
+        )
+        breaker.record_success()
+        return result
+    except _HumanizerSubprocessError:
+        breaker.record_failure()
+        return templated_answer
 
 
 def humanizer_max_allowed_new_tokens(*, cfg: Config) -> int:
@@ -364,3 +386,74 @@ def _release_gpu_lease(lease_token: str) -> None:
     raise NotImplementedError(
         "GPU lease release is a Phase 11 §11.2 feature (ai/swarm/sdk/gpu_arbiter.py)."
     )
+
+
+class _HumanizerSubprocessError(RuntimeError):
+    """Raised when the supervised humanizer subprocess fails."""
+
+
+def _get_humanizer_process_context() -> multiprocessing.context.BaseContext:
+    """Return a subprocess context suitable for the current platform."""
+    try:
+        return multiprocessing.get_context("fork")
+    except ValueError:
+        return multiprocessing.get_context()
+
+
+def _humanizer_process_body(
+    templated_answer: str,
+    cfg: "Config",
+    out_queue: "multiprocessing.queues.Queue[str]",
+) -> None:
+    """Worker body for the supervised humanizer subprocess."""
+    with RequestBudget(cfg=cfg, humanizer=True):
+        out_queue.put(templated_answer)
+
+
+def _run_humanizer_subprocess(
+    templated_answer: str,
+    cfg: Config,
+    *,
+    lease_release_callback: Callable[[], None] | None = None,
+    process_factory: Callable[
+        [Callable[..., None], tuple[object, ...], dict[str, object]],
+        Any,
+    ] | None = None,
+) -> str:
+    """Run the humanizer in a supervised subprocess and return its result."""
+    ctx = _get_humanizer_process_context()
+    out_queue = ctx.Queue(maxsize=1)
+
+    if process_factory is None:
+        process = ctx.Process(
+            target=_humanizer_process_body,
+            args=(templated_answer, cfg, out_queue),
+        )
+    else:
+        process = process_factory(_humanizer_process_body, (templated_answer, cfg, out_queue), {})
+
+    process.start()
+    process.join(timeout=float(cfg.nlp_humanizer_max_latency_ms) / 1000.0)
+
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=1.0)
+        if lease_release_callback is not None:
+            lease_release_callback()
+        raise _HumanizerSubprocessError("Humanizer subprocess timed out")
+
+    if process.exitcode != 0:
+        if lease_release_callback is not None:
+            lease_release_callback()
+        raise _HumanizerSubprocessError(
+            f"Humanizer subprocess exited with code {process.exitcode}"
+        )
+
+    try:
+        return out_queue.get_nowait()
+    except Empty as exc:
+        if lease_release_callback is not None:
+            lease_release_callback()
+        raise _HumanizerSubprocessError(
+            "Humanizer subprocess returned no output"
+        ) from exc

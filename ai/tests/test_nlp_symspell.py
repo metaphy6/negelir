@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from nlp.lexicon_loader import AliasHit
-from nlp.vendor.symspell import SymSpellIndex, _edit_distance
+from nlp.vendor.symspell import SymSpellIndex, _edit_distance, _weighted_edit_distance
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +209,25 @@ class TestTieBreaking:
         result = idx.lookup("galx")
         assert result is not None
         assert result.hit.canonical_id == "short"
+
+
+class TestLayoutAwareLookup:
+    def test_weighted_edit_distance_uses_layout_costs(self):
+        assert _weighted_edit_distance("ax", "ab", layout="q") == 0.5
+        assert _weighted_edit_distance("ax", "ab") == 1.0
+
+    def test_lookup_layout_optional(self):
+        idx = _build([("galatasaray", "gs")])
+        assert idx.lookup("galatasaray") == idx.lookup("galatasaray", layout=None)
+        assert idx.lookup("galatasaray", layout="unknown") is not None
+
+    def test_layout_aware_budget_counts_half(self):
+        idx = _build([("galatasaray", "gs"), ("fenerbahce", "fb")])
+        tokens = ["gaalatasaray", "fenrbahce"]
+        results, exhausted = idx.lookup_tokens(tokens, max_lookups=1, layout="q")
+        assert exhausted is False
+        assert results[0] is not None and results[0].edit_distance > 0
+        assert results[1] is not None and results[1].edit_distance > 0
 
 
 # ---------------------------------------------------------------------------

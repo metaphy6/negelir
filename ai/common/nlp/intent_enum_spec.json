@@ -8,6 +8,7 @@
   "enum": [
     "predict.match_outcome",
     "predict.match_outcome.conditional",
+    "predict.match_outcome.comparative",
     "predict.over_under",
     "predict.btts",
     "predict.handicap",

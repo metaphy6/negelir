@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 494,
+    "build": 708,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.95.6",
+      "version": "1.104.7",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-04T21:22:51+00:00",
+      "last_changed": "2026-06-06T10:33:18+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.45.7",
+      "version": "1.45.13",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-03T14:28:10+00:00",
+      "last_changed": "2026-06-06T02:16:24+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.50.0",
+      "version": "3.51.2",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-03T15:10:42+00:00"
+      "last_changed": "2026-06-06T00:55:51+00:00"
     },
     "docs": {
-      "version": "1.105.4",
+      "version": "1.120.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-04T20:27:14+00:00"
+      "last_changed": "2026-06-06T08:29:55+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -88,9 +88,9 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "swarm": {
-      "version": "0.51.0",
+      "version": "0.54.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
-      "last_changed": "2026-06-03T11:00:20+00:00",
+      "last_changed": "2026-06-06T02:55:37+00:00",
       "min_compatible_with": {
         "ai": "1.5.0"
       }
@@ -203,6 +203,26 @@
         "source_spec": "IANA tzdata Europe/Istanbul zoneinfo file, pinned for Phase 10 §10.23.6 TZ render consistency. Baseline: 2026a.",
         "sha256": "d92d00fdfed5c6fc84ac930c08fa8adf7002840dbd21590caf5a3e4a932d3319",
         "path": "zoneinfo/Europe/Istanbul"
+      },
+      "hijri_table": {
+        "source_spec": "Vendored deterministic Hijri lookup for Phase 10 §10.25 holiday resolution.",
+        "sha256": "3799ccb486995f306bb15618a6e2c8dfcb6d44d7624fa79a68818229535adcd2",
+        "path": "ai/nlp/dates/hijri.py",
+        "comment": "Deterministic table for Turkish holiday resolution in ai/nlp/dates/hijri.py."
+      },
+      "diyanet_override_table": {
+        "source_spec": "Diyanet override table for Phase 10 §10.25 holiday resolution.",
+        "sha256": "f5d34ac3633c574d5676fb22c96a093df31f149977a5dadbe67e56af1a3d1298",
+        "path": "ai/nlp/dates/_diyanet_overrides.tr.yaml"
+      },
+      "openfootball_fifa_window_seed": {
+        "source_spec": "OpenFootball FIFA-window season seed for Phase 10 §10.25 holiday resolver cache build.",
+        "sha256": "6bfa0c16f87ea59ab79c60873ad3d3c0288e3198e4d6d0f56a2ebcb117e708c4",
+        "path": "infra/mock/seeds/openfootball/tr1_2024_25.json"
+      },
+      "python_multiprocessing_glibc_range": {
+        "source_spec": "Tested host glibc range for Phase 10 §10.25 python multiprocessing fork/spawn semantics: glibc 2.35–2.42.",
+        "comment": "Semantics compatibility pin for subprocess supervisor / humanizer respawn behavior; no external file SHA available."
       }
     }
   },
@@ -11663,6 +11683,1932 @@
       "from": "1.95.5",
       "to": "1.95.6",
       "build": 494
+    },
+    {
+      "timestamp": "2026-06-05T06:50:23+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 10.24 qa.answer.v1 schema update",
+      "from": "1.105.4",
+      "to": "1.105.5",
+      "build": 495
+    },
+    {
+      "timestamp": "2026-06-05T06:57:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.24 proof test stability",
+      "from": "1.95.6",
+      "to": "1.95.7",
+      "build": 496
+    },
+    {
+      "timestamp": "2026-06-05T07:14:43+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 10 demo helper for swarm.demo.nlp.full",
+      "from": "3.50.0",
+      "to": "3.50.1",
+      "build": 497
+    },
+    {
+      "timestamp": "2026-06-05T07:14:43+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design checkbox update for swarm.demo.nlp.full",
+      "from": "1.105.5",
+      "to": "1.105.6",
+      "build": 498
+    },
+    {
+      "timestamp": "2026-06-05T07:30:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.24 dotted-i parity and normalize idempotency coverage",
+      "from": "1.95.7",
+      "to": "1.95.8",
+      "build": 499
+    },
+    {
+      "timestamp": "2026-06-05T07:30:36+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 10 §10.24 sec layer dotted-i parity test",
+      "from": "1.45.7",
+      "to": "1.45.8",
+      "build": 500
+    },
+    {
+      "timestamp": "2026-06-05T07:30:36+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.24 docs checkbox update for cross-phase contracts",
+      "from": "1.105.6",
+      "to": "1.105.7",
+      "build": 501
+    },
+    {
+      "timestamp": "2026-06-05T07:43:01+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.25.8 lexicon coverage telemetry added; Go parity test de-brittled",
+      "from": "1.95.8",
+      "to": "1.95.9",
+      "build": 502
+    },
+    {
+      "timestamp": "2026-06-05T07:46:54+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.24 docs update for wrong-Turkish tolerance catalogue",
+      "from": "1.105.7",
+      "to": "1.105.8",
+      "build": 503
+    },
+    {
+      "timestamp": "2026-06-05T07:52:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add NLP unresolved token top-k telemetry helper",
+      "from": "1.95.9",
+      "to": "1.95.10",
+      "build": 504
+    },
+    {
+      "timestamp": "2026-06-05T08:03:58+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 lexicon alert flow",
+      "from": "1.95.10",
+      "to": "1.95.11",
+      "build": 505
+    },
+    {
+      "timestamp": "2026-06-05T08:03:58+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design checklist update for lexicon alerts",
+      "from": "1.105.8",
+      "to": "1.105.9",
+      "build": 506
+    },
+    {
+      "timestamp": "2026-06-05T08:06:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design checkbox closes for 10.25.9 quarantine erase",
+      "from": "1.105.9",
+      "to": "1.105.10",
+      "build": 507
+    },
+    {
+      "timestamp": "2026-06-05T08:16:17+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 tenant-specific NLP compliance banlist overlay support",
+      "from": "1.95.11",
+      "to": "1.96.0",
+      "build": 508
+    },
+    {
+      "timestamp": "2026-06-05T08:21:31+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 banlist-aware NLP answer cache key",
+      "from": "1.96.0",
+      "to": "1.96.1",
+      "build": 509
+    },
+    {
+      "timestamp": "2026-06-05T08:25:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.25.11: added NLP consensus smoke boot-stage readiness gate",
+      "from": "1.96.1",
+      "to": "1.96.2",
+      "build": 510
+    },
+    {
+      "timestamp": "2026-06-05T08:25:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.25.11: consensus smoke stage 6.5 added to NLP boot readiness",
+      "from": "1.96.2",
+      "to": "1.96.3",
+      "build": 511
+    },
+    {
+      "timestamp": "2026-06-05T08:29:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.25.11: added nlp_boot_consensus_sentinel_match_id config support",
+      "from": "1.96.3",
+      "to": "1.96.4",
+      "build": 512
+    },
+    {
+      "timestamp": "2026-06-05T08:36:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "humanizer subprocess crash supervisor helper",
+      "from": "1.96.4",
+      "to": "1.96.5",
+      "build": 513
+    },
+    {
+      "timestamp": "2026-06-05T08:36:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "humanizer subprocess lease-release guard",
+      "from": "1.96.5",
+      "to": "1.96.6",
+      "build": 514
+    },
+    {
+      "timestamp": "2026-06-05T08:36:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "humanizer subprocess AST guard",
+      "from": "1.96.6",
+      "to": "1.96.7",
+      "build": 515
+    },
+    {
+      "timestamp": "2026-06-05T08:53:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 repeated-query cache freshness decision",
+      "from": "1.96.7",
+      "to": "1.96.8",
+      "build": 516
+    },
+    {
+      "timestamp": "2026-06-05T08:53:47+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 repeated-query cache freshness checkbox ticked",
+      "from": "1.105.10",
+      "to": "1.105.11",
+      "build": 517
+    },
+    {
+      "timestamp": "2026-06-05T08:59:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 summary fan-out salience ranking",
+      "from": "1.96.8",
+      "to": "1.96.9",
+      "build": 518
+    },
+    {
+      "timestamp": "2026-06-05T09:11:50+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 summary truncation disclosure and hard-cap list response",
+      "from": "1.96.9",
+      "to": "1.96.10",
+      "build": 519
+    },
+    {
+      "timestamp": "2026-06-05T09:22:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 summary top-N cache key metadata",
+      "from": "1.96.10",
+      "to": "1.96.11",
+      "build": 520
+    },
+    {
+      "timestamp": "2026-06-05T09:28:37+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design checkbox progression: qa.context.v1 topic",
+      "from": "1.105.11",
+      "to": "1.105.12",
+      "build": 521
+    },
+    {
+      "timestamp": "2026-06-05T09:39:02+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Holiday calendar support in NLP date resolver",
+      "from": "1.96.11",
+      "to": "1.97.0",
+      "build": 522
+    },
+    {
+      "timestamp": "2026-06-05T09:42:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fixed Phase 10 Turkish holiday date resolver holiday alias handling",
+      "from": "1.97.0",
+      "to": "1.97.1",
+      "build": 523
+    },
+    {
+      "timestamp": "2026-06-05T09:52:18+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 10.25.14 new NLP config knobs and nlp.event/nlp.alert registration",
+      "from": "1.97.1",
+      "to": "1.98.0",
+      "build": 524
+    },
+    {
+      "timestamp": "2026-06-05T09:58:39+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 10.25 docs and compatibility guidance",
+      "from": "1.105.12",
+      "to": "1.105.13",
+      "build": 525
+    },
+    {
+      "timestamp": "2026-06-05T09:58:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.25 compatibility pin tests and wire schema coverage",
+      "from": "1.98.0",
+      "to": "1.98.1",
+      "build": 526
+    },
+    {
+      "timestamp": "2026-06-05T10:07:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.2 voice latency budget gate",
+      "from": "1.98.1",
+      "to": "1.98.2",
+      "build": 527
+    },
+    {
+      "timestamp": "2026-06-05T10:07:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.2 voice evaluation corpus gate",
+      "from": "1.98.2",
+      "to": "1.98.3",
+      "build": 528
+    },
+    {
+      "timestamp": "2026-06-05T10:16:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.26.3 SymSpell layout-aware IME lookup",
+      "from": "1.98.3",
+      "to": "1.98.4",
+      "build": 529
+    },
+    {
+      "timestamp": "2026-06-05T10:16:14+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.26.3 design doc progress for mobile IME SymSpell",
+      "from": "1.105.13",
+      "to": "1.105.14",
+      "build": 530
+    },
+    {
+      "timestamp": "2026-06-05T10:25:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26.3 IME keyboard_hint + autocorrect cascade support",
+      "from": "1.98.4",
+      "to": "1.98.5",
+      "build": 531
+    },
+    {
+      "timestamp": "2026-06-05T10:30:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.26.4 Turkish number-word resolver added",
+      "from": "1.98.5",
+      "to": "1.98.6",
+      "build": 532
+    },
+    {
+      "timestamp": "2026-06-05T10:45:56+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26.4 Turkish temporal/numeric parser improvements",
+      "from": "1.98.6",
+      "to": "1.98.7",
+      "build": 533
+    },
+    {
+      "timestamp": "2026-06-05T11:15:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 modality/conditional routing fix",
+      "from": "1.98.7",
+      "to": "1.98.8",
+      "build": 534
+    },
+    {
+      "timestamp": "2026-06-05T11:25:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 lexicon safety validator and build metadata",
+      "from": "1.98.8",
+      "to": "1.98.9",
+      "build": 535
+    },
+    {
+      "timestamp": "2026-06-05T11:25:49+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 10 lexicon safety verify command and Make target",
+      "from": "3.50.1",
+      "to": "3.50.2",
+      "build": 536
+    },
+    {
+      "timestamp": "2026-06-05T12:11:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "QA answer envelope HMAC and correction grammar support",
+      "from": "1.98.9",
+      "to": "1.98.10",
+      "build": 537
+    },
+    {
+      "timestamp": "2026-06-05T12:27:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.7 correction grammar real-gap and detector trigger",
+      "from": "1.98.10",
+      "to": "1.98.11",
+      "build": 538
+    },
+    {
+      "timestamp": "2026-06-05T12:27:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.7 correction semantics and audit trail",
+      "from": "1.98.11",
+      "to": "1.98.12",
+      "build": 539
+    },
+    {
+      "timestamp": "2026-06-05T12:27:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.7 correction boundary: disabled without conversation id",
+      "from": "1.98.12",
+      "to": "1.98.13",
+      "build": 540
+    },
+    {
+      "timestamp": "2026-06-05T12:27:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.8 answer envelope HMAC rollout discipline implemented",
+      "from": "1.98.13",
+      "to": "1.98.14",
+      "build": 541
+    },
+    {
+      "timestamp": "2026-06-05T12:27:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.11 empty-input anomaly telemetry per subject",
+      "from": "1.98.14",
+      "to": "1.98.15",
+      "build": 542
+    },
+    {
+      "timestamp": "2026-06-05T12:27:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.11 tier-blind empty-input alert semantics",
+      "from": "1.98.15",
+      "to": "1.98.16",
+      "build": 543
+    },
+    {
+      "timestamp": "2026-06-05T12:49:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26 paste normalization + answer envelope integrity",
+      "from": "1.98.16",
+      "to": "1.98.17",
+      "build": 544
+    },
+    {
+      "timestamp": "2026-06-05T13:02:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26.10 football vocab table added",
+      "from": "1.98.17",
+      "to": "1.98.18",
+      "build": 545
+    },
+    {
+      "timestamp": "2026-06-05T13:02:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26.10 football vocab classifier hinting",
+      "from": "1.98.18",
+      "to": "1.98.19",
+      "build": 546
+    },
+    {
+      "timestamp": "2026-06-05T13:02:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26.10 bilingual football abuse token guard",
+      "from": "1.98.19",
+      "to": "1.98.20",
+      "build": 547
+    },
+    {
+      "timestamp": "2026-06-05T13:02:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.26.10 football vocab build pipeline verify gate",
+      "from": "1.98.20",
+      "to": "1.98.21",
+      "build": 548
+    },
+    {
+      "timestamp": "2026-06-05T13:06:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.26.10 football vocab hint coverage",
+      "from": "1.98.21",
+      "to": "1.98.22",
+      "build": 549
+    },
+    {
+      "timestamp": "2026-06-05T13:06:22+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "10.26.10 football vocab design checkbox ticked",
+      "from": "1.105.14",
+      "to": "1.106.0",
+      "build": 550
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: all §10.26.1–§10.26.13 ticks verified",
+      "from": "1.106.0",
+      "to": "1.106.1",
+      "build": 551
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: §10.20 DoD item 24 added",
+      "from": "1.106.1",
+      "to": "1.106.2",
+      "build": 552
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: Phase 10 proof-test distribution documented",
+      "from": "1.106.2",
+      "to": "1.106.3",
+      "build": 553
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: swarm.demo.nlp.full extension budget documented",
+      "from": "1.106.3",
+      "to": "1.106.4",
+      "build": 554
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: chart compatibility pins acknowledged",
+      "from": "1.106.4",
+      "to": "1.106.5",
+      "build": 555
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: TURKISH_NLP docs sections added",
+      "from": "1.106.5",
+      "to": "1.106.6",
+      "build": 556
+    },
+    {
+      "timestamp": "2026-06-05T13:11:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.26.14 closure: NLP runbook triage sections added",
+      "from": "1.106.6",
+      "to": "1.106.7",
+      "build": 557
+    },
+    {
+      "timestamp": "2026-06-05T13:20:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.27 fixture-state routing implementation",
+      "from": "1.98.22",
+      "to": "1.98.23",
+      "build": 558
+    },
+    {
+      "timestamp": "2026-06-05T13:20:08+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Updated Phase 10 §10.27 design checklist",
+      "from": "1.106.7",
+      "to": "1.106.8",
+      "build": 559
+    },
+    {
+      "timestamp": "2026-06-05T13:28:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.29.1 geminate restoration support",
+      "from": "1.98.23",
+      "to": "1.98.24",
+      "build": 560
+    },
+    {
+      "timestamp": "2026-06-05T13:28:18+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 10.29.1 geminate restoration doc update",
+      "from": "1.106.8",
+      "to": "1.106.9",
+      "build": 561
+    },
+    {
+      "timestamp": "2026-06-05T14:19:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added complaint trace rebuild helper",
+      "from": "1.98.24",
+      "to": "1.98.25",
+      "build": 562
+    },
+    {
+      "timestamp": "2026-06-05T14:19:16+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "added nlp.complaint-trace operator command",
+      "from": "3.50.2",
+      "to": "3.50.3",
+      "build": 563
+    },
+    {
+      "timestamp": "2026-06-05T14:19:16+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ticked Phase 10 §10.27.3 complaint trace design checklist",
+      "from": "1.106.9",
+      "to": "1.106.10",
+      "build": 564
+    },
+    {
+      "timestamp": "2026-06-05T15:04:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 NLP kill-pattern TTL clamp and proof tests",
+      "from": "1.98.25",
+      "to": "1.98.26",
+      "build": 565
+    },
+    {
+      "timestamp": "2026-06-05T15:04:59+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 10 opsctl nlp-kill-pattern command",
+      "from": "3.50.3",
+      "to": "3.50.4",
+      "build": 566
+    },
+    {
+      "timestamp": "2026-06-05T15:16:25+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "operator preview request_metadata.preview added",
+      "from": "1.98.26",
+      "to": "1.99.0",
+      "build": 567
+    },
+    {
+      "timestamp": "2026-06-05T15:28:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.6 embedded focus-particle failure pattern detection",
+      "from": "1.99.0",
+      "to": "1.99.1",
+      "build": 568
+    },
+    {
+      "timestamp": "2026-06-05T15:28:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.6 focus_particle_disambiguation rule table and loader",
+      "from": "1.99.1",
+      "to": "1.99.2",
+      "build": 569
+    },
+    {
+      "timestamp": "2026-06-05T15:28:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.6 negation-scope composition handling",
+      "from": "1.99.2",
+      "to": "1.99.3",
+      "build": 570
+    },
+    {
+      "timestamp": "2026-06-05T15:28:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.6 proof tests for focus-particle disambiguation",
+      "from": "1.99.3",
+      "to": "1.99.4",
+      "build": 571
+    },
+    {
+      "timestamp": "2026-06-05T15:36:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added nlp.abuse.v1 alert producer and abuse detector schema docs",
+      "from": "1.99.4",
+      "to": "1.99.5",
+      "build": 572
+    },
+    {
+      "timestamp": "2026-06-05T15:51:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.31.1 sarcasm drift telemetry",
+      "from": "1.99.5",
+      "to": "1.99.6",
+      "build": 573
+    },
+    {
+      "timestamp": "2026-06-05T15:51:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.31.1 sarcasm proof tests",
+      "from": "1.99.6",
+      "to": "1.99.7",
+      "build": 574
+    },
+    {
+      "timestamp": "2026-06-05T16:00:50+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "QA answer downgrade honors client schema version",
+      "from": "1.99.7",
+      "to": "1.99.8",
+      "build": 575
+    },
+    {
+      "timestamp": "2026-06-05T16:00:50+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "API Accept header qa.answer schema-version parsing",
+      "from": "1.45.8",
+      "to": "1.45.9",
+      "build": 576
+    },
+    {
+      "timestamp": "2026-06-05T16:19:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "QA answer downgrade and sunset support",
+      "from": "1.99.8",
+      "to": "1.99.9",
+      "build": 577
+    },
+    {
+      "timestamp": "2026-06-05T16:19:59+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "QA answer schema sunset/Upgrade Required handling",
+      "from": "1.45.9",
+      "to": "1.45.10",
+      "build": 578
+    },
+    {
+      "timestamp": "2026-06-05T16:26:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 politeness-strip extension",
+      "from": "1.99.9",
+      "to": "1.99.10",
+      "build": 579
+    },
+    {
+      "timestamp": "2026-06-05T17:09:26+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.27 disclosure registry and cache-key extension",
+      "from": "1.99.10",
+      "to": "1.100.0",
+      "build": 580
+    },
+    {
+      "timestamp": "2026-06-05T17:09:26+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 10 §10.27 lexicon deploy drain protocol command",
+      "from": "3.50.4",
+      "to": "3.51.0",
+      "build": 581
+    },
+    {
+      "timestamp": "2026-06-05T17:09:26+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.27 design checkbox updates",
+      "from": "1.106.10",
+      "to": "1.106.11",
+      "build": 582
+    },
+    {
+      "timestamp": "2026-06-05T17:22:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.27.8 regulatory disclosure mandatory docs",
+      "from": "1.100.0",
+      "to": "1.100.1",
+      "build": 583
+    },
+    {
+      "timestamp": "2026-06-05T17:22:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.27.8 disclosure proof tests",
+      "from": "1.100.1",
+      "to": "1.100.2",
+      "build": 584
+    },
+    {
+      "timestamp": "2026-06-05T17:36:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fix LexiconStore reload interval and late invalid snapshot blocking",
+      "from": "1.100.2",
+      "to": "1.100.3",
+      "build": 585
+    },
+    {
+      "timestamp": "2026-06-05T17:44:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.9 lexicon swap cross-pod consistency fix",
+      "from": "1.100.3",
+      "to": "1.100.4",
+      "build": 586
+    },
+    {
+      "timestamp": "2026-06-05T17:44:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.27.9 docs checkbox closure for swap consistency",
+      "from": "1.106.11",
+      "to": "1.106.12",
+      "build": 587
+    },
+    {
+      "timestamp": "2026-06-05T17:49:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.27.10 anti-leakage eligibility for intent training",
+      "from": "1.100.4",
+      "to": "1.100.5",
+      "build": 588
+    },
+    {
+      "timestamp": "2026-06-05T18:08:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.27 design doc progress",
+      "from": "1.106.12",
+      "to": "1.106.13",
+      "build": 589
+    },
+    {
+      "timestamp": "2026-06-05T18:22:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30.10: wired offensive_obfuscated.tr.yaml into normalization pipeline",
+      "from": "1.100.5",
+      "to": "1.100.6",
+      "build": 590
+    },
+    {
+      "timestamp": "2026-06-05T18:22:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30.10: added obfuscated slur context-negation veto event support",
+      "from": "1.100.6",
+      "to": "1.100.7",
+      "build": 591
+    },
+    {
+      "timestamp": "2026-06-05T18:22:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30.10: classified offensive_obfuscated.tr.yaml as high-leverage governance lexicon",
+      "from": "1.100.7",
+      "to": "1.100.8",
+      "build": 592
+    },
+    {
+      "timestamp": "2026-06-05T18:22:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30.10: added obfuscated slur canonical coverage proof test",
+      "from": "1.100.8",
+      "to": "1.100.9",
+      "build": 593
+    },
+    {
+      "timestamp": "2026-06-05T18:22:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30.10: added bus-kind schema and design checklist ticks for obfuscated slur negation",
+      "from": "1.100.9",
+      "to": "1.100.10",
+      "build": 594
+    },
+    {
+      "timestamp": "2026-06-05T18:32:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.13: added NLP preview config knob",
+      "from": "1.100.10",
+      "to": "1.100.11",
+      "build": 595
+    },
+    {
+      "timestamp": "2026-06-05T18:32:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.13: registered new nlp.event.v1 kinds",
+      "from": "1.100.11",
+      "to": "1.100.12",
+      "build": 596
+    },
+    {
+      "timestamp": "2026-06-05T18:32:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.13: documented new nlp.alert.v1 kinds",
+      "from": "1.100.12",
+      "to": "1.100.13",
+      "build": 597
+    },
+    {
+      "timestamp": "2026-06-05T18:32:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.13: added maint.event.v1 schema for nlp_pii_recovered_for_trace",
+      "from": "1.100.13",
+      "to": "1.100.14",
+      "build": 598
+    },
+    {
+      "timestamp": "2026-06-05T18:32:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.13: validated data.request.v1 fixture_state/live_state contract closure",
+      "from": "1.100.14",
+      "to": "1.100.15",
+      "build": 599
+    },
+    {
+      "timestamp": "2026-06-05T18:32:53+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.13: added Phase 10.27 proof coverage tests for new NLP kinds",
+      "from": "1.100.15",
+      "to": "1.100.16",
+      "build": 600
+    },
+    {
+      "timestamp": "2026-06-05T18:44:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "added qa.request.v1 request_metadata.client_format_max_version support",
+      "from": "1.100.16",
+      "to": "1.100.17",
+      "build": 601
+    },
+    {
+      "timestamp": "2026-06-05T18:44:54+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "extended embedded qa.request.v1 schema with client_format_max_version",
+      "from": "1.45.10",
+      "to": "1.45.11",
+      "build": 602
+    },
+    {
+      "timestamp": "2026-06-05T18:44:54+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ticked Phase 10 cross-phase contract checklist items in phase 27 design doc",
+      "from": "1.106.13",
+      "to": "1.106.14",
+      "build": 603
+    },
+    {
+      "timestamp": "2026-06-05T18:48:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.27 boundary test and horizon support coverage",
+      "from": "1.100.17",
+      "to": "1.100.18",
+      "build": 604
+    },
+    {
+      "timestamp": "2026-06-05T18:48:47+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "ticked Phase 10.27 cross-phase contract checklist in design doc",
+      "from": "1.106.14",
+      "to": "1.106.15",
+      "build": 605
+    },
+    {
+      "timestamp": "2026-06-05T18:53:52+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 10.27 server gateway preview metadata and answer schema version support",
+      "from": "1.45.11",
+      "to": "1.45.12",
+      "build": 606
+    },
+    {
+      "timestamp": "2026-06-05T18:53:52+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.27 NLP preview metadata support and abuse CPU-only import guard",
+      "from": "1.100.18",
+      "to": "1.100.19",
+      "build": 607
+    },
+    {
+      "timestamp": "2026-06-05T18:53:52+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.27 design section checkbox progress",
+      "from": "1.106.15",
+      "to": "1.106.16",
+      "build": 608
+    },
+    {
+      "timestamp": "2026-06-05T18:58:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.27.14 Phase 12 chaos stubs added",
+      "from": "1.106.16",
+      "to": "1.106.17",
+      "build": 609
+    },
+    {
+      "timestamp": "2026-06-05T18:58:05+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.27.14 Phase 13a LeagueCatalog no-change closed",
+      "from": "1.106.17",
+      "to": "1.106.18",
+      "build": 610
+    },
+    {
+      "timestamp": "2026-06-05T19:07:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.7 real failure pattern covered",
+      "from": "1.100.19",
+      "to": "1.100.20",
+      "build": 611
+    },
+    {
+      "timestamp": "2026-06-05T19:07:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.7 apostrophe-suffixed numeric parser added",
+      "from": "1.100.20",
+      "to": "1.100.21",
+      "build": 612
+    },
+    {
+      "timestamp": "2026-06-05T19:07:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.7 score-pair derivative parser behavior implemented",
+      "from": "1.100.21",
+      "to": "1.100.22",
+      "build": 613
+    },
+    {
+      "timestamp": "2026-06-05T19:07:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.7 numeric apostrophe spec single-source parity added",
+      "from": "1.100.22",
+      "to": "1.100.23",
+      "build": 614
+    },
+    {
+      "timestamp": "2026-06-05T19:07:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.7 apostrophe numeric golden proof tests added",
+      "from": "1.100.23",
+      "to": "1.100.24",
+      "build": 615
+    },
+    {
+      "timestamp": "2026-06-05T19:15:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.14 nlp.abuse.v1 K8s single-replica guard landed",
+      "from": "1.100.24",
+      "to": "1.100.25",
+      "build": 616
+    },
+    {
+      "timestamp": "2026-06-05T19:15:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.19 fixture-state routing league-agnostic AST guard landed",
+      "from": "1.100.25",
+      "to": "1.100.26",
+      "build": 617
+    },
+    {
+      "timestamp": "2026-06-05T19:15:29+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.27.20 disclosures tier-blind and preview budget tier separation guards landed",
+      "from": "1.100.26",
+      "to": "1.100.27",
+      "build": 618
+    },
+    {
+      "timestamp": "2026-06-05T19:15:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.27 design checklist updates for abuse/fixture-state/monetization cluster",
+      "from": "1.106.18",
+      "to": "1.106.19",
+      "build": 619
+    },
+    {
+      "timestamp": "2026-06-05T19:26:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.8 real failure pattern and productive suffix feature",
+      "from": "1.100.27",
+      "to": "1.100.28",
+      "build": 620
+    },
+    {
+      "timestamp": "2026-06-05T19:26:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.8 productive-suffix peeler implementation",
+      "from": "1.100.28",
+      "to": "1.100.29",
+      "build": 621
+    },
+    {
+      "timestamp": "2026-06-05T19:26:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.8 apostrophe-repair composition for productive suffixes",
+      "from": "1.100.29",
+      "to": "1.100.30",
+      "build": 622
+    },
+    {
+      "timestamp": "2026-06-05T19:26:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.8 productive peel negative no-fire corpus",
+      "from": "1.100.30",
+      "to": "1.100.31",
+      "build": 623
+    },
+    {
+      "timestamp": "2026-06-05T19:26:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.8 productive peel proof tests",
+      "from": "1.100.31",
+      "to": "1.100.32",
+      "build": 624
+    },
+    {
+      "timestamp": "2026-06-05T19:45:40+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "added nlp.transliteration-build and lexicon transliteration variant injection",
+      "from": "3.51.0",
+      "to": "3.51.1",
+      "build": 625
+    },
+    {
+      "timestamp": "2026-06-05T19:59:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 fragment detection and routing implementation",
+      "from": "1.100.32",
+      "to": "1.100.33",
+      "build": 626
+    },
+    {
+      "timestamp": "2026-06-05T20:03:38+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "add Phase 10 fragment proof coverage tests",
+      "from": "1.100.33",
+      "to": "1.100.34",
+      "build": 627
+    },
+    {
+      "timestamp": "2026-06-05T20:13:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.30.11: venue inference cap",
+      "from": "1.100.34",
+      "to": "1.100.35",
+      "build": 628
+    },
+    {
+      "timestamp": "2026-06-05T20:13:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.30.11: venue table ingestion",
+      "from": "1.100.35",
+      "to": "1.100.36",
+      "build": 629
+    },
+    {
+      "timestamp": "2026-06-05T20:13:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.30.11: venue proof coverage",
+      "from": "1.100.36",
+      "to": "1.100.37",
+      "build": 630
+    },
+    {
+      "timestamp": "2026-06-05T20:36:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.30.13 per-conversation entity-state TTL",
+      "from": "1.100.37",
+      "to": "1.100.38",
+      "build": 631
+    },
+    {
+      "timestamp": "2026-06-05T20:36:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.30.13 state-change disclosure",
+      "from": "1.100.38",
+      "to": "1.100.39",
+      "build": 632
+    },
+    {
+      "timestamp": "2026-06-05T22:25:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 shout detection proof coverage",
+      "from": "1.100.39",
+      "to": "1.100.40",
+      "build": 633
+    },
+    {
+      "timestamp": "2026-06-05T22:25:47+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 shout detection docs checkbox",
+      "from": "1.106.19",
+      "to": "1.106.20",
+      "build": 634
+    },
+    {
+      "timestamp": "2026-06-05T22:51:51+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 authentic-Turkish floor soft-g and meta-question routing",
+      "from": "1.100.40",
+      "to": "1.101.0",
+      "build": 635
+    },
+    {
+      "timestamp": "2026-06-05T23:09:18+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10.28.11 request budget guard and default budgets",
+      "from": "1.101.0",
+      "to": "1.102.0",
+      "build": 636
+    },
+    {
+      "timestamp": "2026-06-05T23:48:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.28.12: bounded lexicon rebuild concurrency at 2",
+      "from": "1.102.0",
+      "to": "1.102.1",
+      "build": 637
+    },
+    {
+      "timestamp": "2026-06-05T23:48:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.28.12: added bounded lexicon rebuild queue overflow alert",
+      "from": "1.102.1",
+      "to": "1.102.2",
+      "build": 638
+    },
+    {
+      "timestamp": "2026-06-05T23:48:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.28.12: added RSS reservation deferral for rebuilds",
+      "from": "1.102.2",
+      "to": "1.102.3",
+      "build": 639
+    },
+    {
+      "timestamp": "2026-06-05T23:48:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.28.12: added request budget swap grace bonus",
+      "from": "1.102.3",
+      "to": "1.102.4",
+      "build": 640
+    },
+    {
+      "timestamp": "2026-06-05T23:48:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.28.12: added proof tests for lexicon rebuild concurrency and swap grace",
+      "from": "1.102.4",
+      "to": "1.102.5",
+      "build": 641
+    },
+    {
+      "timestamp": "2026-06-06T00:12:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix TR PII audit redaction in NLP persisted audit rows",
+      "from": "1.102.5",
+      "to": "1.102.6",
+      "build": 642
+    },
+    {
+      "timestamp": "2026-06-06T00:12:02+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "close Phase 10 10.28.14 Phase 4 storage PII contract checkbox",
+      "from": "1.106.20",
+      "to": "1.107.0",
+      "build": 643
+    },
+    {
+      "timestamp": "2026-06-06T00:14:53+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 design doc update: skew histogram contract bullet closed",
+      "from": "1.107.0",
+      "to": "1.107.1",
+      "build": 644
+    },
+    {
+      "timestamp": "2026-06-06T00:22:55+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 10 Phase 10.28.14 TR-PII parity test added",
+      "from": "0.51.0",
+      "to": "0.51.1",
+      "build": 645
+    },
+    {
+      "timestamp": "2026-06-06T00:22:55+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "Phase 10 Phase 10.28.14 patcher scope boundary test added",
+      "from": "0.51.1",
+      "to": "0.51.2",
+      "build": 646
+    },
+    {
+      "timestamp": "2026-06-06T00:42:02+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.28.14: add Phase 12 chaos catalogue stubs",
+      "from": "1.107.1",
+      "to": "1.108.0",
+      "build": 647
+    },
+    {
+      "timestamp": "2026-06-06T00:49:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.30.13 state-change cache invalidation hook",
+      "from": "1.102.6",
+      "to": "1.102.7",
+      "build": 648
+    },
+    {
+      "timestamp": "2026-06-06T00:55:51+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 10 §10.29.1 geminate restoration build-refusal guard",
+      "from": "3.51.1",
+      "to": "3.51.2",
+      "build": 649
+    },
+    {
+      "timestamp": "2026-06-06T01:00:44+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.28 developer tooling: expose nlp.transliteration-build via Make",
+      "from": "1.108.0",
+      "to": "1.109.0",
+      "build": 650
+    },
+    {
+      "timestamp": "2026-06-06T01:05:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10.28 add new nlp.event.v1 kinds and proof coverage",
+      "from": "1.102.7",
+      "to": "1.102.8",
+      "build": 651
+    },
+    {
+      "timestamp": "2026-06-06T01:05:22+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.28 design checklist update for new event/alert kinds",
+      "from": "1.109.0",
+      "to": "1.109.1",
+      "build": 652
+    },
+    {
+      "timestamp": "2026-06-06T01:13:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "add optional Phase 13a consonant alternation coverage validator",
+      "from": "1.102.8",
+      "to": "1.102.9",
+      "build": 653
+    },
+    {
+      "timestamp": "2026-06-06T01:22:46+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.28.14 Phase 14 K8s budget exhaustion degrade path",
+      "from": "1.109.1",
+      "to": "1.109.2",
+      "build": 654
+    },
+    {
+      "timestamp": "2026-06-06T01:22:46+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.28.14 Phase 16 Emitter LexiconStore protocol unchanged",
+      "from": "1.109.2",
+      "to": "1.109.3",
+      "build": 655
+    },
+    {
+      "timestamp": "2026-06-06T01:22:46+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.28.14 Phase 19 long-tail leagues additive table growth",
+      "from": "1.109.3",
+      "to": "1.109.4",
+      "build": 656
+    },
+    {
+      "timestamp": "2026-06-06T01:22:46+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.28.14 Phase 20 monetization tier-blind paths",
+      "from": "1.109.4",
+      "to": "1.109.5",
+      "build": 657
+    },
+    {
+      "timestamp": "2026-06-06T01:26:00+00:00",
+      "component": "swarm",
+      "level": "patch",
+      "note": "10.28 finalization: closed Phase 10 §10.28 design addendum",
+      "from": "0.51.2",
+      "to": "0.51.3",
+      "build": 658
+    },
+    {
+      "timestamp": "2026-06-06T01:26:00+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "10.28 finalization: closed Phase 10 §10.28 design addendum",
+      "from": "1.109.5",
+      "to": "1.110.0",
+      "build": 659
+    },
+    {
+      "timestamp": "2026-06-06T01:55:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "normalize: preserve pragmatic_class on timeout and fix ambiguous negative question classification",
+      "from": "1.102.9",
+      "to": "1.102.10",
+      "build": 660
+    },
+    {
+      "timestamp": "2026-06-06T02:04:50+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 10.30 event/alert kind inventory added",
+      "from": "0.51.3",
+      "to": "0.52.0",
+      "build": 661
+    },
+    {
+      "timestamp": "2026-06-06T02:04:50+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10.30 design doc event/alert inventory updated",
+      "from": "1.110.0",
+      "to": "1.110.1",
+      "build": 662
+    },
+    {
+      "timestamp": "2026-06-06T02:09:06+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 29.3 nk->ng consonant alternation",
+      "from": "1.102.10",
+      "to": "1.102.11",
+      "build": 663
+    },
+    {
+      "timestamp": "2026-06-06T02:09:06+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 29.3 design doc checkbox ticks",
+      "from": "1.110.1",
+      "to": "1.110.2",
+      "build": 664
+    },
+    {
+      "timestamp": "2026-06-06T02:16:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.29.1 geminate restoration proof tests",
+      "from": "1.102.11",
+      "to": "1.102.12",
+      "build": 665
+    },
+    {
+      "timestamp": "2026-06-06T02:16:24+00:00",
+      "component": "server",
+      "level": "patch",
+      "note": "Phase 10 10.29.1 Go geminate parity helper",
+      "from": "1.45.12",
+      "to": "1.45.13",
+      "build": 666
+    },
+    {
+      "timestamp": "2026-06-06T02:16:24+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 10.29.1 design doc proof tests closed",
+      "from": "1.110.2",
+      "to": "1.111.0",
+      "build": 667
+    },
+    {
+      "timestamp": "2026-06-06T02:24:57+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 10 10.30 event/alert kinds + boot corpus guard",
+      "from": "0.52.0",
+      "to": "0.53.0",
+      "build": 668
+    },
+    {
+      "timestamp": "2026-06-06T02:24:57+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 10.30 design checklist progress",
+      "from": "1.111.0",
+      "to": "1.112.0",
+      "build": 669
+    },
+    {
+      "timestamp": "2026-06-06T02:55:37+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10.30.14 boot corpus proof tests and Phase 10 CODEOWNERS docs closure",
+      "from": "1.112.0",
+      "to": "1.113.0",
+      "build": 670
+    },
+    {
+      "timestamp": "2026-06-06T02:55:37+00:00",
+      "component": "swarm",
+      "level": "minor",
+      "note": "Phase 10.30.15 closure: intent enum/closed-table release and CODEOWNERS governance",
+      "from": "0.53.0",
+      "to": "0.54.0",
+      "build": 671
+    },
+    {
+      "timestamp": "2026-06-06T02:57:03+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.30 final checklist closure",
+      "from": "1.113.0",
+      "to": "1.113.1",
+      "build": 672
+    },
+    {
+      "timestamp": "2026-06-06T02:57:48+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.30 cross-phase impact close",
+      "from": "1.113.1",
+      "to": "1.113.2",
+      "build": 673
+    },
+    {
+      "timestamp": "2026-06-06T03:00:00+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "close Phase 10 §10.32.9 conversational-meta design checklist",
+      "from": "1.113.2",
+      "to": "1.114.0",
+      "build": 674
+    },
+    {
+      "timestamp": "2026-06-06T03:10:04+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 10.29.7 reduplication collapse",
+      "from": "1.102.12",
+      "to": "1.103.0",
+      "build": 675
+    },
+    {
+      "timestamp": "2026-06-06T03:10:04+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 10.29.7 design checklist update",
+      "from": "1.114.0",
+      "to": "1.115.0",
+      "build": 676
+    },
+    {
+      "timestamp": "2026-06-06T03:29:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.34 apostrophe punctuation substitution repair",
+      "from": "1.103.0",
+      "to": "1.103.1",
+      "build": 677
+    },
+    {
+      "timestamp": "2026-06-06T03:35:25+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 URL-only input floor and mid-word URL paste handling",
+      "from": "1.103.1",
+      "to": "1.103.2",
+      "build": 678
+    },
+    {
+      "timestamp": "2026-06-06T03:41:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 10.29.4 pronoun lexicon bypass",
+      "from": "1.103.2",
+      "to": "1.103.3",
+      "build": 679
+    },
+    {
+      "timestamp": "2026-06-06T03:41:20+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 10.29.4 pronoun irregular design",
+      "from": "1.115.0",
+      "to": "1.116.0",
+      "build": 680
+    },
+    {
+      "timestamp": "2026-06-06T03:50:50+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.29.5 loanword plural-as-singular repair",
+      "from": "1.103.3",
+      "to": "1.103.4",
+      "build": 681
+    },
+    {
+      "timestamp": "2026-06-06T04:02:48+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.29.6 verbal noun ambiguity disambiguation implementation",
+      "from": "1.103.4",
+      "to": "1.103.5",
+      "build": 682
+    },
+    {
+      "timestamp": "2026-06-06T04:14:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.29.8: comparative multi-fixture problem & fix",
+      "from": "1.103.5",
+      "to": "1.103.6",
+      "build": 683
+    },
+    {
+      "timestamp": "2026-06-06T04:14:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.29.8: comparative intent routing fan-out",
+      "from": "1.103.6",
+      "to": "1.103.7",
+      "build": 684
+    },
+    {
+      "timestamp": "2026-06-06T04:14:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.29.8: intent tier map extends comparative intent",
+      "from": "1.103.7",
+      "to": "1.103.8",
+      "build": 685
+    },
+    {
+      "timestamp": "2026-06-06T05:26:11+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 §10.29 design doc checklist update",
+      "from": "1.116.0",
+      "to": "1.116.1",
+      "build": 686
+    },
+    {
+      "timestamp": "2026-06-06T05:29:23+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.29 section doc update",
+      "from": "1.116.1",
+      "to": "1.117.0",
+      "build": 687
+    },
+    {
+      "timestamp": "2026-06-06T05:33:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.33.1 score notation conversational-first default",
+      "from": "1.117.0",
+      "to": "1.117.1",
+      "build": 688
+    },
+    {
+      "timestamp": "2026-06-06T05:33:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.33.1 dialect normalization diaspora code-switch rule",
+      "from": "1.117.1",
+      "to": "1.117.2",
+      "build": 689
+    },
+    {
+      "timestamp": "2026-06-06T05:33:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.33.1 morphology mutation lexicon-driven table",
+      "from": "1.117.2",
+      "to": "1.117.3",
+      "build": 690
+    },
+    {
+      "timestamp": "2026-06-06T05:33:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.33.1 template suffix binding extension",
+      "from": "1.117.3",
+      "to": "1.117.4",
+      "build": 691
+    },
+    {
+      "timestamp": "2026-06-06T05:38:48+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.31 design checklist cluster",
+      "from": "1.117.4",
+      "to": "1.118.0",
+      "build": 692
+    },
+    {
+      "timestamp": "2026-06-06T06:09:59+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Fix apostrophe repair false positive on bare proper nouns",
+      "from": "1.103.8",
+      "to": "1.103.9",
+      "build": 693
+    },
+    {
+      "timestamp": "2026-06-06T06:21:36+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 smart-quote/ellipsis proof tests",
+      "from": "1.118.0",
+      "to": "1.119.0",
+      "build": 694
+    },
+    {
+      "timestamp": "2026-06-06T06:21:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 smart-quote/ellipsis proof tests",
+      "from": "1.103.9",
+      "to": "1.103.10",
+      "build": 695
+    },
+    {
+      "timestamp": "2026-06-06T06:28:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§10.32 resolver extension: user/system anaphora mention_by",
+      "from": "1.103.10",
+      "to": "1.103.11",
+      "build": 696
+    },
+    {
+      "timestamp": "2026-06-06T06:28:55+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 10 section checklist update for anaphora resolver extension",
+      "from": "1.119.0",
+      "to": "1.119.1",
+      "build": 697
+    },
+    {
+      "timestamp": "2026-06-06T07:39:04+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10.32.11 qa.context_extension.v1 and complementary system-uttered anaphora support",
+      "from": "1.103.11",
+      "to": "1.104.0",
+      "build": 698
+    },
+    {
+      "timestamp": "2026-06-06T08:02:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fix summary disclosure events and QA context entity sanitization",
+      "from": "1.104.0",
+      "to": "1.104.1",
+      "build": 699
+    },
+    {
+      "timestamp": "2026-06-06T08:17:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.34.2: lexicon collision-load guard blocks malicious alias bucket overload",
+      "from": "1.104.1",
+      "to": "1.104.2",
+      "build": 700
+    },
+    {
+      "timestamp": "2026-06-06T08:17:44+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "10.34.2 design docs ticked for lexicon collision-load guard",
+      "from": "1.119.1",
+      "to": "1.119.2",
+      "build": 701
+    },
+    {
+      "timestamp": "2026-06-06T08:22:40+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§10.33.2 wire schema strictness proof test",
+      "from": "1.119.2",
+      "to": "1.119.3",
+      "build": 702
+    },
+    {
+      "timestamp": "2026-06-06T08:29:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "10.32.11 ambiguous system-uttered anaphora probe test",
+      "from": "1.104.2",
+      "to": "1.104.3",
+      "build": 703
+    },
+    {
+      "timestamp": "2026-06-06T08:29:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "10.32.11 docs checkbox and proof coverage",
+      "from": "1.119.3",
+      "to": "1.120.0",
+      "build": 704
+    },
+    {
+      "timestamp": "2026-06-06T09:26:49+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 gossip divergence design coverage added",
+      "from": "1.104.3",
+      "to": "1.104.4",
+      "build": 705
+    },
+    {
+      "timestamp": "2026-06-06T10:09:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 NLP boundary outbound topic proof test",
+      "from": "1.104.4",
+      "to": "1.104.5",
+      "build": 706
+    },
+    {
+      "timestamp": "2026-06-06T10:13:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 graceful degradation matrix test and matrix definition",
+      "from": "1.104.5",
+      "to": "1.104.6",
+      "build": 707
+    },
+    {
+      "timestamp": "2026-06-06T10:33:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "structured input refusal floor route fix",
+      "from": "1.104.6",
+      "to": "1.104.7",
+      "build": 708
     }
   ]
 }

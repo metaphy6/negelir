@@ -164,6 +164,23 @@ class TestIntentAccuracyGate:
             f"Eval corpus contains only {matching} idiom-bearing rows; require ≥25 for §10.30.3 coverage seed"
         )
 
+    def test_voice_eval_slice_has_enough_examples(self, corpus_by_tag: Dict[str, List[Dict[str, Any]]]) -> None:
+        """The evaluation corpus must include a voice slice of ≥30 transcribed utterances."""
+        voice_entries = corpus_by_tag.get("voice", [])
+        assert len(voice_entries) >= 30, (
+            f"Voice evaluation slice contains only {len(voice_entries)} rows; require ≥30 for §10.26 voice corpus support"
+        )
+
+    def test_voice_eval_threshold_defaults(self) -> None:
+        """The voice evaluation slice thresholds must be present and default to the Phase 10 policy."""
+        from common.config import Config
+
+        cfg = Config()
+        assert hasattr(cfg, "nlp_voice_eval_intent_accuracy_floor")
+        assert cfg.nlp_voice_eval_intent_accuracy_floor == pytest.approx(0.85)
+        assert hasattr(cfg, "nlp_voice_eval_entity_f1_floor")
+        assert cfg.nlp_voice_eval_entity_f1_floor == pytest.approx(0.80)
+
     def test_intent_accuracy_on_code_switch_slice(
         self,
         golden_corpus: List[Dict[str, Any]],

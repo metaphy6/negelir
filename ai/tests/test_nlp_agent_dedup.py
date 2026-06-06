@@ -503,6 +503,35 @@ class TestAuditKeyVersioning:
         )
         assert key != key4
 
+    def test_cache_key_includes_disclosures_snapshot(self) -> None:
+        """Cache keys change when the disclosure snapshot changes."""
+        from swarm.agents.nlp import cache_key_for_intent
+
+        key1 = cache_key_for_intent(
+            "predict.match_outcome",
+            "hash1",
+            "2026-05-27T00:00:00Z",
+            "mv1",
+            "1.0.0",
+            "lex-sha-1",
+            "2.0.0",
+            "10.0.0",
+            disclosures_snapshot_sha="deadbeef",
+        )
+        key2 = cache_key_for_intent(
+            "predict.match_outcome",
+            "hash1",
+            "2026-05-27T00:00:00Z",
+            "mv1",
+            "1.0.0",
+            "lex-sha-1",
+            "2.0.0",
+            "10.0.0",
+            disclosures_snapshot_sha="cafebabe",
+        )
+
+        assert key1 != key2
+
     def test_cache_key_stable_across_calls(self) -> None:
         """Cache key is deterministic for same inputs."""
         from swarm.agents.nlp import cache_key_for_intent

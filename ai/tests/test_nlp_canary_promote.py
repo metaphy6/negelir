@@ -286,6 +286,24 @@ def test_nlp_phase10_23_docs_extensions_present() -> None:
     assert "Cost-budget tuning" in runbook
 
 
+def test_nlp_phase10_26_docs_extensions_present() -> None:
+    from pathlib import Path
+
+    doc = Path("docs/design/TURKISH_NLP.md").read_text(encoding="utf-8")
+    runbook = Path("docs/guides/nlp_runbook.md").read_text(encoding="utf-8")
+
+    assert "Morphological Arbitration" in doc
+    assert "Voice-to-Text Tolerance" in doc
+    assert "Mobile-IME Awareness" in doc
+    assert "Counterfactual & Modal-Aspect Firewall" in doc
+    assert "Output Envelope Integrity" in doc
+
+    assert "Morphology ambiguity-rate triage" in runbook
+    assert "Voice-path diacritic-aggression triage" in runbook
+    assert "Lexicon PR-flood incident response" in runbook
+    assert "Envelope-HMAC key rotation" in runbook
+
+
 def test_nlp_mitigations_catalogue_present() -> None:
     from pathlib import Path
 

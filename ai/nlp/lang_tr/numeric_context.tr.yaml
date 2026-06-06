@@ -4,6 +4,13 @@ market_line_context:
   - alt
   - ust
   - alt
+  - oran
+  - kat
+  - çarpan
+thousands_format_context:
+  - gol
+  - sayı
+  - taraftar
 score_line_context:
   - skor
   - sonuç

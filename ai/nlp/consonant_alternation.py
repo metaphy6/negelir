@@ -28,6 +28,8 @@ class ConsonantAlternationRule(NamedTuple):
     soften_to: str
     soften_blocked: bool
     source: str
+    kind: str | None = None
+    preceding_char: str | None = None
 
 
 class ConsonantAlternationSchemaError(ValueError):
@@ -58,6 +60,8 @@ def load_consonant_alternations(
         soften_to = lowercase_tr(str(entry.get("soften_to", "")).strip())
         soften_blocked = bool(entry.get("soften_blocked", False))
         source = str(entry.get("source", "manual"))
+        kind = str(entry.get("kind", "")).strip() or None
+        preceding_char = lowercase_tr(str(entry.get("preceding_char", "")).strip()) or None
 
         if not stem or not final_char or not soften_to:
             raise ValueError(f"Invalid consonant alternation row: {entry}")
@@ -69,9 +73,15 @@ def load_consonant_alternations(
             raise ValueError(
                 f"consonant_alternations.tr.yaml: final_char {final_char!r} must be one of {sorted(_SOFTENING_MAP)}"
             )
-        if _SOFTENING_MAP[final_char] != soften_to:
+        if soften_to != _SOFTENING_MAP[final_char] and not (
+            final_char == "k" and soften_to == "g"
+        ):
             raise ValueError(
-                f"consonant_alternations.tr.yaml: soften_to for {final_char!r} must be {_SOFTENING_MAP[final_char]!r}"
+                f"consonant_alternations.tr.yaml: soften_to for {final_char!r} must be {_SOFTENING_MAP[final_char]!r} or 'g' when preceding_char='n'"
+            )
+        if preceding_char is not None and len(preceding_char) != 1:
+            raise ValueError(
+                f"consonant_alternations.tr.yaml: preceding_char must be a single character, got {preceding_char!r}"
             )
 
         alternations.append(
@@ -81,6 +91,8 @@ def load_consonant_alternations(
                 soften_to=soften_to,
                 soften_blocked=soften_blocked,
                 source=source,
+                kind=kind,
+                preceding_char=preceding_char,
             )
         )
     return tuple(alternations)
@@ -112,6 +124,12 @@ def _find_stem_final_char_index(token: str) -> Optional[int]:
 
 
 def _matches_rule(token: str, index: int, rule: ConsonantAlternationRule) -> bool:
+    if rule.preceding_char is not None:
+        if index == 0 or token[index - 1] != rule.preceding_char:
+            return False
+    elif rule.final_char == "k" and token[index - 1 : index] == "n" and rule.soften_to == _SOFTENING_MAP[rule.final_char]:
+        return False
+
     token_prefix = token[: index + 1]
     softened_prefix = rule.stem[:-1] + rule.soften_to
     return token_prefix == rule.stem or token_prefix == softened_prefix
@@ -150,7 +168,10 @@ def tolerate_consonant_alternation(
             return token, None
 
         if token[index] in _SOFTENING_MAP:
-            softened = _apply_alternation(token, index, _SOFTENING_MAP)
+            if rule.soften_to == _SOFTENING_MAP[rule.final_char]:
+                softened = _apply_alternation(token, index, _SOFTENING_MAP)
+            else:
+                softened = token[:index] + rule.soften_to + token[index + 1 :]
             softened_candidate = _lookup_term(softened, lookup)
             if softened_candidate is not None:
                 return (
@@ -176,3 +197,30 @@ def tolerate_consonant_alternation(
                 )
 
     return token, None
+
+
+def load_consonant_alternation_stems(
+    path: Path = _DEFAULT_CONSONANT_ALTERNATION_PATH,
+) -> set[str]:
+    """Return the canonical stems declared in the consonant alternation table."""
+    return {rule.stem for rule in load_consonant_alternations(path)}
+
+
+def validate_consonant_alternation_coverage(
+    stems: list[str] | set[str],
+    alternations: tuple[ConsonantAlternationRule, ...] | None = None,
+) -> list[str]:
+    """Validate that every LeagueCatalog-like stem ending in p/ç/t/k has a rule."""
+    alternations = alternations or load_consonant_alternations()
+    stem_set = {rule.stem for rule in alternations}
+    errors: list[str] = []
+    for raw_stem in sorted({lowercase_tr(str(stem).strip()) for stem in stems if str(stem).strip()}):
+        if not raw_stem:
+            continue
+        if raw_stem[-1] not in _SOFTENING_MAP:
+            continue
+        if raw_stem not in stem_set:
+            errors.append(
+                f"consonant_alternations.tr.yaml missing required LeagueCatalog stem {raw_stem!r}"
+            )
+    return errors

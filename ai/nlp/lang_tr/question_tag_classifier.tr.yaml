@@ -1,0 +1,13 @@
+_meta:
+  schema_version: 1
+entries:
+  - shape: "değil mi"
+    pragmatic_class: "confirmation_seeking"
+  - shape: "mi"
+    pragmatic_class: "information_seeking"
+  - shape: "mı"
+    pragmatic_class: "information_seeking"
+  - shape: "mu"
+    pragmatic_class: "information_seeking"
+  - shape: "mü"
+    pragmatic_class: "information_seeking"

@@ -21,19 +21,23 @@ entries:
     class: polite
   - token: rica ediyorum
     class: very_polite
-  - token: bir bakar mısınız
+  - token: mısınız
     class: polite
-  - token: söyler misiniz
+  - token: misiniz
     class: polite
-  - token: yapabilir misiniz
+  - token: mıydınız
     class: polite
-  - token: yapabilir misin
+  - token: miydiniz
     class: polite
-  - token: yapabilir miyim
+  - token: musunuz
     class: polite
-  - token: lütfen bakar mısınız
+  - token: müsünüz
     class: polite
-  - token: lütfen yardımcı olur musunuz
+  - token: misin
+    class: polite
+  - token: mısın
+    class: polite
+  - token: miyim
     class: polite
   - token: hadi
     class: curt

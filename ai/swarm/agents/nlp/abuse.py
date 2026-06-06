@@ -21,6 +21,7 @@ class NlpAbuseAgent:
         self._monotonic = monotonic or _dt.datetime.now
         self._window: deque[tuple[float, dict[str, Any]]] = deque()
         self._dym_counts: dict[tuple[str, str], int] = defaultdict(int)
+        self._dym_offered: dict[str, int] = defaultdict(int)
         self._dym_accepted: dict[tuple[str, str], int] = defaultdict(int)
         self._style_history: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._shadow_counts: dict[tuple[str, str], int] = defaultdict(int)
@@ -28,11 +29,16 @@ class NlpAbuseAgent:
         self._abuse_alert_debouncer = AlertDebouncer(
             ttl_s=300,
             max_buckets=10_000,
-            clock=lambda: _dt.datetime.now().timestamp(),
+            clock=self._now_s,
         )
 
     def _now_s(self) -> float:
-        return _dt.datetime.now(_dt.timezone.utc).timestamp()
+        result = self._monotonic()
+        if isinstance(result, float):
+            return result
+        if isinstance(result, _dt.datetime):
+            return result.timestamp()
+        return float(result)
 
     def _expire(self, now_s: float) -> None:
         horizon_s = float(cfg.nlp_abuse_window_h) * 3600.0
@@ -94,18 +100,18 @@ class NlpAbuseAgent:
         if not offered or not accepted:
             return None
         key = (offered, accepted)
+        self._dym_offered[offered] += 1
         self._dym_counts[key] += 1
-        self._dym_accepted[key] += 1
-        total = self._dym_counts[key]
-        if total < 5:
+        offered_total = self._dym_offered[offered]
+        if offered_total < 5:
             return None
-        ratio = float(self._dym_accepted[key]) / max(1, total)
+        ratio = float(self._dym_counts[key]) / float(offered_total)
         if ratio > float(cfg.nlp_abuse_dym_acceptance_anomaly_ratio):
             return self._emit_alert(
                 kind="nlp_abuse_did_you_mean_anomaly",
                 severity="warn",
                 subject=f"{offered}->{accepted}",
-                details={"ratio": ratio, "window_count": total},
+                details={"ratio": ratio, "window_count": offered_total},
             )
         return None
 

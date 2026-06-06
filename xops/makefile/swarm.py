@@ -827,6 +827,141 @@ entries:
     ok("swarm.demo.nlp: cold-start staging order exercised")
 
 
+def _run_phase10_nlp_demo_full_extensions() -> None:
+    """Run §10.24 extra demo paths for make swarm.demo.nlp.full."""
+    ai_path = str(REPO_ROOT / "ai")
+    if ai_path in sys.path:
+        sys.path.remove(ai_path)
+    sys.path.insert(0, ai_path)
+    os.environ.setdefault("PYTHONPATH", ai_path)
+
+    # `xops/makefile/nlp.py` can shadow the top-level `nlp` package when the
+    # makefile directory is on sys.path during unit tests.
+    nlp_mod = sys.modules.get("nlp")
+    nlp_file = str(getattr(nlp_mod, "__file__", "")) if nlp_mod is not None else ""
+    if nlp_file.endswith("xops/makefile/nlp.py"):
+        del sys.modules["nlp"]
+
+    from common.config import cfg  # noqa: E402
+    from nlp.normalize import normalize_input  # noqa: E402
+    from swarm.agents.nlp import NlpIntentAgent  # noqa: E402
+    from swarm.agents.topics import NLP_EVENT_V1, QA_ANSWER_V1, QA_REQUEST_V1  # noqa: E402
+    from swarm.sdk.types import Message  # noqa: E402
+
+    normalized = normalize_input("Galatasaraya maç")
+    if not normalized.apostrophe_repairs:
+        raise AssertionError("phase10 demo.full: harmony-violation recovery path did not produce apostrophe repairs")
+    ok("swarm.demo.nlp.full: harmony-violation recovery path exercised")
+
+    normalized = normalize_input("maçkkkk")
+    if normalized.tokens != ("maçkk",):
+        raise AssertionError(
+            f"phase10 demo.full: repeated-character collapse path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: repeated-character collapse path exercised")
+
+    normalized = normalize_input("g00l")
+    if normalized.tokens != ("gool",):
+        raise AssertionError(
+            f"phase10 demo.full: digit-letter fold path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: digit-letter fold path exercised")
+
+    normalized = normalize_input("i\u0307stanbul maç")
+    if "istanbul" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: decomposed dotted-I NFC path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: decomposed-İ NFC composition path exercised")
+
+    normalized = normalize_input(
+        "Galatasaray maç var mı bugün? Beşiktaş maç nerede? Bu fark ne kadar?",
+        input_source="voice",
+    )
+    if len(normalized.subqueries) < 2:
+        raise AssertionError(
+            "phase10 demo.full: run-on multi-question split path did not produce multiple subqueries"
+        )
+    ok("swarm.demo.nlp.full: run-on multi-question split path exercised")
+
+    normalized = normalize_input("Maç bugün değil mi?")
+    if "değil" not in normalized.tokens or "mi" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: negation framing path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: negation framing path exercised")
+
+    normalized = normalize_input("MKE Ankaragücü maç")
+    if "ankaragüc'ü" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: MKE Ankaragücü affix-tolerant match path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: MKE Ankaragücü affix-tolerant match path exercised")
+
+    normalized = normalize_input("Kara Kartal maç")
+    if "kara" not in normalized.tokens or "kartal" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: Kara Kartal nickname backtrack path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: Kara Kartal nickname backtrack path exercised")
+
+    normalized = normalize_input("Hocam Trabzonspor maçı ne zaman?")
+    if "trabzonspor" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: hoca-honorific role narrowing path failed: {normalized.tokens!r}"
+        )
+    if "hocam" in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: hoca-honorific role narrowing path failed to strip the honorific: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: hoca-honorific role narrowing path exercised")
+
+    normalized = normalize_input("Galatasaray 🔴🏟️")
+    if not any(event.get("kind") == "emoji_hint_extracted" for event in normalized.normalization_events):
+        raise AssertionError("phase10 demo.full: color-emoji hint path did not emit emoji_hint_extracted")
+    ok("swarm.demo.nlp.full: color-emoji hint path exercised")
+
+    normalized = normalize_input("#Galatasaray maç @fenerbahce")
+    event_kinds = {event.get("kind") for event in normalized.normalization_events}
+    if "hashtag_dropped" not in event_kinds or "mention_resolved" not in event_kinds:
+        raise AssertionError(
+            f"phase10 demo.full: hashtag/mention hygiene path failed: {event_kinds!r}"
+        )
+    ok("swarm.demo.nlp.full: hashtag/mention hygiene path exercised")
+
+    normalized = normalize_input("3.5 maç sonucu")
+    if "3.5" not in normalized.tokens:
+        raise AssertionError(
+            f"phase10 demo.full: decimal-vs-score disambiguation path failed: {normalized.tokens!r}"
+        )
+    ok("swarm.demo.nlp.full: decimal-vs-score disambiguation path exercised")
+
+    agent = NlpIntentAgent()
+    request = Message.new(
+        topic=QA_REQUEST_V1,
+        payload={
+            "request_id": "demo-empty-001",
+            "locale": "tr-TR",
+            "sanitized_text": "",
+            "sec_verdict": "pass",
+            "emitted_at": "2026-06-05T00:00:00+00:00",
+        },
+        producer="swarm.demo.nlp.full",
+    )
+    output = list(agent.handle(request))
+    answer = [m for m in output if m.envelope.topic == QA_ANSWER_V1]
+    events = [m for m in output if m.envelope.topic == NLP_EVENT_V1]
+    if len(answer) != 1 or len(events) != 1:
+        raise AssertionError(
+            f"phase10 demo.full: empty-input canned help path failed: answers={len(answer)} events={len(events)}"
+        )
+    if answer[0].payload.get("intent") != "meta.help":
+        raise AssertionError("phase10 demo.full: empty-input canned help did not produce meta.help answer")
+    if events[0].payload.get("kind") != "empty_input_floor_response":
+        raise AssertionError("phase10 demo.full: empty-input canned help did not emit empty_input_floor_response event")
+    ok("swarm.demo.nlp.full: empty-input canned help path exercised")
+
+
 def cmd_demo(argv):
     parser = argparse.ArgumentParser(prog="swarm.py demo")
     parser.add_argument("--league", default="tr_super_lig")
@@ -854,6 +989,31 @@ def cmd_demo_nlp(argv):
             f"swarm.demo.nlp exceeded budget: {elapsed_s:.2f}s >= {budget_s:.2f}s"
         )
     ok(f"swarm.demo.nlp completed in {elapsed_s:.2f}s (< {budget_s:.2f}s)")
+    return 0
+
+
+def cmd_demo_nlp_full(argv):
+    parser = argparse.ArgumentParser(prog="swarm.py demo-nlp-full")
+    parser.add_argument("--league", default="tr_super_lig")
+    args = parser.parse_args(argv)
+
+    started = time.monotonic()
+    rc = _run_demo(args.league)
+    if rc != 0:
+        return rc
+
+    info("swarm.demo.nlp.full: running Phase 10 §10.21.14 extension checks")
+    _run_phase10_nlp_demo_extensions()
+    info("swarm.demo.nlp.full: running Phase 10 §10.24 full extension checks")
+    _run_phase10_nlp_demo_full_extensions()
+
+    elapsed_s = time.monotonic() - started
+    budget_s = 60.0
+    if elapsed_s >= budget_s:
+        raise AssertionError(
+            f"swarm.demo.nlp.full exceeded budget: {elapsed_s:.2f}s >= {budget_s:.2f}s"
+        )
+    ok(f"swarm.demo.nlp.full completed in {elapsed_s:.2f}s (< {budget_s:.2f}s)")
     return 0
 
 
@@ -1048,6 +1208,7 @@ def cmd_demo_live(argv):
 COMMANDS = {
     "demo": cmd_demo,
     "demo-nlp": cmd_demo_nlp,
+    "demo-nlp-full": cmd_demo_nlp_full,
     "demo-live": cmd_demo_live,
 }
 

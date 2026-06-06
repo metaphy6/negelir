@@ -100,31 +100,53 @@ def cmd_nlp_bench(argv: List[str]) -> int:
         f"threshold p95 ≤ {threshold_ms} ms"
     )
 
-    latencies_ms: List[float] = []
+    keyboard_latencies_ms: List[float] = []
     for _ in range(_ITERATIONS):
         t0 = time.perf_counter()
         normalize_input(payload, cfg=cfg)
         t1 = time.perf_counter()
-        latencies_ms.append((t1 - t0) * 1_000.0)
+        keyboard_latencies_ms.append((t1 - t0) * 1_000.0)
 
-    p95 = compute_p95(latencies_ms)
-    p50 = statistics.median(latencies_ms)
-    worst = max(latencies_ms)
+    voice_latencies_ms: List[float] = []
+    for _ in range(_ITERATIONS):
+        t0 = time.perf_counter()
+        normalize_input(payload, cfg=cfg, input_source="voice")
+        t1 = time.perf_counter()
+        voice_latencies_ms.append((t1 - t0) * 1_000.0)
 
-    info(f"nlp.bench: p50={p50:.3f} ms  p95={p95:.3f} ms  worst={worst:.3f} ms")
+    keyboard_p95 = compute_p95(keyboard_latencies_ms)
+    voice_p95 = compute_p95(voice_latencies_ms)
+    keyboard_p50 = statistics.median(keyboard_latencies_ms)
+    voice_p50 = statistics.median(voice_latencies_ms)
+    worst = max(keyboard_latencies_ms + voice_latencies_ms)
+    overhead_p95 = max(0.0, voice_p95 - keyboard_p95)
 
-    if p95 <= threshold_ms:
-        ok(
-            f"nlp.bench: p95={p95:.3f} ms ≤ {threshold_ms} ms — "
-            "Phase 10 §10.1 bounded-latency gate PASSED"
-        )
-        return 0
-
-    err(
-        f"nlp.bench: p95={p95:.3f} ms > {threshold_ms} ms — "
-        "Phase 10 §10.1 bounded-latency gate FAILED"
+    info(
+        f"nlp.bench: keyboard p50={keyboard_p50:.3f} ms  p95={keyboard_p95:.3f} ms; "
+        f"voice p50={voice_p50:.3f} ms  p95={voice_p95:.3f} ms; "
+        f"voice p95 overhead={overhead_p95:.3f} ms"
     )
-    return 1
+
+    if keyboard_p95 > threshold_ms:
+        err(
+            f"nlp.bench: keyboard p95={keyboard_p95:.3f} ms > {threshold_ms} ms — "
+            "Phase 10 §10.1 bounded-latency gate FAILED"
+        )
+        return 1
+
+    if overhead_p95 > 3.0:
+        err(
+            f"nlp.bench: voice p95 overhead={overhead_p95:.3f} ms > 3.000 ms — "
+            "Phase 10 §10.26 voice-path latency gate FAILED"
+        )
+        return 1
+
+    ok(
+        f"nlp.bench: keyboard p95={keyboard_p95:.3f} ms, voice p95={voice_p95:.3f} ms, "
+        f"voice overhead={overhead_p95:.3f} ms ≤ 3.000 ms — "
+        "Phase 10 §10.1 bounded-latency gate PASSED"
+    )
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -783,6 +805,193 @@ def _load_phonetic_aliases(path: Path) -> list[dict[str, object]]:
     return aliases
 
 
+def _load_transliteration_variants(path: Path) -> list[dict[str, object]]:
+    """Load the transliteration variants table used by lexicon-build and audit."""
+    if not path.exists():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return []
+    if not isinstance(data, dict):
+        return []
+
+    variants: list[dict[str, object]] = []
+    entries = data.get("variants", []) if isinstance(data.get("variants", []), list) else []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        canonical = item.get("canonical")
+        domain = item.get("domain")
+        source = item.get("source")
+        raw_variants = item.get("variants", [])
+        if not isinstance(canonical, str) or not canonical.strip():
+            continue
+        if not isinstance(domain, str) or not domain.strip():
+            continue
+        if not isinstance(source, str) or not source.strip():
+            continue
+        variants_list = [
+            str(v).strip()
+            for v in raw_variants
+            if isinstance(v, str) and v.strip()
+        ]
+        variants.append(
+            {
+                "canonical": canonical.strip(),
+                "domain": domain.strip().lower(),
+                "source": source.strip(),
+                "variants": variants_list,
+            }
+        )
+    return variants
+
+
+def _load_loanword_overrides(path: Path) -> set[str]:
+    """Load transliteration override variants that are allowed despite frequency."""
+    if not path.exists():
+        return set()
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    values = data.get("variants", []) if isinstance(data.get("variants", []), list) else []
+    return {
+        str(item).strip()
+        for item in values
+        if isinstance(item, str) and item.strip()
+    }
+
+
+def _validate_transliteration_variants(
+    variants: list[dict[str, object]],
+    word_freq: dict[str, int],
+    overrides: set[str],
+) -> list[str]:
+    """Validate transliteration variant table semantics for build-time safety."""
+    errors: list[str] = []
+    allowed_domains = {"football", "generic"}
+    frequency_cutoff = 0
+    if word_freq:
+        sorted_freqs = sorted(word_freq.values(), reverse=True)
+        frequency_cutoff = sorted_freqs[min(999, len(sorted_freqs) - 1)]
+    top_1000 = {
+        token for token, freq in word_freq.items() if freq >= frequency_cutoff and frequency_cutoff > 0
+    }
+    seen: dict[str, tuple[str, str]] = {}
+
+    for idx, item in enumerate(variants):
+        canonical = item.get("canonical")
+        domain = item.get("domain")
+        source = item.get("source")
+        raw_variants = item.get("variants", [])
+
+        if not isinstance(canonical, str) or not canonical.strip():
+            errors.append(f"variant[{idx}] missing canonical")
+            continue
+        if not isinstance(domain, str) or domain.strip().lower() not in allowed_domains:
+            errors.append(
+                f"variant[{idx}] canonical={canonical!r} has invalid domain {domain!r}"
+            )
+        if not isinstance(source, str) or not source.strip():
+            errors.append(f"variant[{idx}] canonical={canonical!r} missing source")
+
+        if not isinstance(raw_variants, list) or not raw_variants:
+            errors.append(f"variant[{idx}] canonical={canonical!r} missing variants list")
+            continue
+
+        for raw_variant in raw_variants:
+            if not isinstance(raw_variant, str) or not raw_variant.strip():
+                errors.append(
+                    f"variant[{idx}] canonical={canonical!r} contains empty variant"
+                )
+                continue
+            variant = raw_variant.strip()
+            folded = _ascii_fold_tr(variant)
+            if not folded:
+                errors.append(
+                    f"variant[{idx}] canonical={canonical!r} has invalid folded form for {variant!r}"
+                )
+                continue
+            override_key = folded if folded in overrides else variant
+            if folded in top_1000 and override_key not in overrides:
+                errors.append(
+                    f"variant[{idx}] {variant!r} is a top-1000 Turkish token and requires override"
+                )
+            current = seen.get(folded)
+            if current is None:
+                seen[folded] = (canonical, str(domain))
+            elif current[0] != canonical:
+                errors.append(
+                    f"variant[{idx}] {variant!r} collides across canonicals {current[0]!r} and {canonical!r}"
+                )
+    return errors
+
+
+def _inject_transliteration_variants_into_lexicon_data(
+    lexicon_data: dict[Path, dict[str, Any]],
+    variants: list[dict[str, object]],
+) -> tuple[set[Path], list[str]]:
+    """Add transliteration variant aliases to matching lexicon entries."""
+    errors: list[str] = []
+    canonical_locations: dict[str, list[tuple[Path, int]]] = {}
+    for lex_path, data in sorted(lexicon_data.items(), key=lambda kv: kv[0].name):
+        entries = data.get("entries", []) if isinstance(data.get("entries", []), list) else []
+        for idx, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            cid = str(entry.get("canonical_id", "")).strip()
+            if cid:
+                canonical_locations.setdefault(cid, []).append((lex_path, idx))
+
+    changed: set[Path] = set()
+    for item in variants:
+        canonical = str(item.get("canonical", "")).strip()
+        if not canonical:
+            continue
+        locations = canonical_locations.get(canonical, [])
+        if not locations:
+            errors.append(
+                f"transliteration variant canonical_id {canonical!r} not found in any lexicon file"
+            )
+            continue
+        if len(locations) > 1:
+            paths = ", ".join(sorted(str(path) for path, _ in locations))
+            errors.append(
+                f"transliteration variant canonical_id {canonical!r} found in multiple lexicon files: {paths}"
+            )
+            continue
+
+        lex_path, idx = locations[0]
+        entry = lexicon_data[lex_path]["entries"][idx]
+        names = [
+            str(value).strip()
+            for value in entry.get("names", []) or []
+            if isinstance(value, str) and value.strip()
+        ]
+        aliases = [
+            str(value).strip()
+            for value in entry.get("aliases", []) or []
+            if isinstance(value, str) and value.strip()
+        ]
+        existing = {value for value in names + aliases}
+        added = False
+        for raw_variant in item.get("variants", []):
+            if not isinstance(raw_variant, str) or not raw_variant.strip():
+                continue
+            variant = raw_variant.strip()
+            if variant not in existing:
+                aliases.append(variant)
+                existing.add(variant)
+                added = True
+        if added:
+            entry["aliases"] = aliases
+            changed.add(lex_path)
+    return changed, errors
+
+
 def _write_phonetic_collisions_report(
     aliases: list[dict[str, object]],
     report_path: Path,
@@ -889,11 +1098,64 @@ def _parse_iso_utc(timestamp: object) -> bool:
         return False
 
 
+def _build_existing_alias_symspell_index(lexicon_dir: Path) -> "SymSpellIndex":
+    from nlp.lexicon_loader import AliasHit
+    from nlp.vendor.symspell import SymSpellIndex
+
+    idx = SymSpellIndex(max_edit_distance=1)
+    for lex_path in sorted(lexicon_dir.glob("*.tr.yaml")):
+        if lex_path.name.startswith("_"):
+            continue
+        try:
+            data = yaml.safe_load(lex_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            continue
+        entries = (data or {}).get("entries", []) if isinstance(data, dict) else []
+        lex_version = str((data or {}).get("_meta", {}).get("lexicon_version", "1.0.0"))
+        kind = _ALIAS_DELTA_KIND_BY_FILE.get(lex_path.name, "")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            cid = str(entry.get("canonical_id", "")).strip()
+            if not cid:
+                continue
+            for alias in list(entry.get("aliases", [])) + list(entry.get("names", [])):
+                if not isinstance(alias, str):
+                    continue
+                term = alias.strip().lower()
+                if term:
+                    idx.add_term(term, AliasHit(cid, kind, lex_version))
+    return idx
+
+
+def _delta_override_matches(delta: dict[str, Any], canonical_id: str) -> bool:
+    overrides = delta.get("overrides")
+    if not isinstance(overrides, list):
+        return False
+    for override in overrides:
+        if not isinstance(override, dict):
+            continue
+        ids = override.get("canonical_ids")
+        if not isinstance(ids, list):
+            continue
+        normalized_ids = {str(item).strip() for item in ids if isinstance(item, str) and str(item).strip()}
+        if canonical_id in normalized_ids and str(delta.get("canonical_id", "")).strip() in normalized_ids:
+            return True
+    return False
+
+
 def _validate_alias_delta_entries(
     deltas: list[dict[str, Any]],
     lexicon_dir: Path | None = None,
 ) -> list[str]:
     errors: list[str] = []
+    alias_index = None
+    if lexicon_dir is not None:
+        try:
+            alias_index = _build_existing_alias_symspell_index(lexicon_dir)
+        except Exception as exc:
+            errors.append(f"alias delta validation: failed to build alias index: {exc}")
+
     for idx, delta in enumerate(deltas):
         if not isinstance(delta, dict):
             errors.append(f"delta[{idx}] must be a mapping")
@@ -956,6 +1218,34 @@ def _validate_alias_delta_entries(
                 f"delta[{idx}] missing or invalid 'added_at_utc' (ISO 8601 UTC required)"
             )
 
+        min_appearances = delta.get("min_corpus_appearances")
+        if min_appearances is not None and (
+            not isinstance(min_appearances, int) or min_appearances < 0
+        ):
+            errors.append(
+                f"delta[{idx}] min_corpus_appearances must be a non-negative integer"
+            )
+
+        overrides = delta.get("overrides")
+        if overrides is not None:
+            if not isinstance(overrides, list):
+                errors.append(f"delta[{idx}] 'overrides' must be a list if present")
+            else:
+                for override in overrides:
+                    if not isinstance(override, dict):
+                        errors.append(f"delta[{idx}] override entries must be mappings")
+                        continue
+                    ids = override.get("canonical_ids")
+                    justification = override.get("justification")
+                    if not isinstance(ids, list) or len(ids) < 2:
+                        errors.append(
+                            f"delta[{idx}] override must declare at least two canonical_ids"
+                        )
+                    if not isinstance(justification, str) or not justification.strip():
+                        errors.append(
+                            f"delta[{idx}] override entry must include a non-empty justification"
+                        )
+
         if (
             lexicon_dir is not None
             and isinstance(canonical_id, str)
@@ -983,6 +1273,23 @@ def _validate_alias_delta_entries(
             else:
                 errors.append(f"delta[{idx}] target file not found: '{fname}'")
 
+            if alias_index is not None and isinstance(add_aliases, list):
+                for alias in add_aliases:
+                    if not isinstance(alias, str):
+                        continue
+                    term = alias.strip().lower()
+                    if len(term) <= 2:
+                        continue
+                    candidate = alias_index.lookup(term)
+                    if candidate is None:
+                        continue
+                    if candidate.hit.canonical_id == canonical_id:
+                        continue
+                    if not _delta_override_matches(delta, candidate.hit.canonical_id):
+                        errors.append(
+                            f"delta[{idx}] alias '{alias}' is a typo-squat of canonical_id '{candidate.hit.canonical_id}'"
+                        )
+
     return errors
 
 
@@ -999,6 +1306,97 @@ def _check_lexicon_alias_quota(entries: list[dict[str, Any]], max_aliases: int, 
                 f"{fname}: canonical_id '{canonical_id}' has {len(unique_aliases)} aliases, exceeds max {max_aliases}"
             )
     return violations
+
+
+def _parse_git_numstat(output: str) -> dict[str, tuple[int, int]]:
+    rows: dict[str, tuple[int, int]] = {}
+    for line in output.splitlines():
+        parts = line.strip().split()
+        if len(parts) < 3:
+            continue
+        added_str, deleted_str, path = parts[0], parts[1], parts[2]
+        try:
+            added = 0 if added_str == "-" else int(added_str)
+            deleted = 0 if deleted_str == "-" else int(deleted_str)
+        except ValueError:
+            continue
+        rows[path] = (added, deleted)
+    return rows
+
+
+def _git_diff_base() -> str:
+    base_ref = os.getenv("NEGELIR_GIT_DIFF_BASE", "").strip()
+    if base_ref:
+        return base_ref
+    github_base = os.getenv("GITHUB_BASE_REF", "").strip()
+    if github_base:
+        return f"origin/{github_base}"
+    return "HEAD~1"
+
+
+def _build_git_diff_stats(paths: list[str], base_ref: str) -> dict[str, tuple[int, int]]:
+    proc = subprocess.run(
+        ["git", "diff", "--numstat", f"{base_ref}...HEAD", "--", *paths],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "git diff failed")
+    return _parse_git_numstat(proc.stdout)
+
+
+def _load_canonical_id_collision_allowlist(path: Path) -> set[frozenset[str]]:
+    if not path.exists():
+        return set()
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"could not parse canonical ID collision allowlist: {exc}")
+    if not isinstance(raw, dict):
+        raise ValueError("canonical id collision allowlist must be a mapping")
+    allowlist = set()
+    entries = raw.get("allowlist", [])
+    if not isinstance(entries, list):
+        raise ValueError("canonical id collision allowlist must contain an 'allowlist' list")
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        ids = item.get("canonical_ids")
+        if not isinstance(ids, list) or len(ids) < 2:
+            continue
+        normalized_ids = frozenset(str(cid).strip() for cid in ids if isinstance(cid, str) and str(cid).strip())
+        if len(normalized_ids) > 1:
+            allowlist.add(normalized_ids)
+    return allowlist
+
+
+def _validate_canonical_id_confusable_collisions(
+    entries_by_file: dict[str, list[dict]],
+    allowlist_path: Path,
+) -> list[str]:
+    from common.text.normalize import confusables_fold
+
+    allowlist = _load_canonical_id_collision_allowlist(allowlist_path)
+    folded: dict[str, set[str]] = {}
+    for fname, entries in entries_by_file.items():
+        for entry in entries:
+            cid = str(entry.get("canonical_id", "")).strip()
+            if not cid:
+                continue
+            folded_key = confusables_fold(cid).strip().lower()
+            folded.setdefault(folded_key, set()).add(cid)
+
+    failures: list[str] = []
+    for folded_key, cids in folded.items():
+        if len(cids) <= 1:
+            continue
+        if any(pair.issubset(cids) for pair in allowlist):
+            continue
+        failures.append(
+            f"(d) canonical_id confusable collision: folded '{folded_key}' maps to {sorted(cids)}"
+        )
+    return failures
 
 
 def cmd_nlp_lexicon_build(argv: List[str]) -> int:
@@ -1061,18 +1459,31 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
     import datetime as _dt
     now_utc = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    lexicon_files = sorted(
+        f for f in LEXICON_DIR.glob("*.tr.yaml") if not f.name.startswith("_")
+    )
+    lexicon_data: dict[Path, dict[str, Any]] = {}
+    file_changed: dict[Path, bool] = {}
+    for lex_path in lexicon_files:
+        try:
+            data = yaml.safe_load(lex_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            err(f"nlp.lexicon-build: {lex_path.name}: YAML parse error: {exc}")
+            return 1
+        if not isinstance(data, dict) or "entries" not in data:
+            err(f"nlp.lexicon-build: {lex_path.name}: unexpected structure (no 'entries')")
+            return 1
+        lexicon_data[lex_path] = data
+        file_changed[lex_path] = False
+
     modified = 0
     for fname, file_deltas in by_file.items():
         target = LEXICON_DIR / fname
-        if not target.exists():
+        if target not in lexicon_data:
             err(f"nlp.lexicon-build: target file not found: {target}")
             return 1
 
-        data = yaml.safe_load(target.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or "entries" not in data:
-            err(f"nlp.lexicon-build: {fname}: unexpected structure (no 'entries')")
-            return 1
-
+        data = lexicon_data[target]
         quota_errors = _check_lexicon_alias_quota(data["entries"], max_aliases, fname)
         if quota_errors:
             for message in quota_errors:
@@ -1116,26 +1527,70 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
                 return 1
 
         if changed:
-            # Bump patch version and refresh generated_at_utc in _meta
-            meta = data.get("_meta", {})
-            old_ver = meta.get("lexicon_version", "1.0.0")
-            meta["lexicon_version"] = _bump_patch(old_ver)
-            meta["generated_at_utc"] = now_utc
-            data["_meta"] = meta
-            # Write back (block-style YAML, UTF-8, explicit allow_unicode)
-            out = yaml.dump(
-                data,
-                allow_unicode=True,
-                default_flow_style=False,
-                sort_keys=False,
-            )
-            target.write_text(out, encoding="utf-8")
-            ok(f"nlp.lexicon-build: {fname} updated (v{old_ver} → {meta['lexicon_version']})")
-            modified += 1
-        else:
-            info(f"nlp.lexicon-build: {fname} — no changes after applying delta")
+            file_changed[target] = True
 
-    if no_deltas:
+    word_freq_path = REPO_ROOT_LOCAL / "ai" / "nlp" / "data" / "tr_word_freq.txt"
+    word_freq = _load_word_frequencies(word_freq_path)
+
+    transliteration_source = (
+        REPO_ROOT_LOCAL / "ai" / "nlp" / "lang_tr" / "loanwords" / "transliteration_variants.tr.yaml"
+    )
+    transliteration_overrides_path = (
+        REPO_ROOT_LOCAL / "ai" / "nlp" / "lang_tr" / "loanwords" / "_loanword_overrides.tr.yaml"
+    )
+    transliteration_variants = _load_transliteration_variants(transliteration_source)
+    transliteration_overrides = {
+        _ascii_fold_tr(value)
+        for value in _load_loanword_overrides(transliteration_overrides_path)
+    }
+    transliteration_errors = _validate_transliteration_variants(
+        transliteration_variants,
+        word_freq,
+        transliteration_overrides,
+    )
+    if transliteration_errors:
+        err("nlp.lexicon-build: transliteration variant validation failed")
+        for message in transliteration_errors[:20]:
+            err(f"  • {message}")
+        if len(transliteration_errors) > 20:
+            err(f"  • ... and {len(transliteration_errors) - 20} more")
+        return 1
+
+    injected_paths, inject_errors = _inject_transliteration_variants_into_lexicon_data(
+        lexicon_data,
+        transliteration_variants,
+    )
+    if inject_errors:
+        err("nlp.lexicon-build: transliteration variant injection failed")
+        for message in inject_errors[:20]:
+            err(f"  • {message}")
+        if len(inject_errors) > 20:
+            err(f"  • ... and {len(inject_errors) - 20} more")
+        return 1
+    for path in injected_paths:
+        file_changed[path] = True
+
+    for lex_path, data in sorted(lexicon_data.items(), key=lambda kv: kv[0].name):
+        if not file_changed[lex_path]:
+            continue
+        meta = data.get("_meta", {})
+        old_ver = meta.get("lexicon_version", "1.0.0")
+        meta["lexicon_version"] = _bump_patch(old_ver)
+        meta["generated_at_utc"] = now_utc
+        data["_meta"] = meta
+        out = yaml.dump(
+            data,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        lex_path.write_text(out, encoding="utf-8")
+        ok(
+            f"nlp.lexicon-build: {lex_path.name} updated (v{old_ver} → {meta['lexicon_version']})"
+        )
+        modified += 1
+
+    if no_deltas and modified == 0:
         info("nlp.lexicon-build: no deltas to apply — rebuilding ASCII indices only")
 
     # Phase 10 §10.22.1: emit sibling ASCII alias index files and gate
@@ -1252,9 +1707,91 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
     return 0
 
 
+def cmd_nlp_transliteration_build(argv: List[str]) -> int:
+    """Validate the transliteration variants table used by NLP lexicon build."""
+    REPO_ROOT_LOCAL = Path(__file__).resolve().parents[2]
+    table_path = (
+        REPO_ROOT_LOCAL / "ai" / "nlp" / "lang_tr" / "loanwords" / "transliteration_variants.tr.yaml"
+    )
+    override_path = (
+        REPO_ROOT_LOCAL / "ai" / "nlp" / "lang_tr" / "loanwords" / "_loanword_overrides.tr.yaml"
+    )
+    word_freq_path = REPO_ROOT_LOCAL / "ai" / "nlp" / "data" / "tr_word_freq.txt"
+
+    variants = _load_transliteration_variants(table_path)
+    overrides = { _ascii_fold_tr(value) for value in _load_loanword_overrides(override_path) }
+    word_freq = _load_word_frequencies(word_freq_path)
+    validation_errors = _validate_transliteration_variants(variants, word_freq, overrides)
+    if validation_errors:
+        err("nlp.transliteration-build: validation failed")
+        for message in validation_errors[:20]:
+            err(f"  • {message}")
+        if len(validation_errors) > 20:
+            err(f"  • ... and {len(validation_errors) - 20} more")
+        return 1
+
+    report_path = REPO_ROOT_LOCAL / "data" / "nlp" / "build_reports" / "transliteration_variants.md"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Transliteration variants build report",
+        "",
+        f"validated {len(variants)} entries from {table_path}",
+        "",
+    ]
+    for item in variants:
+        lines.append(
+            f"- {item['canonical']} ({item['domain']}): {len(item['variants'])} variants, source={item['source']}"
+        )
+    report_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    ok(f"nlp.transliteration-build: validated {len(variants)} entries and wrote report to {report_path}")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # verify.nlp-lexicons
 # ---------------------------------------------------------------------------
+
+def _validate_player_geminate_restoration_coverage(
+    all_entries: dict[str, list[dict[str, Any]]]
+) -> list[str]:
+    failures: list[str] = []
+    try:
+        from common.text.turkish import lowercase_tr
+        from nlp.geminate_restoration import load_geminate_restorations
+    except ImportError as exc:
+        failures.append(
+            f"verify.nlp-lexicons: import error in geminate restoration coverage: {exc}"
+        )
+        return failures
+
+    restorations = load_geminate_restorations()
+    doubled_forms = tuple(rule.doubled_form for rule in restorations)
+
+    def _has_vowel_suffix(token: str, prefix: str) -> bool:
+        return len(token) > len(prefix) and token[len(prefix)] in "aeıioöuü"
+
+    for entry in all_entries.get("players.tr.yaml", []):
+        for term in list(entry.get("names", [])) + list(entry.get("aliases", [])):
+            if not isinstance(term, str):
+                continue
+            for token in re.split(r"[^\wçğıöüşÇĞİÖÜ]+", term.strip()):
+                if not token:
+                    continue
+                lower = lowercase_tr(token)
+                if not re.search(r"(pp|tt|kk|cc)[aeıioöuü]", lower):
+                    continue
+                if doubled_forms and any(
+                    lower.startswith(df) and _has_vowel_suffix(lower, df)
+                    for df in doubled_forms
+                ):
+                    continue
+                failures.append(
+                    f"(e) players.tr.yaml: token '{token}' looks like a geminate form but no restoration rule applies"
+                )
+                break
+    return failures
+
 
 def cmd_verify_nlp_lexicons(argv: List[str]) -> int:
     """Assert the three §10.2 Build-pipeline properties across all lexicons.
@@ -1414,6 +1951,52 @@ def cmd_verify_nlp_lexicons(argv: List[str]) -> int:
                     f"canonicals [{owners_str}] with no disambiguator"
                 )
 
+    # ── (d) canonical_id confusable collisions ─────────────────────────────
+    info("verify.nlp-lexicons: (d) checking canonical_id confusable collisions …")
+    allowlist_path = REPO_ROOT_LOCAL / "ai" / "nlp" / "lang_tr" / "_canonical_id_collision_allow.yaml"
+    collision_failures = _validate_canonical_id_confusable_collisions(all_entries, allowlist_path)
+    failures.extend(collision_failures)
+
+    # ── (e) geminate restoration coverage for player names ──────────────────
+    info("verify.nlp-lexicons: (e) checking player geminate restoration coverage …")
+    geminate_failures = _validate_player_geminate_restoration_coverage(all_entries)
+    failures.extend(geminate_failures)
+
+    # ── (f) optional LeagueCatalog consonant alternation coverage ──────────
+    if cfg.nlp_league_catalog_consonant_stems_path:
+        info(
+            "verify.nlp-lexicons: (f) checking LeagueCatalog consonant alternation coverage …"
+        )
+        try:
+            from nlp.consonant_alternation import validate_consonant_alternation_coverage
+        except ImportError as exc:
+            failures.append(
+                f"verify.nlp-lexicons: cannot import consonant alternation validator: {exc}"
+            )
+        else:
+            stem_path = Path(cfg.nlp_league_catalog_consonant_stems_path)
+            if not stem_path.exists():
+                failures.append(
+                    f"verify.nlp-lexicons: LeagueCatalog consonant stems file missing: {stem_path}"
+                )
+            else:
+                stems = [
+                    line.strip()
+                    for line in stem_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.strip().startswith("#")
+                ]
+                coverage_failures = validate_consonant_alternation_coverage(stems)
+                failures.extend(coverage_failures)
+                try:
+                    from nlp.vowel_drop_before_suffix import validate_vowel_drop_before_suffix_coverage
+                except ImportError as exc:
+                    failures.append(
+                        f"verify.nlp-lexicons: cannot import vowel-drop-before-suffix validator: {exc}"
+                    )
+                else:
+                    vowel_drop_failures = validate_vowel_drop_before_suffix_coverage(stems)
+                    failures.extend(vowel_drop_failures)
+
     # ── Report ─────────────────────────────────────────────────────────────
     if failures:
         err(f"verify.nlp-lexicons: {len(failures)} violation(s):")
@@ -1425,8 +2008,73 @@ def cmd_verify_nlp_lexicons(argv: List[str]) -> int:
         "verify.nlp-lexicons: all assertions passed — "
         "(a) canonical IDs resolve, "
         "(b) no uncovered alias collisions, "
-        "(c) normalize round-trip clean"
+        "(c) normalize round-trip clean, "
+        "(d) canonical_id confusable collisions clean"
     )
+    return 0
+
+
+def cmd_verify_nlp_lexicon_diff(argv: List[str]) -> int:
+    """Assert PR diff row limits and lexicon-bot commit authority.
+
+    Uses git diff line-addition statistics as a proxy for PR row count.
+    """
+    import argparse
+    from common.config import cfg
+
+    parser = argparse.ArgumentParser(prog="verify.nlp-lexicon-diff")
+    parser.add_argument("--base", default=None, help="Git base ref for PR diff")
+    args = parser.parse_args(argv)
+
+    base_ref = args.base or _git_diff_base()
+    paths = [
+        "ai/nlp/lexicon/teams.tr.yaml",
+        "ai/nlp/lexicon/players.tr.yaml",
+        "ai/nlp/lexicon/leagues.tr.yaml",
+        "ai/nlp/lexicon/competitions.tr.yaml",
+        "ai/nlp/lexicon/markets.tr.yaml",
+        "ai/nlp/lexicon/_aliases_delta.tr.yaml",
+    ]
+
+    try:
+        stats = _build_git_diff_stats(paths, base_ref)
+    except RuntimeError as exc:
+        err(f"verify.nlp-lexicon-diff: git diff failed — {exc}")
+        return 1
+
+    failures: list[str] = []
+    for path, (added, _) in stats.items():
+        if added > cfg.nlp_lexicon_pr_max_added_rows_per_file:
+            failures.append(
+                f"{path}: added rows {added} exceeds max {cfg.nlp_lexicon_pr_max_added_rows_per_file}"
+            )
+        elif added > cfg.nlp_lexicon_pr_soft_warn_added_rows_per_file:
+            info(
+                f"verify.nlp-lexicon-diff: advisory: {path} added {added} rows; "
+                f"soft threshold is {cfg.nlp_lexicon_pr_soft_warn_added_rows_per_file}"
+            )
+
+    if failures:
+        err(f"verify.nlp-lexicon-diff: {len(failures)} violation(s):")
+        for failure in failures:
+            err(f"  • {failure}")
+        return 1
+
+    changed_paths = [path for path, (added, _) in stats.items() if added > 0]
+    if ("ai/nlp/lexicon/_aliases_delta.tr.yaml" in changed_paths
+            and any(path.endswith(".tr.yaml") and path != "ai/nlp/lexicon/_aliases_delta.tr.yaml" for path in changed_paths)):
+        actor = os.getenv("GITHUB_ACTOR", "").strip()
+        bot_actor = os.getenv("NEGELIR_NLP_LEXICON_BUILD_BOT_ACTOR", "lexicon-build-bot").strip()
+        if actor and actor != bot_actor:
+            err(
+                "verify.nlp-lexicon-diff: commit author mismatch — "
+                f"expected '{bot_actor}' for auto-generated lexicon updates, got '{actor}'"
+            )
+            return 1
+        if not actor:
+            info("verify.nlp-lexicon-diff: no GITHUB_ACTOR available; skipping bot impersonation check")
+
+    ok("verify.nlp-lexicon-diff: all checked lexicon diffs are within limits")
     return 0
 
 
@@ -1934,6 +2582,17 @@ def cmd_nlp_template_lint(argv: List[str]) -> int:
 
     info(f"nlp.template-lint: scanning {TEMPLATE_DIR}")
 
+    compliance_dir = REPO_ROOT_LOCAL / "ai" / "nlp" / "compliance"
+    disclosure_texts: list[str] = []
+    for disclosures_path in sorted(compliance_dir.glob("disclosures.*.yaml")):
+        if disclosures_path.is_file():
+            raw = yaml.safe_load(disclosures_path.read_text(encoding="utf-8")) or {}
+            for item in raw.get("disclosures", []):
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str) and text.strip():
+                        disclosure_texts.append(text)
+
     template_files = sorted(TEMPLATE_DIR.glob("*.j2"))
     if not template_files:
         err(f"nlp.template-lint: no .j2 files found in {TEMPLATE_DIR}")
@@ -1943,6 +2602,15 @@ def cmd_nlp_template_lint(argv: List[str]) -> int:
     for tpl_path in template_files:
         try:
             source = tpl_path.read_text(encoding="utf-8")
+            for disclosure_text in disclosure_texts:
+                if disclosure_text in source:
+                    failed.append(
+                        (
+                            tpl_path.name,
+                            disclosure_text[:80],
+                            "§10.27.8: template may not contain closed disclosure text"
+                        )
+                    )
             # Parse with Jinja2's AST
             env = jinja2.Environment()
             ast = env.parse(source)
@@ -2189,6 +2857,94 @@ def cmd_nlp_intent_rollback(argv: List[str]) -> int:
     Phase 10 §10.25.5: operator-driven intent model rollback.
     """
     return cmd_nlp_canary_rollback(["--target", "intent"] + argv)
+
+
+def cmd_nlp_lexicon_deploy(argv: List[str]) -> int:
+    """Validate an NLP lexicon deploy candidate and report whether it is safe to promote.
+
+    Usage:
+        make nlp.lexicon-deploy LEXICON=<name>
+
+    Phase 10 §10.27.9: drain protocol for lexicon deploy candidates.
+    """
+    parser = argparse.ArgumentParser(prog="nlp.lexicon-deploy")
+    parser.add_argument("--lexicon", type=str, default=os.getenv("LEXICON", ""))
+    parser.add_argument("--version", type=str, default=os.getenv("VERSION", ""))
+    parser.add_argument(
+        "--lexicon-dir",
+        type=str,
+        default=str(REPO_ROOT / "ai" / "nlp" / "lexicon"),
+    )
+    args = parser.parse_args(argv)
+
+    lexicon = str(args.lexicon or "").strip()
+    version = str(args.version or "").strip()
+    if not lexicon:
+        err("nlp.lexicon-deploy: requires --lexicon or LEXICON=<name>")
+        return 1
+
+    lexicon_dir = Path(args.lexicon_dir)
+    lex_path = lexicon_dir / f"{lexicon}.tr.yaml"
+    if not lex_path.is_file():
+        err(
+            f"nlp.lexicon-deploy: lexicon file not found: {lex_path}"
+        )
+        return 1
+
+    try:
+        from common.config import Config  # noqa: E402
+        cfg = Config()
+        raw_text = lex_path.read_text(encoding="utf-8")
+        doc = yaml.safe_load(raw_text)
+        if not isinstance(doc, dict):
+            err(f"nlp.lexicon-deploy: lexicon file invalid YAML mapping: {lex_path}")
+            return 1
+        meta = doc.get("_meta")
+        if not isinstance(meta, dict):
+            err(f"nlp.lexicon-deploy: lexicon file missing _meta block: {lex_path}")
+            return 1
+
+        swap_at_utc = datetime.now(timezone.utc) + datetime.timedelta(
+            seconds=int(cfg.nlp_lexicon_swap_grace_s)
+        )
+        meta["swap_at_utc"] = swap_at_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if version:
+            meta["lexicon_version"] = version
+        doc["_meta"] = meta
+        lex_path.write_text(
+            yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        err(f"nlp.lexicon-deploy: failed to stage lexicon deploy metadata — {exc}")
+        return 1
+
+    try:
+        from nlp.lexicon_loader import LexiconStore  # noqa: E402
+    except ImportError as exc:
+        err(f"nlp.lexicon-deploy: import error — {exc}")
+        return 1
+
+    try:
+        store = LexiconStore(lexicon_dir, reload_s=9999, max_rss_mb=0)
+        alerts = store.maybe_reload()
+    except Exception as exc:
+        err(f"nlp.lexicon-deploy: validation failed — {exc}")
+        return 1
+
+    errors = [a for a in alerts if str(a.get("severity", "")).lower() == "error"]
+    if errors:
+        err(
+            "nlp.lexicon-deploy: validation failed — error-level lexicon alerts emitted"
+        )
+        for alert in errors:
+            err(f"  {alert}")
+        return 1
+
+    ok(
+        f"nlp.lexicon-deploy: lexicon '{lexicon}' validated successfully in {lexicon_dir}"
+    )
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -2587,6 +3343,71 @@ def cmd_verify_nlp_schemas(argv: List[str]) -> int:
     return 0
 
 
+def cmd_verify_nlp_football_vocab(argv: List[str]) -> int:
+    """Verify the Phase 10 football vocabulary table and intent-hint references.
+
+    Per Phase 10 §10.26.10, this gate checks that the table exists, is
+    syntactically valid, contains no duplicate canonical concepts, and that
+    every optional intent_hint resolves to a value in the Phase 10 closed
+    intent enum.
+
+    Exit codes:
+        0  Table passes validation.
+        1  Fatal validation failures.
+    """
+    from nlp.football_vocab import load_football_vocab
+    from nlp.intent import INTENT_LABELS
+
+    REPO_ROOT_LOCAL = Path(__file__).resolve().parents[2]
+    vocab_path = REPO_ROOT_LOCAL / "ai" / "nlp" / "lang_tr" / "football" / "vocab.tr.yaml"
+
+    if not vocab_path.exists():
+        err(f"verify.nlp-football-vocab: missing football vocab file: {vocab_path}")
+        return 1
+
+    try:
+        entries = load_football_vocab(vocab_path)
+    except Exception as exc:
+        err(f"verify.nlp-football-vocab: failed to load football vocab: {exc}")
+        return 1
+
+    failures: list[str] = []
+    seen_concepts: set[str] = set()
+    seen_surface_forms: dict[str, str] = {}
+
+    for entry in entries:
+        if entry.canonical_concept in seen_concepts:
+            failures.append(
+                f"duplicate canonical_concept: {entry.canonical_concept!r}"
+            )
+        seen_concepts.add(entry.canonical_concept)
+
+        for surface_form in entry.all_surface_forms:
+            key = surface_form.lower()
+            previous_concept = seen_surface_forms.get(key)
+            if previous_concept is not None and previous_concept != entry.canonical_concept:
+                failures.append(
+                    f"duplicate surface form across concepts: {surface_form!r} "
+                    f"({previous_concept!r} vs {entry.canonical_concept!r})"
+                )
+            seen_surface_forms[key] = entry.canonical_concept
+
+        if entry.intent_hint and entry.intent_hint not in INTENT_LABELS:
+            failures.append(
+                f"intent_hint {entry.intent_hint!r} for canonical_concept "
+                f"{entry.canonical_concept!r} is not a valid intent label"
+            )
+
+    if failures:
+        err(f"verify.nlp-football-vocab: {len(failures)} failure(s)")
+        for failure in failures:
+            err(f"  • {failure}")
+        return 1
+
+    ok("verify.nlp-football-vocab: football vocab table is valid")
+    return 0
+
+
 def cmd_nlp_audit_rerender(argv: List[str]) -> int:
     """Run the Phase 10 NLP audit bundle rerender operator runbook."""
     parser = argparse.ArgumentParser(prog="nlp.audit-rerender")
@@ -2611,6 +3432,73 @@ def cmd_nlp_audit_rerender(argv: List[str]) -> int:
         return 0
     except subprocess.CalledProcessError as exc:
         err(f"nlp.audit-rerender failed (exit {exc.returncode})")
+        return int(exc.returncode)
+
+
+def cmd_nlp_complaint_trace(argv: List[str]) -> int:
+    """Run the Phase 10 operator complaint trace rebuild workflow."""
+    parser = argparse.ArgumentParser(prog="nlp.complaint-trace")
+    parser.add_argument("--request-id", required=False)
+    parser.add_argument("--strict-uniqueness", dest="strict_uniqueness", action="store_true", default=True)
+    parser.add_argument("--no-strict-uniqueness", dest="strict_uniqueness", action="store_false")
+    args = parser.parse_args(argv)
+
+    request_id = args.request_id or os.getenv("REQUEST_ID")
+    if not request_id:
+        parser.error("--request-id is required")
+
+    cmd = [
+        "run", "--rm",
+        "-e", f"REQUEST_ID={request_id}",
+        "ai",
+        "python", "-m", "nlp.complaint_trace",
+        "--request-id", request_id,
+    ]
+    if not args.strict_uniqueness:
+        cmd.append("--no-strict-uniqueness")
+
+    try:
+        compose_run(*cmd)
+        return 0
+    except subprocess.CalledProcessError as exc:
+        err(f"nlp.complaint-trace failed (exit {exc.returncode})")
+        return int(exc.returncode)
+
+
+def cmd_nlp_complaint_trace_with_text(argv: List[str]) -> int:
+    """Run the Phase 10 operator complaint trace workflow with PII confirmation."""
+    parser = argparse.ArgumentParser(prog="nlp.complaint-trace-with-text")
+    parser.add_argument("--request-id", required=False)
+    parser.add_argument("--operator-id-h", required=False)
+    parser.add_argument("--reason-text-sha8", required=False)
+    args = parser.parse_args(argv)
+
+    request_id = args.request_id or os.getenv("REQUEST_ID")
+    operator_id_h = args.operator_id_h or os.getenv("OPERATOR_ID_H")
+    if not request_id:
+        parser.error("--request-id is required")
+    if not operator_id_h:
+        parser.error("--operator-id-h is required")
+
+    cmd = [
+        "run", "--rm",
+        "-e", f"REQUEST_ID={request_id}",
+        "-e", f"OPERATOR_ID_H={operator_id_h}",
+        "ai",
+        "python", "-m", "nlp.complaint_trace",
+        "--request-id", request_id,
+        "--with-text",
+        "--confirm-pii",
+        "--operator-id-h", operator_id_h,
+    ]
+    if args.reason_text_sha8:
+        cmd.extend(["--reason-text-sha8", args.reason_text_sha8])
+
+    try:
+        compose_run(*cmd)
+        return 0
+    except subprocess.CalledProcessError as exc:
+        err(f"nlp.complaint-trace-with-text failed (exit {exc.returncode})")
         return int(exc.returncode)
 
 
@@ -2663,6 +3551,61 @@ def cmd_nlp_rotate_citation_key(argv: List[str]) -> int:
 
     ok(
         "nlp.rotate-citation-key: rotated citation key "
+        f"(new_key_id={new_key_id}, prev_key_id={previous_key_id or 'none'}, "
+        f"grace_s={grace_s}, key_path={key_path}, prev_path={prev_path})"
+    )
+    return 0
+
+
+def cmd_nlp_rotate_answer_hmac_key(argv: List[str]) -> int:
+    """Rotate the Phase 10 answer envelope HMAC key with dual-acceptance grace window.
+
+    Flow:
+    1) Move current key to <path>.prev (if current key exists).
+    2) Generate a new 32-byte key at <path> (mode 0400).
+    3) Keep .prev valid for cfg.qa_answer_hmac_grace_s seconds.
+    """
+    try:
+        from common.config import cfg
+    except ImportError as exc:
+        err(f"nlp.rotate-answer-hmac-key: import error — {exc}")
+        return 1
+
+    key_path = Path(str(cfg.qa_answer_hmac_key_path)).expanduser()
+    prev_path = Path(f"{key_path}.prev")
+    grace_s = int(cfg.qa_answer_hmac_grace_s)
+
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+
+    previous_key_id = None
+    if key_path.exists():
+        try:
+            old_key = key_path.read_bytes().strip()
+        except OSError as exc:
+            err(f"nlp.rotate-answer-hmac-key: cannot read existing key: {exc}")
+            return 1
+        if old_key:
+            previous_key_id = hashlib.sha256(old_key).hexdigest()[:16]
+            try:
+                prev_path.write_bytes(old_key)
+                os.chmod(prev_path, 0o400)
+            except OSError as exc:
+                err(f"nlp.rotate-answer-hmac-key: cannot persist previous key: {exc}")
+                return 1
+
+    new_key = os.urandom(32)
+    new_key_id = hashlib.sha256(new_key).hexdigest()[:16]
+    try:
+        if key_path.exists():
+            os.chmod(key_path, 0o600)
+        key_path.write_bytes(new_key)
+        os.chmod(key_path, 0o400)
+    except OSError as exc:
+        err(f"nlp.rotate-answer-hmac-key: cannot write new key: {exc}")
+        return 1
+
+    ok(
+        "nlp.rotate-answer-hmac-key: rotated answer envelope HMAC key "
         f"(new_key_id={new_key_id}, prev_key_id={previous_key_id or 'none'}, "
         f"grace_s={grace_s}, key_path={key_path}, prev_path={prev_path})"
     )
@@ -2732,9 +3675,12 @@ COMMANDS = {
     "nlp.intent-pin": cmd_nlp_intent_pin,
     "nlp.intent-train": cmd_nlp_intent_train,
     "nlp.lexicon-build": cmd_nlp_lexicon_build,
+    "nlp.transliteration-build": cmd_nlp_transliteration_build,
+    "nlp.lexicon-deploy": cmd_nlp_lexicon_deploy,
     "nlp.lexicon-eval": cmd_nlp_lexicon_eval,
     "nlp.diacritics-build": cmd_nlp_diacritics_build,
     "nlp.rotate-citation-key": cmd_nlp_rotate_citation_key,
+    "nlp.rotate-answer-hmac-key": cmd_nlp_rotate_answer_hmac_key,
     "nlp.rotate-lexicon-key": cmd_nlp_rotate_lexicon_key,
     "nlp.template-lint": cmd_nlp_template_lint,
     "nlp.compat-validate": cmd_nlp_compat_validate,
@@ -2747,9 +3693,13 @@ COMMANDS = {
     "nlp.canary-rollback": cmd_nlp_canary_rollback,
     "nlp.intent-rollback": cmd_nlp_intent_rollback,
     "nlp.audit-rerender": cmd_nlp_audit_rerender,
+    "nlp.complaint-trace": cmd_nlp_complaint_trace,
+    "nlp.complaint-trace-with-text": cmd_nlp_complaint_trace_with_text,
     "nlp.eval-diff": cmd_nlp_eval_diff,
+    "verify.nlp-lexicon-diff": cmd_verify_nlp_lexicon_diff,
     "verify.nlp-lexicons": cmd_verify_nlp_lexicons,
     "verify.nlp-schemas": cmd_verify_nlp_schemas,
+    "verify.nlp-football-vocab": cmd_verify_nlp_football_vocab,
 }
 
 

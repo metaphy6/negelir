@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/fixture_state_flipped_during_rpc",
+  "title": "nlp.event.v1{kind=fixture_state_flipped_during_rpc}",
+  "description": "A fixture transitioned into a live in-play state while a predictor RPC was in flight; the approval is discarded and the query is refused.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "match_id",
+    "prior_state",
+    "new_state",
+    "rpc_age_ms"
+  ],
+  "properties": {
+    "kind": {
+      "const": "fixture_state_flipped_during_rpc"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "qa_correlation_id": {
+      "type": ["string", "null"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "match_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prior_state": {
+      "type": "string",
+      "description": "The fixture state before the RPC became stale or the preceding state when unknown."
+    },
+    "new_state": {
+      "type": "string",
+      "description": "The current fixture state after the transition."
+    },
+    "rpc_age_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Elapsed time in milliseconds since approval arrival or request initiation."
+    }
+  },
+  "additionalProperties": false
+}

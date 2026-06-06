@@ -12,6 +12,9 @@ apostrophe_repair:
   misplaced_apostrophe:
     id: "misplaced_apostrophe"
     max_candidates: 1
+  punctuation_substitution:
+    id: "punctuation_apostrophe_substitution"
+    chars: [",", ".", "`"]
   legitimate_internal_apostrophe:
     id: "legitimate_internal_apostrophe"
     allowlist:

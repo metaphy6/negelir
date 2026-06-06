@@ -1,0 +1,57 @@
+_meta:
+  schema_version: 1
+reduplication_pairs:
+  - token: yeşil
+    source: manual
+  - token: uzun
+    source: manual
+  - token: kırmızı
+    source: manual
+  - token: beyaz
+    source: manual
+  - token: siyah
+    source: manual
+  - token: harika
+    source: manual
+  - token: güzel
+    source: manual
+  - token: mutlu
+    source: manual
+  - token: şahane
+    source: manual
+  - token: bomba
+    source: manual
+  - token: mükemmel
+    source: manual
+  - token: çılgın
+    source: manual
+  - token: temiz
+    source: manual
+  - token: hızlı
+    source: manual
+  - token: gürültülü
+    source: manual
+  - token: sessiz
+    source: manual
+  - token: parlak
+    source: manual
+  - token: serin
+    source: manual
+  - token: sabırlı
+    source: manual
+  - token: cesur
+    source: manual
+  - token: tatlı
+    source: manual
+  - token: sıcak
+    source: manual
+  - token: lezzetli
+    source: manual
+  - token: enerjik
+    source: manual
+  - token: dikkatli
+    source: manual
+  - token: nazik
+    source: manual
+  - token: ciddi
+    source: manual

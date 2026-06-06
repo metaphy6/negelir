@@ -20,8 +20,13 @@ import from other agents.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import re
 import unicodedata
+from pathlib import Path
+from typing import Any
 
 # Verbatim copy of the set in ai/swarm/agents/sec/input.py::_STRIP_CONTROL_RE.
 # Must be kept bit-for-bit equal; test_canonical_normalize_matches_sec_sanitize
@@ -62,6 +67,46 @@ def _is_disallowed_codepoint(ch: str) -> bool:
     if category in {"Cn", "Co", "Cs"}:
         return True
     return False
+
+
+def _tr_normalize_spec_path() -> Path:
+    return Path(os.getenv("NEGELIR_NLP_TR_NORMALIZE_SPEC_PATH", "ai/common/text/tr_normalize_spec.json"))
+
+
+def _load_tr_normalize_spec(path: Path | str | None = None) -> dict[str, Any]:
+    spec_path = Path(path or _tr_normalize_spec_path())
+    raw = spec_path.read_text(encoding="utf-8")
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{spec_path}: expected JSON object")
+    if parsed.get("spec_version") != 1:
+        raise ValueError(f"{spec_path}: expected spec_version=1")
+    steps = parsed.get("steps")
+    if not isinstance(steps, list) or not all(isinstance(step, str) for step in steps):
+        raise ValueError(f"{spec_path}: expected a list of string steps")
+    required = {"nfc", "strip_control", "lowercase_tr"}
+    if not required.issubset(set(steps)):
+        raise ValueError(
+            f"{spec_path}: must declare required steps {sorted(required)}; got {steps}"
+        )
+    mappings = parsed.get("mappings")
+    if not isinstance(mappings, dict):
+        raise ValueError(f"{spec_path}: expected a mappings object")
+    for required_key in ("I", "İ"):
+        if required_key not in mappings:
+            raise ValueError(f"{spec_path}: missing required mapping {required_key!r}")
+    return parsed
+
+
+def _load_tr_normalize_spec_sha(path: Path | str | None = None) -> str:
+    spec_path = Path(path or _tr_normalize_spec_path())
+    raw = spec_path.read_bytes()
+    _ = _load_tr_normalize_spec(spec_path)
+    return hashlib.sha256(raw).hexdigest()
+
+
+_TR_NORMALIZE_SPEC_SHA = _load_tr_normalize_spec_sha()
+TR_NORMALIZE_SPEC_SHA = _TR_NORMALIZE_SPEC_SHA
 
 
 # ---------------------------------------------------------------------------

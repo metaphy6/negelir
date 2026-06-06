@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/nlp_complaint_trace_drift_detected",
+  "title": "nlp.event.v1{kind=nlp_complaint_trace_drift_detected}",
+  "description": "Complaint trace audit drift was detected during operator reprojection.",
+  "type": "object",
+  "required": ["kind", "producer", "request_id", "emitted_at"],
+  "properties": {
+    "kind": {"const": "nlp_complaint_trace_drift_detected"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.dispatcher.v1", "nlp.answer.v1", "nlp.proofreader.v1", "nlp.abuse.v1"]
+    },
+    "request_id": {"type": "string", "minLength": 1},
+    "reason": {"type": ["string", "null"], "minLength": 1},
+    "qa_correlation_id": {"type": ["string", "null"]},
+    "emitted_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}

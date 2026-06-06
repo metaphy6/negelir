@@ -13,8 +13,10 @@ Per AGENTS.md Rule 10: new public surface -> happy + adversarial tests.
 from __future__ import annotations
 
 import ast
+import datetime as _dt
 import hashlib
 import hmac
+import json
 import inspect
 from collections import deque
 from pathlib import Path
@@ -22,8 +24,19 @@ from pathlib import Path
 import pytest
 
 from common.config import cfg as _cfg
+from common.fixture_state import FixtureState
 from nlp.conversation import ConversationStore
-from swarm.agents.nlp import NlpAnswerAgent, NlpDispatcherAgent, _SummaryAgg
+import swarm.agents.nlp as nlp_agent
+from swarm.agents.nlp import (
+    FixtureStateLookup,
+    NlpAnswerAgent,
+    NlpDispatcherAgent,
+    NlpIntentAgent,
+    _QA_ANSWER_SCHEMA_VERSION_REQUEST_KEY,
+    _SummaryAgg,
+    _load_fixture_state_routing,
+    downgrade_qa_answer_v1,
+)
 from swarm.agents.topics import (
     DATA_REQUEST_V1,
     NLP_ALERT_V1,
@@ -31,10 +44,12 @@ from swarm.agents.topics import (
     PREDICT_APPROVED,
     PREDICT_REQUEST_V1,
     QA_ANSWER_V1,
+    QA_CONTEXT_EXTENSION_V1,
     QA_CONTEXT_V1,
     QA_FEEDBACK_V1,
     QA_INTENT_V1,
     QA_REQUEST,
+    QA_REQUEST_V1,
     SEC_ALERT,
 )
 from swarm.sdk.types import Message
@@ -98,6 +113,331 @@ def test_nlp_feedback_provenance_mismatch_dropped() -> None:
     assert out[0].payload["request_id"] == "req-mismatch"
 
 
+def test_nlp_skew_detector_fires_on_synthetic_skew() -> None:
+    original_window = _cfg.nlp_skew_window_s
+    original_p95 = _cfg.nlp_skew_alert_p95
+    original_min_requests = _cfg.nlp_skew_alert_min_requests
+    original_debounce = _cfg.nlp_skew_alert_debounce_s
+    _cfg.nlp_skew_window_s = 600
+    _cfg.nlp_skew_alert_p95 = 0.4
+    _cfg.nlp_skew_alert_min_requests = 3
+    _cfg.nlp_skew_alert_debounce_s = 600
+
+    try:
+        agent = NlpDispatcherAgent()
+        all_output: list[Message] = []
+        for idx in range(4):
+            msg = _make_intent_msg({
+                "request_id": f"req-skew-{idx}",
+                "intent": "predict.match_outcome",
+                "entities": [],
+                "intent_confidence": 0.95,
+            })
+            output = list(agent.handle(msg))
+            all_output.extend(output)
+
+        assert any(
+            m.topic == NLP_ALERT_V1 and m.payload.get("kind") == "nlp_classifier_extractor_skew_high"
+            for m in all_output
+        )
+        assert any(
+            m.topic == QA_ANSWER_V1 and m.payload.get("kind") == "disambiguation"
+            for m in output
+        )
+    finally:
+        _cfg.nlp_skew_window_s = original_window
+        _cfg.nlp_skew_alert_p95 = original_p95
+        _cfg.nlp_skew_alert_min_requests = original_min_requests
+        _cfg.nlp_skew_alert_debounce_s = original_debounce
+
+
+def test_nlp_skew_histogram_is_observed(monkeypatch) -> None:
+    observed: list[tuple[str, float]] = []
+
+    class DummyHistogram:
+        def labels(self, *, intent: str):
+            class Observer:
+                def observe(self, value: float) -> None:
+                    observed.append((intent, value))
+            return Observer()
+
+    monkeypatch.setattr(
+        nlp_agent,
+        "NLP_CLASSIFIER_EXTRACTOR_SKEW",
+        DummyHistogram(),
+    )
+
+    agent = NlpDispatcherAgent()
+    msg = _make_intent_msg({
+        "request_id": "req-skew-metric",
+        "intent": "predict.match_outcome",
+        "entities": [],
+        "intent_confidence": 0.95,
+    })
+    list(agent.handle(msg))
+
+    assert observed == [("predict.match_outcome", 0.95)]
+
+
+def test_nlp_skew_detector_silent_on_meta_intents() -> None:
+    original_min_requests = _cfg.nlp_skew_alert_min_requests
+    _cfg.nlp_skew_alert_min_requests = 1
+    try:
+        agent = NlpDispatcherAgent()
+        for idx in range(3):
+            out = list(agent.handle(_make_intent_msg({
+                "request_id": f"req-meta-{idx}",
+                "intent": "meta.help",
+                "entities": [],
+                "intent_confidence": 0.95,
+            })))
+            assert not any(
+                m.topic == NLP_ALERT_V1 and m.payload.get("kind") == "nlp_classifier_extractor_skew_high"
+                for m in out
+            )
+    finally:
+        _cfg.nlp_skew_alert_min_requests = original_min_requests
+
+
+def test_nlp_skew_does_not_change_routing() -> None:
+    original_min_requests = _cfg.nlp_skew_alert_min_requests
+    _cfg.nlp_skew_alert_min_requests = 1
+    try:
+        agent = NlpDispatcherAgent()
+        out = list(agent.handle(_make_intent_msg({
+            "request_id": "req-routing",
+            "intent": "predict.match_outcome",
+            "entities": [],
+            "intent_confidence": 0.95,
+        })))
+        assert any(
+            m.topic == QA_ANSWER_V1 and m.payload.get("kind") == "disambiguation"
+            for m in out
+        )
+        assert any(
+            m.topic == NLP_ALERT_V1 and m.payload.get("kind") == "nlp_classifier_extractor_skew_high"
+            for m in out
+        )
+    finally:
+        _cfg.nlp_skew_alert_min_requests = original_min_requests
+
+
+def test_pro_drop_resolver_uses_anaphora_first() -> None:
+    agent = NlpDispatcherAgent()
+    conversation_id = "conv-prodrop-anaphora"
+    agent._conversation_store.save({
+        "schema_version": 1,
+        "conversation_id": conversation_id,
+        "turn_index": 0,
+        "intent": "predict.match_outcome",
+        "entities": [],
+        "anaphora_mentions": [
+            {
+                "canonical_id": "fb",
+                "kind": "team",
+                "confidence": 1.0,
+                "name": "Fenerbahçe",
+                "mentioned_turn": 0,
+                "mentioned_at": agent._clock_iso(),
+            }
+        ],
+        "expires_at_utc": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+    })
+
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-prodrop-anaphora",
+        "qa_correlation_id": "corr-prodrop-anaphora",
+        "conversation_id": conversation_id,
+        "intent": "predict.match_outcome",
+        "entities": [],
+        "intent_confidence": 0.92,
+        "normalized_text": "Galatasaray kazandı mı?",
+    })))
+
+    assert any(
+        m.topic == NLP_EVENT_V1
+        and m.payload.get("kind") == "pro_drop_resolved"
+        and m.payload.get("source") == "anaphora"
+        and m.payload.get("resolved_entity_id") == "fb"
+        for m in out
+    )
+    assert any(
+        m.topic == QA_CONTEXT_V1
+        and any(
+            isinstance(e, dict)
+            and e.get("kind") == "team"
+            and e.get("canonical_id") == "fb"
+            for e in m.payload.get("entities", [])
+        )
+        for m in out
+    )
+
+
+def test_anaphora_mentions_are_tagged_as_user() -> None:
+    agent = NlpDispatcherAgent()
+    conversation_id = "conv-user-anaphora"
+    agent._conversation_store.clear(conversation_id)
+
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-user-anaphora",
+        "qa_correlation_id": "corr-user-anaphora",
+        "conversation_id": conversation_id,
+        "intent": "predict.match_outcome",
+        "entities": [
+            {
+                "kind": "team",
+                "canonical_id": "gs",
+                "confidence": 0.9,
+                "name": "Galatasaray",
+            }
+        ],
+        "normalized_text": "Galatasaray kazandı mı?",
+    })))
+
+    assert any(
+        m.topic == QA_CONTEXT_V1
+        and any(
+            isinstance(mention, dict)
+            and mention.get("kind") == "team"
+            and mention.get("canonical_id") == "gs"
+            and mention.get("mentioned_by") == "user"
+            for mention in m.payload.get("anaphora_mentions", [])
+        )
+        for m in out
+    )
+
+
+def test_pro_drop_default_team_capped_at_confidence() -> None:
+    agent = NlpDispatcherAgent()
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-prodrop-default",
+        "qa_correlation_id": "corr-prodrop-default",
+        "conversation_id": "conv-prodrop-default",
+        "intent": "data.lineup_probable",
+        "entities": [],
+        "request_metadata": {
+            "user_preferences": {
+                "favorite_team": "fb",
+            },
+        },
+    })))
+
+    assert any(
+        m.topic == NLP_EVENT_V1
+        and m.payload.get("kind") == "pro_drop_resolved"
+        and m.payload.get("source") == "default_team"
+        and m.payload.get("resolved_entity_id") == "fb"
+        for m in out
+    )
+    assert any(
+        m.topic == QA_CONTEXT_V1
+        and any(
+            isinstance(e, dict)
+            and e.get("kind") == "team"
+            and e.get("canonical_id") == "fb"
+            and e.get("confidence") == pytest.approx(0.55)
+            for e in m.payload.get("entities", [])
+        )
+        for m in out
+    )
+
+
+def test_pro_drop_no_anaphora_no_default_emits_disambiguation() -> None:
+    agent = NlpDispatcherAgent()
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-prodrop-disambiguation",
+        "qa_correlation_id": "corr-prodrop-disambiguation",
+        "conversation_id": "conv-prodrop-disambiguation",
+        "intent": "predict.match_outcome",
+        "entities": [],
+        "intent_confidence": 0.93,
+        "normalized_text": "Galatasaray kazandı mı?",
+    })))
+
+    assert any(
+        m.topic == QA_ANSWER_V1 and m.payload.get("kind") == "disambiguation"
+        for m in out
+    )
+    assert not any(
+        m.topic == NLP_EVENT_V1 and m.payload.get("kind") == "pro_drop_resolved"
+        for m in out
+    )
+
+
+def test_anaphora_with_multiple_system_mentions_emits_disambiguation() -> None:
+    conversation_id = "conv-system-anaphora"
+    store = ConversationStore()
+    store.save({
+        "schema_version": 1,
+        "conversation_id": conversation_id,
+        "turn_index": 2,
+        "entities": [],
+        "intent": "predict.match_outcome",
+        "anaphora_mentions": [
+            {
+                "canonical_id": "gs",
+                "kind": "team",
+                "confidence": 0.9,
+                "name": "Galatasaray",
+                "mentioned_turn": 0,
+                "mentioned_at": "2026-05-27T09:59:00+00:00",
+                "mentioned_by": "system",
+            },
+            {
+                "canonical_id": "fb",
+                "kind": "team",
+                "confidence": 0.95,
+                "name": "Fenerbahçe",
+                "mentioned_turn": 1,
+                "mentioned_at": "2026-05-27T09:59:30+00:00",
+                "mentioned_by": "system",
+            },
+        ],
+        "expires_at_utc": "2026-05-27T10:30:00+00:00",
+    })
+
+    agent = NlpDispatcherAgent(
+        clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+        new_id=lambda: "test-corr-id",
+    )
+    agent._conversation_store = store
+    msg = _make_intent_msg({
+        "request_id": "req-system-anaphora",
+        "qa_correlation_id": "corr-system-anaphora",
+        "conversation_id": conversation_id,
+        "intent": "predict.match_outcome",
+        "entities": [],
+        "intent_confidence": 0.87,
+        "normalized_text": "o kazanır mı",
+    })
+    results = list(agent.handle(msg))
+    answers = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+    assert len(answers) == 1
+    assert answers[0].payload["kind"] == "disambiguation"
+
+
+def test_pro_drop_resolver_only_fires_on_pro_drop_intent_classes() -> None:
+    agent = NlpDispatcherAgent()
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-prodrop-noop",
+        "qa_correlation_id": "corr-prodrop-noop",
+        "conversation_id": "conv-prodrop-noop",
+        "intent": "meta.help",
+        "entities": [],
+        "intent_confidence": 0.99,
+        "request_metadata": {
+            "user_preferences": {
+                "favorite_team": "fb",
+            },
+        },
+    })))
+
+    assert not any(
+        m.topic == NLP_EVENT_V1 and m.payload.get("kind") == "pro_drop_resolved"
+        for m in out
+    )
+
+
 def test_nlp_feedback_processor_does_not_branch_on_user_id_ast() -> None:
     source = Path(__file__).resolve().parents[2] / "ai" / "swarm" / "agents" / "nlp" / "__init__.py"
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
@@ -108,6 +448,182 @@ def test_nlp_feedback_processor_does_not_branch_on_user_id_ast() -> None:
             if "user_id" in test_expr:
                 violations.append(f"{source}:{node.lineno}: user_id usage in dispatcher logic")
     assert violations == [], "\n".join(violations)
+
+
+def test_nlp_conversational_meta_routes_to_user_data_disclosure() -> None:
+    agent = NlpDispatcherAgent()
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-meta-user-data",
+        "intent": "predict.match_outcome",
+        "normalized_text": "Benim hakkımda ne biliyorsun?",
+        "conversation_id": "conv-meta-user",
+    })))
+
+    answers = [m for m in out if m.topic == QA_ANSWER_V1]
+    assert len(answers) == 1
+    assert answers[0].payload["intent"] == "meta.user_data_disclosure"
+    assert "KVKK" in answers[0].payload["answer_text"]
+
+
+def test_nlp_conversational_meta_routes_to_system_capabilities_with_template_path(tmp_path: Path) -> None:
+    old_path = _cfg.nlp_system_capability_template_path
+    try:
+        custom_path = tmp_path / "system_capabilities.txt"
+        custom_path.write_text("Ben bir futbol asistanıyım.", encoding="utf-8")
+        _cfg.nlp_system_capability_template_path = str(custom_path)
+
+        agent = NlpDispatcherAgent()
+        out = list(agent.handle(_make_intent_msg({
+            "request_id": "req-meta-system",
+            "intent": "predict.match_outcome",
+            "normalized_text": "Neler yapabilirsin?",
+            "conversation_id": "conv-meta-system",
+        })))
+
+        answers = [m for m in out if m.topic == QA_ANSWER_V1]
+        assert len(answers) == 1
+        assert answers[0].payload["intent"] == "meta.system_capabilities"
+        assert "Ben bir futbol asistanıyım." in answers[0].payload["answer_text"]
+    finally:
+        _cfg.nlp_system_capability_template_path = old_path
+
+
+def test_nlp_conversational_meta_conversation_history_rendered_from_safe_metadata() -> None:
+    agent = NlpDispatcherAgent()
+    conversation_id = "conv-meta-history"
+    agent._conversation_store.save_metadata(conversation_id, {
+        "conversation_history": [
+            {"turn_index": 0, "intent": "predict.match_outcome", "entities": ["team:galatasaray"]},
+            {"turn_index": 1, "intent": "predict.btts", "entities": ["team:fenerbahce"]},
+        ]
+    })
+
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-meta-history",
+        "intent": "predict.match_outcome",
+        "normalized_text": "Daha önce ne sormuştum?",
+        "conversation_id": conversation_id,
+    })))
+
+    answers = [m for m in out if m.topic == QA_ANSWER_V1]
+    assert len(answers) == 1
+    assert answers[0].payload["intent"] == "meta.conversation_history"
+    assert "predict.match_outcome" in answers[0].payload["answer_text"]
+    assert "team:galatasaray" in answers[0].payload["answer_text"]
+
+
+def test_nlp_conversational_meta_last_answer_explain_uses_saved_answer_text() -> None:
+    agent = NlpDispatcherAgent()
+    conversation_id = "conv-meta-last-answer"
+    agent._conversation_store.save_metadata(conversation_id, {
+        "last_qa_answer_text": "Galatasaray kazanabilir.",
+    })
+
+    out = list(agent.handle(_make_intent_msg({
+        "request_id": "req-meta-last-answer",
+        "intent": "predict.match_outcome",
+        "normalized_text": "Ne demek istedin?",
+        "conversation_id": conversation_id,
+    })))
+
+    answers = [m for m in out if m.topic == QA_ANSWER_V1]
+    assert len(answers) == 1
+    assert answers[0].payload["intent"] == "meta.last_answer_explain"
+    assert "Galatasaray kazanabilir." in answers[0].payload["answer_text"]
+
+
+def test_nlp_user_data_disclosure_template_never_reads_user_columns() -> None:
+    from nlp.render import build_environment, render
+
+    env = build_environment(user_text_for_guard="benim hakkımda ne biliyorsun?")
+    rendered = render(
+        "meta.user_data_disclosure.tr.j2",
+        {"user_id": "secret", "email": "secret@example.com"},
+        env=env,
+    )
+    assert "secret" not in rendered
+    assert "secret@example.com" not in rendered
+
+
+def test_meta_question_routing_short_circuits_before_intent_classifier() -> None:
+    agent = NlpIntentAgent()
+    msg = _make_request_msg(
+        {
+            "request_id": "req-meta-001",
+            "sanitized_text": "ne düşünüyorsun",
+        }
+    )
+    results = list(agent.handle(msg))
+    qa_messages = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+    assert len(qa_messages) == 1
+    assert qa_messages[0].payload["intent"] == "meta.opinion_request"
+    assert "sistem" in qa_messages[0].payload["answer_text"].lower()
+
+
+def test_nlp_intent_agent_merges_system_context_extension_into_store() -> None:
+    agent = NlpIntentAgent()
+    conversation_id = "conv-ext-001"
+    agent._conversation_store.save({
+        "schema_version": 1,
+        "conversation_id": conversation_id,
+        "turn_index": 0,
+        "entities": [
+            {
+                "span_start": 0,
+                "span_end": 1,
+                "kind": "team",
+                "canonical_id": "gs",
+                "confidence": 0.9,
+                "source": "gazetteer",
+            }
+        ],
+        "intent": "predict.match_outcome",
+        "anaphora_mentions": [],
+        "expires_at_utc": "2026-05-27T10:00:00+00:00",
+    })
+
+    ext_msg = Message.new(
+        topic=QA_CONTEXT_EXTENSION_V1,
+        payload={
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "entities": [
+                {
+                    "kind": "team",
+                    "canonical_id": "fb",
+                    "confidence": 0.95,
+                    "source": "system",
+                }
+            ],
+            "emitted_at_utc": "2026-05-27T10:00:00+00:00",
+        },
+        producer="nlp.answer.v1",
+    )
+
+    results = list(agent.handle(ext_msg))
+    assert results == []
+
+    context = agent._conversation_store.load(conversation_id)
+    assert context is not None
+    mentions = [m for m in context["anaphora_mentions"] if isinstance(m, dict)]
+    assert any(
+        mention.get("canonical_id") == "fb" and mention.get("mentioned_by") == "system"
+        for mention in mentions
+    )
+
+
+def test_meta_question_rhetorical_tier_blind_refusal_remains_identical() -> None:
+    agent = NlpIntentAgent()
+    base = {
+        "sanitized_text": "sen ne diyorsun la",
+        "request_metadata": {"tier_id": "gold"},
+    }
+    first = list(agent.handle(_make_request_msg({**base, "request_id": "req-meta-tier-001"})))
+    second = list(agent.handle(_make_request_msg({**base, "request_id": "req-meta-tier-002", "request_metadata": {"tier_id": "free"}})))
+    first_text = next(r.payload["answer_text"] for r in first if r.envelope.topic == QA_ANSWER_V1)
+    second_text = next(r.payload["answer_text"] for r in second if r.envelope.topic == QA_ANSWER_V1)
+    assert first_text == second_text
+    assert "rhetorik" in first_text.lower() or "soru" in first_text.lower()
 
 
 def test_sarcasm_modifier_only_used_by_dispatcher_refusal_path_ast() -> None:
@@ -146,6 +662,20 @@ def _make_intent_msg(overrides: dict | None = None) -> Message:
     if overrides:
         payload.update(overrides)
     return Message.new(topic=QA_INTENT_V1, payload=payload)
+
+
+def _make_request_msg(overrides: dict | None = None) -> Message:
+    payload = {
+        "request_id": "req-request-001",
+        "conversation_id": "conv-001",
+        "locale": "tr-TR",
+        "input_source": "keyboard",
+        "sanitized_text": "",
+        "request_metadata": {},
+    }
+    if overrides:
+        payload.update(overrides)
+    return Message.new(topic=QA_REQUEST_V1, payload=payload)
 
 
 def _make_feedback_msg(overrides: dict | None = None) -> Message:
@@ -200,6 +730,34 @@ def _make_competition_entity(canonical_id: str = "ucl") -> dict:
     }
 
 
+def _make_venue_entity(canonical_id: str = "galatasaray") -> dict:
+    return {
+        "span_start": 0,
+        "span_end": 3,
+        "kind": "venue",
+        "canonical_id": canonical_id,
+        "confidence": 1.0,
+        "lexicon_version": "1.0.0",
+        "source": "gazetteer",
+    }
+
+
+def _make_date_entity_at(
+    canonical_id: str,
+    span_start: int,
+    span_end: int,
+) -> dict:
+    return {
+        "span_start": span_start,
+        "span_end": span_end,
+        "kind": "date",
+        "canonical_id": canonical_id,
+        "confidence": 0.93,
+        "lexicon_version": "1.0.0",
+        "source": "date_resolver",
+    }
+
+
 @pytest.fixture
 def agent() -> NlpDispatcherAgent:
     # Pin clock and id for deterministic tests.
@@ -235,6 +793,9 @@ class TestNlpDispatcherAgentContract:
 
     def test_publishes_qa_context_v1(self, agent: NlpDispatcherAgent) -> None:
         assert QA_CONTEXT_V1 in agent.publishes
+
+    def test_publishes_qa_context_extension_v1(self) -> None:
+        assert QA_CONTEXT_EXTENSION_V1 in NlpAnswerAgent.publishes
 
 
 class TestNlpDispatcherProducerRegistration:
@@ -324,6 +885,13 @@ class TestNlpDispatcherDeterministicBackoff:
         assert payload["humanizer_used"] is False
         assert payload["proofreader_status"] == "pass"
         assert payload["nlp_pipeline_version"] == _cfg.nlp_pipeline_version
+        assert isinstance(payload.get("parts"), list)
+        assert len(payload["parts"]) == 1
+        first_part = payload["parts"][0]
+        assert first_part["intent"] == payload["intent"]
+        assert first_part["body"] == payload["answer_text"]
+        assert first_part["polarity"] == "affirm"
+        assert first_part["subquery_correlation_id"] == payload["qa_correlation_id"]
 
     def test_predict_no_entity_producer_is_dispatcher(
         self, agent: NlpDispatcherAgent
@@ -356,6 +924,33 @@ class TestNlpDispatcherDeterministicBackoff:
         answer = results[0]
         assert answer.payload["kind"] == "disambiguation"
         assert answer.payload["conversation_id"] == "conv-123"
+
+    def test_verbal_noun_ambiguity_triggers_disambiguation(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg({
+            "intent": "data.fixture_lookup",
+            "normalized_text": "galatasaray oynaması",
+            "entities": [
+                {
+                    "span_start": 0,
+                    "span_end": 1,
+                    "kind": "team",
+                    "canonical_id": "gs",
+                    "confidence": 1.0,
+                    "source": "gazetteer",
+                    "name": "Galatasaray",
+                    "syntactic_role": "ambiguous",
+                }
+            ],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        out = results[0]
+        assert out.envelope.topic == QA_ANSWER_V1
+        assert out.payload["kind"] == "disambiguation"
+        assert "Galatasaray'ın oynaması mı" in out.payload["answer_text"]
+        assert "Galatasaray oynamak mı" in out.payload["answer_text"]
 
     def test_multi_pronoun_compose_emits_single_disambiguation(
         self, agent: NlpDispatcherAgent
@@ -479,6 +1074,160 @@ class TestNlpDispatcherDeterministicBackoff:
         assert predict_req.payload["match_id"] == "gs"
         assert predict_req.payload["qa_request_id"] == "req-001"
 
+    def test_predict_with_venue_entity_infers_home_team_and_emits_fixture_state_lookup(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg({
+            "intent": "predict.match_outcome",
+            "entities": [_make_venue_entity("galatasaray")],
+        })
+        results = list(agent.handle(msg))
+
+        assert len(results) == 2
+        lookup_req = results[0]
+        assert lookup_req.envelope.topic == DATA_REQUEST_V1
+        assert lookup_req.payload["kind"] == "fixture_state"
+        assert lookup_req.payload["match_id"] == "galatasaray_sk"
+
+        predict_req = results[1]
+        assert predict_req.envelope.topic == PREDICT_REQUEST_V1
+        assert predict_req.payload["match_id"] == "galatasaray_sk"
+
+    def test_venue_inference_confidence_is_capped_by_config(self, agent: NlpDispatcherAgent) -> None:
+        inferred = agent._infer_team_from_venue([
+            {
+                "span_start": 0,
+                "span_end": 3,
+                "kind": "venue",
+                "canonical_id": "galatasaray",
+                "confidence": 1.0,
+                "lexicon_version": "1.0.0",
+            }
+        ])
+        assert inferred is not None
+        assert inferred["kind"] == "team"
+        assert inferred["confidence"] == _cfg.nlp_venue_inferred_team_confidence_cap
+
+    def test_predict_with_team_entity_in_play_state_refuses_predict_and_routes_live_state(
+        self, agent: NlpDispatcherAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = _make_intent_msg({"entities": [_make_team_entity()]})
+        results = list(agent.handle(msg))
+
+        assert len(results) == 3
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "fixture_state"
+
+        assert results[1].envelope.topic == DATA_REQUEST_V1
+        assert results[1].payload["kind"] == "live_state"
+        assert results[1].payload["params"]["match_id"] == "gs"
+        assert results[1].payload["params"].get("degraded") is None
+
+        assert results[2].envelope.topic == QA_ANSWER_V1
+        assert results[2].payload["intent"] == "meta.live_match_unsupported"
+        assert results[2].payload["kind"] == "live_match_unsupported"
+        assert "Maç şu an oynanıyor" in results[2].payload["answer_text"]
+
+    def test_predict_with_team_entity_unknown_state_routes_to_live_state_with_degraded_meta(
+        self, agent: NlpDispatcherAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.UNKNOWN.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = _make_intent_msg({"entities": [_make_team_entity()]})
+        results = list(agent.handle(msg))
+
+        assert results[1].envelope.topic == DATA_REQUEST_V1
+        assert results[1].payload["kind"] == "live_state"
+        assert results[1].payload["params"]["match_id"] == "gs"
+        assert results[1].payload["params"]["degraded"] is True
+
+        assert results[2].envelope.topic == QA_ANSWER_V1
+        assert results[2].payload["intent"] == "meta.fixture_state_unknown"
+        assert results[2].payload["kind"] == "fixture_state_unknown"
+        assert results[2].payload["degraded"] is True
+        assert results[2].payload["degraded_reason"] == "fixture_state_unknown"
+
+    def test_predict_with_team_entity_finished_state_routes_to_data_h2h(
+        self, agent: NlpDispatcherAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.FINISHED.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = _make_intent_msg({"entities": [_make_team_entity()]})
+        results = list(agent.handle(msg))
+
+        assert results[0].payload["kind"] == "fixture_state"
+        assert results[1].envelope.topic == DATA_REQUEST_V1
+        assert results[1].payload["kind"] == "h2h"
+        assert results[1].payload["params"]["match_id"] == "gs"
+        assert len(results) == 2
+
+    def test_fixture_state_routing_yaml_matches_enum_completeness(self) -> None:
+        routing = _load_fixture_state_routing()
+        expected_states = {state.value for state in FixtureState}
+        assert set(routing) == expected_states
+
     def test_nlp_dispatcher_consults_fixture_state_before_predict_request_ast(self) -> None:
         source = Path(__file__).resolve().parents[2] / "ai" / "swarm" / "agents" / "nlp" / "__init__.py"
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
@@ -522,6 +1271,92 @@ class TestNlpDispatcherDeterministicBackoff:
         assert context_msg.payload["intent"] == "predict.match_outcome"
         assert context_msg.payload["turn_index"] == 0
         assert context_msg.payload["entities"] == msg.payload["entities"]
+
+    def test_conversation_correction_replacement_applies_to_context(self, agent: NlpDispatcherAgent) -> None:
+        conversation_id = "conv-corr-001"
+        agent._conversation_store.clear(conversation_id)
+        agent._conversation_store.save({
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "turn_index": 0,
+            "entities": [_make_team_entity("gs")],
+            "intent": "predict.match_outcome",
+            "anaphora_mentions": [],
+            "expires_at_utc": "2026-05-27T10:00:00+00:00",
+        })
+
+        msg = _make_intent_msg({
+            "request_id": "req-corr-001",
+            "conversation_id": conversation_id,
+            "normalized_text": "değil, Beşiktaş demek istedim",
+            "entities": [_make_team_entity("bjk")],
+        })
+        results = list(agent.handle(msg))
+
+        assert any(
+            result.envelope.topic == NLP_EVENT_V1
+            and result.payload.get("kind") == "conversation_correction_applied"
+            for result in results
+        )
+        context_msg = next(
+            result for result in results if result.envelope.topic == QA_CONTEXT_V1
+        )
+        assert all(entity["canonical_id"] != "gs" for entity in context_msg.payload["entities"])
+        assert any(entity["canonical_id"] == "bjk" for entity in context_msg.payload["entities"])
+
+    def test_conversation_correction_restart_clears_context(self, agent: NlpDispatcherAgent) -> None:
+        conversation_id = "conv-corr-002"
+        agent._conversation_store.clear(conversation_id)
+        agent._conversation_store.save({
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "turn_index": 0,
+            "entities": [_make_team_entity("gs")],
+            "intent": "predict.match_outcome",
+            "anaphora_mentions": [],
+            "expires_at_utc": "2026-05-27T10:00:00+00:00",
+        })
+
+        msg = _make_intent_msg({
+            "request_id": "req-corr-002",
+            "conversation_id": conversation_id,
+            "normalized_text": "yok yok, baştan",
+            "entities": [],
+        })
+        results = list(agent.handle(msg))
+
+        assert any(
+            result.envelope.topic == NLP_EVENT_V1
+            and result.payload.get("kind") == "conversation_restarted_by_user"
+            for result in results
+        )
+        context_msg = next(
+            result for result in results if result.envelope.topic == QA_CONTEXT_V1
+        )
+        assert context_msg.payload["entities"] == []
+
+    def test_correction_grammar_disabled_when_conversation_id_absent(
+        self,
+        agent: NlpDispatcherAgent,
+    ) -> None:
+        msg = _make_intent_msg({
+            "request_id": "req-corr-003",
+            "normalized_text": "değil, Beşiktaş demek istedim",
+            "entities": [_make_team_entity("bjk")],
+        })
+        results = list(agent.handle(msg))
+
+        assert all(
+            not (
+                result.envelope.topic == NLP_EVENT_V1
+                and result.payload.get("kind") in {
+                    "conversation_correction_applied",
+                    "conversation_restarted_by_user",
+                }
+            )
+            for result in results
+        )
+        assert all(result.envelope.topic != QA_CONTEXT_V1 for result in results)
 
     def test_predict_without_conversation_id_does_not_emit_context(
         self,
@@ -601,6 +1436,339 @@ class TestNlpDispatcherDeterministicBackoff:
             for r in results2
         )
 
+    def test_nlp_entity_state_ttl_per_class_triggers_refresh_and_disclosure(
+        self,
+        agent: NlpDispatcherAgent,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        conversation_id = "conv-state-refresh"
+        agent._conversation_store.clear(conversation_id)
+        context_payload = {
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "turn_index": 0,
+            "entities": [
+                {
+                    **_make_team_entity("gs"),
+                    "fixture_state": FixtureState.SCHEDULED.value,
+                    "state_class": "pre_match",
+                    "last_resolved_state_at": "2026-05-27T09:54:00+00:00",
+                }
+            ],
+            "intent": "predict.match_outcome",
+            "anaphora_mentions": [],
+        }
+        agent._conversation_store.save(context_payload)
+        agent._clock_iso = lambda: "2026-05-27T10:00:00+00:00"
+
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            assert match_id == "gs"
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-001",
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer=agent.name,
+            )
+            return (
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        invalidated = {"called": False}
+
+        expected_conversation_id = conversation_id
+        def fake_invalidate(entity: dict[str, object], conversation_id: str | None = None) -> None:
+            invalidated["called"] = True
+            assert entity["canonical_id"] == "gs"
+            assert conversation_id == expected_conversation_id
+
+        monkeypatch.setattr(agent, "_invalidate_entity_state_change_cache", fake_invalidate)
+
+        msg = _make_intent_msg({
+            "conversation_id": conversation_id,
+            "request_id": "req-001",
+            "qa_correlation_id": "corr-001",
+            "entities": [_make_team_entity("gs")],
+        })
+
+        results = list(agent.handle(msg))
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1 and r.payload.get("kind") == "fixture_state"
+            for r in results
+        )
+        assert any(
+            r.envelope.topic == QA_ANSWER_V1 and r.payload.get("kind") == "entity_state_changed"
+            for r in results
+        )
+        assert invalidated["called"]
+
+        context = agent._conversation_store.load(conversation_id)
+        assert context is not None
+        entity_context = context["entities"][0]
+        assert entity_context["fixture_state"] == FixtureState.IN_PLAY_FIRST_HALF.value
+        assert entity_context["state_class"] == "live"
+        assert entity_context["last_resolved_state_at"] == "2026-05-27T10:00:00+00:00"
+
+    def test_nlp_fresh_entity_state_reuses_cached_fixture_state_without_extra_lookup(
+        self,
+        agent: NlpDispatcherAgent,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        conversation_id = "conv-state-fresh"
+        agent._conversation_store.clear(conversation_id)
+        now = _dt.datetime.now(_dt.timezone.utc)
+        context_payload = {
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "turn_index": 0,
+            "entities": [
+                {
+                    **_make_team_entity("gs"),
+                    "fixture_state": FixtureState.SCHEDULED.value,
+                    "state_class": "pre_match",
+                    "last_resolved_state_at": (now - _dt.timedelta(seconds=30)).isoformat(),
+                }
+            ],
+            "intent": "predict.match_outcome",
+            "anaphora_mentions": [],
+        }
+        agent._conversation_store.save(context_payload)
+        agent._clock_iso = lambda: now.isoformat()
+
+        def fail_if_called(*args: object, **kwargs: object) -> None:
+            raise AssertionError("FixtureStateLookup.get must not be called for fresh cached state")
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fail_if_called))
+
+        msg = _make_intent_msg({
+            "conversation_id": conversation_id,
+            "request_id": "req-002",
+            "qa_correlation_id": "corr-002",
+            "entities": [_make_team_entity("gs")],
+        })
+
+        results = list(agent.handle(msg))
+        assert any(r.envelope.topic == PREDICT_REQUEST_V1 for r in results)
+
+        context = agent._conversation_store.load(conversation_id)
+        assert context is not None
+        entity_context = context["entities"][0]
+        assert entity_context["fixture_state"] == FixtureState.SCHEDULED.value
+        assert entity_context["state_class"] == "pre_match"
+        assert entity_context["last_resolved_state_at"] == (now - _dt.timedelta(seconds=30)).isoformat()
+
+    @pytest.mark.parametrize(
+        (
+            "initial_state",
+            "initial_state_class",
+            "lookup_state",
+            "ttl_key",
+            "delta_s",
+        ),
+        [
+            (
+                FixtureState.SCHEDULED.value,
+                "pre_match",
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                "nlp_entity_pre_match_max_stale_s",
+                301,
+            ),
+            (
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                "live",
+                FixtureState.FINISHED.value,
+                "nlp_entity_live_max_stale_s",
+                31,
+            ),
+            (
+                FixtureState.FINISHED.value,
+                "post_match",
+                FixtureState.POSTPONED.value,
+                "nlp_entity_post_match_max_stale_s",
+                3601,
+            ),
+        ],
+    )
+    def test_entity_state_ttl_per_class_triggers_refresh_and_disclosure(
+        self,
+        agent: NlpDispatcherAgent,
+        monkeypatch: pytest.MonkeyPatch,
+        initial_state: str,
+        initial_state_class: str,
+        lookup_state: str,
+        ttl_key: str,
+        delta_s: int,
+    ) -> None:
+        conversation_id = "conv-state-ttl"
+        agent._conversation_store.clear(conversation_id)
+        now = _dt.datetime.now(_dt.timezone.utc)
+        stale_time = (now - _dt.timedelta(seconds=delta_s)).isoformat()
+        context_payload = {
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "turn_index": 0,
+            "entities": [
+                {
+                    **_make_team_entity("gs"),
+                    "fixture_state": initial_state,
+                    "state_class": initial_state_class,
+                    "last_resolved_state_at": stale_time,
+                }
+            ],
+            "intent": "predict.match_outcome",
+            "anaphora_mentions": [],
+        }
+        agent._conversation_store.save(context_payload)
+        agent._clock_iso = lambda: now.isoformat()
+
+        called: dict[str, bool] = {"lookup": False}
+
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            assert match_id == "gs"
+            called["lookup"] = True
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-ttl",
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": now.isoformat(),
+                },
+                producer=agent.name,
+            )
+            return (lookup_state, now.isoformat(), "test", lookup_req)
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+
+        msg = _make_intent_msg({
+            "conversation_id": conversation_id,
+            "request_id": "req-ttl",
+            "qa_correlation_id": "corr-ttl",
+            "entities": [_make_team_entity("gs")],
+        })
+
+        results = list(agent.handle(msg))
+        assert called["lookup"]
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1 and r.payload.get("kind") == "fixture_state"
+            for r in results
+        )
+        assert any(
+            r.envelope.topic == QA_ANSWER_V1 and r.payload.get("kind") == "entity_state_changed"
+            for r in results
+        )
+
+        context = agent._conversation_store.load(conversation_id)
+        assert context is not None
+        entity_context = context["entities"][0]
+        assert entity_context["fixture_state"] == lookup_state
+        assert entity_context["state_class"] == {
+            FixtureState.IN_PLAY_FIRST_HALF.value: "live",
+            FixtureState.FINISHED.value: "post_match",
+            FixtureState.POSTPONED.value: "postponed",
+        }[lookup_state]
+        assert entity_context["last_resolved_state_at"] == now.isoformat()
+
+    def test_entity_state_change_invalidates_repeated_query_cache(self, agent: NlpDispatcherAgent) -> None:
+        conversation_id = "conv-state-invalidate"
+        agent._conversation_store.clear(conversation_id)
+        now = _dt.datetime.now(_dt.timezone.utc)
+        agent._conversation_store.save_metadata(conversation_id, {
+            "repeated_query_cached_answer": {
+                "signature": "sig",
+                "cached_at": now.isoformat(),
+                "payload": {"intent": "predict.match_outcome"},
+            }
+        })
+
+        entity = {
+            **_make_team_entity("gs"),
+            "fixture_state": FixtureState.IN_PLAY_FIRST_HALF.value,
+            "state_class": "live",
+            "last_resolved_state_at": (now - _dt.timedelta(seconds=301)).isoformat(),
+        }
+
+        agent._invalidate_entity_state_change_cache(entity, conversation_id)
+
+        metadata = agent._conversation_store.load_metadata(conversation_id)
+        assert metadata is not None
+        assert "repeated_query_cached_answer" not in metadata
+
+    def test_entity_state_change_invalidation_calls_l1_cache_hook(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        called: dict[str, object | None] = {"entity": None, "conversation_id": None}
+        def cache_hook(entity: dict[str, object], conversation_id: str | None) -> None:
+            called["entity"] = entity
+            called["conversation_id"] = conversation_id
+
+        agent = NlpDispatcherAgent(cache_invalidator=cache_hook)
+        conversation_id = "conv-state-hook"
+        agent._conversation_store.clear(conversation_id)
+        now = _dt.datetime.now(_dt.timezone.utc)
+        context_payload = {
+            "schema_version": 1,
+            "conversation_id": conversation_id,
+            "turn_index": 0,
+            "entities": [
+                {
+                    **_make_team_entity("gs"),
+                    "fixture_state": FixtureState.SCHEDULED.value,
+                    "state_class": "pre_match",
+                    "last_resolved_state_at": (now - _dt.timedelta(seconds=301)).isoformat(),
+                }
+            ],
+            "intent": "predict.match_outcome",
+            "anaphora_mentions": [],
+        }
+        agent._conversation_store.save(context_payload)
+        agent._clock_iso = lambda: now.isoformat()
+
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-hook",
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": now.isoformat(),
+                },
+                producer=agent.name,
+            )
+            return (
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                now.isoformat(),
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        results = list(agent.handle(_make_intent_msg({
+            "conversation_id": conversation_id,
+            "request_id": "req-hook",
+            "qa_correlation_id": "corr-hook",
+            "entities": [_make_team_entity("gs")],
+        })))
+
+        assert any(
+            r.envelope.topic == QA_ANSWER_V1 and r.payload.get("kind") == "entity_state_changed"
+            for r in results
+        )
+        assert isinstance(called["entity"], dict)
+        assert called["entity"]["canonical_id"] == "gs"
+        assert called["conversation_id"] == conversation_id
+
     def test_repeated_query_threshold_crossed_emits_event(self, agent: NlpDispatcherAgent) -> None:
         conversation_id = "conv-repeated-1"
         agent._conversation_store.clear(conversation_id)
@@ -625,6 +1793,68 @@ class TestNlpDispatcherDeterministicBackoff:
         assert event.payload["repeat_count"] == 4
         assert event.payload["window_s"] == int(_cfg.nlp_repeated_query_window_s)
         assert event.payload["conversation_id"] == conversation_id
+
+    def test_repeated_query_serves_cached_answer_within_max_age(self, agent: NlpDispatcherAgent) -> None:
+        conversation_id = "conv-repeated-cache-1"
+        agent._conversation_store.clear(conversation_id)
+
+        base = {
+            "conversation_id": conversation_id,
+            "entities": [_make_team_entity("gs")],
+            "intent": "predict.match_outcome",
+            "query_style": "search",
+        }
+        first = _make_intent_msg({**base, "request_id": "req-001", "qa_correlation_id": "corr-001"})
+        results1 = list(agent.handle(first))
+        first_answer = next(
+            r for r in results1
+            if r.envelope.topic == QA_ANSWER_V1
+        )
+        assert first_answer.payload["kind"] == "search_syntax_unsupported"
+
+        second = _make_intent_msg({**base, "request_id": "req-002", "qa_correlation_id": "corr-002"})
+        results2 = list(agent.handle(second))
+        second_answer = next(
+            r for r in results2
+            if r.envelope.topic == QA_ANSWER_V1
+        )
+
+        assert second_answer.payload["request_id"] == first_answer.payload["request_id"]
+        assert isinstance(second_answer.payload.get("cached_at"), str)
+
+    def test_repeated_query_serves_fresh_when_cache_older_than_repeat_max_age(self, agent: NlpDispatcherAgent) -> None:
+        conversation_id = "conv-repeated-cache-2"
+        agent._conversation_store.clear(conversation_id)
+
+        base = {
+            "conversation_id": conversation_id,
+            "entities": [_make_team_entity("gs")],
+            "intent": "predict.match_outcome",
+            "query_style": "search",
+        }
+        first = _make_intent_msg({**base, "request_id": "req-001", "qa_correlation_id": "corr-001"})
+        list(agent.handle(first))
+
+        history = agent._conversation_store.load_metadata(conversation_id)
+        assert history is not None
+        cached_answer = history.get("repeated_query_cached_answer")
+        assert isinstance(cached_answer, dict)
+        assert isinstance(cached_answer.get("payload"), dict)
+
+        old_cached_at = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=int(_cfg.nlp_repeated_query_cache_max_age_s) + 1)).isoformat()
+        cached_answer["cached_at"] = old_cached_at
+        cached_answer["payload"]["cached_at"] = old_cached_at
+        agent._conversation_store.save_metadata(conversation_id, history)
+
+        second = _make_intent_msg({**base, "request_id": "req-002", "qa_correlation_id": "corr-002"})
+        results2 = list(agent.handle(second))
+        second_answer = next(
+            r for r in results2
+            if r.envelope.topic == QA_ANSWER_V1
+        )
+
+        assert second_answer.payload["request_id"] == "req-002"
+        assert "cached_at" not in second_answer.payload
 
     def test_repeated_query_summary_mode_template_at_higher_threshold(self, agent: NlpDispatcherAgent, monkeypatch) -> None:
         monkeypatch.setattr(_cfg, "nlp_repeated_query_threshold", 1)
@@ -1062,6 +2292,25 @@ class TestNlpDispatcherDeterministicBackoff:
         assert results[0].payload["intent"] == "predict.match_outcome.conditional"
         assert results[0].payload["kind"] == "disambiguation"
 
+    def test_comparative_match_outcome_routes_to_multi_fixture_fanout(self, agent: NlpDispatcherAgent) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "qa_correlation_id": "corr-comp",
+                "normalized_text": "galatasaray ya da fenerbahçe kim kazanır",
+                "entities": [
+                    {"span_start": 0, "span_end": 10, "kind": "team", "canonical_id": "gs", "confidence": 1.0, "lexicon_version": "1.0.0", "source": "gazetteer"},
+                    {"span_start": 11, "span_end": 25, "kind": "team", "canonical_id": "fb", "confidence": 1.0, "lexicon_version": "1.0.0", "source": "gazetteer"},
+                ],
+            }
+        )
+        results = list(agent.handle(msg))
+        predict_requests = [r for r in results if r.envelope.topic == PREDICT_REQUEST_V1]
+        assert len(predict_requests) == 2
+        summary_correlation_ids = {r.payload.get("summary_correlation_id") for r in predict_requests}
+        assert len(summary_correlation_ids) == 1
+        assert summary_correlation_ids.pop() is not None
+
     def test_conditional_present_match_outcome_rewrites_to_data_lineup_probable(self, agent: NlpDispatcherAgent) -> None:
         msg = _make_intent_msg(
             {
@@ -1088,10 +2337,129 @@ class TestNlpDispatcherDeterministicBackoff:
             }
         )
         results = list(agent.handle(msg))
-        assert len(results) == 1
-        assert results[0].envelope.topic == QA_ANSWER_V1
-        assert results[0].payload["intent"] == "meta.counterfactual_past_unsupported"
-        assert results[0].payload["kind"] == "counterfactual_past_unsupported"
+        qa_messages = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+        assert len(qa_messages) == 1
+        assert qa_messages[0].payload["intent"] == "meta.counterfactual_past_unsupported"
+        assert qa_messages[0].payload["kind"] == "counterfactual_past_unsupported"
+
+    def test_counterfactual_past_aspectual_stack_routes_to_meta_counterfactual_past_unsupported(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "galatasaray yenseydi şampiyon olur muydu",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        qa_messages = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+        assert len(qa_messages) == 1
+        assert qa_messages[0].payload["intent"] == "meta.counterfactual_past_unsupported"
+        assert qa_messages[0].payload["kind"] == "counterfactual_past_unsupported"
+
+    def test_inferential_past_aspectual_stack_routes_to_data_h2h_with_resolved_entities(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "galatasaray kazanmış olur",
+                "entities": [_make_team_entity("gs")],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1 and r.payload["kind"] == "h2h"
+            for r in results
+        )
+
+    def test_evidential_hearsay_aspectual_stack_routes_to_data_h2h_with_resolved_entities(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "galatasaray kazanmışmış",
+                "entities": [_make_team_entity("gs")],
+            }
+        )
+        results = list(agent.handle(msg))
+        assert any(
+            r.envelope.topic == DATA_REQUEST_V1 and r.payload["kind"] == "h2h"
+            for r in results
+        )
+
+    def test_obligative_aspectual_stack_routes_to_meta_advice_unsupported(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "galatasaray kazanmalı mı",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        qa_messages = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+        assert len(qa_messages) == 1
+        assert qa_messages[0].payload["intent"] == "meta.advice_unsupported"
+        assert qa_messages[0].payload["kind"] == "advice_unsupported"
+
+    def test_epistemic_potential_with_past_temporal_contradiction_routes_to_meta_unsupported(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        msg = _make_intent_msg(
+            {
+                "intent": "predict.match_outcome",
+                "normalized_text": "dün galatasaray kazanabilir mi",
+                "entities": [],
+            }
+        )
+        results = list(agent.handle(msg))
+        qa_messages = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+        assert len(qa_messages) == 1
+        assert qa_messages[0].payload["intent"] == "meta.unsupported"
+        assert qa_messages[0].payload["kind"] == "unsupported"
+
+    def test_modality_corpus_routes_as_expected(self, agent: NlpDispatcherAgent) -> None:
+        corpus_path = (
+            Path(__file__).resolve().parents[1]
+            / "nlp"
+            / "tests"
+            / "data"
+            / "modality_corpus.tr.json"
+        )
+        corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+
+        for index, row in enumerate(corpus):
+            msg = _make_intent_msg(
+                {
+                    "request_id": f"req-{index:04}",
+                    "intent": "predict.match_outcome",
+                    "normalized_text": row["text"],
+                    "entities": row.get("entities", []),
+                }
+            )
+            results = list(agent.handle(msg))
+            if row["expected_topic"] == QA_ANSWER_V1:
+                qa_messages = [r for r in results if r.envelope.topic == QA_ANSWER_V1]
+                assert len(qa_messages) == 1
+                assert qa_messages[0].payload["intent"] == row["expected_intent"]
+                assert qa_messages[0].payload["kind"] == row["expected_kind"]
+            elif row["expected_topic"] == DATA_REQUEST_V1:
+                assert any(
+                    r.envelope.topic == DATA_REQUEST_V1
+                    and r.payload["kind"] == row["expected_kind"]
+                    for r in results
+                )
+            elif row["expected_topic"] == PREDICT_REQUEST_V1:
+                assert any(
+                    r.envelope.topic == PREDICT_REQUEST_V1
+                    for r in results
+                )
+            else:
+                raise AssertionError(f"unsupported expected topic: {row['expected_topic']}")
 
     def test_conditional_routing_matrix_complete_ast(self) -> None:
         src = Path(__file__).resolve().parents[2] / "ai" / "swarm" / "agents" / "nlp" / "__init__.py"
@@ -1403,6 +2771,23 @@ class TestNlpDispatcherMultiFixtureFanOut:
         results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         assert len(results) == cfg.nlp_summary_max_fixtures
 
+    def test_summary_hard_cap_degrades_to_list_only_answer(
+        self, agent: NlpDispatcherAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Summary fan-out over the hard cap degrades to an immediate list-only answer."""
+        monkeypatch.setattr(_cfg, "nlp_summary_max_fixtures_hard", 2)
+
+        msg = _make_summary_intent_msg(entities=_make_team_entities(3))
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        answer = results[0]
+        assert answer.envelope.topic == QA_ANSWER_V1
+        assert answer.payload["kind"] == "summary"
+        assert answer.payload["degraded"] is True
+        assert answer.payload["degraded_reason"] == "summary_hard_cap_exceeded"
+        assert "liste yanıtı" in answer.payload["answer_text"]
+        assert "Lig listeleri" in answer.payload["answer_text"]
+
     def test_summary_fan_out_carries_match_id(
         self, agent: NlpDispatcherAgent
     ) -> None:
@@ -1422,6 +2807,85 @@ class TestNlpDispatcherMultiFixtureFanOut:
         results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
         for r in results:
             assert r.payload["qa_request_id"] == "req-summary-001"
+
+    def test_summary_fan_out_uses_salience_not_fifo(
+        self, agent: NlpDispatcherAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Fixture selection uses salience features rather than entity arrival order."""
+        monkeypatch.setattr(_cfg, "nlp_summary_max_fixtures", 2)
+
+        entities = [
+            {
+                "kind": "team",
+                "canonical_id": "team-c",
+                "league_tier": 0,
+                "is_derby": False,
+                "confidence": 0.95,
+            },
+            {
+                "kind": "team",
+                "canonical_id": "team-a",
+                "league_tier": 1,
+                "is_derby": False,
+                "confidence": 0.95,
+            },
+            {
+                "kind": "team",
+                "canonical_id": "team-b",
+                "league_tier": 0,
+                "is_derby": True,
+                "confidence": 0.95,
+            },
+        ]
+        msg = _make_summary_intent_msg(entities=entities)
+
+        results = [r for r in list(agent.handle(msg)) if r.envelope.topic == PREDICT_REQUEST_V1]
+        assert [r.payload["match_id"] for r in results] == ["team-a", "team-b"]
+
+    def test_summary_fan_out_is_deterministic_across_entity_order(
+        self, agent: NlpDispatcherAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ordering of selected fixtures is stable across different input orders."""
+        monkeypatch.setattr(_cfg, "nlp_summary_max_fixtures", 2)
+
+        entities = [
+            {
+                "kind": "team",
+                "canonical_id": "team-b",
+                "league_tier": 0,
+                "is_derby": False,
+                "confidence": 0.95,
+            },
+            {
+                "kind": "team",
+                "canonical_id": "team-a",
+                "league_tier": 0,
+                "is_derby": False,
+                "confidence": 0.95,
+            },
+            {
+                "kind": "team",
+                "canonical_id": "team-c",
+                "league_tier": 0,
+                "is_derby": False,
+                "confidence": 0.95,
+            },
+        ]
+        msg_a = _make_summary_intent_msg(
+            entities=entities,
+            intent="summary.matchday",
+        )
+        msg_a.payload["request_id"] = "req-summary-001"
+        msg_b = _make_summary_intent_msg(
+            entities=list(reversed(entities)),
+            intent="summary.matchday",
+        )
+        msg_b.payload["request_id"] = "req-summary-002"
+
+        results_a = [r for r in list(agent.handle(msg_a)) if r.envelope.topic == PREDICT_REQUEST_V1]
+        results_b = [r for r in list(agent.handle(msg_b)) if r.envelope.topic == PREDICT_REQUEST_V1]
+
+        assert [r.payload["match_id"] for r in results_a] == [r.payload["match_id"] for r in results_b]
 
     def test_summary_fan_out_producer_is_dispatcher(
         self, agent: NlpDispatcherAgent
@@ -1474,6 +2938,8 @@ def _make_approved_msg(
     degraded: bool = False,
     degraded_reason: str | None = None,
     citation_signature: str | None = "__auto__",
+    schema_version: int = 3,
+    calibration_state_horizon: str | None = "prematch",
 ) -> Message:
     """Build a synthetic predict.approved.v1 for a summary fan-out."""
     # §10.16: predict.approved.v1 includes predict.final under "final" key
@@ -1505,6 +2971,8 @@ def _make_approved_msg(
         "quorum": 1,
         "final": final_payload,
         "calibration_version": 1,
+        "schema_version": schema_version,
+        "calibration_state_horizon": calibration_state_horizon,
     }
     if citation_signature == "__auto__":
         key_id = hashlib.sha256(_MOCK_PREDICT_CITATION_HMAC_KEY).hexdigest()[:16]
@@ -1549,12 +3017,285 @@ class TestNlpAnswerAgentSummaryAggregation:
         results1 = list(agent.handle(msg1))
         assert results1 == [], "Should not emit until all received"
         results2 = list(agent.handle(msg2))
-        assert len(results2) == 1
-        ans = results2[0]
-        assert ans.envelope.topic == QA_ANSWER_V1
+        assert len(results2) == 2
+        ans = next(r for r in results2 if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is False
         assert ans.payload["qa_correlation_id"] == corr
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results2
+        )
+
+    def test_summary_truncation_disclosure_metadata_and_text(self, agent: NlpAnswerAgent) -> None:
+        """When a summary is truncated by the cap, the final answer exposes metadata and disclosure text."""
+        corr = "agg-corr-002"
+        msg1 = _make_approved_msg(
+            corr,
+            expected_count=2,
+            prediction_id="p1",
+            degraded=False,
+        )
+        msg1.payload["summary_original_count"] = 5
+        msg1.payload["summary_top_n_by"] = "öncelik (lig sıralaması, derbi, saat)"
+        msg2 = _make_approved_msg(
+            corr,
+            expected_count=2,
+            prediction_id="p2",
+            degraded=False,
+        )
+        msg2.payload["summary_original_count"] = 5
+        msg2.payload["summary_top_n_by"] = "öncelik (lig sıralaması, derbi, saat)"
+
+        assert list(agent.handle(msg1)) == []
+        results = list(agent.handle(msg2))
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+        assert ans.payload["truncated_count"] == 3
+        assert ans.payload["top_n_by"] == "öncelik (lig sıralaması, derbi, saat)"
+        assert "Bu hafta 5 maç var; en öne çıkan 2 tanesini özetledim." in ans.payload["answer_text"]
         assert ans.payload["kind"] == "summary"
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
+
+    def test_predict_answer_appends_disclosures_and_locale_fallback_event(self, agent: NlpAnswerAgent) -> None:
+        _cfg.nlp_age_gating_enabled = True
+        try:
+            msg = _make_approved_msg(
+                "agg-corr-003",
+                expected_count=1,
+                qa_request_id="req-001",
+                prediction_id="pred-001",
+            )
+            msg.payload["conversation_id"] = "conv-001"
+            msg.payload["locale"] = "en-US"
+            msg.payload["request_metadata"] = {
+                "user_age_attestation": None,
+                "qa_answer_schema_version": 3,
+            }
+
+            results = list(agent.handle(msg))
+            answer = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+            assert any(
+                r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_locale_fallback"
+                for r in results
+            )
+            assert any(
+                r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+                for r in results
+            )
+
+            assert "Bu bir tahmindir; kesin sonuçlar garanti edilmez." in answer.payload["answer_text"]
+            assert "Bu sonuç tamamen otomatik bir sistem tarafından üretildi" in answer.payload["answer_text"]
+            assert "KVKK Art 11 uyarınca kişisel verilerinizi inceleme" in answer.payload["answer_text"]
+            assert answer.payload["disclosures"]
+            fallback_event = next(
+                r for r in results if r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_locale_fallback"
+            )
+            assert fallback_event.payload["requested_locale"] == "en-US"
+            assert fallback_event.payload["resolved_locale"] == "tr-TR"
+        finally:
+            _cfg.nlp_age_gating_enabled = False
+
+    def test_gambling_disclaimer_on_every_predict_answer(self, agent: NlpAnswerAgent) -> None:
+        _cfg.nlp_age_gating_enabled = False
+        try:
+            conversation_id = "conv-disclosure-001"
+            payload = {
+                "intent": "predict.match_outcome",
+                "request_id": "req-004",
+                "qa_correlation_id": "corr-004",
+                "conversation_id": conversation_id,
+                "answer_text": "Test answer.",
+                "locale": "tr-TR",
+            }
+            payload["request_metadata"] = {
+                "user_age_attestation": True,
+                "qa_answer_schema_version": 3,
+            }
+            results = agent._with_disclosures(
+                [Message.new(topic=QA_ANSWER_V1, payload=dict(payload), producer="test")],
+                payload,
+            )
+
+            answer = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+            assert "Bu bir tahmindir; kesin sonuçlar garanti edilmez." in answer.payload["answer_text"]
+            assert answer.payload["disclosures"][0]["disclosure_id"] == "gambling_law_disclaimer_band"
+
+            answer2_payload = dict(payload)
+            answer2_payload["request_id"] = "req-005"
+            results2 = agent._with_disclosures(
+                [Message.new(topic=QA_ANSWER_V1, payload=answer2_payload, producer="test")],
+                answer2_payload,
+            )
+            answer2 = next(r for r in results2 if r.envelope.topic == QA_ANSWER_V1)
+            assert "Bu bir tahmindir; kesin sonuçlar garanti edilmez." in answer2.payload["answer_text"]
+            assert answer2.payload["disclosures"][0]["disclosure_id"] == "gambling_law_disclaimer_band"
+        finally:
+            _cfg.nlp_age_gating_enabled = False
+
+    def test_predict_answer_emits_context_extension_for_system_entities(
+        self,
+        agent: NlpAnswerAgent,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "prediction_id": "pred-ctx",
+                "qa_correlation_id": "agg-corr-ctx",
+                "request_id": "req-ctx",
+                "schema_version": 3,
+                "match_id": "team-0",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-ctx",
+                    "match_id": "team-0",
+                    "market": "1x2",
+                    "contributing_models": ["model-1"],
+                    "calibration_version": 1,
+                    "swarm_confidence": 0.5,
+                    "degraded": False,
+                    "degraded_reason": "",
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+                "conversation_id": "conv-ctx",
+                "entities": [
+                    {
+                        "kind": "team",
+                        "canonical_id": "fb",
+                        "confidence": 0.95,
+                        "source": "system",
+                    }
+                ],
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "locale": "tr-TR",
+            },
+        )
+
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-001",
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.answer.v1",
+            )
+            return (
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        results = list(agent.handle(msg))
+
+        assert any(r.envelope.topic == QA_CONTEXT_EXTENSION_V1 for r in results)
+        extension = next(r for r in results if r.envelope.topic == QA_CONTEXT_EXTENSION_V1)
+        assert extension.payload["conversation_id"] == "conv-ctx"
+        assert extension.payload["entities"][0]["canonical_id"] == "fb"
+        assert extension.payload["entities"][0]["source"] == "system"
+
+    def test_kvkk_footer_and_auto_notice_fire_only_on_first_conversation_answer(
+        self, agent: NlpAnswerAgent
+    ) -> None:
+        _cfg.nlp_age_gating_enabled = False
+        try:
+            conversation_id = "conv-disclosure-002"
+            payload = {
+                "intent": "predict.match_outcome",
+                "request_id": "req-006",
+                "qa_correlation_id": "corr-006",
+                "conversation_id": conversation_id,
+                "answer_text": "Test answer.",
+                "locale": "tr-TR",
+            }
+            payload["request_metadata"] = {
+                "user_age_attestation": True,
+                "qa_answer_schema_version": 3,
+            }
+            results1 = agent._with_disclosures(
+                [Message.new(topic=QA_ANSWER_V1, payload=dict(payload), producer="test")],
+                payload,
+            )
+            answer1 = next(r for r in results1 if r.envelope.topic == QA_ANSWER_V1)
+            assert "KVKK Art 11 uyarınca kişisel verilerinizi inceleme, düzeltme ve silme hakkınız vardır." in answer1.payload["answer_text"]
+            assert "Bu sonuç tamamen otomatik bir sistem tarafından üretildi, insan uzman görüşü içermez." in answer1.payload["answer_text"]
+
+            payload2 = dict(payload)
+            payload2["request_id"] = "req-007"
+            results2 = agent._with_disclosures(
+                [Message.new(topic=QA_ANSWER_V1, payload=payload2, producer="test")],
+                payload2,
+            )
+            answer2 = next(r for r in results2 if r.envelope.topic == QA_ANSWER_V1)
+            assert "KVKK Art 11 uyarınca kişisel verilerinizi inceleme, düzeltme ve silme hakkınız vardır." not in answer2.payload["answer_text"]
+            assert "Bu sonuç tamamen otomatik bir sistem tarafından üretildi, insan uzman görüşü içermez." not in answer2.payload["answer_text"]
+        finally:
+            _cfg.nlp_age_gating_enabled = False
+
+    def test_disclosures_are_appended_from_registry_exactly(self, agent: NlpAnswerAgent) -> None:
+        _cfg.nlp_age_gating_enabled = False
+        try:
+            from nlp.compliance import load_disclosures
+
+            payload = {
+                "intent": "predict.match_outcome",
+                "request_id": "req-008",
+                "qa_correlation_id": "corr-008",
+                "conversation_id": "conv-disclosure-003",
+                "answer_text": "Test body.",
+                "locale": "tr-TR",
+                "request_metadata": {"user_age_attestation": True, "qa_answer_schema_version": 3},
+            }
+            results = agent._with_disclosures(
+                [Message.new(topic=QA_ANSWER_V1, payload=dict(payload), producer="test")],
+                payload,
+            )
+            answer = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+
+            disclosures = load_disclosures("tr-TR")[0]
+            footer = next(
+                d for d in disclosures if d["disclosure_id"] == "kvkk_user_rights_footer_first_per_conversation"
+            )
+            assert footer["text"] in answer.payload["answer_text"]
+            assert answer.payload["disclosures"]
+            assert any(
+                event.payload.get("kind") == "disclosure_emitted"
+                for event in results
+                if event.envelope.topic == NLP_EVENT_V1
+            )
+        finally:
+            _cfg.nlp_age_gating_enabled = False
+
+    def test_downgrade_strips_disclosures_for_older_schema_versions(self) -> None:
+        payload = {
+            "schema_version": 3,
+            "request_id": "req-002",
+            "qa_correlation_id": "corr-002",
+            "intent": "predict.match_outcome",
+            "answer_text": "Test",
+            "disclosures": [
+                {
+                    "disclosure_id": "gambling_law_disclaimer_band",
+                    "disclosure_version": 1,
+                    "disclosure_sha8": "deadbeef",
+                }
+            ],
+        }
+
+        downgraded = downgrade_qa_answer_v1(payload, 2)
+        assert "disclosures" not in downgraded
 
     def test_complete_answer_text_contains_count(
         self, agent: NlpAnswerAgent
@@ -1579,8 +3320,13 @@ class TestNlpAnswerAgentSummaryAggregation:
         c = "agg-fresh"
         list(agent3.handle(_make_approved_msg(c, expected_count=2)))
         out = list(agent3.handle(_make_approved_msg(c, expected_count=2)))
-        assert len(out) == 1
-        assert "2" in out[0].payload["answer_text"]
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+        assert "2" in answer.payload["answer_text"]
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_expired_aggregation_emits_degraded_answer(
         self, agent: NlpAnswerAgent
@@ -1605,10 +3351,14 @@ class TestNlpAnswerAgentSummaryAggregation:
         )
         msg = _make_approved_msg(corr, expected_count=3)
         results = list(expired_agent.handle(msg))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is True
         assert ans.envelope.topic == QA_ANSWER_V1
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
 
     def test_expired_degraded_answer_text_contains_x_of_y(
         self, agent: NlpAnswerAgent
@@ -1627,9 +3377,15 @@ class TestNlpAnswerAgentSummaryAggregation:
         corr = "agg-expired-002"
         msg = _make_approved_msg(corr, expected_count=5)
         out = list(expired_agent.handle(msg))
-        text = out[0].payload["answer_text"]
-        assert text.startswith("Tüm")
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+        text = answer.payload["answer_text"]
+        assert "Tüm maçları kapsayan bir özet hazırlanamadı" in text
         assert "hazırlanamadı" in text
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_expired_summary_answer_discloses_quorum_failure_for_insufficient_fixtures(
         self, agent: NlpAnswerAgent
@@ -1648,10 +3404,15 @@ class TestNlpAnswerAgentSummaryAggregation:
         corr = "agg-expired-005"
         msg = _make_approved_msg(corr, expected_count=5)
         out = list(expired_agent.handle(msg))
-        assert len(out) == 1
-        assert out[0].payload["answer_text"].startswith("Tüm")
-        assert "hazırlanamadı" in out[0].payload["answer_text"]
-        assert "summary quorum not met" in out[0].payload["degraded_reason"]
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+        assert "Tüm maçları kapsayan bir özet hazırlanamadı" in answer.payload["answer_text"]
+        assert "hazırlanamadı" in answer.payload["answer_text"]
+        assert "summary quorum not met" in answer.payload["degraded_reason"]
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_expired_summary_answer_discloses_partial_matches_and_incomplete_notice(
         self, agent: NlpAnswerAgent
@@ -1670,10 +3431,15 @@ class TestNlpAnswerAgentSummaryAggregation:
         corr = "agg-expired-003"
         msg = _make_approved_msg(corr, expected_count=10)
         out = list(expired_agent.handle(msg))
-        assert len(out) == 1
-        assert out[0].payload["answer_text"].startswith("Tüm")
-        assert "hazırlanamadı" in out[0].payload["answer_text"]
-        assert "summary quorum not met" in out[0].payload["degraded_reason"]
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+        assert "Tüm maçları kapsayan bir özet hazırlanamadı" in answer.payload["answer_text"]
+        assert "hazırlanamadı" in answer.payload["answer_text"]
+        assert "summary quorum not met" in answer.payload["degraded_reason"]
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_expired_summary_answer_below_quorum_renders_per_fixture_only_degraded_answer(
         self, agent: NlpAnswerAgent
@@ -1693,11 +3459,15 @@ class TestNlpAnswerAgentSummaryAggregation:
         msg = _make_approved_msg(corr, expected_count=3)
         out = list(expired_agent.handle(msg))
 
-        assert len(out) == 1
-        ans = out[0]
+        assert len(out) == 2
+        ans = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is True
         assert "Tüm maçları kapsayan bir özet hazırlanamadı" in ans.payload["answer_text"]
         assert "summary quorum not met" in ans.payload["degraded_reason"]
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_nlp_summary_quorum_met_renders_partial_with_disclosure(
         self, agent: NlpAnswerAgent
@@ -1726,13 +3496,17 @@ class TestNlpAnswerAgentSummaryAggregation:
             if prediction_id != "p3":
                 assert results == []
             else:
-                assert len(results) == 1
-                ans = results[0]
+                assert len(results) == 2
+                ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
                 assert ans.payload["degraded"] is True
                 assert "3/4 maç tahmini hazır" in ans.payload["answer_text"]
                 assert "Eksik maçlar" in ans.payload["answer_text"]
                 assert "summary quorum not met" not in (
                     ans.payload["degraded_reason"] or ""
+                )
+                assert any(
+                    r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+                    for r in results
                 )
 
     def test_nlp_summary_zero_returns_renders_predict_timeout_template(self) -> None:
@@ -1776,10 +3550,14 @@ class TestNlpAnswerAgentSummaryAggregation:
             if prediction_id == "p1":
                 assert results == []
             else:
-                assert len(results) == 1
-                ans = results[0]
+                assert len(results) == 2
+                ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
                 assert ans.payload["degraded"] is True
                 assert "summary quorum not met" in ans.payload["degraded_reason"]
+                assert any(
+                    r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+                    for r in results
+                )
 
     def test_non_summary_predict_approved_returns_empty(
         self, agent: NlpAnswerAgent
@@ -1816,8 +3594,16 @@ class TestNlpAnswerAgentSummaryAggregation:
         msg_b = _make_approved_msg("corr-B", expected_count=1)
         out_a = list(agent.handle(msg_a))
         out_b = list(agent.handle(msg_b))
-        assert len(out_a) == 1
-        assert len(out_b) == 1
+        assert len(out_a) == 2
+        assert len(out_b) == 2
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out_a
+        )
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out_b
+        )
         assert out_a[0].payload["qa_correlation_id"] == "corr-A"
         assert out_b[0].payload["qa_correlation_id"] == "corr-B"
 
@@ -1836,7 +3622,11 @@ class TestNlpAnswerAgentSummaryAggregation:
         out1 = list(agent.handle(_make_approved_msg(corr, expected_count=2, prediction_id="p1")))
         out2 = list(agent.handle(_make_approved_msg(corr, expected_count=2, prediction_id="p2")))
         assert out1 == []
-        assert len(out2) == 1
+        assert len(out2) == 2
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out2
+        )
         assert out2[0].envelope.topic == QA_ANSWER_V1
         assert out2[0].payload["intent"] == "summary"
 
@@ -1860,12 +3650,21 @@ class TestNlpAnswerAgentSummaryAggregation:
                 )
             )
         )
-        assert len(out) == 2
+        assert len(out) == 3
         assert out[0].envelope.topic == QA_ANSWER_V1
         assert out[0].payload["intent"] == "predict.timeout"
-        assert out[1].envelope.topic == NLP_ALERT_V1
-        assert out[1].payload["kind"] == "nlp_citation_signature_verify_failed"
-        assert out[1].payload["severity"] == "critical"
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
+        assert any(
+            r.envelope.topic == NLP_ALERT_V1 and r.payload.get("kind") == "nlp_citation_signature_verify_failed"
+            for r in out
+        )
+        assert any(
+            r.envelope.topic == NLP_ALERT_V1 and r.payload.get("severity") == "critical"
+            for r in out
+        )
 
     def test_nlp_warn_mode_renders_with_alert(
         self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
@@ -1887,12 +3686,17 @@ class TestNlpAnswerAgentSummaryAggregation:
                 )
             )
         )
-        assert len(out) == 2
+        assert len(out) == 3
         assert out[0].envelope.topic == QA_ANSWER_V1
         assert out[0].payload["intent"] == "summary"
-        assert out[1].envelope.topic == NLP_ALERT_V1
-        assert out[1].payload["kind"] == "nlp_citation_signature_verify_failed"
-        assert out[1].payload["severity"] == "warn"
+        assert any(
+            r.envelope.topic == NLP_ALERT_V1 and r.payload.get("kind") == "nlp_citation_signature_verify_failed"
+            for r in out
+        )
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_nlp_citation_key_rotation_dual_window_accepts_both(
         self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1936,10 +3740,18 @@ class TestNlpAnswerAgentSummaryAggregation:
 
         prev_out = list(agent.handle(prev_msg))
         new_out = list(agent.handle(new_msg))
-        assert len(prev_out) == 1
+        assert len(prev_out) == 2
         assert prev_out[0].envelope.topic == QA_ANSWER_V1
-        assert len(new_out) == 1
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in prev_out
+        )
+        assert len(new_out) == 2
         assert new_out[0].envelope.topic == QA_ANSWER_V1
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in new_out
+        )
 
 
 # ── §10.6 qa_correlation_id invariant tests ──────────────────────────────────
@@ -2027,8 +3839,339 @@ class TestQaCorrelationIdInvariant:
             qa_request_id="original-request-id",
         )
         out = list(answer_agent.handle(msg))
-        assert len(out) == 1
-        assert out[0].payload["request_id"] == "original-request-id"
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+        assert answer.payload["request_id"] == "original-request-id"
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
+
+    def test_predict_approved_in_play_state_discards_prediction_and_emits_live_state_refusal(
+        self, answer_agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.IN_PLAY_FIRST_HALF.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "request_id": "req-001",
+                "qa_correlation_id": "qc-001",
+                "match_id": "gs",
+                "market": "1x2",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-001",
+                    "match_id": "gs",
+                    "market": "1x2",
+                    "distribution": {"1": 0.5, "X": 0.3, "2": 0.2},
+                    "weights": {},
+                    "contributing_models": ["model-1"],
+                    "calibration_version": 1,
+                    "swarm_confidence": 0.85,
+                    "degraded": False,
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+            },
+        )
+
+        results = list(answer_agent.handle(msg))
+        assert any(r.envelope.topic == DATA_REQUEST_V1 and r.payload["kind"] == "live_state" for r in results)
+        assert any(r.envelope.topic == QA_ANSWER_V1 and r.payload["intent"] == "meta.live_match_unsupported" for r in results)
+        event_messages = [r for r in results if r.envelope.topic == NLP_EVENT_V1]
+        assert len(event_messages) == 1
+        event_payload = event_messages[0].payload
+        assert event_payload["kind"] == "fixture_state_flipped_during_rpc"
+        assert event_payload["match_id"] == "gs"
+        assert event_payload["new_state"] == FixtureState.IN_PLAY_FIRST_HALF.value
+
+    def test_predict_approved_in_play_state_emits_fixture_state_flipped_during_rpc_event(
+        self, answer_agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.IN_PLAY_SECOND_HALF.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "request_id": "req-002",
+                "qa_correlation_id": "qc-002",
+                "match_id": "gs",
+                "market": "1x2",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-002",
+                    "match_id": "gs",
+                    "market": "1x2",
+                    "distribution": {"1": 0.4, "X": 0.4, "2": 0.2},
+                    "weights": {},
+                    "contributing_models": ["model-2"],
+                    "calibration_version": 1,
+                    "swarm_confidence": 0.80,
+                    "degraded": False,
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+            },
+        )
+
+        results = list(answer_agent.handle(msg))
+        event_messages = [r for r in results if r.envelope.topic == NLP_EVENT_V1]
+        assert len(event_messages) == 1
+        event_payload = event_messages[0].payload
+        assert event_payload["kind"] == "fixture_state_flipped_during_rpc"
+        assert event_payload["request_id"] == "req-002"
+        assert event_payload["qa_correlation_id"] == "qc-002"
+        assert event_payload["match_id"] == "gs"
+        assert event_payload["prior_state"] == "unknown"
+        assert event_payload["new_state"] == FixtureState.IN_PLAY_SECOND_HALF.value
+        assert isinstance(event_payload["rpc_age_ms"], int)
+
+    def test_nlp_rejects_live_horizon_calibration_in_v1(
+        self, answer_agent: NlpAnswerAgent
+    ) -> None:
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "request_id": "req-horizon-001",
+                "qa_correlation_id": "qc-001",
+                "match_id": "gs",
+                "market": "1x2",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-horizon-001",
+                    "match_id": "gs",
+                    "market": "1x2",
+                    "distribution": {"1": 0.5, "X": 0.3, "2": 0.2},
+                    "weights": {},
+                    "contributing_models": ["model-1"],
+                    "calibration_version": 1,
+                    "swarm_confidence": 0.85,
+                    "degraded": False,
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+                "schema_version": 1,
+                "calibration_state_horizon": "live",
+            },
+        )
+
+        results = list(answer_agent.handle(msg))
+        assert any(r.envelope.topic == QA_ANSWER_V1 for r in results)
+        assert any(r.envelope.topic == NLP_ALERT_V1 for r in results)
+        answer = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+        assert answer.payload["intent"] == "meta.calibration_horizon_mismatch"
+        alert = next(r for r in results if r.envelope.topic == NLP_ALERT_V1)
+        assert alert.payload["kind"] == "calibration_horizon_mismatch"
+        assert alert.payload["severity"] == "error"
+
+    def test_nlp_calibration_horizon_round_trip_through_qa_answer(
+        self, answer_agent: NlpAnswerAgent
+    ) -> None:
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "request_id": "req-horizon-004",
+                "qa_correlation_id": "qc-004",
+                "match_id": "gs",
+                "market": "1x2",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-horizon-004",
+                    "match_id": "gs",
+                    "market": "1x2",
+                    "distribution": {"1": 0.5, "X": 0.3, "2": 0.2},
+                    "weights": {},
+                    "contributing_models": ["model-1"],
+                    "calibration_version": 1,
+                    "swarm_confidence": 0.85,
+                    "degraded": False,
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+                "schema_version": 3,
+                "calibration_state_horizon": "live",
+            },
+        )
+
+        results = list(answer_agent.handle(msg))
+        assert any(r.envelope.topic == NLP_ALERT_V1 for r in results)
+
+    def test_nlp_rejects_prematch_horizon_on_in_play_fixture(
+        self, answer_agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.IN_PLAY_SECOND_HALF.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "request_id": "req-horizon-002",
+                "qa_correlation_id": "qc-002",
+                "match_id": "gs",
+                "market": "1x2",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-horizon-002",
+                    "match_id": "gs",
+                    "market": "1x2",
+                    "distribution": {"1": 0.5, "X": 0.3, "2": 0.2},
+                    "weights": {},
+                    "contributing_models": ["model-1"],
+                    "calibration_version": 1,
+                    "swarm_confidence": 0.85,
+                    "degraded": False,
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+                "schema_version": 3,
+                "calibration_state_horizon": "prematch",
+            },
+        )
+
+        results = list(answer_agent.handle(msg))
+        assert any(r.envelope.topic == DATA_REQUEST_V1 for r in results)
+        assert any(r.envelope.topic == QA_ANSWER_V1 for r in results)
+        assert any(r.envelope.topic == NLP_ALERT_V1 for r in results)
+        answer = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+        assert answer.payload["intent"] == "meta.live_match_unsupported"
+
+    def test_nlp_alert_calibration_horizon_mismatch_debounced(
+        self, answer_agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_fixture_state_get(match_id: str, request_id: str, qa_correlation_id: str, timeout_ms: int):
+            lookup_req = Message.new(
+                topic=DATA_REQUEST_V1,
+                payload={
+                    "request_id": "lookup-req",
+                    "qa_request_id": request_id,
+                    "qa_correlation_id": qa_correlation_id,
+                    "kind": "fixture_state",
+                    "match_id": match_id,
+                    "timeout_ms": timeout_ms,
+                    "emitted_at": "2026-05-27T10:00:00+00:00",
+                },
+                producer="nlp.dispatcher.v1",
+            )
+            return (
+                FixtureState.SCHEDULED.value,
+                "2026-05-27T10:00:00+00:00",
+                "test",
+                lookup_req,
+            )
+
+        monkeypatch.setattr(FixtureStateLookup, "get", staticmethod(fake_fixture_state_get))
+        msg = Message.new(
+            topic=PREDICT_APPROVED,
+            payload={
+                "request_id": "req-horizon-003",
+                "qa_correlation_id": "qc-003",
+                "match_id": "gs",
+                "market": "1x2",
+                "approved_at": "2026-05-27T10:00:00+00:00",
+                "approved_by": ["proof.sanity.v1"],
+                "verdict_count": 1,
+                "quorum": 1,
+                "final": {
+                    "prediction_id": "pred-horizon-003",
+                    "match_id": "gs",
+                    "market": "1x2",
+                    "distribution": {"1": 0.5, "X": 0.3, "2": 0.2},
+                    "weights": {},
+                    "contributing_models": ["model-1"],
+                    "calibration_version": 1,
+                    "profile_id": "profile-a",
+                    "swarm_confidence": 0.85,
+                    "degraded": False,
+                    "produced_at": "2026-05-27T10:00:00+00:00",
+                },
+                "schema_version": 1,
+                "calibration_state_horizon": "live",
+            },
+        )
+
+        results_first = list(answer_agent.handle(msg))
+        assert any(r.envelope.topic == NLP_ALERT_V1 for r in results_first)
+
+        results_second = list(answer_agent.handle(msg))
+        alerts_second = [r for r in results_second if r.envelope.topic == NLP_ALERT_V1]
+        assert len(alerts_second) <= 1
+        if alerts_second:
+            assert alerts_second[0].payload["kind"] == "calibration_horizon_mismatch"
+
+    def test_nlp_calibration_horizon_strict_default_true_in_config_sync(
+        self,
+    ) -> None:
+        assert _cfg.nlp_calibration_horizon_strict is True
 
     def test_summary_answer_carries_dispatch_qa_correlation_id(
         self, answer_agent: NlpAnswerAgent
@@ -2044,8 +4187,13 @@ class TestQaCorrelationIdInvariant:
             qa_correlation_id=qa_corr,
         )
         out = list(answer_agent.handle(msg))
-        assert len(out) == 1
-        assert out[0].payload["qa_correlation_id"] == qa_corr
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+        assert answer.payload["qa_correlation_id"] == qa_corr
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_summary_answer_uses_summary_corr_when_qa_corr_absent(
         self, answer_agent: NlpAnswerAgent
@@ -2057,9 +4205,14 @@ class TestQaCorrelationIdInvariant:
         # Use the pre-existing helper that omits qa_correlation_id
         msg = _make_approved_msg(corr, expected_count=1, qa_request_id="req-bc")
         out = list(answer_agent.handle(msg))
-        assert len(out) == 1
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
         # Falls back to summary_corr
-        assert out[0].payload["qa_correlation_id"] == corr
+        assert answer.payload["qa_correlation_id"] == corr
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     def test_both_fields_present_in_every_summary_qa_answer_v1(
         self, answer_agent: NlpAnswerAgent
@@ -2076,10 +4229,37 @@ class TestQaCorrelationIdInvariant:
             qa_request_id="req-inv-004",
         )
         out = list(answer_agent.handle(msg))
-        assert len(out) == 1
-        payload = out[0].payload
+        assert len(out) == 2
+        payload = next(r for r in out if r.envelope.topic == QA_ANSWER_V1).payload
         assert payload.get("request_id"), "request_id must be non-empty"
         assert payload.get("qa_correlation_id"), "qa_correlation_id must be non-empty"
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
+
+    def test_summary_answer_includes_query_time_bucket_and_feature_set_hash(
+        self, answer_agent: NlpAnswerAgent
+    ) -> None:
+        corr = "sc-010"
+        msg = _make_approved_msg_with_corr(
+            summary_corr=corr,
+            expected_count=1,
+            qa_correlation_id="qc-010",
+            qa_request_id="req-summary-010",
+        )
+        msg.payload["summary_original_count"] = 3
+        msg.payload["summary_top_n_by"] = "öncelik (lig sıralaması, derbi, saat)"
+        out = list(answer_agent.handle(msg))
+        assert len(out) == 2
+        payload = next(r for r in out if r.envelope.topic == QA_ANSWER_V1).payload
+        assert payload["query_time_bucket"] == "2026-05-27T10:00:00Z"
+        assert isinstance(payload["feature_set_hash"], str)
+        assert len(payload["feature_set_hash"]) == 16
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
     # ── adversarial: qa_correlation_id cannot be empty via null payload ──
 
@@ -2102,10 +4282,15 @@ class TestQaCorrelationIdInvariant:
             },
         )
         out = list(answer_agent.handle(msg))
-        assert len(out) == 1
+        assert len(out) == 2
+        answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
         # None → falls back to summary_corr
-        assert out[0].payload["qa_correlation_id"] == corr
-        assert out[0].payload["qa_correlation_id"], "qa_correlation_id must be non-empty"
+        assert answer.payload["qa_correlation_id"] == corr
+        assert answer.payload["qa_correlation_id"], "qa_correlation_id must be non-empty"
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
 
 
 # ── §10.6 idempotency / dedup tests ──────────────────────────────────────────
@@ -2275,10 +4460,14 @@ class TestDegradedFlagRoundTrip:
         )
         list(agent.handle(msg1))
         results = list(agent.handle(msg2))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is True
         assert "swarm voter count below minimum" in ans.payload["degraded_reason"]
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
 
     def test_all_predictions_degraded_combines_reasons(
         self, agent: NlpAnswerAgent
@@ -2301,12 +4490,16 @@ class TestDegradedFlagRoundTrip:
         )
         list(agent.handle(msg1))
         results = list(agent.handle(msg2))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is True
         degraded_reason = ans.payload["degraded_reason"]
         assert "reason_A" in degraded_reason
         assert "reason_B" in degraded_reason
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
 
     def test_no_predictions_degraded_flag_false(
         self, agent: NlpAnswerAgent
@@ -2321,9 +4514,13 @@ class TestDegradedFlagRoundTrip:
         )
         list(agent.handle(msg1))
         results = list(agent.handle(msg2))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is False
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
         assert ans.payload["degraded_reason"] is None
 
     def test_timeout_and_prediction_degraded_combines(
@@ -2351,8 +4548,12 @@ class TestDegradedFlagRoundTrip:
             degraded_reason="voter count insufficient",
         )
         results = list(expired_agent.handle(msg))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         assert ans.payload["degraded"] is True
         reason = ans.payload["degraded_reason"]
         # Both timeout reason and prediction reason must be present
@@ -2444,13 +4645,17 @@ class TestCalibrationVersionStamping:
         )
         list(agent.handle(msg1))
         results = list(agent.handle(msg2))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         citations = ans.payload["citations"]
         assert len(citations) == 1
         assert citations[0]["calibration_version"] == 1
         assert citations[0]["prediction_count"] == 2
         assert "note" not in citations[0], "No note when only one version"
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
 
     def test_multiple_calibration_versions_multiple_citations_with_notes(
         self, agent: NlpAnswerAgent
@@ -2495,9 +4700,13 @@ class TestCalibrationVersionStamping:
         list(agent.handle(msg1))
         list(agent.handle(msg2))
         results = list(agent.handle(msg3))
-        assert len(results) == 1
-        ans = results[0]
+        assert len(results) == 2
+        ans = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
         citations = ans.payload["citations"]
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in results
+        )
         # Two citation entries: one for v1 (2 preds), one for v2 (1 pred)
         assert len(citations) == 2
         # Sorted by calibration_version
@@ -2691,9 +4900,7 @@ def test_nlp_summary_calibration_mismatch_refuse_mode(monkeypatch: pytest.Monkey
     payload = qa_answers[0].payload
     assert payload["degraded"] is True
     assert (
-        payload["answer_text"].startswith(
-            "Bu hafta için tahminler farklı kalibrasyon sürümleriyle üretildiği için birleşik özet sunulamıyor."
-        )
+        "Bu hafta için tahminler farklı kalibrasyon sürümleriyle üretildiği için birleşik özet sunulamıyor." in payload["answer_text"]
     )
     assert "/tahmin/refuse-p1" in payload["answer_text"]
     assert "/tahmin/refuse-p2" in payload["answer_text"]
@@ -2748,5 +4955,15 @@ def test_nlp_dispatcher_tier_lookup_does_not_branch_on_humanizer_ast() -> None:
         if isinstance(node, ast.If):
             test_expr = ast.get_source_segment(source, node.test) or ""
             assert "humanizer_used" not in test_expr
+
+
+def test_pragmatic_class_only_used_by_proofreader_prepend_ast() -> None:
+    """AST guard: dispatcher must not branch on pragmatic_class; only proofreader may use it."""
+    source = inspect.getsource(NlpDispatcherAgent)
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If):
+            test_expr = ast.get_source_segment(source, node.test) or ""
+            assert "pragmatic_class" not in test_expr
 
 

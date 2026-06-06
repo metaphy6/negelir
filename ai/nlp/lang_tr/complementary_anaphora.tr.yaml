@@ -1,0 +1,9 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Complementary Turkish anaphora markers for system-uttered otherness."
+entries:
+  - öbür
+  - diğer
+  - diğeri
+  - öteki

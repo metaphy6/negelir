@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from nlp.numbers.apostrophe_suffixed import parse_apostrophe_suffixed_numeric
+
 _NUMERIC_CONTEXT_PATH = Path(__file__).resolve().parent / "lang_tr" / "numeric_context.tr.yaml"
 _NUMERIC_CONTEXT_RULES: dict[str, set[str]] | None = None
 
@@ -20,11 +22,13 @@ def _load_numeric_context_rules() -> dict[str, set[str]]:
         if not isinstance(raw, dict):
             raise ValueError("numeric_context.tr.yaml must be a mapping")
         market_tokens = raw.get("market_line_context", [])
+        thousands_tokens = raw.get("thousands_format_context", [])
         score_tokens = raw.get("score_line_context", [])
-        if not isinstance(market_tokens, list) or not isinstance(score_tokens, list):
+        if not isinstance(market_tokens, list) or not isinstance(thousands_tokens, list) or not isinstance(score_tokens, list):
             raise ValueError("numeric_context.tr.yaml entries must be lists")
         _NUMERIC_CONTEXT_RULES = {
             "market_line_context": {str(item).strip().lower() for item in market_tokens if isinstance(item, str)},
+            "thousands_format_context": {str(item).strip().lower() for item in thousands_tokens if isinstance(item, str)},
             "score_line_context": {str(item).strip().lower() for item in score_tokens if isinstance(item, str)},
         }
     return _NUMERIC_CONTEXT_RULES
@@ -52,6 +56,10 @@ def choose_numeric_parse(token: str, left: list[str], right: list[str]) -> tuple
     right_set = {t.lower() for t in right}
     context = left_set | right_set
 
+    apostrophe_parse = parse_apostrophe_suffixed_numeric(token)
+    if apostrophe_parse is not None:
+        return "apostrophe_numeric", apostrophe_parse
+
     score_parse = score_parser(token)
     market_parse = market_line_parser(token)
 
@@ -65,9 +73,16 @@ def choose_numeric_parse(token: str, left: list[str], right: list[str]) -> tuple
     if market_parse is not None:
         if context & rules["market_line_context"]:
             return "market_decimal", market_parse
+        if context & rules["thousands_format_context"]:
+            return "thousands_decimal", None
 
     if market_parse is not None and token.count(",") == 1:
         whole, fraction = token.split(",", 1)
+        if whole.isdigit() and fraction.isdigit() and len(whole) <= 2 and len(fraction) <= 2:
+            return "ambiguous_decimal", None
+
+    if market_parse is not None and token.count(".") == 1 and token.count(",") == 0:
+        whole, fraction = token.split(".", 1)
         if whole.isdigit() and fraction.isdigit() and len(whole) <= 2 and len(fraction) <= 2:
             return "ambiguous_decimal", None
 

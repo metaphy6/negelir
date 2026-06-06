@@ -33,7 +33,10 @@ Usage::
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 from typing import NamedTuple, Optional
+
+import yaml
 
 from nlp.lexicon_loader import AliasHit
 
@@ -49,8 +52,12 @@ class _Candidate(NamedTuple):
     """The indexed term that best matches the query token."""
     hit: AliasHit
     """The ``AliasHit`` (canonical_id, kind, lexicon_version) for *term*."""
-    edit_distance: int
-    """True Levenshtein edit distance between *term* and the query token."""
+    edit_distance: float
+    """Edit distance between *term* and the query token.
+
+    For ordinary lookups this is true Levenshtein distance. Layout-aware
+    lookups may return weighted distances using keyboard confusable costs.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +87,10 @@ def _delete_variants(word: str, max_dist: int) -> set[str]:
     return variants
 
 
+_LAYOUT_CONFUSABLES_PATH = Path(__file__).resolve().parents[1] / "lang_tr" / "ime" / "keyboard_confusables.tr.yaml"
+_LAYOUT_CONFUSABLES: dict[str, dict[tuple[str, str], float]] | None = None
+
+
 def _edit_distance(a: str, b: str) -> int:
     """Wagner-Fischer full edit distance (insert / delete / substitute = 1 each)."""
     if a == b:
@@ -95,6 +106,83 @@ def _edit_distance(a: str, b: str) -> int:
         for j in range(1, n + 1):
             cost = 0 if a[i - 1] == b[j - 1] else 1
             curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+        prev = curr
+    return prev[n]
+
+
+def _normalize_layout_name(layout: str | None) -> str | None:
+    if layout is None:
+        return None
+    layout = layout.strip().lower()
+    if layout == "unknown":
+        return None
+    if layout not in {"q", "f", "swipe"}:
+        raise ValueError(
+            f"SymSpellIndex.lookup: unsupported layout {layout!r}; must be one of q, f, swipe, unknown, or None"
+        )
+    return layout
+
+
+def _load_layout_confusables() -> dict[str, dict[tuple[str, str], float]]:
+    global _LAYOUT_CONFUSABLES
+    if _LAYOUT_CONFUSABLES is None:
+        raw = yaml.safe_load(_LAYOUT_CONFUSABLES_PATH.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("keyboard_confusables.tr.yaml must be a mapping")
+        parsed: dict[str, dict[tuple[str, str], float]] = {}
+        for key, value in raw.items():
+            if key == "q_layout":
+                layout = "q"
+            elif key == "f_layout":
+                layout = "f"
+            elif key == "swipe_vowel":
+                layout = "swipe"
+            else:
+                raise ValueError(
+                    f"keyboard_confusables.tr.yaml contains unexpected section {key!r}"
+                )
+            if not isinstance(value, dict):
+                raise ValueError(f"{key} section must be a mapping")
+            table: dict[tuple[str, str], float] = {}
+            for source_char, neighbours in value.items():
+                if not isinstance(neighbours, dict):
+                    raise ValueError(f"{key}.{source_char} must be a mapping")
+                for neighbour_char, cost in neighbours.items():
+                    if not isinstance(cost, (int, float)):
+                        raise ValueError(
+                            f"{key}.{source_char}.{neighbour_char} cost must be numeric"
+                        )
+                    table[(source_char, neighbour_char)] = float(cost)
+            parsed[layout] = table
+        _LAYOUT_CONFUSABLES = parsed
+    return _LAYOUT_CONFUSABLES
+
+
+def _layout_cost_multiplier(a: str, b: str, layout: str | None) -> float:
+    if layout is None:
+        return 1.0
+    table = _load_layout_confusables().get(layout, {})
+    return table.get((a, b), 1.0)
+
+
+def _weighted_edit_distance(a: str, b: str, layout: str | None = None) -> float:
+    """Weighted edit distance using layout-specific substitution costs."""
+    if a == b:
+        return 0.0
+    m, n = len(a), len(b)
+    if m == 0:
+        return float(n)
+    if n == 0:
+        return float(m)
+    prev = [float(x) for x in range(n + 1)]
+    for i in range(1, m + 1):
+        curr = [float(i)] + [0.0] * n
+        for j in range(1, n + 1):
+            if a[i - 1] == b[j - 1]:
+                cost = 0.0
+            else:
+                cost = _layout_cost_multiplier(a[i - 1], b[j - 1], layout)
+            curr[j] = min(prev[j] + 1.0, curr[j - 1] + 1.0, prev[j - 1] + cost)
         prev = curr
     return prev[n]
 
@@ -159,7 +247,7 @@ class SymSpellIndex:
     # Lookup
     # ------------------------------------------------------------------
 
-    def lookup(self, token: str) -> Optional[_Candidate]:
+    def lookup(self, token: str, layout: str | None = None) -> Optional[_Candidate]:
         """Return the closest indexed term for *token*, or ``None``.
 
         Per-token edit budget (§10.3 doctrine):
@@ -169,7 +257,11 @@ class SymSpellIndex:
 
         When two candidates share the same edit distance, the one with the
         shorter original term is preferred.  Exact matches short-circuit.
+        Layout-aware lookups use a keyboard confusable cost matrix when
+        *layout* is set; default lookup behaviour is unchanged.
         """
+        layout = _normalize_layout_name(layout)
+
         # Fast path: exact match
         if token in self._exact:
             return _Candidate(token, self._exact[token], 0)
@@ -213,13 +305,13 @@ class SymSpellIndex:
         # Score via true edit distance; filter to budget
         best: Optional[_Candidate] = None
         for orig_term, hit in sorted(candidates.items()):
-            dist = _edit_distance(token, orig_term)
-            if dist > budget:
+            dist = _weighted_edit_distance(token, orig_term, layout=layout)
+            if dist > float(budget):
                 continue
             if best is None or dist < best.edit_distance or (
                 dist == best.edit_distance and len(orig_term) < len(best.term)
             ):
-                best = _Candidate(orig_term, hit, dist)
+                best = _Candidate(orig_term, hit, int(dist) if dist.is_integer() else dist)
 
         return best
 
@@ -231,6 +323,7 @@ class SymSpellIndex:
         self,
         tokens: list[str],
         max_lookups: int,
+        layout: str | None = None,
     ) -> "tuple[list[Optional[_Candidate]], bool]":
         """Correct a list of *tokens*, capping total fuzzy lookups at *max_lookups*.
 
@@ -251,6 +344,9 @@ class SymSpellIndex:
         max_lookups:
             Maximum number of fuzzy corrections allowed; must be ≥ 1.
             Pass ``cfg.nlp_typo_max_lookups_per_query`` from the call site.
+        layout:
+            Optional keyboard layout hint. ``q``, ``f``, and ``swipe`` use
+            layout-aware typo costs and count as 0.5 fuzzy budget each.
 
         Returns
         -------
@@ -264,16 +360,18 @@ class SymSpellIndex:
             "Did you mean?" rather than continuing to guess.
         """
         results: list[Optional[_Candidate]] = []
-        fuzzy_done: int = 0
+        fuzzy_done: float = 0.0
         budget_exhausted: bool = False
+        layout = _normalize_layout_name(layout)
+        layout_cost = 0.5 if layout in {"q", "f", "swipe"} else 1.0
 
         for token in tokens:
             if budget_exhausted:
                 results.append(None)
                 continue
-            candidate = self.lookup(token)
+            candidate = self.lookup(token, layout=layout)
             if candidate is not None and candidate.edit_distance > 0:
-                fuzzy_done += 1
+                fuzzy_done += layout_cost
                 if fuzzy_done > max_lookups:
                     # This correction would exceed the budget; discard it.
                     budget_exhausted = True

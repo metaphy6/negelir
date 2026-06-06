@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Iterable
 
 import common.config as _cm
+from swarm.agents.nlp.training.eligibility import (
+    filter_shadow_rows_for_intent_training,
+    write_training_manifest,
+)
 
 
 class IntentTrainError(RuntimeError):
@@ -23,7 +27,7 @@ def _load_shadow_rows(shadow_path: Path) -> list[tuple[str, str]]:
             f"Intent training shadow corpus not found: {shadow_path}"
         )
 
-    rows: list[tuple[str, str]] = []
+    shadow_payloads: list[dict[str, object]] = []
     with shadow_path.open("r", encoding="utf-8") as fh:
         for line_no, line in enumerate(fh, start=1):
             stripped = line.strip()
@@ -35,16 +39,40 @@ def _load_shadow_rows(shadow_path: Path) -> list[tuple[str, str]]:
                 raise IntentTrainError(
                     f"Invalid JSON on line {line_no} of {shadow_path}: {exc}"
                 ) from exc
+            if isinstance(payload, dict):
+                shadow_payloads.append(payload)
 
-            text = payload.get("text") or payload.get("input_text") or payload.get("sentence")
-            intent = payload.get("intent") or payload.get("label") or payload.get("intent_label")
-            if not isinstance(text, str) or not isinstance(intent, str):
-                continue
-            text = text.strip().replace("\n", " ")
-            intent = intent.strip()
-            if not text or not intent:
-                continue
-            rows.append((text, intent))
+    cfg = _current_cfg()
+    eval_manifest_path = (
+        Path(cfg.nlp_intent_train_eval_manifest_path)
+        if cfg.nlp_intent_train_eval_manifest_path
+        else None
+    )
+    selected_payloads, excluded_counts, eval_set_checksum = filter_shadow_rows_for_intent_training(
+        shadow_payloads,
+        eval_manifest_path=eval_manifest_path,
+        max_rows_per_subject_bucket=cfg.nlp_intent_train_max_rows_per_subject_bucket,
+    )
+    train_run_id = _utc_iso().replace("-", "").replace(":", "").replace("Z", "")
+    write_training_manifest(
+        train_run_id=train_run_id,
+        shadow_path=shadow_path,
+        selected_count=len(selected_payloads),
+        excluded_counts=excluded_counts,
+        eval_set_checksum=eval_set_checksum,
+    )
+
+    rows: list[tuple[str, str]] = []
+    for payload in selected_payloads:
+        text = payload.get("text") or payload.get("input_text") or payload.get("sentence")
+        intent = payload.get("intent") or payload.get("label") or payload.get("intent_label")
+        if not isinstance(text, str) or not isinstance(intent, str):
+            continue
+        text = text.strip().replace("\n", " ")
+        intent = intent.strip()
+        if not text or not intent:
+            continue
+        rows.append((text, intent))
 
     if not rows:
         raise IntentTrainError(

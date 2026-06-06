@@ -16,6 +16,7 @@ import swarm.sdk.schemas as bus_schemas
 from swarm.sdk.wire_contracts import (
     NLP_ALERT_V1_ALLOWED_PRODUCERS,
     NLP_EVENT_V1_ALLOWED_PRODUCERS,
+    NLP_GOSSIP_V1_ALLOWED_PRODUCERS,
 )
 
 SCHEMA_DIR = Path(__file__).parent.parent / "swarm" / "sdk" / "schemas"
@@ -62,7 +63,7 @@ _NLP_EVENT_V1_KNOWN_KINDS = frozenset({
 
 def _valid_qa_intent() -> dict:
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "request_id": "req-001",
         "qa_correlation_id": "corr-001",
         "intent": "predict.match_outcome",
@@ -103,14 +104,20 @@ def _valid_qa_answer() -> dict:
     return {
         "request_id": "req-001",
         "qa_correlation_id": "corr-abc",
-        "answer_text": "Galatasaray maçı için tahmini göremiyorum.",
+        "locale": "tr-TR",
         "intent": "predict.match_outcome",
+        "answer_text": "Galatasaray maçı için tahmini göremiyorum.",
+        "answer_format": "plain",
         "kind": "direct",
         "degraded": False,
         "degraded_reason": None,
+        "humanizer_used": False,
+        "proofreader_status": "pass",
+        "nlp_pipeline_version": "1.0.0",
         "tier_id_required": None,
         "citations": [],
         "emitted_at": "2026-05-27T10:00:01Z",
+        "emitted_at_utc": "2026-05-27T10:00:01Z",
     }
 
 
@@ -132,9 +139,10 @@ def _valid_nlp_alert() -> dict:
         "kind": "lexicon_unreadable",
         "severity": "error",
         "producer": "nlp.intent.v1",
+        "source": "nlp.intent.v1",
         "reason": "SHA256 mismatch on teams.tr.yaml after partial write.",
         "request_id": None,
-        "produced_at": "2026-05-27T10:00:00Z",
+        "emitted_at": "2026-05-27T10:00:00Z",
     }
 
 
@@ -240,6 +248,11 @@ class TestQaAnswerV1Schema:
         payload = {**_valid_qa_answer(), "kind": "totally_unknown"}
         errors = bus_schemas.validate(self.TOPIC, payload)
         assert errors, "unknown kind must be rejected"
+
+    def test_meta_kind_accepted(self):
+        payload = {**_valid_qa_answer(), "kind": "meta.unsupported"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], errors
 
     def test_adversarial_extra_field_rejected(self):
         payload = {**_valid_qa_answer(), "hidden_field": "injection"}
@@ -396,6 +409,11 @@ class TestNlpEventV1Schema:
         "compound_query_split",
         "empty_input_floor_response",
         "garden_path_backtrack_succeeded",
+        "conversation_entity_overridden",
+        "streaming_client_slow_canceled",
+        "compliance_refusal_triggered",
+        "nlp_intent_rolled_back",
+        "nlp_audit_rerender_executed",
     ])
     def test_happy_new_nlp_event_kinds(self, kind: str) -> None:
         payload = _valid_nlp_event(kind)
@@ -461,6 +479,11 @@ class TestNlpAlertV1Schema:
         errors = bus_schemas.validate(self.TOPIC, _valid_nlp_alert())
         assert errors == [], errors
 
+    def test_happy_abuse_agent_producer_is_accepted(self):
+        payload = {**_valid_nlp_alert(), "producer": "nlp.abuse.v1", "source": "nlp.abuse.v1"}
+        errors = bus_schemas.validate(self.TOPIC, payload)
+        assert errors == [], errors
+
     def test_happy_all_severities(self):
         for sev in ("info", "warn", "error", "critical"):
             payload = {**_valid_nlp_alert(), "severity": sev}
@@ -497,6 +520,39 @@ class TestNlpAlertV1Schema:
         errors = bus_schemas.validate(self.TOPIC, payload)
         assert errors, "maint.* producer must be rejected from nlp.alert.v1"
 
+
+class TestNlpGossipV1Schema:
+    TOPIC = "nlp.gossip.v1"
+
+    def _valid_nlp_gossip(self) -> dict[str, object]:
+        return {
+            "kind": "nlp_lexicon_state_gossip",
+            "producer": "nlp.intent.v1",
+            "pod_instance_id": "pod-1",
+            "lexicon_set_sha": "abc123",
+            "intent_sha": "def456",
+            "crf_sha": "ghi789",
+            "calibration_version": "1.0.0",
+            "template_git_sha": "template-sha-1",
+            "pipeline_version": "1.0.0",
+            "emitted_at_utc": "2026-05-27T10:00:00Z",
+        }
+
+    def test_schema_file_exists_and_has_correct_id(self):
+        p = SCHEMA_DIR / f"{self.TOPIC}.json"
+        assert p.exists(), f"Schema file missing: {p}"
+        data = json.loads(p.read_text(encoding="utf-8"))
+        assert data["$id"] == f"negelir/swarm/{self.TOPIC}"
+
+    def test_producer_set_matches_wire_contracts(self):
+        schema = bus_schemas.load(self.TOPIC)
+        schema_producers = set(schema["properties"]["producer"]["enum"])
+        assert schema_producers == NLP_GOSSIP_V1_ALLOWED_PRODUCERS
+
+    def test_happy_minimal(self):
+        errors = bus_schemas.validate(self.TOPIC, self._valid_nlp_gossip())
+        assert errors == [], errors
+
     def test_1021_13_known_alert_kinds_registered_in_schema_docs(self):
         """§10.21.13: new alert kinds must be registered as known kinds."""
         schema = bus_schemas.load(self.TOPIC)
@@ -514,11 +570,20 @@ class TestNlpAlertV1Schema:
             "nlp_lexicon_feed_signature_invalid",
             "nlp_repair_density_anomaly",
             "nlp_tenant_intake_abuse",
+            "nlp_abuse_did_you_mean_anomaly",
+            "nlp_abuse_style_shift",
+            "nlp_abuse_shadow_concentration",
+            "nlp_abuse_account_farm",
             "nlp_canary_rolled_back",
             "nlp_weekly_eval_regression",
             "nlp_humanizer_pod_budget_exceeded",
             "nlp_l1_cache_signature_invalid",
             "nlp_safe_mode_active",
+            "nlp_consensus_smoke_failed",
+            "humanizer_subprocess_died",
+            "nlp_compatibility_quartet_mismatch",
+            "conversation_context_cleared_after_block",
+            "streaming_humanizer_chunk_blocked",
         }
         missing = sorted(kind for kind in expected_kinds if kind not in description)
         assert not missing, f"§10.21.13 known kinds missing from schema docs: {missing}"
@@ -561,6 +626,13 @@ class TestPredictSchemaQaCorrelationIdParity:
         schema = bus_schemas.load("predict.approved.v1")
         assert "schema_version" in schema["properties"], (
             "predict.approved.v1 schema must declare schema_version field"
+        )
+
+    def test_predict_approved_v1_schema_declares_calibration_state_horizon(self):
+        """Verify predict.approved.v1 schema declares calibration_state_horizon."""
+        schema = bus_schemas.load("predict.approved.v1")
+        assert "calibration_state_horizon" in schema["properties"], (
+            "predict.approved.v1 schema must declare calibration_state_horizon field"
         )
 
     def test_predict_request_nlp_originated_carries_qa_correlation_id(self):
@@ -654,6 +726,54 @@ class TestPredictSchemaQaCorrelationIdParity:
         roundtrip = obj.as_dict()
         assert roundtrip["qa_correlation_id"] == "corr-abc"
         assert roundtrip["schema_version"] == 2
+
+    def test_predict_approved_v1_dataclass_roundtrip_with_calibration_state_horizon(self):
+        """PredictApproved dataclass roundtrip with calibration_state_horizon."""
+        from swarm.agents.payloads import PredictApproved
+
+        data = {
+            "request_id": "req-001",
+            "prediction_id": "pred-123",
+            "match_id": "match-123",
+            "market": "1x2",
+            "approved_at": "2026-05-27T10:00:01Z",
+            "approved_by": ["proof.sanity.v1"],
+            "verdict_count": 1,
+            "quorum": 1,
+            "final": {"prediction_id": "pred-123"},
+            "calibration_version": 0,
+            "schema_version": 3,
+            "calibration_state_horizon": "live",
+        }
+        obj = PredictApproved.from_dict(data)
+        assert obj.calibration_state_horizon == "live"
+
+        roundtrip = obj.as_dict()
+        assert roundtrip["calibration_state_horizon"] == "live"
+
+    def test_predict_approved_v1_dataclass_roundtrip_with_both_calibration_state_horizon(self):
+        """PredictApproved dataclass accepts the live/prematch/both horizon marker."""
+        from swarm.agents.payloads import PredictApproved
+
+        data = {
+            "request_id": "req-001",
+            "prediction_id": "pred-123",
+            "match_id": "match-123",
+            "market": "1x2",
+            "approved_at": "2026-05-27T10:00:00Z",
+            "approved_by": ["proof.sanity.v1"],
+            "verdict_count": 1,
+            "quorum": 1,
+            "final": {"prediction_id": "pred-123"},
+            "calibration_version": 0,
+            "schema_version": 3,
+            "calibration_state_horizon": "both",
+        }
+        obj = PredictApproved.from_dict(data)
+        assert obj.calibration_state_horizon == "both"
+
+        roundtrip = obj.as_dict()
+        assert roundtrip["calibration_state_horizon"] == "both"
 
     def test_predict_approved_v1_dataclass_defaults_schema_version_1(self):
         """PredictApproved dataclass defaults to schema_version=1 for backward compat."""

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/historical_venue_mentioned",
+  "title": "nlp.event.v1{kind=historical_venue_mentioned}",
+  "description": "A historical venue was mentioned without explicit past context.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "venue"
+  ],
+  "properties": {
+    "kind": {
+      "const": "historical_venue_mentioned"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "venue": {
+      "type": "string",
+      "description": "The venue name referenced in the query."
+    },
+    "mentioned_at": {
+      "type": ["string", "null"],
+      "description": "Optional timestamp of the venue mention if known."
+    }
+  },
+  "additionalProperties": false
+}

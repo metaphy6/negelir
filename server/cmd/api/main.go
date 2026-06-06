@@ -315,7 +315,7 @@ func main() {
 		v1.POST("/qa",
 			middleware.BodySizeCap(int64(cfg.QAInputMaxBytes)),
 			middleware.BackpressureCheck(&middleware.RedisBackpressure{C: rdb}),
-			qaHandler(qaGate),
+			qaHandler(qaGate, cfg),
 		)
 		// Phase 9.6: password-field bypass — password routed through
 		// sec.PasswordPasses (length-cap only; no NFC; no patterns).
@@ -974,7 +974,7 @@ func bootCostTotalityGate(r *gin.Engine, m *sec.EndpointCostMap) {
 // Phase 10 humanizer will add "humanize": bool as an additive minor bump.
 // The qa_correlation_id returned here WILL be stamped on every
 // predict.request.v1 spawned by the Phase 10 NLP fan-out.
-func qaHandler(gate *sec.QAInputGate) gin.HandlerFunc {
+func qaHandler(gate *sec.QAInputGate, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Q      string `json:"q"`
@@ -991,6 +991,27 @@ func qaHandler(gate *sec.QAInputGate) gin.HandlerFunc {
 			return
 		}
 		c.Set("answer_format", answerFormat)
+
+		qaAnswerSchemaVersion, err := resolveQAAnswerSchemaVersion(c)
+		if err != nil {
+			aperrors.Respond(c, aperrors.CodeInvalidRequest, err.Error())
+			return
+		}
+		if err := maybeFinalizeQAAnswerSchemaVersion(c, qaAnswerSchemaVersion, cfg); err != nil {
+			aperrors.Respond(c, aperrors.CodeUpgradeRequired, err.Error())
+			c.Abort()
+			return
+		}
+		c.Set("qa_answer_schema_version", qaAnswerSchemaVersion)
+
+		requestMetadata, err := resolveRequestMetadata(c)
+		if err != nil {
+			aperrors.Respond(c, aperrors.CodeInvalidRequest, err.Error())
+			return
+		}
+		if requestMetadata != nil {
+			c.Set("request_metadata", requestMetadata)
+		}
 
 		decision := gate.Inspect(req.Q)
 		if decision.Verdict == sec.VerdictQuarantine {
@@ -1012,11 +1033,14 @@ func resolveAnswerFormat(c *gin.Context) (string, error) {
 		plain        = "plain"
 		markdown     = "markdown_safe"
 		screenReader = "screen_reader"
+		whatsapp     = "whatsapp_4096"
+		sms          = "sms_160"
+		ttsNeutral   = "tts_neutral"
 	)
 
 	if q := strings.TrimSpace(c.Query("answer_format")); q != "" {
 		switch q {
-		case plain, markdown, screenReader:
+		case plain, markdown, screenReader, whatsapp, sms, ttsNeutral:
 			return q, nil
 		default:
 			return "", fmt.Errorf("unsupported answer_format: %q", q)
@@ -1039,6 +1063,139 @@ func resolveAnswerFormat(c *gin.Context) (string, error) {
 		}
 	}
 	return plain, nil
+}
+
+func resolveQAAnswerSchemaVersion(c *gin.Context) (int, error) {
+	const serverSupported = 3
+	acceptHeader := c.GetHeader("Accept")
+	if acceptHeader == "" {
+		return serverSupported, nil
+	}
+
+	for _, part := range strings.Split(acceptHeader, ",") {
+		mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+		if !strings.EqualFold(mediaType, "application/vnd.negelir.qa-answer+json") {
+			continue
+		}
+
+		versionParam := strings.TrimSpace(params["version"])
+		if versionParam == "" {
+			return serverSupported, nil
+		}
+
+		bestVersion := 0
+		for _, candidate := range strings.Split(versionParam, "|") {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "" {
+				continue
+			}
+			v, err := strconv.Atoi(candidate)
+			if err != nil {
+				return 0, fmt.Errorf("invalid qa answer version: %q", candidate)
+			}
+			if v > bestVersion {
+				bestVersion = v
+			}
+		}
+		if bestVersion == 0 {
+			return 0, fmt.Errorf("invalid qa answer version: %q", versionParam)
+		}
+		if bestVersion > serverSupported {
+			return serverSupported, nil
+		}
+		return bestVersion, nil
+	}
+
+	return serverSupported, nil
+}
+
+func resolveRequestMetadata(c *gin.Context) (map[string]any, error) {
+	metadata := map[string]any{}
+	acceptHeader := c.GetHeader("Accept")
+	for _, part := range strings.Split(acceptHeader, ",") {
+		mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+		if !strings.EqualFold(mediaType, "application/vnd.negelir.qa-answer+json") {
+			continue
+		}
+
+		versionParam := strings.TrimSpace(params["version"])
+		if versionParam == "" {
+			continue
+		}
+
+		bestVersion := 0
+		for _, candidate := range strings.Split(versionParam, "|") {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "" {
+				continue
+			}
+			v, err := strconv.Atoi(candidate)
+			if err != nil {
+				return nil, fmt.Errorf("invalid qa answer version: %q", candidate)
+			}
+			if v > bestVersion {
+				bestVersion = v
+			}
+		}
+		if bestVersion == 0 {
+			return nil, fmt.Errorf("invalid qa answer version: %q", versionParam)
+		}
+		metadata["client_format_max_version"] = bestVersion
+		break
+	}
+
+	previewHeader := strings.TrimSpace(c.GetHeader("X-NLP-Preview"))
+	if previewHeader != "" {
+		if !isMTLSRequest(c.Request) {
+			return nil, fmt.Errorf("X-NLP-Preview requires mTLS")
+		}
+		if strings.EqualFold(previewHeader, "true") || previewHeader == "1" {
+			metadata["preview"] = true
+			return metadata, nil
+		}
+		return nil, fmt.Errorf("unsupported X-NLP-Preview value: %q", previewHeader)
+	}
+
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+	return metadata, nil
+}
+
+func isMTLSRequest(req *http.Request) bool {
+	return req.TLS != nil && len(req.TLS.VerifiedChains) > 0
+}
+
+func parseSunsetTime(cfg *config.Config) (time.Time, error) {
+	if cfg.QAAnswerSunsetOnUTC != "" {
+		return time.Parse(time.RFC3339, cfg.QAAnswerSunsetOnUTC)
+	}
+	return time.Now().UTC(), nil
+}
+
+func maybeFinalizeQAAnswerSchemaVersion(c *gin.Context, requestedVersion int, cfg *config.Config) error {
+	if requestedVersion >= cfg.QAAnswerMinSupportedVersion {
+		return nil
+	}
+
+	sunsetOn, err := parseSunsetTime(cfg)
+	if err != nil {
+		return fmt.Errorf("invalid sunset configuration: %v", err)
+	}
+
+	deadline := sunsetOn.Add(time.Duration(cfg.QAAnswerSunsetWindowDays) * 24 * time.Hour)
+	c.Header("Deprecation", "true")
+	c.Header("Sunset", deadline.Format("Mon, 02 Jan 2006 15:04:05 GMT"))
+	if time.Now().UTC().After(deadline) {
+		return fmt.Errorf("unsupported qa answer schema version %d; upgrade to %d", requestedVersion, cfg.QAAnswerMinSupportedVersion)
+	}
+	return nil
 }
 
 // newQACorrelationID returns a random UUIDv4 used as the qa_correlation_id

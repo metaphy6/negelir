@@ -118,6 +118,31 @@ def test_no_free_text_slots():
     )
 
 
+def test_templates_do_not_embed_disclosure_text():
+    """§10.27.8: templates must not contain closed disclosure text verbatim."""
+    import yaml
+
+    disclosure_path = pathlib.Path("ai") / "nlp" / "compliance" / "disclosures.tr.yaml"
+    disclosures = yaml.safe_load(disclosure_path.read_text(encoding="utf-8")) or {}
+    disclosure_texts = [
+        item["text"]
+        for item in disclosures.get("disclosures", [])
+        if isinstance(item, dict) and isinstance(item.get("text"), str)
+    ]
+
+    failures: list[str] = []
+    for tpl_path in TEMPLATES_DIR.glob("*.tr.j2"):
+        source = tpl_path.read_text(encoding="utf-8")
+        for disclosure_text in disclosure_texts:
+            if disclosure_text and disclosure_text in source:
+                failures.append(f"{tpl_path.name}: disclosure text found")
+
+    assert not failures, (
+        "Templates must not contain raw disclosure text; use the renderer instead:\n"
+        + "\n".join(sorted(failures))
+    )
+
+
 def test_meta_adversarial_off_topic_handling():
     """§10.15 off-topic handling: meta.adversarial must return the exact
     spec-defined Turkish redirection.

@@ -3003,3 +3003,369 @@ corpus:
   tags:
   - clean
   - temporal
+- id: voice-001
+  raw: eee galatasaray yarin maci var mi
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray
+    span_start: 4
+    span_end: 14
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-002
+  raw: fenerbahce besiktas maci kim kazanir
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: fenerbahce
+    span_start: 0
+    span_end: 10
+  - kind: team
+    canonical_id: besiktas
+    span_start: 11
+    span_end: 19
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-003
+  raw: yani super lig puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities: []
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-004
+  raw: kayserispor bugun saat kacta
+  locale: tr-TR
+  expected_intent: data.kickoff_time
+  expected_entities:
+  - kind: team
+    canonical_id: kayserispor
+    span_start: 0
+    span_end: 10
+  expected_template_id: data_kickoff_time
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-005
+  raw: baskansehir haftaya maci var mi
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities: []
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-006
+  raw: eee galatasaray yarin maci var mi
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray
+    span_start: 4
+    span_end: 14
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-007
+  raw: fenerbahce besiktas maci kim kazanir
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: fenerbahce
+    span_start: 0
+    span_end: 10
+  - kind: team
+    canonical_id: besiktas
+    span_start: 11
+    span_end: 19
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-008
+  raw: yani super lig puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities: []
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-009
+  raw: kayserispor bugun saat kacta
+  locale: tr-TR
+  expected_intent: data.kickoff_time
+  expected_entities:
+  - kind: team
+    canonical_id: kayserispor
+    span_start: 0
+    span_end: 10
+  expected_template_id: data_kickoff_time
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-010
+  raw: baskansehir haftaya maci var mi
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities: []
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-011
+  raw: eee galatasaray yarin maci var mi
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray
+    span_start: 4
+    span_end: 14
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-012
+  raw: fenerbahce besiktas maci kim kazanir
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: fenerbahce
+    span_start: 0
+    span_end: 10
+  - kind: team
+    canonical_id: besiktas
+    span_start: 11
+    span_end: 19
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-013
+  raw: yani super lig puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities: []
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-014
+  raw: kayserispor bugun saat kacta
+  locale: tr-TR
+  expected_intent: data.kickoff_time
+  expected_entities:
+  - kind: team
+    canonical_id: kayserispor
+    span_start: 0
+    span_end: 10
+  expected_template_id: data_kickoff_time
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-015
+  raw: baskansehir haftaya maci var mi
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities: []
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-016
+  raw: eee galatasaray yarin maci var mi
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray
+    span_start: 4
+    span_end: 14
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-017
+  raw: fenerbahce besiktas maci kim kazanir
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: fenerbahce
+    span_start: 0
+    span_end: 10
+  - kind: team
+    canonical_id: besiktas
+    span_start: 11
+    span_end: 19
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-018
+  raw: yani super lig puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities: []
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-019
+  raw: kayserispor bugun saat kacta
+  locale: tr-TR
+  expected_intent: data.kickoff_time
+  expected_entities:
+  - kind: team
+    canonical_id: kayserispor
+    span_start: 0
+    span_end: 10
+  expected_template_id: data_kickoff_time
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-020
+  raw: baskansehir haftaya maci var mi
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities: []
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-021
+  raw: eee galatasaray yarin maci var mi
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray
+    span_start: 4
+    span_end: 14
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-022
+  raw: fenerbahce besiktas maci kim kazanir
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: fenerbahce
+    span_start: 0
+    span_end: 10
+  - kind: team
+    canonical_id: besiktas
+    span_start: 11
+    span_end: 19
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-023
+  raw: yani super lig puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities: []
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-024
+  raw: kayserispor bugun saat kacta
+  locale: tr-TR
+  expected_intent: data.kickoff_time
+  expected_entities:
+  - kind: team
+    canonical_id: kayserispor
+    span_start: 0
+    span_end: 10
+  expected_template_id: data_kickoff_time
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-025
+  raw: baskansehir haftaya maci var mi
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities: []
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-026
+  raw: eee galatasaray yarin maci var mi
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: galatasaray
+    span_start: 4
+    span_end: 14
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-027
+  raw: fenerbahce besiktas maci kim kazanir
+  locale: tr-TR
+  expected_intent: predict.match_outcome
+  expected_entities:
+  - kind: team
+    canonical_id: fenerbahce
+    span_start: 0
+    span_end: 10
+  - kind: team
+    canonical_id: besiktas
+    span_start: 11
+    span_end: 19
+  expected_template_id: predict_match_outcome
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-028
+  raw: yani super lig puan durumu nedir
+  locale: tr-TR
+  expected_intent: data.standings
+  expected_entities: []
+  expected_template_id: data_standings
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-029
+  raw: kayserispor bugun saat kacta
+  locale: tr-TR
+  expected_intent: data.kickoff_time
+  expected_entities:
+  - kind: team
+    canonical_id: kayserispor
+    span_start: 0
+    span_end: 10
+  expected_template_id: data_kickoff_time
+  expected_disambiguation: false
+  tags:
+  - voice
+- id: voice-030
+  raw: baskansehir haftaya maci var mi
+  locale: tr-TR
+  expected_intent: summary.next_week
+  expected_entities: []
+  expected_template_id: summary_next_week
+  expected_disambiguation: false
+  tags:
+  - voice

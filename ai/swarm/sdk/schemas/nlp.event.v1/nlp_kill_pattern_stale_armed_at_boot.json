@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/nlp_kill_pattern_stale_armed_at_boot",
+  "title": "nlp.event.v1{kind=nlp_kill_pattern_stale_armed_at_boot}",
+  "description": "A previously armed kill pattern was stale at boot and requires operator attention.",
+  "type": "object",
+  "required": ["kind", "producer", "pattern_pack_sha8", "emitted_at"],
+  "properties": {
+    "kind": {"const": "nlp_kill_pattern_stale_armed_at_boot"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.dispatcher.v1", "nlp.answer.v1", "nlp.proofreader.v1", "nlp.abuse.v1"]
+    },
+    "pattern_pack_sha8": {"type": "string", "minLength": 1},
+    "reason": {"type": ["string", "null"], "minLength": 1},
+    "emitted_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}

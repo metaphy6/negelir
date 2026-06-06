@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
 from common.config import cfg
+from nlp.compliance import disclosures_snapshot_sha, load_disclosures
 
 from ..sdk.types import Message
 from .payloads import MatchStored, PredictApproved
@@ -104,6 +105,7 @@ class VersionSnapshot:
     normalized_text: str
     intent_model_version: str
     lexicon_snapshot_sha: str
+    banlist_snapshot_sha: str
     calibration_version: str
     pipeline_version: str
 
@@ -168,6 +170,7 @@ def _capture_version_snapshot(payload: dict[str, object]) -> VersionSnapshot:
         normalized_text=str(payload.get("normalized_text", "")),
         intent_model_version=str(payload.get("intent_model_version", "")),
         lexicon_snapshot_sha=str(payload.get("lexicon_snapshot_sha", "")),
+        banlist_snapshot_sha=str(payload.get("banlist_snapshot_sha", "")),
         calibration_version=str(payload.get("calibration_version", "")),
         pipeline_version=str(payload.get("nlp_pipeline_version", "")),
     )
@@ -204,20 +207,27 @@ def make_answer_key(
     entity_hash: str,
     fixture_window_bucket: str,
     model_versions_hash: str,
+    tenant_id: str,
+    banlist_snapshot_sha: str,
     intent_model_version: str,
     lexicon_snapshot_sha: str,
     calibration_version: str,
     pipeline_version: str,
+    disclosures_snapshot_sha: str = "",
+    query_time_bucket: str = "",
+    feature_set_hash: str = "",
 ) -> str:
     """Build the canonical cache key for an L1 NLP answer (Phase 10 §10.12).
 
     Key = ``sha256(normalized_text|intent|entity_hash|fixture_window_bucket|
-                 model_versions_hash|intent_model_version|lexicon_snapshot_sha|
-                 calibration_version|pipeline_version)``.
+                 model_versions_hash|tenant_id|banlist_snapshot_sha|
+                 intent_model_version|lexicon_snapshot_sha|calibration_version|
+                 pipeline_version|disclosures_snapshot_sha)``.
 
     The stable hash ensures that two requests with identical request text +
-    intent + entities + fixture window + model versions + intent model version +
-    lexicon version + calibration + pipeline produce the same cache key.
+    intent + entities + fixture window + model versions + tenant + banlist state +
+    intent model version + lexicon version + calibration + pipeline + disclosure
+    snapshot produce the same cache key.
 
     Returns:
         Prefixed cache key string: ``answer:<64-hex-sha256>``.
@@ -228,10 +238,15 @@ def make_answer_key(
         entity_hash,
         fixture_window_bucket,
         model_versions_hash,
+        tenant_id,
+        banlist_snapshot_sha,
         intent_model_version,
         lexicon_snapshot_sha,
         calibration_version,
         pipeline_version,
+        disclosures_snapshot_sha,
+        query_time_bucket,
+        feature_set_hash,
     ])
     stable_hash = hashlib.sha256(components.encode("utf-8")).hexdigest()
     return f"answer:{stable_hash}"
@@ -339,16 +354,23 @@ class CacheAgent:
             # Meta intents and others: use data TTL as default
             ttl = int(cfg.nlp_answer_cache_ttl_data_s)
 
+        locale = str(payload.get("locale") or "tr-TR")
+        disclosures, _ = load_disclosures(locale)
         key = make_answer_key(
             snapshot.normalized_text,
             intent,
             str(payload.get("entity_hash", "")),
             str(payload.get("fixture_window_bucket", "")),
             str(payload.get("model_versions_hash", "")),
+            str(payload.get("tenant_id", "")),
+            str(payload.get("banlist_snapshot_sha", "")),
             snapshot.intent_model_version,
             snapshot.lexicon_snapshot_sha,
             snapshot.calibration_version,
             snapshot.pipeline_version,
+            disclosures_snapshot_sha(disclosures),
+            str(payload.get("query_time_bucket", "")),
+            str(payload.get("feature_set_hash", "")),
         )
 
         if (

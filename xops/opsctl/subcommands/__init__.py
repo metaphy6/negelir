@@ -22,6 +22,7 @@ from . import (
     allowlist_show,
     backup_now,
     backup_rotate_key,
+    nlp_kill_pattern,
     baseline_reset,
     bootstrap_allowlist_key,
     bootstrap_key,
@@ -82,6 +83,7 @@ SUBCOMMANDS = (
     revoke_key,
     rotate_key,
     verify_key_id,
+    nlp_kill_pattern,
 )
 
 __all__ = [
@@ -117,4 +119,5 @@ __all__ = [
     "spool_flush",
     "spool_show",
     "verify_key_id",
+    "nlp_kill_pattern",
 ]

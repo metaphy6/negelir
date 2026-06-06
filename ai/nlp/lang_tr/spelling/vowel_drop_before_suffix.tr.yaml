@@ -1,0 +1,31 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-06T00:00:00Z"
+  source: "phase10-10.29.2"
+  notes: >
+    Closed vowel-drop-before-suffix table for §10.29.2. This list governs
+    when a dropped high vowel in a disyllabic stem is restored before a
+    vowel-initial suffix for lexicon lookup.
+
+vowel_drop_before_suffix:
+  - stem: "oğul"
+    dropped_form: "oğl"
+    suffix_classes: ["acc"]
+    source: "manual"
+  - stem: "burun"
+    dropped_form: "burn"
+    suffix_classes: ["acc", "gen", "dat"]
+    source: "manual"
+  - stem: "ağız"
+    dropped_form: "ağz"
+    suffix_classes: ["acc", "gen"]
+    source: "manual"
+  - stem: "omuz"
+    dropped_form: "omz"
+    suffix_classes: ["acc", "gen"]
+    source: "manual"
+  - stem: "boyun"
+    dropped_form: "boyn"
+    suffix_classes: ["acc", "gen", "dat"]
+    source: "manual"

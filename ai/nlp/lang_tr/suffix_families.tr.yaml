@@ -34,8 +34,8 @@ suffix_families:
 
   - name: dative
     # After vowel-final stem: buffer 'y' + 2-way harmonic vowel.
-    # Examples: Bursa'ya (back), Fenerbahçe'ye (front).
-    vowel_final_forms: [ya, ye]
+    # Examples: Bursa'ya (back), Fenerbahçe'ye (front), Gençlerbirliği'ne.
+    vowel_final_forms: [ya, ye, na, ne]
     # After consonant-final stem: direct 2-way harmonic vowel.
     # Examples: Trabzon'a (back), Beşiktaş'a (back), Rize'ye (front).
     consonant_final_forms: [a, e]

@@ -1,0 +1,182 @@
+[
+  {
+    "id": "shout-positive-01",
+    "input": "GALATASARAY KAZANIR MI BU HAFTA?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-02",
+    "input": "TRABZONSPOR BU MAÇI KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-03",
+    "input": "FENERBAHÇE BU SEZON ŞAMPİYON OLUR MU?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-04",
+    "input": "BEŞİKTAŞ BU DERBİYİ KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-05",
+    "input": "SAMSUNSPOR KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-06",
+    "input": "KARŞIYAKA BU MAÇI KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-07",
+    "input": "BURSASPOR MAÇI KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-08",
+    "input": "GÖZTEPE KUPAYI ALIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-09",
+    "input": "ANTALYASPOR KAÇ GOL ATAR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-10",
+    "input": "ERZURUMSPOR BU MAÇI KAYBEDER MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-11",
+    "input": "KAYSERİSPOR BU HAFTA KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-12",
+    "input": "MERSİN İDMANYURDU BU MAÇTA OYNAR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-13",
+    "input": "FENERBAHÇE BU HAFTAYA KAZANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-14",
+    "input": "ALANYASPOR BU MAÇTA OYNAR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-positive-15",
+    "input": "BAŞAKŞEHİR KALE KAPANIR MI?",
+    "expected_shout": true,
+    "should_resolve": true
+  },
+  {
+    "id": "shout-negative-01",
+    "input": "GALATASARAY kazanir MI?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-02",
+    "input": "TRABZONSPOR galip GELIR MI?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-03",
+    "input": "GALATASARAY?? kazanır mı",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-04",
+    "input": "BU MAÇTa mı?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-05",
+    "input": "VER mi?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-06",
+    "input": "SESli mi?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-07",
+    "input": "FENERbahçe BU HAFTA MI?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-08",
+    "input": "GÖZtepe... kazanır mı",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-09",
+    "input": "GALATASARAY kazanır mı?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-negative-10",
+    "input": "ANTALYASPOR kaç gol atar mı?",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-edge-01",
+    "input": "A",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-edge-02",
+    "input": "!!!???",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-edge-03",
+    "input": "2026",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-edge-04",
+    "input": "GO!!!",
+    "expected_shout": false,
+    "should_resolve": false
+  },
+  {
+    "id": "shout-edge-05",
+    "input": "İ",
+    "expected_shout": false,
+    "should_resolve": false
+  }
+]

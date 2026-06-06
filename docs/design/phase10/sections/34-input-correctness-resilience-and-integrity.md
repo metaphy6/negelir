@@ -87,7 +87,7 @@ not enumerate, the empirical counter-example, the binding correction,
 and the proof test. Tests live in
 `ai/swarm/agents/nlp/tests/generic_broken_turkish/`.
 
-- [ ] **Predictive-text overshoot.** iOS/Android keyboards aggressively
+- [x] **Predictive-text overshoot.** iOS/Android keyboards aggressively
       auto-complete partial Turkish words to nearest dictionary entry,
       often producing a syntactically-valid but semantically-wrong
       sentence (`Galatasaray onları yendi mi` ⇒ keyboard auto-finishes
@@ -144,7 +144,7 @@ and the proof test. Tests live in
       rows half lexical / half not), `test_paste_column_tear_routes_meta`
       (20 rows).
 
-- [ ] **Mid-word URL paste.** `Galatasarayhttps://example.com/maçı` —
+- [x] **Mid-word URL paste.** `Galatasarayhttps://example.com/maçı` —
       the user copied a partial URL and concatenated it inadvertently.
       §10.33.3 `nlp_strip_urls` handles standalone URLs but not URLs
       glued to a token. **Correction:** before §10.33.3 URL strip,
@@ -205,7 +205,7 @@ and the proof test. Tests live in
       `test_emoji_without_suffix_still_stripped` (50 rows assert
       §10.33.3 path unchanged).
 
-- [ ] **Apostrophe-replaced-by-comma / dot / backtick.** Cheap mobile
+- [x] **Apostrophe-replaced-by-comma / dot / backtick.** Cheap mobile
       keyboards autocorrect `'` to `,` for half a key press; some
       Turkish layouts put `.` where US layouts put `'`. The §10.32.5
       apostrophe-suffix repair assumes the apostrophe is *missing*,
@@ -454,7 +454,7 @@ lands the contract.
       `test_typo_pathological_input_under_5ms` (15 rows of 50-char
       no-space tokens, each must complete in < 5ms).
 
-- [ ] **Lexicon load: bounded hash collision under malicious aliases.**
+- [x] **Lexicon load: bounded hash collision under malicious aliases.**
       A lexicon contributor (Phase 13a) could insert ≥ 200 aliases
       that all collide on the hash bucket the gazetteer uses; lookup
       degrades from `O(1)` to `O(n)` per token. **Correction:** boot-time
@@ -645,7 +645,7 @@ covering all six new specs (was 1000 rows in §10.33.5).
 Each new closed table introduced in §10.34.1 + §10.34.4 ships its own
 `corpus.yaml` per the §10.33.4 discipline:
 
-- [ ] `predictive_text_known_overshoot.tr.yaml` (≥ 50 rows;
+- [x] `predictive_text_known_overshoot.tr.yaml` (≥ 50 rows;
       reviewers = nlp-curator + nlp-domain-football)
 - [ ] `ocr_confusables.tr.yaml` (≥ 30 rows; reviewers = nlp-curator)
 - [ ] `paste_layout_spec.json` corpus (≥ 50 rows; reviewers = nlp-curator)

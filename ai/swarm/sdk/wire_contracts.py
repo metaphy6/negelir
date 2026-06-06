@@ -122,8 +122,9 @@ SEC_ALERT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
 SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER: Mapping[str, FrozenSet[str]] = {
     # Phase 8 §8.9: telemetry may only relay the dead-man silence alert.
     "telemetry.v1": frozenset({"maint_silence_alert"}),
-    # Phase 8 §8.14.6: ops_console may only emit the legacy-schema nudge.
-    "ops_console": frozenset({"maint_ack_legacy_schema"}),
+    # Phase 8 §8.14.6: ops_console may emit the legacy-schema nudge and
+    # Phase 10 §10.27 operator kill-pattern arm audit alert.
+    "ops_console": frozenset({"maint_ack_legacy_schema", "nlp_kill_pattern_armed"}),
 }
 
 
@@ -191,6 +192,25 @@ NLP_ALERT_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
     "nlp.dispatcher.v1",
     "nlp.answer.v1",
     "nlp.proofreader.v1",
+    "nlp.abuse.v1",
+    "nlp.gossip_aggregator.v1",
+})
+
+# `nlp.gossip.v1` producers (Phase 10.32.12 gossip diagnostics).
+#
+# Bounded to Phase 10 NLP plane agents. Any new producer must be
+# added here with a tracker row + minor bump.
+NLP_GOSSIP_V1_ALLOWED_PRODUCERS: FrozenSet[str] = frozenset({
+    "nlp.intent.v1",
+    "nlp.dispatcher.v1",
+    "nlp.answer.v1",
+    "nlp.proofreader.v1",
+})
+
+# Consumers are bounded to the gossip aggregator plus telemetry.
+NLP_GOSSIP_V1_ALLOWED_CONSUMERS: FrozenSet[str] = frozenset({
+    "nlp.gossip_aggregator.v1",
+    "telemetry.v1",
 })
 
 
@@ -199,6 +219,8 @@ __all__ = [
     "MAINT_EVENT_V1_ALLOWED_PRODUCERS",
     "NLP_ALERT_V1_ALLOWED_PRODUCERS",
     "NLP_EVENT_V1_ALLOWED_PRODUCERS",
+    "NLP_GOSSIP_V1_ALLOWED_PRODUCERS",
+    "NLP_GOSSIP_V1_ALLOWED_CONSUMERS",
     "PREDICT_CANCEL_V1_ALLOWED_PRODUCERS",
     "SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER",
     "SEC_ALERT_V1_ALLOWED_PRODUCERS",

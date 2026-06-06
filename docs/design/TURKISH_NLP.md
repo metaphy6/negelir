@@ -52,6 +52,70 @@ ai/nlp/lexicon/
 Lexicons are versioned, hot-reloadable on `SIGHUP`, and have a property test
 that asserts every alias maps back to a canonical form.
 
+### Conversational Context
+
+Phase 10 §10.25 adds multi-turn state to the NLP plane. The system preserves
+`qa.context.v1` across a bounded conversation window and may override stale
+or blocked entities with `nlp.event.v1{kind=conversation_entity_overridden}`
+when the conversational context no longer matches the current query.
+
+- `qa.context.v1` is produced by `nlp.dispatcher.v1` and consumed by
+  `nlp.intent.v1`.
+- Context is cleared after a blocked entity or out-of-window turn, with an
+  explicit `nlp.alert.v1{kind=conversation_context_cleared_after_block}`.
+- The context model is intentionally bounded and recoverable; a stale slot is
+  safer than silently trusting an old entity value.
+
+### Streaming Response
+
+Streaming response is offered as a skeleton-first SSE path.
+The humanizer emits partial chunks while a mid-stream proofreader gate
+validates each chunk before it is published to the client.
+
+- Slow clients may trigger `nlp.event.v1{kind=streaming_client_slow_canceled}`.
+- The runtime tracks chunk progress with `cfg.nlp_streaming_write_timeout_ms`
+  and enforces `cfg.nlp_streaming_proofread_chunk_chars` for proofreader gates.
+- The stream path is designed to degrade cleanly to a final answer if the
+  stream is canceled or the proofreader rejects a chunk.
+
+### Audit Re-render Bundles
+
+Phase 10 §10.25 preserves the full audit trail needed to reproduce an answer
+later. An audit bundle includes `qa.intent.v1`, `nlp.event.v1`, `nlp.alert.v1`,
+and the rendered citation block.
+
+- `make nlp.audit-rerender` regenerates an answer from the bundle and emits
+  `nlp.event.v1{kind=nlp_audit_rerender_executed}` on success.
+- Re-render bundles are normalized so they are byte-stable across the same
+  input, humanizer model version, and proofreader contract.
+
+### Lexicon Contributor Guide
+
+Lexicon governance is a first-class Phase 10 path.
+New lexicon alias PRs must be reviewed by at least two maintainers before
+being merged, and high-leverage tables (`teams`, `players`, `leagues`)
+are subject to stricter alias-delta review.
+
+- Lexicon drift is monitored by `nlp_lexicon_coverage` telemetry.
+- `TelemetrySink.record_nlp_lexicon_coverage` emits
+  `nlp.alert.v1{kind=lexicon_coverage_below_floor}` when p50 coverage remains
+  below `cfg.nlp_lexicon_coverage_p50_floor` for 30 minutes.
+- Lexicon files older than `cfg.nlp_lexicon_max_age_days` may emit
+  `nlp.alert.v1{kind=lexicon_stale}` and prompt an operator review.
+
+### Holiday Calendar
+
+Date resolution in the Turkish NLP plane uses a deterministic vendor table for
+Hijri lookup plus a Diyanet override table for specific national holidays.
+
+- `ai/nlp/dates/hijri.py` contains the vendored lookup used for Ramazan,
+  Kurban Bayramı, and other lunar-calendar dates.
+- `ai/nlp/dates/_diyanet_overrides.tr.yaml` contains the Diyanet-specific
+  manual corrections used when the official calendar differs from the calculated
+  Hijri date.
+- The resolver also consults cached OpenFootball FIFA-window seed data for
+  multi-year schedule context in holiday-aware queries.
+
 ## 📘 Rule tables for Turkish input robustness
 
 Phase 10.22 embeds the robustness rules directly into the NLP design doc so
@@ -77,6 +141,91 @@ implementation.
 - `cfg.nlp_lexicon_feed_*` and `make nlp.rotate-lexicon-key` — feed integrity,
   signature validation, and dual-acceptance key rotation for production lexicon
   swaps.
+
+## Morphological Arbitration
+
+Morphological arbitration resolves Turkish parse ambiguity in favour of
+proper-noun interpretations when gazetteer evidence is strong. The system
+emits `nlp.event.v1{kind=morph_parse_ambiguous}` for ambiguous parses, then
+applies a proper-noun bypass path for `teams.tr.yaml`, `players.tr.yaml`, and
+other closed canonical entries. This reduces false-negative entity resolution
+in queries such as `galatasaray yenseydi` or `besiktas dua etse`.
+
+## Voice-to-Text Tolerance
+
+The voice-input path tolerates filler words, missing diacritics, and aggressive
+capitalization. Voice-specific detection emits
+`nlp.event.v1{kind=asr_input_auto_detected}` and the system strips filler tokens
+before intent classification. A warning is published as
+`nlp.alert.v1{kind=nlp_voice_path_diacritic_overaggressive}` when voice-path
+diacritic restoration is too aggressive, so operators can tune the voice path
+without breaking normal text input.
+
+## Mobile-IME Awareness
+
+Mobile-IME awareness uses `ai/nlp/lang_tr/ime/keyboard_confusables.tr.yaml` and
+layout-aware repair logic to recover from Turkish keyboard slips, swipe input,
+and autocorrect cascades. The IME path is intentionally non-blocking; it
+emits diagnostic signals such as `autocorrect_cascade_repaired` while preserving
+the original query semantics.
+
+## Counterfactual & Modal-Aspect Firewall
+
+Counterfactual queries and modal aspect constructions are handled by a safety
+firewall that routes unsupported cases to safe fallback outcomes. Queries with
+counterfactual past or evidential phrasing may produce events such as
+`modality_routed_counterfactual`, `modality_routed_evidential_hearsay`, or
+`modality_routed_obligative`. The firewall prevents unsupported modal inputs
+from reaching predictor logic and instead returns an explicit unsupported
+response when appropriate.
+
+## Output Envelope Integrity
+
+Output integrity is enforced by adding `qa.answer.v1.envelope_signature`,
+`qa.answer.v1.envelope_signature_key_id`, and `qa.answer.v1.body_canonical_sha`.
+The answer envelope is signed and verified across the gateway and audit paths.
+Key rotation for answer envelope HMAC is operator-driven via
+`make nlp.rotate-answer-hmac-key`, with a dual-acceptance grace window for key
+rollover.
+
+## 🚧 Wrong-Turkish Tolerance Catalogue
+
+The Phase 10.24 catalogue documents every wrong-Turkish tolerance rule and
+operator-facing worked example.
+
+- **§10.24.1 Vowel-harmony-violation tolerance.** Recover malformed suffixes such
+  as `Galatasarayda` → `Galatasaray'da`, `Fenerbahceye` → `Fenerbahçe'ye`, and
+  `Ankaragucuya` → `Ankaragücü'ye`.
+- **§10.24.2 Repeated-character & emphasis normalization.** Collapse
+  `Galatasarayyy` → `Galatasaray`, `evetttt` → `evet`, and `bugunn` → `bugun`.
+- **§10.24.3 Digit ↔ letter confusable folding.** Fold `3`/`1`/`2` into Turkish
+  letters in noisy fan input such as `3stanbul`, `1nönü`, and `Fener2ahçe`.
+- **§10.24.4 Turkish dotted/dotless i NFC corner case.** Normalize `Istanbul`
+  / `istanbul` with Turkish-specific NFC treatment and preserve the difference
+  between `ı` and `i` where it changes meaning.
+- **§10.24.5 Run-on / multi-question input splitting.** Split `bugun gs maci kacta
+  ne` into `bugun gs maci kacta` + `ne` so downstream intent classification
+  does not produce a single incorrect combined intent.
+- **§10.24.6 Negation-aware intent.** Detect negation in inputs like `kazandimi
+  degil` and avoid misclassifying the query as an affirmative prediction.
+- **§10.24.7 Compound / hyphenated club name handling.** Match
+  `MKE Ankaragücü` and `Kayserispor-Çaykur` to canonical club names despite
+  spacing and hyphen variants.
+- **§10.24.8 Honorific / role-prefix normalization.** Normalize expressions such
+  as `hoca`, `başkan`, and `yönetici` in queries like `hoca ne dedi`.
+- **§10.24.9 Emoji / pictograph as semantic signal, never decision.** Treat
+  `fenerbahçe❤️` as fan sentiment rather than a separate team token.
+- **§10.24.10 Hashtag, @-mention, URL / HTML-entity hygiene.** Sanitize
+  `#galatasaray`, `@fener`, and `malatya.com` without breaking intent or entity
+  extraction.
+- **§10.24.11 Decimal-comma / score-line numeric disambiguation.** Resolve
+  `1-0` as a score-line query, `1,5` as a decimal market, and `2. gol` as an
+  event phrase.
+- **§10.24.12 Garden-path backtracking & abstention discipline.** Recover from
+  ambiguous inputs such as `galatasaray besiktas mı` and defer to a safe
+  clarification path where the semantic structure is uncertain.
+- **§10.24.13 Empty / pathological / single-character input.** Handle `?`, `a`,
+  and whitespace-only queries with canned Turkish guidance rather than guessing.
 
 ### Worked examples
 

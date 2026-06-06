@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/nlp_preview_token_budget_exhausted_per_operator",
+  "title": "nlp.event.v1{kind=nlp_preview_token_budget_exhausted_per_operator}",
+  "description": "Operator preview token budget exhausted for a single operator in the current hour.",
+  "type": "object",
+  "required": ["kind", "producer", "operator_id_h", "requested_tokens", "budget_per_operator_per_h", "emitted_at"],
+  "properties": {
+    "kind": {"const": "nlp_preview_token_budget_exhausted_per_operator"},
+    "producer": {
+      "type": "string",
+      "enum": ["nlp.intent.v1", "nlp.dispatcher.v1", "nlp.answer.v1", "nlp.proofreader.v1", "nlp.abuse.v1"]
+    },
+    "operator_id_h": {"type": "string", "minLength": 1},
+    "requested_tokens": {"type": "integer", "minimum": 1},
+    "budget_per_operator_per_h": {"type": "integer", "minimum": 1},
+    "qa_correlation_id": {"type": ["string", "null"]},
+    "emitted_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}

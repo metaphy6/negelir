@@ -22,14 +22,18 @@ Usage::
 """
 from __future__ import annotations
 
+import calendar
 import datetime
+import json
 import re
 from pathlib import Path
 from typing import Callable, NamedTuple
+from zoneinfo import ZoneInfo
 
 import yaml
 
-from common.text.turkish import lowercase_tr, parse_number_word
+from common.text.turkish import lowercase_tr, parse_number_word, int_to_number_word
+from nlp.dates.hijri import resolve_hijri_observed_date
 
 # ── Public types ──────────────────────────────────────────────────────────
 
@@ -45,12 +49,15 @@ class DateTimeResolution(NamedTuple):
         For ``granularity="week"``  : ``start_utc + 7 days``.
         For ``granularity="hour_minute"``: ``start_utc + 2 h`` (match window).
     granularity:
-        One of ``"day"``, ``"week"``, ``"hour_minute"``.
+        One of ``"day"``, ``"week"``, ``"month"``, ``"year"``, ``"hour_minute"``.
+    polarity:
+        ``"past"``, ``"present"``, or ``"future"`` for relative time semantics.
     """
 
     start_utc: datetime.datetime
     end_utc: datetime.datetime
     granularity: str
+    polarity: str = "present"
 
 
 # ── Turkish month names (1-indexed) ──────────────────────────────────────
@@ -113,7 +120,13 @@ _TIME_OF_DAY_NUMERIC_RE = re.compile(
 )
 
 _DEFAULT_HOLIDAY_LOOKUP_HORIZON_DAYS = 540
+
+
+def _normalize_apostrophes(text: str) -> str:
+    return text.replace("’", "").replace("'", "").replace("`", "")
 _HOLIDAY_CONFIG_PATH = Path(__file__).resolve().parent / "dates" / "holidays_tr.yaml"
+_DIYANET_OVERRIDE_PATH = Path(__file__).resolve().parent / "dates" / "_diyanet_overrides.tr.yaml"
+_FIFA_WINDOW_CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "nlp" / "fifa_windows"
 
 class _HolidayDefinition(NamedTuple):
     key: str
@@ -121,6 +134,7 @@ class _HolidayDefinition(NamedTuple):
     date_kind: str
     fixed_month: int | None
     fixed_day: int | None
+    lookup_key: str | None
 
 _TWO_HOURS = datetime.timedelta(hours=2)
 _ONE_DAY = datetime.timedelta(days=1)
@@ -128,6 +142,20 @@ _ONE_WEEK = datetime.timedelta(weeks=1)
 
 _DEFAULT_DATE_WINDOW_DAYS = 180
 _DEFAULT_TIME_DEFAULT_PERIOD = "am"
+
+_ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
+_ORDINAL_SUFFIXES = ("inci", "ıncı", "uncu", "üncü")
+
+_FRACTIONAL_HOUR_RE = re.compile(r"\b(\d+|[a-zığüşöç]+)\s+buçuk\s+saat\s+sonra\b")
+_HALF_HOUR_RE = re.compile(r"\b(yarım|çeyrek)\s+saat\s+sonra\b")
+_BUCUKTA_RE = re.compile(r"\b(\d{1,2})\s+buçukta\b")
+_RELATIVE_DAY_RE = re.compile(r"\b(\d+|[a-zığüşöç]+)\s+gün\s+(önce|sonra)\b")
+_RELATIVE_WEEK_RE = re.compile(r"\b(\d+|[a-zığüşöç]+)\s+hafta\s+sonra\b")
+_LAST_MONTH_RE = re.compile(r"\bgeçen ay\b")
+_LAST_YEAR_RE = re.compile(r"\bgeçen yıl\b")
+_PREVIOUS_WEEK_RE = re.compile(r"\bönceki hafta\b")
+_YESTERDAY_BEFORE_RE = re.compile(r"\bdünden önce\b")
+_WEEKEND_RE = re.compile(r"\bhafta sonu\b")
 
 # ── Resolver ─────────────────────────────────────────────────────────────
 
@@ -174,6 +202,7 @@ class DateTimeResolver:
         Returns ``None`` when no temporal expression is recognized.
         """
         text_lower = lowercase_tr(text.strip())
+        text_lower = _normalize_apostrophes(text_lower)
         now = self._clock_now()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -247,9 +276,19 @@ class DateTimeResolver:
                     base_date = self._apply_year_omission_window(base_date, now)
                 return self._apply_time(base_date, time_delta)
 
-        holiday_date = self._resolve_holiday(text_lower, now)
-        if holiday_date is not None:
-            return self._apply_time(holiday_date, time_delta)
+        holiday_resolution = self._resolve_holiday(text_lower, now)
+        if holiday_resolution is not None:
+            if holiday_resolution.granularity == "day":
+                return self._apply_time(holiday_resolution.start_utc, time_delta)
+            return holiday_resolution
+
+        relative_resolution = self._resolve_relative_phrase(text_lower, now)
+        if relative_resolution is not None:
+            if relative_resolution.granularity == "hour_minute":
+                return relative_resolution
+            if time_delta is None:
+                return relative_resolution
+            return self._apply_time(relative_resolution.start_utc, time_delta, relative_resolution.polarity)
 
         # ── 3. Relative day keywords ───────────────────────────────────
         if "bugün" in text_lower:
@@ -332,19 +371,58 @@ class DateTimeResolver:
             return next_year
         return base_date
 
-    def _resolve_holiday(self, text_lower: str, now: datetime.datetime) -> datetime.datetime | None:
+    def _resolve_holiday(self, text_lower: str, now: datetime.datetime) -> DateTimeResolution | None:
         for holiday in _HOLIDAY_DEFINITIONS:
             for alias in holiday.aliases:
                 if _word_in(alias, text_lower):
                     return self._resolve_holiday_date(holiday, now)
+
+        if "bayramda" in text_lower or "bayramında" in text_lower:
+            return self._resolve_next_bayram(now)
+
         return None
+
+    def _resolve_next_bayram(
+        self,
+        now: datetime.datetime,
+    ) -> DateTimeResolution | None:
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        candidates: list[DateTimeResolution] = []
+        for holiday in _HOLIDAY_DEFINITIONS:
+            if "bayram" not in holiday.key and not any(
+                "bayram" in alias for alias in holiday.aliases
+            ):
+                continue
+            holiday_resolution = self._resolve_holiday_date(holiday, now)
+            if holiday_resolution is None:
+                continue
+            if holiday_resolution.start_utc < today_start:
+                continue
+            candidates.append(holiday_resolution)
+
+        if not candidates:
+            return None
+        return min(candidates, key=lambda res: res.start_utc)
 
     def _resolve_holiday_date(
         self,
         holiday: _HolidayDefinition,
         now: datetime.datetime,
-    ) -> datetime.datetime | None:
-        if holiday.date_kind != "fixed_gregorian" or holiday.fixed_month is None or holiday.fixed_day is None:
+    ) -> DateTimeResolution | None:
+        if holiday.date_kind == "fixed_gregorian":
+            return self._resolve_fixed_gregorian_holiday(holiday, now)
+        if holiday.date_kind == "fixed_hijri_observed":
+            return self._resolve_hijri_observed_holiday(holiday, now)
+        if holiday.date_kind == "fifa_window":
+            return self._resolve_fifa_window_holiday(holiday, now)
+        return None
+
+    def _resolve_fixed_gregorian_holiday(
+        self,
+        holiday: _HolidayDefinition,
+        now: datetime.datetime,
+    ) -> DateTimeResolution | None:
+        if holiday.fixed_month is None or holiday.fixed_day is None:
             return None
 
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -359,7 +437,76 @@ class DateTimeResolver:
 
         if candidate - today_start > self._holiday_lookup_horizon:
             return None
-        return candidate
+        return DateTimeResolution(candidate, candidate + _ONE_DAY, "day")
+
+    def _resolve_hijri_observed_holiday(
+        self,
+        holiday: _HolidayDefinition,
+        now: datetime.datetime,
+    ) -> DateTimeResolution | None:
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        for year in (today_start.year, today_start.year + 1):
+            override = _DIYANET_OVERRIDES.get((year, holiday.key))
+            if override is not None:
+                month, day = override
+            else:
+                month_day = resolve_hijri_observed_date(holiday.lookup_key or holiday.key, year)
+                if month_day is None:
+                    continue
+                month, day = month_day
+
+            try:
+                candidate = datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+            except ValueError:
+                continue
+
+            if candidate < today_start:
+                continue
+            if candidate - today_start > self._holiday_lookup_horizon:
+                continue
+            return DateTimeResolution(candidate, candidate + _ONE_DAY, "day")
+        return None
+
+    def _resolve_fifa_window_holiday(
+        self,
+        holiday: _HolidayDefinition,
+        now: datetime.datetime,
+    ) -> DateTimeResolution | None:
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        for year in (today_start.year, today_start.year + 1):
+            window = self._load_fifa_window(holiday.lookup_key or holiday.key, year)
+            if window is None:
+                continue
+            start, end = window
+            if end <= today_start:
+                continue
+            if start - today_start > self._holiday_lookup_horizon:
+                continue
+            granularity = "week" if end - start == _ONE_WEEK else "day"
+            return DateTimeResolution(start, end, granularity)
+        return None
+
+    def _load_fifa_window(
+        self,
+        lookup_key: str,
+        year: int,
+    ) -> tuple[datetime.datetime, datetime.datetime] | None:
+        path = _FIFA_WINDOW_CACHE_DIR / f"{year}.json"
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+
+        entry = raw.get(lookup_key)
+        if not isinstance(entry, dict):
+            return None
+
+        try:
+            start = datetime.datetime.fromisoformat(entry["start_date"]).replace(tzinfo=datetime.timezone.utc)
+            end = datetime.datetime.fromisoformat(entry["end_date"]).replace(tzinfo=datetime.timezone.utc)
+        except (KeyError, TypeError, ValueError):
+            return None
+        return (start, end)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -369,12 +516,207 @@ class DateTimeResolver:
     def _apply_time(
         base_date: datetime.datetime,
         time_delta: datetime.timedelta | None,
+        polarity: str = "present",
     ) -> DateTimeResolution:
         """Combine a date-midnight base with an optional intra-day offset."""
         if time_delta is not None:
             start = base_date + time_delta
-            return DateTimeResolution(start, start + _TWO_HOURS, "hour_minute")
-        return DateTimeResolution(base_date, base_date + _ONE_DAY, "day")
+            return DateTimeResolution(start, start + _TWO_HOURS, "hour_minute", polarity)
+        return DateTimeResolution(base_date, base_date + _ONE_DAY, "day", polarity)
+
+    @staticmethod
+    def _make_resolution(
+        start: datetime.datetime,
+        end: datetime.datetime,
+        granularity: str,
+        polarity: str = "present",
+    ) -> DateTimeResolution:
+        return DateTimeResolution(start, end, granularity, polarity)
+
+    def _resolve_relative_phrase(
+        self,
+        text_lower: str,
+        now: datetime.datetime,
+    ) -> DateTimeResolution | None:
+        if _BUCUKTA_RE.search(text_lower) and self._has_no_explicit_hour(text_lower):
+            return None
+
+        fractional = self._resolve_fractional_time(text_lower, now)
+        if fractional is not None:
+            return fractional
+
+        if _PREVIOUS_WEEK_RE.search(text_lower):
+            return self._resolve_week(now, -1, "past")
+        if _YESTERDAY_BEFORE_RE.search(text_lower):
+            start = self._local_midnight(now) - _ONE_DAY * 2
+            end = self._local_midnight(now)
+            return self._make_resolution(
+                start.astimezone(datetime.timezone.utc),
+                end.astimezone(datetime.timezone.utc),
+                "day",
+                "past",
+            )
+        relative_day = _RELATIVE_DAY_RE.search(text_lower)
+        if relative_day:
+            quantity_text, direction = relative_day.groups()
+            if quantity_text.isdigit():
+                quantity_days = int(quantity_text)
+            else:
+                quantity = parse_number_word(quantity_text)
+                if quantity is None:
+                    quantity_days = 0
+                else:
+                    quantity_days = quantity
+            if direction == "önce":
+                start = self._local_midnight(now) - datetime.timedelta(days=quantity_days)
+                end = self._local_midnight(now)
+                return self._make_resolution(
+                    start.astimezone(datetime.timezone.utc),
+                    end.astimezone(datetime.timezone.utc),
+                    "day",
+                    "past",
+                )
+            start = self._local_midnight(now) + datetime.timedelta(days=quantity_days)
+            end = self._local_midnight(now) + datetime.timedelta(days=quantity_days + 1)
+            return self._make_resolution(
+                start.astimezone(datetime.timezone.utc),
+                end.astimezone(datetime.timezone.utc),
+                "day",
+                "future",
+            )
+        relative_week = _RELATIVE_WEEK_RE.search(text_lower)
+        if relative_week:
+            quantity_text = relative_week.group(1)
+            if quantity_text.isdigit():
+                quantity = int(quantity_text)
+            else:
+                quantity = parse_number_word(quantity_text) or 0
+            return self._resolve_week(now, quantity, "future")
+        if _LAST_MONTH_RE.search(text_lower):
+            return self._resolve_previous_month(now)
+        if _LAST_YEAR_RE.search(text_lower):
+            return self._resolve_previous_year(now)
+        if _WEEKEND_RE.search(text_lower):
+            return self._resolve_weekend(now)
+        return None
+
+    @staticmethod
+    def _has_no_explicit_hour(text_lower: str) -> bool:
+        return not (_TIME_SAAT_RE.search(text_lower) or _TIME_BARE_RE.search(text_lower) or _TIME_LOCATIVE_RE.search(text_lower))
+
+    @staticmethod
+    def _local_midnight(now: datetime.datetime) -> datetime.datetime:
+        local = now.astimezone(_ISTANBUL_TZ)
+        return local.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    @staticmethod
+    def _resolve_week(now: datetime.datetime, week_offset: int, polarity: str) -> DateTimeResolution:
+        local_midnight = DateTimeResolver._local_midnight(now)
+        monday_this_week = local_midnight - datetime.timedelta(days=local_midnight.weekday())
+        start = monday_this_week + _ONE_WEEK * week_offset
+        end = start + _ONE_WEEK
+        return DateTimeResolver._make_resolution(
+            start.astimezone(datetime.timezone.utc),
+            end.astimezone(datetime.timezone.utc),
+            "week",
+            polarity,
+        )
+
+    @staticmethod
+    def _resolve_previous_month(now: datetime.datetime) -> DateTimeResolution:
+        local_midnight = DateTimeResolver._local_midnight(now)
+        first_this_month = local_midnight.replace(day=1)
+        previous_month_end = first_this_month
+        previous_month_start = (first_this_month - datetime.timedelta(days=1)).replace(day=1)
+        return DateTimeResolver._make_resolution(
+            previous_month_start.astimezone(datetime.timezone.utc),
+            previous_month_end.astimezone(datetime.timezone.utc),
+            "month",
+            "past",
+        )
+
+    @staticmethod
+    def _resolve_previous_year(now: datetime.datetime) -> DateTimeResolution:
+        local_midnight = DateTimeResolver._local_midnight(now)
+        first_this_year = local_midnight.replace(month=1, day=1)
+        previous_year_start = first_this_year.replace(year=first_this_year.year - 1)
+        return DateTimeResolver._make_resolution(
+            previous_year_start.astimezone(datetime.timezone.utc),
+            first_this_year.astimezone(datetime.timezone.utc),
+            "year",
+            "past",
+        )
+
+    @staticmethod
+    def _resolve_weekend(now: datetime.datetime) -> DateTimeResolution:
+        local_midnight = DateTimeResolver._local_midnight(now)
+        weekday = local_midnight.weekday()
+        saturday = local_midnight + datetime.timedelta(days=(5 - weekday) % 7)
+        start = saturday.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=2)
+        return DateTimeResolver._make_resolution(
+            start.astimezone(datetime.timezone.utc),
+            end.astimezone(datetime.timezone.utc),
+            "week",
+            "future",
+        )
+
+    @staticmethod
+    def _resolve_fractional_time(text_lower: str, now: datetime.datetime) -> DateTimeResolution | None:
+        fractional_match = _FRACTIONAL_HOUR_RE.search(text_lower)
+        if fractional_match:
+            quantity_text = fractional_match.group(1)
+            if quantity_text.isdigit():
+                hours = int(quantity_text)
+            else:
+                hours = parse_number_word(quantity_text) or 0
+            delta = datetime.timedelta(hours=hours, minutes=30)
+            start = now + delta
+            return DateTimeResolution(start, start + _TWO_HOURS, "hour_minute", "future")
+        half_match = _HALF_HOUR_RE.search(text_lower)
+        if half_match:
+            amount = half_match.group(1)
+            minutes = 30 if amount == "yarım" else 15
+            start = now + datetime.timedelta(minutes=minutes)
+            return DateTimeResolution(start, start + _TWO_HOURS, "hour_minute", "future")
+        return None
+
+    @staticmethod
+    def parse_ordinal_phrase(tokens: list[str]) -> tuple[int, str, int] | None:
+        if not tokens:
+            return None
+
+        token = tokens[0]
+        if token == "sonuncu":
+            return (-1, "reverse", 1)
+
+        digit_match = re.match(r"^(\d+)(?:'inci|'ıncı|'uncu|'üncü|\.)$", token)
+        if digit_match:
+            return (int(digit_match.group(1)), "forward", 1)
+
+        for suffix in _ORDINAL_SUFFIXES:
+            if token.endswith(suffix):
+                base = token[: -len(suffix)]
+                parsed = parse_number_word(base)
+                if parsed is not None:
+                    return (parsed, "forward", 1)
+        return None
+
+    class PartialNumberEntity(NamedTuple):
+        accumulator: int
+        unit_pending: bool
+
+    @staticmethod
+    def detect_partial_number(tokens: list[str]) -> "DateTimeResolver.PartialNumberEntity" | None:
+        if not tokens:
+            return None
+        result = number_word_to_int(tokens)
+        if result is None:
+            return None
+        value, span = result
+        if span == len(tokens):
+            return DateTimeResolver.PartialNumberEntity(accumulator=value, unit_pending=True)
+        return None
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
@@ -403,11 +745,17 @@ def _load_holiday_definitions() -> tuple["_HolidayDefinition", ...]:
         )
         fixed_month = None
         fixed_day = None
+        lookup_key = None
         if date_kind == "fixed_gregorian":
             fixed_md = str(item["fixed_md"])
             month_str, day_str = fixed_md.split("-")
             fixed_month = int(month_str)
             fixed_day = int(day_str)
+        elif date_kind == "fixed_hijri_observed":
+            lookup_key = str(item.get("hijri_year_lookup", key))
+        elif date_kind == "fifa_window":
+            lookup_key = str(item.get("fifa_window_lookup", key))
+
         definitions.append(
             _HolidayDefinition(
                 key=key,
@@ -415,11 +763,38 @@ def _load_holiday_definitions() -> tuple["_HolidayDefinition", ...]:
                 date_kind=date_kind,
                 fixed_month=fixed_month,
                 fixed_day=fixed_day,
+                lookup_key=lookup_key,
             )
         )
     return tuple(definitions)
 
 _HOLIDAY_DEFINITIONS = _load_holiday_definitions()
+
+
+def _load_diyanet_overrides() -> dict[tuple[int, str], tuple[int, int]]:
+    try:
+        raw = yaml.safe_load(_DIYANET_OVERRIDE_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise ValueError("diyanet override table must be a YAML list")
+
+    overrides: dict[tuple[int, str], tuple[int, int]] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("diyanet override entries must be mapping objects")
+        year = int(item["year"])
+        holiday_key = str(item["holiday_key"])
+        date_str = str(item["date"])
+        date = datetime.date.fromisoformat(date_str)
+        overrides[(year, holiday_key)] = (date.month, date.day)
+    return overrides
+
+
+_DIYANET_OVERRIDES = _load_diyanet_overrides()
 
 
 def _word_in(word: str, text: str) -> bool:
@@ -434,3 +809,18 @@ def _word_in(word: str, text: str) -> bool:
     before_ok = idx == 0 or not text[idx - 1].isalpha()
     after_ok = idx + len(word) == len(text) or not text[idx + len(word)].isalpha()
     return before_ok and after_ok
+
+
+def number_word_to_int(tokens: list[str]) -> tuple[int, int] | None:
+    """Parse a prefix of Turkish number-word tokens into an integer and span."""
+    for end in range(len(tokens), 0, -1):
+        phrase = " ".join(tokens[:end])
+        value = parse_number_word(phrase)
+        if value is not None:
+            return value, end
+    return None
+
+
+def number_word_to_ordinal_phrase(value: int) -> str:
+    """Convert an integer to a Turkish ordinal phrase using the shared helper."""
+    return int_to_number_word(value, register="ordinal")

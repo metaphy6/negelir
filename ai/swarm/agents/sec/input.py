@@ -59,6 +59,7 @@ from common.security import (
     resolve_path as _resolve_pattern_path,
 )
 from common.security.tr_pii import redact_tr_pii
+from common.text.turkish import lowercase_tr
 
 from ..payloads import (
     QaRequest,
@@ -182,7 +183,8 @@ def sanitize_text(raw: str) -> tuple[str, list[str], bool]:
     # 2. Strip control chars + zero-widths + RTL overrides + BOM.
     stripped = _STRIP_CONTROL_RE.sub("", nfc)
     stripped = "".join(ch for ch in stripped if not _is_disallowed_unicode_char(ch))
-    return stripped, ["nfc", "strip_control"], stripped != raw
+    lowercased = lowercase_tr(stripped)
+    return lowercased, ["nfc", "strip_control", "lowercase_tr"], lowercased != raw
 
 
 class SecInputAgent:
@@ -400,7 +402,10 @@ class SecInputAgent:
         # Defense-in-depth Turkish-specific PII redaction happens before
         # the classifier and before the length cap. This ensures the NLP
         # plane never receives raw TR-sensitive identifiers in transit.
-        redacted_text, pii_spans = redact_tr_pii(req.raw_text)
+        if _cfg.nlp_tr_pii_redact_enabled:
+            redacted_text, pii_spans = redact_tr_pii(req.raw_text)
+        else:
+            redacted_text, pii_spans = req.raw_text, []
 
         # Defense-in-depth length cap. The Go gateway enforces this on
         # the request boundary (rejects 413 before bytes reach the bus

@@ -1,0 +1,270 @@
+[
+  {
+    "text": "galatasaray yenseydi şampiyon olur muydu",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_past_unsupported",
+    "expected_intent": "meta.counterfactual_past_unsupported"
+  },
+  {
+    "text": "fenerbahçe kazansaydı ligde kalır mıydı",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_past_unsupported",
+    "expected_intent": "meta.counterfactual_past_unsupported"
+  },
+  {
+    "text": "beşiktaş olsaydı farklı mı kazanırdı",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_past_unsupported",
+    "expected_intent": "meta.counterfactual_past_unsupported"
+  },
+  {
+    "text": "fenerbahçe kazanmış olur",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "fenerbahçe"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "galatasaray gelmiş olur",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "galatasaray"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "trabzonspor bitmiş olur",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "trabzonspor"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "beşiktaş kazanmış olursa",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "besiktas"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "galatasaray kazanmış olur mu",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "galatasaray"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "fenerbahçe kazanmışmış",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "fenerbahçe"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "galatasaray diyorlar",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "galatasaray"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "fenerbahçe oynamalı",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "advice_unsupported",
+    "expected_intent": "meta.advice_unsupported"
+  },
+  {
+    "text": "galatasaray kazanmalı mı",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "advice_unsupported",
+    "expected_intent": "meta.advice_unsupported"
+  },
+  {
+    "text": "beşiktaş girmeli",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "advice_unsupported",
+    "expected_intent": "meta.advice_unsupported"
+  },
+  {
+    "text": "trabzonspor gelmeli mi",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "advice_unsupported",
+    "expected_intent": "meta.advice_unsupported"
+  },
+  {
+    "text": "dün galatasaray kazanabilir mi",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "unsupported",
+    "expected_intent": "meta.unsupported"
+  },
+  {
+    "text": "geçen hafta galatasaray kazanabilir mi",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "unsupported",
+    "expected_intent": "meta.unsupported"
+  },
+  {
+    "text": "dünden sonra galatasaray kazanabilir mi",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "unsupported",
+    "expected_intent": "meta.unsupported"
+  },
+  {
+    "text": "fenerbahçe olabilir mi",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "fenerbahçe"
+      }
+    ],
+    "expected_topic": "predict.request.v1",
+    "expected_kind": "predict_request"
+  },
+  {
+    "text": "beşiktaş oynayabilir mi",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "besiktas"
+      }
+    ],
+    "expected_topic": "predict.request.v1",
+    "expected_kind": "predict_request"
+  },
+  {
+    "text": "galatasaray oynamalıymış",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "advice_unsupported",
+    "expected_intent": "meta.advice_unsupported"
+  },
+  {
+    "text": "fenerbahçe diyorlar ki kazanmışmış",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "fenerbahçe"
+      }
+    ],
+    "expected_topic": "data.request.v1",
+    "expected_kind": "h2h"
+  },
+  {
+    "text": "galatasaray kazanabilir mi",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "galatasaray"
+      }
+    ],
+    "expected_topic": "predict.request.v1",
+    "expected_kind": "predict_request"
+  },
+  {
+    "text": "trabzonspor olabilir mi",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "trabzonspor"
+      }
+    ],
+    "expected_topic": "predict.request.v1",
+    "expected_kind": "predict_request"
+  },
+  {
+    "text": "beşiktaş kazanmalı mıydı",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "advice_unsupported",
+    "expected_intent": "meta.advice_unsupported"
+  },
+  {
+    "text": "galatasaray olsaydı nasıl olurdu",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_past_unsupported",
+    "expected_intent": "meta.counterfactual_past_unsupported"
+  },
+  {
+    "text": "fenerbahçe yenseydi nasıl olurdu",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_past_unsupported",
+    "expected_intent": "meta.counterfactual_past_unsupported"
+  },
+  {
+    "text": "galatasaray kazanmış olacak",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "galatasaray"
+      }
+    ],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_probe",
+    "expected_intent": "meta.counterfactual_probe"
+  },
+  {
+    "text": "galatasaray yenmiş olur",
+    "entities": [
+      {
+        "kind": "team",
+        "canonical_id": "galatasaray"
+      }
+    ],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "counterfactual_probe",
+    "expected_intent": "meta.counterfactual_probe"
+  },
+  {
+    "text": "galatasaray olabilirmiş mi",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_kind": "unsupported",
+    "expected_intent": "meta.unsupported"
+  },
+  {
+    "text": "fenerbahçe yenseydi tarihi değişir miydi",
+    "entities": [],
+    "expected_topic": "qa.answer.v1",
+    "expected_intent": "meta.counterfactual_past_unsupported",
+    "expected_kind": "counterfactual_past_unsupported"
+  }
+]

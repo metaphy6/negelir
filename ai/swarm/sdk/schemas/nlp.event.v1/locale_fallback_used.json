@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/locale_fallback_used",
+  "title": "nlp.event.v1{kind=locale_fallback_used}",
+  "description": "A locale fallback was used during entity resolution.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at"
+  ],
+  "properties": {
+    "kind": {
+      "const": "locale_fallback_used"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requested": {
+      "type": "string"
+    },
+    "resolved": {
+      "type": "string"
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    }
+  },
+  "additionalProperties": false
+}

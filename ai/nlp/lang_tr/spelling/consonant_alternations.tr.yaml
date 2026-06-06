@@ -24,6 +24,13 @@ consonant_alternations:
     soften_to: "ğ"
     soften_blocked: false
     source: "manual"
+  - stem: "renk"
+    final_char: "k"
+    soften_to: "g"
+    kind: "nk_to_ng"
+    preceding_char: "n"
+    soften_blocked: false
+    source: "manual"
   - stem: "yaprak"
     final_char: "k"
     soften_to: "ğ"

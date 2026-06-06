@@ -1,0 +1,10 @@
+_meta:
+  schema_version: 1
+  generated_at_utc: "2026-06-06T00:00:00Z"
+  generator: "phase10-telegraphic-inference"
+entries:
+  - intent: "data.fixture_lookup"
+  - intent: "data.kickoff_time"
+  - intent: "data.standings"
+  - intent: "data.h2h"
+  - intent: "data.player_card_risk"

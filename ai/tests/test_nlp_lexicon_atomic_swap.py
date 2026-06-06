@@ -11,13 +11,14 @@ import hashlib
 import hmac
 import shutil
 import tempfile
+import threading
 import time
 
 import pytest
 
 from common.config import Config
 from nlp.lexicon_loader import LexiconStore, _set_safe_mode_active, is_safe_mode_active
-from swarm.agents.nlp import NlpAnswerAgent
+from swarm.agents.nlp import NlpAnswerAgent, _canonical_lexicon_snapshot_sha
 
 
 @pytest.fixture
@@ -213,6 +214,216 @@ entries:
     # Version should also be old
     assert current_players[0].lexicon_version == "1.0.0", \
         f"Expected old version 1.0.0, got {current_players[0].lexicon_version}"
+
+
+def test_nlp_lexicon_collision_load_refuses_swap(temp_lexicon_dir, cfg, tmp_path: Path) -> None:
+    """§10.34.2: lexicon swap refuses snapshots with adversarial collision load."""
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=0,
+        max_rss_mb=0,
+    )
+    # Initial valid load succeeds.
+    assert store.maybe_reload() == []
+    assert store.is_loaded
+
+    # Replace teams.tr.yaml with a fixture that overflows the hash-bucket load cap.
+    fixture_path = Path(__file__).parent / "fixtures" / "adversarial_collision_lexicon.yaml"
+    assert fixture_path.exists(), f"Fixture missing: {fixture_path}"
+    (temp_lexicon_dir / "teams.tr.yaml").write_text(
+        fixture_path.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    time.sleep(0.1)
+
+    alerts = store.maybe_reload()
+    assert len(alerts) == 1, f"Expected 1 alert, got {len(alerts)}: {alerts}"
+    alert = alerts[0]
+    assert alert["kind"] == "lexicon_collision_load_high", \
+        f"Expected lexicon_collision_load_high, got {alert['kind']}"
+    assert alert["severity"] == "error"
+    assert "alias hash bucket load" in alert["reason"]
+
+    # Store should retain the old valid snapshot.
+    current = store.get("teams.tr.yaml")
+    assert current is not None
+    assert current[0].lexicon_version == "1.0.0"
+    assert len(current[1]) == 1
+
+
+def test_nlp_lexicon_snapshot_id_changes_when_file_content_changes(temp_lexicon_dir: Path) -> None:
+    """§10.27.9 cache coherence proof: snapshot SHA changes when file content changes."""
+    import yaml
+
+    store = LexiconStore(temp_lexicon_dir, reload_s=0, max_rss_mb=0)
+    assert store.maybe_reload() == []
+    first_id = store.lexicon_version_id
+    assert first_id
+
+    teams_path = temp_lexicon_dir / "teams.tr.yaml"
+    data = yaml.safe_load(teams_path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    entries = data.get("entries")
+    assert isinstance(entries, list) and entries
+    first_entry = entries[0]
+    assert isinstance(first_entry, dict)
+    first_entry.setdefault("names", []).append("Fenerbahçe")
+    teams_path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    time.sleep(0.1)
+    assert store.maybe_reload() == []
+    assert store.lexicon_version_id != first_id
+
+    # Cache coherence contract: the snapshot identifier is the component of
+    # the NLP answer cache key that changes when the lexicon generation changes.
+    first_key = _canonical_lexicon_snapshot_sha({"teams.tr.yaml": first_id})
+    second_key = _canonical_lexicon_snapshot_sha({"teams.tr.yaml": store.lexicon_version_id})
+    assert first_key != second_key
+
+
+def test_nlp_lexicon_concurrent_rebuild_capped_at_two(temp_lexicon_dir: Path) -> None:
+    """Lexicon rebuilds respect the configured concurrency cap and queue pending requests."""
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=0,
+        max_rss_mb=0,
+        rebuild_concurrency_max=2,
+        rebuild_queue_max=8,
+    )
+    assert store.maybe_reload() == []
+
+    # Touch four files so multiple concurrent reload triggers race for rebuild.
+    yaml_files = sorted(f for f in temp_lexicon_dir.glob("*.tr.yaml") if not f.name.startswith("_"))[:4]
+    for idx, yaml_file in enumerate(yaml_files, start=1):
+        original = yaml_file.read_text(encoding="utf-8")
+        yaml_file.write_text(original.replace("1.0.0", f"1.0.{idx}"), encoding="utf-8")
+        time.sleep(0.01)
+
+    barrier = threading.Barrier(3)
+    active_builds: list[str] = []
+
+    original_builder = LexiconStore._build_symspell_index
+
+    def blocked_build(self, data):
+        active_builds.append(threading.current_thread().name)
+        barrier.wait(timeout=2)
+        barrier.wait(timeout=2)
+        return original_builder(self, data)
+
+    try:
+        LexiconStore._build_symspell_index = blocked_build
+
+        threads = [
+            threading.Thread(target=store.maybe_reload, name=f"reload-{i}")
+            for i in range(4)
+        ]
+        for thread in threads:
+            thread.start()
+
+        barrier.wait(timeout=2)
+        assert len(active_builds) == 2, f"Expected two concurrent rebuilds, got {len(active_builds)}"
+        assert store.rebuild_queue_len == 2, (
+            f"Expected two queued rebuild requests, got {store.rebuild_queue_len}"
+        )
+
+        barrier.wait(timeout=2)
+    finally:
+        LexiconStore._build_symspell_index = original_builder
+
+    for thread in threads:
+        thread.join(timeout=2)
+        assert not thread.is_alive(), "Expected all reload threads to finish"
+
+
+def test_lexicon_swap_late_emits_warn_alert(temp_lexicon_dir: Path) -> None:
+    """Straggler pods that activate after swap_at_utc emit a warn alert and still swap."""
+    import datetime
+    import yaml
+
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=0,
+        max_rss_mb=0,
+    )
+    assert store.maybe_reload() == []
+    prior_id = store.lexicon_version_id
+    assert prior_id
+
+    teams_path = temp_lexicon_dir / "teams.tr.yaml"
+    data = yaml.safe_load(teams_path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    meta = data.setdefault("_meta", {})
+    assert isinstance(meta, dict)
+    meta["swap_at_utc"] = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(seconds=5)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data["lexicon_version"] = "1.0.1"
+    data["entries"][0]["names"].append("Fenerbahçe")
+    teams_path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    alerts = store.maybe_reload()
+    assert any(alert["kind"] == "lexicon_swap_late" and alert["severity"] == "warn" for alert in alerts), alerts
+    late_alert = next(alert for alert in alerts if alert["kind"] == "lexicon_swap_late")
+    assert late_alert["details"]["pod_id"] == "local"
+    assert late_alert["details"]["lag_s"] > 0
+    assert store.lexicon_version_id != prior_id
+
+
+def test_lexicon_swap_max_lag_pod_drains_to_503(
+    temp_lexicon_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§10.27.9 proof: overdue invalid lexicon swap emits error and blocks traffic until recovery."""
+    import datetime
+    import yaml
+
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_SWAP_MAX_LAG_S", "1")
+
+    store = LexiconStore(
+        temp_lexicon_dir,
+        reload_s=0,
+        max_rss_mb=0,
+    )
+    assert store.maybe_reload() == []
+    assert store.is_loaded
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    late_swap = now - datetime.timedelta(seconds=11)
+    teams_path = temp_lexicon_dir / "teams.tr.yaml"
+    data = yaml.safe_load(teams_path.read_text(encoding="utf-8"))
+    data["_meta"]["swap_at_utc"] = late_swap.strftime("%Y-%m-%dT%H:%M:%SZ")
+    data["entries"][0]["league_canonical_id"] = "nonexistent_league"
+    data["_meta"]["schema_version"] = 1
+    teams_path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    alerts = store.maybe_reload()
+    assert any(
+        alert["kind"] == "lexicon_swap_lag_drained_to_503" and alert["severity"] == "error"
+        for alert in alerts
+    ), f"Expected lexicon_swap_lag_drained_to_503, got {alerts}"
+    assert store.swap_lag_blocking is True
+
+    data["_meta"]["schema_version"] = 1
+    data["entries"][0]["league_canonical_id"] = "super_lig"
+    data["_meta"]["lexicon_version"] = "1.0.1"
+    teams_path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    alerts = store.maybe_reload()
+    assert store.swap_lag_blocking is False
+    assert any(alert["kind"] == "lexicon_swap_late" for alert in alerts)
 
 
 def _create_safe_mode_snapshot(base_dir: Path, safe_mode_dir: Path) -> None:

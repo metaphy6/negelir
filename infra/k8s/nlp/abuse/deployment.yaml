@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: negelir-nlp-abuse
+  labels:
+    app: negelir-nlp-abuse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: negelir-nlp-abuse
+  template:
+    metadata:
+      labels:
+        app: negelir-nlp-abuse
+    spec:
+      containers:
+        - name: nlp-abuse
+          image: negelir/nlp:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

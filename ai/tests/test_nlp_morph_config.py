@@ -44,6 +44,20 @@ class TestNlpMorphConfig:
         env_example = pathlib.Path("xops/env/.env.example").read_text()
         assert "NEGELIR_NLP_MORPH_AMBIGUOUS_MAX_PER_QUERY" in env_example
 
+    def test_nlp_productive_peel_max_depth_in_env_example(self):
+        env_example = pathlib.Path("xops/env/.env.example").read_text()
+        assert "NEGELIR_NLP_PRODUCTIVE_PEEL_MAX_DEPTH" in env_example
+
+    def test_nlp_productive_peel_min_residue_resolution_in_env_example(self):
+        env_example = pathlib.Path("xops/env/.env.example").read_text()
+        assert "NEGELIR_NLP_PRODUCTIVE_PEEL_MIN_RESIDUE_RESOLUTION" in env_example
+
+    def test_config_has_nlp_productive_peel_max_depth(self):
+        assert cfg.nlp_productive_peel_max_depth == 3
+
+    def test_config_has_nlp_productive_peel_min_residue_resolution(self):
+        assert cfg.nlp_productive_peel_min_residue_resolution is True
+
     def test_config_has_nlp_morph_ambiguous_max_per_query(self):
         assert cfg.nlp_morph_ambiguous_max_per_query == 4
 

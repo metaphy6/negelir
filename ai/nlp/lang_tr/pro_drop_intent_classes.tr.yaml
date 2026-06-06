@@ -1,0 +1,20 @@
+_meta:
+  schema_version: 1
+  description: "Phase 10 §10.31.3 pro-drop intent classes with resolution strategies."
+entries:
+  - intent: "predict.match_outcome"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_disambiguation"
+  - intent: "predict.over_under"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_disambiguation"
+  - intent: "predict.btts"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_disambiguation"
+  - intent: "predict.handicap"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_disambiguation"
+  - intent: "predict.score_grid"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_disambiguation"
+  - intent: "data.lineup_probable"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_default_team"
+  - intent: "data.lineup_official"
+    pro_drop_resolution_strategy: "cross_turn_anaphora_then_default_team"
+  - intent: "data.score_current"
+    pro_drop_resolution_strategy: "disambiguation_only"

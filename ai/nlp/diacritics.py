@@ -23,6 +23,8 @@ DIACRITICS_SCHEMA_VERSION: int = 1
 
 #: Default path: ``ai/nlp/lexicon/_diacritics.tr.yaml`` relative to this file.
 _DEFAULT_PATH: Path = Path(__file__).parent / "lexicon" / "_diacritics.tr.yaml"
+#: Soft-g restoration table for Turkish voice input.
+_SOFTG_PATH: Path = Path(__file__).parent / "lang_tr" / "spelling" / "g_to_softg.tr.yaml"
 
 #: Default path: ``ai/nlp/lang_tr/diacritic_risk.tr.yaml`` relative to this file.
 _DEFAULT_RISK_PATH: Path = Path(__file__).parent / "lang_tr" / "diacritic_risk.tr.yaml"
@@ -78,6 +80,30 @@ def _load_risk_weights(path: Path) -> dict[str, float]:
     return weights
 
 
+def _load_softg_table(path: Path = _SOFTG_PATH) -> dict[str, DiacriticsEntry]:
+    if not path.is_file():
+        return {}
+    raw_yaml = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw_yaml, dict):
+        return {}
+    meta = raw_yaml.get("_meta")
+    if not isinstance(meta, dict) or meta.get("schema_version") != DIACRITICS_SCHEMA_VERSION:
+        return {}
+    mappings = raw_yaml.get("mappings") or {}
+    if not isinstance(mappings, dict):
+        return {}
+    result: dict[str, DiacriticsEntry] = {}
+    for ascii_form, entry in mappings.items():
+        if not isinstance(ascii_form, str) or not isinstance(entry, dict):
+            continue
+        canonical = entry.get("canonical")
+        frequency = entry.get("frequency")
+        if not isinstance(canonical, str) or not isinstance(frequency, (int, float)):
+            continue
+        result[ascii_form] = DiacriticsEntry(canonical=canonical, frequency=int(frequency))
+    return result
+
+
 def make_diacritic_restorer(cfg: Config, input_source: str = "keyboard") -> Callable[[str], str]:
     """Return a callable step-6 restoration hook for the normalization pipeline.
 
@@ -92,7 +118,22 @@ def make_diacritic_restorer(cfg: Config, input_source: str = "keyboard") -> Call
 
     tie_break_ratio = cfg.nlp_diacritic_tie_break_ratio_voice
     table = DiacriticsTable.load(tie_break_ratio=tie_break_ratio)
-    return table.restore
+    softg_table = _load_softg_table()
+    min_freq = int(cfg.nlp_diacritic_softg_min_freq)
+
+    def restore_with_softg(text: str) -> str:
+        restored = table.restore(text)
+        if not softg_table:
+            return restored
+        parts = _ASCII_WORD_RE.split(restored)
+        for index, part in enumerate(parts):
+            if _ASCII_WORD_RE.fullmatch(part):
+                entry = softg_table.get(part)
+                if entry is not None and entry.frequency >= min_freq:
+                    parts[index] = entry.canonical
+        return "".join(parts)
+
+    return restore_with_softg
 
 
 # ---------------------------------------------------------------------------

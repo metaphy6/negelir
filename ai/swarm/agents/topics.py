@@ -201,9 +201,12 @@ QA_INTENT_V1 = Topic("qa.intent.v1")
 QA_FEEDBACK_V1 = Topic("qa.feedback.v1")
 QA_ANSWER_V1 = Topic("qa.answer.v1")
 QA_CONTEXT_V1 = Topic("qa.context.v1")
+QA_CONTEXT_EXTENSION_V1 = Topic("qa.context_extension.v1")
 NLP_EVENT_V1 = Topic("nlp.event.v1")
 NLP_ALERT_V1 = Topic("nlp.alert.v1")
+NLP_GOSSIP_V1 = Topic("nlp.gossip.v1")
 NLP_SHADOW_V1 = Topic("nlp.shadow.v1")
+NLP_PROBER_V1 = Topic("nlp.prober.v1")
 PREDICT_REQUEST_V1 = Topic("predict.request.v1")
 DATA_REQUEST_V1 = Topic("data.request.v1")
 
@@ -214,13 +217,17 @@ __all__ = [
     "DATA_REQUEST_V1",
     "NLP_ALERT_V1",
     "NLP_EVENT_V1",
+    "NLP_GOSSIP_V1",
+    "NLP_PROBER_V1",
     "NLP_SHADOW_V1",
     "PREDICT_CANCEL_V1",
     "PREDICT_REQUEST_V1",
     "QA_ANSWER_V1",
+    "QA_CONTEXT_EXTENSION_V1",
     "QA_CONTEXT_V1",
     "QA_FEEDBACK_V1",
     "QA_INTENT_V1",
+    "NLP_GOSSIP_V1",
     "FRESHNESS_EVENTS",
     "MAINT_ACK",
     "MAINT_EVENT",

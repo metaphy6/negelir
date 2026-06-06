@@ -1,31 +1,19 @@
 package sec
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode"
 
 	"golang.org/x/text/unicode/norm"
 )
 
-// SanitizeText mirrors `ai/swarm/agents/sec/input.py::sanitize_text`.
-// It applies two deterministic, idempotent transforms:
-//
-//  1. NFC normalize. Defends against canonical-equivalence smuggling
-//     where an attacker uses combining sequences that look identical
-//     to a precomposed character but bypass keyword filters.
-//
-//  2. Strip control characters (C0 minus \t \n \r, DEL, C1), zero-
-//     width characters (ZWSP / ZWNJ / ZWJ / LRM / RLM), bidi-override
-//     characters (LRE / RLE / PDF / LRO / RLO / LRI / RLI / FSI / PDI),
-//     the BOM (U+FEFF), and SOFT HYPHEN (U+00AD).
-//
-// Returns the cleaned string, the ordered audit trail of which
-// transforms ran (always `["nfc", "strip_control"]` so the wire
-// contract is deterministic), and a `mutated` flag that is true iff
-// the bytes actually changed. The mutated flag is the gateway's
-// signal that something tried to smuggle a charset bypass; the
-// caller fires a `sec.alert.v1{kind=charset_anomaly}` when true.
-//
 // Idempotency invariant — the second call must return mutated=false:
 //
 //	clean1, _, _ := SanitizeText(raw)
@@ -34,8 +22,9 @@ import (
 func SanitizeText(raw string) (clean string, stepsRun []string, mutated bool) {
 	nfc := norm.NFC.String(raw)
 	stripped := stripControlAndZeroWidth(nfc)
-	steps := []string{"nfc", "strip_control"}
-	return stripped, steps, stripped != raw
+	lowercased := LowercaseTurkish(stripped)
+	steps := []string{"nfc", "strip_control", "lowercase_tr"}
+	return lowercased, steps, lowercased != raw
 }
 
 // stripControlAndZeroWidth removes the same code points the Python
@@ -63,6 +52,80 @@ var hangulFillerRunes = map[rune]bool{
 	0x115F: true,
 	0x1160: true,
 	0x3164: true,
+}
+
+const defaultTRNormalizeSpecPath = "ai/common/text/tr_normalize_spec.json"
+
+var TRNormalizeSpecSHA string
+
+func init() {
+	if err := verifyTRNormalizeSpec(); err != nil {
+		panic(err)
+	}
+}
+
+func trNormalizeSpecPath() string {
+	if path := strings.TrimSpace(os.Getenv("NEGELIR_TR_NORMALIZE_SPEC_PATH")); path != "" {
+		return path
+	}
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("unable to resolve caller path")
+	}
+	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filename))))
+	return filepath.Join(repoRoot, defaultTRNormalizeSpecPath)
+}
+
+func verifyTRNormalizeSpec() error {
+	path := trNormalizeSpecPath()
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open tr_normalize_spec: %w", err)
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("failed to read tr_normalize_spec: %w", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return fmt.Errorf("invalid tr_normalize_spec JSON: %w", err)
+	}
+	version, ok := parsed["spec_version"]
+	if !ok {
+		return fmt.Errorf("tr_normalize_spec.spec_version missing")
+	}
+	versionFloat, ok := version.(float64)
+	if !ok || int(versionFloat) != 1 {
+		return fmt.Errorf("tr_normalize_spec.spec_version must be 1")
+	}
+	steps, ok := parsed["steps"].([]any)
+	if !ok {
+		return fmt.Errorf("tr_normalize_spec.steps must be a list")
+	}
+	required := map[string]bool{"nfc": true, "strip_control": true, "lowercase_tr": true}
+	for _, rawStep := range steps {
+		step, ok := rawStep.(string)
+		if !ok {
+			return fmt.Errorf("tr_normalize_spec.steps must be strings")
+		}
+		delete(required, step)
+	}
+	if len(required) > 0 {
+		return fmt.Errorf("tr_normalize_spec missing required steps: %v", required)
+	}
+	mappings, ok := parsed["mappings"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("tr_normalize_spec.mappings must be an object")
+	}
+	for _, requiredKey := range []string{"I", "İ"} {
+		if _, ok := mappings[requiredKey]; !ok {
+			return fmt.Errorf("tr_normalize_spec.mappings missing required key %q", requiredKey)
+		}
+	}
+	hash := sha256.Sum256(raw)
+	TRNormalizeSpecSHA = fmt.Sprintf("%x", hash[:])
+	return nil
 }
 
 // needsStrip is a fast-path check: return false (no allocation needed)

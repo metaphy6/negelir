@@ -31,6 +31,7 @@ _INTENT_ENUM_PATH = _SCHEMA_DIR / "_intent_enum.json"
 # Canonical label set derived from §10.4 design doc (source of truth).
 _EXPECTED_LABELS = frozenset({
     "predict.match_outcome",
+    "predict.match_outcome.comparative",
     "predict.over_under",
     "predict.btts",
     "predict.handicap",
@@ -110,10 +111,10 @@ class TestIntentEnumJson:
             "ai/common/nlp/intent_enum_spec.json must mirror ai/swarm/sdk/schemas/_intent_enum.json"
         )
 
-    def test_exactly_34_labels(self):
+    def test_exactly_35_labels(self):
         raw = self._load()
-        assert len(raw["enum"]) == 34, (
-            f"Expected 34 intent labels, got {len(raw['enum'])}: {raw['enum']}"
+        assert len(raw["enum"]) == 35, (
+            f"Expected 35 intent labels, got {len(raw['enum'])}: {raw['enum']}"
         )
 
     def test_all_expected_labels_present(self):
@@ -163,9 +164,9 @@ class TestIntentLabelsModule:
         missing = _EXPECTED_LABELS - INTENT_LABELS
         assert not missing, f"INTENT_LABELS missing: {missing}"
 
-    def test_intent_labels_count_34(self):
+    def test_intent_labels_count_35(self):
         from nlp.intent import INTENT_LABELS
-        assert len(INTENT_LABELS) == 34
+        assert len(INTENT_LABELS) == 35
 
     def test_meta_adversarial_in_intent_labels(self):
         from nlp.intent import INTENT_LABELS

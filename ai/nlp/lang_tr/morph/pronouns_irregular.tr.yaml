@@ -1,0 +1,198 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-06T00:00:00Z"
+  generator: phase10-implementer
+entries:
+  - pronoun: ben
+    case: nominative
+    surface: ben
+    canonical: ben
+  - pronoun: ben
+    case: accusative
+    surface: beni
+    canonical: ben
+  - pronoun: ben
+    case: dative
+    surface: bana
+    canonical: ben
+  - pronoun: ben
+    case: genitive
+    surface: benim
+    canonical: ben
+  - pronoun: ben
+    case: locative
+    surface: bende
+    canonical: ben
+  - pronoun: ben
+    case: ablative
+    surface: benden
+    canonical: ben
+  - pronoun: sen
+    case: nominative
+    surface: sen
+    canonical: sen
+  - pronoun: sen
+    case: accusative
+    surface: seni
+    canonical: sen
+  - pronoun: sen
+    case: dative
+    surface: sana
+    canonical: sen
+  - pronoun: sen
+    case: genitive
+    surface: senin
+    canonical: sen
+  - pronoun: sen
+    case: locative
+    surface: sende
+    canonical: sen
+  - pronoun: sen
+    case: ablative
+    surface: senden
+    canonical: sen
+  - pronoun: o
+    case: nominative
+    surface: o
+    canonical: o
+  - pronoun: o
+    case: accusative
+    surface: onu
+    canonical: o
+  - pronoun: o
+    case: dative
+    surface: ona
+    canonical: o
+  - pronoun: o
+    case: genitive
+    surface: onun
+    canonical: o
+  - pronoun: o
+    case: locative
+    surface: onda
+    canonical: o
+  - pronoun: o
+    case: ablative
+    surface: ondan
+    canonical: o
+  - pronoun: kim
+    case: nominative
+    surface: kim
+    canonical: kim
+  - pronoun: kim
+    case: accusative
+    surface: kimi
+    canonical: kim
+  - pronoun: kim
+    case: dative
+    surface: kime
+    canonical: kim
+  - pronoun: kim
+    case: genitive
+    surface: kimin
+    canonical: kim
+  - pronoun: kim
+    case: locative
+    surface: kimde
+    canonical: kim
+  - pronoun: kim
+    case: ablative
+    surface: kimden
+    canonical: kim
+  - pronoun: bu
+    case: nominative
+    surface: bu
+    canonical: bu
+  - pronoun: bu
+    case: accusative
+    surface: bunu
+    canonical: bu
+  - pronoun: bu
+    case: dative
+    surface: buna
+    canonical: bu
+  - pronoun: bu
+    case: genitive
+    surface: bunun
+    canonical: bu
+  - pronoun: bu
+    case: locative
+    surface: bunda
+    canonical: bu
+  - pronoun: bu
+    case: ablative
+    surface: bundan
+    canonical: bu
+  - pronoun: şu
+    case: nominative
+    surface: şu
+    canonical: şu
+  - pronoun: şu
+    case: accusative
+    surface: şunu
+    canonical: şu
+  - pronoun: şu
+    case: dative
+    surface: şuna
+    canonical: şu
+  - pronoun: şu
+    case: genitive
+    surface: şunun
+    canonical: şu
+  - pronoun: şu
+    case: locative
+    surface: şunda
+    canonical: şu
+  - pronoun: şu
+    case: ablative
+    surface: şundan
+    canonical: şu
+  - pronoun: biz
+    case: nominative
+    surface: biz
+    canonical: biz
+  - pronoun: biz
+    case: accusative
+    surface: bizi
+    canonical: biz
+  - pronoun: biz
+    case: dative
+    surface: bize
+    canonical: biz
+  - pronoun: biz
+    case: genitive
+    surface: bizim
+    canonical: biz
+  - pronoun: biz
+    case: locative
+    surface: bizde
+    canonical: biz
+  - pronoun: biz
+    case: ablative
+    surface: bizden
+    canonical: biz
+  - pronoun: siz
+    case: nominative
+    surface: siz
+    canonical: siz
+  - pronoun: siz
+    case: accusative
+    surface: sizi
+    canonical: siz
+  - pronoun: siz
+    case: dative
+    surface: size
+    canonical: siz
+  - pronoun: siz
+    case: genitive
+    surface: sizin
+    canonical: siz
+  - pronoun: siz
+    case: locative
+    surface: sizde
+    canonical: siz
+  - pronoun: siz
+    case: ablative
+    surface: sizden
+    canonical: siz

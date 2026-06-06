@@ -136,6 +136,14 @@ scrape: env ## Scrape & cache real match data (LEAGUE=super_lig)
 nlp.audit-rerender: env ## Operator-only runbook for NLP audit bundle re-render
 	@$(XOPS)/nlp.py nlp.audit-rerender
 
+.PHONY: nlp.complaint-trace
+nlp.complaint-trace: env ## Phase 10 §10.27.3 — operator forensic complaint trace rebuild by request_id
+	@$(XOPS)/nlp.py nlp.complaint-trace
+
+.PHONY: nlp.complaint-trace-with-text
+nlp.complaint-trace-with-text: env ## Phase 10 §10.27.3 — operator complaint trace with PII confirmation
+	@$(XOPS)/nlp.py nlp.complaint-trace-with-text $(ARGS)
+
 .PHONY: nlp.sbom
 nlp.sbom: env ## Generate NLP SBOM and write data/nlp/sbom.json
 	@$(XOPS)/nlp.py nlp.sbom
@@ -322,6 +330,14 @@ nlp.intent-train: ## Phase 10 §10.25.5 — operator-driven intent model retrain
 nlp.lexicon-build: ## Phase 10 §10.2 — apply _aliases_delta.tr.yaml onto lexicons, bump patch version
 	@$(XOPS)/nlp.py nlp.lexicon-build
 
+.PHONY: nlp.transliteration-build
+nlp.transliteration-build: ## Phase 10 §10.28 — validate loanword transliteration variants table and write build report
+	@$(XOPS)/nlp.py nlp.transliteration-build
+
+.PHONY: nlp.lexicon-deploy
+nlp.lexicon-deploy: ## Phase 10 §10.27 — validate and drain lexicon deploy candidates before promotion
+	@$(XOPS)/nlp.py nlp.lexicon-deploy $(ARGS)
+
 .PHONY: nlp.lexicon-eval
 nlp.lexicon-eval: ## Phase 10 §10.25.6 — run lexicon acceptance corpus regression check after lexicon build
 	@$(XOPS)/nlp.py nlp.lexicon-eval $(ARGS)
@@ -333,6 +349,10 @@ nlp.diacritics-build: ## Phase 10 §10.3 — generate _diacritics.tr.yaml from t
 .PHONY: nlp.rotate-citation-key
 nlp.rotate-citation-key: ## Phase 10 §10.21.8 — rotate predict citation HMAC key (dual-acceptance grace window)
 	@$(XOPS)/nlp.py nlp.rotate-citation-key
+
+.PHONY: nlp.rotate-answer-hmac-key
+nlp.rotate-answer-hmac-key: ## Phase 10 §10.26.8 — rotate qa.answer.v1 envelope HMAC key (dual-acceptance grace window)
+	@$(XOPS)/nlp.py nlp.rotate-answer-hmac-key
 
 .PHONY: nlp.template-lint
 nlp.template-lint: ## Phase 10 §10.15 — AST-assert no {{ free_text }} slot in any template (hallucination guard)
@@ -361,6 +381,10 @@ nlp.canary-rollback: ## Phase 10 §10.23 — rollback canary pods with a single 
 .PHONY: verify.nlp-lexicons
 verify.nlp-lexicons: ## Phase 10 §10.2 — assert (a) canonical_id resolves (b) no uncovered alias collision (c) normalize round-trip
 	@$(XOPS)/nlp.py verify.nlp-lexicons
+
+.PHONY: verify.nlp-lexicon-diff
+verify.nlp-lexicon-diff: ## Phase 10 §10.26 — assert lexicon PR diff size cap and bot impersonation defense
+	@$(XOPS)/nlp.py verify.nlp-lexicon-diff
 
 .PHONY: verify.nlp-schemas
 verify.nlp-schemas: ## Phase 10 §10.19 — assert all four NLP topics (qa.intent.v1, qa.answer.v1, nlp.event.v1, nlp.alert.v1) have valid JSON Schema files
@@ -525,6 +549,10 @@ swarm.demo: ## Phase 4.8 DoD — end-to-end scrape→categorize→process→stor
 .PHONY: swarm.demo.nlp
 swarm.demo.nlp: ## Phase 10 §10.21.14 — swarm.demo + NLP extension scenarios within 30s budget
 	@$(XOPS)/swarm.py demo-nlp $(if $(LEAGUE),--league $(LEAGUE),)
+
+.PHONY: swarm.demo.nlp.full
+swarm.demo.nlp.full: ## Phase 10 §10.24 — swarm.demo.nlp full coverage within 60s budget
+	@$(XOPS)/swarm.py demo-nlp-full $(if $(LEAGUE),--league $(LEAGUE),)
 
 .PHONY: swarm.demo.live
 swarm.demo.live: ## Phase 8.16.13 — live Redis ops.denylist-clear demo with realistic ack budget

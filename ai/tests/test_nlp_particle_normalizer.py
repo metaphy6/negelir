@@ -69,6 +69,14 @@ class TestQuestionParticleDetach:
         )
         assert "oynuyormu" in repaired
 
+    def test_nlp_question_particle_does_not_split_durumu(self) -> None:
+        """'durumu' must not be split into ['dur', 'mu'].'"""
+        from nlp._particle_normalize import normalize_particles
+
+        tokens, repaired = normalize_particles(["durumu"])
+        assert tokens == ["durumu"], f"Expected no split, got {tokens}"
+        assert not repaired
+
 
 # ---------------------------------------------------------------------------
 # Named proof test 2 — de/da locative recovery
@@ -278,6 +286,39 @@ class TestParticleNormalizeComposition:
         result = normalize_input("test", _clock=_zero_budget_clock)
         assert "particle_normalize" in result.steps_run
         assert result.stage_timed_out is True
+
+
+class TestKiContextDisambiguation:
+    def test_ki_context_relative_emits_disambiguated_event(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Galatasaray kazandı, ki bu sürpriz", _clock=lambda: 0.0)
+        assert "ki" in result.tokens
+        assert any(
+            event.get("kind") == "ki_context_disambiguated"
+            and event.get("reading") == "relative"
+            for event in result.normalization_events
+        )
+
+    def test_ki_context_emphatic_emits_disambiguated_event(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Galatasaray kazandı ki!", _clock=lambda: 0.0)
+        assert "ki" in result.tokens
+        assert any(
+            event.get("kind") == "ki_context_disambiguated"
+            and event.get("reading") == "emphatic"
+            for event in result.normalization_events
+        )
+
+    def test_ki_context_ambiguous_emits_low_confidence_event(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Galatasaray kazandı ki bakıyorum", _clock=lambda: 0.0)
+        assert any(
+            event.get("kind") == "ki_disambiguation_low_confidence"
+            for event in result.normalization_events
+        )
 
 
 # ---------------------------------------------------------------------------

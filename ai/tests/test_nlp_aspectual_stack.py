@@ -38,16 +38,16 @@ ASPECTUAL_STACK_PROOF_SAMPLES = [
     ("yapacak olan kim", "future_relative_clause_attributive"),
     ("girecek olan kim", "future_relative_clause_attributive"),
     ("bitirecek olan kim", "future_relative_clause_attributive"),
-    ("oynamış olur", "progressive_inferential"),
-    ("oynamış olursa", "progressive_inferential"),
-    ("kazanmış olur", "progressive_inferential"),
-    ("kazanmış olursa", "progressive_inferential"),
-    ("gelmiş olur", "progressive_inferential"),
-    ("gelmiş olursa", "progressive_inferential"),
-    ("bitmiş olur", "progressive_inferential"),
-    ("bitmiş olursa", "progressive_inferential"),
-    ("maç bitmiş olur", "progressive_inferential"),
-    ("takım kazanmış olur", "progressive_inferential"),
+    ("oynamış olur", "inferential_past"),
+    ("oynamış olursa", "inferential_past"),
+    ("kazanmış olur", "inferential_past"),
+    ("kazanmış olursa", "inferential_past"),
+    ("gelmiş olur", "inferential_past"),
+    ("gelmiş olursa", "inferential_past"),
+    ("bitmiş olur", "inferential_past"),
+    ("bitmiş olursa", "inferential_past"),
+    ("maç bitmiş olur", "inferential_past"),
+    ("takım kazanmış olur", "inferential_past"),
     ("attaş olmuş olabilir", "perfect_modal_potential"),
     ("takım gelmiş olacaksa", "future_perfect_evidential"),
     ("maç oynuyor olabilir", "progressive_epistemic"),
@@ -56,12 +56,17 @@ ASPECTUAL_STACK_PROOF_SAMPLES = [
     ("kim gelecek olan var", "future_relative_clause_attributive"),
     ("galiba kazanmış olabilir", "perfect_modal_potential"),
     ("yakında bitecek üzere", "imminent_progressive"),
+    ("galatasaray yenseydi şampiyon olur muydu", "counterfactual_past"),
+    ("galatasaray kazanmış olur", "inferential_past"),
+    ("galatasaray olabilir", "epistemic_potential"),
+    ("galatasaray kazanmalı", "obligative"),
+    ("galatasaray kazanmışmış", "evidential_hearsay"),
 ]
 
 
 def test_loads_aspectual_stack_rules_from_yaml() -> None:
     rules = load_aspectual_stack_rules()
-    assert len(rules) == 6
+    assert len(rules) == 11
     classes = {rule.modality_class for rule in rules}
     assert classes == {
         "future_perfect_evidential",
@@ -69,7 +74,11 @@ def test_loads_aspectual_stack_rules_from_yaml() -> None:
         "imminent_progressive",
         "progressive_epistemic",
         "future_relative_clause_attributive",
-        "progressive_inferential",
+        "inferential_past",
+        "counterfactual_past",
+        "epistemic_potential",
+        "obligative",
+        "evidential_hearsay",
     }
 
 
@@ -79,10 +88,10 @@ def test_detects_future_perfect_evidential_stack() -> None:
     assert detection.modality_class == "future_perfect_evidential"
 
 
-def test_detects_progressive_inferential_stack() -> None:
+def test_detects_inferential_past_stack() -> None:
     detection = detect_aspectual_stack("kazanmış olur")
     assert detection is not None
-    assert detection.modality_class == "progressive_inferential"
+    assert detection.modality_class == "inferential_past"
 
 
 def test_detects_future_relative_clause_attributive_stack() -> None:

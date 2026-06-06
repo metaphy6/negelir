@@ -1,0 +1,6 @@
+# Phase 10 §10.26.6 — allow-list for deliberate canonical ID collisions under confusables fold.
+# Empty at v1; each entry is a permitted set of canonical IDs that may confusably collide.
+_meta:
+  schema_version: 1
+  description: "Approved canonical_id collisions under confusables_fold for exceptional, audited cases."
+allowlist: []

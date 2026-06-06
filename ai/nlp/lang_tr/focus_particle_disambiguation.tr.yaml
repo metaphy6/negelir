@@ -1,0 +1,9 @@
+_meta:
+  schema_version: 1
+  generated_by: "phase10_30"
+  description: "Tokens that may behave as embedded focus particles in Turkish wh-clauses."
+particles:
+  - mi
+  - mı
+  - mu
+  - mü

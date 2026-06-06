@@ -1,6 +1,7 @@
 """Tests for Phase 10 §10.32.5 input-side apostrophe repair."""
 from __future__ import annotations
 
+from common.text.turkish import lowercase_tr
 from nlp.apostrophe_proper_noun import (
     ApostropheRepair,
     load_proper_noun_apostrophe_spec,
@@ -41,6 +42,16 @@ def test_voice_path_does_not_short_circuit_on_capitalization_alone() -> None:
     assert repairs == ()
 
 
+def test_shout_input_does_not_use_capitalization_hint_for_apostrophe_insertion() -> None:
+    normalized, repairs = repair_apostrophe_proper_noun(
+        "GALATASARAYA",
+        original_text="GALATASARAYA",
+        shout=True,
+    )
+    assert normalized == "galatasaraya"
+    assert repairs == ()
+
+
 def test_normalize_input_records_apostrophe_inference_event() -> None:
     from nlp.normalize import normalize_input
 
@@ -68,6 +79,45 @@ def test_misplaced_apostrophe_repairs_single_candidate() -> None:
     )
 
 
+def test_apostrophe_comma_substitute() -> None:
+    normalized, repairs = repair_apostrophe_proper_noun("Galatasaray,da")
+    assert normalized == "galatasaray'da"
+    assert repairs == (
+        ApostropheRepair(
+            original="galatasaray,da",
+            repaired="galatasaray'da",
+            rule_id="punctuation_apostrophe_substitution",
+            rule_class="punctuation_apostrophe_substitution",
+            evidence="substituted=,",
+        ),
+    )
+
+
+def test_apostrophe_backtick_substitute_emits_event() -> None:
+    events: list[dict[str, str]] = []
+    normalized, repairs = repair_apostrophe_proper_noun(
+        "Galatasaray`a",
+        event_sink=events.append,
+    )
+    assert normalized == "galatasaray'a"
+    assert repairs == (
+        ApostropheRepair(
+            original="galatasaray`a",
+            repaired="galatasaray'a",
+            rule_id="punctuation_apostrophe_substitution",
+            rule_class="punctuation_apostrophe_substitution",
+            evidence="substituted=`",
+        ),
+    )
+    assert events == [{"kind": "apostrophe_punctuation_substituted", "found": "`"}]
+
+
+def test_apostrophe_substitute_negative_does_not_fire_in_lists() -> None:
+    normalized, repairs = repair_apostrophe_proper_noun("Galatasaray,")
+    assert normalized == "galatasaray,"
+    assert repairs == ()
+
+
 def test_legitimate_internal_apostrophe_is_preserved() -> None:
     normalized, repairs = repair_apostrophe_proper_noun("akhisar'spor")
     assert normalized == "akhisar'spor"
@@ -86,6 +136,12 @@ def test_normalize_pipeline_apostrophe_repair_step_runs() -> None:
 def test_correct_apostrophe_input_idempotent() -> None:
     normalized, repairs = repair_apostrophe_proper_noun("galatasaray'a")
     assert normalized == "galatasaray'a"
+    assert repairs == ()
+
+
+def test_missing_apostrophe_suffix_does_not_rewrite_bare_proper_noun() -> None:
+    normalized, repairs = repair_apostrophe_proper_noun("Galatasaray")
+    assert normalized == "galatasaray"
     assert repairs == ()
 
 
@@ -123,10 +179,8 @@ def test_apostrophe_repair_golden_corpus() -> None:
         'Sivassp\'ora': "sivasspor'a",
         'Göztep\'eye': "göztepe'ye",
         'Kayserisp\'ora': "kayserispor'a",
-        'Başakşehir\'e': "başakşehir'e",
         'Konyasp\'ora': "konyaspor'a",
         'Bursasp\'ora': "bursaspor'a",
-        'Gaziantep\'e': "gaziantep'e",
         'Eskişehirsp\'ora': "eskişehirspor'a",
         'ÇaykurRizesp\'ora': "çaykurrizespor'a",
         'Malatyasp\'oray': "malatyaspor'a",
@@ -164,7 +218,7 @@ def test_apostrophe_repair_golden_corpus() -> None:
         assert normalized == expected
         assert repairs == (
             ApostropheRepair(
-                original=source.lower(),
+                original=lowercase_tr(source),
                 repaired=expected,
                 rule_id="missing_apostrophe_suffix",
                 rule_class="missing_apostrophe_suffix",
@@ -177,7 +231,7 @@ def test_apostrophe_repair_golden_corpus() -> None:
         assert normalized == expected
         assert repairs == (
             ApostropheRepair(
-                original=source.lower(),
+                original=lowercase_tr(source),
                 repaired=expected,
                 rule_id="misplaced_apostrophe",
                 rule_class="misplaced_apostrophe",
@@ -188,6 +242,43 @@ def test_apostrophe_repair_golden_corpus() -> None:
         normalized, repairs = repair_apostrophe_proper_noun(source)
         assert normalized == source
         assert repairs == ()
+
+
+def test_smart_quote_paste_normalizes_to_apostrophe() -> None:
+    from nlp.normalize import normalize_input
+
+    examples = [
+        "galatasaray'a",
+        "fenerbahçe'ye",
+        "beşiktaş'a",
+        "trabzonspor'a",
+        "kasımpaşa'ya",
+        "antalyaspor'a",
+        "sivasspor'a",
+        "göztepe'ye",
+        "kayserispor'a",
+        "başakşehir'e",
+        "konyaspor'a",
+        "bursaspor'a",
+        "gaziantep'e",
+        "eskişehirspor'a",
+        "çaykurrizespor'a",
+        "malatyaspor'a",
+        "kocaelispor'a",
+        "denizlispor'a",
+        "ıspartaspor'a",
+        "gençlerbirliği'ne",
+        "akhisar'spor",
+    ]
+
+    for plain in examples:
+        smart = plain.replace("'", "\u2019")
+        smart_result = normalize_input(smart)
+        plain_result = normalize_input(plain)
+
+        assert smart_result.tokens == plain_result.tokens
+        assert smart_result.apostrophe_repairs == plain_result.apostrophe_repairs
+        assert "\u2019" not in " ".join(smart_result.tokens)
 
 
 def test_apostrophe_repair_suffix_forms_are_idempotent() -> None:

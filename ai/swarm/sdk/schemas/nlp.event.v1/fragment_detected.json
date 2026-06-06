@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/fragment_detected",
+  "title": "nlp.event.v1{kind=fragment_detected}",
+  "description": "NLP event kind fragment_detected.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at"
+  ],
+  "properties": {
+    "kind": {
+      "const": "fragment_detected"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "conversation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    }
+  },
+  "additionalProperties": false
+}

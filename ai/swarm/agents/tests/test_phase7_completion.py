@@ -285,6 +285,22 @@ def test_request_id_deduper_simulates_gateway_and_agent_dual_publish() -> None:
     )
 
 
+def test_qa_request_v1_request_metadata_roundtrips() -> None:
+    request_metadata = {
+        "preview": True,
+        "client_format_max_version": 2,
+    }
+    v1 = QaRequestV1(
+        request_id="req-001",
+        sanitized_text="kim kazanır?",
+        locale="tr",
+        sec_verdict="pass",
+        request_metadata=request_metadata,
+    )
+    assert v1.request_metadata == request_metadata
+    assert QaRequestV1.from_dict(v1.as_dict()).request_metadata == request_metadata
+
+
 # ─────────────────────────────────────────────────────────────────
 # §7.6 — sec.quarantine.v1 overflow drops oldest *from tracking*
 # ─────────────────────────────────────────────────────────────────

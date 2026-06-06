@@ -421,6 +421,18 @@ def build_environment(
     return env
 
 
+_ALLOWED_ANSWER_FORMATS = frozenset(
+    {
+        "plain",
+        "markdown_safe",
+        "screen_reader",
+        "whatsapp_4096",
+        "sms_160",
+        "tts_neutral",
+    }
+)
+
+
 def render(
     template_name: str,
     context: "dict[str, Any]",
@@ -428,6 +440,8 @@ def render(
     env: "jinja2.Environment | None" = None,
     fallback_env: "jinja2.Environment | None" = None,
     answer_format: str = "plain",
+    tenant_id: str | None = None,
+    locale: str | None = None,
 ) -> str:
     """Render *template_name* with *context*, falling back to meta.unsupported.
 
@@ -461,8 +475,12 @@ def render(
         env = build_environment()
     if fallback_env is None:
         fallback_env = env
-    if answer_format not in {"plain", "markdown_safe", "screen_reader"}:
+    from common.config import cfg
+
+    if answer_format not in _ALLOWED_ANSWER_FORMATS:
         raise ValueError(f"unsupported answer_format: {answer_format!r}")
+    if not isinstance(cfg.nlp_answer_format_enabled, dict) or not cfg.nlp_answer_format_enabled.get(answer_format, False):
+        template_name = "meta.format_unsupported.tr.j2"
     # For predict templates, synthesize the canonical citation block from the
     # closed-schema citation dict when callers provide raw fields.
     render_context = dict(context)
@@ -487,19 +505,25 @@ def render(
     try:
         tmpl = env.get_template(template_name)
         rendered = tmpl.render(**render_context)
-        if answer_format == "screen_reader":
-            return _normalize_screen_reader_answer(rendered)
 
         from common.config import cfg
 
-        if answer_format == "markdown_safe":
+        if answer_format == "screen_reader":
+            rendered = _normalize_screen_reader_answer(rendered)
+        elif answer_format == "markdown_safe":
             rendered = _sanitize_markdown_safe_answer(rendered)
             if not cfg.nlp_answer_decorative_emoji_enabled:
                 rendered = _strip_emoji(rendered)
-            return rendered
+        else:
+            if not cfg.nlp_answer_decorative_emoji_enabled:
+                rendered = _strip_emoji(rendered)
 
-        if not cfg.nlp_answer_decorative_emoji_enabled:
-            rendered = _strip_emoji(rendered)
+        if tenant_id is not None:
+            from nlp.compliance.banlist import apply_banlist_overlay
+
+            resolved_locale = _resolve_locale_tag(locale)
+            rendered = apply_banlist_overlay(rendered, tenant_id=tenant_id, locale=resolved_locale)
+
         return rendered
     except jinja2.UndefinedError as exc:
         # Missing slot: route to meta.unsupported.
@@ -556,6 +580,7 @@ def render_with_citation(
     env: "jinja2.Environment | None" = None,
     fallback_env: "jinja2.Environment | None" = None,
     answer_format: str = "plain",
+    tenant_id: str | None = None,
 ) -> "tuple[str, str | None]":
     """Render *template_name* and return ``(answer_text, citation_sha256_or_None)``.
 
@@ -579,6 +604,8 @@ def render_with_citation(
         env=env,
         fallback_env=fallback_env,
         answer_format=answer_format,
+        tenant_id=tenant_id,
+        locale=locale,
     )
     _, citation = extract_citation_block(text)
     if citation is None:

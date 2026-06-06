@@ -43,9 +43,10 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Deque, Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Deque, Dict, FrozenSet, List, NamedTuple, Optional, Tuple, Union
 
-from nlp.phase10_30 import apply_wh_prior_to_scores
+from nlp.football_vocab import apply_football_vocab_hint
+from nlp.phase10_30 import apply_wh_prior_to_scores, infer_telegraphic_intent
 
 # ---------------------------------------------------------------------------
 # Closed intent enum (§10.4)
@@ -639,12 +640,17 @@ class IntentClassifier:
     # Inference
     # ------------------------------------------------------------------
 
+    def _preprocess_text_for_classifier(self, text: str) -> str:
+        """Apply optional football vocabulary hinting before fastText inference."""
+        return apply_football_vocab_hint(text)
+
     def predict_intent(self, text: str) -> Tuple[str, float]:
         """Return (label, probability) for the top-1 intent.
 
         The __label__ fastText prefix is stripped; the returned label matches
         the closed intent enum in _intent_enum.json (§10.4).
         """
+        text = self._preprocess_text_for_classifier(text)
         labels, probs = self._model.predict(text, k=1)
         label = labels[0].replace("__label__", "")
         return label, float(probs[0])
@@ -685,6 +691,7 @@ class IntentClassifier:
             text: Normalized Turkish query text.
             k:    Number of top intents to return (default 3).
         """
+        text = self._preprocess_text_for_classifier(text)
         labels, probs = self._model.predict(text, k=k)
         raw_scores: list[dict[str, float | str]] = []
         for raw_label, raw_prob_val in zip(labels, probs):
@@ -724,6 +731,8 @@ class IntentClassifier:
         text: str,
         min_conf: float,
         k: int = 3,
+        entities: list[dict[str, Any]] | None = None,
+        has_verb_form: bool | None = None,
     ) -> Union[IntentScore, IntentAbstention]:
         """Return a definite :class:`IntentScore` or an :class:`IntentAbstention`.
 
@@ -741,6 +750,32 @@ class IntentClassifier:
                       (default 3 matching the §10.4 spec).
         """
         scores = self.predict_intent_distribution(text, k=k)
+        if entities is not None and has_verb_form is not None:
+            intent_candidates: list[dict[str, Any]] = [
+                {"label": score.label, "raw_prob": score.raw_prob}
+                for score in scores
+            ]
+            telegraphic = infer_telegraphic_intent(
+                entities,
+                intent_candidates,
+                normalized_text=text,
+                token_count=len(text.split()),
+                has_verb_form=has_verb_form,
+            )
+            if telegraphic is not None:
+                label, confidence, reason = telegraphic
+                if label.startswith("predict."):
+                    raise ValueError(
+                        "telegraphic inference must not route predict.* intents"
+                    )
+                return IntentScore(
+                    label=label,
+                    raw_prob=confidence,
+                    calibrated_prob=confidence,
+                    raw_logit=None,
+                    raw_logit_after_wh_prior=None,
+                )
+
         if not scores:
             # No predictions at all — treat as unconditional abstention.
             return IntentAbstention(suggestions=[], top_conf=0.0)

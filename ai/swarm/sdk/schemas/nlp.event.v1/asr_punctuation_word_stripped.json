@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/asr_punctuation_word_stripped",
+  "title": "nlp.event.v1{kind=asr_punctuation_word_stripped}",
+  "description": "An ASR punctuation word was stripped as part of voice-input normalization.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "punctuation_word"
+  ],
+  "properties": {
+    "kind": {
+      "const": "asr_punctuation_word_stripped"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "punctuation_word": {
+      "type": "string",
+      "description": "The literal punctuation word that was stripped."
+    }
+  },
+  "additionalProperties": false
+}

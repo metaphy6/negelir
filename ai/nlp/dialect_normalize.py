@@ -386,6 +386,35 @@ def _apply_single_token_rules(
     return out
 
 
+_GREETING_VOCATIVE_PREFIXES = frozenset({
+    "merhaba",
+    "selam",
+    "slm",
+    "meraba",
+    "merhabalar",
+})
+
+
+def _is_coordinating_particle_token(idx: int, tokens: list[str]) -> bool:
+    """Preserve "ya" when it is part of a coordinating particle phrase."""
+    if tokens[idx].lower() != "ya":
+        return False
+
+    if idx + 1 < len(tokens) and tokens[idx + 1].lower() == "da":
+        return True
+
+    # Preserve the first and last "ya" in a "ya...ya" coordinating phrase.
+    for offset in range(2, 8):
+        forward_idx = idx + offset
+        if forward_idx < len(tokens) and tokens[forward_idx].lower() == "ya":
+            return True
+        backward_idx = idx - offset
+        if backward_idx >= 0 and tokens[backward_idx].lower() == "ya":
+            return True
+
+    return False
+
+
 def _strip_vocatives(
     tokens: list[str],
     vocative_set: frozenset[str],
@@ -397,8 +426,14 @@ def _strip_vocatives(
         return tokens, []
     stripped: list[str] = []
     kept: list[str] = []
-    for tok in tokens:
+    for idx, tok in enumerate(tokens):
+        if idx == 1 and tokens[0] in _GREETING_VOCATIVE_PREFIXES and tok in vocative_set:
+            kept.append(tok)
+            continue
         if tok in vocative_set:
+            if _is_coordinating_particle_token(idx, tokens):
+                kept.append(tok)
+                continue
             stripped.append(tok)
         elif tok in sole_token_safe_set:
             # strip_only_if_not_sole_token: keep if it would be the only token

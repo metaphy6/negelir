@@ -14,7 +14,7 @@ from typing import Iterable, List, Optional, Pattern, Tuple
 REDACTED_TOKEN_RE = re.compile(r"\[REDACTED:([A-Z_]+):sha8=([0-9a-f]{8})\]")
 
 TC_KIMLIK_RE = re.compile(r"(^|[^0-9])([1-9][0-9]{10})(?![0-9])")
-IBAN_TR_RE = re.compile(r"(TR\d{2}(?:\s?\d{4}){6})", re.IGNORECASE)
+IBAN_TR_RE = re.compile(r"(TR\d{2}(?:\s?\d{4}){5}\s?\d{2})", re.IGNORECASE)
 PHONE_TR_RE = re.compile(
     r"(?:\+90|0090|0)\s?\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}"
 )

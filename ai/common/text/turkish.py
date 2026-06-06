@@ -615,6 +615,109 @@ def parse_number_word(text: str) -> int | None:
     return total
 
 
+_CARDINAL_NUMBER_WORDS: dict[int, str] = {
+    0: "sıfır",
+    1: "bir",
+    2: "iki",
+    3: "üç",
+    4: "dört",
+    5: "beş",
+    6: "altı",
+    7: "yedi",
+    8: "sekiz",
+    9: "dokuz",
+    10: "on",
+    20: "yirmi",
+    30: "otuz",
+    40: "kırk",
+    50: "elli",
+    60: "altmış",
+    70: "yetmiş",
+    80: "seksen",
+    90: "doksan",
+    100: "yüz",
+    1000: "bin",
+    1000000: "milyon",
+}
+
+_FRONT_VOWELS = {"e", "i", "ö", "ü"}
+_BACK_VOWELS = {"a", "ı", "o", "u"}
+
+
+def _ordinal_suffix_for_word(word: str) -> str:
+    last_vowel: str | None = None
+    for ch in reversed(lowercase_tr(word)):
+        if ch in _FRONT_VOWELS or ch in _BACK_VOWELS:
+            last_vowel = ch
+            break
+
+    if last_vowel is None:
+        return "inci"
+    if last_vowel in {"e", "i"}:
+        return "inci"
+    if last_vowel in {"ö", "ü"}:
+        return "üncü"
+    if last_vowel in {"a", "ı"}:
+        return "ıncı"
+    return "inci"
+
+
+def int_to_number_word(value: int, register: str = "cardinal") -> str:
+    """Convert an integer to a Turkish number-word phrase.
+
+    Supports ``register='cardinal'`` and ``register='ordinal'``.
+    """
+    if register not in {"cardinal", "ordinal"}:
+        raise ValueError("register must be 'cardinal' or 'ordinal'")
+    if value < 0 or value > 999999999:
+        raise ValueError("value must be between 0 and 999_999_999")
+
+    def _cardinal(n: int) -> str:
+        if n == 0:
+            return _CARDINAL_NUMBER_WORDS[0]
+        parts: list[str] = []
+        millions = n // 1000000
+        if millions:
+            if millions > 1:
+                parts.append(_cardinal(millions))
+            parts.append(_CARDINAL_NUMBER_WORDS[1000000])
+            n %= 1000000
+        thousands = n // 1000
+        if thousands:
+            if thousands > 1:
+                parts.append(_cardinal(thousands))
+            parts.append(_CARDINAL_NUMBER_WORDS[1000])
+            n %= 1000
+        hundreds = n // 100
+        if hundreds:
+            if hundreds > 1:
+                parts.append(_CARDINAL_NUMBER_WORDS[hundreds])
+            parts.append(_CARDINAL_NUMBER_WORDS[100])
+            n %= 100
+        tens = n // 10 * 10
+        if tens:
+            parts.append(_CARDINAL_NUMBER_WORDS[tens])
+            n %= 10
+        if n:
+            parts.append(_CARDINAL_NUMBER_WORDS[n])
+        return " ".join(parts)
+
+    cardinal_phrase = _cardinal(value)
+    if register == "cardinal":
+        return cardinal_phrase
+
+    if value == 0:
+        return "sıfırıncı"
+
+    words = cardinal_phrase.split()
+    last_word = words[-1]
+    if last_word == "iki":
+        words[-1] = "ikinci"
+    else:
+        words[-1] = last_word + _ordinal_suffix_for_word(last_word)
+    return " ".join(words)
+
+
 def _suffix_harmonizes(suffix: str, stem_last_vowel: "str | None") -> bool:
     """Return True if the suffix's first vowel agrees front/back with *stem_last_vowel*.
 

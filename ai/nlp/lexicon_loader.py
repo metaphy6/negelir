@@ -33,6 +33,7 @@ import datetime
 import hashlib
 import hmac
 import json
+import resource
 import threading
 import time
 import uuid
@@ -77,6 +78,7 @@ class LexiconMeta:
     lexicon_version: str
     generated_at_utc: str
     generator: str
+    swap_at_utc: str | None = None
 
 
 class AliasHit(NamedTuple):
@@ -109,6 +111,8 @@ def _compute_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 _SAFE_MODE_ACTIVE: bool = False
+_LAST_LEXICON_REBUILD_START_MONO: float | None = None
+_LAST_LEXICON_REBUILD_COMPLETE_MONO: float | None = None
 
 
 def is_safe_mode_active() -> bool:
@@ -119,6 +123,31 @@ def is_safe_mode_active() -> bool:
 def _set_safe_mode_active(active: bool) -> None:
     global _SAFE_MODE_ACTIVE
     _SAFE_MODE_ACTIVE = bool(active)
+
+
+def _set_last_lexicon_rebuild_start_mono(value: float | None) -> None:
+    global _LAST_LEXICON_REBUILD_START_MONO, _LAST_LEXICON_REBUILD_COMPLETE_MONO
+    _LAST_LEXICON_REBUILD_START_MONO = value
+    if value is None:
+        _LAST_LEXICON_REBUILD_COMPLETE_MONO = None
+
+
+def _set_last_lexicon_rebuild_complete_mono(value: float | None) -> None:
+    global _LAST_LEXICON_REBUILD_COMPLETE_MONO
+    _LAST_LEXICON_REBUILD_COMPLETE_MONO = value
+
+
+def lexicon_swap_grace_active(grace_s: int, now: float | None = None) -> bool:
+    if _LAST_LEXICON_REBUILD_START_MONO is None:
+        return False
+    if now is None:
+        now = time.monotonic()
+    if _LAST_LEXICON_REBUILD_COMPLETE_MONO is None:
+        return now - _LAST_LEXICON_REBUILD_START_MONO <= float(grace_s)
+    return (
+        now - _LAST_LEXICON_REBUILD_COMPLETE_MONO <= float(grace_s)
+        or now - _LAST_LEXICON_REBUILD_START_MONO <= float(grace_s)
+    )
 
 
 def _parse_lexicon_raw(
@@ -206,11 +235,27 @@ def _parse_lexicon_raw(
             f"got {type(entries).__name__!r}."
         )
 
+    swap_at_utc = None
+    if "swap_at_utc" in meta_raw:
+        raw_swap = meta_raw["swap_at_utc"]
+        if not isinstance(raw_swap, str):
+            raise LexiconSchemaError(
+                f"{name}: '_meta.swap_at_utc' must be a string, got {type(raw_swap).__name__!r}"
+            )
+        try:
+            _parse_iso8601_utc(raw_swap)
+        except ValueError as exc:
+            raise LexiconSchemaError(
+                f"{name}: invalid '_meta.swap_at_utc': {exc}"
+            )
+        swap_at_utc = raw_swap
+
     meta = LexiconMeta(
         schema_version=declared,
         lexicon_version=str(meta_raw["lexicon_version"]),
         generated_at_utc=str(meta_raw["generated_at_utc"]),
         generator=str(meta_raw["generator"]),
+        swap_at_utc=swap_at_utc,
     )
     return meta, entries
 
@@ -265,6 +310,17 @@ def _verify_lexicon_feed_signature(raw_bytes: bytes, signature: str, keys: dict[
         if hmac.compare_digest(signature, expected):
             return True
     return False
+
+
+def _parse_iso8601_utc(value: str) -> datetime.datetime:
+    """Parse an ISO-8601 UTC timestamp string into a timezone-aware datetime."""
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        raise ValueError("timestamp missing timezone information")
+    return parsed.astimezone(datetime.timezone.utc)
 
 
 def load_lexicon_file(path: Path) -> tuple[LexiconMeta, list[dict[str, Any]]]:
@@ -550,6 +606,31 @@ def _build_alias_index(
     return index
 
 
+def _inspect_alias_hash_distribution(snapshot: dict[str, "_LoadedFile"], max_load: int) -> list[str]:
+    if max_load <= 0:
+        return []
+
+    errors: list[str] = []
+    for fname, loaded in sorted(snapshot.items()):
+        total_aliases = len(loaded.alias_index)
+        if total_aliases <= max_load:
+            continue
+
+        bucket_count = max(1, (total_aliases + max_load - 1) // max_load)
+        counts = [0] * bucket_count
+        for alias in loaded.alias_index:
+            digest = hashlib.sha256(alias.encode("utf-8")).digest()
+            bucket = int.from_bytes(digest[:8], "big") % bucket_count
+            counts[bucket] += 1
+
+        heavy_load = max(counts)
+        if heavy_load > max_load:
+            errors.append(
+                f"{fname}: alias hash bucket load {heavy_load} > {max_load}"
+            )
+    return errors
+
+
 def _current_rss_kb() -> int:
     """Return the current process RSS in kilobytes.
 
@@ -655,13 +736,17 @@ class LexiconStore:
         league_catalog_ids: frozenset[str] | None = None,
         safe_mode_dir: Path | None = None,
         safe_mode_enabled: bool = True,
+        rebuild_concurrency_max: int = 2,
+        rebuild_queue_max: int = 8,
+        rebuild_rss_reservation_mb: int = 200,
         clock_mono: Callable[[], float] | None = None,
+        clock_wall: Callable[[], float] | None = None,
         clock_iso: Callable[[], str] | None = None,
         new_id: Callable[[], str] | None = None,
         rss_kb_fn: Callable[[], int] | None = None,
     ) -> None:
         self._dir = lexicon_dir
-        self._reload_s = max(1, int(reload_s))
+        self._reload_s = max(0, int(reload_s))
         self._max_entries_per_file = max(1, int(max_entries_per_file))
         self._max_rss_mb = max(0, int(max_rss_mb))
         self._max_old_generations = max(0, int(max_old_generations))
@@ -675,6 +760,15 @@ class LexiconStore:
         self._clock_iso = clock_iso if clock_iso is not None else _utc_iso
         self._new_id = new_id if new_id is not None else _new_uuid
         self._rss_kb_fn = rss_kb_fn if rss_kb_fn is not None else _current_rss_kb
+        self._clock_wall = clock_wall if clock_wall is not None else time.time
+        self._rebuild_concurrency_max = max(1, int(rebuild_concurrency_max))
+        self._rebuild_queue_max = max(0, int(rebuild_queue_max))
+        self._rebuild_rss_reservation_mb = max(0, int(rebuild_rss_reservation_mb))
+        self._rebuild_semaphore = threading.Semaphore(self._rebuild_concurrency_max)
+        self._rebuild_queue: "collections.deque[float]" = collections.deque(maxlen=self._rebuild_queue_max)
+        self._rebuild_queue_lock = threading.Lock()
+        self._last_rebuild_started_mono: float | None = None
+        self._last_rebuild_completed_mono: float | None = None
 
         self._lock = threading.Lock()
         # Current live data: file_name → _LoadedFile.
@@ -685,6 +779,8 @@ class LexiconStore:
         # Generation tracking (§10.21.2 Old-generation eviction contract).
         self._generation_counter: int = 0
         # Retired snapshots: deque[(generation: int, data: dict[str, _LoadedFile], symspell: SymSpellIndex | None)].
+        self._daily_alert_last: dict[tuple[str, str], float] = {}
+        self._last_lexicon_stale_alert: float | None = None
         # Bounded by max_old_generations; oldest dropped when full.
         # When max_old_generations=0, maxlen=0 means no retention (immediate drop).
         self._old_generations: "collections.deque[tuple[int, dict[str, _LoadedFile], SymSpellIndex | None]]" = (
@@ -702,6 +798,8 @@ class LexiconStore:
         self._last_lock_hold_ms: float = 0.0
         # Lexicon snapshot identifier (§10.23.2 / §10.23.9).
         self._lexicon_version_id: str = ""
+        # If a swap is overdue and the pod cannot load the snapshot, refuse traffic until recovery.
+        self._swap_lag_blocking: bool = False
 
     @classmethod
     def _resolve_lexicon_dir(cls, cfg: object, *, canary: bool = False) -> Path:
@@ -721,6 +819,9 @@ class LexiconStore:
             cls._resolve_lexicon_dir(cfg, canary=canary),
             safe_mode_dir=safe_mode_dir,
             safe_mode_enabled=safe_mode_enabled,
+            rebuild_concurrency_max=getattr(cfg, "nlp_lexicon_rebuild_concurrency_max", 2),
+            rebuild_queue_max=getattr(cfg, "nlp_lexicon_rebuild_queue_max", 8),
+            rebuild_rss_reservation_mb=getattr(cfg, "nlp_lexicon_rebuild_rss_reservation_mb", 200),
             **kwargs,
         )
 
@@ -736,15 +837,87 @@ class LexiconStore:
         with self._lock:
             return self._safe_mode_active
 
+    @property
+    def swap_lag_blocking(self) -> bool:
+        """Return true when a lexicon swap has missed the max lag threshold and the pod is waiting to recover."""
+        with self._lock:
+            return self._swap_lag_blocking
+
     @staticmethod
     def _compute_snapshot_id(data: dict[str, "_LoadedFile"]) -> str:
         items = sorted(
-            f"{filename}:{loaded.meta.lexicon_version}"
+            f"{filename}:{loaded.sha256}"
             for filename, loaded in data.items()
         )
         if not items:
             return ""
         return hashlib.sha256("|".join(items).encode("utf-8")).hexdigest()
+
+    @property
+    def rebuild_queue_len(self) -> int:
+        with self._rebuild_queue_lock:
+            return len(self._rebuild_queue)
+
+    def _can_reserve_rss_headroom(self, cfg: Config) -> bool:
+        if resource is None or self._rebuild_rss_reservation_mb <= 0:
+            return True
+        try:
+            soft_limit, _ = resource.getrlimit(resource.RLIMIT_AS)
+        except (ValueError, OSError):
+            return True
+        if soft_limit == resource.RLIM_INFINITY:
+            return True
+        rss_kb = self._rss_kb_fn()
+        desired_bytes = (rss_kb * 1024) + (self._rebuild_rss_reservation_mb * 1024 * 1024)
+        return desired_bytes <= soft_limit
+
+    def _make_lexicon_rebuild_deferred_event(self) -> dict[str, Any]:
+        return {
+            "topic": "nlp.event.v1",
+            "kind": "lexicon_rebuild_deferred_for_rss",
+            "producer": "nlp.intent.v1",
+            "reason": (
+                "lexicon rebuild deferred until sufficient RSS headroom is available "
+                "for request budget guarantees."
+            ),
+            "produced_at": self._clock_iso(),
+        }
+
+    def _make_lexicon_rebuild_queue_overflow_alert(self) -> dict[str, Any]:
+        return self._maybe_emit_alert(
+            kind="lexicon_rebuild_queue_overflow",
+            severity="error",
+            subject=self._dir.name,
+            reason=(
+                "lexicon rebuild queue overflowed; oldest pending rebuild was dropped "
+                "to preserve pod headroom and avoid repeated rebuild storms."
+            ),
+        )
+
+    def _queue_rebuild(self, now: float, alerts: list[dict[str, Any]], reason: str) -> None:
+        overflow = False
+        with self._rebuild_queue_lock:
+            if self._rebuild_queue.maxlen <= 0:
+                overflow = True
+            elif len(self._rebuild_queue) >= self._rebuild_queue.maxlen:
+                self._rebuild_queue.popleft()
+                overflow = True
+            if self._rebuild_queue.maxlen > 0:
+                self._rebuild_queue.append(now)
+        if overflow:
+            alert = self._make_lexicon_rebuild_queue_overflow_alert()
+            if alert:
+                alerts.append(alert)
+        if reason == "rss":
+            alerts.append(self._make_lexicon_rebuild_deferred_event())
+
+    def _record_rebuild_start(self, now: float) -> None:
+        self._last_rebuild_started_mono = now
+        _set_last_lexicon_rebuild_start_mono(now)
+
+    def _record_rebuild_complete(self, now: float) -> None:
+        self._last_rebuild_completed_mono = now
+        _set_last_lexicon_rebuild_complete_mono(now)
 
     def _load_shadow(
         self,
@@ -905,10 +1078,31 @@ class LexiconStore:
         if not changed and set(current_data) - {f.name for f in yaml_files}:
             changed = True
 
-        if not changed:
+        stale_alert = self._maybe_emit_lexicon_stale_alert()
+        if stale_alert:
+            alerts.append(stale_alert)
+
+        queued_reload = False
+        with self._rebuild_queue_lock:
+            if self._rebuild_queue and self._rebuild_semaphore.acquire(blocking=False):
+                self._rebuild_queue.popleft()
+                queued_reload = True
+
+        if not changed and not queued_reload:
             return alerts
 
+        if not queued_reload:
+            if not self._rebuild_semaphore.acquire(blocking=False):
+                self._queue_rebuild(now, alerts, reason="queue")
+                return alerts
+
         cfg = Config()
+        if not self._can_reserve_rss_headroom(cfg):
+            self._rebuild_semaphore.release()
+            self._queue_rebuild(now, alerts, reason="rss")
+            return alerts
+
+        self._record_rebuild_start(now)
         shadow, load_errors, schema_too_new_errors, signature_warn_files, signature_enforce_files = (
             self._load_shadow(self._dir, cfg, skip_feed_signature=False)
         )
@@ -938,6 +1132,23 @@ class LexiconStore:
                 )
                 if alert:
                     alerts.append(alert)
+
+        swap_at_utc: datetime.datetime | None = None
+        for loaded in shadow.values():
+            if loaded.meta.swap_at_utc is None:
+                continue
+            parsed = _parse_iso8601_utc(loaded.meta.swap_at_utc)
+            if swap_at_utc is None or parsed > swap_at_utc:
+                swap_at_utc = parsed
+
+        if swap_at_utc is not None:
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            if now_utc < swap_at_utc:
+                # New lexicon snapshot is present but not yet activated.
+                # Keep the currently active pointer until the cluster-wide
+                # swap window begins.
+                self._swap_lag_blocking = False
+                return alerts
 
         if signature_warn_files and not primary_failed:
             alert = self._maybe_emit_alert(
@@ -1017,7 +1228,7 @@ class LexiconStore:
             if alert:
                 alerts.append(alert)
 
-        def _inspect_shadow(snapshot: dict[str, _LoadedFile]) -> tuple[list[str], list[str], list[str]]:
+        def _inspect_shadow(snapshot: dict[str, _LoadedFile]) -> tuple[list[str], list[str], list[str], list[str]]:
             cap_errors: list[str] = []
             for fname, loaded in sorted(snapshot.items()):
                 count = len(loaded.entries)
@@ -1026,14 +1237,18 @@ class LexiconStore:
                         f"{fname}: {count} entries exceeds cap {self._max_entries_per_file}"
                     )
             if cap_errors:
-                return cap_errors, [], []
+                return cap_errors, [], [], []
 
             if self._max_rss_mb > 0:
                 rss_kb = self._rss_kb_fn()
                 if rss_kb > self._max_rss_mb * 1024:
                     return [
                         f"rss_budget: {rss_kb // 1024} MB > {self._max_rss_mb} MB"
-                    ], [], []
+                    ], [], [], []
+
+            collision_errors = _inspect_alias_hash_distribution(snapshot, cfg.nlp_lexicon_max_collision_load)
+            if collision_errors:
+                return [], collision_errors, [], []
 
             markets_ids = self._get_markets_ids()
             validation_errors: list[str] = []
@@ -1046,11 +1261,11 @@ class LexiconStore:
                 from nlp.lexicon._xref import validate_xref  # noqa: PLC0415
                 xref_errors = validate_xref(snapshot)
 
-            return cap_errors, validation_errors, xref_errors
+            return cap_errors, collision_errors, validation_errors, xref_errors
 
-        cap_errors, validation_errors, xref_errors = _inspect_shadow(shadow)
+        cap_errors, collision_errors, validation_errors, xref_errors = _inspect_shadow(shadow)
         if (
-            (cap_errors or validation_errors or xref_errors)
+            (cap_errors or collision_errors or validation_errors or xref_errors)
             and self._safe_mode_enabled
             and not self.is_loaded
             and not safe_mode_active
@@ -1059,10 +1274,10 @@ class LexiconStore:
                 self._load_shadow(self._safe_mode_dir, cfg, skip_feed_signature=True)
             )
             if not (safe_load_errors or safe_schema_too_new_errors or safe_enforce_files):
-                safe_cap_errors, safe_validation_errors, safe_xref_errors = _inspect_shadow(
+                safe_cap_errors, safe_collision_errors, safe_validation_errors, safe_xref_errors = _inspect_shadow(
                     safe_shadow
                 )
-                if not (safe_cap_errors or safe_validation_errors or safe_xref_errors):
+                if not (safe_cap_errors or safe_collision_errors or safe_validation_errors or safe_xref_errors):
                     shadow = safe_shadow
                     safe_mode_active = True
                     load_errors = []
@@ -1070,6 +1285,7 @@ class LexiconStore:
                     signature_warn_files = []
                     signature_enforce_files = []
                     cap_errors = safe_cap_errors
+                    collision_errors = safe_collision_errors
                     validation_errors = safe_validation_errors
                     xref_errors = safe_xref_errors
                     alert = self._maybe_emit_alert(
@@ -1083,6 +1299,51 @@ class LexiconStore:
                     )
                     if alert:
                         alerts.append(alert)
+
+        if swap_at_utc is not None:
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            if now_utc < swap_at_utc:
+                self._swap_lag_blocking = False
+                return alerts
+
+            lag_s = (now_utc - swap_at_utc).total_seconds()
+            details = {
+                "pod_id": cfg.nlp_pod_id,
+                "lag_s": round(lag_s, 3),
+            }
+
+            if now_utc > swap_at_utc + datetime.timedelta(seconds=cfg.nlp_lexicon_swap_max_lag_s):
+                if cap_errors or validation_errors or xref_errors:
+                    self._swap_lag_blocking = True
+                    alert = self._maybe_emit_alert(
+                        kind="lexicon_swap_lag_drained_to_503",
+                        severity="error",
+                        subject=self._dir.name,
+                        reason=(
+                            "lexicon swap could not be loaded within the configured "
+                            f"max lag of {cfg.nlp_lexicon_swap_max_lag_s}s; refusing new traffic until a valid snapshot is available"
+                        ),
+                        details=details,
+                    )
+                    if alert:
+                        alerts.append(alert)
+                    return alerts
+
+            if lag_s > 0:
+                alert = self._maybe_emit_alert(
+                    kind="lexicon_swap_late",
+                    severity="warn",
+                    subject=self._dir.name,
+                    reason=(
+                        "lexicon swap activation was delayed past the configured "
+                        "grace window; swapping immediately"
+                    ),
+                    details=details,
+                )
+                if alert:
+                    alerts.append(alert)
+
+        self._swap_lag_blocking = False
 
         if cap_errors:
             alert = self._maybe_emit_alert(
@@ -1109,6 +1370,20 @@ class LexiconStore:
                 alerts.append(alert)
             return alerts
 
+        if collision_errors:
+            alert = self._maybe_emit_alert(
+                kind="lexicon_collision_load_high",
+                severity="error",
+                subject=",".join(sorted({e.split(":")[0] for e in collision_errors})),
+                reason=(
+                    "lexicon alias hash bucket load exceeded: "
+                    + "; ".join(collision_errors[:5])
+                ),
+            )
+            if alert:
+                alerts.append(alert)
+            return alerts
+
         if xref_errors:
             alert = self._maybe_emit_alert(
                 kind="nlp_lexicon_atomic_swap_failed",
@@ -1123,56 +1398,78 @@ class LexiconStore:
                 alerts.append(alert)
             return alerts
 
-        # ── Build SymSpellIndex ────────────────────────────────────────────
-        # ── Build SymSpellIndex ────────────────────────────────────────────
-        # §10.21.2 Symspell dictionary lifetime: built once at boot from
-        # current lexicon snapshot; on lexicon swap, REBUILT (not mutated).
-        # Build from union of all aliases across all loaded lexicon files.
-        new_symspell = self._build_symspell_index(shadow)
-        new_lexicon_version_id = self._compute_snapshot_id(shadow)
+        if swap_at_utc is not None:
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            if now_utc > swap_at_utc + datetime.timedelta(seconds=cfg.nlp_lexicon_swap_max_lag_s):
+                alert = self._maybe_emit_alert(
+                    kind="lexicon_swap_late",
+                    severity="warn",
+                    subject=self._dir.name,
+                    reason=(
+                        "lexicon swap activation was delayed past the configured "
+                        "grace window; swapping immediately"
+                    ),
+                )
+                if alert:
+                    alerts.append(alert)
 
-        # ── Atomic swap under lock ─────────────────────────────────────────
-        # §10.21.2 Old-generation eviction contract: capture old generation,
-        # add to deque (auto-evicts oldest), increment counter, log swap.
-        # §10.21.3 Bounded swap latency: lock held ONLY for pointer flip.
-        # Validation ran OUTSIDE the lock (above); lock is held only for
-        # dict-pointer assignment + generation bookkeeping (target: < 50ms).
-        lock_start = self._clock_mono()
-        with self._lock:
-            old_gen = self._generation_counter
-            old_data = self._data
-            old_symspell = self._symspell
-            self._generation_counter += 1
-            new_gen = self._generation_counter
-            
-            # Add old generation to deque; if deque is at maxlen, oldest is
-            # auto-dropped (refcount → 0 once last in-flight request returns).
-            # Old SymSpellIndex dereferenced atomically with old lexicon generation.
-            if old_data:  # Skip if this is the first load (no old generation).
-                self._old_generations.append((old_gen, old_data, old_symspell))
-            
-            # Atomic swap (data + SymSpellIndex).
-            self._data = shadow
-            self._symspell = new_symspell
-            self._lexicon_version_id = new_lexicon_version_id
-            self._safe_mode_active = safe_mode_active
-            _set_safe_mode_active(safe_mode_active)
+        try:
+            # ── Build SymSpellIndex ────────────────────────────────────────────
+            # §10.21.2 Symspell dictionary lifetime: built once at boot from
+            # current lexicon snapshot; on lexicon swap, REBUILT (not mutated).
+            # Build from union of all aliases across all loaded lexicon files.
+            new_symspell = self._build_symspell_index(shadow)
+            new_lexicon_version_id = self._compute_snapshot_id(shadow)
 
-            # in_flight_count proxy: number of old generations currently
-            # retained (each represents a snapshot still potentially
-            # referenced by in-flight requests).
-            in_flight_count = len(self._old_generations)
-        lock_hold_ms = (self._clock_mono() - lock_start) * 1000.0
-        self._last_lock_hold_ms = lock_hold_ms
-        
-        # Log outside lock (I/O outside critical section).
-        self._logger.debug(
-            "Lexicon swap: old_gen=%d, new_gen=%d, in_flight_count=%d, lock_hold_ms=%.2f",
-            old_gen,
-            new_gen,
-            in_flight_count,
-            lock_hold_ms,
-        )
+            # ── Atomic swap under lock ─────────────────────────────────────────
+            # §10.21.2 Old-generation eviction contract: capture old generation,
+            # add to deque (auto-evicts oldest), increment counter, log swap.
+            # §10.21.3 Bounded swap latency: lock held ONLY for pointer flip.
+            # Validation ran OUTSIDE the lock (above); lock is held only for
+            # dict-pointer assignment + generation bookkeeping (target: < 50ms).
+            lock_start = self._clock_mono()
+            with self._lock:
+                old_gen = self._generation_counter
+                old_data = self._data
+                old_symspell = self._symspell
+                self._generation_counter += 1
+                new_gen = self._generation_counter
+
+                # Add old generation to deque; if deque is at maxlen, oldest is
+                # auto-dropped (refcount → 0 once last in-flight request returns).
+                # Old SymSpellIndex dereferenced atomically with old lexicon generation.
+                if old_data:  # Skip if this is the first load (no old generation).
+                    self._old_generations.append((old_gen, old_data, old_symspell))
+
+                # Atomic swap (data + SymSpellIndex).
+                self._data = shadow
+                self._symspell = new_symspell
+                self._lexicon_version_id = new_lexicon_version_id
+                self._safe_mode_active = safe_mode_active
+                _set_safe_mode_active(safe_mode_active)
+
+                # in_flight_count proxy: number of old generations currently
+                # retained (each represents a snapshot still potentially
+                # referenced by in-flight requests).
+                in_flight_count = len(self._old_generations)
+            lock_hold_ms = (self._clock_mono() - lock_start) * 1000.0
+            self._last_lock_hold_ms = lock_hold_ms
+
+            # Log outside lock (I/O outside critical section).
+            self._logger.debug(
+                "Lexicon swap: old_gen=%d, new_gen=%d, in_flight_count=%d, lock_hold_ms=%.2f",
+                old_gen,
+                new_gen,
+                in_flight_count,
+                lock_hold_ms,
+            )
+
+            stale_alert = self._maybe_emit_lexicon_stale_alert()
+            if stale_alert:
+                alerts.append(stale_alert)
+        finally:
+            self._record_rebuild_complete(self._clock_mono())
+            self._rebuild_semaphore.release()
 
         return alerts
 
@@ -1343,6 +1640,7 @@ class LexiconStore:
         severity: str,
         subject: str,
         reason: str,
+        details: dict[str, object] | None = None,
     ) -> dict[str, Any] | None:
         """Return an ``nlp.alert.v1`` payload dict if the debounce window
         has elapsed, else ``None``.
@@ -1357,7 +1655,7 @@ class LexiconStore:
         if now - last < _ALERT_DEBOUNCE_S:
             return None
         self._debounce_last[key] = now
-        return {
+        alert: dict[str, Any] = {
             "alert_id": self._new_id(),
             "kind": kind,
             "severity": severity,
@@ -1366,3 +1664,60 @@ class LexiconStore:
             "request_id": None,
             "produced_at": self._clock_iso(),
         }
+        if details is not None:
+            alert["details"] = details
+        return alert
+
+    def _maybe_emit_daily_alert(
+        self,
+        *,
+        kind: str,
+        severity: str,
+        subject: str,
+        reason: str,
+        min_interval_s: float,
+    ) -> dict[str, Any] | None:
+        now = self._clock_mono()
+        key = (kind, subject)
+        last = self._daily_alert_last.get(key, float("-inf"))
+        if now - last < min_interval_s:
+            return None
+        self._daily_alert_last[key] = now
+        if kind == "lexicon_stale":
+            self._last_lexicon_stale_alert = now
+        return {
+            "alert_id": self._new_id(),
+            "kind": kind,
+            "severity": severity,
+            "producer": "nlp.intent.v1",
+            "subject": subject,
+            "reason": reason[:1024],
+            "request_id": None,
+            "produced_at": self._clock_iso(),
+        }
+
+    def _maybe_emit_lexicon_stale_alert(self) -> dict[str, Any] | None:
+        if not self.is_loaded:
+            return None
+        cfg = Config()
+        max_age_days = cfg.nlp_lexicon_max_age_days
+        if max_age_days <= 0:
+            return None
+        with self._lock:
+            if not self._data:
+                return None
+            newest_mtime_ns = max(loaded.mtime_ns for loaded in self._data.values())
+        now_wall = self._clock_wall()
+        age_days = (now_wall - newest_mtime_ns / 1e9) / 86400.0
+        if age_days < float(max_age_days):
+            return None
+        return self._maybe_emit_daily_alert(
+            kind="lexicon_stale",
+            severity="info",
+            subject="lexicon",
+            reason=(
+                f"Lexicon files have not changed for {age_days:.1f} days; "
+                f"stale threshold is {max_age_days} days."
+            ),
+            min_interval_s=86400.0,
+        )

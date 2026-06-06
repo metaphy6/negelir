@@ -25,6 +25,8 @@ import pytest
 
 from common.config import Config
 from nlp.proofreader import ProofreadResult, proofread_answer, proofread_answer_safe
+from swarm.agents.nlp import NlpProofreaderAgent
+from swarm.sdk.types import Message
 
 
 def test_gate1_citation_block_missing_blocks():
@@ -815,4 +817,115 @@ def test_gate7_boundary_cases():
         confidence_band_label="yüksek",
     )
     assert result_yuksek.block_reason != "confidence_narration_contradiction"
+
+
+def test_proofreader_prepends_confirmation_seeking_match() -> None:
+    agent = NlpProofreaderAgent()
+    payload = {
+        "request_id": "req-001",
+        "qa_correlation_id": "corr-001",
+        "locale": "tr-TR",
+        "intent": "predict.match_outcome",
+        "answer_text": "Galatasaray kazandı.",
+        "answer_format": "plain",
+        "kind": "direct",
+        "degraded": False,
+        "degraded_reason": None,
+        "humanizer_used": False,
+        "proofreader_status": "pass",
+        "nlp_pipeline_version": "1.0.0",
+        "emitted_at_utc": "2026-05-27T10:00:00Z",
+        "request_metadata": {"pragmatic_class": "confirmation_seeking"},
+        "parts": [
+            {
+                "intent": "predict.match_outcome",
+                "body": "Galatasaray kazandı.",
+                "citation": {
+                    "kind": "prediction",
+                    "produced_at_utc": "2026-05-27T10:00:00Z",
+                },
+                "polarity": "affirm",
+                "subquery_correlation_id": "subquery-001",
+            }
+        ],
+    }
+    msg = Message.new(topic="qa.answer.v1", payload=payload, producer="test")
+    out = list(agent.handle(msg))
+
+    assert len(out) == 1
+    assert out[0].payload["answer_text"] == "Evet, Galatasaray kazandı."
+
+
+def test_proofreader_prepends_confirmation_seeking_mismatch() -> None:
+    agent = NlpProofreaderAgent()
+    payload = {
+        "request_id": "req-002",
+        "qa_correlation_id": "corr-002",
+        "locale": "tr-TR",
+        "intent": "predict.match_outcome",
+        "answer_text": "Galatasaray kazanmadı.",
+        "answer_format": "plain",
+        "kind": "direct",
+        "degraded": False,
+        "degraded_reason": None,
+        "humanizer_used": False,
+        "proofreader_status": "pass",
+        "nlp_pipeline_version": "1.0.0",
+        "emitted_at_utc": "2026-05-27T10:00:00Z",
+        "request_metadata": {"pragmatic_class": "confirmation_seeking"},
+        "parts": [
+            {
+                "intent": "predict.match_outcome",
+                "body": "Galatasaray kazanmadı.",
+                "citation": {
+                    "kind": "prediction",
+                    "produced_at_utc": "2026-05-27T10:00:00Z",
+                },
+                "polarity": "negate",
+                "subquery_correlation_id": "subquery-002",
+            }
+        ],
+    }
+    msg = Message.new(topic="qa.answer.v1", payload=payload, producer="test")
+    out = list(agent.handle(msg))
+
+    assert len(out) == 1
+    assert out[0].payload["answer_text"] == "Aslında hayır, Galatasaray kazanmadı."
+
+
+def test_proofreader_does_not_prepend_information_seeking() -> None:
+    agent = NlpProofreaderAgent()
+    payload = {
+        "request_id": "req-003",
+        "qa_correlation_id": "corr-003",
+        "locale": "tr-TR",
+        "intent": "predict.match_outcome",
+        "answer_text": "Galatasaray kazandı.",
+        "answer_format": "plain",
+        "kind": "direct",
+        "degraded": False,
+        "degraded_reason": None,
+        "humanizer_used": False,
+        "proofreader_status": "pass",
+        "nlp_pipeline_version": "1.0.0",
+        "emitted_at_utc": "2026-05-27T10:00:00Z",
+        "request_metadata": {"pragmatic_class": "information_seeking"},
+        "parts": [
+            {
+                "intent": "predict.match_outcome",
+                "body": "Galatasaray kazandı.",
+                "citation": {
+                    "kind": "prediction",
+                    "produced_at_utc": "2026-05-27T10:00:00Z",
+                },
+                "polarity": "affirm",
+                "subquery_correlation_id": "subquery-003",
+            }
+        ],
+    }
+    msg = Message.new(topic="qa.answer.v1", payload=payload, producer="test")
+    out = list(agent.handle(msg))
+
+    assert len(out) == 1
+    assert out[0].payload["answer_text"] == "Galatasaray kazandı."
 

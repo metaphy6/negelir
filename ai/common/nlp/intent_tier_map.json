@@ -28,6 +28,7 @@
   "predict.btts": "pro",
   "predict.handicap": "pro",
   "predict.match_outcome": "pro",
+  "predict.match_outcome.comparative": "pro",
   "predict.match_outcome.conditional": "pro",
   "predict.over_under": "pro",
   "predict.score_grid": "pro",

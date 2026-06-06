@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/nlp_kill_pattern_armed",
+  "title": "maint.event.v1{kind=nlp_kill_pattern_armed}",
+  "description": "Operator arms an NLP kill pattern to rewrite matching in-flight or cached answers until TTL expiry.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "operator_id_h",
+    "pattern_pack_sha8",
+    "ttl_s",
+    "reason"
+  ],
+  "properties": {
+    "kind": { "const": "nlp_kill_pattern_armed" },
+    "kind_schema_version": { "const": 1 },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Command target identifier; v1 uses 'nlp.kill_pattern'."
+    },
+    "request_id": { "type": "string", "minLength": 1 },
+    "operator_id_h": { "type": "string", "minLength": 1 },
+    "pattern_pack_sha8": { "type": "string", "minLength": 1 },
+    "ttl_s": { "type": "integer", "minimum": 1 },
+    "match_id": { "type": "string", "minLength": 1 },
+    "intent_class": { "type": "string", "minLength": 1 },
+    "template_id": { "type": "string", "minLength": 1 },
+    "lexicon_hit": { "type": "string", "minLength": 1 },
+    "body_substring_sha8": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" }
+  },
+  "additionalProperties": false
+}

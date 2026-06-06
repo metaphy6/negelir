@@ -24,3 +24,23 @@ offensive:
   - token: "öldüreceğim"
     class: "severe_threat"
     note: "Death-threat language, should route to adversarial treatment in future phases."
+
+  - token: "choke"
+    class: "mild"
+    note: "English football insult used as adversarial framing in Turkish football queries."
+
+  - token: "choked"
+    class: "mild"
+    note: "English football insult used as adversarial framing in Turkish football queries."
+
+  - token: "bottle"
+    class: "mild"
+    note: "English football insult used as adversarial framing in Turkish football queries."
+
+  - token: "bottled"
+    class: "mild"
+    note: "English football insult used as adversarial framing in Turkish football queries."
+
+  - token: "parked the bus"
+    class: "mild"
+    note: "English football insult used as adversarial framing in Turkish football queries."

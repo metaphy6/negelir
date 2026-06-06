@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/intent_decision_breakdown",
+  "title": "nlp.event.v1{kind=intent_decision_breakdown}",
+  "description": "Intent decision diagnostics including the raw logit and WH-word prior adjusted score.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "intent_score_raw_logit",
+    "intent_score_after_wh_prior"
+  ],
+  "properties": {
+    "kind": {
+      "const": "intent_decision_breakdown"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "wh_word": {
+      "type": ["string", "null"],
+      "description": "The WH-word that triggered the prior, if any."
+    },
+    "intent_score_raw_logit": {
+      "type": "number",
+      "description": "Raw classifier logit before WH-word prior adjustment."
+    },
+    "intent_score_after_wh_prior": {
+      "type": "number",
+      "description": "Intent score after applying the WH-word prior but before calibration."
+    }
+  },
+  "additionalProperties": false
+}

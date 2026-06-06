@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/idiom_ambiguous",
+  "title": "nlp.event.v1{kind=idiom_ambiguous}",
+  "description": "An idiom candidate span was ambiguous and the system deferred to literal interpretation.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "idiom_id"
+  ],
+  "properties": {
+    "kind": {
+      "const": "idiom_ambiguous"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "idiom_id": {
+      "type": "string",
+      "description": "Identifier of the ambiguous idiom candidate."
+    }
+  },
+  "additionalProperties": false
+}

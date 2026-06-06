@@ -24,7 +24,7 @@
     "schema_version": {
       "type": "integer",
       "minimum": 1,
-      "description": "Envelope schema version for qa.intent.v1; v4 after Phase 10.30 additive intent additions."
+      "description": "Envelope schema version for qa.intent.v1; v5 after Phase 10.31 additive pragmatic_class addition."
     },
     "request_id": {
       "type": "string",
@@ -39,6 +39,43 @@
     "conversation_id": {
       "type": ["string", "null"],
       "description": "Optional conversation identifier carried from qa.request.v1 for follow-up context." 
+    },
+    "request_metadata": {
+      "type": "object",
+      "description": "Optional request metadata preserved from qa.request.v1 for downstream NLP provenance.",
+      "properties": {
+        "input_source": {
+          "type": ["string", "null"],
+          "enum": ["keyboard", "voice", "paste", "unknown", null]
+        },
+        "keyboard_hint": {
+          "type": ["string", "null"],
+          "enum": ["q", "f", "swipe", "unknown", null]
+        },
+        "preview": {
+          "type": ["boolean", "null"],
+          "description": "Operator preview mode flag carried from the originating request."
+        },
+        "user_preferences": {
+          "type": "object",
+          "properties": {
+            "favorite_team": {
+              "type": ["string", "null"],
+              "description": "Optional favorite team canonical ID from the user's profile."
+            }
+          },
+          "additionalProperties": false
+        },
+        "shout": {
+          "type": ["boolean", "null"],
+          "description": "Optional signal that the original request was an ALL-CAPS shout."
+        },
+        "stripped_tail": {
+          "type": "string",
+          "description": "Trimmed copy/paste tail removed from the normalized input for audit tracing."
+        }
+      },
+      "additionalProperties": false
     },
     "intent": {
       "type": "string",
@@ -153,6 +190,11 @@
           "original_text": {
             "type": "string",
             "description": "§10.21.5: Original user-typed text before confusables fold, preserved for audit when folded differs from raw. Omit if no confusables were resolved for this span."
+          },
+          "syntactic_role": {
+            "type": "string",
+            "enum": ["entity_subject", "entity_object", "ambiguous"],
+            "description": "Optional syntactic role inferred from verbal-no / nominalisation constructions for downstream dispatcher routing."
           }
         },
         "additionalProperties": false
@@ -236,6 +278,11 @@
           "uniqueItems": true
         }
       ]
+    },
+    "pragmatic_class": {
+      "type": "string",
+      "enum": ["information_seeking", "confirmation_seeking"],
+      "description": "Optional question-tag pragmatic class for confirmation-seeking vs information-seeking questions."
     },
     "query_style": {
       "description": "Optional query styling metadata for special input modes.",

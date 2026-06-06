@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/obfuscated_slur_negated",
+  "title": "nlp.event.v1{kind=obfuscated_slur_negated}",
+  "description": "An obfuscated slur was detected but negated by a surrounding safe context.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at",
+    "pattern_id"
+  ],
+  "properties": {
+    "kind": {
+      "const": "obfuscated_slur_negated"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "pattern_id": {
+      "type": "string",
+      "description": "Identifier of the obfuscated slur pattern that was matched."
+    }
+  },
+  "additionalProperties": false
+}

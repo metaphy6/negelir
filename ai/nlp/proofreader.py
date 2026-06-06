@@ -107,6 +107,21 @@ def _load_forbidden_phrases() -> "list[str]":
     return _forbidden_phrases
 
 
+def _qa_answer_has_negative_polarity(parts: list[object] | None) -> bool:
+    if not isinstance(parts, list):
+        return False
+    for part in parts:
+        if isinstance(part, dict) and part.get("polarity") == "negate":
+            return True
+    return False
+
+
+def _prepend_confirmation_seeking_intro(answer_text: str, parts: list[object] | None = None) -> str:
+    if _qa_answer_has_negative_polarity(parts):
+        return f"Aslında hayır, {answer_text}"
+    return f"Evet, {answer_text}"
+
+
 def _find_unauthorized_decorative_emoji(text: str, allowed: set[str]) -> list[str]:
     """Return decorative emoji characters in text that are not in the allowlist."""
     return [

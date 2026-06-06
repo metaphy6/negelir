@@ -1,0 +1,8 @@
+{% if history %}
+Konuşma geçmişinizin son {{ history|length }} sorgusu:
+{% for entry in history %}
+- {{ loop.index }}. {{ entry.intent }}{% if entry.entities %} ({{ entry.entities | join(", ") }}){% endif %}
+{% endfor %}
+{% else %}
+Önceki sorgu geçmişinizi bulamadım.
+{% endif %}

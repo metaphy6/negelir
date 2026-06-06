@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/nlp.event.v1/softg_restored",
+  "title": "nlp.event.v1{kind=softg_restored}",
+  "description": "NLP event kind softg_restored.",
+  "type": "object",
+  "required": [
+    "kind",
+    "producer",
+    "emitted_at"
+  ],
+  "properties": {
+    "kind": {
+      "const": "softg_restored"
+    },
+    "producer": {
+      "type": "string",
+      "enum": [
+        "nlp.intent.v1",
+        "nlp.dispatcher.v1",
+        "nlp.answer.v1",
+        "nlp.proofreader.v1"
+      ]
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "conversation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    }
+  },
+  "additionalProperties": false
+}

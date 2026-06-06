@@ -14,6 +14,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ai.common.config import Config
+from common.config import cfg
 
 
 # ── Phase 10 §10.14 — NLP Structured Logs (PII-clean) ────────────────────────
@@ -102,7 +103,9 @@ def test_nlp_structured_log_all_proofreader_statuses():
 
 # ── Phase 10 §10.12 — L1 Answer Cache ────────────────────────────────────────
 
+from nlp.compliance import disclosures_snapshot_sha, load_disclosures
 from swarm.agents.cache import CacheAgent, InMemoryCacheBackend, make_answer_key
+from swarm.agents.nlp import _make_qa_answer_payload
 from swarm.sdk.types import Envelope, Message, Topic
 
 
@@ -114,6 +117,8 @@ def test_make_answer_key_stable_hash():
         entity_hash="abc123",
         fixture_window_bucket="2026-05-29T00:00:00Z",
         model_versions_hash="def456",
+        tenant_id="tenant_a",
+        banlist_snapshot_sha="ban-sha-1",
         intent_model_version="1.0.0",
         lexicon_snapshot_sha="lex-sha-1",
         calibration_version="v1.2",
@@ -125,6 +130,8 @@ def test_make_answer_key_stable_hash():
         entity_hash="abc123",
         fixture_window_bucket="2026-05-29T00:00:00Z",
         model_versions_hash="def456",
+        tenant_id="tenant_a",
+        banlist_snapshot_sha="ban-sha-1",
         intent_model_version="1.0.0",
         lexicon_snapshot_sha="lex-sha-1",
         calibration_version="v1.2",
@@ -144,6 +151,8 @@ def test_make_answer_key_different_inputs():
         "abc",
         "2026-05-29",
         "def",
+        "tenant_a",
+        "ban-sha-1",
         "1.0.0",
         "lex-sha-1",
         "v1",
@@ -155,12 +164,142 @@ def test_make_answer_key_different_inputs():
         "abc",
         "2026-05-29",
         "def",
+        "tenant_a",
+        "ban-sha-1",
         "1.0.0",
         "lex-sha-1",
         "v1",
         "10.0.0",
     )
     assert key1 != key2
+
+
+def test_make_answer_key_includes_disclosures_snapshot_sha() -> None:
+    key1 = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+        disclosures_snapshot_sha="deadbeef",
+    )
+    key2 = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+        disclosures_snapshot_sha="cafebabe",
+    )
+    assert key1 != key2
+
+
+def test_make_answer_key_includes_query_time_bucket_and_feature_set_hash() -> None:
+    key1 = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+        query_time_bucket="2026-05-27T10:00:00Z",
+        feature_set_hash="f00bar",
+    )
+    key2 = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+        query_time_bucket="2026-05-27T11:00:00Z",
+        feature_set_hash="f00bar",
+    )
+    key3 = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+        query_time_bucket="2026-05-27T10:00:00Z",
+        feature_set_hash="deadbeef",
+    )
+
+    assert key1 != key2
+    assert key1 != key3
+
+
+def test_make_answer_key_differs_by_tenant_and_banlist_snapshot() -> None:
+    key_a = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+    )
+    key_b = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_b",
+        "ban-sha-1",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+    )
+    key_c = make_answer_key(
+        "gs maçı tahmin",
+        "predict.match_outcome",
+        "abc",
+        "2026-05-29",
+        "def",
+        "tenant_a",
+        "ban-sha-2",
+        "1.0.0",
+        "lex-sha-1",
+        "v1",
+        "10.0.0",
+    )
+
+    assert key_a != key_b
+    assert key_a != key_c
 
 
 def test_nlp_cache_key_includes_all_5_version_fields() -> None:
@@ -185,8 +324,11 @@ def test_nlp_cache_key_includes_all_5_version_fields() -> None:
         "normalized_text",
         "intent_model_version",
         "lexicon_snapshot_sha",
+        "banlist_snapshot_sha",
         "calibration_version",
         "nlp_pipeline_version",
+        "tenant_id",
+        "locale",
     }
     found_fields: set[str] = set()
     for node in ast.walk(handle_answer):
@@ -268,6 +410,7 @@ def test_nlp_version_snapshot_held_for_request_lifetime() -> None:
         "normalized_text": "gs maçı tahmin",
         "intent_model_version": "1.0.0",
         "lexicon_snapshot_sha": "lex-sha-1",
+        "banlist_snapshot_sha": "ban-sha-1",
         "calibration_version": "v1.0",
         "nlp_pipeline_version": "10.0.0",
         "intent": "predict.match_outcome",
@@ -288,6 +431,7 @@ def test_nlp_version_snapshot_held_for_request_lifetime() -> None:
 
     assert snapshot.intent_model_version == "1.0.0"
     assert snapshot.lexicon_snapshot_sha == "lex-sha-1"
+    assert snapshot.banlist_snapshot_sha == "ban-sha-1"
     assert snapshot.calibration_version == "v1.0"
     assert snapshot.pipeline_version == "10.0.0"
 
@@ -306,6 +450,8 @@ def test_cache_agent_handles_qa_answer_v1_data_intent():
         "entity_hash": "entity123",
         "fixture_window_bucket": "2026-05-29",
         "model_versions_hash": "model456",
+        "tenant_id": "tenant_a",
+        "banlist_snapshot_sha": "ban-sha-1",
         "intent_model_version": "1.0.0",
         "lexicon_snapshot_sha": "lex-sha-1",
         "calibration_version": "v1.0",
@@ -334,6 +480,8 @@ def test_cache_agent_handles_qa_answer_v1_predict_intent():
         "entity_hash": "entity789",
         "fixture_window_bucket": "2026-05-30",
         "model_versions_hash": "modelXYZ",
+        "tenant_id": "tenant_a",
+        "banlist_snapshot_sha": "ban-sha-1",
         "intent_model_version": "1.0.0",
         "lexicon_snapshot_sha": "lex-sha-1",
         "calibration_version": "v2.0",
@@ -346,6 +494,67 @@ def test_cache_agent_handles_qa_answer_v1_predict_intent():
     result = list(agent.handle(msg))
     assert result == []
     assert len(backend) == 1
+
+
+def test_cache_agent_writes_qa_answer_v1_with_envelope_signature(monkeypatch):
+    monkeypatch.setattr(cfg, "profile", "mock")
+    monkeypatch.setattr(cfg, "qa_answer_hmac_key_path", "")
+
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+
+    payload = _make_qa_answer_payload(
+        request_id="req-qa-001",
+        qa_correlation_id="qa-001",
+        intent="predict.match_outcome",
+        kind="prediction",
+        answer_text="Galatasaray %65 olasılıkla kazanacak.",
+        citations=[{
+            "kind": "prediction",
+            "prediction_id": "pred-001",
+            "produced_at_utc": "2026-05-26T10:00:00Z",
+            "model_versions": ["predictor@1.2.3"],
+            "calibration_version": "1.0.0",
+        }],
+        schema_version=3,
+    )
+    payload["normalized_text"] = "galatasaray maçı"
+    envelope = Envelope(topic=Topic("qa.answer.v1"))
+    msg = Message(envelope=envelope, payload=payload)
+
+    result = list(agent.handle(msg))
+    assert result == []
+    assert len(backend) == 1
+
+    disclosure_sha = disclosures_snapshot_sha(load_disclosures("tr-TR")[0])
+    key = make_answer_key(
+        normalized_text=payload["normalized_text"],
+        intent=payload["intent"],
+        entity_hash=str(payload.get("entity_hash", "")),
+        fixture_window_bucket=str(payload.get("fixture_window_bucket", "")),
+        model_versions_hash=str(payload.get("model_versions_hash", "")),
+        tenant_id=str(payload.get("tenant_id", "")),
+        banlist_snapshot_sha=str(payload.get("banlist_snapshot_sha", "")),
+        intent_model_version=str(payload.get("intent_model_version", "")),
+        lexicon_snapshot_sha=str(payload.get("lexicon_snapshot_sha", "")),
+        calibration_version=str(payload.get("calibration_version", "")),
+        pipeline_version=str(payload.get("nlp_pipeline_version", "")),
+        disclosures_snapshot_sha=disclosure_sha,
+    )
+    cached = backend.get(key)
+    assert cached is not None
+
+    from swarm.agents.cache import _verify_cache_entry
+
+    cache_value = _verify_cache_entry(cached)
+    assert cache_value["payload"]["envelope_signature"] == payload["envelope_signature"]
+    assert cache_value["payload"]["body_canonical_sha"] == payload["body_canonical_sha"]
+
+
+def test_load_disclosures_locale_fallback_chain() -> None:
+    disclosures, used_locale = load_disclosures("en-US")
+    assert used_locale == "tr-TR"
+    assert any(d["disclosure_id"] == "gambling_law_disclaimer_band" for d in disclosures)
 
 
 def test_nlp_cache_ttls_are_short():
@@ -387,16 +596,20 @@ def test_cache_agent_caches_streamed_qa_answer_as_one_shot_payload():
 
     from swarm.agents.cache import _verify_cache_entry
 
+    disclosure_sha = disclosures_snapshot_sha(load_disclosures("tr-TR")[0])
     key = make_answer_key(
         normalized_text=payload["normalized_text"],
         intent=payload["intent"],
         entity_hash=payload["entity_hash"],
         fixture_window_bucket=payload["fixture_window_bucket"],
         model_versions_hash=payload["model_versions_hash"],
+        tenant_id=payload.get("tenant_id", ""),
+        banlist_snapshot_sha=payload.get("banlist_snapshot_sha", ""),
         intent_model_version=payload["intent_model_version"],
         lexicon_snapshot_sha=payload["lexicon_snapshot_sha"],
         calibration_version=payload["calibration_version"],
         pipeline_version=payload["nlp_pipeline_version"],
+        disclosures_snapshot_sha=disclosure_sha,
     )
     cached = backend.get(key)
     assert cached is not None
@@ -3536,6 +3749,7 @@ def test_prometheus_metrics_available():
         NLP_HUMANIZER_BREAKER_STATE,
         NLP_PROOFREADER_BLOCK_TOTAL,
         NLP_LEXICON_VERSION,
+        NLP_LEXICON_COVERAGE,
         _PROMETHEUS_AVAILABLE,
     )
     
@@ -3546,20 +3760,22 @@ def test_prometheus_metrics_available():
         assert NLP_HUMANIZER_BREAKER_STATE is not None
         assert NLP_PROOFREADER_BLOCK_TOTAL is not None
         assert NLP_LEXICON_VERSION is not None
+        assert NLP_LEXICON_COVERAGE is not None
     else:
         assert NLP_PIPELINE_LATENCY is None
         assert NLP_INTENT_CONFIDENCE is None
         assert NLP_HUMANIZER_BREAKER_STATE is None
         assert NLP_PROOFREADER_BLOCK_TOTAL is None
         assert NLP_LEXICON_VERSION is None
+        assert NLP_LEXICON_COVERAGE is None
 
 
 def test_record_pipeline_stage_latency():
     """TelemetrySink.record_pipeline_stage_latency records histogram metric."""
     from common.telemetry import TelemetrySink
-    
+
     sink = TelemetrySink()
-    
+
     # Should not raise regardless of prometheus availability
     sink.record_pipeline_stage_latency(
         stage="normalize",
@@ -3595,6 +3811,72 @@ def test_record_humanizer_tokens_emitted():
         intent="predict.match_outcome",
         count=42,
     )
+
+
+def test_nlp_coverage_histogram_per_intent_class():
+    """TelemetrySink.record_nlp_lexicon_coverage records the lexicon coverage histogram."""
+    from common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_LEXICON_COVERAGE
+
+    sink = TelemetrySink()
+    sink.record_nlp_lexicon_coverage(intent_class="predict.match_outcome", coverage_ratio=0.75)
+    sink.record_nlp_lexicon_coverage(intent_class="predict.btts", coverage_ratio=1.0)
+
+    if _PROMETHEUS_AVAILABLE:
+        assert "intent_class" in NLP_LEXICON_COVERAGE._labelnames
+        assert len(NLP_LEXICON_COVERAGE._labelnames) == 1
+
+
+def test_nlp_sarcasm_cue_fire_rate_histogram_label():
+    """TelemetrySink.record_nlp_sarcasm_cue exports a sarcasm cue histogram label."""
+    from common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_SARCASM_CUE_FIRE_RATE
+
+    sink = TelemetrySink()
+    sink.record_nlp_sarcasm_cue("harika oynadılar")
+
+    if _PROMETHEUS_AVAILABLE:
+        assert "cue_id" in NLP_SARCASM_CUE_FIRE_RATE._labelnames
+        assert len(NLP_SARCASM_CUE_FIRE_RATE._labelnames) == 1
+
+
+def test_record_nlp_sarcasm_cue_rate_drift_alert():
+    """TelemetrySink.record_nlp_sarcasm_cue emits an alert on week-over-week cue drift."""
+    from common.telemetry import TelemetrySink
+
+    times = [0.0]
+    alerts: list[dict[str, object]] = []
+    sink = TelemetrySink(clock=lambda: times[0])
+    sink.register_nlp_alert_callback(lambda payload: alerts.append(payload))
+
+    for _ in range(10):
+        sink.record_nlp_sarcasm_cue("harika oynadılar")
+
+    times[0] = 8 * 24 * 3600
+    for _ in range(16):
+        sink.record_nlp_sarcasm_cue("harika oynadılar")
+
+    assert len(alerts) == 1
+    assert alerts[0]["kind"] == "sarcasm_cue_rate_drift"
+    assert alerts[0]["severity"] == "info"
+    assert alerts[0]["subject"] == "harika oynadılar"
+    assert alerts[0]["details"]["previous_week_count"] == 10
+    assert alerts[0]["details"]["current_week_count"] == 16
+
+
+def test_nlp_unresolved_top_k_pii_scrubbed_and_capped():
+    """TelemetrySink.record_nlp_unresolved_token honors PII redaction and rolling top-k capping."""
+    import hashlib
+    from common.telemetry import TelemetrySink
+
+    sink = TelemetrySink()
+    secret_token = "A" * 100
+    sink.record_nlp_unresolved_token("foo")
+    sink.record_nlp_unresolved_token("foo")
+    sink.record_nlp_unresolved_token(secret_token)
+
+    top_tokens = sink.get_nlp_unresolved_top_k(k=2)
+    assert top_tokens[0] == ("foo", 2)
+    expected_redacted = f"[REDACTED:len=100:sha8={hashlib.sha256(secret_token.encode('utf-8')).hexdigest()[:8].upper()}]"
+    assert top_tokens[1] == (expected_redacted, 1)
 
 
 def test_record_politeness_class_distribution():

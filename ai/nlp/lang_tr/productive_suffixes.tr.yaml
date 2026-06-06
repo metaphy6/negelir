@@ -1,0 +1,26 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-05T00:00:00Z"
+  source: "phase10-10.32.8"
+  notes: >
+    Productive derivational suffix families for §10.32.8.
+    This YAML is the single source of truth for the allowed surface forms.
+    The peeler must be generalising and work by matching these closed forms.
+productive_suffixes:
+  - id: lI
+    forms: [lı, li, lu, lü]
+  - id: lIk
+    forms: [lık, lik, luk, lük]
+  - id: cI
+    forms: [cı, ci, cu, cü]
+  - id: CIk
+    forms: [cık, cik, cuk, cük, çık, çik, çuk, çük]
+  - id: mIş
+    forms: [mış, miş, muş, müş]
+  - id: yorlu
+    forms: [yorlu]
+  - id: lIlIk
+    forms: [lılık, lilik, luluk, lülük]
+  - id: lIlAr
+    forms: [lılar, liler, lular, lüler]

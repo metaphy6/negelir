@@ -1,0 +1,61 @@
+_meta:
+  schema_version: 1
+  table_version: "1.0.0"
+  generated_at_utc: "2026-06-04T00:00:00Z"
+  source: "phase10-10.26.10"
+  domain: football
+  notes: >
+    Closed football-specific bilingual vocabulary table for Phase 10 §10.26.10.
+    Entries bias the intent classifier toward football concepts without
+    overriding the classifier's confidence floor.
+
+entries:
+  - canonical_concept: "handicap"
+    surface_forms_tr:
+      - "handikap"
+      - "handikap kuponu"
+    surface_forms_en:
+      - "handicap"
+      - "handicap coupon"
+    register: "fan"
+    intent_hint: "predict.handicap"
+
+  - canonical_concept: "btts"
+    surface_forms_tr:
+      - "btts"
+      - "karşılıklı gol"
+    surface_forms_en:
+      - "btts"
+      - "both teams to score"
+    register: "media"
+    intent_hint: "predict.btts"
+
+  - canonical_concept: "offside"
+    surface_forms_tr:
+      - "ofsayt"
+      - "ofsayt oldu mu"
+    surface_forms_en:
+      - "offside"
+      - "was it offside"
+    register: "media"
+    intent_hint: "predict.match_outcome"
+
+  - canonical_concept: "var_decision"
+    surface_forms_tr:
+      - "var kararı"
+      - "var"
+    surface_forms_en:
+      - "var decision"
+      - "video assistant referee"
+    register: "formal"
+    intent_hint: "predict.match_outcome"
+
+  - canonical_concept: "extra_time"
+    surface_forms_tr:
+      - "ekstra dakikalar"
+      - "uzatma"
+    surface_forms_en:
+      - "extra time"
+      - "added time"
+    register: "media"
+    intent_hint: "predict.match_outcome"

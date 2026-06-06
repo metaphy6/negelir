@@ -43,11 +43,43 @@ def test_nlp_mark_ready_keeps_liveness_and_flips_readiness() -> None:
     assert state.readiness() is True
 
 
-def test_nlp_readiness_503_semantics_until_stage_6_and_cold_start_event() -> None:
-    """Stage 6 is the only ready state; every stage move emits cold_start_stage."""
+def test_nlp_mark_consensus_smoke_observed_flips_readiness() -> None:
+    """The consensus smoke stage is the final boot readiness gate."""
+    state = NlpBootProbeState()
+    state.mark_stage(6, elapsed_ms=100)
+
+    assert state.readiness() is False
+
+    event = state.mark_consensus_smoke_observed(elapsed_ms=50)
+    assert event.payload["kind"] == "cold_start_stage"
+    assert event.payload["stage_name"] == "consensus_smoke_observed"
+    assert state.readiness() is True
+
+
+def test_nlp_boot_consensus_sentinel_match_id_default() -> None:
+    """Default NLP boot consensus sentinel ID matches the Phase 10 design contract."""
+    from common.config import Config
+
+    cfg = Config()
+
+    assert cfg.nlp_boot_consensus_sentinel_match_id == "nlp:boot:canary"
+
+
+def test_nlp_boot_consensus_sentinel_match_id_must_be_non_empty() -> None:
+    """The sentinel match id config must be non-empty."""
+    from common.config import Config
+
+    cfg = Config(nlp_boot_consensus_sentinel_match_id="")
+    issues = cfg.validate()
+
+    assert any("nlp_boot_consensus_sentinel_match_id" in issue for issue in issues)
+
+
+def test_nlp_readiness_503_semantics_until_stage_7_and_cold_start_event() -> None:
+    """Stage 7 is the only ready state; every stage move emits cold_start_stage."""
     state = NlpBootProbeState(clock_iso=lambda: "2026-05-31T00:00:00+00:00")
 
-    for stage in range(6):
+    for stage in range(7):
         event = state.mark_stage(stage, elapsed_ms=100 + stage)
         assert event.envelope.topic == "nlp.event.v1"
         assert event.payload["kind"] == "cold_start_stage"
@@ -55,15 +87,15 @@ def test_nlp_readiness_503_semantics_until_stage_6_and_cold_start_event() -> Non
         assert event.payload["elapsed_ms"] == 100 + stage
         assert state.readiness() is False
 
-    final_event = state.mark_stage(6, elapsed_ms=777)
+    final_event = state.mark_stage(7, elapsed_ms=777)
     assert final_event.payload["kind"] == "cold_start_stage"
-    assert final_event.payload["stage"] == 6
+    assert final_event.payload["stage"] == 7
     assert state.readiness() is True
 
 
-def test_nlp_readiness_503_until_stage_6() -> None:
-    """Named proof from §10.21.9: readiness stays false until stage 6."""
-    test_nlp_readiness_503_semantics_until_stage_6_and_cold_start_event()
+def test_nlp_readiness_503_until_stage_7() -> None:
+    """Named proof from §10.21.9: readiness stays false until stage 7."""
+    test_nlp_readiness_503_semantics_until_stage_7_and_cold_start_event()
 
 
 def test_nlp_probe_contract_stage_thresholds() -> None:
@@ -82,9 +114,9 @@ def test_nlp_probe_contract_stage_thresholds() -> None:
     assert state.startup_readiness() is True
     assert state.readiness() is False
 
-    state.mark_stage(6, elapsed_ms=700)
+    state.mark_stage(7, elapsed_ms=700)
 
-    # Stage 6: readiness finally flips true.
+    # Stage 7: readiness finally flips true.
     assert state.liveness() is True
     assert state.startup_readiness() is True
     assert state.readiness() is True

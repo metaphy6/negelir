@@ -5,7 +5,16 @@ from typing import Any
 
 from nlp.render import build_environment, render as _render
 
-_ALLOWED_FORMATS = frozenset({"plain", "markdown_safe", "screen_reader"})
+_ALLOWED_FORMATS = frozenset(
+    {
+        "plain",
+        "markdown_safe",
+        "screen_reader",
+        "whatsapp_4096",
+        "sms_160",
+        "tts_neutral",
+    }
+)
 
 _TEMPLATES_BASE = pathlib.Path(__file__).resolve().parent / "templates"
 
@@ -27,7 +36,8 @@ def render(answer_blocks: dict[str, Any], answer_format: str = "plain") -> str:
     answer_blocks:
         Must contain ``template_name`` and an optional ``context`` dict.
     answer_format:
-        One of ``plain``, ``markdown_safe``, or ``screen_reader``.
+        One of ``plain``, ``markdown_safe``, ``screen_reader``,
+        ``whatsapp_4096``, ``sms_160``, or ``tts_neutral``.
     """
     if not isinstance(answer_blocks, dict):
         raise TypeError("answer_blocks must be a dict")

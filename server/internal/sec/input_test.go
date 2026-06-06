@@ -28,7 +28,7 @@ patterns:
 
 func TestQAGatePassOnBenignInput(t *testing.T) {
 	g := NewQAInputGate(newTestRules(t), 1024)
-	dec := g.Inspect("Galatasaray maçı saat kaçta?")
+	dec := g.Inspect("galatasaray maçı saat kaçta?")
 	if dec.Verdict != VerdictPass {
 		t.Fatalf("verdict = %s; want pass", dec.Verdict)
 	}

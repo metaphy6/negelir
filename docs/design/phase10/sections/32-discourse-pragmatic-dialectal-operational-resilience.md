@@ -271,7 +271,7 @@
 
 #### 10.32.6 Embedded focus-particle (mi/mı inside larger question)
 
-- [ ] **Real failure pattern.** *"Galatasaray ne zaman mı oynayacak?"* —
+- [x] **Real failure pattern.** *"Galatasaray ne zaman mı oynayacak?"* —
   Turkish allows `mi/mı/mu/mü` to attach as a **focus particle**
   inside a wh-question, where it does NOT make the sentence
   yes/no but emphasises the wh-element ("**when** is Galatasaray
@@ -279,21 +279,21 @@
   routes as confirmation_seeking; §10.30.2 wh-intent map sees
   the `ne zaman` and routes as data.kickoff_time; the dispatcher
   silently breaks the tie alphabetically — wrong half the time.
-- [ ] **Closed `focus_particle_disambiguation.tr.yaml`** — when
+- [x] **Closed `focus_particle_disambiguation.tr.yaml`** — when
   both a wh-word AND `mi/mı/mu/mü` appear in the same clause,
   the particle is **focus** not question; the wh-intent wins;
   the §10.31.2 confirmation/information classifier is **bypassed**
   for this token. AST guard
   `test_nlp_focus_particle_bypasses_question_tag_classifier`.
-- [ ] **Composition with §10.31.7 negation-scope** — *"yenmedi mi
+- [x] **Composition with §10.31.7 negation-scope** — *"yenmedi mi
   kim?"* (rhetorical negative + focus particle + wh) → route
   via §10.31.7 rhetorical-correction first, then wh-intent wins.
-- [ ] **Proof tests** — 25-row golden; 100% routing to wh-intent
+- [x] **Proof tests** — 25-row golden; 100% routing to wh-intent
   when both signals coexist; 0 leak to question-tag classifier.
 
 #### 10.32.7 Numeric-with-suffix realization (apostrophe-bound)
 
-- [ ] **Real failure pattern.** *"3'ü kazanmıştı"*, *"2008'de"*,
+- [x] **Real failure pattern.** *"3'ü kazanmıştı"*, *"2008'de"*,
   *"1-1'lik beraberlik"*, *"5-0'lık galibiyet"*, *"100.'sü"* —
   Turkish numbers take case suffixes via apostrophe (`3'ü`,
   `2008'de`) and ordinals/derivative-forms also via apostrophe
@@ -303,7 +303,7 @@
   suffix**. Today these are rejected by Symspell (no lexicon
   match) and fall through with the suffix attached, breaking
   downstream score / time / line resolution.
-- [ ] **Closed parser** at `ai/nlp/numbers/apostrophe_suffixed.py` —
+- [x] **Closed parser** at `ai/nlp/numbers/apostrophe_suffixed.py` —
   pure-stdlib regex over the closed shape
   `^(?P<num>\d+|\d+[-–]\d+|\d+\.)'(?P<suffix>[a-zçğıöşü]+)$`
   (with §10.26.9 dash canonicalisation already applied).
@@ -312,16 +312,16 @@
   `NumericEntity{value, kind ∈ {cardinal, score_pair, ordinal},
   case ∈ {nominative, accusative, dative, locative, ablative,
   genitive, ablative_distributive, derivative_lik}}`.
-- [ ] **Score-pair handling** — `1-1'lik` parsed as
+- [x] **Score-pair handling** — `1-1'lik` parsed as
   `NumericEntity{value=(1,1), kind=score_pair, case=derivative_lik}`;
   consumed by §10.24.11 decimal-vs-score parser as **definitive
   score** (no ambiguity — the `'lik` derivative makes it
   unambiguously a result-noun); routes to `data.h2h` not
   `data.over_under`.
-- [ ] **Cross-language byte-parity** — Go sec layer adds parallel
+- [x] **Cross-language byte-parity** — Go sec layer adds parallel
   parser (single-source `numeric_apostrophe_spec.json`); SHA pin
   + refuse-boot on drift (mirrors §10.29.11 doctrine).
-- [ ] **Proof tests** — 45-row golden (15 cardinal-with-case + 15
+- [x] **Proof tests** — 45-row golden (15 cardinal-with-case + 15
   score-pair-derivative + 15 ordinal-derivative); 100% correct
   parse; 0 silent fall-through; Hypothesis property: all
   combinations of (number-shape, vowel-harmony-class, case)
@@ -329,7 +329,7 @@
 
 #### 10.32.8 Slang-suffixation tolerance
 
-- [ ] **Real failure pattern.** Turkish freely derives nouns and
+- [x] **Real failure pattern.** Turkish freely derives nouns and
   adjectives from any stem via productive suffixes: *"GSlilik"*
   (Galatasaray-supporter-quality), *"Beşiktaşlılarımız"*
   (our-Beşiktaş-supporters), *"transferlik"* (transfer-worthy),
@@ -338,7 +338,7 @@
   doesn't cover these; the §10.5 gazetteer doesn't recognise
   the inflected forms; Zemberek often parses but loses the
   underlying canonical reference.
-- [ ] **Productive-suffix peeler** at `ai/nlp/morph/productive_suffixes.py` —
+- [x] **Productive-suffix peeler** at `ai/nlp/morph/productive_suffixes.py` —
   closed `productive_suffixes.tr.yaml` with 8-row family of
   productive derivational suffixes (`-lI`, `-lIk`, `-cI`, `-CIk`,
   `-mIş`, `-yorlu`, `-lIlIk`, `-lIlAr`); peel iteratively up to
@@ -346,27 +346,27 @@
   each peel whether the residue resolves to a LeagueCatalog
   canonical. First-resolving residue wins; preserves audit trail
   in `entities[].morph={original_token, peeled_suffixes[]}`.
-- [ ] **Composition with §10.32.5 apostrophe repair** — *"GS'lilik"*
+- [x] **Composition with §10.32.5 apostrophe repair** — *"GS'lilik"*
   (apostrophe-correct) and *"GSlilik"* (apostrophe-dropped) both
   resolve to same canonical via the §10.32.5 missing-apostrophe
   rule firing **before** the productive-peel; AST ordering guard.
-- [ ] **Negative test discipline** — peel must NOT fire on closed
+- [x] **Negative test discipline** — peel must NOT fire on closed
   allow-list of common nouns ending in productive suffixes (e.g.
   *"birlik"* the noun, not *"bir+lik"*); closed
   `productive_peel_no_fire.tr.yaml` 50-row negative corpus.
-- [ ] **Proof tests** — 40-row positive + 50-row negative; 100%
+- [x] **Proof tests** — 40-row positive + 50-row negative; 100%
   resolution on positives; 0 false-fire on negatives.
 
 #### 10.32.9 Self-meta / conversational-meta routing
 
-- [ ] **Real failure pattern.** *"ne demek istedin?"*, *"şaka mı?"*,
+- [x] **Real failure pattern.** *"ne demek istedin?"*, *"şaka mı?"*,
   *"kafa mı buluyorsun?"*, *"sen kimsin?"*, *"benim hakkımda ne
   biliyorsun?"*, *"daha önce ne sormuştum?"* — meta-conversational
   queries about the system's own behavior or prior conversation
   state. §10.28.10 covers system_self / rhetorical_dismissive /
   opinion_request but **not** the per-conversation introspection
   class.
-- [ ] **Closed `conversational_meta.tr.yaml`** in 4 sub-classes:
+- [x] **Closed `conversational_meta.tr.yaml`** in 4 sub-classes:
   - `system_clarification_request` (`ne demek istedin?`, `bunu
     açıklayabilir misin?`) → routes to `meta.last_answer_explain`
     (NEW; v5→v6 additive); template re-renders the prior
@@ -389,28 +389,28 @@
     regulatory disclosures); NEVER discloses any actual user
     data (boundary doctrine — NLP layer never reads user-PII
     columns).
-- [ ] **Routing precedence** — these intents short-circuit AFTER
+- [x] **Routing precedence** — these intents short-circuit AFTER
   §10.31.1 sarcasm AFTER §10.30.5 politeness BEFORE the main
   classifier (mirrors §10.28.10 meta-routing position). AST
   ordering guard.
-- [ ] **Per-intent SLO** — all four meta intents map to
+- [x] **Per-intent SLO** — all four meta intents map to
   `slo_fast` per §10.31.12 (250ms p99); they are deterministic
   template lookups + (for `prior_query_recall`) a single
   conversation-context read.
-- [ ] **Proof tests** — 4 × 15-row golden = 60-row; 100% routing
+- [x] **Proof tests** — 4 × 15-row golden = 60-row; 100% routing
   to corresponding meta intent; 0 leak to predict.* / data.*;
   AST guard `test_nlp_user_data_disclosure_template_never_reads_user_columns`.
 
 #### 10.32.10 Inline self-correction & stutter handling
 
-- [ ] **Real failure pattern.** *"Galat- Galatasaray bugün
+- [x] **Real failure pattern.** *"Galat- Galatasaray bugün
   oynuyor mu?"*, *"yok yok Fenerbahçe demiştim"*, *"Beşik-
   Beşiktaş'ı sormuştum aslında"* — voice-typed or fast-typed
   inputs frequently contain inline self-corrections that today
   the entity extractor sees as **two distinct entities** and
   the dispatcher treats as multi-fixture (per §10.29.8
   coordinator splitting), arriving at the wrong answer.
-- [ ] **Closed `inline_correction_markers.tr.yaml`** in 3 classes:
+- [x] **Closed `inline_correction_markers.tr.yaml`** in 3 classes:
   - `stutter_repeat` — same-prefix-token immediately repeated
     (≥ 3 chars overlap, edit-distance ≤ 1); closed heuristic
     via Levenshtein on adjacent tokens
@@ -420,22 +420,22 @@
   - `restart_marker` — `tamam`, `başa dön`, `unut`, `bırak`
     (whole-conversation reset; routes to §10.26.7 multi-turn
     correction grammar — already covered there)
-- [ ] **Detection ordering** — runs as §10.1 **step 7c.5** AFTER
+- [x] **Detection ordering** — runs as §10.1 **step 7c.5** AFTER
   §10.29.7 reduplication collapse AFTER §10.24.5 multi-question
   split BEFORE §10.32.6 focus-particle disambiguation. AST
   ordering guard.
-- [ ] **Resolution rule** — when stutter or verbal-self-correction
+- [x] **Resolution rule** — when stutter or verbal-self-correction
   detected, the **later** entity wins (right-most replacement
   semantics — matches actual Turkish self-correction usage); the
   earlier entity is dropped + audit-traced in
   `entities[].correction_dropped=true` (additive field on
   `qa.intent.v1`); NEVER emitted as a fan-out.
-- [ ] **Conservatism** — when entities are of **different kinds**
+- [x] **Conservatism** — when entities are of **different kinds**
   (e.g. team vs. player), self-correction does NOT apply
   (likely a legitimate two-entity query); falls through to
   normal extraction. AST guard
   `test_nlp_self_correction_only_replaces_same_kind`.
-- [ ] **Proof tests** — 35-row golden (15 stutter + 15 verbal +
+- [x] **Proof tests** — 35-row golden (15 stutter + 15 verbal +
   5 different-kind-no-fire); 100% correct; Hypothesis property:
   identical input + repeated entity → resolves to single entity;
   different-kind entities → resolves to multi-entity.
@@ -450,13 +450,13 @@
   o oyuncu kim?"*. Today these resolve via §10.30.7 stack which
   contains user-mentioned entities only — system-uttered entities
   are invisible.
-- [ ] **System-uttered entity capture** — the §10.7 template
+- [x] **System-uttered entity capture** — the §10.7 template
   renderer, alongside producing the answer text, emits a
   parallel `qa.context_extension.v1{entities[]}` envelope to the
   conversation context (PII-clean — canonical IDs only, per
   §10.27.12 doctrine). Capture is **post-render** so it captures
   exactly what the user saw (not what the dispatcher intended).
-- [ ] **Resolver extension** — the §10.30.7 `EntityMentionStack`
+- [x] **Resolver extension** — the §10.30.7 `EntityMentionStack`
   gains a 6th type slot `mentioned_by ∈ {user, system}`; pronoun
   resolution prefers user-mentioned entities when both exist
   (matches Turkish discourse-pragmatic preference) but falls
@@ -464,22 +464,22 @@
   cache key composition includes `mentioned_by` to defend against
   the §10.30.12 cache-collision class extending to mixed
   user/system anaphora.
-- [ ] **Specific marker handling** — *"öbür"*, *"diğer"*, *"diğeri"*,
+- [x] **Specific marker handling** — *"öbür"*, *"diğer"*, *"diğeri"*,
   *"öteki"* (the-other) trigger **complementary** resolution: if
   the system mentioned 2 fixtures and user references *"öbür"*
   → resolves to the one **not** the most-recent-user-focus.
   Closed `complementary_anaphora.tr.yaml` 8-row; AST guard
   enforces this is the only place complement semantics fires.
-- [ ] **Disambiguation when system mentioned > 1 entity of same
+- [x] **Disambiguation when system mentioned > 1 entity of same
   kind** — falls through to §10.30.7 floor-confidence
   disambiguation; NEVER silent pick.
-- [ ] **Proof tests** — 30-row golden (10 system-only-mentioned +
+- [x] **Proof tests** — 30-row golden (10 system-only-mentioned +
   10 mixed user-system + 10 complementary `öbür/diğer`); 100%
   correct resolution; AST guard `test_nlp_system_uttered_anaphora_capture_is_pii_clean`.
 
 #### 10.32.12 Cross-pod lexicon-state divergence detection (gossip)
 
-- [ ] **Real failure pattern not covered by §10.27.9.** §10.27.9
+- [x] **Real failure pattern not covered by §10.27.9.** §10.27.9
   pins the swap timing; once two pods have completed swap, today
   there is no **steady-state** check that they agree on lexicon
   state. A subtle pod-local corruption (memory bit-flip, partial-

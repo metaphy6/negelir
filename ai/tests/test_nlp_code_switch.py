@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import ast
+import datetime
+import os
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -70,6 +73,84 @@ def test_nlp_code_switch_manchester_city_resolves_to_canonical() -> None:
         assert "manchester_city" in team_ids, (
             f"Expected Manchester City to resolve to manchester_city, got {team_ids}"
         )
+
+
+def test_lexicon_reload_skips_true_file_touches(tmp_path: Path) -> None:
+    """Touching a lexicon file without content changes should not trigger a swap."""
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir(parents=True, exist_ok=True)
+    _write_minimal_team_lexicon(lexdir)
+
+    times = [0.0]
+    def clock_mono() -> float:
+        return times[0]
+
+    store = LexiconStore(
+        lexdir,
+        reload_s=0,
+        max_rss_mb=0,
+        clock_mono=clock_mono,
+        clock_wall=lambda: times[0],
+    )
+    store.maybe_reload()
+    assert store.is_loaded
+    first_generation = store._generation_counter
+    first_version = store.lexicon_version_id
+
+    # Update the file timestamp without changing content.
+    path = lexdir / "teams.tr.yaml"
+    os.utime(path, (times[0] + 1.0, times[0] + 1.0))
+    times[0] += 1.0
+
+    alerts = store.maybe_reload()
+    assert alerts == []
+    assert store._generation_counter == first_generation
+    assert store.lexicon_version_id == first_version
+
+
+def test_lexicon_swap_at_utc_delays_activation(tmp_path: Path) -> None:
+    """Lexicon snapshots with future swap_at_utc are validated but not activated."""
+    lexdir = tmp_path / "lexicon"
+    lexdir.mkdir(parents=True, exist_ok=True)
+    _write_minimal_team_lexicon(lexdir)
+
+    times = [0.0]
+    def clock_mono() -> float:
+        return times[0]
+
+    def clock_wall() -> float:
+        return times[0]
+
+    store = LexiconStore(
+        lexdir,
+        reload_s=0,
+        max_rss_mb=0,
+        clock_mono=clock_mono,
+        clock_wall=clock_wall,
+    )
+    store.maybe_reload()
+    assert store.is_loaded
+    base_generation = store._generation_counter
+
+    path = lexdir / "teams.tr.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    meta = data.setdefault("_meta", {})
+    assert isinstance(meta, dict)
+    meta["swap_at_utc"] = (
+        datetime.datetime.now(datetime.timezone.utc)
+        + datetime.timedelta(seconds=1)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+    alerts = store.maybe_reload()
+    assert alerts == []
+    assert store._generation_counter == base_generation
+
+    time.sleep(1.1)
+    alerts = store.maybe_reload()
+    assert any(str(alert.get("kind")) == "lexicon_swap_late" for alert in alerts)
+    assert store._generation_counter == base_generation + 1
 
 
 def test_nlp_english_pluralized_galatasaraylar_recovers_to_galatasaray() -> None:

@@ -1,0 +1,9 @@
+[
+  {"raw": "degil", "expected": "değil"},
+  {"raw": "dogru", "expected": "doğru"},
+  {"raw": "yagmur", "expected": "yağmur"},
+  {"raw": "agac", "expected": "ağaç"},
+  {"raw": "degil mac", "expected": "değil maç"},
+  {"raw": "gol", "expected": "gol"},
+  {"raw": "kapi", "expected": "kapi"}
+]

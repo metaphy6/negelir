@@ -11,6 +11,11 @@ Phase 11 §11.3: CPU parity test.
 """
 from __future__ import annotations
 
+import ast
+import inspect
+import os
+import multiprocessing
+
 import pytest
 
 
@@ -434,6 +439,66 @@ class TestHumanizerGPUSharing:
         assert "finally" in doc.lower(), (
             "_acquire_gpu_lease() must document finally-block release requirement"
         )
+
+    def test_humanizer_subprocess_death_releases_gpu_lease_callback(self) -> None:
+        """Process death must trigger the humanizer lease-release callback."""
+        from common.config import Config
+        from nlp.humanizer import _run_humanizer_subprocess
+
+        cfg = Config()
+        released: list[bool] = []
+
+        def release_callback() -> None:
+            released.append(True)
+
+        def failing_process_factory(target, args, kwargs):
+            ctx = multiprocessing.get_context("fork")
+            return ctx.Process(target=os._exit, args=(1,))
+
+        with pytest.raises(RuntimeError, match="Humanizer subprocess exited"):
+            _run_humanizer_subprocess(
+                "Some template text.",
+                cfg,
+                lease_release_callback=release_callback,
+                process_factory=failing_process_factory,
+            )
+
+        assert released == [True], "Lease-release callback must be invoked on subprocess death"
+
+    def test_humanizer_subprocess_body_uses_request_budget(self) -> None:
+        """Humanizer subprocess work must be budgeted separately from the parent process."""
+        import inspect
+
+        from nlp.humanizer import _humanizer_process_body
+
+        signature = inspect.signature(_humanizer_process_body)
+        assert "cfg" in signature.parameters
+        source = inspect.getsource(_humanizer_process_body)
+        assert "RequestBudget" in source
+        assert "humanizer=True" in source
+
+    def test_nlp_humanizer_runs_in_subprocess_not_thread(self) -> None:
+        """AST guard: humanizer must use multiprocessing.Process, not threading.Thread."""
+        from nlp import humanizer
+
+        source = inspect.getsource(humanizer)
+        tree = ast.parse(source)
+
+        has_process = any(
+            isinstance(node, ast.Call)
+            and ((isinstance(node.func, ast.Attribute) and node.func.attr == "Process")
+                 or (isinstance(node.func, ast.Name) and node.func.id == "Process"))
+            for node in ast.walk(tree)
+        )
+        assert has_process, "humanizer.py must supervise a multiprocessing.Process"
+
+        has_thread = any(
+            isinstance(node, ast.Call)
+            and ((isinstance(node.func, ast.Attribute) and node.func.attr == "Thread")
+                 or (isinstance(node.func, ast.Name) and node.func.id == "Thread"))
+            for node in ast.walk(tree)
+        )
+        assert not has_thread, "humanizer.py must not use threading.Thread for humanizer supervision"
 
 
 class TestHumanizerCPUParity:

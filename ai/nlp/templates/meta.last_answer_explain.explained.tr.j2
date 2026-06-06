@@ -1,0 +1,11 @@
+{% if last_answer_text %}
+Önceki cevap şu şekildeydi:
+{{ last_answer_text }}
+
+Açıklama adımları:
+1. Kullanıcının sorusunu anlama aşaması.
+2. Uygun veri kaynağını belirleme.
+3. Yanıtı Türkçe olarak oluşturma.
+{% else %}
+Önceki cevabı bulamadım; lütfen önce bir soru sorup yanıt aldıktan sonra tekrar deneyin.
+{% endif %}

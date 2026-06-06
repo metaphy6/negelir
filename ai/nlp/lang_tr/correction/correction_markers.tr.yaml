@@ -1,0 +1,14 @@
+negation_of_prior:
+  - "yok öyle değil"
+  - "hayır onu demedim"
+  - "yanlış anladın"
+  - "ben öyle demek istemedim"
+replacement:
+  - "değil"
+  - "yerine"
+  - "aslında"
+restart:
+  - "yok yok"
+  - "baştan"
+  - "unut onu"
+  - "sıfırdan"

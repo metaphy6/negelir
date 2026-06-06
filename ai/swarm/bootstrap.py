@@ -51,7 +51,14 @@ from .agents.maint.dlq import MaintDlqSupervisor
 from .agents.maint.scaler import MaintScaler
 from .agents.maint.schema import MaintSchemaSentinel
 from .agents.maint.sec import MaintSecAgent
-from .agents.nlp import NlpAnswerAgent, NlpIntentAgent, NlpProofreaderAgent
+from .agents.nlp import (
+    NlpAnswerAgent,
+    NlpDispatcherAgent,
+    NlpGossipAggregatorAgent,
+    NlpIntentAgent,
+    NlpProofreaderAgent,
+    NlpProberAgent,
+)
 from .agents.sec import SecInputAgent, SecRateAgent, SecScrapeAgent
 from .agents.telemetry import TelemetryAgent
 from .source_watcher.agent import SourceWatcherAgent
@@ -94,6 +101,7 @@ SINGLE_INSTANCE_AGENTS: frozenset[str] = frozenset({
     "storage.v1",
     "consensus.v1",
     "proofreader_aggregator.v1",
+    "gossip_aggregator.v1",
     "drift.v1",
     "sec.rate.v1",
     # Phase 8 maint plane — all four hold per-target / per-pattern
@@ -230,8 +238,11 @@ def build_agents() -> list[Agent]:
         # Phase 10 §10.0 — NLP plane agents (boundary-discipline stubs).
         # Full handler logic lands per-bullet in §10.1–§10.20.
         NlpIntentAgent(),
+        NlpDispatcherAgent(),
+        NlpGossipAggregatorAgent(),
         NlpAnswerAgent(),
         NlpProofreaderAgent(),
+        NlpProberAgent(),
     ]
 
 

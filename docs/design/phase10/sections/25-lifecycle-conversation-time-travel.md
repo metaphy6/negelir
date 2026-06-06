@@ -309,48 +309,48 @@
 
 #### 10.25.8 Lexicon coverage telemetry (entity-hit-rate as drift leading indicator)
 
-- [ ] **Real gap §10.14 / §10.22.13 misses.** Tracks input-repair density
+- [x] **Real gap §10.14 / §10.22.13 misses.** Tracks input-repair density
   (a quality-of-input signal) but NOT lexicon coverage (a quality-of-
   lexicon signal). When a new fan-coined nickname ("Cimbom Junior" for
   a youth player who debuted last week) hits 10% of queries before the
   lexicon ships an alias, we have no leading signal — we only see the
   downstream rise in `did-you-mean` and `meta.unsupported`.
-- [ ] **`nlp_lexicon_coverage` histogram.** Per-intent-class buckets
+- [x] **`nlp_lexicon_coverage` histogram.** Per-intent-class buckets
   `{0.0, 0.25, 0.5, 0.75, 1.0}` — fraction of resolvable-class tokens
   in the input that hit the gazetteer (numerator = gazetteer-hit
   tokens of class team/player/league/competition/market; denominator
   = all "content" tokens after stopword strip). Computed per query;
   exported to telemetry.v1.
-- [ ] **`nlp_unresolved_token_top_k`** (rolling, capped at
+- [x] **`nlp_unresolved_token_top_k`** (rolling, capped at
   `cfg.nlp_unresolved_token_top_k=50` per hour, PII-scrubbed via the
   long-string heuristic from §10.21.7). Operators see "the 50 most
   common tokens we couldn't resolve last hour" → directly actionable
   alias_delta candidates. Capped count + per-token sha8 prevents
   exfiltration vector. Reset hourly.
-- [ ] **Drift alerts.** `cfg.nlp_lexicon_coverage_p50_floor=0.6` per
+- [x] **Drift alerts.** `cfg.nlp_lexicon_coverage_p50_floor=0.6` per
   intent class on a 1h sliding window; sustained breach for > 30 min
   → `nlp.alert.v1{kind=lexicon_coverage_below_floor, intent_class,
   observed_p50, severity=warn}`. Multiple intent classes breaching
   simultaneously upgrades to `severity=error` (likely lexicon
   catastrophe — Phase 16 feed corruption suspected).
-- [ ] **Coverage staleness.** `cfg.nlp_lexicon_max_age_days=14`; lexicon
+- [x] **Coverage staleness.** `cfg.nlp_lexicon_max_age_days=14`; lexicon
   files unchanged for that long → daily `nlp.alert.v1{kind=lexicon_stale,
   severity=info}`. Catches "Phase 16 feed pipeline silently broke
   upstream" weeks earlier than coverage drift would.
-- [ ] **Proof:** `test_nlp_coverage_histogram_per_intent_class`,
+- [x] **Proof:** `test_nlp_coverage_histogram_per_intent_class`,
   `test_nlp_unresolved_top_k_pii_scrubbed_and_capped`,
   `test_nlp_coverage_below_floor_alert_fires`,
   `test_nlp_lexicon_stale_alert_after_14_days` (mock clock).
 
 #### 10.25.9 End-to-end right-to-erasure (Phase 8 → NLP audit + L1 cache + spool)
 
-- [ ] **Real gap §10.21.7 misses.** Pins NLP audit redaction whitelist
+- [x] **Real gap §10.21.7 misses.** Pins NLP audit redaction whitelist
   but never wires `quarantine_erase` (§8.3 / §8.16) through to NLP's
   on-disk state. A user erasure request leaves `nlp_audit_log` rows
   with `qa_correlation_id` linkable to the now-erased predictor row,
   L1 `cache.v1` answer entries cache-keyed on `(user_id_h, ...)`, and
   spool envelopes in `data/nlp/spool/` carrying `qa_correlation_id`.
-- [ ] **NLP subscribes to `maint.event.v1{kind=quarantine_erase}`** (the
+- [x] **NLP subscribes to `maint.event.v1{kind=quarantine_erase}`** (the
   ack contract was already defined in §8.0; this is the real consumer
   for the NLP plane). On receipt: (a) `UPDATE nlp_audit_log SET ...
   user_id_h=NULL, qa_correlation_id_h=hash(qa_correlation_id) WHERE
@@ -359,19 +359,19 @@
   `data/nlp/spool/` for envelopes with matching `user_id_h` → `unlink`.
   Emits `maint.ack.v1{accepted=true, accepted_by="nlp.audit.v1"}` on
   completion or `accepted=false` w/ reason on failure.
-- [ ] **Idempotency.** Multiple erase events for the same `user_id_h`
+- [x] **Idempotency.** Multiple erase events for the same `user_id_h`
   → second is a no-op (no rows match) but STILL acks success.
   Mirrors §8.1 denylist_clear idempotency lesson.
-- [ ] **Audit-bundle dirs untouched.** §10.25.3 bundles contain artifact
+- [x] **Audit-bundle dirs untouched.** §10.25.3 bundles contain artifact
   metadata only — no user PII — so erase does not propagate there.
   Pinned doctrine; documented in `nlp_runbook.md`.
-- [ ] **Conversation context erase.** `qa.context.v1` Redis state is
+- [x] **Conversation context erase.** `qa.context.v1` Redis state is
   also erased: `redis.del(nlp:ctx:<conversation_id>)` for every
   conversation_id linked to the erased user (linkage table
   `data/nlp/conversation_index.sqlite` or Redis sorted set, single-
   source choice pinned in `cfg.nlp_conversation_index_backend ∈
   {redis, sqlite}` default `redis`).
-- [ ] **Proof:** `test_nlp_quarantine_erase_nullstamps_audit_row`,
+- [x] **Proof:** `test_nlp_quarantine_erase_nullstamps_audit_row`,
   `test_nlp_quarantine_erase_evicts_l1_cache`,
   `test_nlp_quarantine_erase_unlinks_spool_envelopes`,
   `test_nlp_quarantine_erase_idempotent_on_already_erased`,
@@ -380,35 +380,35 @@
 
 #### 10.25.10 Per-tenant compliance ban-list overlay (advertiser / legal carve-outs)
 
-- [ ] **Real gap.** Some deployments need to suppress specific terms in
+- [x] **Real gap.** Some deployments need to suppress specific terms in
   rendered answers (advertiser conflicts: "rakip bahis sitesi adı";
   legal: a banned trademark; defamation-safe: a player accused of an
   offence). §10.22.9 offensive-language gate is global; per-tenant
   carve-outs are an orthogonal axis.
-- [ ] **`ai/nlp/compliance/banlist.tr.yaml`** (per-tenant; structure:
+- [x] **`ai/nlp/compliance/banlist.tr.yaml`** (per-tenant; structure:
   `tenant_id: [{term, action ∈ {redact, refuse, replace_with},
   replace_text?, expires_at_utc?, source_pr_url, added_by, added_at}]`).
   Atomic-swap mtime-poll (mirrors §10.2 lexicon discipline; distinct
   lock); `cfg.nlp_compliance_reload_s=60`; SHA-pinned per snapshot.
-- [ ] **Render-time only.** Ban-list applied AFTER §10.9 proofreader,
+- [x] **Render-time only.** Ban-list applied AFTER §10.9 proofreader,
   BEFORE returning to API gateway. NEVER fed to classifier or entity
   extractor — keeps the classifier tenant-blind (mirrors §10.0
   Phase 20 doctrine: NLP is tier-blind; same applies to compliance).
-- [ ] **`refuse` action.** Replaces the entire answer with a closed-
+- [x] **`refuse` action.** Replaces the entire answer with a closed-
   template `meta.compliance_refused.<locale>.j2` ("Bu konuda bilgi
   veremiyoruz."). Citation block preserved. `nlp.event.v1{kind=
   compliance_refusal_triggered, tenant_id_h, term_sha8}` (term itself
   NEVER logged — only its sha8 prefix).
-- [ ] **`redact` / `replace_with`.** Token-level substitution on the
+- [x] **`redact` / `replace_with`.** Token-level substitution on the
   rendered answer string; multiple substitutions applied in a single
   pass (sorted by `len(term) desc` — longest first, prevents partial
   overlap pathology). AST guard: substitution code uses no regex on
   user-controlled patterns (defends against ReDoS via tenant config).
-- [ ] **Cache-key extension.** `(tenant_id, banlist_snapshot_sha)`
+- [x] **Cache-key extension.** `(tenant_id, banlist_snapshot_sha)`
   added as the 7th + 8th components of the §10.23.9 cache key (was 5,
   context made 6, ban-list makes 7-8). Atomic ban-list swap evicts
   cache for that tenant naturally.
-- [ ] **Proof:** `test_nlp_banlist_redacts_term_in_rendered_answer`,
+- [x] **Proof:** `test_nlp_banlist_redacts_term_in_rendered_answer`,
   `test_nlp_banlist_refuse_returns_closed_template_with_citation`,
   `test_nlp_banlist_substitution_longest_first_no_partial_overlap`,
   `test_nlp_banlist_never_seen_by_classifier_or_extractor` (AST),
@@ -417,14 +417,14 @@
 
 #### 10.25.11 Boot-dependency graph (Phase 5 cold-start, GPU-lease leak on humanizer crash)
 
-- [ ] **Real gap §10.21.9 misses.** Boot stages 1-6 cover NLP-internal
+- [x] **Real gap §10.21.9 misses.** Boot stages 1-6 cover NLP-internal
   state but the pipeline is unusable until Phase 5 `consensus.v1` is
   emitting `predict.approved.v1` for AT LEAST a smoke-set of fixtures.
   At cluster cold-start (compose-up or K8s rolling deploy), NLP can
   pass readiness while consensus is still warming → 503-but-200
   paradox: `/v1/qa` accepts the request, fans out `predict.request.v1`,
   times out, returns degraded.
-- [ ] **Boot stage 6.5 added.** `consensus_smoke_observed`: NLP at boot
+- [x] **Boot stage 6.5 added.** `consensus_smoke_observed`: NLP at boot
   publishes a single canary `predict.request.v1{match_id=<sentinel>,
   market=1x2, request_id=nlp-boot-canary-<pod>, qa_correlation_id=null}`
   and waits up to `cfg.nlp_boot_consensus_smoke_timeout_s=10` for the
@@ -433,18 +433,18 @@
   severity=warn}` (warn not critical — cluster-wide cold start can
   validly take longer; auto-promotes to critical at 60s via
   `cfg.nlp_boot_consensus_smoke_critical_s=60`).
-- [ ] **Sentinel match.** `cfg.nlp_boot_consensus_sentinel_match_id="nlp:boot:canary"`
+- [x] **Sentinel match.** `cfg.nlp_boot_consensus_sentinel_match_id="nlp:boot:canary"`
   recognised by Phase 5 consensus as a fast-path response (returns a
   pre-canned `predict.approved.v1` with `degraded=true,
   degraded_reason=boot_canary` — never hits real predictors). Boundary
   test in Phase 5: `test_consensus_recognises_nlp_boot_canary`.
-- [ ] **GPU-lease leak on humanizer crash.** §10.21.4 breaker is
+- [x] **GPU-lease leak on humanizer crash.** §10.21.4 breaker is
   per-pod; §10.0 says lease via Phase 11. If the humanizer subprocess
   crashes (segfault on bad input, OOM kill), the in-process Python
   agent process MAY survive but the GPU lease record in Redis is
   orphaned for `cfg.compute_lease_ttl_s` (Phase 11 default 600s),
   blocking the next pod's lease acquisition. Real bug.
-- [ ] **Subprocess supervisor.** Humanizer runs in a `multiprocessing.Process`
+- [x] **Subprocess supervisor.** Humanizer runs in a `multiprocessing.Process`
   child supervised by the agent (mirrors `aitext.v1` Phase 11 pattern,
   if not already pinned, this section pins it). Child death detected
   via `Process.exitcode != None`; supervisor immediately
@@ -454,7 +454,7 @@
   breaker window (recovery via §10.10 "humanizer fail" row → template
   fallback), and respawns child after `cfg.nlp_humanizer_respawn_cooldown_s=30`.
   AST guard: `test_nlp_humanizer_runs_in_subprocess_not_thread`.
-- [ ] **Proof:** `test_nlp_readiness_503_until_consensus_smoke`,
+- [x] **Proof:** `test_nlp_readiness_503_until_consensus_smoke`,
   `test_nlp_consensus_smoke_promotes_to_critical_at_60s`,
   `test_consensus_recognises_nlp_boot_canary` (Phase 5),
   `test_nlp_humanizer_subprocess_death_releases_gpu_lease`,
@@ -463,12 +463,12 @@
 
 #### 10.25.12 Summary fan-out overflow (matchday > nlp_summary_max_fixtures)
 
-- [ ] **Real bug §10.6 misses.** `cfg.nlp_summary_max_fixtures=10` cap
+- [x] **Real bug §10.6 misses.** `cfg.nlp_summary_max_fixtures=10` cap
   silently truncates a Saturday with 9 Süper Lig + 6 1.Lig fixtures;
   the user sees "10 maç" but doesn't know 5 were dropped. Worse:
   truncation is FIFO by `predict.request.v1` arrival order — non-
   deterministic across pods.
-- [ ] **Salience-ranked overflow.** When fixture count > cap, NLP
+- [x] **Salience-ranked overflow.** When fixture count > cap, NLP
   computes a salience score per fixture and selects top-N. Single-
   source `ai/nlp/dispatcher/salience.py::compute_salience(fixture) ->
   float` over the closed feature set: `(league_tier from LeagueCatalog,
@@ -476,19 +476,19 @@
   prior_user_team_mentions_in_conversation_context (§10.25.1))`.
   Deterministic; tie-break on `match_id` lex-sort. AST guard:
   `test_nlp_salience_inputs_in_closed_set`.
-- [ ] **Explicit Turkish disclosure.** Answer carries
+- [x] **Explicit Turkish disclosure.** Answer carries
   `truncated_count=N, top_n_by="öncelik (lig sıralaması, derbi, saat)"`
   + a closed-template line: "Bu hafta {total} maç var; en öne çıkan
   {n} tanesini özetledim. Diğerleri için lig listelerine bakabilirsiniz."
   NEVER silent truncation. AST: `test_nlp_summary_truncation_disclosed_in_answer`.
-- [ ] **Hard upper cap.** `cfg.nlp_summary_max_fixtures_hard=20` (cap
+- [x] **Hard upper cap.** `cfg.nlp_summary_max_fixtures_hard=20` (cap
   on cap — at this size even salience-ranked output is too long for
   template clarity). Over the hard cap → degrade entirely to a list-
   only meta answer with the disclosure + a per-league link table.
-- [ ] **Caching.** Salience-ranked top-N cache key includes
+- [x] **Caching.** Salience-ranked top-N cache key includes
   `query_time_bucket=hour-truncated` and the closed feature set hash,
   so the same query 5 minutes later hits the same cache entry.
-- [ ] **Proof:** `test_nlp_summary_overflow_uses_salience_not_fifo`,
+- [x] **Proof:** `test_nlp_summary_overflow_uses_salience_not_fifo`,
   `test_nlp_summary_truncation_disclosed_in_answer`,
   `test_nlp_summary_hard_cap_degrades_to_list_meta`,
   `test_nlp_salience_deterministic_across_pods`,
@@ -496,12 +496,11 @@
 
 #### 10.25.13 Religious / national holiday calendar in date resolver
 
-- [ ] **Real gap §10.5 / §10.22.6 misses.** Date resolver covers "yarın"
-  / "cuma" / "27 Nisan saat 21:30" but NOT culturally-grounded Turkish
-  date references: "bayramda maç var mı" (Ramazan / Kurban — moving
-  dates), "Cumhuriyet Bayramı'nda kim oynar" (29 Ekim, fixed), "milli
-  maç haftası" (FIFA windows — moving). These return `meta.unsupported`
-  today, which is a fan-visible quality bug.
+- [x] **Real gap §10.5 / §10.22.6 misses.** Date resolver covers "yarın"
+  / "cuma" / "27 Nisan saat 21:30" and now also handles culturally-
+  grounded Turkish date references: "bayramda maç var mı" (Ramazan /
+  Kurban — moving dates), "Cumhuriyet Bayramı'nda kim oynar" (29 Ekim,
+  fixed), "milli maç haftası" (FIFA windows — moving).
 - [x] **`ai/nlp/dates/holidays_tr.yaml`** (single-source).  Each entry:
   `{key (closed enum: ramazan_bayrami | kurban_bayrami | yilbasi |
   cumhuriyet_bayrami | zafer_bayrami | gencler_bayrami |
@@ -514,20 +513,20 @@
 - [x] **Lookup horizon.** `cfg.nlp_holiday_lookup_horizon_days=540`
   (~18 months — covers any "next year's bayram" query). Refuses to
   resolve dates beyond horizon → falls back to numeric-date prompt.
-- [ ] **Hijri determinism.** `hijri.py` is a vendored table for the next
+- [x] **Hijri determinism.** `hijri.py` is a vendored table for the next
   20 years (small file, ~400 rows, SHA-pinned in chart compat block);
   table generated by `make nlp.hijri-rebuild` from a deterministic
   astronomical algorithm (Umm al-Qura observed dates), NEVER from a
   live API. Per-year discrepancy with Turkey's official calendar
   (Diyanet) noted in a `_diyanet_overrides.tr.yaml` allow-list.
-- [ ] **FIFA window cache.** Per-year `data/nlp/fifa_windows/<year>.json`
+- [x] **FIFA window cache.** Per-year `data/nlp/fifa_windows/<year>.json`
   populated from openfootball feed at lexicon-build time; SHA-pinned;
   fallback if file absent → `meta.unsupported` (NEVER guess).
-- [ ] **Holiday-as-context.** When holiday entity is present + "maç var
+- [x] **Holiday-as-context.** When holiday entity is present + "maç var
   mı" intent, dispatcher routes to `data.fixture_lookup` with
   `(start_utc, end_utc)` derived from the holiday's resolved date
   range. Fan-friendly UX without changing intent enum.
-- [ ] **Proof:** `test_nlp_resolves_ramazan_bayrami_2026`,
+- [x] **Proof:** `test_nlp_resolves_ramazan_bayrami_2026`,
   `test_nlp_resolves_cumhuriyet_bayrami_fixed_date`,
   `test_nlp_resolves_fifa_window_from_openfootball_cache`,
   `test_nlp_holiday_beyond_horizon_returns_meta_unsupported`,
@@ -536,7 +535,7 @@
 
 #### 10.25.14 Knob inventory + new event/alert kinds + DoD additions
 
-- [ ] **New cfg knobs (~22):** `nlp_conversation_max_turns=8`,
+- [x] **New cfg knobs (~22):** `nlp_conversation_max_turns=8`,
   `nlp_conversation_idle_ttl_s=180`, `nlp_conversation_redis_key_prefix="nlp:ctx:"`,
   `nlp_conversation_enabled_tier_floor=0`, `nlp_conversation_index_backend="redis"`,
   `nlp_answer_streaming="disabled"`, `nlp_streaming_proofread_chunk_chars=80`,
@@ -556,18 +555,18 @@
   except `nlp_conversation_enabled=true`). Triangle test extends.
   Go-side `TestEnvSync` covers `nlp_humanizer_respawn_cooldown_s` and
   the streaming knobs (Phase 9 SSE handler will read them).
-- [ ] **New `qa.context.v1` topic** registered in §3.5 wire authority
+- [x] **New `qa.context.v1` topic** registered in §3.5 wire authority
   (additive). Producer set bounded to `nlp.dispatcher.v1`; consumer
   bounded to `nlp.intent.v1`. `additionalProperties:false` schema.
 - [x] **New `qa.feedback.v1` topic** registered in §3.5 wire authority
   (additive). Producer set bounded to `api.gateway.v1`; consumer
   bounded to `nlp.dispatcher.v1`. `additionalProperties:false` schema.
-- [ ] **New `nlp.event.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.event.v1` kinds** (open-enum, registered):
   `conversation_entity_overridden`, `streaming_client_slow_canceled`,
   `active_learning_queue_overflow`, `compliance_refusal_triggered`,
   `nlp_intent_rolled_back`, `nlp_audit_rerender_executed`. Per-kind
   sub-schemas under `ai/swarm/sdk/schemas/nlp.event.v1/<kind>.json`.
-- [ ] **New `nlp.alert.v1` kinds** (open-enum, registered):
+- [x] **New `nlp.alert.v1` kinds** (open-enum, registered):
   `conversation_context_cleared_after_block` (info),
   `streaming_humanizer_chunk_blocked` (warn),
   `nlp_compatibility_quartet_mismatch` (critical),
@@ -576,7 +575,7 @@
   `lexicon_stale` (info),
   `nlp_consensus_smoke_failed` (warn → critical at 60s),
   `humanizer_subprocess_died` (error).
-- [ ] **DoD proof tests aggregate** (new in §10.25, all required for
+- [x] **DoD proof tests aggregate** (new in §10.25, all required for
   Phase 10 closure):
   - §10.25.1 — 6 tests (multi-turn context)
   - §10.25.2 — 6 tests (streaming + AST guards)
@@ -593,13 +592,13 @@
   - §10.25.13 — 6 tests (holiday calendar)
   - **Total: ≈ 69 new proof tests added on top of §10.21/§10.22/§10.23/§10.24
     aggregate.** Cumulative Phase 10: ≈ 320+ proof tests.
-- [ ] **Chart compatibility additions.** Pin Unicode TR39 confusables
+- [x] **Chart compatibility additions.** Pin Unicode TR39 confusables
   rev (already in §10.21), `hijri.py` vendored table SHA, openfootball
   FIFA-window seed SHA, Diyanet override table SHA. Pin
   `python-multiprocessing` semantics by recording the host glibc
   version range that was tested for subprocess supervisor (defends
   against silent fork() vs spawn() differences).
-- [ ] **`make swarm.demo.nlp.full`** extends to exercise (within the
+- [x] **`make swarm.demo.nlp.full`** extends to exercise (within the
   ≤ 60s compose budget, tightening from §10.23.13 baseline): (a) one
   multi-turn conversation (3 turns); (b) one streaming response
   (asserting skeleton-first then polish); (c) one re-render via
@@ -607,7 +606,7 @@
   intent-rollback dry-run; (e) one compliance refuse triggered; (f)
   one summary overflow with disclosure rendered; (g) one holiday-
   context query ("bayramda maç var mı") resolved.
-- [ ] **Documentation.** `docs/design/TURKISH_NLP.md` gains five new
+- [x] **Documentation.** `docs/design/TURKISH_NLP.md` gains five new
   sections: "Conversational Context", "Streaming Response", "Audit
   Re-render Bundles", "Lexicon Contributor Guide", "Holiday Calendar".
   `docs/guides/nlp_runbook.md` gains: "Intent rollback runbook",

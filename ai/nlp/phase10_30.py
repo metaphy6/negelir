@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import functools
 import math
 import re
 from dataclasses import dataclass
@@ -12,9 +13,14 @@ from common.config import cfg
 from common.text.turkish import parse_number_word
 
 _LANG_TR_DIR = Path(__file__).parent / "lang_tr"
+_META_QUESTIONS_PATH = _LANG_TR_DIR / "meta_questions.tr.yaml"
+_CONVERSATIONAL_META_PATH = _LANG_TR_DIR / "conversational_meta.tr.yaml"
+_QUESTION_TAG_CLASSIFIER_PATH = _LANG_TR_DIR / "question_tag_classifier.tr.yaml"
+_COMPLEMENTARY_ANAPHORA_PATH = _LANG_TR_DIR / "complementary_anaphora.tr.yaml"
 
 GOVERNANCE_HIGH_LEVERAGE_LEXICON_FILES = frozenset({
     "idioms.tr.yaml",
+    "offensive_obfuscated.tr.yaml",
 })
 
 
@@ -88,6 +94,367 @@ def load_wh_words(path: Path | None = None) -> list[str]:
     if not isinstance(words, list):
         raise Phase10SchemaError(f"{actual_path.name}: missing required 'wh_words' list")
     return [str(w) for w in words if isinstance(w, str) and w]
+
+
+def load_focus_particle_disambiguation(path: Path | None = None) -> frozenset[str]:
+    actual_path = path or _LANG_TR_DIR / "focus_particle_disambiguation.tr.yaml"
+    if not actual_path.exists():
+        return frozenset()
+    raw = _load_yaml(actual_path)
+    particles = raw.get("particles")
+    if not isinstance(particles, list):
+        raise Phase10SchemaError(
+            f"{actual_path.name}: missing required 'particles' list"
+        )
+    return frozenset(str(p).strip() for p in particles if isinstance(p, str) and p.strip())
+
+
+_PRO_DROP_INTENT_CLASSES_PATH = _LANG_TR_DIR / "pro_drop_intent_classes.tr.yaml"
+_PRO_DROP_RESOLUTION_STRATEGIES = frozenset({
+    "cross_turn_anaphora_then_default_team",
+    "cross_turn_anaphora_then_disambiguation",
+    "time_context_only",
+    "disambiguation_only",
+})
+
+
+def load_pro_drop_intent_classes(path: Path | None = None) -> dict[str, str]:
+    actual_path = path or _PRO_DROP_INTENT_CLASSES_PATH
+    if not actual_path.exists():
+        return {}
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        intent = entry.get("intent")
+        strategy = entry.get("pro_drop_resolution_strategy")
+        if not isinstance(intent, str) or not intent:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid intent")
+        if not isinstance(strategy, str) or strategy not in _PRO_DROP_RESOLUTION_STRATEGIES:
+            raise Phase10SchemaError(
+                f"{actual_path.name}: invalid pro_drop_resolution_strategy for intent {intent!r}"
+            )
+        result[intent] = strategy
+    return result
+
+
+def load_question_tag_classifier(path: Path | None = None) -> dict[str, str]:
+    actual_path = path or _QUESTION_TAG_CLASSIFIER_PATH
+    if not actual_path.exists():
+        return {}
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        shape = entry.get("shape")
+        pragmatic_class = entry.get("pragmatic_class")
+        if not isinstance(shape, str) or not shape:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid shape")
+        if pragmatic_class not in {"information_seeking", "confirmation_seeking"}:
+            raise Phase10SchemaError(
+                f"{actual_path.name}: invalid pragmatic_class for shape {shape!r}"
+            )
+        result[shape] = pragmatic_class
+    return result
+
+
+_NEGATIVE_QUESTION_OBJECT_MARKER_RE = re.compile(r"(?:'yi|'yı|'yu|'yü|yi|yı|yu|yü)$")
+_NEGATIVE_QUESTION_VERB_RE = re.compile(
+    r".*(?:madı|medi|maz|mez|mıyor|miyor|mıyordu|miyordu|muyor|müyor|mamış|memiş|mamıştı|memişti)$"
+)
+
+
+def _is_ambiguous_negative_question(tokens: list[str]) -> bool:
+    if len(tokens) < 2:
+        return False
+    normalized = [token.lower() for token in tokens]
+    # Remove trailing punctuation tokens.
+    normalized = [token for token in normalized if token not in {"?", "!", ".", ",", ":", ";"}]
+    if len(normalized) < 2:
+        return False
+    if normalized[-1] not in {"mi", "mı", "mu", "mü"}:
+        return False
+    if not _NEGATIVE_QUESTION_VERB_RE.fullmatch(normalized[-2]):
+        return False
+    if any(_NEGATIVE_QUESTION_OBJECT_MARKER_RE.search(tok) for tok in normalized[:-2]):
+        return True
+    return False
+
+
+def detect_question_tag_pragmatic_class(
+    tokens: list[str],
+    *,
+    path: Path | None = None,
+    focus_particle_disambiguated: bool = False,
+) -> str | None:
+    if not tokens or focus_particle_disambiguated:
+        return None
+
+    normalized_tokens = [token.lower() for token in tokens]
+    stripped = [token for token in normalized_tokens if token not in {"?", "!", ".", ",", ":", ";"}]
+    if not stripped:
+        return None
+
+    if stripped[-1] not in {"mi", "mı", "mu", "mü"}:
+        return None
+
+    if len(stripped) >= 2 and stripped[-2] == "değil":
+        return "confirmation_seeking"
+
+    if _is_ambiguous_negative_question(stripped):
+        return None
+
+    table = load_question_tag_classifier(path)
+    text = " ".join(stripped)
+    for shape, pragmatic_class in table.items():
+        if re.search(rf"\b{re.escape(shape)}\b", text):
+            return pragmatic_class
+
+    return "information_seeking"
+
+
+_TELEGRAPHIC_INTENT_MAP_PATH = _LANG_TR_DIR / "intent_telegraphic.tr.yaml"
+_TELEGRAPHIC_ENTITY_KINDS = frozenset({"team", "player", "league", "competition"})
+_TELEGRAPHIC_TEMPORAL_KINDS = frozenset({"date", "time", "weekday"})
+_TELEGRAPHIC_QUESTION_PARTICLES = frozenset({"mi", "mı", "mu", "mü"})
+
+
+def load_telegraphic_intent_classes(path: Path | None = None) -> frozenset[str]:
+    actual_path = path or _TELEGRAPHIC_INTENT_MAP_PATH
+    if not actual_path.exists():
+        return frozenset()
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        intent = entry.get("intent")
+        if not isinstance(intent, str) or not intent:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid intent")
+        result.add(intent)
+    return frozenset(result)
+
+
+def _entity_is_high_confidence_for_telegraphic(entity: dict[str, Any]) -> bool:
+    if not isinstance(entity, dict):
+        return False
+    kind = entity.get("kind")
+    if not isinstance(kind, str) or kind not in _TELEGRAPHIC_ENTITY_KINDS:
+        return False
+    confidence = entity.get("confidence")
+    if isinstance(confidence, (float, int)) and float(confidence) >= float(cfg.nlp_telegraphic_min_entity_confidence):
+        return True
+    source = entity.get("source")
+    return isinstance(source, str) and source == "gazetteer"
+
+
+def _has_temporal_entity(entities: list[dict[str, Any]]) -> bool:
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        kind = entity.get("kind")
+        if isinstance(kind, str) and kind in _TELEGRAPHIC_TEMPORAL_KINDS:
+            return True
+    return False
+
+
+def _contains_question_marker(text: str) -> bool:
+    lower = text.lower()
+    if "?" in lower:
+        return True
+    return any(re.search(rf"\b{re.escape(p)}\b", lower) for p in _TELEGRAPHIC_QUESTION_PARTICLES)
+
+
+def infer_telegraphic_intent(
+    entities: list[dict[str, Any]],
+    intent_distribution: list[dict[str, Any]] | None,
+    normalized_text: str,
+    token_count: int,
+    has_verb_form: bool,
+) -> tuple[str, float, str] | None:
+    if not cfg.nlp_telegraphic_inference_enabled:
+        return None
+    if token_count > int(cfg.nlp_telegraphic_max_tokens):
+        return None
+    if has_verb_form:
+        return None
+    if _contains_question_marker(normalized_text):
+        return None
+    if not any(_entity_is_high_confidence_for_telegraphic(entity) for entity in entities):
+        return None
+    if not _has_temporal_entity(entities):
+        return None
+
+    allowed_intents = load_telegraphic_intent_classes()
+    if not allowed_intents:
+        return None
+
+    if intent_distribution is not None:
+        for entry in intent_distribution:
+            label = entry.get("label")
+            if not isinstance(label, str):
+                continue
+            if label.startswith("predict."):
+                continue
+            if label in allowed_intents:
+                return label, 0.65, "telegraphic_inference"
+
+    return "data.fixture_lookup", 0.65, "telegraphic_inference"
+
+
+_KI_CONTEXT_PATH = _LANG_TR_DIR / "spelling" / "ki_context.tr.yaml"
+
+
+def load_ki_context(path: Path | None = None) -> dict[str, str]:
+    actual_path = path or _KI_CONTEXT_PATH
+    if not actual_path.exists():
+        return {}
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        token = entry.get("token")
+        common_reading = entry.get("common_reading")
+        if not isinstance(token, str) or not token:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid token")
+        if not isinstance(common_reading, str) or common_reading not in {"relative", "emphatic"}:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid common_reading for token {token!r}")
+        result[token.lower()] = common_reading
+    return result
+
+
+def detect_ki_contexts(normalized_text: str, tokens: list[str], *, path: Path | None = None) -> list[str]:
+    if not normalized_text or not tokens:
+        return []
+
+    token_forms = [token.lower() for token in tokens]
+    ki_positions = [idx for idx, tok in enumerate(token_forms) if tok == "ki"]
+    if not ki_positions:
+        return []
+
+    patterns = list(re.finditer(r"(?<!\w)ki(?!\w)", normalized_text, flags=re.IGNORECASE))
+    if len(patterns) != len(ki_positions):
+        return []
+
+    ambiguous_defaults = load_ki_context(path)
+    results: list[str] = []
+    for pattern in patterns:
+        start, end = pattern.span()
+        before = ""
+        i = start - 1
+        while i >= 0 and normalized_text[i].isspace():
+            i -= 1
+        if i >= 0:
+            before = normalized_text[i]
+
+        after = ""
+        j = end
+        while j < len(normalized_text) and normalized_text[j].isspace():
+            j += 1
+        if j < len(normalized_text):
+            after = normalized_text[j]
+
+        if before == "," or after == ",":
+            results.append("relative")
+            continue
+        if after == "!" or after == "":
+            results.append("emphatic")
+            continue
+        token = pattern.group(0).lower()
+        if token in ambiguous_defaults:
+            results.append("ambiguous")
+        else:
+            results.append("relative")
+    return results
+
+
+def _normalize_conversational_meta_text(text: str) -> str:
+    normalized = text.casefold()
+    normalized = re.sub(r"[^\wığüşöçĞÜŞÖÇİ]+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+@functools.lru_cache(maxsize=1)
+def load_conversational_meta_patterns(path: Path | None = None) -> dict[str, tuple[str, ...]]:
+    actual_path = path or (_META_QUESTIONS_PATH if _META_QUESTIONS_PATH.exists() else _CONVERSATIONAL_META_PATH)
+    if not actual_path.exists():
+        return {}
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: dict[str, tuple[str, ...]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a mapping")
+        intent = entry.get("intent")
+        examples = entry.get("examples")
+        if not isinstance(intent, str) or not intent:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid intent")
+        if not isinstance(examples, list) or not examples:
+            raise Phase10SchemaError(
+                f"{actual_path.name}: invalid examples for intent {intent!r}"
+            )
+        result[intent] = tuple(str(example) for example in examples if isinstance(example, str) and example.strip())
+
+    if len(result) > cfg.nlp_meta_question_table_max:
+        raise Phase10SchemaError(
+            f"{actual_path.name}: contains {len(result)} entries, exceeding cfg.nlp_meta_question_table_max"
+        )
+    return result
+
+
+def classify_conversational_meta(normalized_text: str, path: Path | None = None) -> str | None:
+    patterns = load_conversational_meta_patterns(path)
+    if not patterns:
+        return None
+    normalized_text = _normalize_conversational_meta_text(normalized_text)
+    for intent, examples in patterns.items():
+        for example in examples:
+            normalized_example = _normalize_conversational_meta_text(example)
+            if not normalized_example:
+                continue
+            if re.search(rf"\b{re.escape(normalized_example)}\b", normalized_text):
+                return intent
+    return None
+
+
+def detect_focus_particle_disambiguation(tokens: list[str], path: Path | None = None) -> bool:
+    if not tokens:
+        return False
+    particles = load_focus_particle_disambiguation(path)
+    if not particles:
+        return False
+    normalized_tokens = [token.lower() for token in tokens]
+    if not any(token in particles for token in normalized_tokens):
+        return False
+    text = " ".join(normalized_tokens)
+    wh_words = load_wh_words()
+    for wh in wh_words:
+        if re.search(rf"\b{re.escape(wh)}\b", text):
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -446,6 +813,47 @@ def load_conditional_markers(path: Path | None = None) -> list[str]:
     return [str(item) for item in entries if isinstance(item, str)]
 
 
+def _compile_coordinating_particle_pattern(form: str) -> re.Pattern[str]:
+    if "..." in form:
+        parts = [part.strip() for part in form.split("...")]
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise Phase10SchemaError(
+                "coordinating_particles.tr.yaml: invalid 'form' with ellipsis"
+            )
+        left, right = parts
+        regex = rf"\b{re.escape(left)}\b(?:\s+\S+){{1,6}}\s+\b{re.escape(right)}\b"
+    else:
+        regex = rf"\b{re.escape(form)}\b"
+    return re.compile(regex, re.IGNORECASE | re.UNICODE)
+
+
+def load_coordinating_particles(path: Path | None = None) -> list[re.Pattern[str]]:
+    actual_path = path or _LANG_TR_DIR / "morph" / "coordinating_particles.tr.yaml"
+    if not actual_path.exists():
+        return []
+    raw = _load_yaml(actual_path)
+    entries = raw.get("particles")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing 'particles' list")
+    result: list[re.Pattern[str]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise Phase10SchemaError(f"{actual_path.name}: each particle entry must be a mapping")
+        form = entry.get("form")
+        if not isinstance(form, str) or not form:
+            raise Phase10SchemaError(f"{actual_path.name}: invalid particle form")
+        result.append(_compile_coordinating_particle_pattern(form))
+    return result
+
+
+def detect_coordinating_particles(text: str) -> bool:
+    patterns = load_coordinating_particles()
+    if not patterns:
+        return False
+    lowered = text.lower()
+    return any(pattern.search(lowered) for pattern in patterns)
+
+
 def load_sarcasm_markers(path: Path | None = None) -> list[str]:
     actual_path = path or _LANG_TR_DIR / "sarcasm_markers.tr.yaml"
     if not actual_path.exists():
@@ -484,25 +892,39 @@ def _find_phrase_positions(tokens: list[str], phrase: str) -> list[int]:
     return positions
 
 
-def detect_sarcastic_modifier(tokens: list[str]) -> str:
+def find_sarcasm_cue_ids(tokens: list[str]) -> list[str]:
     markers = load_sarcasm_markers()
     if not markers:
+        return []
+
+    lower_tokens = [token.lower() for token in tokens]
+    cue_ids: list[str] = []
+    for marker in markers:
+        phrase_tokens = marker.lower().split()
+        if not phrase_tokens:
+            continue
+        for idx in range(len(lower_tokens) - len(phrase_tokens) + 1):
+            if tuple(lower_tokens[idx : idx + len(phrase_tokens)]) == tuple(phrase_tokens):
+                cue_ids.append(marker)
+    return cue_ids
+
+
+def detect_sarcastic_modifier(tokens: list[str]) -> str:
+    cue_ids = find_sarcasm_cue_ids(tokens)
+    if not cue_ids:
         return "none"
 
     lower_tokens = [token.lower() for token in tokens]
-    cue_positions: list[int] = []
-    for marker in markers:
-        cue_positions.extend(_find_phrase_positions(lower_tokens, marker.lower()))
-
-    if not cue_positions:
-        return "none"
-
     negative_positions: list[int] = []
     for phrase in _SARCASM_NEGATIVE_PHRASES:
         negative_positions.extend(_find_phrase_positions(lower_tokens, phrase))
 
     if not negative_positions:
         return "none"
+
+    cue_positions: list[int] = []
+    for cue_id in cue_ids:
+        cue_positions.extend(_find_phrase_positions(lower_tokens, cue_id.lower()))
 
     for cue_pos in cue_positions:
         for neg_pos in negative_positions:
@@ -513,29 +935,34 @@ def detect_sarcastic_modifier(tokens: list[str]) -> str:
 
 
 def find_sarcasm_cues_without_context(tokens: list[str]) -> list[dict[str, object]]:
-    markers = load_sarcasm_markers()
-    if not markers:
+    cue_ids = find_sarcasm_cue_ids(tokens)
+    if not cue_ids:
         return []
 
     lower_tokens = [token.lower() for token in tokens]
-    cue_positions: list[tuple[str, int, int]] = []
-    for marker in markers:
-        phrase_tokens = marker.lower().split()
-        if not phrase_tokens:
-            continue
-        for idx in range(len(lower_tokens) - len(phrase_tokens) + 1):
-            if tuple(lower_tokens[idx : idx + len(phrase_tokens)]) == tuple(phrase_tokens):
-                cue_positions.append((marker, idx, len(phrase_tokens)))
-
-    if not cue_positions:
-        return []
-
     negative_positions: list[int] = []
     for phrase in _SARCASM_NEGATIVE_PHRASES:
         negative_positions.extend(_find_phrase_positions(lower_tokens, phrase))
 
     if negative_positions:
         return []
+
+    results: list[dict[str, object]] = []
+    for cue_id in cue_ids:
+        phrase_tokens = cue_id.lower().split()
+        if not phrase_tokens:
+            continue
+        for idx in range(len(lower_tokens) - len(phrase_tokens) + 1):
+            if tuple(lower_tokens[idx : idx + len(phrase_tokens)]) == tuple(phrase_tokens):
+                results.append(
+                    {
+                        "kind": "sarcasm_cue_no_context",
+                        "cue_id": cue_id,
+                        "cue_phrase": cue_id,
+                        "span": (idx, idx + len(phrase_tokens)),
+                    }
+                )
+    return results
 
     return [
         {
@@ -556,7 +983,7 @@ def detect_conditional_modifier(tokens: list[str]) -> tuple[str | tuple[str, ...
     comparative = re.search(r"\b(daha|en|kadar|gibi|önde|geride|fazla|az)\b", token_text)
     modifier = ("conditional", "comparative") if comparative else "conditional"
     future = re.search(r"\b(kazanırsa|olursa|gelirse|atarsa)\b", token_text)
-    past = re.search(r"\b(kazansaydı|olurdu|gelirseyd[iı])\b", token_text)
+    past = re.search(r"\b(yenseydi|kazansaydı|olsaydı|olurdu|gelirseyd[iı])\b", token_text)
     if past:
         return modifier, "past"
     if future:
@@ -606,11 +1033,14 @@ def load_anaphora_pronouns(path: Path | None = None) -> dict[str, AnaphoraPronou
 
 def detect_anaphora_pronouns(normalized_text: str) -> tuple[str, ...]:
     table = load_anaphora_pronouns()
-    if not table:
+    complementary = load_complementary_anaphora()
+    if not table and not complementary:
         return ()
     lower = normalized_text.lower()
     matches: list[tuple[int, str]] = []
-    for pronoun in sorted(table.keys(), key=len, reverse=True):
+    for pronoun in sorted(
+        list(table.keys()) + list(complementary), key=len, reverse=True
+    ):
         for m in re.finditer(rf"\b{re.escape(pronoun)}\b", lower):
             matches.append((m.start(), pronoun))
     matches.sort(key=lambda item: item[0])
@@ -626,13 +1056,13 @@ def resolve_anaphora_pronoun(
     if not pronoun or not mention_stack:
         return None, 0.0
 
-    entry = load_anaphora_pronouns().get(pronoun)
-    if entry is None:
+    table = load_anaphora_pronouns()
+    entry = table.get(pronoun)
+    complementary = pronoun in load_complementary_anaphora()
+    if entry is None and not complementary:
         return None, 0.0
 
-    allowed_kinds = ANAPHORA_TYPE_CONSTRAINTS.get(entry.type_constraint)
-    best_candidate: dict[str, object] | None = None
-    best_score = 0.0
+    allowed_kinds = None if complementary else ANAPHORA_TYPE_CONSTRAINTS.get(entry.type_constraint)
     now_dt = None
     if current_time_iso is not None:
         try:
@@ -640,22 +1070,13 @@ def resolve_anaphora_pronoun(
         except ValueError:
             now_dt = None
 
-    for mention in reversed(mention_stack):
-        if not isinstance(mention, dict):
-            continue
-        kind = mention.get("kind")
-        canonical_id = mention.get("canonical_id")
-        if not isinstance(kind, str) or not isinstance(canonical_id, str):
-            continue
-        if allowed_kinds is not None and kind not in allowed_kinds:
-            continue
-
+    def _score_mention(mention: dict[str, object], *, skip_recency: bool = False) -> float:
         if current_turn_index is not None and isinstance(mention.get("mentioned_turn"), int):
             age_turns = current_turn_index - mention["mentioned_turn"]
             if age_turns < 0:
                 age_turns = 0
             if age_turns >= int(cfg.nlp_anaphora_lookback_turns):
-                continue
+                return -1.0
         else:
             age_turns = 0
 
@@ -666,27 +1087,125 @@ def resolve_anaphora_pronoun(
             except ValueError:
                 age_seconds = 0.0
             if age_seconds >= int(cfg.nlp_anaphora_lookback_seconds):
-                continue
+                return -1.0
         else:
             age_seconds = 0.0
+
+        salience = 0.5
+        if isinstance(mention.get("confidence"), (float, int)):
+            salience = min(1.0, max(0.0, float(mention["confidence"])))
+
+        if skip_recency:
+            return salience
 
         if int(cfg.nlp_anaphora_lookback_turns) > 0:
             recency_weight = max(0.0, 1.0 - (age_turns / float(cfg.nlp_anaphora_lookback_turns)))
         else:
             recency_weight = 1.0
 
-        salience = 0.5
-        if isinstance(mention.get("confidence"), (float, int)):
-            salience = min(1.0, max(0.0, float(mention["confidence"])))
+        return recency_weight * salience
 
-        score = recency_weight * salience
-        if score > best_score:
+    def _best_candidate(mentions: list[dict[str, object]]) -> tuple[dict[str, object] | None, float]:
+        best_candidate: dict[str, object] | None = None
+        best_score = 0.0
+        for mention in reversed(mentions):
+            if not isinstance(mention, dict):
+                continue
+            kind = mention.get("kind")
+            canonical_id = mention.get("canonical_id")
+            if not isinstance(kind, str) or not isinstance(canonical_id, str):
+                continue
+            if allowed_kinds is not None and kind not in allowed_kinds:
+                continue
+
+            score = _score_mention(mention)
+            if score <= best_score:
+                continue
             best_score = score
             best_candidate = mention
 
-    if best_score < float(cfg.nlp_anaphora_min_antecedent_confidence):
-        return None, best_score
-    return best_candidate, best_score
+        return best_candidate, best_score
+
+    user_mentions = [m for m in mention_stack if isinstance(m, dict) and m.get("mentioned_by") == "user"]
+    system_mentions = [m for m in mention_stack if isinstance(m, dict) and m.get("mentioned_by") != "user"]
+
+    user_candidate, user_score = _best_candidate(user_mentions)
+
+    complementary = pronoun in load_complementary_anaphora()
+    eligible_system_mentions = [
+        mention
+        for mention in system_mentions
+        if isinstance(mention, dict)
+        and isinstance(mention.get("kind"), str)
+        and isinstance(mention.get("canonical_id"), str)
+        and (allowed_kinds is None or mention["kind"] in allowed_kinds)
+    ]
+
+    if not complementary:
+        if user_candidate is not None and user_score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+            return user_candidate, user_score
+        if user_mentions:
+            return None, 0.0
+        if len(eligible_system_mentions) > 1:
+            return None, 0.0
+        if len(eligible_system_mentions) == 1:
+            mention = eligible_system_mentions[0]
+            score = _score_mention(mention)
+            if score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+                return mention, score
+        return None, 0.0
+
+    if user_candidate is not None and user_score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+        for mention in reversed(eligible_system_mentions):
+            if (
+                mention.get("canonical_id") != user_candidate.get("canonical_id")
+                or mention.get("kind") != user_candidate.get("kind")
+            ):
+                score = _score_mention(mention, skip_recency=True)
+                if score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+                    mention["mentioned_by"] = "system"
+                    return mention, score
+        return None, 0.0
+
+    # Resolve to the previous system entity when the pronoun itself indicates "the other one".
+    if len(eligible_system_mentions) >= 2:
+        latest = eligible_system_mentions[-1]
+        for mention in reversed(eligible_system_mentions[:-1]):
+            if (
+                mention.get("canonical_id") != latest.get("canonical_id")
+                or mention.get("kind") != latest.get("kind")
+            ):
+                score = _score_mention(mention, skip_recency=True)
+                if score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+                    mention["mentioned_by"] = "system"
+                    return mention, score
+    return None, 0.0
+
+    if user_candidate is not None and user_score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+        return user_candidate, user_score
+
+    system_candidate, system_score = _best_candidate(system_mentions)
+    if system_candidate is not None and system_score >= float(cfg.nlp_anaphora_min_antecedent_confidence):
+        return system_candidate, system_score
+
+    return None, max(user_score, system_score)
+
+
+def load_complementary_anaphora(path: Path | None = None) -> frozenset[str]:
+    actual_path = path or _COMPLEMENTARY_ANAPHORA_PATH
+    if not actual_path.exists():
+        return frozenset()
+    raw = _load_yaml(actual_path)
+    entries = raw.get("entries")
+    if not isinstance(entries, list):
+        raise Phase10SchemaError(f"{actual_path.name}: missing required 'entries' list")
+
+    result: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.strip():
+            raise Phase10SchemaError(f"{actual_path.name}: each entry must be a non-empty string")
+        result.add(entry.strip().lower())
+    return frozenset(result)
 
 
 def load_anaphora_compose(path: Path | None = None) -> set[frozenset[str]]:

@@ -536,7 +536,7 @@
   `garden_path_backtrack_succeeded`.
 - [x] **New `nlp.alert.v1` kinds** (open-enum, registered):
   `excessive_combining_marks` (warn, debounced 60s).
-- [ ] **Updated wire schema.** `qa.answer.v1` schema_version 1→2
+- [x] **Updated wire schema.** `qa.answer.v1` schema_version 1→2
   additive: `parts: [{intent, body, citation, polarity,
   subquery_correlation_id}]` array (legacy clients see top-level
   `intent` + `body` from `parts[0]` via consumer-side fallback —
@@ -544,7 +544,7 @@
   ALWAYS populates `parts[]` (single-question case = 1-element
   array) so consumers may rely on it; legacy `intent` / `body`
   duplicated for `parts[0]` only.
-- [ ] **DoD proof tests aggregate (new in §10.24):**
+- [x] **DoD proof tests aggregate (new in §10.24):**
   - §10.24.1 — 4 tests
   - §10.24.2 — 5 tests (incl. hypothesis property)
   - §10.24.3 — 4 tests
@@ -559,7 +559,7 @@
   - §10.24.12 — 4 tests (incl. 50-row flood corpus)
   - §10.24.13 — 6 tests
   - **Total: ≈ 63 new proof tests on top of §10.20 + §10.21 + §10.22 + §10.23 baseline.**
-- [ ] **`make swarm.demo.nlp.full` extends** to cover the §10.24
+- [x] **`make swarm.demo.nlp.full` extends** to cover the §10.24
   paths: one query each for harmony-violation recovery, repeated-char
   collapse, digit-letter fold, decomposed-İ NFC composition, run-on
   multi-question split, negation framing, MKE Ankaragücü
@@ -568,7 +568,7 @@
   Kara Kartal nickname backtrack, empty-input canned help. Total
   demo runtime stays ≤ 60s for `.full` (per §10.23 split — the
   `.fast` variant remains < 30s).
-- [ ] **Cross-phase contracts updated.**
+- [x] **Cross-phase contracts updated.**
   - **Phase 7 sec layer.** §10.24.4 Turkish-dotted-i compose helper
     is shared with `server/internal/sec/sanitize.go`; cross-language
     byte parity test added to the §10.20 boundary suite (mirrors
@@ -589,7 +589,7 @@
     (§10.24.7) grows additively per league; AST guard
     `test_nlp_no_per_league_branch` (already in §10.20) still
     holds — no `if league_id == ...` introduced.
-- [ ] **Documentation.** `docs/design/TURKISH_NLP.md` gains a
+- [x] **Documentation.** `docs/design/TURKISH_NLP.md` gains a
   "Wrong-Turkish Tolerance Catalogue" section enumerating every
   §10.24 rule with worked examples (real-Turkish-fan corpus
   excerpts, PII-scrubbed). `docs/guides/nlp_runbook.md` gains a
