@@ -64,6 +64,36 @@ def test_nlp_url_only_input_routes_meta_url_only_input() -> None:
     assert "bağlantı" in answer[0].payload["answer_text"]
 
 
+def test_nlp_partial_input_routes_meta_likely_partial_input() -> None:
+    agent = NlpIntentAgent()
+    out = list(agent.handle(_make_qa_request_v1_msg("Gala", request_id="req-010")))
+    answer = [m for m in out if m.envelope.topic == QA_ANSWER_V1]
+    events = [m for m in out if m.envelope.topic == NLP_EVENT_V1]
+
+    assert len(answer) == 1
+    assert len(events) == 1
+    assert events[0].payload["kind"] == "partial_input_completion_offered"
+    assert events[0].payload["completions"]
+    assert answer[0].payload["intent"] == "meta.likely_partial_input"
+    assert answer[0].payload["kind"] == "meta.likely_partial_input"
+    assert "Belki" in answer[0].payload["answer_text"]
+    assert events[0].payload["completions"][0] in answer[0].payload["answer_text"]
+
+
+def test_nlp_single_emoji_intent_routes_meta_single_emoji_intent() -> None:
+    agent = NlpIntentAgent()
+    out = list(agent.handle(_make_qa_request_v1_msg("⚽", request_id="req-011")))
+    answer = [m for m in out if m.envelope.topic == QA_ANSWER_V1]
+    events = [m for m in out if m.envelope.topic == NLP_EVENT_V1]
+
+    assert len(answer) == 1
+    assert len(events) == 1
+    assert events[0].payload["kind"] == "meta.single_emoji_intent"
+    assert answer[0].payload["intent"] == "meta.single_emoji_intent"
+    assert answer[0].payload["kind"] == "meta.single_emoji_intent"
+    assert "emoji" in answer[0].payload["answer_text"].lower() or "sormak" in answer[0].payload["answer_text"].lower()
+
+
 def test_nlp_structured_input_refusal_routes_meta_structured_input_refused() -> None:
     agent = NlpIntentAgent()
     out = list(

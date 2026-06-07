@@ -233,69 +233,69 @@ unverified `[ ]` claim. Tests live in
       `additionalProperties: false` at every nested object level (not
       just root). The current §10.11 claim is root-only; this test
       catches the residual class.
-- [ ] **§10.12 caching.**
+- [x] **§10.12 caching.**
       `test_cache_key_does_not_depend_on_pii` runs a 200-row corpus
       where the same intent is asked with vs. without PII (phone
       number, email, name in the question body unrelated to the
       football query) and asserts the L0 cache key is byte-identical.
       Closes the privacy-leak class where a cache hit reveals another
       user's question shape.
-- [ ] **§10.14 observability.**
+- [x] **§10.14 observability.**
       `test_telemetry_no_pii_in_event_body` walks a 500-row PII-spiked
       corpus through the NLP pipeline and asserts no event body emitted
       to `telemetry.v1` contains any of the §10.21.7 PII patterns
       (post-redaction). Today §10.14 says "PII-clean" in prose.
-- [ ] **§10.16 calibration.**
+- [x] **§10.16 calibration.**
       `test_degraded_flag_propagates_to_answer` runs a 100-row corpus
       where the upstream consensus carries `degraded=true` and asserts
       every `qa.answer.v1` body carries the §10.16-mandated disclaimer
       text byte-for-byte. Closes the "calibration awareness" claim
       that today is a §10.20 DoD bullet without a test.
-- [ ] **§10.18 evaluation harness.**
+- [x] **§10.18 evaluation harness.**
       `test_eval_harness_corpus_is_pii_clean` runs the §10.21.7 PII
       detector over the eval corpus itself and asserts zero matches.
       Defends against a leaked production sample contaminating the
       corpus during the §10.32.14 quarterly curation cycle.
-- [ ] **§10.21.8 citation HMAC.**
+- [x] **§10.21.8 citation HMAC.**
       `test_citation_hmac_rejects_tampered_citation` mutates the
       citation block in 200 sampled answers (single-byte flip in the
       `prediction_id` field, suffix swap, timestamp drift, signer-id
       swap) and asserts every mutation is rejected by the verifier.
       Today the §10.21.8 claim is "HMAC verified"; this proves it
       against a real adversarial set.
-- [ ] **§10.22 messy-Turkish floor.**
+- [x] **§10.22 messy-Turkish floor.**
       `test_messy_turkish_floor_corpus` runs a 1,000-row real-world
       messy-Turkish corpus (deduped, PII-scrubbed, two-reviewer signed
       off) end-to-end and asserts intent_id top-1 ≥ 0.92 and entity
       top-1 ≥ 0.88, refusal-rate ≤ 5%. Caps regressions in CI.
-- [ ] **§10.23 production-serving floor.**
+- [x] **§10.23 production-serving floor.**
       `test_canary_promotion_gate_blocks_on_intent_drift` simulates a
       shadow-canary deploy where the new lexicon flips 3% of intent
       assignments and asserts the §10.31.15 canary gate blocks
       promotion with `nlp.alert.v1{kind=canary_promotion_blocked,
       severity=critical}`.
-- [ ] **§10.25 conversation lifecycle.**
+- [x] **§10.25 conversation lifecycle.**
       `test_time_travel_re_render_byte_identical` re-renders a 200-row
       historical conversation against the pinned pipeline-version
       snapshot and asserts byte-identical output. Today the §10.25
       claim is "time-travel safe"; this proves it.
-- [ ] **§10.26.5 modality firewall.**
-      `test_counterfactual_past_never_routes_predict` runs a 100-row
+- [x] **§10.26.5 modality firewall.**
+      `test_counterfactual_past_aspectual_stack_routes_to_meta_counterfactual_past_unsupported` runs a 100-row
       counterfactual-past corpus (`yenmeseydi ne olurdu?`,
       `oynamasaydı kazanır mıydık?`) and asserts NONE route to any
       `predict.*` intent. AST guard alone is not sufficient — this is
       the runtime proof.
-- [ ] **§10.27.6 abuse resilience.**
+- [x] **§10.27.6 abuse resilience.**
       `test_coordinated_abuse_signal_threshold` simulates a per-user
       query rate ramp and asserts the abuse signal trips at the
       configured threshold with the configured cooldown.
-- [ ] **§10.29.12 prediction-id determinism.**
+- [x] **§10.29.12 prediction-id determinism.**
       `test_prediction_id_re_derivation_rejects_swapped_envelope`
       crafts an envelope whose HMAC is valid but whose `prediction_id`
       does not match `sha256(match_id|market|request_id|
       calibration_version)` and asserts the NLP plane rejects it with
       `nlp.alert.v1{kind=prediction_id_mismatch, severity=critical}`.
-- [ ] **§10.30.10 slur-obfuscation defense.**
+- [x] **§10.30.10 slur-obfuscation defense.**
       `test_slur_obfuscation_corpus` runs a curated 200-row
       obfuscation corpus (asterisk / dot / leetspeak / cyrillic-
       homoglyph / U+2060-split) and asserts ≥ 99% detection AND ≤ 1%
@@ -309,7 +309,7 @@ unverified `[ ]` claim. Tests live in
       answer with `nlp.alert.v1{kind=tr_output_grammar_violation,
       severity=error}` and falls back to the §10.31.9 grammar-fallback
       template.
-- [ ] **§10.31.11 outbound checksum.**
+- [x] **§10.31.11 outbound checksum.**
       `test_outbound_checksum_rejects_post_proofreader_mutation`
       simulates middleware mutation of the answer body between
       proofreader-sign and gateway-emit (single-byte flip, field
@@ -320,7 +320,7 @@ unverified `[ ]` claim. Tests live in
       / Dutch-diaspora / UK-diaspora, ≥ 80 rows each) and asserts
       intent top-1 ≥ 0.85 per dialect class. Caps the §10.32.4 closed
       table claim with a per-class regression gate.
-- [ ] **§10.32.12 cross-pod gossip.**
+- [x] **§10.32.12 cross-pod gossip.**
       `test_gossip_divergence_alert_fires_on_lexicon_skew` deploys two
       shadow pods with deliberately-skewed lexicon SHAs and asserts
       `nlp.alert.v1{kind=lexicon_state_divergence_detected,

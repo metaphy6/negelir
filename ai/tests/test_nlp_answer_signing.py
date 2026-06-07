@@ -34,7 +34,7 @@ def _minimal_v3_answer() -> dict[str, object]:
         request_id="req-001",
         qa_correlation_id="qa-001",
         intent="predict.match_outcome",
-        kind="prediction",
+        kind="direct",
         answer_text="Galatasaray yarın kazanacak.",
         citations=[_minimal_citation()],
         schema_version=3,

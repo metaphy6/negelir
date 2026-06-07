@@ -954,6 +954,8 @@ _ALLOWED_MAINT_KINDS: frozenset[str] = frozenset({
     "quarantine_erase",     # maint.backup.v1 consumer (§8.3 right-to-erasure; ops_console publisher)
     "nlp_kill_pattern_armed",    # Phase 10 operator kill-pattern arm for NLP in-flight/cached answers
     "nlp_kill_pattern_disarmed", # Phase 10 operator kill-pattern disarm
+    "nlp_flame_armed",
+    "nlp_flame_captured",
 })
 
 _ALLOWED_DRIFT_REASONS: frozenset[str] = frozenset({

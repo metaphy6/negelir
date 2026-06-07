@@ -142,6 +142,8 @@ nlp:
   # §10.19 backpressure
   queue_pressure_threshold: 100  # NEGELIR_NLP_QUEUE_PRESSURE_THRESHOLD
   pressure_humanize_off_s: 60    # NEGELIR_NLP_PRESSURE_HUMANIZE_OFF_S
+  eval_corpus_pr_max_added_rows_per_quarter: 500  # NEGELIR_NLP_EVAL_CORPUS_PR_MAX_ADDED_ROWS_PER_QUARTER
+  eval_corpus_review_required: true  # NEGELIR_NLP_EVAL_CORPUS_REVIEW_REQUIRED
   # §10.19 sampled answer audit
   answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
   answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP

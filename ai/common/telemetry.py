@@ -73,6 +73,19 @@ if _PROMETHEUS_AVAILABLE:
         labelnames=["reason"],
     )
 
+    # nlp_prober_success_rate{intent} — last outcome of synthetic prober requests
+    NLP_PROBER_SUCCESS_RATE = Gauge(
+        "nlp_prober_success_rate",
+        "Synthetic prober success rate by intent",
+        labelnames=["intent"],
+    )
+
+    # nlp_flame_capture_armed_count — gauge of currently armed flame captures
+    NLP_FLAME_CAPTURE_ARMED_COUNT = Gauge(
+        "nlp_flame_capture_armed_count",
+        "Number of currently armed NLP flame capture requests",
+    )
+
     # nlp_input_repair_total{repair_class} — counter of input repair events per class
     NLP_INPUT_REPAIR_TOTAL = Counter(
         "nlp_input_repair_total",
@@ -125,6 +138,14 @@ if _PROMETHEUS_AVAILABLE:
         buckets=(1.0,),
     )
 
+    # nlp_eval_corpus_growth_rate{intent_class} — histogram of new eval corpus rows added per intent class
+    NLP_EVAL_CORPUS_GROWTH_RATE = Histogram(
+        "nlp_eval_corpus_growth_rate",
+        "New NLP evaluation corpus rows added per intent class",
+        labelnames=["intent_class"],
+        buckets=(1.0, 5.0, 10.0, 25.0, 50.0, 100.0),
+    )
+
     # nlp_disambiguation_offered_total{cause} — counter of disambiguation offers
     NLP_DISAMBIGUATION_OFFERED_TOTAL = Counter(
         "nlp_disambiguation_offered_total",
@@ -173,6 +194,8 @@ else:
     NLP_HUMANIZER_BREAKER_STATE = None
     NLP_PROOFREADER_BLOCK_TOTAL = None
     NLP_HUMANIZER_TOKENS_EMITTED_TOTAL = None
+    NLP_EVAL_CORPUS_GROWTH_RATE = None
+    NLP_FLAME_CAPTURE_ARMED_COUNT = None
     NLP_LEXICON_VERSION = None
     NLP_CLASSIFIER_EXTRACTOR_SKEW = None
 
@@ -193,7 +216,14 @@ class TelemetrySink:
 
     def __init__(self, config: Config | None = None, clock: Callable[[], float] | None = None):
         self._redis = None
+        self._redis_attempted_connection = False
         cfg = config or Config()
+        self._redis_config = {
+            "host": cfg.redis_host,
+            "port": cfg.redis_port,
+            "decode_responses": True,
+            "socket_connect_timeout": getattr(cfg, "redis_socket_timeout", 2),
+        }
         self._clock = clock or time.monotonic
         self._max_stream_len = getattr(cfg, "telemetry_max_stream_len", self._DEFAULT_MAX_STREAM_LEN)
         self._unresolved_token_counts: collections.Counter[str] = collections.Counter()
@@ -218,25 +248,35 @@ class TelemetrySink:
         self._nlp_shout_alert_cooldown_s = float(getattr(cfg, "nlp_shout_rate_alert_cooldown_s", 600))
         self._nlp_sarcasm_cue_samples: dict[str, list[float]] = {}
         self._nlp_sarcasm_cue_last_alert: dict[str, float] = {}
-        self._nlp_sarcasm_cue_window_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_window_s", 7 * 24 * 3600))
+        self._nlp_sarcasm_cue_window_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_alert_window_s", 7 * 24 * 3600))
         self._nlp_sarcasm_cue_alert_cooldown_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_alert_cooldown_s", 7 * 24 * 3600))
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self._redis_client())
+
+    def _connect_redis(self) -> None:
+        if self._redis_attempted_connection:
+            return
+        self._redis_attempted_connection = True
         try:
             import redis
-            self._redis = redis.Redis(
-                host=cfg.redis_host,
-                port=cfg.redis_port,
-                decode_responses=True,
-                socket_connect_timeout=getattr(cfg, "redis_socket_timeout", 2),
+            client = redis.Redis(**self._redis_config)
+            client.ping()
+            self._redis = client
+            log.info(
+                "Telemetry sink connected to Redis %s:%s",
+                self._redis_config["host"],
+                self._redis_config["port"],
             )
-            self._redis.ping()
-            log.info("Telemetry sink connected to Redis %s:%s", cfg.redis_host, cfg.redis_port)
         except Exception as exc:  # noqa: BLE001
             log.warning("Redis unavailable (%s) — telemetry disabled", exc)
             self._redis = None
 
-    @property
-    def enabled(self) -> bool:
-        return self._redis is not None
+    def _redis_client(self) -> Any | None:
+        if self._redis is None and not self._redis_attempted_connection:
+            self._connect_redis()
+        return self._redis
 
     # ── TQU classification events ────────────────────────
 
@@ -248,7 +288,8 @@ class TelemetrySink:
         success: bool,
     ) -> None:
         """Push one classification event to the stream."""
-        if not self._redis:
+        client = self._redis_client()
+        if not client:
             return
         entry: dict[str, Any] = {
             "ts": str(time.time()),
@@ -258,7 +299,7 @@ class TelemetrySink:
             "input_len": str(len(raw_input)),
         }
         try:
-            self._redis.xadd(
+            client.xadd(
                 self._CLASSIFICATION_STREAM,
                 entry,
                 maxlen=self._max_stream_len,
@@ -311,6 +352,41 @@ class TelemetrySink:
         if _PROMETHEUS_AVAILABLE and NLP_INTENT_CONFIDENCE:
             try:
                 NLP_INTENT_CONFIDENCE.labels(intent=intent).observe(intent_confidence)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_prober_outcome(
+        self,
+        request_id: str,
+        intent: str,
+        success: bool,
+        latency_seconds: float | None = None,
+    ) -> None:
+        """Log synthetic prober outcome events for audit and observability."""
+        if len(str(request_id)) > 64 or len(str(intent)) > 64:
+            log.warning("Refusing nlp_prober outcome log: ID/intent field suspiciously long")
+            return
+
+        entry: dict[str, str] = {
+            "ts": str(time.time()),
+            "request_id": request_id,
+            "intent": intent or "unknown",
+            "success": str(int(success)),
+        }
+        if latency_seconds is not None:
+            entry["latency_seconds"] = f"{latency_seconds:.3f}"
+
+        log.info(
+            "NLP prober outcome",
+            extra={
+                "structured": True,
+                **entry,
+            },
+        )
+
+        if _PROMETHEUS_AVAILABLE and NLP_PROBER_SUCCESS_RATE:
+            try:
+                NLP_PROBER_SUCCESS_RATE.labels(intent=entry["intent"]).set(1.0 if success else 0.0)
             except Exception:  # noqa: BLE001
                 pass  # non-blocking
 
@@ -367,7 +443,8 @@ class TelemetrySink:
 
     def log_qid_snapshot(self, match_id: str, volume: int, distribution: dict[str, float]) -> None:
         """Push a QID distribution snapshot for one match."""
-        if not self._redis:
+        client = self._redis_client()
+        if not client:
             return
         entry: dict[str, str] = {
             "ts": str(time.time()),
@@ -376,7 +453,7 @@ class TelemetrySink:
             "dist": json.dumps(distribution),
         }
         try:
-            self._redis.xadd(
+            client.xadd(
                 self._QID_STREAM,
                 entry,
                 maxlen=self._max_stream_len,
@@ -389,12 +466,13 @@ class TelemetrySink:
     def persist_qid_profiles(self, profiles: dict) -> int:
         """Persist full QID profiles dict to Redis hash for crash recovery.
         Returns count of matches persisted."""
-        if not self._redis:
+        client = self._redis_client()
+        if not client:
             return 0
         key = "negelir:qid:profiles"
         count = 0
         try:
-            pipe = self._redis.pipeline()
+            pipe = client.pipeline()
             for match_id, profile_data in profiles.items():
                 pipe.hset(key, match_id, json.dumps(profile_data))
                 count += 1
@@ -406,11 +484,12 @@ class TelemetrySink:
 
     def restore_qid_profiles(self) -> dict:
         """Restore QID profiles from Redis hash. Returns dict of match_id → profile_data."""
-        if not self._redis:
+        client = self._redis_client()
+        if not client:
             return {}
         key = "negelir:qid:profiles"
         try:
-            raw = self._redis.hgetall(key)
+            raw = client.hgetall(key)
             return {k: json.loads(v) for k, v in raw.items()}
         except Exception:  # noqa: BLE001
             return {}
@@ -419,12 +498,13 @@ class TelemetrySink:
 
     def stream_lengths(self) -> dict[str, int]:
         """Return current stream lengths for monitoring."""
-        if not self._redis:
+        client = self._redis_client()
+        if not client:
             return {}
         try:
             return {
-                "classifications": self._redis.xlen(self._CLASSIFICATION_STREAM),
-                "qid_snapshots": self._redis.xlen(self._QID_STREAM),
+                "classifications": client.xlen(self._CLASSIFICATION_STREAM),
+                "qid_snapshots": client.xlen(self._QID_STREAM),
             }
         except Exception:  # noqa: BLE001
             return {}
@@ -827,6 +907,18 @@ class TelemetrySink:
                 NLP_POLITENESS_CLASS_DISTRIBUTION.labels(
                     politeness_class=politeness_class,
                 ).observe(1.0)
+            except Exception:  # noqa: BLE001
+                pass  # non-blocking
+
+    def record_nlp_eval_corpus_growth_rate(self, intent_class: str, new_rows: float) -> None:
+        """
+        Observe the number of new eval corpus rows added for the given intent class.
+        """
+        if new_rows < 0:
+            return
+        if _PROMETHEUS_AVAILABLE and NLP_EVAL_CORPUS_GROWTH_RATE:
+            try:
+                NLP_EVAL_CORPUS_GROWTH_RATE.labels(intent_class=intent_class).observe(new_rows)
             except Exception:  # noqa: BLE001
                 pass  # non-blocking
 

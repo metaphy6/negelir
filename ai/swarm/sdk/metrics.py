@@ -38,10 +38,16 @@ class Metrics:
         self._lock = threading.Lock()
         self._counters: dict[str, int] = defaultdict(int)
         self._latencies: deque[float] = deque(maxlen=_LATENCY_RESERVOIR_SIZE)
+        self._gauges: dict[tuple[str, tuple[tuple[str, str], ...]], float] = {}
 
     def inc(self, name: str, by: int = 1) -> None:
         with self._lock:
             self._counters[name] += by
+
+    def set_gauge(self, name: str, labels: dict[str, str] | None, value: float) -> None:
+        normalized_labels = tuple(sorted((str(k), str(v)) for k, v in (labels or {}).items()))
+        with self._lock:
+            self._gauges[(name, normalized_labels)] = float(value)
 
     def observe_ms(self, latency_ms: float) -> None:
         with self._lock:
@@ -51,11 +57,18 @@ class Metrics:
         with self._lock:
             counters = dict(self._counters)
             lat = list(self._latencies)
+            gauges = dict(self._gauges)
         snap: dict[str, float] = {f"counter.{k}": float(v) for k, v in counters.items()}
         snap["gauge.latency_ms_p50"] = _percentile(lat, 50)
         snap["gauge.latency_ms_p95"] = _percentile(lat, 95)
         snap["gauge.latency_ms_p99"] = _percentile(lat, 99)
         snap["gauge.latency_ms_count"] = float(len(lat))
+        for (name, labels), value in gauges.items():
+            if labels:
+                label_str = ",".join(f'{k}="{v}"' for k, v in labels)
+                snap[f"gauge.{name}{{{label_str}}}"] = value
+            else:
+                snap[f"gauge.{name}"] = value
         return snap
 
     def render_prometheus(self) -> str:
@@ -65,11 +78,18 @@ class Metrics:
         agent = self.agent_name
         for k, v in sorted(snap.items()):
             kind, name = k.split(".", 1)
-            metric_name = f"swarm_{name}"
+            if "{" in name and name.endswith("}"):
+                metric_name, labels = name.split("{", 1)
+                labels = labels[:-1]
+                metric_name = f"swarm_{metric_name}"
+                label_block = f'{{{labels},agent="{agent}"}}' if labels else f'{{agent="{agent}"}}'
+            else:
+                metric_name = f"swarm_{name}"
+                label_block = f'{{agent="{agent}"}}'
             prom_type = "counter" if kind == "counter" else "gauge"
             lines.append(f"# HELP {metric_name} swarm SDK {kind}: {name}")
             lines.append(f"# TYPE {metric_name} {prom_type}")
-            lines.append(f'{metric_name}{{agent="{agent}"}} {v:g}')
+            lines.append(f"{metric_name}{label_block} {v:g}")
         return "\n".join(lines) + "\n"
 
 

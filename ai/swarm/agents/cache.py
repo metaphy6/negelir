@@ -338,6 +338,10 @@ class CacheAgent:
         (gracefully degrade; never block answer delivery on cache failure).
         """
         payload = msg.payload
+        request_metadata = payload.get("request_metadata")
+        if isinstance(request_metadata, dict) and request_metadata.get("synthetic_prober"):
+            return ()
+
         try:
             snapshot = _capture_version_snapshot(payload)
             intent = str(payload["intent"])

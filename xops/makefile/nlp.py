@@ -1707,6 +1707,104 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
     return 0
 
 
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default).strip()
+
+
+def _is_dry_run() -> bool:
+    return _env("DRY_RUN", "0").lower() in {"1", "true", "yes"}
+
+
+def _print_dry_run(message: str) -> int:
+    info(f"DRY RUN: {message}")
+    ok("dry run mode, no mutation performed")
+    return 0
+
+
+def _not_implemented_real_run(command: str) -> int:
+    err(
+        f"{command}: real execution is not implemented in this repository; "
+        "use DRY_RUN=true to preview the intended action"
+    )
+    return 1
+
+
+def cmd_nlp_lexicon_restore_from_snapshot(argv: List[str]) -> int:
+    """Dry-run-safe wrapper for restoring a lexicon snapshot from backup."""
+    parser = argparse.ArgumentParser(prog="nlp.lexicon-restore-from-snapshot")
+    parser.add_argument("--snapshot-id", default=_env("SNAPSHOT_ID", ""))
+    args = parser.parse_args(argv)
+
+    snapshot_id = str(args.snapshot_id or "").strip()
+    if not snapshot_id:
+        err("nlp.lexicon-restore-from-snapshot: SNAPSHOT_ID is required")
+        return 64
+
+    if _is_dry_run():
+        return _print_dry_run(
+            f"would restore lexicon snapshot {snapshot_id} to NLP lexicon storage"
+        )
+
+    return _not_implemented_real_run("nlp.lexicon-restore-from-snapshot")
+
+
+def cmd_nlp_intent_model_restore(argv: List[str]) -> int:
+    """Dry-run-safe wrapper for restoring a prior intent model version."""
+    parser = argparse.ArgumentParser(prog="nlp.intent-model-restore")
+    parser.add_argument("--version", default=_env("VERSION", ""))
+    args = parser.parse_args(argv)
+
+    version = str(args.version or "").strip()
+    if not version:
+        err("nlp.intent-model-restore: VERSION is required")
+        return 64
+
+    if _is_dry_run():
+        return _print_dry_run(
+            f"would restore intent model version {version} from backup"
+        )
+
+    return _not_implemented_real_run("nlp.intent-model-restore")
+
+
+def cmd_nlp_calibration_pin(argv: List[str]) -> int:
+    """Dry-run-safe wrapper for pinning a calibration snapshot for NLP."""
+    parser = argparse.ArgumentParser(prog="nlp.calibration-pin")
+    parser.add_argument("--snapshot-id", default=_env("SNAPSHOT_ID", ""))
+    args = parser.parse_args(argv)
+
+    snapshot_id = str(args.snapshot_id or "").strip()
+    if not snapshot_id:
+        err("nlp.calibration-pin: SNAPSHOT_ID is required")
+        return 64
+
+    if _is_dry_run():
+        return _print_dry_run(
+            f"would pin calibration snapshot {snapshot_id} for the NLP service"
+        )
+
+    return _not_implemented_real_run("nlp.calibration-pin")
+
+
+def cmd_nlp_humanizer_rollback(argv: List[str]) -> int:
+    """Dry-run-safe wrapper for rolling back the humanizer model version."""
+    parser = argparse.ArgumentParser(prog="nlp.humanizer-rollback")
+    parser.add_argument("--version", default=_env("VERSION", ""))
+    args = parser.parse_args(argv)
+
+    version = str(args.version or "").strip()
+    if not version:
+        err("nlp.humanizer-rollback: VERSION is required")
+        return 64
+
+    if _is_dry_run():
+        return _print_dry_run(
+            f"would rollback humanizer version to {version}"
+        )
+
+    return _not_implemented_real_run("nlp.humanizer-rollback")
+
+
 def cmd_nlp_transliteration_build(argv: List[str]) -> int:
     """Validate the transliteration variants table used by NLP lexicon build."""
     REPO_ROOT_LOCAL = Path(__file__).resolve().parents[2]
@@ -2796,7 +2894,12 @@ def cmd_nlp_canary_promote(argv: List[str]) -> int:
         report["gates_failed"].append("shadow_mode_off")
     if args.shadow_hours < float(cfg.nlp_canary_min_shadow_hours):
         report["gates_failed"].append("min_shadow_hours")
-    if args.disagreement_rate > float(cfg.nlp_canary_max_disagreement_rate):
+    disagreement_threshold = float(cfg.nlp_canary_max_disagreement_rate)
+    if args.target == "lexicon":
+        disagreement_threshold = float(cfg.nlp_lexicon_canary_max_disagreement_pct)
+        report["lexicon_disagreement_threshold"] = disagreement_threshold
+
+    if args.disagreement_rate > disagreement_threshold:
         report["gates_failed"].append("disagreement_rate")
     if abs(args.confidence_drift) > float(cfg.nlp_canary_max_confidence_drift):
         report["gates_failed"].append("confidence_drift")
@@ -2830,6 +2933,26 @@ def cmd_nlp_canary_promote(argv: List[str]) -> int:
         if gate not in report["gates_failed"]
     ]
     report["gates_passed"].extend(extra_passed)
+
+    blocked_alert = None
+    if report["gates_failed"]:
+        blocked_alert = {
+            "alert_id": uuid.uuid4().hex,
+            "kind": "canary_promotion_blocked",
+            "severity": "critical",
+            "source": "nlp.canary_promotion.v1",
+            "reason": "Canary promotion blocked by shadow gate failure.",
+            "subject": args.target,
+            "details": {
+                "failed_gates": report["gates_failed"],
+                "shadow_mode": report["shadow_mode"],
+                "shadow_hours": report["shadow_hours"],
+                "disagreement_rate": report["disagreement_rate"],
+                "confidence_drift": report["confidence_drift"],
+            },
+            "emitted_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
+    report["blocked_alert"] = blocked_alert
 
     info(json.dumps(report, indent=2, sort_keys=True))
 
@@ -3678,6 +3801,10 @@ COMMANDS = {
     "nlp.transliteration-build": cmd_nlp_transliteration_build,
     "nlp.lexicon-deploy": cmd_nlp_lexicon_deploy,
     "nlp.lexicon-eval": cmd_nlp_lexicon_eval,
+    "nlp.lexicon-restore-from-snapshot": cmd_nlp_lexicon_restore_from_snapshot,
+    "nlp.intent-model-restore": cmd_nlp_intent_model_restore,
+    "nlp.calibration-pin": cmd_nlp_calibration_pin,
+    "nlp.humanizer-rollback": cmd_nlp_humanizer_rollback,
     "nlp.diacritics-build": cmd_nlp_diacritics_build,
     "nlp.rotate-citation-key": cmd_nlp_rotate_citation_key,
     "nlp.rotate-answer-hmac-key": cmd_nlp_rotate_answer_hmac_key,

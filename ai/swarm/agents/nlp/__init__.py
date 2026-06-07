@@ -69,19 +69,20 @@ import threading as _threading
 import time as _time
 import unicodedata
 from collections import Counter, deque
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Optional
 import os
 from pathlib import Path
 import stat
 from uuid import uuid4
 
-from common.config import cfg
+from common.config import Config, cfg
 from common.fixture_state import FixtureState
 from common.security.patterns import PII_PATTERNS
 from common.security.tr_pii import parse_redacted_tr_pii, redact_tr_pii
 from common.telemetry import NLP_CLASSIFIER_EXTRACTOR_SKEW
 
 from ...sdk import AlertDebouncer
+from ...sdk.bus_health import BusHealthTracker
 from ...sdk.types import Message
 from nlp.compliance import disclosures_snapshot_sha, load_disclosures
 from nlp.lexicon_loader import is_safe_mode_active
@@ -108,8 +109,10 @@ from ..topics import (
 from ._bus_circuit_breaker import NlpBusCircuitBreaker
 from .abuse import NlpAbuseAgent
 from .shadow_writer import NlpShadowWriter
+from ..payloads import derive_prediction_id
 from nlp.compat import _lexicon_snapshot_sha, validate_compatibility_matrix
 from nlp.conversation import ConversationStore
+from ._flame_capture import NlpFlameCapture
 from ._log_filter import PIIScrubFilter, add_log_filter
 from nlp.aspectual_stack import detect_aspectual_stack
 from nlp.phase10_30 import (
@@ -188,6 +191,11 @@ def _favorite_team_from_request_metadata(payload: dict[str, object]) -> str | No
     if not isinstance(favorite_team, str) or not favorite_team.strip():
         return None
     return favorite_team.strip()
+
+
+def _is_synthetic_prober_payload(payload: dict[str, object]) -> bool:
+    request_metadata = payload.get("request_metadata")
+    return bool(isinstance(request_metadata, dict) and request_metadata.get("synthetic_prober"))
 
 
 def _make_pro_drop_resolved_event(
@@ -332,6 +340,18 @@ def _load_team_name_to_canonical_id_map() -> dict[str, str]:
     entries = store.get("teams.tr.yaml")
     if entries is None:
         entries = store.get("teams.tr-TR.yaml")
+    if entries is None:
+        try:
+            import yaml
+
+            direct_path = Path(__file__).resolve().parents[3] / "nlp" / "lexicon" / "teams.tr-TR.yaml"
+            if direct_path.exists():
+                raw = yaml.safe_load(direct_path.read_text(encoding="utf-8")) or {}
+                rows = raw.get("entries")
+                if isinstance(rows, list):
+                    entries = (None, rows)
+        except Exception:
+            pass
     if entries is None:
         return {}
     _, rows = entries
@@ -672,6 +692,35 @@ def _compute_qa_answer_envelope_signature(payload: dict[str, object], key: bytes
         compatibility_quartet,
     ]).encode("utf-8")
     return _hmac.new(key, blob, _hashlib.sha256).hexdigest()
+
+
+def verify_qa_answer_envelope_signature(payload: dict[str, object]) -> bool:
+    """Verify a schema_version 3+ qa.answer.v1 payload's outbound checksum/signature.
+
+    This mirrors the Phase 10 outbound checksum gate: the signature is valid
+    only if the canonical answer body matches the body_canonical_sha and the
+    HMAC matches the envelope_signature.
+    """
+    schema_version = payload.get("schema_version")
+    if not isinstance(schema_version, int) or schema_version < 3:
+        return True
+
+    envelope_signature = payload.get("envelope_signature")
+    envelope_signature_key_id = payload.get("envelope_signature_key_id")
+    body_canonical_sha = payload.get("body_canonical_sha")
+    if not isinstance(envelope_signature, str) or not isinstance(envelope_signature_key_id, str) or not isinstance(body_canonical_sha, str):
+        return False
+
+    if _hashlib.sha256(_canonical_answer_body(payload).encode("utf-8")).hexdigest() != body_canonical_sha:
+        return False
+
+    keys = _load_qa_answer_hmac_keys()
+    key = keys.get(envelope_signature_key_id)
+    if key is None:
+        return False
+
+    expected_signature = _compute_qa_answer_envelope_signature(payload, key)
+    return envelope_signature == expected_signature
 
 
 def _load_qa_answer_hmac_keys() -> dict[str, bytes]:
@@ -2015,6 +2064,13 @@ class NlpIntentAgent:
                     )
         return self._deduper
 
+    def _lexicon_state_signature(self, values: Iterable[str]) -> str:
+        digest = _hashlib.blake2b(digest_size=8)
+        for value in values:
+            digest.update(value.encode("utf-8"))
+            digest.update(b"\x00")
+        return digest.hexdigest()
+
     def _make_gossip(self) -> Message:
         from common.config import cfg
 
@@ -2025,18 +2081,24 @@ class NlpIntentAgent:
         template_git_sha = str(getattr(cfg, "nlp_template_git_sha", "") or "")
         pipeline_version = str(getattr(cfg, "nlp_pipeline_version", "") or "")
 
+        signature = self._lexicon_state_signature(
+            (
+                lexicon_set_sha,
+                intent_sha,
+                crf_sha,
+                calibration_version,
+                template_git_sha,
+                pipeline_version,
+            )
+        )
+
         return Message.new(
             topic=NLP_GOSSIP_V1,
             payload={
                 "kind": "nlp_lexicon_state_gossip",
                 "producer": self.name,
                 "pod_instance_id": str(cfg.nlp_pod_id),
-                "lexicon_set_sha": lexicon_set_sha,
-                "intent_sha": intent_sha,
-                "crf_sha": crf_sha,
-                "calibration_version": calibration_version,
-                "template_git_sha": template_git_sha,
-                "pipeline_version": pipeline_version,
+                "lexicon_state_signature": signature,
                 "emitted_at_utc": _utc_iso(),
             },
             producer=self.name,
@@ -2212,7 +2274,7 @@ class NlpIntentAgent:
                     keyboard_hint = ""
 
                 sanitized_text = str(msg.payload.get("sanitized_text", ""))
-                floor_kind, greeting_echo = assert_minimum_signal(sanitized_text, cfg=cfg)
+                floor_kind, greeting_echo, partial_completions = assert_minimum_signal(sanitized_text, cfg=cfg)
                 subject = _normalize_subject_key(msg.payload)
                 shout = detect_all_caps(sanitized_text, cfg=cfg)
                 if shout:
@@ -2260,6 +2322,7 @@ class NlpIntentAgent:
                             greeting_echo=greeting_echo,
                             normalized_text=sanitized_text,
                             request_metadata=self._current_request_metadata,
+                            partial_completions=partial_completions,
                         ) + results,
                         msg.payload,
                     )
@@ -2378,6 +2441,7 @@ class NlpIntentAgent:
         greeting_echo: str | None,
         normalized_text: str | None = None,
         request_metadata: dict[str, object] | None = None,
+        partial_completions: list[str] | None = None,
     ) -> list[Message]:
         if floor_kind == "meta.unsupported_fragment":
             answer_text = render(
@@ -2411,6 +2475,14 @@ class NlpIntentAgent:
             )
             answer_intent = "meta.url_only_input"
             answer_kind = "meta.url_only_input"
+        elif floor_kind == "meta.likely_partial_input":
+            answer_text = render(
+                "meta.likely_partial_input.tr.j2",
+                {"completions": partial_completions or []},
+                env=build_environment(user_text_for_guard=normalized_text or ""),
+            )
+            answer_intent = "meta.likely_partial_input"
+            answer_kind = "meta.likely_partial_input"
         elif floor_kind == "meta.structured_input_refused":
             answer_text = (
                 "Gönderdiğin veri yapısı desteklenmiyor; lütfen bir maç ya da "
@@ -2418,6 +2490,10 @@ class NlpIntentAgent:
             )
             answer_intent = "meta.structured_input_refused"
             answer_kind = "meta.structured_input_refused"
+        elif floor_kind == "meta.single_emoji_intent":
+            answer_text = partial_completions[0] if partial_completions else "Bu emojiyle ne sormak istediğinizi açabilir misiniz?"
+            answer_intent = "meta.single_emoji_intent"
+            answer_kind = "meta.single_emoji_intent"
         elif floor_kind in ("meta.system_self", "meta.system_capabilities"):
             answer_text = self._render_conversational_meta_answer_text(
                 floor_kind,
@@ -2448,16 +2524,21 @@ class NlpIntentAgent:
             answer_intent = "meta.help"
             answer_kind = "meta.help"
 
+        event_kind = floor_kind
+        if floor_kind == "meta.likely_partial_input":
+            event_kind = "partial_input_completion_offered"
         event_payload = {
-            "kind": floor_kind,
+            "kind": event_kind,
             "producer": self.name,
             "request_id": request_id or None,
             "emitted_at": _utc_iso(),
         }
-        if floor_kind in ("meta.unsupported_too_short", "meta.unsupported_fragment"):
+        if event_kind in ("meta.unsupported_too_short", "meta.unsupported_fragment"):
             event_payload["severity"] = "warn"
         else:
             event_payload["severity"] = "info"
+        if floor_kind == "meta.likely_partial_input":
+            event_payload["completions"] = partial_completions or []
 
         answer_payload = _make_qa_answer_payload(
             request_id=request_id,
@@ -2522,7 +2603,7 @@ class NlpDispatcherAgent:
     """
 
     name = "nlp.dispatcher.v1"
-    subscribes = [QA_INTENT_V1, QA_FEEDBACK_V1]
+    subscribes = [QA_INTENT_V1, QA_FEEDBACK_V1, MAINT_EVENT]
     publishes = [
         PREDICT_REQUEST_V1,
         DATA_REQUEST_V1,
@@ -2539,6 +2620,10 @@ class NlpDispatcherAgent:
         monotonic: Callable[[], float] | None = None,
         deduper: object | None = None,
         cache_invalidator: Callable[[dict[str, object], str | None], None] | None = None,
+        bus_health_tracker: BusHealthTracker | None = None,
+        flame_capture: NlpFlameCapture | None = None,
+        redis_client: Optional[Any] = None,
+        base_data_dir: Optional[Path] = None,
     ) -> None:
         self._log = logging.getLogger("swarm.agents.nlp.dispatcher")
         add_log_filter(self._log, filters=(PIIScrubFilter(),))
@@ -2568,10 +2653,18 @@ class NlpDispatcherAgent:
             clock=self._monotonic,
         )
         self._conversation_explicit_override_kinds = self._load_explicit_override_kinds()
+        self._bus_health_tracker = bus_health_tracker
+        self._topic_dependency_map = self._load_topic_dependency_map()
         # §10.6 idempotency: lazy-init deduper (cfg not available at class load).
         self._deduper = deduper  # None → created on first handle() call
         self._deduper_lock = _threading.Lock()
         self._feedback_queue = deque(maxlen=int(cfg.nlp_active_learning_queue_max))
+        self._capture_in_progress: set[str] = set()
+        self._flame_capture = flame_capture or NlpFlameCapture(
+            config=cfg,
+            redis_client=redis_client,
+            base_data_dir=base_data_dir,
+        )
 
     def _get_deduper(self) -> object:
         """Return the dispatcher deduper, lazily creating it from cfg."""
@@ -2688,6 +2781,148 @@ class NlpDispatcherAgent:
             )
         except Exception:
             return frozenset()
+
+    def _load_topic_dependency_map(self) -> dict[str, dict[str, list[str]]]:
+        try:
+            import yaml
+
+            path = Path(__file__).resolve().parents[3] / "nlp" / "runtime" / "topic_dependency.yaml"
+            if not path.exists():
+                return {}
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            cleaned: dict[str, dict[str, list[str]]] = {}
+            for intent, payload in data.items():
+                if not isinstance(intent, str) or not isinstance(payload, dict):
+                    continue
+                publish = [str(item) for item in payload.get("publish", []) if isinstance(item, str)]
+                consume = [str(item) for item in payload.get("consume", []) if isinstance(item, str)]
+                cleaned[intent] = {"publish": publish, "consume": consume}
+            return cleaned
+        except Exception:
+            return {}
+
+    def _resolve_topic_dependencies(self, intent: str) -> dict[str, list[str]]:
+        explicit = self._topic_dependency_map.get(intent)
+        if explicit is not None:
+            return explicit
+        for pattern, deps in self._topic_dependency_map.items():
+            if pattern.endswith(".*") and intent.startswith(pattern[:-2]):
+                return deps
+        return {"publish": [], "consume": []}
+
+    def _red_partial_bus_dependency(self, intent: str) -> str | None:
+        if self._bus_health_tracker is None:
+            return None
+        deps = self._resolve_topic_dependencies(intent)
+        for topic in [*deps.get("publish", []), *deps.get("consume", [])]:
+            if self._bus_health_tracker.topic_health(topic) == "red":
+                return topic
+        return None
+
+    def _yellow_partial_bus_dependency(self, intent: str) -> str | None:
+        if self._bus_health_tracker is None:
+            return None
+        deps = self._resolve_topic_dependencies(intent)
+        for topic in [*deps.get("publish", []), *deps.get("consume", [])]:
+            if self._bus_health_tracker.topic_health(topic) == "yellow":
+                return topic
+        return None
+
+    def _make_partial_bus_swr_served_cache_event(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        conversation_id: str | None,
+        topic_name: str,
+    ) -> Message:
+        return Message.new(
+            topic=NLP_EVENT_V1,
+            payload={
+                "kind": "partial_bus_swr_served_cache",
+                "producer": self.name,
+                "request_id": request_id or None,
+                "qa_correlation_id": qa_correlation_id or None,
+                "conversation_id": conversation_id,
+                "topic": topic_name,
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
+    def _cached_answer_for_repeat_query(
+        self,
+        payload: dict[str, object],
+        conversation_id: str,
+    ) -> Message | None:
+        from common.config import cfg
+
+        if not conversation_id:
+            return None
+        history_metadata = self._conversation_store.load_metadata(conversation_id) or {}
+        repeated_history = [
+            item
+            for item in history_metadata.get("repeated_query_history", [])
+            if isinstance(item, dict)
+        ]
+        window_s = int(cfg.nlp_repeated_query_window_s)
+        now_s = _dt.datetime.now(_dt.timezone.utc).timestamp()
+        previous_same = 0
+        signature = _make_repeated_query_signature(
+            str(payload.get("intent", "")),
+            [dict(entity) for entity in payload.get("entities", []) if isinstance(entity, dict)],
+            payload.get("intent_modifier"),
+        )
+        for item in repeated_history:
+            ts = item.get("ts")
+            if isinstance(ts, (int, float)) and now_s - float(ts) <= window_s:
+                if item.get("signature") == signature:
+                    previous_same += 1
+        if previous_same == 0:
+            return None
+
+        cached_entry = history_metadata.get("repeated_query_cached_answer")
+        if not isinstance(cached_entry, dict):
+            return None
+        entry_signature = cached_entry.get("signature")
+        cached_at_iso = cached_entry.get("cached_at")
+        cached_payload = cached_entry.get("payload")
+        if entry_signature != signature or not isinstance(cached_at_iso, str) or not isinstance(cached_payload, dict):
+            return None
+        try:
+            cached_at_ts = _dt.datetime.fromisoformat(cached_at_iso).timestamp()
+        except ValueError:
+            return None
+        if now_s - cached_at_ts > int(cfg.nlp_repeated_query_cache_max_age_s):
+            return None
+        payload_copy = dict(cached_payload)
+        payload_copy["cached_at"] = cached_at_iso
+        return Message.new(
+            topic=QA_ANSWER_V1,
+            payload=payload_copy,
+            producer=self.name,
+        )
+
+    def _make_partial_bus_unavailable_answer(
+        self,
+        request_id: str,
+        qa_correlation_id: str,
+        intent: str,
+        conversation_id: str | None,
+        topic_name: str,
+    ) -> Message:
+        return self._make_meta_answer(
+            request_id=request_id,
+            qa_correlation_id=qa_correlation_id,
+            intent="meta.partial_bus_unavailable",
+            answer_text=(
+                "Bu sorgu için gerekli olan veri kanalı şu an ulaşılamıyor; "
+                "kısa süre sonra tekrar deneyebilir misiniz?"
+            ),
+            conversation_id=conversation_id,
+            degraded=True,
+            degraded_reason=f"partial_bus_{topic_name}",
+        )
 
     def _sanitize_context_entities(
         self,
@@ -3234,7 +3469,29 @@ class NlpDispatcherAgent:
         from common.config import cfg  # local import avoids circular at module load
 
         payload = msg.payload
+        if msg.topic == MAINT_EVENT:
+            return list(self._handle_maint_event(payload))
+
+        if msg.topic == QA_INTENT_V1:
+            request_id = str(payload.get("request_id", ""))
+            qa_corr_in = str(payload.get("qa_correlation_id") or "")
+            if msg.envelope.message_id not in self._capture_in_progress:
+                self._capture_in_progress.add(msg.envelope.message_id)
+                try:
+                    return self._flame_capture.capture_if_armed(
+                        request_id=request_id,
+                        qa_correlation_id=qa_corr_in,
+                        work=lambda: self.handle(msg),
+                    )
+                finally:
+                    self._capture_in_progress.remove(msg.envelope.message_id)
+
+        self._flame_capture.record_stage("10.31.8_request_context")
+
         if msg.topic == QA_FEEDBACK_V1:
+            request_metadata = payload.get("request_metadata")
+            if isinstance(request_metadata, dict) and request_metadata.get("synthetic_prober"):
+                return []
             feedback_payload = self._sanitize_feedback_payload(payload)
             request_id = feedback_payload["request_id"]
             if not self._is_valid_feedback_payload(payload):
@@ -3348,6 +3605,7 @@ class NlpDispatcherAgent:
                         "payload": cached_payload,
                     }
                     self._conversation_store.save_metadata(conversation_id, history_metadata)
+            self._flame_capture.record_stage("10.8_answer_render")
             return _unwrap_qa_answer_downgrade_events(out)
 
         if conversation_id:
@@ -3471,6 +3729,17 @@ class NlpDispatcherAgent:
 
             if cached_answer_message is not None:
                 repeated_query_summary_offer = None
+                yellow_topic = self._yellow_partial_bus_dependency(intent)
+                if yellow_topic is not None:
+                    return _with_context([
+                        cached_answer_message,
+                        self._make_partial_bus_swr_served_cache_event(
+                            request_id=request_id,
+                            qa_correlation_id=qa_corr_in,
+                            conversation_id=conversation_id or None,
+                            topic_name=yellow_topic,
+                        ),
+                    ])
                 return _with_context([cached_answer_message])
 
         # ── §10.6 idempotency — dedup before any routing ───────────────────
@@ -3559,6 +3828,30 @@ class NlpDispatcherAgent:
                     "summary_original_count": len(sorted_fixtures),
                     "summary_top_n_by": _SUMMARY_TOP_N_BY,
                 })
+            yellow_topic = self._yellow_partial_bus_dependency(intent)
+            if yellow_topic is not None:
+                cached_answer = self._cached_answer_for_repeat_query(payload, conversation_id)
+                if cached_answer is not None:
+                    return _with_context([
+                        cached_answer,
+                        self._make_partial_bus_swr_served_cache_event(
+                            request_id=request_id,
+                            qa_correlation_id=qa_corr_in,
+                            conversation_id=conversation_id or None,
+                            topic_name=yellow_topic,
+                        ),
+                    ])
+            red_topic = self._red_partial_bus_dependency(intent)
+            if red_topic is not None:
+                return _with_context([
+                    self._make_partial_bus_unavailable_answer(
+                        request_id=request_id,
+                        qa_correlation_id=qa_corr_in,
+                        intent=intent,
+                        conversation_id=conversation_id or None,
+                        topic_name=red_topic,
+                    )
+                ])
             expected_count = len(routed_payloads)
             for payload in routed_payloads:
                 payload["summary_expected_count"] = expected_count
@@ -3781,6 +4074,19 @@ class NlpDispatcherAgent:
         intent = self._narrow_role_prefix_manager_intent(intent, entities)
 
         if intent.startswith("data.") and intent != "data.fixture_lookup":
+            yellow_topic = self._yellow_partial_bus_dependency(intent)
+            if yellow_topic is not None:
+                cached_answer = self._cached_answer_for_repeat_query(payload, conversation_id)
+                if cached_answer is not None:
+                    return _with_context([
+                        cached_answer,
+                        self._make_partial_bus_swr_served_cache_event(
+                            request_id=request_id,
+                            qa_correlation_id=qa_corr_in,
+                            conversation_id=conversation_id or None,
+                            topic_name=yellow_topic,
+                        ),
+                    ])
             return _with_context(self._make_data_request(request_id, qa_corr_in, intent))
 
         quotative = detect_quotative_frame(normalized_text)
@@ -3950,6 +4256,30 @@ class NlpDispatcherAgent:
 
         # ── §10.6 deterministic backoff ────────────────────────────────────
         if intent.startswith("predict."):
+            yellow_topic = self._yellow_partial_bus_dependency(intent)
+            if yellow_topic is not None:
+                cached_answer = self._cached_answer_for_repeat_query(payload, conversation_id)
+                if cached_answer is not None:
+                    return _with_context([
+                        cached_answer,
+                        self._make_partial_bus_swr_served_cache_event(
+                            request_id=request_id,
+                            qa_correlation_id=qa_corr_in,
+                            conversation_id=conversation_id or None,
+                            topic_name=yellow_topic,
+                        ),
+                    ])
+            red_topic = self._red_partial_bus_dependency(intent)
+            if red_topic is not None:
+                return _with_context([
+                    self._make_partial_bus_unavailable_answer(
+                        request_id=request_id,
+                        qa_correlation_id=qa_corr_in,
+                        intent=intent,
+                        conversation_id=conversation_id or None,
+                        topic_name=red_topic,
+                    )
+                ])
             # Check for fixture-anchoring entities (team or competition).
             fixture_entities = [
                 e for e in entities
@@ -4136,6 +4466,39 @@ class NlpDispatcherAgent:
                     "source": "venue_inference",
                 }
         return None
+
+    def _handle_maint_event(self, payload: dict[str, object]) -> Iterable[Message]:
+        if not isinstance(payload, dict):
+            return []
+
+        kind = str(payload.get("kind") or "")
+        if kind != "nlp_flame_armed":
+            return []
+
+        return self._arm_flame_capture(payload)
+
+    def _arm_flame_capture(self, payload: dict[str, object]) -> Iterable[Message]:
+        request_id = str(payload.get("request_id") or "")
+        qa_correlation_id = str(payload.get("qa_correlation_id") or "")
+        ttl_h = int(payload.get("ttl_h") or 0)
+        operator_id_h = str(payload.get("operator_id_h") or "")
+        reason = str(payload.get("reason") or "")
+
+        try:
+            self._flame_capture.arm(
+                request_id=request_id,
+                qa_correlation_id=qa_correlation_id,
+                ttl_h=ttl_h,
+                operator_id_h=operator_id_h,
+                reason=reason,
+            )
+        except ValueError as exc:
+            self._log.warning(
+                "%s: malformed nlp_flame_armed maint event: %s",
+                self.name,
+                exc,
+            )
+        return []
 
     def _make_disambiguation(
         self,
@@ -4554,6 +4917,17 @@ class NlpDispatcherAgent:
         intent: str,
         extra_params: dict[str, object] | None = None,
     ) -> list[Message]:
+        red_topic = self._red_partial_bus_dependency(intent)
+        if red_topic is not None:
+            return [
+                self._make_partial_bus_unavailable_answer(
+                    request_id=request_id,
+                    qa_correlation_id=qa_correlation_id or self._new_id(),
+                    intent=intent,
+                    conversation_id=None,
+                    topic_name=red_topic,
+                )
+            ]
         qa_corr = qa_correlation_id or self._new_id()
         kind = intent.split(".", 1)[1]
         params: dict[str, object] = {"intent": intent}
@@ -4800,6 +5174,17 @@ class NlpDispatcherAgent:
         fixture_filter: dict[str, str] | None = None,
     ) -> list[Message]:
         """Emit a data.request.v1 for a composite match lookup slot."""
+        red_topic = self._red_partial_bus_dependency("data.fixture_lookup")
+        if red_topic is not None:
+            return [
+                self._make_partial_bus_unavailable_answer(
+                    request_id=request_id,
+                    qa_correlation_id=qa_correlation_id or self._new_id(),
+                    intent="data.fixture_lookup",
+                    conversation_id=None,
+                    topic_name=red_topic,
+                )
+            ]
         qa_correlation_id = qa_correlation_id or self._new_id()
         params: dict[str, object] = {
             "team_pair": sorted([team_a_id, team_b_id])
@@ -4829,6 +5214,17 @@ class NlpDispatcherAgent:
         extra_params: dict[str, object] | None = None,
     ) -> list[Message]:
         """Emit a generic data.request.v1 for any data.* intent."""
+        red_topic = self._red_partial_bus_dependency(intent)
+        if red_topic is not None:
+            return [
+                self._make_partial_bus_unavailable_answer(
+                    request_id=request_id,
+                    qa_correlation_id=qa_correlation_id or self._new_id(),
+                    intent=intent,
+                    conversation_id=None,
+                    topic_name=red_topic,
+                )
+            ]
         qa_corr = qa_correlation_id or self._new_id()
         kind = intent.split(".", 1)[1]
         params: dict[str, object] = {"intent": intent}
@@ -5210,23 +5606,31 @@ class NlpAnswerAgent:
     def _on_predict_approved(self, msg: Message) -> Iterable[Message]:
         payload = msg.payload
         citation_check = self._validate_citation_signature(payload)
+        prediction_id_check = self._validate_prediction_id_determinism(payload)
+        alerts: list[Message] = []
+
         if citation_check is not None:
-            alert = self._build_citation_signature_alert(payload, citation_check)
+            citation_alert = self._build_citation_signature_alert(payload, citation_check)
+            alerts.append(citation_alert)
             if citation_check["mode"] == "enforce":
-                return [
-                    self._build_predict_timeout_answer(payload),
-                    alert,
-                ]
+                return [self._build_predict_timeout_answer(payload), citation_alert]
+
+        if prediction_id_check is not None:
+            prediction_id_alert = self._build_prediction_id_mismatch_alert(payload, prediction_id_check)
+            alerts.append(prediction_id_alert)
+            if prediction_id_check["mode"] == "enforce":
+                return [self._build_predict_timeout_answer(payload, degraded_reason="prediction_id_mismatch"), prediction_id_alert]
 
         summary_corr = payload.get("summary_correlation_id")
         request_id = str(payload.get("request_id") or "")
         qa_corr = str(payload.get("qa_correlation_id") or "")
         if self._kill_pattern_matches(payload):
-            return [self._make_kill_pattern_answer(request_id=request_id, qa_correlation_id=qa_corr)]
+            result = [self._make_kill_pattern_answer(request_id=request_id, qa_correlation_id=qa_corr)]
+            result.extend(alerts)
+            return result
         if summary_corr:
             out = list(self._on_summary_prediction_arrived(payload, str(summary_corr)))
-            if citation_check is not None:
-                out.append(alert)
+            out.extend(alerts)
             return out
 
         match_id = str(payload.get("match_id") or "")
@@ -5280,8 +5684,7 @@ class NlpAnswerAgent:
                         rpc_age_ms=rpc_age_ms,
                     ),
                 ]
-                if citation_check is not None:
-                    out.append(alert)
+                out.extend(alerts)
                 return out
 
         valid_horizon, horizon_alert = self._validate_calibration_horizon(payload, current_state)
@@ -5299,9 +5702,7 @@ class NlpAnswerAgent:
             )
             return out
 
-        if citation_check is not None:
-            return [alert]
-        return []
+        return alerts
 
     def _citation_key_id(self, key: bytes) -> str:
         return _hashlib.sha256(key).hexdigest()[:16]
@@ -5579,6 +5980,65 @@ class NlpAnswerAgent:
             producer=self.name,
         )
 
+    def _validate_prediction_id_determinism(self, payload: dict) -> dict | None:
+        from common.config import cfg
+
+        mode = str(getattr(cfg, "nlp_predict_prediction_id_determinism_required", "warn") or "warn").lower()
+        if mode == "off":
+            return None
+
+        match_id = str(payload.get("match_id") or "")
+        market = str(payload.get("market") or "")
+        request_id = str(payload.get("qa_request_id") or payload.get("request_id") or "")
+        calibration_version = payload.get("calibration_version") or (
+            (payload.get("final") or {}).get("calibration_version")
+        ) or 1
+        try:
+            calibration_version_int = int(calibration_version)
+        except (TypeError, ValueError):
+            calibration_version_int = 1
+
+        expected = derive_prediction_id(
+            match_id=match_id,
+            market=market,
+            request_id=request_id,
+            calibration_version=calibration_version_int,
+        )
+        observed = str(payload.get("prediction_id") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{32}", observed):
+            return None
+        if observed != expected:
+            return {
+                "mode": mode,
+                "reason": "prediction_id_mismatch",
+                "expected": expected,
+                "observed": observed,
+            }
+        return None
+
+    def _build_prediction_id_mismatch_alert(self, payload: dict, check: dict) -> Message:
+        return Message.new(
+            topic=NLP_ALERT_V1,
+            payload={
+                "schema_version": 1,
+                "alert_id": self._new_id(),
+                "kind": "predict_prediction_id_mismatch",
+                "severity": "critical",
+                "source": self.name,
+                "reason": str(check.get("reason") or "prediction_id_mismatch"),
+                "request_id": str(payload.get("qa_request_id") or payload.get("request_id") or "") or None,
+                "qa_correlation_id": (
+                    str(payload.get("qa_correlation_id") or payload.get("summary_correlation_id") or "") or None
+                ),
+                "details": {
+                    "expected": str(check.get("expected") or ""),
+                    "observed": str(check.get("observed") or ""),
+                },
+                "emitted_at": self._clock_iso(),
+            },
+            producer=self.name,
+        )
+
     def _calibration_horizon_state_class(self, state: str) -> str | None:
         if state in {
             FixtureState.SCHEDULED.value,
@@ -5709,7 +6169,7 @@ class NlpAnswerAgent:
                 return False, alert
         return True, None
 
-    def _build_predict_timeout_answer(self, payload: dict) -> Message:
+    def _build_predict_timeout_answer(self, payload: dict, degraded_reason: str = "citation_signature_verification_failed") -> Message:
         request_id = str(payload.get("qa_request_id") or payload.get("request_id") or "")
         qa_correlation_id = str(
             payload.get("qa_correlation_id")
@@ -5905,7 +6365,7 @@ class NlpAnswerAgent:
                 )
         return disclosure_messages
 
-    def _build_predict_timeout_answer(self, payload: dict) -> Message:
+    def _build_predict_timeout_answer(self, payload: dict, degraded_reason: str = "citation_signature_verification_failed") -> Message:
         request_id = str(payload.get("qa_request_id") or payload.get("request_id") or "")
         qa_correlation_id = str(
             payload.get("qa_correlation_id")
@@ -5919,7 +6379,7 @@ class NlpAnswerAgent:
             kind="predict.timeout",
             answer_text="Tahmin zaman aşımına uğradı.",
             degraded=True,
-            degraded_reason="citation_signature_verification_failed",
+            degraded_reason=degraded_reason,
             tier_id_required=None,
             emitted_at_utc=self._clock_iso(),
         )
@@ -6176,11 +6636,11 @@ class NlpGossipAggregatorAgent:
         self._log = logging.getLogger("swarm.agents.nlp.gossip_aggregator")
         add_log_filter(self._log, filters=(PIIScrubFilter(),))
         self._monotonic = monotonic or _time.monotonic
-        self._observations: dict[str, deque[tuple[str, str, str, str, str, str]]] = {}
+        self._observations: dict[str, deque[str]] = {}
         self._lock = _threading.Lock()
 
-    def _cluster_modal_tuple(self) -> tuple[str, str, str, str, str, str] | None:
-        counts: Counter[tuple[str, str, str, str, str, str]] = Counter()
+    def _cluster_modal_signature(self) -> str | None:
+        counts: Counter[str] = Counter()
         for recent in self._observations.values():
             if recent:
                 counts.update(recent)
@@ -6197,8 +6657,8 @@ class NlpGossipAggregatorAgent:
         self,
         kind: str,
         pod_instance_id: str,
-        observed: tuple[str, str, str, str, str, str] | None = None,
-        expected: tuple[str, str, str, str, str, str] | None = None,
+        observed: str | None = None,
+        expected: str | None = None,
         severity: str = "error",
         auto_quarantine: bool = False,
     ) -> Message:
@@ -6206,23 +6666,9 @@ class NlpGossipAggregatorAgent:
             "pod_instance_id": pod_instance_id,
         }
         if expected is not None:
-            details["expected_lexicon_state"] = {
-                "lexicon_set_sha": expected[0],
-                "intent_sha": expected[1],
-                "crf_sha": expected[2],
-                "calibration_version": expected[3],
-                "template_git_sha": expected[4],
-                "pipeline_version": expected[5],
-            }
+            details["expected_lexicon_state_signature"] = expected
         if observed is not None:
-            details["observed_lexicon_state"] = {
-                "lexicon_set_sha": observed[0],
-                "intent_sha": observed[1],
-                "crf_sha": observed[2],
-                "calibration_version": observed[3],
-                "template_git_sha": observed[4],
-                "pipeline_version": observed[5],
-            }
+            details["observed_lexicon_state_signature"] = observed
         if auto_quarantine:
             details["auto_quarantine"] = True
 
@@ -6241,8 +6687,8 @@ class NlpGossipAggregatorAgent:
     def _has_persistent_divergence(
         self,
         pod_instance_id: str,
-        observed: tuple[str, str, str, str, str, str],
-        modal: tuple[str, str, str, str, str, str],
+        observed: str,
+        modal: str,
     ) -> bool:
         from common.config import cfg
 
@@ -6268,14 +6714,9 @@ class NlpGossipAggregatorAgent:
         if not pod_instance_id:
             return []
 
-        observed = (
-            str(payload.get("lexicon_set_sha") or ""),
-            str(payload.get("intent_sha") or ""),
-            str(payload.get("crf_sha") or ""),
-            str(payload.get("calibration_version") or ""),
-            str(payload.get("template_git_sha") or ""),
-            str(payload.get("pipeline_version") or ""),
-        )
+        observed = str(payload.get("lexicon_state_signature") or "").strip()
+        if not observed:
+            return []
 
         with self._lock:
             recent = self._observations.setdefault(
@@ -6283,7 +6724,7 @@ class NlpGossipAggregatorAgent:
                 deque(maxlen=_NLP_GOSSIP_WINDOW_ROUNDS),
             )
             recent.append(observed)
-            cluster_modal = self._cluster_modal_tuple()
+            cluster_modal = self._cluster_modal_signature()
             total_pods = len(self._observations)
 
         events: list[Message] = []
@@ -6319,6 +6760,66 @@ class NlpGossipAggregatorAgent:
                 )
             )
         return events
+
+
+class NlpDivergenceQuarantineState:
+    """Tracks a local NLP pod's auto-quarantine readiness state."""
+
+    def __init__(self) -> None:
+        self._lock = _threading.Lock()
+        self._quarantined = False
+
+    def quarantine(self) -> None:
+        with self._lock:
+            self._quarantined = True
+
+    def is_quarantined(self) -> bool:
+        with self._lock:
+            return self._quarantined
+
+
+class NlpGossipQuarantineAgent:
+    """Local NLP pod readiness quarantine listener.
+
+    Subscribes to ``nlp.alert.v1`` and marks this pod as quarantined
+    when a divergence alert targets its own pod_instance_id.
+    """
+
+    name = "nlp.gossip_quarantine.v1"
+    subscribes = [NLP_ALERT_V1]
+    publishes: list = []
+
+    def __init__(self) -> None:
+        from common.config import cfg
+
+        self._pod_instance_id = str(cfg.nlp_pod_id)
+        self._state = NlpDivergenceQuarantineState()
+
+    def handle(self, msg: Message) -> list[Message]:
+        payload = msg.payload
+        if not isinstance(payload, dict):
+            return []
+
+        kind = str(payload.get("kind") or "")
+        if kind != "lexicon_state_divergence":
+            return []
+
+        details = payload.get("details")
+        if not isinstance(details, dict):
+            return []
+
+        if not bool(details.get("auto_quarantine")):
+            return []
+
+        pod_instance_id = str(details.get("pod_instance_id") or "").strip()
+        if pod_instance_id != self._pod_instance_id:
+            return []
+
+        self._state.quarantine()
+        return []
+
+    def is_quarantined(self) -> bool:
+        return self._state.is_quarantined()
 
 
 class NlpProofreaderAgent:
@@ -6439,19 +6940,176 @@ class NlpProofreaderAgent:
 
 
 class NlpProberAgent:
-    """Phase 10 §10.32 skeleton: independent synthetic probe emitter.
+    """Phase 10 §10.32 independent synthetic prober agent.
 
-    Publishes ``nlp.prober.v1`` when the prober runtime is enabled. The
-    class exists in the canonical NLP registry so the §10.0 outbound
-    wire contract can be asserted by a registry walk.
+    Publishes synthetic probe requests on ``qa.request.v1`` and prober
+    audit heartbeats on ``nlp.prober.v1``. Consumes ``qa.answer.v1`` so
+    it can detect drift for synthetic-prober traffic and emit alerts.
     """
 
     name = "nlp.prober.v1"
-    subscribes: list[object] = []
-    publishes = [NLP_PROBER_V1]
+    subscribes = [QA_ANSWER_V1]
+    publishes = [NLP_PROBER_V1, QA_REQUEST_V1]
+
+    def __init__(
+        self,
+        *,
+        corpus_path: str | None = None,
+        clock: Callable[[], float] | None = None,
+    ) -> None:
+        self._clock = clock or _time.monotonic
+        self._last_probe_at = float("-inf")
+        self._next_index = -1
+        self._drift_history: deque[float] = deque()
+        self._corpus_path = (
+            Path(corpus_path)
+            if corpus_path is not None
+            else Path(__file__).resolve().parents[4] / "data" / "nlp" / "prober_corpus.jsonl"
+        )
+        self._corpus = self._load_corpus()
+        self._expected_answers: dict[str, dict[str, object]] = {}
+
+    def _record_prober_outcome(self, payload: dict[str, object], *, success: bool) -> None:
+        from common.telemetry import get_sink
+
+        if not _is_synthetic_prober_payload(payload):
+            return
+
+        intent = str(payload.get("intent_id") or payload.get("intent") or "unknown")
+        request_id = str(payload.get("request_id") or "")
+        latency_seconds = None
+        emitted_at = payload.get("emitted_at")
+        if isinstance(emitted_at, str):
+            emitted_timestamp = _parse_rfc3339_utc(emitted_at)
+            if emitted_timestamp is not None:
+                latency_seconds = max(
+                    0.0,
+                    (_dt.datetime.now(_dt.timezone.utc) - emitted_timestamp).total_seconds(),
+                )
+
+        try:
+            get_sink().record_nlp_prober_outcome(
+                request_id=request_id,
+                intent=intent,
+                success=success,
+                latency_seconds=latency_seconds,
+            )
+        except Exception:
+            pass  # non-blocking audit helper
+
+    def _load_corpus(self) -> list[dict[str, object]]:
+        if not self._corpus_path.exists():
+            return []
+        rows: list[dict[str, object]] = []
+        for line in self._corpus_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            request_payload = payload.get("request_payload")
+            if not isinstance(request_payload, dict) or not request_payload.get("request_id"):
+                continue
+            rows.append(payload)
+        return rows[:cfg.nlp_prober_corpus_size]
+
+    def on_heartbeat(self) -> list[Message]:
+        from common.config import cfg
+
+        now = self._clock()
+        interval = float(cfg.nlp_prober_interval_s)
+        if now - self._last_probe_at < interval:
+            return []
+        if not self._corpus:
+            return []
+        self._last_probe_at = now
+        self._next_index = (self._next_index + 1) % len(self._corpus)
+        entry = self._corpus[self._next_index]
+        request_payload = dict(entry["request_payload"])
+        request_metadata = dict(request_payload.get("request_metadata") or {})
+        request_metadata["synthetic_prober"] = True
+        request_metadata["humanizer_disabled"] = True
+        request_payload["request_metadata"] = request_metadata
+        request_payload.setdefault("locale", "tr-TR")
+        request_payload.setdefault("emitted_at", _utc_iso())
+
+        self._expected_answers[str(request_payload["request_id"])] = {
+            k: v
+            for k, v in (
+                ("intent_id", entry.get("expected_intent_id")),
+                ("top_1_entity_id", entry.get("expected_top_1_entity_id")),
+                ("refusal_reason_code", entry.get("expected_refusal_reason_code")),
+                ("post_render_template_sha", entry.get("expected_post_render_template_sha")),
+                ("outbound_checksum", entry.get("expected_outbound_checksum")),
+            )
+            if v is not None
+        }
+
+        return [
+            Message.new(topic=QA_REQUEST_V1, payload=request_payload, producer=self.name),
+            Message.new(
+                topic=NLP_PROBER_V1,
+                payload={
+                    "kind": "prober_request_dispatched",
+                    "producer": self.name,
+                    "request_id": request_payload["request_id"],
+                    "emitted_at": _utc_iso(),
+                },
+                producer=self.name,
+            ),
+        ]
 
     def handle(self, msg: Message) -> Iterable[Message]:
-        return ()
+        request_metadata = msg.payload.get("request_metadata")
+        if not isinstance(request_metadata, dict):
+            return []
+        if not request_metadata.get("synthetic_prober"):
+            return []
+
+        request_id = str(msg.payload.get("request_id", ""))
+        expected = self._expected_answers.get(request_id)
+        if not expected:
+            return []
+
+        now = self._clock()
+        drift_fields: list[str] = []
+        observed: dict[str, object] = {}
+        for field, expected_value in expected.items():
+            if msg.payload.get(field) != expected_value:
+                drift_fields.append(field)
+                observed[field] = msg.payload.get(field)
+
+        if not drift_fields:
+            self._record_prober_outcome(msg.payload, success=True)
+            return []
+
+        self._drift_history.append(now)
+        cutoff = now - 1800.0
+        while self._drift_history and self._drift_history[0] < cutoff:
+            self._drift_history.popleft()
+
+        severity = "critical" if len(self._drift_history) >= 5 else "warn"
+        field = drift_fields[0]
+        payload = {
+            "schema_version": 1,
+            "alert_id": uuid4().hex,
+            "kind": "prober_drift_detected",
+            "producer": self.name,
+            "request_id": request_id,
+            "severity": severity,
+            "expected": expected,
+            "observed": {
+                field: observed[field],
+            },
+            "drift_field": field,
+            "emitted_at": _utc_iso(),
+        }
+        self._record_prober_outcome(msg.payload, success=False)
+        return [Message.new(topic=NLP_ALERT_V1, payload=payload, producer=self.name)]
 
 
 __all__ = [

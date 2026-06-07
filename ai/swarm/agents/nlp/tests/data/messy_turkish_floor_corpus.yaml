@@ -1,0 +1,8 @@
+version: 1
+corpus_name: messy_turkish_floor_corpus
+row_count: 1000
+sha256: 0610b1af462da734e5f2e4ab2c2f45800d54ed1b77888b85c587e4931ad9855b
+reviewers:
+- nlp-curator
+- nlp-domain-football
+notes: Phase 10 §10.22 messy Turkish floor regression corpus.

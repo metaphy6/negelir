@@ -60,6 +60,10 @@
           "type": ["boolean", "null"],
           "description": "Optional signal that the normalized request was an ALL-CAPS shout."
         },
+        "humanizer_disabled": {
+          "type": ["boolean", "null"],
+          "description": "Optional signal that humanizer rephrasing should be disabled for this request."
+        },
         "client_format_max_version": {
           "type": ["integer", "null"],
           "minimum": 1,
@@ -69,6 +73,10 @@
         "stripped_tail": {
           "type": "string",
           "description": "Trimmed copy/paste tail removed from the normalized input for audit tracing."
+        },
+        "synthetic_prober": {
+          "type": ["boolean", "null"],
+          "description": "Synthetic prober signal for prober-dispatched qa.request.v1 envelopes."
         }
       },
       "additionalProperties": false

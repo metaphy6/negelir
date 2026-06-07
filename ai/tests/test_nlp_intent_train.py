@@ -210,6 +210,16 @@ def test_eligibility_excludes_kill_pattern_rewritten_rows() -> None:
     assert len(selected) == 1
 
 
+def test_eligibility_excludes_synthetic_prober_rows() -> None:
+    selected, counts, _ = filter_shadow_rows_for_intent_training([
+        _make_shadow_payload(request_metadata={"synthetic_prober": True}),
+        _make_shadow_payload(),
+    ])
+
+    assert counts["synthetic_prober"] == 1
+    assert len(selected) == 1
+
+
 def test_train_excludes_eval_set_membership_via_manifest(tmp_path: Path) -> None:
     manifest_path = tmp_path / "eval_manifest.json"
     manifest_path.write_text(json.dumps(["eval-hash-1"]), encoding="utf-8")

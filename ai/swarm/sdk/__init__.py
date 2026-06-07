@@ -28,6 +28,7 @@ from .registry import AgentRegistry
 from .runner import AgentRunner
 from .singleflight import Singleflight
 from .types import Envelope, Message, Topic
+from .bus_health import BusHealthTracker
 
 __all__ = [
     "Agent",
@@ -36,6 +37,7 @@ __all__ = [
     "AgentSpec",
     "AlertDebouncer",
     "Bus",
+    "BusHealthTracker",
     "Codec",
     "DebounceDecision",
     "Envelope",

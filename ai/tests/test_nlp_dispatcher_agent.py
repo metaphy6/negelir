@@ -13,6 +13,7 @@ Per AGENTS.md Rule 10: new public surface -> happy + adversarial tests.
 from __future__ import annotations
 
 import ast
+import copy
 import datetime as _dt
 import hashlib
 import hmac
@@ -2155,6 +2156,166 @@ class TestNlpDispatcherDeterministicBackoff:
             assert results[0].envelope.topic == DATA_REQUEST_V1
             assert results[0].payload["kind"] == intent.split(".", 1)[1]
 
+    def test_topic_red_partial_bus_fails_with_meta_partial_bus_unavailable(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        class FakeBusHealthTracker:
+            def __init__(self, health_map: dict[str, str]) -> None:
+                self._health_map = health_map
+
+            def topic_health(self, topic: str) -> str:
+                return self._health_map.get(topic, "green")
+
+        agent._topic_dependency_map = {
+            "predict.match_outcome": {
+                "publish": ["predict.request.v1"],
+                "consume": ["predict.approved.v1"],
+            },
+            "data.standings": {
+                "publish": ["data.request.v1"],
+                "consume": ["data.response.v1"],
+            },
+            "meta.help": {"publish": [], "consume": []},
+        }
+        agent._bus_health_tracker = FakeBusHealthTracker({"data.request.v1": "red"})
+
+        msg = _make_intent_msg({"intent": "data.standings", "entities": []})
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == QA_ANSWER_V1
+        assert results[0].payload["intent"] == "meta.partial_bus_unavailable"
+        assert results[0].payload.get("degraded") is True
+        assert results[0].payload.get("degraded_reason") == "partial_bus_data.request.v1"
+
+    def test_topic_yellow_partial_bus_serves_cached_answer_and_emits_event(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        class FakeBusHealthTracker:
+            def __init__(self, health_map: dict[str, str]) -> None:
+                self._health_map = health_map
+
+            def topic_health(self, topic: str) -> str:
+                return self._health_map.get(topic, "green")
+
+        agent._topic_dependency_map = {
+            "data.standings": {
+                "publish": ["data.request.v1"],
+                "consume": ["data.response.v1"],
+            },
+        }
+        agent._bus_health_tracker = FakeBusHealthTracker({"data.request.v1": "yellow"})
+        from datetime import datetime, timezone
+        from swarm.agents.nlp import _make_repeated_query_signature
+
+        signature = _make_repeated_query_signature("data.standings", [], None)
+        now_ts = datetime.now(timezone.utc).timestamp()
+
+        agent._conversation_store.save_metadata(
+            "conv-1",
+            {
+                "repeated_query_history": [
+                    {
+                        "signature": signature,
+                        "ts": now_ts,
+                    }
+                ],
+                "repeated_query_cached_answer": {
+                    "signature": signature,
+                    "cached_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "payload": {
+                        "request_id": "prior-request",
+                        "qa_correlation_id": "prior-corr",
+                        "intent": "data.standings",
+                        "answer_text": "Önceki yanıt.",
+                        "kind": "standings",
+                        "degraded": False,
+                        "tier_id_required": None,
+                        "emitted_at_utc": "2026-05-27T10:00:00+00:00",
+                        "schema_version": 2,
+                    },
+                },
+            },
+        )
+
+        msg = _make_intent_msg(
+            {
+                "intent": "data.standings",
+                "entities": [],
+                "conversation_id": "conv-1",
+            }
+        )
+        results = list(agent.handle(msg))
+
+        assert any(
+            r.envelope.topic == QA_ANSWER_V1
+            and r.payload.get("intent") == "data.standings"
+            and r.payload.get("answer_text") == "Önceki yanıt."
+            for r in results
+        )
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1
+            and r.payload.get("kind") == "partial_bus_swr_served_cache"
+            for r in results
+        )
+
+    def test_meta_intent_topic_dependency_is_empty_when_all_topics_red(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        class FakeBusHealthTracker:
+            def __init__(self, health_map: dict[str, str]) -> None:
+                self._health_map = health_map
+
+            def topic_health(self, topic: str) -> str:
+                return self._health_map.get(topic, "red")
+
+        agent._topic_dependency_map = {
+            "predict.match_outcome": {
+                "publish": ["predict.request.v1"],
+                "consume": ["predict.approved.v1"],
+            },
+            "data.standings": {
+                "publish": ["data.request.v1"],
+                "consume": ["data.response.v1"],
+            },
+            "meta.help": {"publish": [], "consume": []},
+        }
+        agent._bus_health_tracker = FakeBusHealthTracker({"data.request.v1": "red"})
+
+        assert agent._red_partial_bus_dependency("meta.help") is None
+        assert agent._red_partial_bus_dependency("data.standings") == "data.request.v1"
+
+    def test_topic_dependency_map_loads_from_yaml(self, agent: NlpDispatcherAgent) -> None:
+        assert "predict.*" in agent._topic_dependency_map
+        assert agent._resolve_topic_dependencies("predict.match_outcome")["publish"] == ["predict.request.v1"]
+        assert agent._resolve_topic_dependencies("predict.match_outcome")["consume"] == ["predict.approved.v1"]
+        assert agent._topic_dependency_map["data.fixture_lookup"]["consume"] == ["data.response.v1"]
+        assert agent._topic_dependency_map["meta.*"]["publish"] == []
+        assert agent._topic_dependency_map["meta.*"]["consume"] == []
+
+    def test_topic_dependency_yaml_drives_partial_bus_failure(
+        self, agent: NlpDispatcherAgent
+    ) -> None:
+        class FakeBusHealthTracker:
+            def __init__(self, health_map: dict[str, str]) -> None:
+                self._health_map = health_map
+
+            def topic_health(self, topic: str) -> str:
+                return self._health_map.get(topic, "green")
+
+        class DummyRedis:
+            def getdel(self, key: str) -> None:
+                return None
+
+        agent._bus_health_tracker = FakeBusHealthTracker({"predict.request.v1": "red"})
+        agent._flame_capture._redis = DummyRedis()
+        msg = _make_intent_msg({"intent": "predict.match_outcome", "entities": []})
+        results = list(agent.handle(msg))
+
+        assert len(results) == 1
+        assert results[0].envelope.topic == QA_ANSWER_V1
+        assert results[0].payload["intent"] == "meta.partial_bus_unavailable"
+        assert results[0].payload.get("degraded_reason") == "partial_bus_predict.request.v1"
+
     def test_nlp_role_prefix_manager_narrows_intent_dispatch(
         self, agent: NlpDispatcherAgent
     ) -> None:
@@ -3026,6 +3187,24 @@ class TestNlpAnswerAgentSummaryAggregation:
             for r in results2
         )
 
+    def test_degraded_flag_propagates_to_answer_body(self, agent: NlpAnswerAgent) -> None:
+        """A degraded upstream prediction causes qa.answer.v1 to include the calibration disclaimer."""
+        corr = "agg-corr-degraded-001"
+        msg = _make_approved_msg(
+            corr,
+            expected_count=1,
+            prediction_id="p-degraded-001",
+            degraded=True,
+            degraded_reason="summary_hard_cap_exceeded",
+        )
+
+        results = list(agent.handle(msg))
+        assert len(results) == 2
+        answer = next(r for r in results if r.envelope.topic == QA_ANSWER_V1)
+        assert answer.payload["degraded"] is True
+        assert answer.payload["degraded_reason"] == "summary_hard_cap_exceeded"
+        assert "Bu bir tahmindir; kesin sonuçlar garanti edilmez." in answer.payload["answer_text"]
+
     def test_summary_truncation_disclosure_metadata_and_text(self, agent: NlpAnswerAgent) -> None:
         """When a summary is truncated by the cap, the final answer exposes metadata and disclosure text."""
         corr = "agg-corr-002"
@@ -3666,6 +3845,63 @@ class TestNlpAnswerAgentSummaryAggregation:
             for r in out
         )
 
+    def test_nlp_tampered_citation_signature_rejected_for_all_mutations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """§10.21.8: mutated citation blocks must be rejected by the verifier."""
+        monkeypatch.setattr(
+            _cfg,
+            "nlp_predict_citation_hmac_required",
+            "enforce",
+            raising=False,
+        )
+
+        base_msg = _make_approved_msg(
+            "agg-tamper-001",
+            expected_count=1,
+            prediction_id="p-valid-001",
+        )
+        assert base_msg.payload["citation_signature"] is not None
+        assert base_msg.payload["citation_key_id"] is not None
+
+        mutations: list[Message] = []
+        for idx in range(200):
+            mutated = copy.deepcopy(base_msg)
+            payload = mutated.payload
+            if idx % 5 == 0:
+                payload["prediction_id"] = f"{payload['prediction_id']}-{idx}"
+            elif idx % 5 == 1:
+                payload["final"]["produced_at"] = "2026-05-27T10:00:01+00:00"
+            elif idx % 5 == 2:
+                payload["calibration_version"] = int(payload["calibration_version"]) + 1
+            elif idx % 5 == 3:
+                payload["citation_key_id"] = "0" * 16
+            else:
+                signature = str(payload["citation_signature"])
+                payload["citation_signature"] = (
+                    signature[:-1] + ("0" if signature[-1] != "0" else "1")
+                )
+            mutations.append(mutated)
+
+        for msg in mutations:
+            agent = NlpAnswerAgent(
+                clock_iso=lambda: "2026-05-27T10:00:00+00:00",
+                new_id=lambda: "test-ans-id",
+                monotonic=None,
+            )
+            out = list(agent.handle(msg))
+            assert any(r.envelope.topic == QA_ANSWER_V1 for r in out)
+            assert any(
+                r.envelope.topic == NLP_ALERT_V1 and r.payload.get("kind") == "nlp_citation_signature_verify_failed"
+                for r in out
+            )
+            assert any(
+                r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+                for r in out
+            )
+            answer = next(r for r in out if r.envelope.topic == QA_ANSWER_V1)
+            assert answer.payload["intent"] == "predict.timeout"
+
     def test_nlp_warn_mode_renders_with_alert(
         self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -3691,6 +3927,42 @@ class TestNlpAnswerAgentSummaryAggregation:
         assert out[0].payload["intent"] == "summary"
         assert any(
             r.envelope.topic == NLP_ALERT_V1 and r.payload.get("kind") == "nlp_citation_signature_verify_failed"
+            for r in out
+        )
+        assert any(
+            r.envelope.topic == NLP_EVENT_V1 and r.payload.get("kind") == "disclosure_emitted"
+            for r in out
+        )
+
+    def test_prediction_id_re_derivation_rejects_swapped_envelope(
+        self, agent: NlpAnswerAgent, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """§10.29.12: valid HMAC but wrong prediction_id must be rejected."""
+        monkeypatch.setattr(
+            _cfg,
+            "nlp_predict_prediction_id_determinism_required",
+            "enforce",
+            raising=False,
+        )
+
+        out = list(
+            agent.handle(
+                _make_approved_msg(
+                    "agg-pred-id-mismatch-001",
+                    expected_count=1,
+                    prediction_id="0" * 32,
+                )
+            )
+        )
+        assert len(out) == 3
+        assert out[0].envelope.topic == QA_ANSWER_V1
+        assert out[0].payload["intent"] == "predict.timeout"
+        assert any(
+            r.envelope.topic == NLP_ALERT_V1 and r.payload.get("kind") == "predict_prediction_id_mismatch"
+            for r in out
+        )
+        assert any(
+            r.envelope.topic == NLP_ALERT_V1 and r.payload.get("severity") == "critical"
             for r in out
         )
         assert any(

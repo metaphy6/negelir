@@ -450,14 +450,17 @@ def _repair_missing_apostrophe(
             token_folded = _ascii_fold_tr(token)
             if token in lexicon_stems or token_folded in lexicon_stem_map:
                 return None
-            return _repair_missing_apostrophe(
-                token[:-1],
-                internal_allowlist,
-                no_insert_allowlist,
-                suffix_forms,
-                event_sink=event_sink,
-                fallback_trailing_char=False,
-            )
+            shorter = token[:-1]
+            shorter_folded = _ascii_fold_tr(shorter)
+            if shorter in lexicon_stems or shorter_folded in lexicon_stem_map:
+                return _repair_missing_apostrophe(
+                    shorter,
+                    internal_allowlist,
+                    no_insert_allowlist,
+                    suffix_forms,
+                    event_sink=event_sink,
+                    fallback_trailing_char=False,
+                )
         return None
 
     best_freq = max(freq for freq, _, _, _, _ in candidates)

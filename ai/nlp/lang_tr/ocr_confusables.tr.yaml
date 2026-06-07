@@ -1,0 +1,37 @@
+# OCR/photo-source confusion classes for Phase 10 §10.34.1.
+# This table is consulted only when the input contains ligatures, a soft hyphen,
+# or when the forced repair knob is enabled.
+# The repair stage runs before dialect normalization and is gated to avoid
+# paying the cost on clean keyboard input.
+"ﬁ": "fi"
+"ﬂ": "fl"
+"ﬃ": "ffi"
+"ﬀ": "ff"
+"ﬄ": "ffl"
+"ﬅ": "ft"
+"ﬆ": "st"
+"0": "o"
+"O": "o"
+"1": "i"
+"I": "i"
+"!": "i"
+"|": "i"
+"5": "s"
+"S": "s"
+"8": "b"
+"B": "b"
+"6": "g"
+"9": "g"
+"2": "z"
+"Z": "z"
+"7": "t"
+"T": "t"
+"rn": "m"
+"cl": "d"
+"vv": "w"
+"mn": "m"
+"¢": "c"
+"€": "e"
+# Ligature sequence fallbacks for pathological OCR output.
+"ﬀi": "ffi"
+"ﬀl": "ffl"

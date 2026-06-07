@@ -1,0 +1,2 @@
+{"_meta":{"schema_version":1,"generated_at_utc":"2026-06-01T00:00:00Z","source_window_start":"2026-05-01T00:00:00Z","source_window_end":"2026-05-31T23:59:59Z","reviewer_signoffs":[{"reviewer":"nlp-curator","role":"curator","signed_at_utc":"2026-06-01T00:00:00Z"},{"reviewer":"nlp-domain-football","role":"domain","signed_at_utc":"2026-06-01T00:00:00Z"}],"curator_pipeline_version":"10.0.0"}}
+{"id":"2026q2-1","query":"Galatasaray Beşiktaş maçı ne zaman?","intent_class":"data.fixture_lookup","dialect_class":"standard","has_dialect":false,"has_anaphora":false,"has_negation":false}

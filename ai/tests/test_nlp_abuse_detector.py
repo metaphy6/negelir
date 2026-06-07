@@ -25,6 +25,17 @@ class TestNlpAbuseDetector:
         text = src.read_text(encoding="utf-8")
         assert "tier" not in text, "abuse detector must not branch on tier or tier_id"
 
+    def test_nlp_abuse_detector_ignores_synthetic_prober_payload(self) -> None:
+        agent = NlpAbuseAgent()
+        payload = {
+            "request_id": "prober-001",
+            "request_metadata": {"synthetic_prober": True},
+            "locale": "tr-TR",
+        }
+
+        events = agent.handle(_shadow_message(payload))
+        assert not events
+
     def test_nlp_abuse_detector_emits_did_you_mean_anomaly(self) -> None:
         old_threshold = cfg.nlp_abuse_dym_acceptance_anomaly_ratio
         cfg.nlp_abuse_dym_acceptance_anomaly_ratio = 0.8

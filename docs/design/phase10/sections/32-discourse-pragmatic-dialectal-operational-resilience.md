@@ -442,7 +442,7 @@
 
 #### 10.32.11 System-uttered-anaphora resolver (extends §10.30.7)
 
-- [ ] **Real failure pattern.** §10.30.7 cross-turn anaphora
+- [x] **Real failure pattern.** §10.30.7 cross-turn anaphora
   resolves pronouns referring to entities the **user** mentioned
   in prior turns. But users also reference entities the **system
   itself** mentioned in its own prior answer: *"ya öbür maç?"*,
@@ -486,7 +486,7 @@
   write recovery, stuck old-generation pinned by an in-flight
   request) produces silent cross-pod answer divergence — same
   query to different pods returns different answers.
-- [ ] **Periodic gossip-based consistency check** — every
+- [x] **Periodic gossip-based consistency check** — every
   `nlp_lexicon_gossip_interval_s=300` (5min) each pod publishes
   to NEW `nlp.gossip.v1` topic (data-plane; consumer = telemetry
   + the gossip aggregator pod) the SHA tuple
@@ -499,7 +499,7 @@
   rounds → emit `nlp.alert.v1{kind=lexicon_state_divergence,
   severity=critical, divergent_pod_id, expected_tuple_sha,
   observed_tuple_sha}`.
-- [ ] **Auto-quarantine of divergent pod** — when divergence
+- [x] **Auto-quarantine of divergent pod** — when divergence
   alert fires AND `cfg.nlp_lexicon_divergence_auto_quarantine=true`
   (default true), the divergent pod's readyz turns 503 (removes
   from gateway pool). Operator runbook in
@@ -507,18 +507,18 @@
   recovery path (typically: SIGTERM the divergent pod;
   Kubernetes restarts it; cold-start reload restores cluster
   consistency).
-- [ ] **Bounded gossip cardinality** — `nlp_gossip_max_pods=50`
+- [x] **Bounded gossip cardinality** — `nlp_gossip_max_pods=50`
   (refuse-boot if cluster size exceeds — defends against
   unbounded gossip storm in a runaway-scale-up scenario);
   `nlp.gossip.v1` payload bounded to ≤ 256 bytes (closed schema
   `additionalProperties:false`).
-- [ ] **Cross-phase wire-authority** — `nlp.gossip.v1` added to
+- [x] **Cross-phase wire-authority** — `nlp.gossip.v1` added to
   §3.5 catalog with producer set bounded to NLP plane agents
   (`nlp.intent.v1`, `nlp.dispatcher.v1`, `nlp.answer.v1`,
   `nlp.proofreader.v1`); consumer set bounded to
   `nlp.gossip_aggregator.v1` (NEW agent, replicas:1) +
   `telemetry.v1`; boundary tests enforce.
-- [ ] **Proof tests** — synthetic divergence test: spin up 3 pods,
+- [x] **Proof tests** — synthetic divergence test: spin up 3 pods,
   inject lexicon corruption in 1 pod, assert alert fires within
   2 × `gossip_interval_s` and divergent pod's readyz turns 503;
   4-pod test with 2-vs-2 split (modal-tuple is unclear) → emit
@@ -527,14 +527,14 @@
 
 #### 10.32.13 Synthetic continuous prober (independent of §10.31.13 healthz)
 
-- [ ] **Real failure pattern not covered.** §10.31.13 healthz
+- [x] **Real failure pattern not covered.** §10.31.13 healthz
   realism probe runs once-per-pod-per-15s on a single golden
   query. It catches cold-start corruption but **not** drift
   that develops mid-flight (e.g. a closed-table file got
   silently truncated by a runaway disk-full) or steady-state
   regressions (e.g. a recent humanizer LLM weight load
   produced a subtle decoding shift).
-- [ ] **Independent prober agent** `nlp.prober.v1` (replicas:1,
+- [x] **Independent prober agent** `nlp.prober.v1` (replicas:1,
   leader-leased; CPU-only AST guard) at
   `ai/swarm/agents/nlp/prober.py`. Every
   `nlp_prober_interval_s=60` publishes a `qa.request.v1` envelope
@@ -544,7 +544,7 @@
   (`prober_corpus.jsonl` — distinct file from §10.30.14
   boot-regression corpus, can overlap; CODEOWNERS = `nlp-curator`
   + `nlp-compliance` for PII-clean curation).
-- [ ] **Result verification** — prober subscribes to
+- [x] **Result verification** — prober subscribes to
   `qa.answer.v1` (consumer-side, normal subscription), filters by
   `synthetic_prober=true`, byte-compares `(intent_id, top_1_entity_id,
   refusal_reason_code, post_render_template_sha,
@@ -552,7 +552,7 @@
   `nlp.alert.v1{kind=prober_drift_detected, severity=warn (per
   query) | critical (≥ 5 in 30min), expected, observed,
   drift_field}`.
-- [ ] **Tier-blind, audit-clean, cache-bypass discipline** —
+- [x] **Tier-blind, audit-clean, cache-bypass discipline** —
   `synthetic_prober=true` envelopes:
   - bypass §9.7 rate limiting (separate prober token bucket
     `cfg.api_prober_bucket_rps=2` so prober can never starve
@@ -566,27 +566,27 @@
     closed guard)
   - WRITE `qa.answer.v1{synthetic_prober=true}` so downstream
     audit can also exclude (one-source-of-truth)
-- [ ] **Cost discipline** — prober's humanizer is **always
+- [x] **Cost discipline** — prober's humanizer is **always
   disabled** regardless of `cfg.nlp_humanize` (template-only
   mode); prober cost is bounded to ≤ 50 × 60 = 3000 template-
   only renders per pod per hour, well below background noise.
-- [ ] **Cross-phase** — Phase 9 gateway honors `synthetic_prober=true`
+- [x] **Cross-phase** — Phase 9 gateway honors `synthetic_prober=true`
   for the cache-bypass and rate-limit-bypass; Phase 8 telemetry
   exposes `nlp_prober_success_rate` gauge per intent class.
-- [ ] **Proof tests** — synthetic regression: inject a wrong
+- [x] **Proof tests** — synthetic regression: inject a wrong
   template version on one pod, assert prober alert fires within
   2 × `prober_interval_s` for the affected golden queries.
 
 #### 10.32.14 Production-sample → eval-corpus curation lifecycle
 
-- [ ] **Real failure pattern not covered.** §10.30.14 has a static
+- [x] **Real failure pattern not covered.** §10.30.14 has a static
   boot regression corpus (200 PII-scrubbed rows) and §10.18 has
   a static evaluation harness (≥ 250 rows). Neither has a
   **lifecycle for adding to it from real production traffic**.
   Real-world Turkish football query distribution drifts seasonally
   (player transfers, league restructuring, new derbies) and the
   static corpus loses representativeness within months.
-- [ ] **Quarterly curation pipeline** at `xops/nlp/eval_corpus_curator.py`:
+- [x] **Quarterly curation pipeline** at `xops/nlp/eval_corpus_curator.py`:
   1. Sample ≥ 5000 rows from `nlp.shadow.v1` (per §10.27.10)
      stratified by (intent_class, dialect_class, has_dialect,
      has_anaphora, has_negation) with proportional allocation
@@ -605,28 +605,28 @@
   5. Diff-cap discipline (mirrors §10.26.6 lexicon supply-chain):
      `nlp_eval_corpus_pr_max_added_rows_per_quarter=500`;
      over-cap → CI fail.
-- [ ] **Versioned corpus file** at `data/nlp/eval_corpus/<year>q<n>.jsonl`
+- [x] **Versioned corpus file** at `data/nlp/eval_corpus/<year>q<n>.jsonl`
   with `_meta.{schema_version, generated_at_utc, source_window_start,
   source_window_end, reviewer_signoffs[], curator_pipeline_version}`;
   immutable once promoted (corrections via additive next-quarter
   delta).
-- [ ] **Eval-set evolution rate gauge** — `nlp_eval_corpus_growth_rate`
+- [x] **Eval-set evolution rate gauge** — `nlp_eval_corpus_growth_rate`
   histogram per intent class; if any intent class stays
   unchanged for ≥ 4 quarters → warn alert
   `eval_corpus_intent_class_stale` (the curator missed coverage).
-- [ ] **Proof tests** — curator deterministic on fixed shadow sample
+- [x] **Proof tests** — curator deterministic on fixed shadow sample
   + random seed; PII-scrub round-trip (curator output passes
   independent PII detector); diff-cap enforcement; reviewer-
   signoff structure validation.
 
 #### 10.32.15 Per-stage operator flame-chart capture (one-shot, PII-clean)
 
-- [ ] **Real failure pattern.** When a single request is anomalously
+- [x] **Real failure pattern.** When a single request is anomalously
   slow (per §10.31.12 SLO breach) but the per-pod cumulative
   metrics look normal, operator has **no per-stage breakdown**
   for that specific request — the §10.14 sampled audit captures
   the answer, not the timing flame.
-- [ ] **One-shot operator-triggered flame capture** — `make ops.nlp-flame-capture
+- [x] **One-shot operator-triggered flame capture** — `make ops.nlp-flame-capture
   REQUEST_ID=<uuidv7>` (mirrors §10.27.3 forensic complaint trace
   pattern). On next occurrence of that `request_id` (or
   `qa_correlation_id`), the NLP pipeline records per-stage
@@ -636,13 +636,13 @@
   written to `data/nlp/flame_captures/<request_id>.flame.json`
   (PII-clean — no input text, only stage-level structural metadata
   + redacted intent/entity tuple).
-- [ ] **Capture is sticky-armed via Redis** — `nlp:flame:<request_id>`
+- [x] **Capture is sticky-armed via Redis** — `nlp:flame:<request_id>`
   TTL `cfg.opsctl_flame_capture_ttl_h=24`; first matching request
   triggers capture and clears the flag; cluster-wide via
   `maint.event.v1{kind=nlp_flame_armed}` + `nlp_flame_captured`;
   one-shot integrity (capture once, then clear — defends against
   flooding).
-- [ ] **Cost & boundary discipline** — capture overhead bounded
+- [x] **Cost & boundary discipline** — capture overhead bounded
   to ≤ 5% of pipeline latency (per-stage `time.monotonic_ns()`
   + `tracemalloc` snapshot; closed-form, not flame-graph
   sampling); when not armed, code path is a single
@@ -650,10 +650,10 @@
   Operator can arm at most `cfg.opsctl_flame_capture_max_armed_per_h=10`
   request_ids per hour cluster-wide (defends against capture-
   storm DoS).
-- [ ] **Forward-phase contract Phase 9** — gateway passes
+- [x] **Forward-phase contract Phase 9** — gateway passes
   `request_id` immutably; Phase 8 telemetry exposes
   `nlp_flame_capture_armed_count` gauge for operator visibility.
-- [ ] **Proof tests** — round-trip: arm flame, send request,
+- [x] **Proof tests** — round-trip: arm flame, send request,
   assert capture file exists, asserts every pipeline stage
   appears in capture, asserts no PII (raw input substring scan
   on capture file = 0 matches), asserts overhead ≤ 5% (timed
@@ -662,24 +662,24 @@
 
 #### 10.32.16 Partial-bus graceful degradation matrix
 
-- [ ] **Real failure pattern not covered.** §10.10 graceful
-  degradation matrix covers full-component failures (lexicon /
-  classifier / predict / humanizer / proofreader / bus). It does
-  **not** cover the *partial-bus* case where some topics are
-  reachable but others are not (e.g. `predict.approved.v1` stream
-  readable, but `data.request.v1` stream timing out — common
-  during Redis hot-spot or per-stream Lua-script bug). Today
-  NLP just times-out per request with no holistic per-topic
-  awareness.
-- [ ] **Per-topic reachability gauge** at the SDK level
-  (`swarm.sdk.bus_health.v1`) — every pod tracks per-subscribed-
-  topic `(last_successful_read_at, last_successful_publish_at,
-  consecutive_error_count)`; per-topic health = `green`
-  (last_success ≤ 30s) | `yellow` (≤ 5min) | `red` (> 5min OR
-  consecutive errors ≥ 5).
-- [ ] **Per-intent-class topic-dependency map** at
-  `ai/nlp/runtime/topic_dependency.yaml` (closed; cross-language
-  with Phase 9 gateway):
+- [x] **Real failure pattern not covered.** §10.10 graceful
+degradation matrix covers full-component failures (lexicon /
+classifier / predict / humanizer / proofreader / bus). It does
+**not** cover the *partial-bus* case where some topics are
+reachable but others are not (e.g. `predict.approved.v1` stream
+readable, but `data.request.v1` stream timing out — common
+during Redis hot-spot or per-stream Lua-script bug). Today
+NLP just times-out per request with no holistic per-topic
+awareness.
+- [x] **Per-topic reachability gauge** at the SDK level
+(`swarm.sdk.bus_health.v1`) — every pod tracks per-subscribed-
+topic `(last_successful_read_at, last_successful_publish_at,
+consecutive_error_count)`; per-topic health = `green`
+(last_success ≤ 30s) | `yellow` (≤ 5min) | `red` (> 5min OR
+consecutive errors ≥ 5).
+- [x] **Per-intent-class topic-dependency map** at
+`ai/nlp/runtime/topic_dependency.yaml` (closed; cross-language
+with Phase 9 gateway):
   - `predict.*` intents need `predict.request.v1` (publish) +
     `predict.approved.v1` (consume)
   - `data.fixture_lookup` / `data.kickoff_time` / `data.h2h` /
@@ -689,24 +689,22 @@
     with `kind=live_state` filter (separate logical stream;
     treated as distinct topic for health tracking)
   - `meta.*` intents need no bus topics (template-only)
-- [ ] **Pre-dispatch topic-health check** — dispatcher consults
+- [x] **Pre-dispatch topic-health check** — dispatcher consults
   per-topic health BEFORE publishing; if a needed topic is `red`,
   short-circuit to NEW `meta.partial_bus_unavailable` template
   (closed Turkish: "Bu sorgu için gerekli olan veri kanalı şu an
   ulaşılamıyor; kısa süre sonra tekrar deneyebilir misiniz?")
   with `degraded=true, degraded_reason=partial_bus_<topic_name>`
   carried through to `qa.answer.v1`. NEVER block on a red topic.
-- [ ] **Yellow-state SWR** — when topic is `yellow`, dispatcher
+- [x] **Yellow-state SWR** — when topic is `yellow`, dispatcher
   publishes BUT in parallel queries L0/L1 cache; if cache hit,
   returns cached + emits `nlp.event.v1{kind=partial_bus_swr_served_cache}`;
   if neither cache nor bus respond within the §10.31.12 SLO
   budget, fall through to graceful refusal.
-- [ ] **`meta.*` intents always pass** — even when ALL bus topics
-  are red, meta intents (help, capabilities, system_clarification,
-  etc.) continue to serve from template-only. This is the user's
+- [x] **`meta.*` intents always pass** — even when ALL bus topics
   only feedback channel during plane-wide outage; AST guard
   `test_nlp_meta_intents_have_zero_topic_dependencies`.
-- [ ] **Proof tests** — synthetic per-topic outage: simulate
+- [x] **Proof tests** — synthetic per-topic outage: simulate
   `predict.request.v1` being red, assert `predict.*` queries
   refuse with closed template + correct `degraded_reason`;
   assert `data.*` queries still succeed; assert `meta.*` always
@@ -715,13 +713,13 @@
 
 #### 10.32.17 Breaking-schema migration playbook + NLP-plane DR runbook
 
-- [ ] **Real failure pattern not covered.** §10.27.7 covers
+- [x] **Real failure pattern not covered.** §10.27.7 covers
   schema-version downgrade for old clients consuming additive-only
   bumps. The doctrine is "additive-only" but **eventually a
   breaking change is needed** (e.g. removing a deprecated intent,
   re-keying the entity-frame format). There is no documented
   playbook for this.
-- [ ] **NEW `docs/guides/nlp_breaking_schema_migration.md`** —
+- [x] **NEW `docs/guides/nlp_breaking_schema_migration.md`** —
   binding playbook with 6 phases, each gated:
   1. **T-90d: Deprecation announce** — schema bump goal posted;
      dual-emit of old + new schema enabled via
@@ -745,7 +743,7 @@
      change diff during grace.
   6. **T+7d: Frozen-snapshot tear-down** — `cfg.nlp_qa_answer_legacy_grace_enabled=false`;
      all responses are new-schema only.
-- [ ] **NEW `docs/guides/nlp_dr_runbook.md`** — DR scenarios with
+- [x] **NEW `docs/guides/nlp_dr_runbook.md`** — DR scenarios with
   closed runbook per scenario:
   - **all-lexicon-corruption** (every pod's lexicon files
     corrupted simultaneously — rare but possible via runaway
@@ -774,7 +772,7 @@
     disables (per §10.10 + §10.31.x); operator runs
     `make nlp.humanizer-rollback VERSION=<prior_sha>`; cpu_only
     parity test re-runs and gates re-enable.
-- [ ] **Proof tests** — DR-runbook scripts are dry-run-safe
+- [x] **Proof tests** — DR-runbook scripts are dry-run-safe
   (each `make nlp.*-restore` accepts `DRY_RUN=true` env var
   printing intended actions without mutation); CI gates that
   every documented runbook scenario has a dry-run-mode test in

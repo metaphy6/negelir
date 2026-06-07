@@ -144,6 +144,74 @@ def test_nlp_canary_promote_refuses_on_disagreement_breach(monkeypatch, capsys):
     assert "REFUSED" in captured.err
 
 
+def test_nlp_canary_promote_refuses_on_lexicon_disagreement_and_emits_blocked_alert(monkeypatch, capsys):
+    monkeypatch.setenv("NEGELIR_NLP_INTENT_SHADOW_MODE", "on")
+    monkeypatch.setenv("NEGELIR_NLP_CANARY_MIN_SHADOW_HOURS", "72")
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_CANARY_MAX_DISAGREEMENT_PCT", "0.02")
+    _reload_config()
+
+    rc = cmd_nlp_canary_promote([
+        "--target",
+        "lexicon",
+        "--shadow-hours",
+        "72",
+        "--disagreement-rate",
+        "0.03",
+        "--confidence-drift",
+        "0.01",
+        "--eval-harness",
+        "pass",
+    ])
+
+    captured = capsys.readouterr()
+    json_start = captured.out.index("{")
+    json_end = captured.out.rindex("}") + 1
+    payload = json.loads(captured.out[json_start:json_end])
+
+    assert rc == 1
+    assert payload["target"] == "lexicon"
+    assert payload["gates_failed"] == ["disagreement_rate"]
+    assert payload["blocked_alert"] is not None
+    assert payload["blocked_alert"]["kind"] == "canary_promotion_blocked"
+    assert payload["blocked_alert"]["severity"] == "critical"
+    assert payload["blocked_alert"]["subject"] == "lexicon"
+    assert payload["blocked_alert"]["details"]["failed_gates"] == ["disagreement_rate"]
+
+
+def test_canary_promotion_gate_blocks_on_intent_drift(monkeypatch, capsys):
+    monkeypatch.setenv("NEGELIR_NLP_INTENT_SHADOW_MODE", "on")
+    monkeypatch.setenv("NEGELIR_NLP_CANARY_MIN_SHADOW_HOURS", "72")
+    monkeypatch.setenv("NEGELIR_NLP_LEXICON_CANARY_MAX_DISAGREEMENT_PCT", "0.02")
+    _reload_config()
+
+    rc = cmd_nlp_canary_promote([
+        "--target",
+        "lexicon",
+        "--shadow-hours",
+        "72",
+        "--disagreement-rate",
+        "0.03",
+        "--confidence-drift",
+        "0.01",
+        "--eval-harness",
+        "pass",
+    ])
+
+    captured = capsys.readouterr()
+    json_start = captured.out.index("{")
+    json_end = captured.out.rindex("}") + 1
+    payload = json.loads(captured.out[json_start:json_end])
+
+    assert rc == 1
+    assert payload["target"] == "lexicon"
+    assert payload["gates_failed"] == ["disagreement_rate"]
+    assert payload["blocked_alert"] is not None
+    assert payload["blocked_alert"]["kind"] == "canary_promotion_blocked"
+    assert payload["blocked_alert"]["severity"] == "critical"
+    assert payload["blocked_alert"]["subject"] == "lexicon"
+    assert payload["blocked_alert"]["details"]["failed_gates"] == ["disagreement_rate"]
+
+
 def test_nlp_canary_promote_refuses_on_eval_harness_fail(monkeypatch, capsys):
     monkeypatch.setenv("NEGELIR_NLP_INTENT_SHADOW_MODE", "on")
     _reload_config()

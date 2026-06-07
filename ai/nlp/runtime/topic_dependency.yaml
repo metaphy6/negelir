@@ -1,0 +1,37 @@
+predict.*:
+  publish:
+    - predict.request.v1
+  consume:
+    - predict.approved.v1
+
+data.fixture_lookup:
+  publish:
+    - data.request.v1
+  consume:
+    - data.response.v1
+
+data.kickoff_time:
+  publish:
+    - data.request.v1
+  consume:
+    - data.response.v1
+
+data.h2h:
+  publish:
+    - data.request.v1
+  consume:
+    - data.response.v1
+
+data.attributed_claim:
+  publish:
+    - data.request.v1
+  consume:
+    - data.response.v1
+
+data.live_state:
+  publish:
+    - data.request.v1
+  consume: []
+meta.*:
+  publish: []
+  consume: []

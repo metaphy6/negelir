@@ -38,6 +38,7 @@ from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 from common.config import cfg
+from common.locale_loader import build_team_names, load_locale
 import json
 import yaml
 
@@ -91,6 +92,7 @@ from nlp.phase10_30 import (
 )
 from nlp.apostrophe_proper_noun import (
     ApostropheRepair,
+    _load_lexicon_stems,
     repair_apostrophe_proper_noun,
 )
 from nlp.assimilation import (
@@ -99,6 +101,7 @@ from nlp.assimilation import (
     load_assimilation_pairs,
 )
 from nlp.compound_splitter import split_compound_tokens
+from nlp.football_vocab import load_football_vocab
 from nlp.consonant_alternation import (
     ConsonantAlternationRule,
     load_consonant_alternations,
@@ -196,6 +199,106 @@ def detect_all_caps(text: str, cfg=None) -> bool:
         getattr(cfg, "nlp_all_caps_threshold", 0.85)
     )
 
+
+def _load_single_emoji_intent_lookup() -> dict[str, str]:
+    global _SINGLE_EMOJI_INTENT_LOOKUP
+    if _SINGLE_EMOJI_INTENT_LOOKUP is None:
+        try:
+            raw = yaml.safe_load(_SINGLE_EMOJI_INTENT_PATH.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            _SINGLE_EMOJI_INTENT_LOOKUP = {}
+            return _SINGLE_EMOJI_INTENT_LOOKUP
+        if not isinstance(raw, dict):
+            raise ValueError("single_emoji_intent.tr.yaml must contain a mapping")
+        lookup: dict[str, str] = {}
+        for emoji, prompt in raw.items():
+            if not isinstance(emoji, str) or not isinstance(prompt, str):
+                raise ValueError("single_emoji_intent.tr.yaml entries must map strings to strings")
+            lookup[emoji.strip()] = prompt.strip()
+        _SINGLE_EMOJI_INTENT_LOOKUP = lookup
+    assert _SINGLE_EMOJI_INTENT_LOOKUP is not None
+    return _SINGLE_EMOJI_INTENT_LOOKUP
+
+
+def _build_partial_input_completions(text: str, cfg) -> list[str]:
+    if not getattr(cfg, "nlp_partial_input_min_token_len", 3):
+        return []
+    token = str(text or "").strip()
+    if not token or " " in token:
+        return []
+    if len(token) < int(cfg.nlp_partial_input_min_token_len):
+        return []
+
+    normalized_token = lowercase_tr(token)
+    locale_data = load_locale("tr-TR")
+    candidates = [name for name in build_team_names(locale_data) if lowercase_tr(name).startswith(normalized_token)]
+    if not candidates:
+        return []
+
+    if any(lowercase_tr(candidate) == normalized_token for candidate in candidates):
+        return []
+
+    max_completions = int(getattr(cfg, "nlp_partial_input_max_completions", 3))
+    return candidates[:max_completions]
+
+
+def assert_minimum_signal(text: str, cfg=None) -> tuple[str, str | None, list[str] | None]:
+    """Inspect sanitized text and return a floor kind or OK signal.
+
+    This helper is a minimal runtime gate for the NLP intent floor path.
+    """
+    if cfg is None:
+        from common.config import cfg as _cfg
+        cfg = _cfg
+
+    normalized = str(text or "").strip()
+    if not normalized:
+        return "empty_input_floor_response", None, None
+
+    if _URL_RE.fullmatch(normalized):
+        return "meta.url_only_input", None, None
+
+    if _looks_like_fragment(normalized, cfg=cfg):
+        return "meta.unsupported_fragment", None, None
+
+    emoji_lookup = _load_single_emoji_intent_lookup()
+    if getattr(cfg, "nlp_single_emoji_intent_enabled", True) and normalized in emoji_lookup:
+        return "meta.single_emoji_intent", None, [emoji_lookup[normalized]]
+
+    partial_completions = _build_partial_input_completions(normalized, cfg)
+    if partial_completions:
+        return "meta.likely_partial_input", None, partial_completions
+
+    letter_count = sum(1 for ch in normalized if ch.isalpha())
+    if letter_count < 2:
+        return "meta.unsupported_too_short", None, None
+
+    return "ok", None, None
+
+
+_FRAGMENT_FRAGMENT_RE = re.compile(r"(?:\b(?:ya da|veya|ve|ile|kadar|gibi|ama|fakat|için)\s*|[:;])$", re.IGNORECASE)
+
+
+def _looks_like_fragment(text: str, cfg=None) -> bool:
+    """Return True when the text looks like an incomplete Turkish query.
+
+    This is a lightweight floor detector for trailing fragment markers and
+    common connective terms that indicate the user may have sent an incomplete
+    query. It is intentionally conservative to avoid false positives.
+    """
+    if cfg is None:
+        from common.config import cfg as _cfg
+        cfg = _cfg
+
+    if not getattr(cfg, "nlp_fragment_detection_enabled", True):
+        return False
+
+    normalized = str(text or "").strip()
+    if not normalized:
+        return False
+
+    return bool(_FRAGMENT_FRAGMENT_RE.search(normalized))
+
 _SOCIAL_HANDLES_PATH = Path(__file__).resolve().parent / "lang_tr" / "social_handles.tr.yaml"
 _COPY_PASTE_CITATION_TAILS_PATH = Path(__file__).resolve().parent / "lang_tr" / "copy_paste" / "citation_tails.tr.yaml"
 _CITATION_TAIL_REGEXES: list[re.Pattern[str]] | None = None
@@ -204,8 +307,8 @@ _ABBREVIATION_KEYS: set[str] | None = None
 _URL_RE = re.compile(
     r"((?:https?://|ftp://|www\.)[^\s,;!?\)\]]+)", re.IGNORECASE | re.UNICODE
 )
-_HASHTAG_RE = re.compile(r"#([A-Za-z0-9_]+)")
-_MENTION_RE = re.compile(r"@([A-Za-z0-9_]+)")
+_HASHTAG_RE = re.compile(r"#([^\s]+)")
+_MENTION_RE = re.compile(r"@([^\s]+)")
 _ALL_PUNCT_RE = re.compile(r"[^\w\d]+", re.UNICODE)
 
 _GREETINGS_PATH = Path(__file__).resolve().parent / "lang_tr" / "greetings.tr.yaml"
@@ -223,6 +326,36 @@ _PREAMBLE_STRIPPERS: tuple[tuple[str, ...], ...] | None = None
 _EMOJI_HINTS_PATH = Path(__file__).resolve().parent / "lang_tr" / "emoji_hints.tr.yaml"
 _EMOJI_HINTS_TABLE: dict[str, dict[str, object]] | None = None
 _EMOJI_HINTS_RE: re.Pattern[str] | None = None
+
+
+def _load_emoji_hints_table() -> dict[str, dict[str, object]]:
+    global _EMOJI_HINTS_TABLE
+    if _EMOJI_HINTS_TABLE is None:
+        raw = yaml.safe_load(_EMOJI_HINTS_PATH.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("emoji_hints.tr.yaml must contain a mapping")
+        lookup: dict[str, dict[str, object]] = {}
+        for emoji, hint_payload in raw.items():
+            if not isinstance(emoji, str) or not isinstance(hint_payload, dict):
+                raise ValueError("emoji_hints.tr.yaml entries must map emoji to mappings")
+            lookup[emoji] = {k: v for k, v in hint_payload.items()}
+        _EMOJI_HINTS_TABLE = lookup
+    assert _EMOJI_HINTS_TABLE is not None
+    return _EMOJI_HINTS_TABLE
+
+
+def _build_emoji_hints_re(lookup: dict[str, dict[str, object]]) -> re.Pattern[str]:
+    global _EMOJI_HINTS_RE
+    if _EMOJI_HINTS_RE is not None:
+        return _EMOJI_HINTS_RE
+
+    if not lookup:
+        raise ValueError("emoji_hints lookup must not be empty")
+
+    sorted_keys = sorted(lookup.keys(), key=len, reverse=True)
+    alternatives = "|".join(re.escape(key) for key in sorted_keys)
+    _EMOJI_HINTS_RE = re.compile(rf"(?P<emoji>{alternatives})")
+    return _EMOJI_HINTS_RE
 
 
 def _load_copy_paste_citation_tail_patterns() -> list[str]:
@@ -398,8 +531,193 @@ def _load_preamble_strippers() -> tuple[tuple[str, ...], ...]:
     return _PREAMBLE_STRIPPERS
 
 
+def _strip_preamble(
+    text: str,
+    cfg,
+    event_sink: Callable[[dict[str, object]], None],
+    *,
+    original_text: str,
+) -> str:
+    tokens = list(_tokenize(text))
+    if not tokens:
+        return text
+
+    for pattern in _load_preamble_strippers():
+        if tokens[: len(pattern)] != list(pattern):
+            continue
+
+        if len(pattern) > getattr(cfg, "nlp_preamble_max_strip_tokens", 2):
+            event_sink({
+                "kind": "preamble_strip_capped",
+                "strip_tokens": len(pattern),
+                "max_tokens": getattr(cfg, "nlp_preamble_max_strip_tokens", 2),
+                "original_text": original_text,
+            })
+            return text
+
+        remaining = tokens[len(pattern) :]
+        if not remaining:
+            return text
+
+        event_sink({
+            "kind": "preamble_stripped",
+            "stripped_tokens": len(pattern),
+            "original_text": original_text,
+        })
+        return " ".join(remaining)
+
+    return text
+
+
 _PREDICTIVE_OVERSHOOT_PATH = Path(__file__).resolve().parent / "lang_tr" / "predictive_text_known_overshoot.tr.yaml"
 _PREDICTIVE_OVERSHOOT_LOOKUP: dict[str, str] | None = None
+_OCR_CONFUSABLES_PATH = Path(__file__).resolve().parent / "lang_tr" / "ocr_confusables.tr.yaml"
+_OCR_CONFUSABLES_LOOKUP: dict[str, str] | None = None
+_OCR_LIGATURES: frozenset[str] = frozenset({"ﬀ", "ﬁ", "ﬂ", "ﬃ", "ﬄ", "ﬅ", "ﬆ"})
+_SINGLE_EMOJI_INTENT_PATH = Path(__file__).resolve().parent / "lang_tr" / "single_emoji_intent.tr.yaml"
+_SINGLE_EMOJI_INTENT_LOOKUP: dict[str, str] | None = None
+_EMOJI_TO_CONCEPT_PATH = Path(__file__).resolve().parent / "lang_tr" / "emoji_to_concept.tr.yaml"
+_EMOJI_TO_CONCEPT_LOOKUP: dict[str, str] | None = None
+_EMOJI_TO_CONCEPT_RE: re.Pattern[str] | None = None
+_TIME_OF_DAY_SHORTHAND_PATH = Path(__file__).resolve().parent / "lang_tr" / "time_of_day_shorthand.tr.yaml"
+_TIME_OF_DAY_SHORTHAND_LOOKUP: dict[str, str] | None = None
+_NUMERIC_REDUNDANT_RESTATEMENT_PATH = Path(__file__).resolve().parent / "lang_tr" / "numeric_redundant_restatement.tr.yaml"
+_NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP: dict[str, str] | None = None
+_PASTE_LAYOUT_LINE_BREAK_RE = re.compile(r"[\u2028\u2029\u000C]")
+_PASTE_HYPHEN_BREAK_RE = re.compile(r"([^\s\-\n\r]+)-\r?\n\s*([^\s\-\n\r]+)")
+_FOOTBALL_SURFACE_FORMS: set[str] | None = None
+
+
+def _normalize_paste_layout(
+    text: str,
+    cfg,
+    event_sink: Callable[[dict[str, object]], None],
+    *,
+    pre_canonical: str,
+) -> tuple[str, str | None]:
+    """Normalize messy pasted text and detect column-tear failures."""
+    floor_kind: str | None = None
+    normalized = text
+
+    if _PASTE_HYPHEN_BREAK_RE.search(normalized):
+        normalized = _PASTE_HYPHEN_BREAK_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}", normalized)
+        event_sink({"kind": "paste_layout_normalized"})
+
+    if _PASTE_LAYOUT_LINE_BREAK_RE.search(normalized):
+        normalized = _PASTE_LAYOUT_LINE_BREAK_RE.sub(" ", normalized)
+        event_sink({"kind": "paste_layout_normalized"})
+
+    lines = [line for line in normalized.split("\n") if line.strip()]
+    if len(lines) >= 3 and all(len(_tokenize(line)) <= 3 for line in lines):
+        floor_kind = "meta.multi_input_clarification_required"
+        event_sink({"kind": "column_tear_detected", "line_count": len(lines)})
+
+    return normalized, floor_kind
+
+
+def _normalize_ocr_confusions(
+    text: str,
+    pre_canonical: str,
+    cfg,
+    event_sink: Callable[[dict[str, object]], None],
+) -> str:
+    """Stub for OCR-confusion repair when the full feature is not yet implemented."""
+    return text
+
+
+def _is_title_case_token(token: str) -> bool:
+    letters = [ch for ch in token if ch.isalpha()]
+    if len(letters) < 2:
+        return False
+    if not letters[0].isupper():
+        return False
+    return all(ch.islower() for ch in letters[1:])
+
+
+def _token_random_case_flip_ratio(token: str) -> float:
+    letters = [ch for ch in token if ch.isalpha()]
+    if len(letters) < 4:
+        return 0.0
+    flips = sum(
+        1
+        for previous, current in zip(letters, letters[1:])
+        if previous.isupper() != current.isupper()
+    )
+    return float(flips) / float(len(letters))
+
+
+def _normalize_random_case_noise(
+    text: str,
+    cfg,
+    event_sink: Callable[[dict[str, object]], None],
+) -> str:
+    """Detect and fold random-case token noise before lowercase conversion."""
+    threshold = float(getattr(cfg, "nlp_random_case_threshold", 0.30))
+    if threshold <= 0.0:
+        return text
+
+    parts = re.split(r"(\s+)", text)
+    normalized_parts: list[str] = []
+    for part in parts:
+        if part and not part.isspace():
+            if _token_random_case_flip_ratio(part) > threshold and not _is_title_case_token(part):
+                folded = lowercase_tr(part)
+                if folded != part:
+                    event_sink({
+                        "kind": "random_case_normalized",
+                        "original_token": part,
+                        "normalized_token": folded,
+                    })
+                    part = folded
+        normalized_parts.append(part)
+
+    return "".join(normalized_parts)
+
+
+def _normalize_social_tokens(
+    text: str,
+    event_sink: list[dict[str, object]],
+    cfg,
+) -> str:
+    """Stub for social token normalization when the full feature is not yet implemented."""
+    return text
+
+
+def _normalize_numeric_redundant_restatement(
+    tokens: list[str],
+    cfg,
+    event_sink: Callable[[dict[str, object]], None],
+) -> list[str]:
+    """Collapse digit + number-word redundant restatements into digit-only tokens."""
+    if not getattr(cfg, "nlp_numeric_redundant_restatement_enabled", False):
+        return tokens
+
+    word_to_digit = _load_numeric_redundant_restatement_lookup()
+    if not word_to_digit:
+        return tokens
+
+    normalized_tokens: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if re.fullmatch(r"\d+(?:-\d+)*", token):
+            digit_parts = token.split("-")
+            candidate_slice = tokens[index + 1 : index + 1 + len(digit_parts)]
+            if len(candidate_slice) == len(digit_parts):
+                if all(word_to_digit.get(word) == digit for word, digit in zip(candidate_slice, digit_parts)):
+                    event_sink({
+                        "kind": "numeric_redundant_collapsed",
+                        "token": token,
+                        "restatement": " ".join(candidate_slice),
+                        "collapsed_count": len(candidate_slice),
+                    })
+                    normalized_tokens.append(token)
+                    index += 1 + len(digit_parts)
+                    continue
+        normalized_tokens.append(token)
+        index += 1
+
+    return normalized_tokens
 
 
 def _load_predictive_overshoot_lookup() -> dict[str, str]:
@@ -424,359 +742,198 @@ def _load_predictive_overshoot_lookup() -> dict[str, str]:
     return _PREDICTIVE_OVERSHOOT_LOOKUP
 
 
-_AMBIGUOUS_PREAMBLE_PREFIXES = {
-    "bence",
-    "yani",
-    "peki",
-    "ama",
-    "fakat",
-    "selam",
-    "selamlar",
-    "slm",
-}
+def _load_ocr_confusables_lookup() -> dict[str, str]:
+    global _OCR_CONFUSABLES_LOOKUP
+    if _OCR_CONFUSABLES_LOOKUP is None:
+        raw = yaml.safe_load(_OCR_CONFUSABLES_PATH.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("ocr_confusables.tr.yaml must contain a mapping")
+        lookup: dict[str, str] = {}
+        for source, target in raw.items():
+            if not isinstance(source, str) or not isinstance(target, str):
+                raise ValueError("ocr_confusables.tr.yaml entries must map strings to strings")
+            source = source.strip()
+            target = target.strip()
+            if not source:
+                raise ValueError("ocr_confusables.tr.yaml entries must not be empty")
+            if source in lookup and lookup[source] != target:
+                raise ValueError(f"ocr_confusables.tr.yaml contains duplicate source {source!r}")
+            lookup[source] = target
+        _OCR_CONFUSABLES_LOOKUP = lookup
+    assert _OCR_CONFUSABLES_LOOKUP is not None
+    return _OCR_CONFUSABLES_LOOKUP
 
-_QUERY_LIKE_RE = re.compile(
-    r"\b(" 
-    r"mi|mı|mu|mü|ne|nerede|hangi|kim|kaç|kadro|puan|kaydet|kazan|berabere|maç|bugün|bugun" 
-    r")\b",
-    re.IGNORECASE,
-)
+
+def _load_single_emoji_intent_lookup() -> dict[str, str]:
+    global _SINGLE_EMOJI_INTENT_LOOKUP
+    if _SINGLE_EMOJI_INTENT_LOOKUP is None:
+        try:
+            raw = yaml.safe_load(_SINGLE_EMOJI_INTENT_PATH.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            _SINGLE_EMOJI_INTENT_LOOKUP = {}
+            return _SINGLE_EMOJI_INTENT_LOOKUP
+        if not isinstance(raw, dict):
+            raise ValueError("single_emoji_intent.tr.yaml must contain a mapping")
+        lookup: dict[str, str] = {}
+        for emoji, prompt in raw.items():
+            if not isinstance(emoji, str) or not isinstance(prompt, str):
+                raise ValueError("single_emoji_intent.tr.yaml entries must map strings to strings")
+            lookup[emoji] = prompt.strip()
+        _SINGLE_EMOJI_INTENT_LOOKUP = lookup
+    assert _SINGLE_EMOJI_INTENT_LOOKUP is not None
+    return _SINGLE_EMOJI_INTENT_LOOKUP
 
 
-def _looks_like_preamble_tail(text: str) -> bool:
-    return bool(_QUERY_LIKE_RE.search(text))
+def _load_emoji_to_concept_lookup() -> dict[str, str]:
+    global _EMOJI_TO_CONCEPT_LOOKUP
+    if _EMOJI_TO_CONCEPT_LOOKUP is None:
+        try:
+            raw = yaml.safe_load(_EMOJI_TO_CONCEPT_PATH.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            _EMOJI_TO_CONCEPT_LOOKUP = {}
+            return _EMOJI_TO_CONCEPT_LOOKUP
+        if not isinstance(raw, dict):
+            raise ValueError("emoji_to_concept.tr.yaml must contain a mapping")
+        lookup: dict[str, str] = {}
+        for emoji, concept in raw.items():
+            if not isinstance(emoji, str) or not isinstance(concept, str):
+                raise ValueError("emoji_to_concept.tr.yaml entries must map strings to strings")
+            lookup[emoji] = concept.strip().lower()
+        _EMOJI_TO_CONCEPT_LOOKUP = lookup
+    assert _EMOJI_TO_CONCEPT_LOOKUP is not None
+    return _EMOJI_TO_CONCEPT_LOOKUP
 
 
-def _strip_preamble(
+def _load_time_of_day_shorthand_lookup() -> dict[str, str]:
+    global _TIME_OF_DAY_SHORTHAND_LOOKUP
+    if _TIME_OF_DAY_SHORTHAND_LOOKUP is None:
+        raw = yaml.safe_load(_TIME_OF_DAY_SHORTHAND_PATH.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("time_of_day_shorthand.tr.yaml must contain a mapping")
+        lookup: dict[str, str] = {}
+        for shorthand, expanded in raw.items():
+            if not isinstance(shorthand, str) or not isinstance(expanded, str):
+                raise ValueError("time_of_day_shorthand.tr.yaml entries must map strings to strings")
+            lookup[shorthand.strip().lower()] = expanded.strip().lower()
+        _TIME_OF_DAY_SHORTHAND_LOOKUP = lookup
+    assert _TIME_OF_DAY_SHORTHAND_LOOKUP is not None
+    return _TIME_OF_DAY_SHORTHAND_LOOKUP
+
+
+def _load_numeric_redundant_restatement_lookup() -> dict[str, str]:
+    global _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP
+    if _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP is None:
+        try:
+            raw = yaml.safe_load(_NUMERIC_REDUNDANT_RESTATEMENT_PATH.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP = {}
+            return _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP
+        if not isinstance(raw, dict):
+            raise ValueError("numeric_redundant_restatement.tr.yaml must contain a mapping")
+        lookup: dict[str, str] = {}
+        for word, digit in raw.items():
+            if not isinstance(word, str) or not isinstance(digit, str):
+                raise ValueError("numeric_redundant_restatement.tr.yaml entries must map strings to strings")
+            word_key = word.strip().lower()
+            digit_value = digit.strip()
+            if word_key in lookup and lookup[word_key] != digit_value:
+                raise ValueError(f"numeric_redundant_restatement.tr.yaml contains duplicate word {word_key!r}")
+            lookup[word_key] = digit_value
+        _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP = lookup
+    assert _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP is not None
+    return _NUMERIC_REDUNDANT_RESTATEMENT_LOOKUP
+
+
+def _extract_last_paragraph(text: str) -> tuple[str, str] | None:
+    lines = [line for line in text.replace("\r\n", "\n").split("\n") if line.strip()]
+    if len(lines) < 3:
+        return None
+    last_paragraph = lines[-1].strip()
+    if not last_paragraph:
+        return None
+    preceding_text = text[: text.rfind(last_paragraph)]
+    preceding_text = preceding_text.rstrip("\r\n")
+    return last_paragraph, preceding_text
+
+
+def _build_emoji_to_concept_re(lookup: dict[str, str]) -> re.Pattern[str]:
+    global _EMOJI_TO_CONCEPT_RE
+    if _EMOJI_TO_CONCEPT_RE is not None:
+        return _EMOJI_TO_CONCEPT_RE
+
+    if not lookup:
+        raise ValueError("emoji_to_concept lookup must not be empty")
+
+    sorted_keys = sorted(lookup.keys(), key=len, reverse=True)
+    alternatives = "|".join(re.escape(key) for key in sorted_keys)
+    _EMOJI_TO_CONCEPT_RE = re.compile(
+        rf"(?P<emoji>{alternatives})(?P<apostrophe>['’]?)(?P<suffix>[A-Za-zÇĞİÖŞÜçğıöşü]+)"
+    )
+    return _EMOJI_TO_CONCEPT_RE
+
+
+def _promote_suffixed_emoji_to_concept(
     text: str,
     cfg,
     event_sink: Callable[[dict[str, object]], None],
-    original_text: str | None = None,
 ) -> str:
-    if not text or text.isspace():
+    if not getattr(cfg, "nlp_emoji_to_concept_enabled", True):
         return text
 
-    prefix_options = _load_preamble_strippers()
-    if not prefix_options:
+    lookup = _load_emoji_to_concept_lookup()
+    if not lookup:
         return text
 
-    for prefix_tokens in prefix_options:
-        prefix_text = " ".join(prefix_tokens)
-        pattern = re.compile(rf"^{re.escape(prefix_text)}(?:(?:[\,\!\?\:\;\-]+\s*)|\s+)(.+)$", re.IGNORECASE)
-        match = pattern.match(text)
-        if not match:
-            continue
+    pattern = _build_emoji_to_concept_re(lookup)
+    events: list[dict[str, object]] = []
 
-        if len(prefix_tokens) > cfg.nlp_preamble_max_strip_tokens:
-            event_sink({
-                "kind": "preamble_strip_capped",
-                "prefix_token_count": len(prefix_tokens),
-                "max_strip_tokens": cfg.nlp_preamble_max_strip_tokens,
-            })
-            return text
-
-        # Prevent false positives where dialect normalization has split a
-        # non-prefix token into a pseudo-prefix + tail, e.g. "benceki" ->
-        # "bence ki".
-        if original_text is not None:
-            original_prefix = original_text[: len(prefix_text)]
-            if original_prefix.lower() == prefix_text.lower() and len(original_text) > len(prefix_text):
-                next_char = original_text[len(prefix_text)]
-                if next_char not in " \t\n\r.,;:!?-" and not next_char.isspace():
-                    continue
-
-        stripped = match.group(1).strip()
-        if not stripped:
-            return text
-
-        stripped_tokens = _tokenize(stripped)
-        if len(stripped_tokens) == 1:
-            single_preamble_tokens = {
-                tokens[0] for tokens in prefix_options if len(tokens) == 1
-            }
-            if stripped_tokens[0] in single_preamble_tokens:
-                return text
-
-        if len(prefix_tokens) == 1 and prefix_tokens[0] in _AMBIGUOUS_PREAMBLE_PREFIXES:
-            if not _looks_like_preamble_tail(stripped):
-                return text
-
-        event_sink({
-            "kind": "preamble_stripped",
-            "preamble": prefix_text,
-            "stripped_tail": stripped,
-        })
-        return stripped
-
-    return text
-
-
-def _load_greetings() -> set[str]:
-    global _GREETINGS
-    if _GREETINGS is None:
-        raw = yaml.safe_load(_GREETINGS_PATH.read_text(encoding="utf-8")) or []
-        if not isinstance(raw, list):
-            raise ValueError("greetings.tr.yaml must contain a list of greetings")
-        greetings: set[str] = set()
-        for entry in raw:
-            if not isinstance(entry, str):
-                raise ValueError("greetings.tr.yaml entries must be strings")
-            normalized = canonical_normalize(entry).strip().lower()
-            if normalized:
-                greetings.add(normalized)
-        _GREETINGS = greetings
-    assert _GREETINGS is not None
-    return _GREETINGS
-
-
-def _looks_like_fragment(text: str, *, cfg=None) -> bool:
-    if cfg is None:
-        from common.config import cfg as _cfg
-        cfg = _cfg
-
-    if not cfg.nlp_fragment_detection_enabled:
-        return False
-
-    normalized = _MULTI_SPACE_RE.sub(" ", text.strip().lower())
-    if normalized in _load_fragment_negative_corpus():
-        return False
-
-    if normalized.endswith(":") or normalized.endswith(";"):
-        return True
-    if normalized.endswith("?") or normalized.endswith("!") or normalized.endswith("."):
-        return False
-
-    tokens = _tokenize(normalized)
-    if not tokens:
-        return False
-
-    last_token = tokens[-1]
-    if last_token in _load_trailing_conjunctions() or last_token in _load_trailing_postpositions():
-        return True
-
-    return False
-
-
-def _looks_like_url_only_input(text: str) -> bool:
-    if not text:
-        return False
-    stripped = _URL_RE.sub(" ", text)
-    stripped = _MULTI_SPACE_RE.sub(" ", stripped).strip()
-    return stripped == ""
-
-
-def _looks_like_structured_input(text: str) -> bool:
-    stripped = text.strip()
-    if not stripped:
-        return False
-    if "```" in stripped or "~~~" in stripped:
-        return True
-    if stripped.startswith("{") or stripped.startswith("["):
-        try:
-            parsed = json.loads(stripped)
-            return isinstance(parsed, (dict, list))
-        except json.JSONDecodeError:
-            pass
-    if stripped.startswith("<"):
-        try:
-            ET.fromstring(stripped)
-            return True
-        except ET.ParseError:
-            pass
-    if "\n" in stripped and (":" in stripped or stripped.lstrip().startswith("-")):
-        try:
-            parsed = yaml.safe_load(stripped)
-            return isinstance(parsed, (dict, list))
-        except yaml.YAMLError:
-            pass
-    return False
-
-
-def assert_minimum_signal(text: str, *, cfg=None) -> tuple[str, str | None]:
-    if cfg is None:
-        from common.config import cfg as _cfg
-        cfg = _cfg
-
-    normalized = canonical_normalize(str(text or ""))
-    normalized = _MULTI_SPACE_RE.sub(" ", normalized).strip()
-    if _looks_like_url_only_input(normalized):
-        return "meta.url_only_input", None
-
-    if cfg.nlp_structured_input_refusal_enabled and _looks_like_structured_input(normalized):
-        return "meta.structured_input_refused", None
-
-    if not normalized:
-        return "empty_input_floor_response", None
-
-    lower_text = normalized.lower()
-    if lower_text in _load_greetings():
-        return "greeting_input_floor_response", lower_text
-
-    if _looks_like_fragment(normalized, cfg=cfg):
-        return "meta.unsupported_fragment", None
-
-    if len(normalized) == 1 and normalized != "?" and not normalized.isdigit():
-        return "meta.unsupported_too_short", None
-
-    if _ALL_PUNCT_RE.sub("", normalized) == "":
-        return "meta.unsupported_too_short", None
-
-    raw_tokens = _tokenize(normalized)
-    if cfg.nlp_meta_question_routing_enabled:
-        meta_intent = classify_conversational_meta(normalized)
-        if meta_intent:
-            return meta_intent, lower_text
-
-    if len(raw_tokens) < int(cfg.nlp_min_tokens) and not re.search(r"\d", normalized):
-        return "meta.unsupported_too_short", None
-
-    return "ok", None
-
-
-def _segment_hashtag(token: str) -> list[str]:
-    known = _load_abbreviation_keys()
-    token = token.lower()
-    if token in known:
-        return [token]
-
-    segments: list[str] = []
-    idx = 0
-    while idx < len(token):
-        match: str | None = None
-        for end in range(len(token), idx, -1):
-            candidate = token[idx:end]
-            if candidate in known:
-                match = candidate
-                break
-        if match is None:
-            return []
-        segments.append(match)
-        idx += len(match)
-    return segments
-
-
-def _extract_domain(url: str) -> str:
-    parsed = urlparse(url if url.startswith("http") else f"http://{url}")
-    return parsed.netloc.lower()
-
-
-def _html_entity_unescape(text: str, event_sink: list[dict[str, object]]) -> str:
-    normalized = html.unescape(text)
-    if normalized != text:
-        event_sink.append({"kind": "html_entity_unescaped", "original": text, "normalized": normalized})
-    return normalized
-
-
-def _normalize_social_tokens(text: str, event_sink: list[dict[str, object]], cfg) -> str:
-    normalized = text
-    stripped_urls: list[str] = []
-
-    def _url_replacer(match: re.Match[str]) -> str:
-        url = match.group(0)
-        stripped_urls.append(url)
-        return " "
-
-    normalized = _URL_RE.sub(_url_replacer, normalized)
-    if stripped_urls:
-        event_sink.append({
-            "kind": "normalize_url_stripped",
-            "count": len(stripped_urls),
-            "domains": [_extract_domain(url) for url in stripped_urls],
-        })
-
-    handles = _load_social_handles()
-
-    def _hashtag_replacer(match: re.Match[str]) -> str:
-        token = match.group(1)
-        segments = _segment_hashtag(token)
-        if not segments:
-            event_sink.append({"kind": "hashtag_dropped", "original": match.group(0)})
-            return " "
-        event_sink.append({"kind": "hashtag_expanded", "original": match.group(0), "segments": segments})
-        return " " + " ".join(segments) + " "
-
-    if cfg.nlp_hashtag_handling_enabled:
-        normalized = _HASHTAG_RE.sub(_hashtag_replacer, normalized)
-
-    def _mention_replacer(match: re.Match[str]) -> str:
-        handle = match.group(1).strip().lower()
-        canonical = handles.get(handle)
+    def replace(match: re.Match[str]) -> str:
+        emoji = match.group("emoji")
+        apostrophe = match.group("apostrophe") or ""
+        suffix = match.group("suffix")
+        canonical = lookup.get(emoji)
         if canonical is None:
-            event_sink.append({"kind": "mention_dropped", "original": match.group(0)})
-            return " "
-        event_sink.append({"kind": "mention_resolved", "original": match.group(0), "canonical": canonical})
-        return " " + canonical + " "
+            return match.group(0)
 
-    if cfg.nlp_at_mention_handling_enabled:
-        normalized = _MENTION_RE.sub(_mention_replacer, normalized)
-    normalized = _MULTI_SPACE_RE.sub(" ", normalized).strip()
-    return normalized
-
-
-def _load_emoji_hints() -> tuple[dict[str, dict[str, object]], re.Pattern[str]]:
-    global _EMOJI_HINTS_TABLE, _EMOJI_HINTS_RE
-    if _EMOJI_HINTS_TABLE is None:
-        raw = yaml.safe_load(_EMOJI_HINTS_PATH.read_text(encoding="utf-8")) or {}
-        if not isinstance(raw, dict):
-            raise ValueError("emoji_hints.tr.yaml must be a mapping")
-
-        hints: dict[str, dict[str, object]] = {}
-        for emoji, meta in raw.items():
-            if not isinstance(emoji, str):
-                raise ValueError("emoji_hints keys must be strings")
-            if not isinstance(meta, dict):
-                raise ValueError("emoji_hints values must be mappings")
-            hint = str(meta.get("hint", "")).strip()
-            if not hint:
-                raise ValueError(f"emoji_hints entry for {emoji!r} missing hint")
-            team_color = meta.get("team_color")
-            if team_color is not None:
-                if not isinstance(team_color, list) or not all(isinstance(item, str) for item in team_color):
-                    raise ValueError(f"team_color for {emoji!r} must be a list of strings")
-                team_color = tuple(item.strip() for item in team_color if item.strip())
-            else:
-                team_color = tuple()
-            hints[emoji] = {"hint": hint, "team_color": team_color}
-
-        _EMOJI_HINTS_TABLE = hints
-        _EMOJI_HINTS_RE = re.compile(
-            "|".join(re.escape(emoji) for emoji in sorted(hints.keys(), key=len, reverse=True))
+        events.append(
+            {
+                "kind": "concept_via_emoji",
+                "original_emoji": emoji,
+                "canonical": canonical,
+                "suffix": suffix,
+            }
         )
-    assert _EMOJI_HINTS_TABLE is not None and _EMOJI_HINTS_RE is not None
-    return _EMOJI_HINTS_TABLE, _EMOJI_HINTS_RE
+        return f"{canonical}{apostrophe}{suffix}"
+
+    normalized = pattern.sub(replace, text)
+    for event in events:
+        event_sink(event)
+    return normalized
 
 
 def _extract_emoji_hints(text: str, event_sink: list[dict[str, object]]) -> tuple[tuple[dict[str, object], ...], str]:
-    hints_table, hint_re = _load_emoji_hints()
-    emoji_hints: list[dict[str, object]] = []
+    lookup = _load_emoji_hints_table()
+    if not lookup:
+        return (), text
 
-    def _replace(match: re.Match[str]) -> str:
-        emoji = match.group(0)
-        meta = hints_table[emoji]
-        if meta["hint"] != "generic_decoration":
-            hint_payload: dict[str, object] = {
-                "emoji": emoji,
-                "hint": meta["hint"],
-            }
-            if meta["team_color"]:
-                hint_payload["team_color"] = list(meta["team_color"])
-            emoji_hints.append(hint_payload)
-            event_sink.append({
-                "kind": "emoji_hint_extracted",
-                "emoji": emoji,
-                "hint": meta["hint"],
-                "team_color": list(meta["team_color"]),
-            })
-        else:
-            event_sink.append({
-                "kind": "emoji_stripped_generic_decoration",
-                "emoji": emoji,
-            })
+    pattern = _build_emoji_hints_re(lookup)
+    extracted: list[dict[str, object]] = []
+
+    def replace(match: re.Match[str]) -> str:
+        emoji = match.group("emoji")
+        payload = lookup.get(emoji)
+        if payload is None:
+            return ""
+        if payload.get("hint") == "generic_decoration":
+            return ""
+        hint = {"emoji": emoji, **payload}
+        extracted.append(hint)
         return ""
 
-    normalized = hint_re.sub(_replace, text)
-    normalized = _MULTI_SPACE_RE.sub(" ", normalized).strip()
-    return tuple(emoji_hints), normalized
+    normalized = pattern.sub(replace, text)
+    if extracted:
+        event_sink.append({"kind": "emoji_hints_extracted", "count": len(extracted), "emojis": [hint["emoji"] for hint in extracted]})
+    return tuple(extracted), normalized
 
 
 def _strip_generic_emoji_symbols(text: str, event_sink: list[dict[str, object]]) -> str:
@@ -979,6 +1136,11 @@ class NormalizedInput:
     """
     budget_exhausted_stage: str | None = None
     """The last normalization stage completed before budget exhaustion."""
+    floor_kind: str | None = None
+    """Optional post-normalization floor kind for cases like column-tear
+    paste-layout input that should be routed to a meta clarification response."""
+    context_dump_sha256: str | None = None
+    """SHA256 of the preserved pre-question context for mega-input extractions."""
     particle_repairs: frozenset = frozenset()
     """Set of original token strings split by step 8a (§10.22.4 particle
     disambiguation).  Consumers can use this to detect which tokens were
@@ -1192,6 +1354,21 @@ def _record_nlp_input_repair_metrics(
 
 
 # ---------------------------------------------------------------------------
+# Helper routines
+# ---------------------------------------------------------------------------
+
+def _html_entity_unescape(text: str, normalization_events: list[dict[str, object]]) -> str:
+    unescaped = html.unescape(text)
+    if unescaped != text:
+        normalization_events.append({
+            "kind": "html_entity_unescaped",
+            "original": text,
+            "normalized": unescaped,
+        })
+    return unescaped
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 def normalize_input(
@@ -1283,6 +1460,7 @@ def normalize_input(
     subqueries: tuple[tuple[str, ...], ...] = tuple()
     normalized_emoji_hints: tuple[str, ...] = tuple()
     particle_repairs: tuple[dict[str, object], ...] = tuple()
+    floor_kind: str | None = None
     dialect_repairs: tuple[dict[str, object], ...] = tuple()
     regional_dialect_rewrites: tuple[dict[str, object], ...] = tuple()
     dialect_alternatives: tuple[dict[str, object], ...] = tuple()
@@ -1318,6 +1496,28 @@ def normalize_input(
             _deadline_s = cfg.nlp_normalize_stage_timeout_ms / 1000.0
 
             raw_cp = len(text)
+            context_dump_sha256: str | None = None
+
+            # -- Step 0a: Mega-input last-paragraph extraction ---------------------
+            if raw_cp > int(cfg.nlp_megainput_min_chars) or text.count("\n") >= 3:
+                last_paragraph = _extract_last_paragraph(text)
+                if last_paragraph is not None:
+                    tail, preceding = last_paragraph
+                    if len(tail) <= cfg.nlp_input_max_codepoints:
+                        text = tail
+                        raw_cp = len(text)
+                        context_dump_sha256 = hashlib.sha256(preceding.encode("utf-8")).hexdigest()
+                        normalization_events.append({
+                            "kind": "megainput_tail_extracted",
+                            "context_dump_chars": len(preceding),
+                            "context_dump_sha256": context_dump_sha256,
+                            "line_count": text.count("\n") + 1,
+                        })
+                    else:
+                        normalization_events.append({
+                            "kind": "megainput_tail_extracted",
+                            "context_dump_chars": raw_cp,
+                        })
 
             current_stage = "length_cap"
             # -- Step 1: Length cap --------------------------------------------------
@@ -1339,6 +1539,7 @@ def normalize_input(
             current_stage = "canonical_normalize"
             # -- Steps 2+3: NFC + control-char / zero-width / RTL strip -------------
             # canonical_normalize is the Python/Go parity surface; NEVER inline here.
+            pre_canonical = normalized
             normalized = canonical_normalize(normalized)
             steps.append("canonical_normalize")
 
@@ -1347,6 +1548,15 @@ def normalize_input(
             # Rejoin Turkish-specific decomposed dotted i sequences before lowercase.
             normalized = compose_turkish_dotted_i(normalized)
             steps.append("compose_turkish_dotted_i")
+
+            current_stage = "paste_layout_normalize"
+            normalized, floor_kind = _normalize_paste_layout(
+                normalized,
+                cfg,
+                normalization_events.append,
+                pre_canonical=pre_canonical,
+            )
+            steps.append("paste_layout_normalize")
 
             current_stage = "confusables_fold"
             # -- Step 3.5: Unicode confusables fold (Phase 10 §10.21.5) ------------
@@ -1357,6 +1567,8 @@ def normalize_input(
             normalized = confusables_fold(normalized)
             confusables_folded = normalized != pre_confusables
             steps.append("confusables_fold")
+
+            normalized = _normalize_random_case_noise(normalized, cfg, normalization_events.append)
 
             # -- Step 3.6: Digit-letter confusable fold (§10.24.3) -------------------
             current_stage = "digit_letter_fold"
@@ -1396,6 +1608,8 @@ def normalize_input(
             current_stage = "social_hygiene"
             normalized = _normalize_social_tokens(normalized, normalization_events, cfg)
             steps.append("social_hygiene")
+
+            normalized = _promote_suffixed_emoji_to_concept(normalized, cfg, normalization_events.append)
 
             current_stage = "emoji_hint_extract"
             if cfg.nlp_emoji_hint_enabled:
@@ -1437,6 +1651,15 @@ def normalize_input(
                     original_text=normalized,
                 )
             steps.append("strip_preamble")
+
+            current_stage = "ocr_confusion_repair"
+            normalized = _normalize_ocr_confusions(
+                normalized,
+                pre_canonical,
+                cfg,
+                normalization_events.append,
+            )
+            steps.append("ocr_confusion_repair")
 
             # -- Step 6.5: Regional / diaspora dialect normalization (§10.32.4) -----
             normalized, regional_dialect_rewrites, dialect_alternatives = apply_regional_dialect_normalize(
@@ -1535,6 +1758,8 @@ def normalize_input(
                 collapsed_tokens.append(collapse_repeated_chars(tok, allowlist=repeat_allowlist))
             raw_tokens = collapsed_tokens
             steps.append("repeat_collapse")
+
+            raw_tokens = _normalize_numeric_redundant_restatement(raw_tokens, cfg, normalization_events.append)
 
             # -- Step 7c: Reduplicated-emphasis collapse (§10.29.7) -----------------
             if cfg.nlp_reduplication_collapse_enabled:
@@ -1708,6 +1933,8 @@ def normalize_input(
                     morphology_events=tuple(morphology_events),
                     loanword_singularisation_events=tuple(loanword_singularisation_events),
                     normalization_events=tuple(normalization_events),
+                    floor_kind=floor_kind,
+                    context_dump_sha256=context_dump_sha256,
                 )
 
             # -- Step 8a: Particle normalization (§10.22.4) -------------------------
@@ -1977,6 +2204,8 @@ def normalize_input(
                 morphology_candidates=morphology_candidates,
                 morphology_events=tuple(morphology_events),
                 loanword_singularisation_events=tuple(loanword_singularisation_events),
+                floor_kind=floor_kind,
+                context_dump_sha256=context_dump_sha256,
             )
             _record_nlp_input_repair_metrics(result, len(tokens), confusables_folded, ascii_restored)
             return result
@@ -2035,6 +2264,7 @@ def normalize_input(
                 morphology_events=tuple(),
                 budget_exhausted_reason=budget_exhausted_reason,
                 budget_exhausted_stage=budget_exhausted_stage,
+                floor_kind=floor_kind,
             )
         except BudgetExceeded:
             return NormalizedInput(
@@ -2075,4 +2305,6 @@ def normalize_input(
                 morphology_events=tuple(),
                 budget_exhausted_reason=budget_exhausted_reason,
                 budget_exhausted_stage=budget_exhausted_stage,
+                floor_kind=floor_kind,
+                context_dump_sha256=context_dump_sha256,
             )

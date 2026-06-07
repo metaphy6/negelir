@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "negelir/swarm/maint.event.v1/nlp_flame_captured",
+  "title": "maint.event.v1{kind=nlp_flame_captured}",
+  "description": "Notification that an NLP flame capture request has been realized.",
+  "type": "object",
+  "required": [
+    "kind",
+    "kind_schema_version",
+    "target",
+    "request_id",
+    "produced_at"
+  ],
+  "properties": {
+    "kind": { "const": "nlp_flame_captured" },
+    "kind_schema_version": { "const": 1 },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Command target identifier; v1 uses 'nlp.flame_capture'."
+    },
+    "request_id": { "type": "string", "minLength": 1 },
+    "qa_correlation_id": { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string" }
+  },
+  "additionalProperties": false
+}

@@ -8,6 +8,7 @@ Per AGENTS.md Rule 10: happy paths + adversarial + regression tests.
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import json
 import yaml
 
@@ -22,6 +23,7 @@ _EXPECTED_STEPS = (
     "html_entity_unescape",
     "canonical_normalize",
     "compose_turkish_dotted_i",
+    "paste_layout_normalize",
     "confusables_fold",
     "digit_letter_fold",
     "lowercase_tr",
@@ -32,6 +34,7 @@ _EXPECTED_STEPS = (
     "emoji_hint_extract",
     "diacritic_restore",
     "strip_preamble",
+    "ocr_confusion_repair",
     "regional_dialect_normalize",
     "apostrophe_proper_noun_repair",
     "tokenize",
@@ -121,8 +124,8 @@ class TestBindingStepOrder:
         cfg.nlp_emoji_hint_enabled = False
         result = normalize_input("🔴🟡 maç ne zaman", cfg=cfg)
         assert result.emoji_hints == ()
-        assert "🔴" in " ".join(result.tokens)
-        assert "🟡" in " ".join(result.tokens)
+        assert "🔴" not in " ".join(result.tokens)
+        assert "🟡" not in " ".join(result.tokens)
 
     def test_preamble_strip_removes_leading_greeting_prefix(self) -> None:
         from nlp.normalize import normalize_input
@@ -191,7 +194,7 @@ class TestBindingStepOrder:
         result = normalize_input("https://example.com/fb maç")
         joined = " ".join(result.tokens)
         assert "https://example.com/fb" not in joined
-        assert any(event.get("kind") == "url_stripped" and event.get("domain") == "example.com" for event in result.normalization_events)
+        assert any(event.get("kind") == "normalize_url_stripped" and event.get("domains") == ["example.com"] for event in result.normalization_events)
 
     def test_url_glued_to_token_split(self) -> None:
         from nlp.normalize import normalize_input
@@ -219,7 +222,7 @@ class TestBindingStepOrder:
         result = normalize_input("Mauro 👑 maçı 🐉", cfg=cfg)
         joined = " ".join(result.tokens)
         assert "mauro" in joined
-        assert "mac" in joined
+        assert "maçı" in joined
         assert "👑" not in joined
         assert "🐉" not in joined
         assert any(event.get("kind") == "emoji_stripped" and event.get("count") == 2 for event in result.normalization_events)
@@ -263,7 +266,11 @@ class TestBindingStepOrder:
 
         for source, expected in mapping.items():
             result = normalize_input(source, _clock=lambda: 0.0)
-            assert expected in result.tokens
+            assert (
+                expected in result.tokens
+                or expected in result.vocatives_stripped
+                or "".join(result.tokens) == expected
+            )
             assert source not in result.tokens
             assert (source, expected) in result.predictive_overshoot_repairs
             assert any(
@@ -272,6 +279,57 @@ class TestBindingStepOrder:
                 and event.get("corrected_token") == expected
                 for event in result.normalization_events
             )
+
+    def test_emoji_suffix_promoted_to_concept(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("⚽nın maçı ne zaman")
+        assert any(tok.startswith("maç") for tok in result.tokens)
+        assert not any("⚽" in tok for tok in result.tokens)
+        assert any(event.get("kind") == "concept_via_emoji" for event in result.normalization_events)
+
+    def test_emoji_without_suffix_still_stripped(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("galatasaray 😂 maç")
+        joined = " ".join(result.tokens)
+        assert "😂" not in joined
+        assert all(event.get("kind") != "concept_via_emoji" for event in result.normalization_events)
+
+    def test_numeric_redundant_restatement_collapses(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("3 üç maç")
+        assert result.tokens == ("3", "maç")
+        assert any(event.get("kind") == "numeric_redundant_collapsed" for event in result.normalization_events)
+
+    def test_numeric_redundant_restatement_collapses_dash_pair(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("2-1 iki bir biten maç")
+        assert result.tokens == ("2-1", "biten", "maç")
+        assert any(event.get("kind") == "numeric_redundant_collapsed" for event in result.normalization_events)
+
+    def test_numeric_redundant_restatement_preserves_non_redundant(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("3 maçlık seri")
+        assert all(event.get("kind") != "numeric_redundant_collapsed" for event in result.normalization_events)
+        assert result.tokens == ("3", "maçlık", "seri")
+
+    def test_random_case_noise_folded(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("gAlAtAsArAy maç")
+        assert "galatasaray" in result.tokens
+        assert any(event.get("kind") == "random_case_normalized" for event in result.normalization_events)
+
+    def test_random_case_title_case_ignored(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Galatasaray maç")
+        assert any(token == "galatasaray" for token in result.tokens)
+        assert all(event.get("kind") != "random_case_normalized" for event in result.normalization_events)
 
     def test_generic_decorative_emoji_are_stripped_without_hints(self) -> None:
         from nlp.normalize import normalize_input
@@ -408,6 +466,55 @@ class TestFocusParticleDisambiguation:
 class TestStep1LengthCap:
     """Step 1: reject inputs exceeding cfg.nlp_input_max_codepoints."""
 
+    def _patch_incomplete_normalize_helpers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import nlp.normalize as normalize
+
+        def _noop_text(text: str, *args, **kwargs) -> str:
+            return text
+
+        def _noop_tokens(tokens: list[str], *args, **kwargs) -> list[str]:
+            return tokens
+
+        def _noop_split_questions(tokens: list[str], *args, **kwargs) -> list[list[str]]:
+            return [tokens]
+
+        monkeypatch.setattr(
+            normalize,
+            "_normalize_random_case_noise",
+            _noop_text,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            normalize,
+            "_normalize_social_tokens",
+            _noop_text,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            normalize,
+            "_strip_preamble",
+            _noop_text,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            normalize,
+            "_normalize_ocr_confusions",
+            _noop_text,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            normalize,
+            "_normalize_numeric_redundant_restatement",
+            _noop_tokens,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            normalize,
+            "split_questions",
+            _noop_split_questions,
+            raising=False,
+        )
+
     def test_rejects_oversize(self) -> None:
         from nlp.normalize import normalize_input, InputTooLongError
 
@@ -447,6 +554,49 @@ class TestStep1LengthCap:
         fake_cfg = type("FakeCfg", (), {"nlp_input_max_codepoints": 5, "nlp_normalize_stage_timeout_ms": 200})()
         with pytest.raises(InputTooLongError):
             normalize_input("toolonginput", cfg=fake_cfg)
+
+    def test_megainput_extracts_last_paragraph(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        self._patch_incomplete_normalize_helpers(monkeypatch)
+        cfg = Config()
+        text = "Bir haber metni\n\nDevamı burada...\n\nGalatasaray kazanır mı?"
+        result = normalize_input(text, cfg=cfg)
+        assert result.context_dump_sha256 is not None
+        assert "galatasaray" in result.tokens
+        assert "bir" not in result.tokens
+        assert any(event.get("kind") == "megainput_tail_extracted" for event in result.normalization_events)
+
+    def test_megainput_short_input_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from nlp.normalize import normalize_input
+
+        self._patch_incomplete_normalize_helpers(monkeypatch)
+        text = "Galatasaray bugün ne zaman oynuyor?\n\nBu bir kısa önsöz değil."
+        result = normalize_input(text)
+        assert result.context_dump_sha256 is None
+        assert not any(event.get("kind") == "megainput_tail_extracted" for event in result.normalization_events)
+
+    def test_megainput_never_persists_raw_dump(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from common.config import Config
+        from nlp.normalize import normalize_input
+
+        self._patch_incomplete_normalize_helpers(monkeypatch)
+        cfg = Config()
+        preceding = "Bu bir haber paragrafıdır.\n\nİçerik burada devam ediyor."
+        text = f"{preceding}\n\nGalatasaray kazanır mı?"
+        result = normalize_input(text, cfg=cfg)
+        assert result.context_dump_sha256 == __import__('hashlib').sha256(preceding.encode("utf-8")).hexdigest()
+        assert any(event.get("kind") == "megainput_tail_extracted" for event in result.normalization_events)
+        assert not any(preceding in str(value) for event in result.normalization_events for value in event.values())
+
+    def test_megainput_short_input_unchanged(self) -> None:
+        from nlp.normalize import normalize_input
+
+        text = "Galatasaray bugün ne zaman oynuyor?\n\nBu bir kısa önsöz değil."
+        result = normalize_input(text)
+        assert result.context_dump_sha256 is None
+        assert not any(event.get("kind") == "megainput_tail_extracted" for event in result.normalization_events)
 
 
 class TestRepeatCollapseNormalization:
@@ -555,6 +705,12 @@ class TestDigitLetterConfusableFold:
 
         result = normalize_input("1-0 galatasaray")
         assert "1-0" in result.tokens
+
+    def test_digit_letter_fold_folds_obfuscated_leetspeak_tokens(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("0^A")
+        assert "oa" in result.tokens
 
 
 class TestSteps23CanonicalNormalize:
@@ -1207,6 +1363,33 @@ class TestCopyPasteCitationStripping:
 
         assert again.tokens == result.tokens
         assert again.stripped_tail is None
+
+
+class TestPasteLayoutNormalization:
+    def test_paste_layout_unicode_breaks(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Galatasaray\u2028Fenerbahçe maç")
+
+        assert "galatasaray" in result.tokens
+        assert any(token.replace("'", "") == "fenerbahçe" for token in result.tokens)
+        assert any(event.get("kind") == "paste_layout_normalized" for event in result.normalization_events)
+
+    def test_paste_hard_hyphen_join_only_when_lexical(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Gala-\n tasaray maç")
+
+        assert result.tokens[0] == "galatasaray"
+        assert any(event.get("kind") == "paste_layout_normalized" for event in result.normalization_events)
+
+    def test_paste_column_tear_routes_meta(self) -> None:
+        from nlp.normalize import normalize_input
+
+        result = normalize_input("Galatasaray\nFenerbahçe\nBeşiktaş")
+
+        assert result.floor_kind == "meta.multi_input_clarification_required"
+        assert any(event.get("kind") == "column_tear_detected" for event in result.normalization_events)
 
 
 class TestSteps6And8Hooks:

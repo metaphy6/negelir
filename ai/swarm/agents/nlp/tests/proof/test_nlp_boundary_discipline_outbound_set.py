@@ -8,6 +8,7 @@ from swarm.agents.topics import (
     NLP_SHADOW_V1,
     PREDICT_REQUEST_V1,
     QA_ANSWER_V1,
+    QA_REQUEST_V1,
     QA_CONTEXT_EXTENSION_V1,
     QA_CONTEXT_V1,
     QA_INTENT_V1,
@@ -26,6 +27,7 @@ def test_nlp_boundary_discipline_outbound_set() -> None:
         NLP_GOSSIP_V1,
         NLP_SHADOW_V1,
         NLP_PROBER_V1,
+        QA_REQUEST_V1,
         PREDICT_REQUEST_V1,
         DATA_REQUEST_V1,
     }

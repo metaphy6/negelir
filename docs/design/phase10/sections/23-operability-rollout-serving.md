@@ -677,6 +677,7 @@
   `nlp_weekly_eval_regression` (warn),
   `nlp_humanizer_pod_budget_exceeded` (warn),
   `nlp_l1_cache_signature_invalid` (warn),
+  `canary_promotion_blocked` (critical),
   `nlp_safe_mode_active` (critical, debounced 300s).
 - [x] **New degraded-reason enum entries** (per §10.10):
   `humanizer_tenant_budget_exceeded`,

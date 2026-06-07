@@ -1,0 +1,7 @@
+{
+  "kind": "nlp_audit_rerender_executed",
+  "produced_at": "2026-06-07T20:48:08+00:00",
+  "request_id": "qa_rerender_time_travel_test",
+  "bundle_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "audit_path": "/tmp/tmpg___lv4a/data/nlp/audit/qa_rerender_time_travel_test.json"
+}

@@ -34,6 +34,17 @@ def test_render_prometheus_includes_agent_label() -> None:
     assert "# TYPE swarm_msg_consumed counter" in out
 
 
+def test_set_gauge_renders_labels() -> None:
+    m = Metrics("echo.v1")
+    m.set_gauge("bus_health", {"topic": "data.request.v1", "state": "yellow"}, 1.0)
+    out = m.render_prometheus()
+    assert "swarm_bus_health{" in out
+    assert 'topic="data.request.v1"' in out
+    assert 'state="yellow"' in out
+    assert 'agent="echo.v1"' in out
+    assert "# TYPE swarm_bus_health gauge" in out
+
+
 def test_empty_metrics_render_safely() -> None:
     out = Metrics("a").render_prometheus()
     # At minimum the latency gauges always appear.

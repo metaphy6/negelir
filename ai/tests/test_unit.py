@@ -52,6 +52,22 @@ def test_nlp_structured_log_carries_required_fields(caplog):
     assert record.structured is True
 
 
+def test_nlp_prober_outcome_structured_log(caplog) -> None:
+    from common.telemetry import TelemetrySink
+
+    sink = TelemetrySink()
+
+    with caplog.at_level("INFO"):
+        sink.record_nlp_prober_outcome(
+            request_id="prober-001",
+            intent="predict.match_outcome",
+            success=True,
+            latency_seconds=0.165,
+        )
+
+    assert any("NLP prober outcome" in r.message for r in caplog.records)
+
+
 def test_nlp_structured_log_never_logs_text(caplog):
     """log_nlp_request rejects suspiciously long ID fields (PII guard)."""
     from common.telemetry import TelemetrySink
@@ -99,6 +115,26 @@ def test_nlp_structured_log_all_proofreader_statuses():
             humanizer_used=False,
             proofreader_status=status,
         )
+
+
+def test_telemetry_sink_lazy_redis_connect_is_deferred(monkeypatch):
+    """TelemetrySink should not attempt Redis connection at construction time."""
+    import sys
+    import types
+
+    dummy_redis = types.ModuleType("redis")
+
+    def redis_factory(**kwargs):
+        raise AssertionError("Redis should not be initialized during TelemetrySink init")
+
+    dummy_redis.Redis = redis_factory
+    monkeypatch.setitem(sys.modules, "redis", dummy_redis)
+
+    from common.telemetry import TelemetrySink
+
+    sink = TelemetrySink()
+    assert sink._redis is None
+    assert not sink._redis_attempted_connection
 
 
 # ── Phase 10 §10.12 — L1 Answer Cache ────────────────────────────────────────
@@ -494,6 +530,34 @@ def test_cache_agent_handles_qa_answer_v1_predict_intent():
     result = list(agent.handle(msg))
     assert result == []
     assert len(backend) == 1
+
+
+def test_cache_agent_ignores_synthetic_prober_qa_answer_v1() -> None:
+    """Synthetic prober answers bypass the L1 qa.answer.v1 cache."""
+    backend = InMemoryCacheBackend()
+    agent = CacheAgent(backend=backend)
+
+    payload = {
+        "normalized_text": "gs maçı tahmin",
+        "intent": "predict.match_outcome",
+        "entity_hash": "entity123",
+        "fixture_window_bucket": "2026-05-29",
+        "model_versions_hash": "model456",
+        "tenant_id": "tenant_a",
+        "banlist_snapshot_sha": "ban-sha-1",
+        "intent_model_version": "1.0.0",
+        "lexicon_snapshot_sha": "lex-sha-1",
+        "calibration_version": "v1.0",
+        "nlp_pipeline_version": "10.0.0",
+        "answer_text": "Galatasaray bugün 21:00'de oynayacak.",
+        "request_metadata": {"synthetic_prober": True},
+    }
+    envelope = Envelope(topic=Topic("qa.answer.v1"))
+    msg = Message(envelope=envelope, payload=payload)
+
+    result = list(agent.handle(msg))
+    assert result == []
+    assert len(backend) == 0
 
 
 def test_cache_agent_writes_qa_answer_v1_with_envelope_signature(monkeypatch):

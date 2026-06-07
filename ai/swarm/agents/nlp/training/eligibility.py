@@ -58,6 +58,11 @@ def _is_preview(payload: dict[str, object]) -> bool:
     return bool(metadata.get("preview"))
 
 
+def _is_synthetic_prober(payload: dict[str, object]) -> bool:
+    metadata = _request_metadata(payload)
+    return bool(metadata.get("synthetic_prober"))
+
+
 def _is_kill_pattern_rewritten(payload: dict[str, object]) -> bool:
     if payload.get("kill_pattern_armed") is True:
         return True
@@ -124,6 +129,9 @@ def filter_shadow_rows_for_intent_training(
             continue
         if _is_kill_pattern_rewritten(payload):
             counts["kill_pattern_rewritten"] += 1
+            continue
+        if _is_synthetic_prober(payload):
+            counts["synthetic_prober"] = counts.get("synthetic_prober", 0) + 1
             continue
 
         request_id_h = payload.get("request_id_h")

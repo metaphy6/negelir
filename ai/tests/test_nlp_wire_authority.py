@@ -529,12 +529,7 @@ class TestNlpGossipV1Schema:
             "kind": "nlp_lexicon_state_gossip",
             "producer": "nlp.intent.v1",
             "pod_instance_id": "pod-1",
-            "lexicon_set_sha": "abc123",
-            "intent_sha": "def456",
-            "crf_sha": "ghi789",
-            "calibration_version": "1.0.0",
-            "template_git_sha": "template-sha-1",
-            "pipeline_version": "1.0.0",
+            "lexicon_state_signature": "0123456789abcdef",
             "emitted_at_utc": "2026-05-27T10:00:00Z",
         }
 
@@ -553,12 +548,16 @@ class TestNlpGossipV1Schema:
         errors = bus_schemas.validate(self.TOPIC, self._valid_nlp_gossip())
         assert errors == [], errors
 
+    def test_gossip_payload_size_is_bounded(self):
+        payload = self._valid_nlp_gossip()
+        size = len(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+        assert size <= 256, f"nlp.gossip.v1 payload must fit within 256 bytes, got {size}"
+
     def test_1021_13_known_alert_kinds_registered_in_schema_docs(self):
         """§10.21.13: new alert kinds must be registered as known kinds."""
         schema = bus_schemas.load(self.TOPIC)
         description = schema["properties"]["kind"]["description"]
         expected_kinds = {
-            "nlp_intent_model_sha_mismatch",
             "nlp_lexicon_atomic_swap_failed",
             "nlp_singleflight_overflow",
             "nlp_template_render_used_raw_user_text",

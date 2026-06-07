@@ -72,6 +72,10 @@ class NlpAbuseAgent:
     def handle(self, msg: Message) -> Iterable[Message]:
         payload = msg.payload
         now_s = self._now_s()
+        request_metadata = payload.get("request_metadata")
+        if isinstance(request_metadata, dict) and request_metadata.get("synthetic_prober"):
+            return ()
+
         self._window.append((now_s, payload))
         self._expire(now_s)
 

@@ -25,6 +25,7 @@ def test_phase10_23_nlp_event_and_alert_kinds_are_registered() -> None:
         "nlp_humanizer_pod_budget_exceeded",
         "nlp_l1_cache_signature_invalid",
         "nlp_safe_mode_active",
+        "canary_promotion_blocked",
     }
     alert_schema = bus_schemas.load("nlp.alert.v1")
     alert_description = alert_schema["properties"]["kind"]["description"]

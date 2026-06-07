@@ -109,6 +109,8 @@ _ACK_ROUTING_TABLE: Final[Mapping[str, frozenset[str]]] = {
     # Phase 10 §10.27 — NLP operator kill-pattern arm/disarm.
     "nlp_kill_pattern_armed": frozenset({"nlp.answer.v1"}),
     "nlp_kill_pattern_disarmed": frozenset({"nlp.answer.v1"}),
+    # Phase 10 §10.32.15 — NLP flame capture arm. Owned by nlp.dispatcher.v1.
+    "nlp_flame_armed": frozenset({"nlp.dispatcher.v1"}),
     # ── Notification-only kinds (Phase 8.2 + 8.5) ────────────────────
     # These are emitted BY maint reactors as side-effect telemetry.
     # They carry NO ``request_id`` (or carry one but expect no acks)
@@ -302,6 +304,7 @@ KINDS_NOTIFICATION_ONLY: Final[frozenset[str]] = frozenset({
     # Phase 10 §10.27 — NLP operator kill-pattern arm/disarm are notification-only.
     "nlp_kill_pattern_armed",
     "nlp_kill_pattern_disarmed",
+    "nlp_flame_captured",
     # Phase 8 §8.15.1 — clock-source boot validation + suspend detection.
     "maint_clock_source_changed",
     "dlq_replayed",

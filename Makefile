@@ -330,6 +330,22 @@ nlp.intent-train: ## Phase 10 §10.25.5 — operator-driven intent model retrain
 nlp.lexicon-build: ## Phase 10 §10.2 — apply _aliases_delta.tr.yaml onto lexicons, bump patch version
 	@$(XOPS)/nlp.py nlp.lexicon-build
 
+.PHONY: nlp.lexicon-restore-from-snapshot
+nlp.lexicon-restore-from-snapshot: ## Phase 10 §10.32 — dry-run-safe lexicon restore runbook command
+	@$(XOPS)/nlp.py nlp.lexicon-restore-from-snapshot
+
+.PHONY: nlp.intent-model-restore
+nlp.intent-model-restore: ## Phase 10 §10.32 — dry-run-safe intent model restore runbook command
+	@$(XOPS)/nlp.py nlp.intent-model-restore
+
+.PHONY: nlp.calibration-pin
+nlp.calibration-pin: ## Phase 10 §10.32 — dry-run-safe calibration snapshot pin command
+	@$(XOPS)/nlp.py nlp.calibration-pin
+
+.PHONY: nlp.humanizer-rollback
+nlp.humanizer-rollback: ## Phase 10 §10.32 — dry-run-safe humanizer rollback runbook command
+	@$(XOPS)/nlp.py nlp.humanizer-rollback
+
 .PHONY: nlp.transliteration-build
 nlp.transliteration-build: ## Phase 10 §10.28 — validate loanword transliteration variants table and write build report
 	@$(XOPS)/nlp.py nlp.transliteration-build

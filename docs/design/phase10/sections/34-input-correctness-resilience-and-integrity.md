@@ -105,7 +105,7 @@ and the proof test. Tests live in
       50-row corpus and asserts each row produces the offered correction
       AND the user's original is preserved in the audit field.
 
-- [ ] **OCR / photo-source artefacts.** Users paste from screenshots,
+- [x] **OCR / photo-source artefacts.** Users paste from screenshots,
       PDFs, or photos of betting slips. The pasted text contains the
       classic OCR confusion classes — `0/O`, `1/l/I/!`, `5/S`, `8/B`,
       `rn/m`, soft-hyphen line-breaks (`Gala-\nbsaray`), and ligatures
@@ -125,7 +125,7 @@ and the proof test. Tests live in
       (25 rows), `test_ocr_no_repair_on_clean_input` (1000 rows assert
       zero invocations + zero allocs).
 
-- [ ] **PDF-paste artefacts (distinct from OCR).** PDF copy-paste
+- [x] **PDF-paste artefacts (distinct from OCR).** PDF copy-paste
       preserves original layout — line-breaks mid-sentence, NBSP as
       space, U+2028 line separator, U+2029 paragraph separator, hard
       hyphenation at line ends, and **column tear** (`Galatasaray\n
@@ -157,7 +157,7 @@ and the proof test. Tests live in
       `test_url_glued_to_token_split` (40 rows), `test_url_only_input`
       (15 rows).
 
-- [ ] **Half-typed-then-sent.** User types `Gala` and accidentally hits
+- [x] **Half-typed-then-sent.** User types `Gala` and accidentally hits
       send (mobile fat-finger on the send button). Today the pipeline
       classifies this as low-confidence + offers did-you-mean, but the
       did-you-mean offer is wasteful — the user was almost certainly
@@ -174,7 +174,7 @@ and the proof test. Tests live in
       `test_partial_input_no_offer_when_token_too_short` (asserts
       `len < nlp_partial_input_min_token_len=3` skips the path).
 
-- [ ] **Multi-paragraph mega-input with question at end.** Users paste
+- [x] **Multi-paragraph mega-input with question at end.** Users paste
       news articles, betting forum posts, or chat-history dumps and
       append `bence Galatasaray kazanır mı?` at the bottom. §10.1 step
       0 length cap drops the **head** of the input (or the tail —
@@ -191,7 +191,7 @@ and the proof test. Tests live in
       `test_megainput_short_input_unchanged` (200 rows clean input
       assert zero step-0a invocations).
 
-- [ ] **Turkish-suffix-on-emoji.** `⚽nın`, `🟡🔴'a`, `🦅cilik` — users
+- [x] **Turkish-suffix-on-emoji.** `⚽nın`, `🟡🔴'a`, `🦅cilik` — users
       treat emoji as a noun and suffix-mark them. §10.33.3 strips
       emoji wholesale, which destroys the suffix evidence. **Correction:**
       promote suffixed-emoji to a *typed entity* — detect emoji + apostrophe
@@ -222,7 +222,7 @@ and the proof test. Tests live in
       heuristic: must be IMMEDIATELY followed by a Turkish-suffix
       character class with no space).
 
-- [ ] **Number-spelled-twice (redundant restatement).** `3 üç maç`,
+- [x] **Number-spelled-twice (redundant restatement).** `3 üç maç`,
       `1 bir gol`, `2-1 iki bir biten maç` — the user repeats the
       digit as a word for emphasis or speech-to-text artefact. §10.32.7
       handles digit-with-suffix; this is digit followed by its
@@ -235,7 +235,7 @@ and the proof test. Tests live in
       `test_numeric_non_redundant_preserved` (40 rows: `3 maçlık seri`
       contains digit + non-restating word, must NOT collapse).
 
-- [ ] **Random-case noise (beyond ALL-CAPS).** `gAlAtAsArAy MaÇı`,
+- [x] **Random-case noise (beyond ALL-CAPS).** `gAlAtAsArAy MaÇı`,
       `gALATASARAY`, `Galatasaray FENERBAHÇE`. §10.28.8 covers
       ALL-CAPS shouting; mixed-case with > 30% case flips inside
       tokens is not covered. **Correction:** detect via per-token
@@ -653,7 +653,7 @@ Each new closed table introduced in §10.34.1 + §10.34.4 ships its own
       since emoji-to-concept can encode unintended slurs)
 - [ ] `emoji_to_concept.tr.yaml` (≥ 30 rows; reviewers = nlp-curator + nlp-domain-football)
 - [ ] `time_of_day_shorthand.tr.yaml` (≥ 15 rows; reviewers = nlp-curator)
-- [ ] `numeric_redundant_restatement.tr.yaml` (≥ 40 rows; reviewers = nlp-curator)
+- [x] `numeric_redundant_restatement.tr.yaml` (≥ 40 rows; reviewers = nlp-curator)
 - [ ] `apostrophe_punctuation_substituted.tr.yaml` (≥ 90 rows;
       reviewers = nlp-curator)
 

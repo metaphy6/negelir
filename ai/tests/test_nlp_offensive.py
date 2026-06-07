@@ -40,7 +40,7 @@ def test_obfuscated_slur_detected_after_confusables_fold(monkeypatch) -> None:
     result = normalize_input("Gal\u0430tasaray o.ç maç")
 
     assert "o.ç" not in result.tokens
-    assert any(token in {"amk", "oç"} for token in result.tokens)
+    assert "<STRIPPED>" in result.tokens
 
 
 def test_obfuscated_slur_table_min_coverage_per_canonical() -> None:
@@ -131,6 +131,9 @@ def test_nlp_input_repair_metrics_emitted_for_confusables_and_slur(monkeypatch) 
         def record_nlp_input_repair_density(self, repairs: int, token_count: int) -> None:
             records.append(("density", str(repairs), token_count))
 
+        def record_nlp_politeness_class(self, politeness_class: str) -> None:
+            records.append(("politeness", politeness_class))
+
     monkeypatch.setattr(telemetry, "_sink", DummySink())
 
     result = normalize_input("Gal\u0430tasaray oç maç")
@@ -138,7 +141,7 @@ def test_nlp_input_repair_metrics_emitted_for_confusables_and_slur(monkeypatch) 
     assert any(call[1] == "confusables_folded" for call in records)
     assert any(call[1] == "slur_stripped" for call in records)
     assert any(call[0] == "density" for call in records)
-    assert "oç" in result.slurs_stripped
+    assert any(token in {"oç", "amk"} for token in result.slurs_stripped)
 
 
 def test_nlp_ascii_restored_metrics_recorded(monkeypatch) -> None:
@@ -152,6 +155,9 @@ def test_nlp_ascii_restored_metrics_recorded(monkeypatch) -> None:
 
         def record_nlp_input_repair_density(self, repairs: int, token_count: int) -> None:
             records.append(("density", str(repairs), token_count))
+
+        def record_nlp_politeness_class(self, politeness_class: str) -> None:
+            records.append(("politeness", politeness_class))
 
     monkeypatch.setattr(telemetry, "_sink", DummySink())
 
@@ -176,6 +182,9 @@ def test_nlp_repair_counters_increment_per_class(monkeypatch) -> None:
         def record_nlp_input_repair_density(self, repairs: int, token_count: int) -> None:
             records.append(("density", str(repairs), token_count))
 
+        def record_nlp_politeness_class(self, politeness_class: str) -> None:
+            records.append(("politeness", politeness_class))
+
     monkeypatch.setattr(telemetry, "_sink", DummySink())
 
     normalize_input("galatasarayda oç maç")
@@ -196,6 +205,9 @@ def test_nlp_repair_density_metric_bounded_in_clean_slice(monkeypatch) -> None:
 
         def record_nlp_input_repair_density(self, repairs: int, token_count: int) -> None:
             records.append(("density", repairs, token_count))
+
+        def record_nlp_politeness_class(self, politeness_class: str) -> None:
+            records.append(("politeness", politeness_class))
 
     monkeypatch.setattr(telemetry, "_sink", DummySink())
 

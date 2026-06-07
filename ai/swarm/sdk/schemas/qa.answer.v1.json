@@ -121,6 +121,10 @@
       ],
       "description": "§10.9 proofreader outcome. `pass` = clean; `blocked` = gate-fail surfaced; `redacted` = PII removed."
     },
+    "synthetic_prober": {
+      "type": ["boolean", "null"],
+      "description": "True when this answer is produced in response to a synthetic prober request."
+    },
     "tier_id_required": {
       "type": [
         "string",

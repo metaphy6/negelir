@@ -1144,27 +1144,14 @@ def test_nlp_gossip_aggregator_emits_divergence_alert_with_auto_quarantine() -> 
     """§10.32.12 proof: persistent wrong-state gossip emits critical alert."""
     from swarm.agents.nlp import NlpGossipAggregatorAgent  # noqa: PLC0415
 
-    def make_gossip_message(
-        pod_instance_id: str,
-        lexicon_set_sha: str,
-        intent_sha: str,
-        crf_sha: str,
-        calibration_version: str,
-        template_git_sha: str,
-        pipeline_version: str,
-    ) -> Message:
+    def make_gossip_message(pod_instance_id: str, signature: str) -> Message:
         return Message.new(
             topic=NLP_GOSSIP_V1,
             payload={
                 "kind": "nlp_lexicon_state_gossip",
                 "producer": "nlp.intent.v1",
                 "pod_instance_id": pod_instance_id,
-                "lexicon_set_sha": lexicon_set_sha,
-                "intent_sha": intent_sha,
-                "crf_sha": crf_sha,
-                "calibration_version": calibration_version,
-                "template_git_sha": template_git_sha,
-                "pipeline_version": pipeline_version,
+                "lexicon_state_signature": signature,
                 "emitted_at_utc": "2026-06-06T00:00:00Z",
             },
             producer="nlp.intent.v1",
@@ -1172,35 +1159,21 @@ def test_nlp_gossip_aggregator_emits_divergence_alert_with_auto_quarantine() -> 
 
     agent = NlpGossipAggregatorAgent()
 
-    good = (
-        "lex-1",
-        "intent-1",
-        "crf-1",
-        "cal-1",
-        "tmpl-1",
-        "pipe-1",
-    )
-    bad = (
-        "lex-2",
-        "intent-2",
-        "crf-2",
-        "cal-1",
-        "tmpl-1",
-        "pipe-1",
-    )
+    good = "good-signature-0001"
+    bad = "bad-signature-0002"
 
     # Round 1: establish modal tuple on two pods.
-    agent.handle(make_gossip_message("pod-A", *good))
-    agent.handle(make_gossip_message("pod-B", *good))
+    agent.handle(make_gossip_message("pod-A", good))
+    agent.handle(make_gossip_message("pod-B", good))
     assert not any(
         msg.payload.get("kind") == "lexicon_state_divergence"
-        for msg in agent.handle(make_gossip_message("pod-C", *bad))
+        for msg in agent.handle(make_gossip_message("pod-C", bad))
     )
 
-    # Round 2: send a good tuple again so the modal tuple stays good,
-    # then a second bad tuple from pod-C should trigger persistent divergence.
-    agent.handle(make_gossip_message("pod-A", *good))
-    events = agent.handle(make_gossip_message("pod-C", *bad))
+    # Round 2: send a good signature again so the modal stays good,
+    # then a second bad signature from pod-C should trigger divergence.
+    agent.handle(make_gossip_message("pod-A", good))
+    events = agent.handle(make_gossip_message("pod-C", bad))
 
     assert len(events) == 1
     alert = events[0]
@@ -1208,8 +1181,72 @@ def test_nlp_gossip_aggregator_emits_divergence_alert_with_auto_quarantine() -> 
     assert alert.payload["kind"] == "lexicon_state_divergence"
     assert alert.payload["severity"] == "critical"
     assert alert.payload["details"]["auto_quarantine"] is True
-    assert alert.payload["details"]["observed_lexicon_state"]["lexicon_set_sha"] == "lex-2"
-    assert alert.payload["details"]["expected_lexicon_state"]["lexicon_set_sha"] == "lex-1"
+    assert alert.payload["details"]["observed_lexicon_state_signature"] == bad
+    assert alert.payload["details"]["expected_lexicon_state_signature"] == good
+
+
+def test_nlp_gossip_aggregator_emits_no_modal_warning_for_tied_cluster() -> None:
+    """§10.32.12 proof: 2-vs-2 split produces no modal warning, not auto-quarantine."""
+    from swarm.agents.nlp import NlpGossipAggregatorAgent  # noqa: PLC0415
+
+    def make_gossip_message(pod_instance_id: str, signature: str) -> Message:
+        return Message.new(
+            topic=NLP_GOSSIP_V1,
+            payload={
+                "kind": "nlp_lexicon_state_gossip",
+                "producer": "nlp.intent.v1",
+                "pod_instance_id": pod_instance_id,
+                "lexicon_state_signature": signature,
+                "emitted_at_utc": "2026-06-06T00:00:00Z",
+            },
+            producer="nlp.intent.v1",
+        )
+
+    agent = NlpGossipAggregatorAgent()
+    a_sig = "clusterA-000001"
+    b_sig = "clusterB-000002"
+
+    agent.handle(make_gossip_message("pod-A", a_sig))
+    agent.handle(make_gossip_message("pod-B", a_sig))
+    agent.handle(make_gossip_message("pod-C", b_sig))
+    events = agent.handle(make_gossip_message("pod-D", b_sig))
+
+    assert any(
+        msg.payload.get("kind") == "lexicon_state_divergence_no_modal"
+        for msg in events
+    )
+    assert not any(msg.payload.get("kind") == "lexicon_state_divergence" for msg in events)
+
+
+def test_nlp_gossip_aggregator_warns_on_excess_pod_cardinality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§10.32.12 proof: gossip storm is bounded by nlp_gossip_max_pods."""
+    from common.config import cfg
+    from swarm.agents.nlp import NlpGossipAggregatorAgent  # noqa: PLC0415
+
+    def make_gossip_message(pod_instance_id: str, signature: str) -> Message:
+        return Message.new(
+            topic=NLP_GOSSIP_V1,
+            payload={
+                "kind": "nlp_lexicon_state_gossip",
+                "producer": "nlp.intent.v1",
+                "pod_instance_id": pod_instance_id,
+                "lexicon_state_signature": signature,
+                "emitted_at_utc": "2026-06-06T00:00:00Z",
+            },
+            producer="nlp.intent.v1",
+        )
+
+    monkeypatch.setattr(cfg, "nlp_gossip_max_pods", 2)
+
+    agent = NlpGossipAggregatorAgent()
+    events = []
+    events.extend(agent.handle(make_gossip_message("pod-A", "sig-A")))
+    events.extend(agent.handle(make_gossip_message("pod-B", "sig-B")))
+    events.extend(agent.handle(make_gossip_message("pod-C", "sig-C")))
+
+    assert any(msg.payload.get("kind") == "lexicon_gossip_storm" for msg in events)
 
 
 def test_nlp_answer_agent_subscribes_to_predict_approved_not_final() -> None:

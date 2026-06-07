@@ -34,3 +34,17 @@ def test_qa_answer_payload_preserves_preview_request_metadata() -> None:
     )
 
     assert payload["request_metadata"] == {"preview": True}
+
+
+def test_qa_answer_payload_preserves_synthetic_prober_request_metadata() -> None:
+    payload = _make_qa_answer_payload(
+        request_id="req-prober-001",
+        qa_correlation_id="corr-prober-001",
+        intent="predict.match_outcome",
+        kind="prediction",
+        answer_text="Bu bir prober cevabıdır.",
+        request_metadata={"synthetic_prober": True},
+        emitted_at_utc="2026-06-05T12:00:00Z",
+    )
+
+    assert payload["request_metadata"] == {"synthetic_prober": True}

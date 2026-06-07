@@ -33,6 +33,7 @@ def cmd_test(_argv):
         "ai/tests",
         "ai/swarm",
         "xops/mock/tests",
+        "xops/nlp/tests",
         "xops/versioning/tests",
     )
 
@@ -55,6 +56,7 @@ def cmd_test_fast(_argv):
         "ai/tests",
         "ai/swarm",
         "xops/mock/tests",
+        "xops/nlp/tests",
         "xops/versioning/tests",
         "-m", "not slow",
     )

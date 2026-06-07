@@ -152,6 +152,26 @@ class Config:
     nlp_pressure_humanize_off_s: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_PRESSURE_HUMANIZE_OFF_S", "60"
     )))
+    # §10.32.13 synthetic continuous prober cadence, corpus sizing,
+    # and template-only cost discipline for probe traffic.
+    nlp_prober_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_PROBER_INTERVAL_S", "60"
+    )))
+    nlp_prober_corpus_size: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_PROBER_CORPUS_SIZE", "50"
+    )))
+    nlp_prober_humanizer_disabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_PROBER_HUMANIZER_DISABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    nlp_eval_corpus_pr_max_added_rows_per_quarter: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_NLP_EVAL_CORPUS_PR_MAX_ADDED_ROWS_PER_QUARTER", "500"
+    )))
+    nlp_eval_corpus_review_required: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_EVAL_CORPUS_REVIEW_REQUIRED", "true"
+    ).lower() in ("true", "1", "yes"))
+    api_prober_bucket_rps: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_API_PROBER_BUCKET_RPS", "2"
+    )))
     # §10.19 sampled answer audit
     nlp_answer_sample_inverse: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_ANSWER_SAMPLE_INVERSE", "1000"
@@ -805,6 +825,14 @@ class Config:
     # nlp_digit_letter_fold_enabled: whether the digit-letter confusable fold
     #   stage runs (§10.24.3).
     nlp_digit_letter_fold_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_DIGIT_LETTER_FOLD_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_ocr_repair_force: when true, run OCR/photo-source repair even on inputs
+    #   that do not contain ligatures or soft-hyphens. Default false for clean
+    #   keyboard input.
+    nlp_ocr_repair_force: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_OCR_REPAIR_FORCE", "false").lower() in ("true", "1", "yes"))
+    # nlp_paste_max_newlines: paste-layout input with more than this many newlines
+    #   is left to the run-on-multi-q splitter instead of being treated as a single
+    #   recognition query. Default 4 for compact PDF/paste input sensitivity.
+    nlp_paste_max_newlines: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_PASTE_MAX_NEWLINES", "4")))
     # nlp_repeat_collapse_max_len: per-token cap for repeated-char collapse (§10.24.2).
     #   Tokens longer than this are treated as garbage and dropped before typo
     #   correction. Prevents DoS from huge repeated-input tokens.
@@ -839,6 +867,12 @@ class Config:
     nlp_predict_citation_hmac_required: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_NLP_PREDICT_CITATION_HMAC_REQUIRED", "warn"
     ))
+    # nlp_predict_prediction_id_determinism_required: verification policy for
+    #   consuming predict.approved.v1 prediction_id determinism (§10.29.12).
+    #   Values: off | warn | enforce. Default warn.
+    nlp_predict_prediction_id_determinism_required: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_PREDICT_PREDICTION_ID_DETERMINISM_REQUIRED", "warn"
+    ))
     # nlp_fairness_key: per-tenant virtual queue key for NLP intake (§10.23.1).
     #   Values: tenant_id | account_id | ip_bucket. Default account_id.
     nlp_fairness_key: str = field(default_factory=lambda: os.getenv("NEGELIR_NLP_FAIRNESS_KEY", "account_id"))
@@ -869,6 +903,9 @@ class Config:
     nlp_pipeline_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_PIPELINE_TIMEOUT_MS", "1800")))
     # nlp_dispatch_overhead_ms: bus round-trip from NLP → dispatcher.
     nlp_dispatch_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_DISPATCH_OVERHEAD_MS", "200")))
+    # nlp_flame_capture_overhead_floor_pct: minimum operator-side overhead for
+    #   NLP flame capture processing, expressed as a percentage of the budget.
+    nlp_flame_capture_overhead_floor_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_FLAME_CAPTURE_OVERHEAD_FLOOR_PCT", "5.0")))
     # nlp_consensus_overhead_ms: overhead for consuming predict.approved.v1
     #   inside the NLP pipeline (Phase 5 consensus consumer).
     nlp_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_CONSENSUS_OVERHEAD_MS", "100")))
@@ -1407,11 +1444,17 @@ class Config:
     #   before a canary promotion is allowed (§10.23.2).
     nlp_canary_min_shadow_hours: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_CANARY_MIN_SHADOW_HOURS", "72")))
     # nlp_canary_max_disagreement_rate: maximum tolerated total disagreement
-    #   rate for a canary promotion (§10.23.2).
+    #   rate for an intent-model canary promotion (§10.23.2).
     nlp_canary_max_disagreement_rate: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_CANARY_MAX_DISAGREEMENT_RATE", "0.03")))
     # nlp_canary_max_confidence_drift: maximum tolerated Δp95 confidence drift
-    #   for a canary promotion (§10.23.2).
+    #   for an intent-model canary promotion (§10.23.2).
     nlp_canary_max_confidence_drift: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_CANARY_MAX_CONFIDENCE_DRIFT", "0.05")))
+    # nlp_lexicon_canary_max_disagreement_pct: maximum tolerated total field
+    #   disagreement rate for a lexicon canary promotion (§10.31.15).
+    nlp_lexicon_canary_max_disagreement_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_LEXICON_CANARY_MAX_DISAGREEMENT_PCT", "0.02")))
+    # nlp_lexicon_canary_max_per_field_disagreement_pct: maximum tolerated per-field
+    #   disagreement rate for a lexicon canary promotion (§10.31.15).
+    nlp_lexicon_canary_max_per_field_disagreement_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_LEXICON_CANARY_MAX_PER_FIELD_DISAGREEMENT_PCT", "0.05")))
 
     # nlp_weekly_eval_sample_size: number of sampled queries for weekly eval
     #   re-run evaluation (§10.23.3). Default 2000.
@@ -1454,6 +1497,30 @@ class Config:
     # nlp_min_tokens: minimum normalized token count before the empty-input
     #   floor gate hands back a canned meta.help response (§10.24.13).
     nlp_min_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_MIN_TOKENS", "1")))
+    # nlp_partial_input_min_token_len: minimum single-token prefix length to
+    #   consider as a half-typed Turkish query prefix.
+    nlp_partial_input_min_token_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_PARTIAL_INPUT_MIN_TOKEN_LEN", "3")))
+    # nlp_partial_input_max_completions: maximum number of completion candidates
+    #   to offer for a partially typed input.
+    nlp_partial_input_max_completions: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_PARTIAL_INPUT_MAX_COMPLETIONS", "3")))
+    # nlp_megainput_min_chars: minimum raw-character length before mega-input
+    #   last-paragraph extraction is considered for long multi-paragraph paste.
+    nlp_megainput_min_chars: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_MEGAINPUT_MIN_CHARS", "1500")))
+    # nlp_random_case_threshold: per-token mixed-case flip ratio that triggers
+    #   automatic casefolding before gazetteer match.
+    nlp_random_case_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NLP_RANDOM_CASE_THRESHOLD", "0.30")))
+    # nlp_emoji_to_concept_enabled: whether emoji+suffix inputs promote to
+    #   typed concept entities instead of strip-only emoji.
+    nlp_emoji_to_concept_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_EMOJI_TO_CONCEPT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_numeric_redundant_restatement_enabled: collapse digit + number-word
+    #   restatement pairs into digit-only tokens.
+    nlp_numeric_redundant_restatement_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_NUMERIC_REDUNDANT_RESTATEMENT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_single_emoji_intent_enabled: whether single-emoji-only input is
+    #   routed to a closed Turkish clarification offer.
+    nlp_single_emoji_intent_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_SINGLE_EMOJI_INTENT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_time_of_day_shorthand_enabled: enable expansion of abbreviated time
+    #   of day forms like aks, sbh, gec.
+    nlp_time_of_day_shorthand_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_TIME_OF_DAY_SHORTHAND_ENABLED", "true").lower() in ("true", "1", "yes"))
     # nlp_fragment_detection_enabled: enable the Phase 10 §10.28.6 fragment
     #   / incomplete-sentence detector before the classifier.
     nlp_fragment_detection_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_FRAGMENT_DETECTION_ENABLED", "true").lower() in ("true", "1", "yes"))
@@ -2252,6 +2319,8 @@ class Config:
     # Maximum TTL for operator NLP kill-pattern arms. Events above this
     # ceiling are clamped on consumer-side to prevent stale forever-filters.
     opsctl_nlp_kill_max_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_NLP_KILL_MAX_TTL_S", "3600")))
+    opsctl_flame_capture_ttl_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_FLAME_CAPTURE_TTL_H", "24")))
+    opsctl_flame_capture_max_armed_per_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPSCTL_FLAME_CAPTURE_MAX_ARMED_PER_H", "10")))
     # Phase 8 §8.16.13 — realistic local Redis Streams latency budget used
     # by `make swarm.demo.live`. This must stay strictly below the hard
     # operator-facing ack timeout above.
@@ -3330,6 +3399,7 @@ class Config:
         _bounded("training_thresholds_holdout_acc", self.training_thresholds_holdout_acc, 0.0, 1.0)
         _bounded("training_thresholds_quarantine_max", self.training_thresholds_quarantine_max, 0.0, 1.0)
         _bounded("nlp_morph_min_confidence", self.nlp_morph_min_confidence, 0.0, 1.0)
+        _bounded("nlp_flame_capture_overhead_floor_pct", self.nlp_flame_capture_overhead_floor_pct, 0.0, 100.0)
 
         if not isinstance(self.nlp_morph_context_radius, int) or self.nlp_morph_context_radius < 0:
             issues.append(
@@ -3359,6 +3429,7 @@ class Config:
             ("swarm_retry_budget", self.swarm_retry_budget),
             ("swarm_dlq_max_len", self.swarm_dlq_max_len),
             ("swarm_pending_claim_sec", self.swarm_pending_claim_sec),
+            ("nlp_eval_corpus_pr_max_added_rows_per_quarter", self.nlp_eval_corpus_pr_max_added_rows_per_quarter),
             # Phase 5
             ("consensus_window_ms", self.consensus_window_ms),
             ("consensus_min_voters", self.consensus_min_voters),
@@ -3496,6 +3567,13 @@ class Config:
                 "opsctl_ack_timeout_ms"
             )
         _bounded("opsctl_nlp_kill_max_ttl_s", self.opsctl_nlp_kill_max_ttl_s, 1, 86_400)
+        _bounded("opsctl_flame_capture_ttl_h", self.opsctl_flame_capture_ttl_h, 1, 168)
+        _bounded(
+            "opsctl_flame_capture_max_armed_per_h",
+            self.opsctl_flame_capture_max_armed_per_h,
+            1,
+            1_000,
+        )
         _bounded("opsctl_spool_max_entries", self.opsctl_spool_max_entries, 1, 1_000_000)
         _bounded("opsctl_spool_flush_max_per_run", self.opsctl_spool_flush_max_per_run, 0, 1_000_000)
         _bounded("maint_ack_payload_max_bytes", self.maint_ack_payload_max_bytes, 64, 1_048_576)
@@ -3999,6 +4077,11 @@ class Config:
                 f"nlp_predict_citation_hmac_required={self.nlp_predict_citation_hmac_required!r} "
                 "must be 'off', 'warn', or 'enforce' (Phase 10 §10.21.8)"
             )
+        if self.nlp_predict_prediction_id_determinism_required not in ("off", "warn", "enforce"):
+            issues.append(
+                f"nlp_predict_prediction_id_determinism_required={self.nlp_predict_prediction_id_determinism_required!r} "
+                "must be 'off', 'warn', or 'enforce' (Phase 10 §10.29.12)"
+            )
         _bounded("qa_answer_hmac_grace_s", self.qa_answer_hmac_grace_s, 0, 604_800)
         if self.nlp_answer_envelope_hmac_required not in ("off", "warn", "enforce"):
             issues.append(
@@ -4059,6 +4142,8 @@ class Config:
         _bounded("nlp_canary_min_shadow_hours", self.nlp_canary_min_shadow_hours, 0, 8_760)
         _bounded("nlp_canary_max_disagreement_rate", self.nlp_canary_max_disagreement_rate, 0.0, 1.0)
         _bounded("nlp_canary_max_confidence_drift", self.nlp_canary_max_confidence_drift, 0.0, 1.0)
+        _bounded("nlp_lexicon_canary_max_disagreement_pct", self.nlp_lexicon_canary_max_disagreement_pct, 0.0, 1.0)
+        _bounded("nlp_lexicon_canary_max_per_field_disagreement_pct", self.nlp_lexicon_canary_max_per_field_disagreement_pct, 0.0, 1.0)
         _bounded("nlp_weekly_eval_sample_size", self.nlp_weekly_eval_sample_size, 1, 100_000)
         _bounded("nlp_weekly_eval_sample_max_chars", self.nlp_weekly_eval_sample_max_chars, 1, 10_000)
         _bounded("nlp_weekly_eval_max_accuracy_drop", self.nlp_weekly_eval_max_accuracy_drop, 0.0, 1.0)

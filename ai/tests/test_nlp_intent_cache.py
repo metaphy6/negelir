@@ -15,6 +15,7 @@ from typing import List
 
 from ai.common.config import Config
 from ai.nlp._intent_cache import IntentCache
+from nlp.eval._sample import _scrub_pii
 
 
 def test_intent_cache_basic_hit_and_miss():
@@ -131,6 +132,32 @@ def test_intent_cache_negative_cache_only():
     assert result is not None
     assert result[0] == "meta.unsupported"
     assert cache.size() == 1
+
+
+def test_l0_cache_key_does_not_depend_on_pii() -> None:
+    """The L0 cache key stays stable across equivalent PII-scrubbed queries."""
+    cache = IntentCache(max_entries=10, ttl_s=300, pod_id="pod")
+
+    raw_with_pii = "Galatasaray maçına 0532 123 45 67 ile geliyorum."
+    scrubbed_with_pii = _scrub_pii(raw_with_pii)
+    expected_normalized = "Galatasaray maçına <UNK> ile geliyorum."
+
+    assert scrubbed_with_pii == expected_normalized
+
+    key_with_pii = cache._make_key(
+        scrubbed_with_pii,
+        "tr-TR",
+        4,
+        "1.0",
+    )
+    key_without_pii = cache._make_key(
+        expected_normalized,
+        "tr-TR",
+        4,
+        "1.0",
+    )
+
+    assert key_with_pii == key_without_pii
 
 
 def test_intent_cache_update_existing_key():

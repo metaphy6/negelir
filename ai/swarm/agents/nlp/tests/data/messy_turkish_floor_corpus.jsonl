@@ -1,0 +1,1000 @@
+{"id": "mtf-0001", "text": "Galatasaray yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0002", "text": "Galatasaray yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0003", "text": "Galatasaray yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0004", "text": "galatasaray yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0005", "text": "Galatasaray yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0006", "text": "Galatasaray yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0007", "text": "GS yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0008", "text": "galatasaray yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0009", "text": "Galatasaray yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0010", "text": "Galatasaray yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0011", "text": "Galatasaray maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0012", "text": "Galatasaray maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0013", "text": "Galatasaray maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0014", "text": "galatasaray maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0015", "text": "Galatasaray maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0016", "text": "Galatasaray maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0017", "text": "GS maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0018", "text": "galatasaray maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0019", "text": "Galatasaray maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0020", "text": "Galatasaray maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0021", "text": "Galatasaray maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0022", "text": "Galatasaray macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0023", "text": "Galatasaray macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0024", "text": "galatasaray maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0025", "text": "Galatasaray maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0026", "text": "Galatasaray macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0027", "text": "GS maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0028", "text": "galatasaray maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0029", "text": "Galatasaray maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0030", "text": "Galatasaray maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0031", "text": "Galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0032", "text": "Galatasaray ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0033", "text": "Galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0034", "text": "galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0035", "text": "Galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0036", "text": "Galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0037", "text": "GS ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0038", "text": "galatasaray ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0039", "text": "Galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0040", "text": "Galatasaray ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0041", "text": "Galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0042", "text": "Galatasaraynin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0043", "text": "Galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0044", "text": "galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0045", "text": "Galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0046", "text": "Galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0047", "text": "GSnın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0048", "text": "galatasaraynın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0049", "text": "Galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0050", "text": "Galatasaraynın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0051", "text": "Galatasaray maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0052", "text": "Galatasaray maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0053", "text": "Galatasaray maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0054", "text": "galatasaray maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0055", "text": "Galatasaray maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0056", "text": "Galatasaray maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0057", "text": "GS maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0058", "text": "galatasaray maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0059", "text": "Galatasaray maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0060", "text": "Galatasaray maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0061", "text": "Gelecek hafta Galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0062", "text": "Gelecek hafta Galatasaraynin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0063", "text": "Gelecek hafta Galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0064", "text": "gelecek hafta galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0065", "text": "Gelecek hafta Galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0066", "text": "Gelecek hafta Galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0067", "text": "Gelecek hafta GSnın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0068", "text": "Gelecek hafta galatasaraynın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0069", "text": "Gelecek hafta Galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0070", "text": "Gelecek hafta Galatasaraynın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0071", "text": "Galatasaray maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0072", "text": "Galatasaray macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0073", "text": "Galatasaray macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0074", "text": "galatasaray maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0075", "text": "Galatasaray maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0076", "text": "Galatasaray maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0077", "text": "GS maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0078", "text": "galatasaray maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0079", "text": "Galatasaray maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0080", "text": "Galatasaray maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0081", "text": "Galatasaray maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0082", "text": "Galatasaray maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0083", "text": "Galatasaray maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0084", "text": "galatasaray maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0085", "text": "Galatasaray maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0086", "text": "Galatasaray maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0087", "text": "GS maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0088", "text": "galatasaray maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0089", "text": "Galatasaray maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0090", "text": "Galatasaray maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0091", "text": "Galatasaray maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0092", "text": "Galatasaray maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0093", "text": "Galatasaray maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0094", "text": "galatasaray maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0095", "text": "Galatasaray maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0096", "text": "Galatasaray maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0097", "text": "GS maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0098", "text": "galatasaray maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0099", "text": "Galatasaray maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0100", "text": "Galatasaray maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "galatasaray_sk"}
+{"id": "mtf-0101", "text": "Fenerbahçe yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0102", "text": "Fenerbahce yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0103", "text": "Fenerbahçe yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0104", "text": "fenerbahçe yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0105", "text": "Fenerbahçe yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0106", "text": "Fenerbahçe yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0107", "text": "FB yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0108", "text": "fenerbahce yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0109", "text": "Fenerbahçe yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0110", "text": "Fenerbahçe yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0111", "text": "Fenerbahçe maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0112", "text": "Fenerbahce maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0113", "text": "Fenerbahçe maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0114", "text": "fenerbahçe maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0115", "text": "Fenerbahçe maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0116", "text": "Fenerbahçe maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0117", "text": "FB maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0118", "text": "fenerbahce maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0119", "text": "Fenerbahçe maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0120", "text": "Fenerbahçe maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0121", "text": "Fenerbahçe maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0122", "text": "Fenerbahce macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0123", "text": "Fenerbahçe macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0124", "text": "fenerbahçe maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0125", "text": "Fenerbahçe maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0126", "text": "Fenerbahçe macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0127", "text": "FB maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0128", "text": "fenerbahce maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0129", "text": "Fenerbahçe maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0130", "text": "Fenerbahçe maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0131", "text": "Fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0132", "text": "Fenerbahce ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0133", "text": "Fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0134", "text": "fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0135", "text": "Fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0136", "text": "Fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0137", "text": "FB ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0138", "text": "fenerbahce ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0139", "text": "Fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0140", "text": "Fenerbahçe ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0141", "text": "Fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0142", "text": "Fenerbahcenin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0143", "text": "Fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0144", "text": "fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0145", "text": "Fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0146", "text": "Fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0147", "text": "FBnın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0148", "text": "fenerbahcenın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0149", "text": "Fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0150", "text": "Fenerbahçenın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0151", "text": "Fenerbahçe maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0152", "text": "Fenerbahce maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0153", "text": "Fenerbahçe maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0154", "text": "fenerbahçe maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0155", "text": "Fenerbahçe maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0156", "text": "Fenerbahçe maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0157", "text": "FB maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0158", "text": "fenerbahce maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0159", "text": "Fenerbahçe maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0160", "text": "Fenerbahçe maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0161", "text": "Gelecek hafta Fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0162", "text": "Gelecek hafta Fenerbahcenin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0163", "text": "Gelecek hafta Fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0164", "text": "gelecek hafta fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0165", "text": "Gelecek hafta Fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0166", "text": "Gelecek hafta Fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0167", "text": "Gelecek hafta FBnın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0168", "text": "Gelecek hafta fenerbahcenın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0169", "text": "Gelecek hafta Fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0170", "text": "Gelecek hafta Fenerbahçenın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0171", "text": "Fenerbahçe maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0172", "text": "Fenerbahce macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0173", "text": "Fenerbahçe macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0174", "text": "fenerbahçe maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0175", "text": "Fenerbahçe maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0176", "text": "Fenerbahçe maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0177", "text": "FB maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0178", "text": "fenerbahce maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0179", "text": "Fenerbahçe maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0180", "text": "Fenerbahçe maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0181", "text": "Fenerbahçe maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0182", "text": "Fenerbahce maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0183", "text": "Fenerbahçe maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0184", "text": "fenerbahçe maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0185", "text": "Fenerbahçe maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0186", "text": "Fenerbahçe maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0187", "text": "FB maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0188", "text": "fenerbahce maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0189", "text": "Fenerbahçe maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0190", "text": "Fenerbahçe maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0191", "text": "Fenerbahçe maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0192", "text": "Fenerbahce maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0193", "text": "Fenerbahçe maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0194", "text": "fenerbahçe maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0195", "text": "Fenerbahçe maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0196", "text": "Fenerbahçe maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0197", "text": "FB maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0198", "text": "fenerbahce maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0199", "text": "Fenerbahçe maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0200", "text": "Fenerbahçe maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "fenerbahce_sk"}
+{"id": "mtf-0201", "text": "Beşiktaş yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0202", "text": "Besiktas yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0203", "text": "Beşiktaş yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0204", "text": "beşiktaş yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0205", "text": "Beşiktaş yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0206", "text": "Beşiktaş yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0207", "text": "BJK yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0208", "text": "besiktas yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0209", "text": "Beşiktaş yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0210", "text": "Beşiktaş yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0211", "text": "Beşiktaş maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0212", "text": "Besiktas maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0213", "text": "Beşiktaş maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0214", "text": "beşiktaş maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0215", "text": "Beşiktaş maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0216", "text": "Beşiktaş maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0217", "text": "BJK maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0218", "text": "besiktas maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0219", "text": "Beşiktaş maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0220", "text": "Beşiktaş maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0221", "text": "Beşiktaş maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0222", "text": "Besiktas macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0223", "text": "Beşiktaş macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0224", "text": "beşiktaş maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0225", "text": "Beşiktaş maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0226", "text": "Beşiktaş macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0227", "text": "BJK maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0228", "text": "besiktas maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0229", "text": "Beşiktaş maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0230", "text": "Beşiktaş maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0231", "text": "Beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0232", "text": "Besiktas ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0233", "text": "Beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0234", "text": "beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0235", "text": "Beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0236", "text": "Beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0237", "text": "BJK ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0238", "text": "besiktas ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0239", "text": "Beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0240", "text": "Beşiktaş ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0241", "text": "Beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0242", "text": "Besiktasnin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0243", "text": "Beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0244", "text": "beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0245", "text": "Beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0246", "text": "Beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0247", "text": "BJKnın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0248", "text": "besiktasnın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0249", "text": "Beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0250", "text": "Beşiktaşnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0251", "text": "Beşiktaş maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0252", "text": "Besiktas maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0253", "text": "Beşiktaş maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0254", "text": "beşiktaş maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0255", "text": "Beşiktaş maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0256", "text": "Beşiktaş maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0257", "text": "BJK maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0258", "text": "besiktas maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0259", "text": "Beşiktaş maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0260", "text": "Beşiktaş maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0261", "text": "Gelecek hafta Beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0262", "text": "Gelecek hafta Besiktasnin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0263", "text": "Gelecek hafta Beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0264", "text": "gelecek hafta beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0265", "text": "Gelecek hafta Beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0266", "text": "Gelecek hafta Beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0267", "text": "Gelecek hafta BJKnın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0268", "text": "Gelecek hafta besiktasnın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0269", "text": "Gelecek hafta Beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0270", "text": "Gelecek hafta Beşiktaşnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0271", "text": "Beşiktaş maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0272", "text": "Besiktas macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0273", "text": "Beşiktaş macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0274", "text": "beşiktaş maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0275", "text": "Beşiktaş maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0276", "text": "Beşiktaş maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0277", "text": "BJK maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0278", "text": "besiktas maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0279", "text": "Beşiktaş maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0280", "text": "Beşiktaş maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0281", "text": "Beşiktaş maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0282", "text": "Besiktas maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0283", "text": "Beşiktaş maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0284", "text": "beşiktaş maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0285", "text": "Beşiktaş maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0286", "text": "Beşiktaş maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0287", "text": "BJK maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0288", "text": "besiktas maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0289", "text": "Beşiktaş maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0290", "text": "Beşiktaş maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0291", "text": "Beşiktaş maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0292", "text": "Besiktas maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0293", "text": "Beşiktaş maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0294", "text": "beşiktaş maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0295", "text": "Beşiktaş maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0296", "text": "Beşiktaş maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0297", "text": "BJK maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0298", "text": "besiktas maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0299", "text": "Beşiktaş maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0300", "text": "Beşiktaş maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "besiktas_jk"}
+{"id": "mtf-0301", "text": "Trabzonspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0302", "text": "Trabzonspor yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0303", "text": "Trabzonspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0304", "text": "trabzonspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0305", "text": "Trabzonspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0306", "text": "Trabzonspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0307", "text": "TS yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0308", "text": "trabzonspor yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0309", "text": "Trabzonspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0310", "text": "Trabzonspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0311", "text": "Trabzonspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0312", "text": "Trabzonspor maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0313", "text": "Trabzonspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0314", "text": "trabzonspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0315", "text": "Trabzonspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0316", "text": "Trabzonspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0317", "text": "TS maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0318", "text": "trabzonspor maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0319", "text": "Trabzonspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0320", "text": "Trabzonspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0321", "text": "Trabzonspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0322", "text": "Trabzonspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0323", "text": "Trabzonspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0324", "text": "trabzonspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0325", "text": "Trabzonspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0326", "text": "Trabzonspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0327", "text": "TS maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0328", "text": "trabzonspor maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0329", "text": "Trabzonspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0330", "text": "Trabzonspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0331", "text": "Trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0332", "text": "Trabzonspor ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0333", "text": "Trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0334", "text": "trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0335", "text": "Trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0336", "text": "Trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0337", "text": "TS ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0338", "text": "trabzonspor ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0339", "text": "Trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0340", "text": "Trabzonspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0341", "text": "Trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0342", "text": "Trabzonspornin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0343", "text": "Trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0344", "text": "trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0345", "text": "Trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0346", "text": "Trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0347", "text": "TSnın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0348", "text": "trabzonspornın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0349", "text": "Trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0350", "text": "Trabzonspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0351", "text": "Trabzonspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0352", "text": "Trabzonspor maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0353", "text": "Trabzonspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0354", "text": "trabzonspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0355", "text": "Trabzonspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0356", "text": "Trabzonspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0357", "text": "TS maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0358", "text": "trabzonspor maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0359", "text": "Trabzonspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0360", "text": "Trabzonspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0361", "text": "Gelecek hafta Trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0362", "text": "Gelecek hafta Trabzonspornin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0363", "text": "Gelecek hafta Trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0364", "text": "gelecek hafta trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0365", "text": "Gelecek hafta Trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0366", "text": "Gelecek hafta Trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0367", "text": "Gelecek hafta TSnın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0368", "text": "Gelecek hafta trabzonspornın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0369", "text": "Gelecek hafta Trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0370", "text": "Gelecek hafta Trabzonspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0371", "text": "Trabzonspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0372", "text": "Trabzonspor macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0373", "text": "Trabzonspor macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0374", "text": "trabzonspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0375", "text": "Trabzonspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0376", "text": "Trabzonspor maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0377", "text": "TS maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0378", "text": "trabzonspor maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0379", "text": "Trabzonspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0380", "text": "Trabzonspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0381", "text": "Trabzonspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0382", "text": "Trabzonspor maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0383", "text": "Trabzonspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0384", "text": "trabzonspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0385", "text": "Trabzonspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0386", "text": "Trabzonspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0387", "text": "TS maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0388", "text": "trabzonspor maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0389", "text": "Trabzonspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0390", "text": "Trabzonspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0391", "text": "Trabzonspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0392", "text": "Trabzonspor maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0393", "text": "Trabzonspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0394", "text": "trabzonspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0395", "text": "Trabzonspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0396", "text": "Trabzonspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0397", "text": "TS maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0398", "text": "trabzonspor maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0399", "text": "Trabzonspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0400", "text": "Trabzonspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "trabzonspor"}
+{"id": "mtf-0401", "text": "Başakşehir yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0402", "text": "Basaksehir yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0403", "text": "Başakşehir yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0404", "text": "başakşehir yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0405", "text": "Başakşehir yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0406", "text": "Başakşehir yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0407", "text": "Basaksehir yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0408", "text": "basaksehir yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0409", "text": "Başakşehir yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0410", "text": "Başakşehir yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0411", "text": "Başakşehir maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0412", "text": "Basaksehir maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0413", "text": "Başakşehir maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0414", "text": "başakşehir maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0415", "text": "Başakşehir maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0416", "text": "Başakşehir maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0417", "text": "Basaksehir maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0418", "text": "basaksehir maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0419", "text": "Başakşehir maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0420", "text": "Başakşehir maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0421", "text": "Başakşehir maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0422", "text": "Basaksehir macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0423", "text": "Başakşehir macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0424", "text": "başakşehir maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0425", "text": "Başakşehir maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0426", "text": "Başakşehir macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0427", "text": "Basaksehir maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0428", "text": "basaksehir maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0429", "text": "Başakşehir maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0430", "text": "Başakşehir maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0431", "text": "Başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0432", "text": "Basaksehir ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0433", "text": "Başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0434", "text": "başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0435", "text": "Başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0436", "text": "Başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0437", "text": "Basaksehir ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0438", "text": "basaksehir ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0439", "text": "Başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0440", "text": "Başakşehir ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0441", "text": "Başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0442", "text": "Basaksehirnin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0443", "text": "Başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0444", "text": "başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0445", "text": "Başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0446", "text": "Başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0447", "text": "Basaksehirnın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0448", "text": "basaksehirnın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0449", "text": "Başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0450", "text": "Başakşehirnın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0451", "text": "Başakşehir maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0452", "text": "Basaksehir maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0453", "text": "Başakşehir maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0454", "text": "başakşehir maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0455", "text": "Başakşehir maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0456", "text": "Başakşehir maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0457", "text": "Basaksehir maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0458", "text": "basaksehir maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0459", "text": "Başakşehir maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0460", "text": "Başakşehir maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0461", "text": "Gelecek hafta Başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0462", "text": "Gelecek hafta Basaksehirnin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0463", "text": "Gelecek hafta Başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0464", "text": "gelecek hafta başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0465", "text": "Gelecek hafta Başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0466", "text": "Gelecek hafta Başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0467", "text": "Gelecek hafta Basaksehirnın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0468", "text": "Gelecek hafta basaksehirnın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0469", "text": "Gelecek hafta Başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0470", "text": "Gelecek hafta Başakşehirnın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0471", "text": "Başakşehir maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0472", "text": "Basaksehir macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0473", "text": "Başakşehir macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0474", "text": "başakşehir maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0475", "text": "Başakşehir maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0476", "text": "Başakşehir maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0477", "text": "Basaksehir maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0478", "text": "basaksehir maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0479", "text": "Başakşehir maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0480", "text": "Başakşehir maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0481", "text": "Başakşehir maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0482", "text": "Basaksehir maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0483", "text": "Başakşehir maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0484", "text": "başakşehir maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0485", "text": "Başakşehir maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0486", "text": "Başakşehir maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0487", "text": "Basaksehir maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0488", "text": "basaksehir maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0489", "text": "Başakşehir maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0490", "text": "Başakşehir maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0491", "text": "Başakşehir maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0492", "text": "Basaksehir maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0493", "text": "Başakşehir maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0494", "text": "başakşehir maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0495", "text": "Başakşehir maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0496", "text": "Başakşehir maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0497", "text": "Basaksehir maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0498", "text": "basaksehir maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0499", "text": "Başakşehir maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0500", "text": "Başakşehir maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "istanbul_basaksehir_fk"}
+{"id": "mtf-0501", "text": "Antalyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0502", "text": "Antalyaspor yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0503", "text": "Antalyaspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0504", "text": "antalyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0505", "text": "Antalyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0506", "text": "Antalyaspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0507", "text": "Antalya yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0508", "text": "antalyaspor yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0509", "text": "Antalyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0510", "text": "Antalyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0511", "text": "Antalyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0512", "text": "Antalyaspor maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0513", "text": "Antalyaspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0514", "text": "antalyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0515", "text": "Antalyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0516", "text": "Antalyaspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0517", "text": "Antalya maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0518", "text": "antalyaspor maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0519", "text": "Antalyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0520", "text": "Antalyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0521", "text": "Antalyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0522", "text": "Antalyaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0523", "text": "Antalyaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0524", "text": "antalyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0525", "text": "Antalyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0526", "text": "Antalyaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0527", "text": "Antalya maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0528", "text": "antalyaspor maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0529", "text": "Antalyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0530", "text": "Antalyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0531", "text": "Antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0532", "text": "Antalyaspor ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0533", "text": "Antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0534", "text": "antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0535", "text": "Antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0536", "text": "Antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0537", "text": "Antalya ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0538", "text": "antalyaspor ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0539", "text": "Antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0540", "text": "Antalyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0541", "text": "Antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0542", "text": "Antalyaspornin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0543", "text": "Antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0544", "text": "antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0545", "text": "Antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0546", "text": "Antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0547", "text": "Antalyanın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0548", "text": "antalyaspornın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0549", "text": "Antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0550", "text": "Antalyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0551", "text": "Antalyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0552", "text": "Antalyaspor maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0553", "text": "Antalyaspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0554", "text": "antalyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0555", "text": "Antalyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0556", "text": "Antalyaspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0557", "text": "Antalya maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0558", "text": "antalyaspor maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0559", "text": "Antalyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0560", "text": "Antalyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0561", "text": "Gelecek hafta Antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0562", "text": "Gelecek hafta Antalyaspornin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0563", "text": "Gelecek hafta Antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0564", "text": "gelecek hafta antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0565", "text": "Gelecek hafta Antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0566", "text": "Gelecek hafta Antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0567", "text": "Gelecek hafta Antalyanın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0568", "text": "Gelecek hafta antalyaspornın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0569", "text": "Gelecek hafta Antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0570", "text": "Gelecek hafta Antalyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0571", "text": "Antalyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0572", "text": "Antalyaspor macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0573", "text": "Antalyaspor macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0574", "text": "antalyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0575", "text": "Antalyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0576", "text": "Antalyaspor maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0577", "text": "Antalya maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0578", "text": "antalyaspor maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0579", "text": "Antalyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0580", "text": "Antalyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0581", "text": "Antalyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0582", "text": "Antalyaspor maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0583", "text": "Antalyaspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0584", "text": "antalyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0585", "text": "Antalyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0586", "text": "Antalyaspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0587", "text": "Antalya maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0588", "text": "antalyaspor maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0589", "text": "Antalyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0590", "text": "Antalyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0591", "text": "Antalyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0592", "text": "Antalyaspor maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0593", "text": "Antalyaspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0594", "text": "antalyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0595", "text": "Antalyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0596", "text": "Antalyaspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0597", "text": "Antalya maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0598", "text": "antalyaspor maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0599", "text": "Antalyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0600", "text": "Antalyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "antalyaspor"}
+{"id": "mtf-0601", "text": "Çaykur Rizespor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0602", "text": "Caykur Rizespor yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0603", "text": "Çaykur Rizespor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0604", "text": "çaykur rizespor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0605", "text": "Çaykur Rizespor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0606", "text": "Çaykur Rizespor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0607", "text": "Rizespor yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0608", "text": "rizespor yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0609", "text": "Çaykur Rizespor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0610", "text": "Çaykur Rizespor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "rizespor"}
+{"id": "mtf-0611", "text": "Çaykur Rizespor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0612", "text": "Caykur Rizespor maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0613", "text": "Çaykur Rizespor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0614", "text": "çaykur rizespor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0615", "text": "Çaykur Rizespor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0616", "text": "Çaykur Rizespor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0617", "text": "Rizespor maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0618", "text": "rizespor maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0619", "text": "Çaykur Rizespor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0620", "text": "Çaykur Rizespor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "rizespor"}
+{"id": "mtf-0621", "text": "Çaykur Rizespor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0622", "text": "Caykur Rizespor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0623", "text": "Çaykur Rizespor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0624", "text": "çaykur rizespor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0625", "text": "Çaykur Rizespor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0626", "text": "Çaykur Rizespor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0627", "text": "Rizespor maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0628", "text": "rizespor maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0629", "text": "Çaykur Rizespor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0630", "text": "Çaykur Rizespor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "rizespor"}
+{"id": "mtf-0631", "text": "Çaykur Rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0632", "text": "Caykur Rizespor ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0633", "text": "Çaykur Rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0634", "text": "çaykur rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0635", "text": "Çaykur Rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0636", "text": "Çaykur Rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0637", "text": "Rizespor ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0638", "text": "rizespor ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0639", "text": "Çaykur Rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0640", "text": "Çaykur Rizespor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "rizespor"}
+{"id": "mtf-0641", "text": "Çaykur Rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0642", "text": "Caykur Rizespornin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0643", "text": "Çaykur Rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0644", "text": "çaykur rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0645", "text": "Çaykur Rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0646", "text": "Çaykur Rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0647", "text": "Rizespornın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0648", "text": "rizespornın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0649", "text": "Çaykur Rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0650", "text": "Çaykur Rizespornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "rizespor"}
+{"id": "mtf-0651", "text": "Çaykur Rizespor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0652", "text": "Caykur Rizespor maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0653", "text": "Çaykur Rizespor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0654", "text": "çaykur rizespor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0655", "text": "Çaykur Rizespor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0656", "text": "Çaykur Rizespor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0657", "text": "Rizespor maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0658", "text": "rizespor maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0659", "text": "Çaykur Rizespor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0660", "text": "Çaykur Rizespor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "rizespor"}
+{"id": "mtf-0661", "text": "Gelecek hafta Çaykur Rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0662", "text": "Gelecek hafta Caykur Rizespornin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0663", "text": "Gelecek hafta Çaykur Rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0664", "text": "gelecek hafta çaykur rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0665", "text": "Gelecek hafta Çaykur Rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0666", "text": "Gelecek hafta Çaykur Rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0667", "text": "Gelecek hafta Rizespornın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0668", "text": "Gelecek hafta rizespornın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0669", "text": "Gelecek hafta Çaykur Rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0670", "text": "Gelecek hafta Çaykur Rizespornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "rizespor"}
+{"id": "mtf-0671", "text": "Çaykur Rizespor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0672", "text": "Caykur Rizespor macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0673", "text": "Çaykur Rizespor macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0674", "text": "çaykur rizespor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0675", "text": "Çaykur Rizespor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0676", "text": "Çaykur Rizespor maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0677", "text": "Rizespor maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0678", "text": "rizespor maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0679", "text": "Çaykur Rizespor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0680", "text": "Çaykur Rizespor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "rizespor"}
+{"id": "mtf-0681", "text": "Çaykur Rizespor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0682", "text": "Caykur Rizespor maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0683", "text": "Çaykur Rizespor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0684", "text": "çaykur rizespor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0685", "text": "Çaykur Rizespor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0686", "text": "Çaykur Rizespor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0687", "text": "Rizespor maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0688", "text": "rizespor maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0689", "text": "Çaykur Rizespor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0690", "text": "Çaykur Rizespor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "rizespor"}
+{"id": "mtf-0691", "text": "Çaykur Rizespor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0692", "text": "Caykur Rizespor maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0693", "text": "Çaykur Rizespor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0694", "text": "çaykur rizespor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0695", "text": "Çaykur Rizespor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0696", "text": "Çaykur Rizespor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0697", "text": "Rizespor maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0698", "text": "rizespor maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0699", "text": "Çaykur Rizespor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0700", "text": "Çaykur Rizespor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "rizespor"}
+{"id": "mtf-0701", "text": "Bursaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0702", "text": "Bursaspor yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0703", "text": "Bursaspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0704", "text": "bursaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0705", "text": "Bursaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0706", "text": "Bursaspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0707", "text": "Bursaspor yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0708", "text": "bursaspor yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0709", "text": "Bursaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0710", "text": "Bursaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0711", "text": "Bursaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0712", "text": "Bursaspor maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0713", "text": "Bursaspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0714", "text": "bursaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0715", "text": "Bursaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0716", "text": "Bursaspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0717", "text": "Bursaspor maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0718", "text": "bursaspor maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0719", "text": "Bursaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0720", "text": "Bursaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0721", "text": "Bursaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0722", "text": "Bursaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0723", "text": "Bursaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0724", "text": "bursaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0725", "text": "Bursaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0726", "text": "Bursaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0727", "text": "Bursaspor maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0728", "text": "bursaspor maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0729", "text": "Bursaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0730", "text": "Bursaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0731", "text": "Bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0732", "text": "Bursaspor ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0733", "text": "Bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0734", "text": "bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0735", "text": "Bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0736", "text": "Bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0737", "text": "Bursaspor ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0738", "text": "bursaspor ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0739", "text": "Bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0740", "text": "Bursaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0741", "text": "Bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0742", "text": "Bursaspornin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0743", "text": "Bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0744", "text": "bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0745", "text": "Bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0746", "text": "Bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0747", "text": "Bursaspornın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0748", "text": "bursaspornın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0749", "text": "Bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0750", "text": "Bursaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0751", "text": "Bursaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0752", "text": "Bursaspor maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0753", "text": "Bursaspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0754", "text": "bursaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0755", "text": "Bursaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0756", "text": "Bursaspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0757", "text": "Bursaspor maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0758", "text": "bursaspor maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0759", "text": "Bursaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0760", "text": "Bursaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0761", "text": "Gelecek hafta Bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0762", "text": "Gelecek hafta Bursaspornin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0763", "text": "Gelecek hafta Bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0764", "text": "gelecek hafta bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0765", "text": "Gelecek hafta Bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0766", "text": "Gelecek hafta Bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0767", "text": "Gelecek hafta Bursaspornın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0768", "text": "Gelecek hafta bursaspornın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0769", "text": "Gelecek hafta Bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0770", "text": "Gelecek hafta Bursaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0771", "text": "Bursaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0772", "text": "Bursaspor macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0773", "text": "Bursaspor macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0774", "text": "bursaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0775", "text": "Bursaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0776", "text": "Bursaspor maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0777", "text": "Bursaspor maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0778", "text": "bursaspor maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0779", "text": "Bursaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0780", "text": "Bursaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0781", "text": "Bursaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0782", "text": "Bursaspor maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0783", "text": "Bursaspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0784", "text": "bursaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0785", "text": "Bursaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0786", "text": "Bursaspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0787", "text": "Bursaspor maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0788", "text": "bursaspor maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0789", "text": "Bursaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0790", "text": "Bursaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0791", "text": "Bursaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0792", "text": "Bursaspor maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0793", "text": "Bursaspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0794", "text": "bursaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0795", "text": "Bursaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0796", "text": "Bursaspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0797", "text": "Bursaspor maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0798", "text": "bursaspor maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0799", "text": "Bursaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0800", "text": "Bursaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "bursaspor"}
+{"id": "mtf-0801", "text": "Kayserispor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0802", "text": "Kayserispor yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0803", "text": "Kayserispor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0804", "text": "kayserispor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0805", "text": "Kayserispor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0806", "text": "Kayserispor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0807", "text": "Kayserispor yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0808", "text": "kayserispor yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0809", "text": "Kayserispor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0810", "text": "Kayserispor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0811", "text": "Kayserispor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0812", "text": "Kayserispor maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0813", "text": "Kayserispor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0814", "text": "kayserispor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0815", "text": "Kayserispor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0816", "text": "Kayserispor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0817", "text": "Kayserispor maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0818", "text": "kayserispor maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0819", "text": "Kayserispor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0820", "text": "Kayserispor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0821", "text": "Kayserispor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0822", "text": "Kayserispor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0823", "text": "Kayserispor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0824", "text": "kayserispor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0825", "text": "Kayserispor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0826", "text": "Kayserispor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0827", "text": "Kayserispor maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0828", "text": "kayserispor maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0829", "text": "Kayserispor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0830", "text": "Kayserispor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0831", "text": "Kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0832", "text": "Kayserispor ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0833", "text": "Kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0834", "text": "kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0835", "text": "Kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0836", "text": "Kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0837", "text": "Kayserispor ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0838", "text": "kayserispor ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0839", "text": "Kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0840", "text": "Kayserispor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0841", "text": "Kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0842", "text": "Kayserispornin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0843", "text": "Kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0844", "text": "kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0845", "text": "Kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0846", "text": "Kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0847", "text": "Kayserispornın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0848", "text": "kayserispornın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0849", "text": "Kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0850", "text": "Kayserispornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0851", "text": "Kayserispor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0852", "text": "Kayserispor maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0853", "text": "Kayserispor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0854", "text": "kayserispor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0855", "text": "Kayserispor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0856", "text": "Kayserispor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0857", "text": "Kayserispor maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0858", "text": "kayserispor maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0859", "text": "Kayserispor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0860", "text": "Kayserispor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0861", "text": "Gelecek hafta Kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0862", "text": "Gelecek hafta Kayserispornin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0863", "text": "Gelecek hafta Kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0864", "text": "gelecek hafta kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0865", "text": "Gelecek hafta Kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0866", "text": "Gelecek hafta Kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0867", "text": "Gelecek hafta Kayserispornın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0868", "text": "Gelecek hafta kayserispornın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0869", "text": "Gelecek hafta Kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0870", "text": "Gelecek hafta Kayserispornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0871", "text": "Kayserispor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0872", "text": "Kayserispor macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0873", "text": "Kayserispor macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0874", "text": "kayserispor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0875", "text": "Kayserispor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0876", "text": "Kayserispor maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0877", "text": "Kayserispor maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0878", "text": "kayserispor maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0879", "text": "Kayserispor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0880", "text": "Kayserispor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0881", "text": "Kayserispor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0882", "text": "Kayserispor maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0883", "text": "Kayserispor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0884", "text": "kayserispor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0885", "text": "Kayserispor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0886", "text": "Kayserispor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0887", "text": "Kayserispor maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0888", "text": "kayserispor maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0889", "text": "Kayserispor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0890", "text": "Kayserispor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0891", "text": "Kayserispor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0892", "text": "Kayserispor maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0893", "text": "Kayserispor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0894", "text": "kayserispor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0895", "text": "Kayserispor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0896", "text": "Kayserispor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0897", "text": "Kayserispor maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0898", "text": "kayserispor maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0899", "text": "Kayserispor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0900", "text": "Kayserispor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "kayserispor"}
+{"id": "mtf-0901", "text": "Alanyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0902", "text": "Alanyaspor yarinki maci kim kazanir?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0903", "text": "Alanyaspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0904", "text": "alanyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0905", "text": "Alanyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0906", "text": "Alanyaspor yarınki maci kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0907", "text": "Alanya yarınki maçı kim kazanır??", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0908", "text": "alanyaspor yarınki maçı kim kazanır ya?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0909", "text": "Alanyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0910", "text": "Alanyaspor yarınki maçı kim kazanır?", "expected_intent": "predict.match_outcome", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0911", "text": "Alanyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0912", "text": "Alanyaspor maci 2.5 ust mu?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0913", "text": "Alanyaspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0914", "text": "alanyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0915", "text": "Alanyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0916", "text": "Alanyaspor maci 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0917", "text": "Alanya maçı 2.5 üst mü??", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0918", "text": "alanyaspor maçı 2.5 üst mü ya?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0919", "text": "Alanyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0920", "text": "Alanyaspor maçı 2.5 üst mü?", "expected_intent": "predict.over_under", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0921", "text": "Alanyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0922", "text": "Alanyaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0923", "text": "Alanyaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0924", "text": "alanyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0925", "text": "Alanyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0926", "text": "Alanyaspor macinda handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0927", "text": "Alanya maçında handicap ne olur??", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0928", "text": "alanyaspor maçında handicap ne olur ya?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0929", "text": "Alanyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0930", "text": "Alanyaspor maçında handicap ne olur?", "expected_intent": "predict.handicap", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0931", "text": "Alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0932", "text": "Alanyaspor ligde kacinci sirada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0933", "text": "Alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0934", "text": "alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0935", "text": "Alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0936", "text": "Alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0937", "text": "Alanya ligde kaçıncı sırada??", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0938", "text": "alanyaspor ligde kaçıncı sırada ya?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0939", "text": "Alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0940", "text": "Alanyaspor ligde kaçıncı sırada?", "expected_intent": "data.standings", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0941", "text": "Alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0942", "text": "Alanyaspornin en golcu oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0943", "text": "Alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0944", "text": "alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0945", "text": "Alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0946", "text": "Alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0947", "text": "Alanyanın en golcü oyuncusu kim??", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0948", "text": "alanyaspornın en golcü oyuncusu kim ya?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0949", "text": "Alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0950", "text": "Alanyaspornın en golcü oyuncusu kim?", "expected_intent": "data.top_scorer", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0951", "text": "Alanyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0952", "text": "Alanyaspor maci su anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0953", "text": "Alanyaspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0954", "text": "alanyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0955", "text": "Alanyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0956", "text": "Alanyaspor maci şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0957", "text": "Alanya maçı şu anda devam ediyor mu??", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0958", "text": "alanyaspor maçı şu anda devam ediyor mu ya?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0959", "text": "Alanyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0960", "text": "Alanyaspor maçı şu anda devam ediyor mu?", "expected_intent": "data.live_state", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0961", "text": "Gelecek hafta Alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0962", "text": "Gelecek hafta Alanyaspornin fiksturu ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0963", "text": "Gelecek hafta Alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0964", "text": "gelecek hafta alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0965", "text": "Gelecek hafta Alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0966", "text": "Gelecek hafta Alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0967", "text": "Gelecek hafta Alanyanın fikstürü ne??", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0968", "text": "Gelecek hafta alanyaspornın fikstürü ne ya?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0969", "text": "Gelecek hafta Alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0970", "text": "Gelecek hafta Alanyaspornın fikstürü ne?", "expected_intent": "summary.next_week", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0971", "text": "Alanyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0972", "text": "Alanyaspor macinin hava durumu nasil olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0973", "text": "Alanyaspor macinın hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0974", "text": "alanyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0975", "text": "Alanyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0976", "text": "Alanyaspor maçinin hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0977", "text": "Alanya maçının hava durumu nasıl olacak??", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0978", "text": "alanyaspor maçının hava durumu nasıl olacak ya?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0979", "text": "Alanyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0980", "text": "Alanyaspor maçının hava durumu nasıl olacak?", "expected_intent": "data.weather_at_kickoff", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0981", "text": "Alanyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0982", "text": "Alanyaspor maci kacta basliyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0983", "text": "Alanyaspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0984", "text": "alanyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0985", "text": "Alanyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0986", "text": "Alanyaspor maci kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0987", "text": "Alanya maçı kaçta başlıyor??", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0988", "text": "alanyaspor maçı kaçta başlıyor ya?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0989", "text": "Alanyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0990", "text": "Alanyaspor maçı kaçta başlıyor?", "expected_intent": "data.kickoff_time", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0991", "text": "Alanyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0992", "text": "Alanyaspor maci karsilikli gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0993", "text": "Alanyaspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0994", "text": "alanyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0995", "text": "Alanyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0996", "text": "Alanyaspor maci karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0997", "text": "Alanya maçı karşılıklı gol olur mu??", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0998", "text": "alanyaspor maçı karşılıklı gol olur mu ya?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-0999", "text": "Alanyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}
+{"id": "mtf-1000", "text": "Alanyaspor maçı karşılıklı gol olur mu?", "expected_intent": "predict.btts", "expected_top_entity": "alanyaspor"}

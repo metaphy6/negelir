@@ -433,7 +433,7 @@ _YEAR_SUFFIX_ALLOWLIST_PATH: _pathlib.Path = (
 )
 _YEAR_SUFFIX_ALLOWLIST_CACHE: "set[str] | None" = None
 
-_DIGIT_LETTER_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_DIGIT_LETTER_TOKEN_RE = re.compile(r"[^\s]+")
 
 
 def load_digit_letter_confusables(path: _pathlib.Path | None = None) -> "dict[str, str]":
@@ -499,13 +499,14 @@ def digit_letter_confusable_fold(
 
     def _replace(match: "re.Match[str]") -> str:
         token = match.group(0)
-        if token.lower() in year_suffix_allowlist:
+        sanitized = re.sub(r"[^0-9A-Za-z\u0100-\u024F]", "", token)
+        if sanitized.lower() in year_suffix_allowlist:
             return token
-        if not any(ch.isdigit() for ch in token):
+        if not any(ch.isdigit() for ch in sanitized):
             return token
-        if not any(ch.isalpha() for ch in token):
+        if not any(ch.isalpha() for ch in sanitized):
             return token
-        return "".join(fold_map.get(ch, ch) for ch in token)
+        return "".join(fold_map.get(ch, ch) for ch in sanitized)
 
     return _DIGIT_LETTER_TOKEN_RE.sub(_replace, text)
 

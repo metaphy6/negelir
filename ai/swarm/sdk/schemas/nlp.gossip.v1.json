@@ -8,12 +8,7 @@
     "kind",
     "producer",
     "pod_instance_id",
-    "lexicon_set_sha",
-    "intent_sha",
-    "crf_sha",
-    "calibration_version",
-    "template_git_sha",
-    "pipeline_version",
+    "lexicon_state_signature",
     "emitted_at_utc"
   ],
   "properties": {
@@ -35,29 +30,10 @@
       "type": "string",
       "maxLength": 64
     },
-    "lexicon_set_sha": {
+    "lexicon_state_signature": {
       "type": "string",
-      "maxLength": 128
-    },
-    "intent_sha": {
-      "type": "string",
-      "maxLength": 128
-    },
-    "crf_sha": {
-      "type": "string",
-      "maxLength": 128
-    },
-    "calibration_version": {
-      "type": "string",
-      "maxLength": 64
-    },
-    "template_git_sha": {
-      "type": "string",
-      "maxLength": 128
-    },
-    "pipeline_version": {
-      "type": "string",
-      "maxLength": 32
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "Short 64-bit hex signature of the current NLP lexicon state tuple used for divergence detection."
     },
     "emitted_at_utc": {
       "type": "string",

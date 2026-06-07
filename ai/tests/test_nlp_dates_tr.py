@@ -18,13 +18,17 @@ Covers:
 from __future__ import annotations
 
 import datetime
+from pathlib import Path
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 import pytest
+import yaml
 
 from nlp.dates_tr import DateTimeResolution, DateTimeResolver, _word_in, number_word_to_int
 
 UTC = datetime.timezone.utc
+ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
 
 # ── Shared fixed clock ─────────────────────────────────────────────────────
 
@@ -43,10 +47,14 @@ def _resolver() -> DateTimeResolver:
 def _assert_day(res: DateTimeResolution | None, expected_date: datetime.date) -> None:
     assert res is not None
     assert res.granularity == "day"
-    assert res.start_utc == datetime.datetime(
-        expected_date.year, expected_date.month, expected_date.day, tzinfo=UTC
-    )
-    assert res.end_utc == res.start_utc + datetime.timedelta(days=1)
+    expected_start = datetime.datetime(
+        expected_date.year,
+        expected_date.month,
+        expected_date.day,
+        tzinfo=ISTANBUL_TZ,
+    ).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.end_utc == expected_start + datetime.timedelta(days=1)
 
 
 def _assert_hour_minute(
@@ -57,10 +65,24 @@ def _assert_hour_minute(
 ) -> None:
     assert res is not None
     assert res.granularity == "hour_minute"
-    assert res.start_utc == datetime.datetime(
-        expected_date.year, expected_date.month, expected_date.day, h, m, tzinfo=UTC
-    )
-    assert res.end_utc == res.start_utc + datetime.timedelta(hours=2)
+    expected_start = datetime.datetime(
+        expected_date.year,
+        expected_date.month,
+        expected_date.day,
+        h,
+        m,
+        tzinfo=ISTANBUL_TZ,
+    ).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.end_utc == expected_start + datetime.timedelta(hours=2)
+
+
+def test_time_of_day_shorthand_lookup_has_entries() -> None:
+    path = Path(__file__).resolve().parents[1] / "nlp" / "lang_tr" / "time_of_day_shorthand.tr.yaml"
+    mapping = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    assert isinstance(mapping, dict)
+    assert len(mapping) >= 15
+    assert mapping["aks"] == "akşam"
 
 
 # ── Relative day expressions ───────────────────────────────────────────────
@@ -136,7 +158,7 @@ def test_pazar_does_not_match_pazartesi() -> None:
     res = _resolver().resolve("pazartesi")
     # Should be parsed as pazartesi (Monday=+5d), NOT pazar (Sunday=+4d)
     assert res is not None
-    assert res.start_utc.date() == datetime.date(2026, 5, 4)
+    assert res.start_utc.astimezone(ISTANBUL_TZ).date() == datetime.date(2026, 5, 4)
 
 
 # ── Week expressions ───────────────────────────────────────────────────────
@@ -146,27 +168,27 @@ def test_bu_hafta() -> None:
     res = _resolver().resolve("bu hafta")
     assert res is not None
     assert res.granularity == "week"
-    monday = datetime.datetime(2026, 4, 27, tzinfo=UTC)
-    assert res.start_utc == monday
-    assert res.end_utc == monday + datetime.timedelta(weeks=1)
+    expected_start = datetime.datetime(2026, 4, 27, tzinfo=ISTANBUL_TZ).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.end_utc == expected_start + datetime.timedelta(weeks=1)
 
 
 def test_onumüzdeki_hafta() -> None:
     res = _resolver().resolve("önümüzdeki hafta")
     assert res is not None
     assert res.granularity == "week"
-    next_monday = datetime.datetime(2026, 5, 4, tzinfo=UTC)
-    assert res.start_utc == next_monday
-    assert res.end_utc == next_monday + datetime.timedelta(weeks=1)
+    expected_start = datetime.datetime(2026, 5, 4, tzinfo=ISTANBUL_TZ).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.end_utc == expected_start + datetime.timedelta(weeks=1)
 
 
 def test_gecen_hafta() -> None:
     res = _resolver().resolve("geçen hafta")
     assert res is not None
     assert res.granularity == "week"
-    prev_monday = datetime.datetime(2026, 4, 20, tzinfo=UTC)
-    assert res.start_utc == prev_monday
-    assert res.end_utc == prev_monday + datetime.timedelta(weeks=1)
+    expected_start = datetime.datetime(2026, 4, 20, tzinfo=ISTANBUL_TZ).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.end_utc == expected_start + datetime.timedelta(weeks=1)
 
 
 # ── Explicit date expressions ──────────────────────────────────────────────
@@ -448,6 +470,28 @@ def test_ogleden_sonra_3_resolves_to_1500() -> None:
 def test_gece_yarisi_resolves_to_midnight() -> None:
     res = _resolver().resolve("gece yarısı")
     _assert_hour_minute(res, _TODAY_START.date(), 0, 0)
+
+
+def test_time_shorthand_expanded() -> None:
+    res = _resolver().resolve("aks 9")
+    _assert_hour_minute(res, _TODAY_START.date(), 21, 0)
+
+
+def test_numeric_date_ambiguous_slash_returns_none() -> None:
+    assert _resolver().resolve("3/4/2025") is None
+
+
+def test_numeric_date_dotted_form_unambiguous() -> None:
+    res = _resolver().resolve("3.4.2025")
+    _assert_day(res, datetime.date(2025, 4, 3))
+
+
+def test_relative_date_resolves_against_client_tz() -> None:
+    clock = lambda: datetime.datetime(2026, 1, 1, 23, 30, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("bugün", client_tz="Europe/Berlin")
+    assert res is not None
+    assert res.start_utc == datetime.datetime(2026, 1, 1, 23, 0, tzinfo=UTC)
 
 
 def test_time_zero_hour() -> None:

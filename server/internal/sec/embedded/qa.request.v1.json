@@ -52,6 +52,14 @@
           "maximum": 3,
           "description": "Optional maximum client format version carried by the gateway or sec input."
         },
+        "humanizer_disabled": {
+          "type": ["boolean", "null"],
+          "description": "Disables humanizer rephrasing for synthetic prober requests."
+        },
+        "synthetic_prober": {
+          "type": ["boolean", "null"],
+          "description": "Synthetic prober signal for prober-dispatched qa.request.v1 envelopes."
+        },
         "stripped_tail": {
           "type": "string",
           "description": "Trimmed copy/paste tail removed from the normalized input for audit tracing."
