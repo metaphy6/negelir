@@ -601,6 +601,55 @@ class Config:
     # String form for PYTORCH_CUDA_ALLOC_CONF override (documented default used in tests)
     cuda_alloc_conf: str = field(default_factory=lambda: os.getenv("NEGELIR_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb=256,garbage_collection_threshold:0.85"))
 
+    # Phase 11.2 — GPU arbiter (mutual exclusion, preemption, placement)
+    # Lease TTL (seconds) for GPU arbiter Redis-backed locks. Auto-renewed every TTL/3.
+    gpu_arbiter_lease_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_ARBITER_LEASE_TTL_S", "60")))
+    # Preemption grace period (milliseconds) for LLM-class loads to finish micro-batch.
+    gpu_arbiter_preempt_grace_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_ARBITER_PREEMPT_GRACE_MS", "250")))
+    # Fragmentation headroom multiplier: refuse placement if largest_free_block < vram_required * (1 + this).
+    gpu_alloc_fragmentation_headroom: float = field(default_factory=lambda: float(os.getenv("NEGELIR_GPU_ALLOC_FRAGMENTATION_HEADROOM", "0.1")))
+    # Fragmentation threshold (0.0-1.0): trigger defrag when occupied_vram/total_vram exceeds this.
+    gpu_alloc_defrag_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_GPU_ALLOC_DEFRAG_THRESHOLD", "0.85")))
+    # Enable NVIDIA Multi-Process Service for light-weight inference co-tenancy (false by default).
+    cuda_mps_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_CUDA_MPS_ENABLED", "false").lower() in ("true", "1", "yes"))
+    # Max concurrent MPS clients per GPU when cuda_mps_enabled=true.
+    cuda_mps_max_clients: int = field(default_factory=lambda: int(os.getenv("NEGELIR_CUDA_MPS_MAX_CLIENTS", "16")))
+    # Enable cold-start hedging: spawn GPU evaluation when CPU latency exceeds p95 (false by default).
+    gpu_arbiter_hedge_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_GPU_ARBITER_HEDGE_ENABLED", "false").lower() in ("true", "1", "yes"))
+    # Max concurrent hedge evaluations across all agents (when gpu_arbiter_hedge_enabled=true).
+    gpu_arbiter_hedge_max_concurrent: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_ARBITER_HEDGE_MAX_CONCURRENT", "10")))
+    # Preemption cooldown (seconds): min wait before a preempted agent may re-claim the same GPU.
+    gpu_arbiter_winback_cooldown_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_ARBITER_WINBACK_COOLDOWN_S", "30")))
+    # Minimum lease hold time (milliseconds) to prevent brief realtime spikes from thrashing batch.
+    gpu_arbiter_min_hold_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_ARBITER_MIN_HOLD_MS", "500")))
+    # Emergency panic CPU mode: set to true to force all agents onto CPU (via SIGHUP or NEGELIR_DISABLE_GPU=1).
+    compute_panic_cpu: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMPUTE_PANIC_CPU", "false").lower() in ("true", "1", "yes"))
+    # Panic drain budget (seconds): time allowed for agents to drop GPU residency and restart on CPU.
+    compute_panic_drain_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMPUTE_PANIC_DRAIN_S", "30")))
+    # Weighted fair-share weights for GPU arbiter (§11.2 bullet 3): per-agent WFQ weights (phase 12+ implementation).
+    # Format (Phase 12+): JSON dict like {"sec_input_classifier": 1.0, "coder_llm": 2.0, "humanizer": 1.5}
+    # Tenant-aware weighting is a Phase 20 hook (currently no-op while cfg.tenant_quota_enabled=false).
+    gpu_arbiter_weights_json: str = field(default_factory=lambda: os.getenv("NEGELIR_GPU_ARBITER_WEIGHTS_JSON", "{}"))
+
+    # Phase 11.3 — CPU compute governor (peer of the GPU arbiter)
+    # Single thread-budget owner per host (ai/swarm/sdk/cpu_governor.py).
+    # Default: each agent gets max(1, floor(cores_physical / active_agents)).
+    cpu_governor_use_smt: bool = field(default_factory=lambda: os.getenv("NEGELIR_CPU_GOVERNOR_USE_SMT", "false").lower() in ("true", "1", "yes"))
+    # CPU frequency scaling mode check: warn if cpufreq is in 'powersave' instead of 'performance' or 'schedutil+boost'.
+    cpu_governor_warn_powersave: bool = field(default_factory=lambda: os.getenv("NEGELIR_CPU_GOVERNOR_WARN_POWERSAVE", "true").lower() in ("true", "1", "yes"))
+    # LLM backend for CPU-only inference (llama.cpp by default; never raw transformers on CPU).
+    cpu_llm_backend: str = field(default_factory=lambda: os.getenv("NEGELIR_CPU_LLM_BACKEND", "llama.cpp"))
+
+    # Phase 11.5 — NPU support (Intel OpenVINO, AMD XDNA, Apple MPS)
+    # OpenVINO IR compiled-blob cache directory (tmpfs in dev, persistent volume in prod).
+    openvino_blob_cache_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_OPENVINO_BLOB_CACHE_DIR", "/tmp/negelir_openvino_blobs"))
+    # NPU vendor selection: "intel" (default), "amd" (XDNA, stretch goal), "apple" (MPS dev-only).
+    npu_vendor: str = field(default_factory=lambda: os.getenv("NEGELIR_NPU_VENDOR", "intel"))
+    # Allow Apple MPS backend on dev hosts (default false; never selected by auto in CI/prod).
+    allow_mps: bool = field(default_factory=lambda: os.getenv("NEGELIR_ALLOW_MPS", "false").lower() in ("true", "1", "yes"))
+    # OpenVINO AsyncInferQueue depth per device (default 4); exported as metric for saturation detection.
+    openvino_async_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_OPENVINO_ASYNC_QUEUE_DEPTH", "4")))
+
     # ── Phase 6 — Proofreader & drift swarm ─────────────────
     # The proofreader replica roster is *not* a config knob — it lives
     # in `swarm.agents.proofreader.replicas.PROOFREADER_POLICY_CLASSES`

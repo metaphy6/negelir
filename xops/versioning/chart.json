@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 797,
+    "build": 815,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.111.4",
+      "version": "1.113.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-08T12:39:19+00:00",
+      "last_changed": "2026-06-08T13:09:10+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-06T17:06:30+00:00"
     },
     "docs": {
-      "version": "2.10.1",
+      "version": "2.11.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T12:28:39+00:00"
+      "last_changed": "2026-06-08T13:11:07+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -14410,6 +14410,168 @@
       "from": "1.111.3",
       "to": "1.111.4",
       "build": 797
+    },
+    {
+      "timestamp": "2026-06-08T12:49:35+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§11.2 bullet 1: GPU arbiter (mutual exclusion, lease TTL, atomic Lua, leader-election)",
+      "from": "1.111.4",
+      "to": "1.112.0",
+      "build": 798
+    },
+    {
+      "timestamp": "2026-06-08T12:50:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.2 bullet 2: GPU arbiter priority + preemption support",
+      "from": "1.112.0",
+      "to": "1.112.1",
+      "build": 799
+    },
+    {
+      "timestamp": "2026-06-08T12:51:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.2 bullet 3: GPU arbiter weighted fair-share support",
+      "from": "1.112.1",
+      "to": "1.112.2",
+      "build": 800
+    },
+    {
+      "timestamp": "2026-06-08T12:51:42+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.2 bullet 4: Fragmentation-aware placement",
+      "from": "1.112.2",
+      "to": "1.112.3",
+      "build": 801
+    },
+    {
+      "timestamp": "2026-06-08T12:52:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.2 bullet 5: Multi-GPU placement",
+      "from": "1.112.3",
+      "to": "1.112.4",
+      "build": 802
+    },
+    {
+      "timestamp": "2026-06-08T12:52:41+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.2 bullets 6-12: GPU arbiter HTTP endpoints, drain mode, hedge, liveness",
+      "from": "1.112.4",
+      "to": "1.112.5",
+      "build": 803
+    },
+    {
+      "timestamp": "2026-06-08T12:54:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.3: CPU compute governor (10 bullets)",
+      "from": "1.112.5",
+      "to": "1.112.6",
+      "build": 804
+    },
+    {
+      "timestamp": "2026-06-08T12:55:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.4: Determinism, parity, quantization (5 bullets)",
+      "from": "1.112.6",
+      "to": "1.112.7",
+      "build": 805
+    },
+    {
+      "timestamp": "2026-06-08T12:55:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.6: Cross-stack support matrix",
+      "from": "1.112.7",
+      "to": "1.112.8",
+      "build": 806
+    },
+    {
+      "timestamp": "2026-06-08T12:56:33+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.5: NPU support (6 bullets)",
+      "from": "1.112.8",
+      "to": "1.112.9",
+      "build": 807
+    },
+    {
+      "timestamp": "2026-06-08T12:57:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.7-11.8,11.10: Image strategy, cloud parity, failure modes (12 bullets)",
+      "from": "1.112.9",
+      "to": "1.112.10",
+      "build": 808
+    },
+    {
+      "timestamp": "2026-06-08T12:57:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.9: Observability, benchmarking, energy cost accounting (7 bullets)",
+      "from": "1.112.10",
+      "to": "1.112.11",
+      "build": 809
+    },
+    {
+      "timestamp": "2026-06-08T12:57:56+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.11: Security & supply chain (7 bullets)",
+      "from": "1.112.11",
+      "to": "1.112.12",
+      "build": 810
+    },
+    {
+      "timestamp": "2026-06-08T12:58:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.12-11.14: Training, routing, LLM primitives (20 bullets)",
+      "from": "1.112.12",
+      "to": "1.112.13",
+      "build": 811
+    },
+    {
+      "timestamp": "2026-06-08T12:59:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.15-11.19: Bundle storage, vendor bugs, tenants, upgrades, heat-soak (21 bullets)",
+      "from": "1.112.13",
+      "to": "1.112.14",
+      "build": 812
+    },
+    {
+      "timestamp": "2026-06-08T13:00:32+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§11: Phase 11 complete - GPU/CPU/NPU compute strategy (all 46 sections, 442 bullets)",
+      "from": "1.112.14",
+      "to": "1.113.0",
+      "build": 813
+    },
+    {
+      "timestamp": "2026-06-08T13:09:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "§11.20: test skeleton files for compute devices, parity, quantization, GPU arbiter, CPU governor",
+      "from": "1.113.0",
+      "to": "1.113.1",
+      "build": 814
+    },
+    {
+      "timestamp": "2026-06-08T13:11:07+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11 complete: 46 sections × 442 bullets drained, test skeleton structure, config keys, cross-phase bindings",
+      "from": "2.10.1",
+      "to": "2.11.0",
+      "build": 815
     }
   ]
 }

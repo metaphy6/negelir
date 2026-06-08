@@ -1490,7 +1490,7 @@ inherit the same routing matrix).
 
 ### 11.DoD Phase rollup
 
-- [ ] Every binding `[ ]` in §11.* (across all per-section files
+- [x] Every binding `[ ]` in §11.* (across all per-section files
       in [`docs/design/phase11/sections/`](../design/phase11/sections/))
       is `[x]`. Tracker row + `make version.bump COMPONENT=docs`
       recorded for every meaningful per-section edit (per AGENTS.md

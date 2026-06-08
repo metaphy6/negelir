@@ -13,7 +13,7 @@
 > never leave the host. Without an explicit class, the safe default is
 > "drop everything", which neuters debuggability.
 
-- [ ] **`data_class` on every request.** Set at the API edge: `public` (no PII, fine to capture), `tenant_internal` (capture metadata only — input lengths, hashes), `pii` (capture nothing beyond timing + provenance). Defaults to `pii` on missing.
-- [ ] **Capture matrix.** Autopsy (§11.9), tail-capture (§11.28), shadow-diff (§11.26), and quarantine (§11.4) each declare which classes they capture and at what fidelity. Lint refuses a capture sink without a declared matrix.
-- [ ] **Sink isolation.** `pii`-class captures route to `cfg.compute_capture_sink_pii` (encrypted at rest, separate retention) — never the default sink. Misrouted capture refuses to write and emits `sec.alert.v1{kind=capture_class_mismatch, severity=critical}`.
-- [ ] **Phase 16/17 binding.** The Emitter (Phase 16) and patcher (Phase 17) inherit the same `data_class` label on any compute-side capture they emit; their CPU-only build tag is unaffected.
+- [x] **`data_class` on every request.** Set at the API edge: `public` (no PII, fine to capture), `tenant_internal` (capture metadata only — input lengths, hashes), `pii` (capture nothing beyond timing + provenance). Defaults to `pii` on missing.
+- [x] **Capture matrix.** Autopsy (§11.9), tail-capture (§11.28), shadow-diff (§11.26), and quarantine (§11.4) each declare which classes they capture and at what fidelity. Lint refuses a capture sink without a declared matrix.
+- [x] **Sink isolation.** `pii`-class captures route to `cfg.compute_capture_sink_pii` (encrypted at rest, separate retention) — never the default sink. Misrouted capture refuses to write and emits `sec.alert.v1{kind=capture_class_mismatch, severity=critical}`.
+- [x] **Phase 16/17 binding.** The Emitter (Phase 16) and patcher (Phase 17) inherit the same `data_class` label on any compute-side capture they emit; their CPU-only build tag is unaffected.

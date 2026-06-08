@@ -19,4 +19,4 @@
 | `torch+mps` | Apple | dev-only | parity testing on macOS | best-effort |
 | CPU (`xgboost-cpu`, `torch-cpu`, `llama.cpp`) | any | **baseline** | every workload, every test | reference |
 
-- [ ] One row per backend lands with a smoke test (`make test.compute BACKEND=<name>`) that exercises a tiny model end-to-end and asserts parity vs. CPU within the §11.4 tolerance. Skipped (not xfail) when the backend is absent on the runner; a skipped row is rendered amber in the bench report.
+- [x] One row per backend lands with a smoke test (`make test.compute BACKEND=<name>`) that exercises a tiny model end-to-end and asserts parity vs. CPU within the §11.4 tolerance. Skipped (not xfail) when the backend is absent on the runner; a skipped row is rendered amber in the bench report.
