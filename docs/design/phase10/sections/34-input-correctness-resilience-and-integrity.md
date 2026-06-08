@@ -250,7 +250,7 @@ and the proof test. Tests live in
       `test_random_case_inter_token_unaffected_when_each_is_titled`
       (40 rows assert proper Title Case is left alone).
 
-- [ ] **Single-emoji-only input.** `⚽?`, `🟡🔴`, `🤔`. Today routes to
+- [x] **Single-emoji-only input.** `⚽?`, `🟡🔴`, `🤔`. Today routes to
       did-you-mean. **Correction:** new §10.4 step `single_emoji_intent`
       runs before classifier; closed `single_emoji_intent.tr.yaml`
       (≥ 20 entries: `⚽` → "Bugünkü maçlar?" disambiguation,
@@ -259,7 +259,7 @@ and the proof test. Tests live in
       clarification offer (NEVER auto-routes to a real intent).
       **Tests:** `test_single_emoji_clarification_offered` (20 rows).
 
-- [ ] **Ambiguous date format.** `3/4/2025` is April 3 in TR convention
+- [x] **Ambiguous date format.** `3/4/2025` is April 3 in TR convention
       (DD/MM/YYYY) but March 4 in US convention. The §10.5 CRF date
       extractor today picks one silently. **Correction:** when both
       readings are valid (both ≤ 12), do NOT silently pick — emit
@@ -273,7 +273,7 @@ and the proof test. Tests live in
       `test_date_dotted_form_unambiguous` (`3.4.2025` is TR-only by
       convention, picks DD.MM.YYYY without ambiguity, 30 rows).
 
-- [ ] **Time-of-day shorthand.** `aks` for `akşam`, `sbh` for `sabah`,
+- [x] **Time-of-day shorthand.** `aks` for `akşam`, `sbh` for `sabah`,
       `öğl` for `öğle`, `gec` for `gece`. The §10.5 CRF time extractor
       relies on full forms. **Correction:** closed
       `time_of_day_shorthand.tr.yaml` (≥ 15 entries) folded in §10.1

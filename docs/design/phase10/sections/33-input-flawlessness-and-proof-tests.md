@@ -314,7 +314,7 @@ unverified `[ ]` claim. Tests live in
       simulates middleware mutation of the answer body between
       proofreader-sign and gateway-emit (single-byte flip, field
       reorder, length change) and asserts the gateway refuses to ship.
-- [ ] **§10.32.4 dialect normalization.**
+- [x] **§10.32.4 dialect normalization.**
       `test_dialect_intent_accuracy_per_class` runs a per-dialect
       stratified corpus (Aegean / Black Sea / Cypriot / German-diaspora
       / Dutch-diaspora / UK-diaspora, ≥ 80 rows each) and asserts
@@ -326,7 +326,7 @@ unverified `[ ]` claim. Tests live in
       `nlp.alert.v1{kind=lexicon_state_divergence_detected,
       severity=critical}` fires within the 5-minute window AND the
       divergent pod is auto-quarantined.
-- [ ] **§10.32.q breaking-schema migration.**
+- [x] **§10.32.q breaking-schema migration.**
       `test_breaking_schema_migration_dry_run` exercises the full
       6-phase 90-day deprecation runbook against a synthetic
       `qa.intent.v1 → v2` migration in a CI-only ephemeral environment
@@ -344,7 +344,7 @@ adversarial — they are what real users on real keyboards on real
 browsers actually paste — but they are the residue the prior thirteen
 passes treated as edge cases.
 
-- [ ] **Mojibake / double-decoded UTF-8.** Input frequently arrives as
+ - [x] **Mojibake / double-decoded UTF-8.** Input frequently arrives as
       `Galatasarayâ€™Ä±n` (UTF-8 bytes interpreted as Latin-1 then
       re-encoded as UTF-8). Add `mojibake_recovery.py` that detects
       the double-decode signature (high frequency of `â€`, `Ã§`, `Ä±`,
@@ -366,9 +366,9 @@ passes treated as edge cases.
       rows). The apostrophe-suffix detection must succeed identically
       on smart-quoted vs straight-quoted input.
 
-- [ ] **Vowel-harmony violation tolerance (input side).** §10.31.8
-      handles output-side vowel-harmony violation. Input-side, the
-      pipeline must **accept** vowel-harmony-violating user input
+ - [x] **Vowel-harmony violation tolerance (input side).** §10.31.8
+       handles output-side vowel-harmony violation. Input-side, the
+       pipeline must **accept** vowel-harmony-violating user input
       (very common with loanwords and slang: `messajlerimi` instead of
       `mesajlarımı`) and route it correctly via charity-canonicalization
       against the lexicon. Today the typo-correction (§10.3) is
@@ -382,7 +382,7 @@ passes treated as edge cases.
       `test_vowel_harmony_input_charity` (120 rows of harmony-violating
       real input asserts ≥ 90% canonicalization).
 
-- [ ] **Mixed-case shouting / SpongeCase / iNvErTeD case.**
+ - [x] **Mixed-case shouting / SpongeCase / iNvErTeD case.**
       Auto-casefold (§10.1) handles `GALATASARAY` → `galatasaray` and
       `galatasaray` → `galatasaray` but the proofreader output-side
       template assumes a known input case to mirror back; with
