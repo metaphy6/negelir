@@ -8,7 +8,7 @@
 
 ---
 
-## 🧭 Implementation Alignment Snapshot (2026-04-28)
+## 🧭 Implementation Alignment Snapshot (2026-06-08)
 
 > Living header — refreshed whenever a phase ships. Authoritative state
 > always lives in the per-phase checkboxes below; this is a quick map
@@ -24,6 +24,7 @@
 | 4 — Worker agents | ✅ done | All 6 Phase 4 topics flow end-to-end via `make swarm.demo`; Postgres-backed gates deferred to Phase 9. |
 | 5 — Predictor swarm | 🛠 design only | §5.1–§5.5 scoped + cross-phase contracts wired; no code yet. |
 | 6+ | ⏳ not started | Ordered per dependency graph. |
+| 10 — Turkish NLP | ✅ done | All 65+ checkboxes green across 15 addendum sections (§10.0–§10.34); normalize pipeline + intent/dispatch/render/proofread/audit gates; property-based tests (2,399 generated cases); docs v2.0.0. |
 | 13a Süper Lig seed | ✅ done | Other T1 leagues land with the 13a sprint. |
 | R1 — chart rename | 🟡 partial | All new chart keys seeded; `version.py rename` + the `source_watcher → datasource_watcher` collapse stay open. |
 | R2–R6 | ⏳ not started | Deferred-path window: lands between Phase 5 design and Phase 6 kickoff (see §Phase R sequencing note). |
@@ -1234,7 +1235,7 @@ The legacy `sec.alert` row (unversioned, `{kind, source, severity}`) is **remove
 
 ### 10.DoD Phase rollup
 
-- [ ] Every binding `[ ]` in §10.0–§10.34 (across all 15 per-section
+- [x] Every binding `[ ]` in §10.0–§10.34 (across all 15 per-section
       files in [`docs/design/phase10/sections/`](../design/phase10/sections/))
       is `[x]`. The §10.20 DoD aggregator (now in
       [`00-baseline.md`](../design/phase10/sections/00-baseline.md)) plus
