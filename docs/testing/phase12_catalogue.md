@@ -190,6 +190,8 @@ matching `sec.alert.v1` envelope.
 | P12-10-F | `chaos.outbound-checksum-mutation-injection` | Mutate the answer body post-sign; outbound checksum gate blocks ship. | design/phase10 §10.31.11 |
 | P12-10-G | `chaos.inbound-checksum-mutation` | Flip a byte after the gateway inbound checksum; NLP drops + 504 + `inbound_checksum_mismatch`. | design/phase10 §10.34.4 |
 | P12-10-H | `chaos.lexicon-state-divergence-injection` | Corrupt one pod's lexicon set; gossip divergence detector quarantines within 5 min. | design/phase10 §10.32.12 |
+| P12-10-I | `chaos.answer-envelope-hmac-forge` | Forge an answer envelope HMAC with the wrong key; consumer rejects the answer + `answer_envelope_signature_invalid` (critical). | design/phase10 §10.26.8 |
+| P12-10-J | `chaos.prediction-id-mismatch-injection` | Inject a `qa.request.v1` with mismatched `prediction_id` in the envelope; system must reject + emit `predict_prediction_id_mismatch`. | design/phase10 §10.29.12 |
 | — | *(historical)* `P12-8-AM…AT` | NLP fixture-state / kill-pattern / pii-flood / compound-flood / rebuild-storm / runaway-normalize / lexicon-swap / pinned-schema (IDs frozen). | §10.27 / §10.28 |
 
 ### §11 — Compute (GPU/CPU/NPU) (`P12-11-*`)

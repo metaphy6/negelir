@@ -316,6 +316,15 @@ class Config:
     load_regression_tolerance: float = field(default_factory=lambda: float(os.getenv(
         "NEGELIR_LOAD_REGRESSION_TOLERANCE", "1.10"
     )))
+    load_baseline_stdev_multiplier: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_LOAD_BASELINE_STDEV_MULTIPLIER", "2.0"
+    )))
+    load_baseline_hard_floor_ms: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_LOAD_BASELINE_HARD_FLOOR_MS", "500.0"
+    )))
+    load_baseline_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_LOAD_BASELINE_DIR", "docs/reports/load-baselines"
+    ))
 
     # Phase 12 §12.8 — Soak & endurance parameters
     soak_resource_drift_pct: float = field(default_factory=lambda: float(os.getenv(

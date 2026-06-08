@@ -21,7 +21,7 @@
       dependency model is "the surface under test must exist", not "two
       named phases". The rollup (§12.17) gates only on stubs whose
       **owning phase has shipped**.
-- [ ] **A1 — "A flat ≥ 85 % line-coverage gate is sufficient."** ❌ →
+- [x] **A1 — "A flat ≥ 85 % line-coverage gate is sufficient."** ❌ →
       ✅ Line coverage is necessary but not sufficient and is
       criticality-blind. §12.12 replaces the flat number with a
       **tiered, criticality-weighted** model (security/integrity/money
@@ -29,7 +29,7 @@
       a **diff-coverage** gate on every PR, and **mutation testing** on
       the highest-leverage modules so that "covered" implies "asserted",
       not merely "executed".
-- [ ] **A2 — "`make chaos-redis-flap` (hyphen) is the target style."**
+- [x] **A2 — "`make chaos-redis-flap` (hyphen) is the target style."**
       ❌ → ✅ The repo standardised on **dot-style** make targets
       (`mock.up`, `version.bump`, `codegraph.status`); verb-noun
       aliases were retired (repo simplification, 2026-04-20). Every
@@ -38,7 +38,7 @@
       `fuzz.api`, `coverage.report`. The §12.5 catalogue is the
       single source of canonical target names; the stale hyphen forms
       in the existing catalogue draft are normalised by this phase.
-- [ ] **A3 — "`boofuzz` is the fuzzer."** ❌ → ✅ `boofuzz` is a
+- [x] **A3 — "`boofuzz` is the fuzzer."** ❌ → ✅ `boofuzz` is a
       network-protocol fuzzer that assumes a long-lived target socket
       and does not fit the containerized, deterministic, CI-gated
       doctrine (Rule 2). §12.3 standardises on **Hypothesis** (already
@@ -47,14 +47,14 @@
       for the Python hot paths), and **`go test -fuzz`** (native, for
       the Go gateway + sec library). Each fuzzer persists a **seed
       corpus** so a found crash becomes a permanent regression test.
-- [ ] **A4 — "Adversarial fixtures are just files."** ❌ → ✅ Every
+- [x] **A4 — "Adversarial fixtures are just files."** ❌ → ✅ Every
       corpus is **governed** like production data-adjacent material:
       per-corpus `corpus.yaml` (seed, sha256, provenance, two-reviewer
       sign-off, independent PII-scrub verifier), a growth bound, a
       quarterly rotation, and a disjointness guard against any training
       set (§12.2). This inherits the Phase 10 §10.33.4 / Phase 13 §13.48
       corpus discipline rather than re-inventing it.
-- [ ] **A5 — "Chaos tools (`pumba`/`toxiproxy`) named ⇒ chaos lab
+- [x] **A5 — "Chaos tools (`pumba`/`toxiproxy`) named ⇒ chaos lab
       designed."** ❌ → ✅ Naming a tool is not a contract. §12.4
       defines **where** faults are injected (a single in-process
       `FaultInjector` seam plus Toxiproxy for network and Pumba for
@@ -63,7 +63,7 @@
       contained** (chaos runs only against the chaos compose profile /
       `agent/**` CI branches, never shared infra), so a chaos test is
       reproducible and safe, not a coin flip.
-- [ ] **A6 — "Adversarial = prompt injection at the API."** ❌ →
+- [x] **A6 — "Adversarial = prompt injection at the API."** ❌ →
       ✅ "Adversarial" spans **every trust boundary**: HTML/DOM at the
       scraper (Phase 7 §7.2), bus envelopes between agents (Phase 3),
       message schemas (contract), forged HMAC/citation/audit chains
@@ -72,7 +72,7 @@
       operator-console envelopes (Phase 8). §12.1's taxonomy and §12.5's
       catalogue enumerate them per owning agent — **a miss is a failing
       test**, not a "known issue".
-- [ ] **A7 — "Chaos asserts liveness (it didn't crash)."** ❌ →
+- [x] **A7 — "Chaos asserts liveness (it didn't crash)."** ❌ →
       ✅ Every chaos drill asserts a **named, documented degraded-mode
       contract**: no message loss, no double-processing, a specific
       `degraded=true` + `degraded_reason`, a specific structured HTTP
@@ -80,21 +80,21 @@
       specified), and a bounded **MTTD/MTTR**. "It came back up" is not
       a pass; "it degraded exactly as specified and recovered within
       budget" is (§12.14).
-- [ ] **A8 — "Coverage/soak/chaos can run on every push."** ❌ →
+- [x] **A8 — "Coverage/soak/chaos can run on every push."** ❌ →
       ✅ These have very different cost/latency profiles. §12.13 defines
       **lanes**: fast unit/contract on every push; adversarial +
       fuzz-smoke on PR; mutation + Atheris + chaos + soak nightly on a
       self-hosted runner; long heat-soak on a slower cadence. A flaky
       chaos test in the fast lane would block all work — lane
       separation is a reliability requirement, not an optimisation.
-- [ ] **A9 — "`xfail` documents a known weakness."** ❌ → ✅ For the
+- [x] **A9 — "`xfail` documents a known weakness."** ❌ → ✅ For the
       adversarial + chaos suites a known weakness is a **release
       blocker, not a `xfail`**. §12.13 forbids `xfail` in these suites;
       a property that cannot yet hold is either fixed or the feature is
       withheld. `skip` is permitted **only** for "hardware/credential
       not present in this lane" with a documented owner (mirrors the
       Phase 11 §11.41 rule), never for "the assertion fails".
-- [ ] **A10 — "Determinism is the test framework's problem."** ❌ →
+- [x] **A10 — "Determinism is the test framework's problem."** ❌ →
       ✅ Adversarial/fuzz/chaos are the **most** prone to flakiness.
       §12.3 + §12.4 mandate: pinned Hypothesis profile
       (`database=None, derandomize=True`, already in
@@ -102,13 +102,13 @@
       injected monotonic clocks (no wall-clock in assertions), seeded
       fault schedules, and a fixed RNG seed surfaced in every failure
       so a red run is reproducible from the log line alone.
-- [ ] **A11 — "Coverage tooling already exists."** ❌ → ✅ There is no
+- [x] **A11 — "Coverage tooling already exists."** ❌ → ✅ There is no
       `.coveragerc` / `pyproject` coverage config, no `make coverage`,
       no `xops/makefile/chaos.py`, no `docker-compose.chaos.yml` today.
       Phase 12 **introduces** them under the single-source-config and
       `xops/` dispatch conventions (§12.15), rather than assuming a
       harness that is not there.
-- [ ] **A12 — "The chaos catalogue is a Phase 7 artifact."** ❌ →
+- [x] **A12 — "The chaos catalogue is a Phase 7 artifact."** ❌ →
       ✅ [`docs/testing/phase12_catalogue.md`](../../../testing/phase12_catalogue.md)
       was seeded from Phase 7 stubs and still carries a formatting
       defect (a merged `… || P12-8-AM` table cell) and §10-era stubs in
@@ -119,10 +119,10 @@
 
 ### 12.0.1 Ledger discipline
 
-- [ ] Each retired assumption A0–A12 is cross-referenced from the
+- [x] Each retired assumption A0–A12 is cross-referenced from the
       section that operationalises it (the `Retires:` line at the top
       of §12.1–§12.16).
-- [ ] §12.17 DoD asserts every A-row has both-direction proof coverage;
+- [x] §12.17 DoD asserts every A-row has both-direction proof coverage;
       a retired assumption with no failing-then-passing proof is an
       incomplete phase, not a green one.
 - [ ] New wrong assumptions discovered while hardening a sister phase

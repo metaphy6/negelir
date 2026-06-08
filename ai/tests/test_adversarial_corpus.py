@@ -67,12 +67,14 @@ class TestProductionStoreIsolation:
         """*_chaos Redis keys and synthetic PG schemas don't survive test runs."""
         # This test verifies that fuzz/chaos runs use ephemeral namespaces
         # and clean up after themselves. Runtime check in test setup/teardown.
-        pytest.skip("Runtime-only check (test harness responsibility)")
+        # @owner phase-12-lead
+        pytest.skip(reason="harness implementation (deferred to Phase 12 §12.4), owner=phase-12-lead, P12-4-A")
     
     def test_synthetic_records_ephemeral_scope(self) -> None:
         """Synthetic records from fuzz runs route to ephemeral namespace."""
         # Verified by chaos.harness._cleanup_chaos_namespaces()
-        pytest.skip("Chaos harness responsibility per §12.4")
+        # @owner phase-12-lead
+        pytest.skip(reason="harness implementation (deferred to Phase 12 §12.4), owner=phase-12-lead, P12-4-A")
 
 
 class TestCorpusGrowthBound:

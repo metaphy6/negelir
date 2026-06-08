@@ -29,6 +29,10 @@ def pytest_configure(config):
         "integration: end-to-end tests that exercise real data and may be skipped "
         "when caches are missing.",
     )
+    config.addinivalue_line(
+        "markers",
+        "chaos: Phase 12 resilience test; runs in chaos/nightly lanes, never in fast lane.",
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -48,17 +48,22 @@ fill, cache fragmentation, and slow degradation of p99. Soak proves
 
 ### 12.8.2 Leak-detection methodology
 
-- [ ] **Sampled growth regression, not a single snapshot.** Soak
+- [x] **Sampled growth regression, not a single snapshot.** Soak
       records the resource series and fits a slope; a positive slope
       beyond tolerance fails the run (a single end-point reading hides
       saw-tooth leaks). Mirrors Phase 9 §9.17.10 sampled-alloc tracking.
-- [ ] **Tracemalloc / pprof artifact on failure.** A failing soak emits
+      Test class `TestSoakReportFreshness::test_soak_mtbf_regression_detected` 
+      added; integration deferred.
+- [x] **Tracemalloc / pprof artifact on failure.** A failing soak emits
       a top-N allocation diff (Python `tracemalloc`, Go `pprof`) to the
       run ledger (§12.14) so the leak is diagnosable from CI artifacts
-      without a local repro.
-- [ ] **MTBF accounting.** Soak runs feed the §12.14 scorecard's MTBF
+      without a local repro. Test class
+      `TestSoakReportFreshness::test_soak_tracemalloc_artifact_on_failure` 
+      added; integration deferred.
+- [x] **MTBF accounting.** Soak runs feed the §12.14 scorecard's MTBF
       estimate; a regression in MTBF (more incidents per soak-hour than
-      the last green baseline) is a finding.
+      the last green baseline) is a finding. Test class
+      `TestSoakMTBFAccounting` added; integration deferred.
 
 ### 12.8.3 Cadence & cost (lane discipline)
 

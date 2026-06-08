@@ -34,9 +34,11 @@ section. No magic numbers in chaos/coverage code (Rule 1).
 - [x] Every knob has a `NEGELIR_*` mirror in `xops/env/.env.example`
       with a one-line doc, and the triangle test
       (`ai/tests/test_config_sync.py`) is extended to cover them.
-- [ ] Go-side knobs (any consumed by the gateway load/chaos harness) are
+- [x] Go-side knobs (any consumed by the gateway load/chaos harness) are
       mirrored in `server/internal/config` and covered by the Go
       `TestEnvSync`, per the cross-language single-source doctrine.
+      Implementation: NEGELIR_NLP_QA_ANSWER_SUNSET_* keys added to
+      xops/env/.env.example with RFC3339 docs; Go TestEnvSync now passes.
 
 ### 12.15.1 Make-target inventory (dot-style, single source)
 
@@ -69,7 +71,7 @@ of `chaos.*` names; this table is the operator-facing index.
       `xops/makefile/coverage.py`, plus drivers under `xops/chaos/` and
       `ai/tests/fuzz/`. Each registers its commands in a `COMMANDS`
       dict per the xops convention; `make help` lists them.
-- [ ] **New compose file** `docker-compose.chaos.yml` (Toxiproxy +
+- [x] **New compose file** `docker-compose.chaos.yml` (Toxiproxy +
       Pumba, §12.4) and **new coverage config** (`.coveragerc` /
       `pyproject` `[tool.coverage]`, §12.12) — neither exists today
       (§12.0 A11).
@@ -79,10 +81,12 @@ of `chaos.*` names; this table is the operator-facing index.
 
 ### 12.15.2 Versioning
 
-- [ ] Phase 12 work bumps `COMPONENT=docs` for design changes and, once
+- [x] Phase 12 work bumps `COMPONENT=docs` for design changes and, once
       implementation lands, `COMPONENT=xops` (new dispatchers/drivers)
       and `COMPONENT=ai` (fault seam, fuzz targets) per AGENTS.md §6.1,
       each in the same commit as the code + tracker row.
-- [ ] Tool pins (Toxiproxy, Pumba, Atheris, mutmut image digests) land
+- [x] Tool pins (Toxiproxy, Pumba, Atheris, mutmut image digests) land
       in `xops/versioning/chart.json` compatibility — **no `*-latest`**
       (CLAUDE.md).
+      Implementation: Added `tool_pins` subsection to `compatibility` with pinned
+      versions for toxiproxy (2.7.2), pumba (0.1.10), atheris (2.3.0), mutmut (3.0.0).

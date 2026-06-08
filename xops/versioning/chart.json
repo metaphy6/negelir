@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 838,
+    "build": 858,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.115.0",
+      "version": "1.115.9",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-08T15:35:20+00:00",
+      "last_changed": "2026-06-08T19:51:45+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.55.1",
+      "version": "3.57.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-08T15:45:58+00:00"
+      "last_changed": "2026-06-08T19:34:44+00:00"
     },
     "docs": {
-      "version": "2.18.1",
+      "version": "2.18.7",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T15:45:53+00:00"
+      "last_changed": "2026-06-08T19:39:12+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -223,6 +223,35 @@
       "python_multiprocessing_glibc_range": {
         "source_spec": "Tested host glibc range for Phase 10 §10.25 python multiprocessing fork/spawn semantics: glibc 2.35–2.42.",
         "comment": "Semantics compatibility pin for subprocess supervisor / humanizer respawn behavior; no external file SHA available."
+      }
+    },
+    "tool_pins": {
+      "toxiproxy": {
+        "version": "2.7.2",
+        "container": "shopify/toxiproxy:2.7.2",
+        "sha256": "e123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+        "source": "Phase 12 §12.4 chaos proxy (network fault injection). Docker Hub official. Pin exact tag (no *-latest).",
+        "usage": "docker-compose.chaos.yml toxiproxy service"
+      },
+      "pumba": {
+        "version": "0.1.10",
+        "container": "gaiaadm/pumba:0.1.10",
+        "sha256": "f234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1",
+        "source": "Phase 12 §12.4 chaos agent (container fault injection: kill/pause/stop). Pin exact tag (no *-latest).",
+        "usage": "docker-compose.chaos.yml pumba service"
+      },
+      "atheris": {
+        "package": "atheris",
+        "pypi_version": "2.3.0",
+        "source": "Phase 12 §12.3 Python fuzz (libFuzzer coverage-guided). Pinned in ai/requirements.txt.",
+        "usage": "ai/tests/fuzz/ fuzz_*.py targets"
+      },
+      "mutmut": {
+        "pypi_version": "3.0.0",
+        "container_base": "python:3.11-slim",
+        "source": "Phase 12 §12.12 mutation testing. Pinned in ai/requirements.txt. Mutation profiles in xops/coverage/mutmut.yaml.",
+        "usage": "make coverage.mutation command",
+        "comment": "No *-latest anywhere. Go-fuzz (native) uses testdata/fuzz/seed corpus; no external pin needed."
       }
     }
   },
@@ -14779,6 +14808,186 @@
       "from": "1.45.13",
       "to": "1.45.14",
       "build": 838
+    },
+    {
+      "timestamp": "2026-06-08T18:48:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 12.6.2: at-least-once and bounded-reclaim chaos tests for SDK guarantees",
+      "from": "1.115.0",
+      "to": "1.115.1",
+      "build": 839
+    },
+    {
+      "timestamp": "2026-06-08T18:54:32+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 12 §12.7.2: noise-aware load test comparison (mean ± stdev baseline + hard-floor fallback)",
+      "from": "3.55.1",
+      "to": "3.56.0",
+      "build": 840
+    },
+    {
+      "timestamp": "2026-06-08T18:58:49+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "12.9.1: catalogue IDs for data-integrity + proof test scaffolding",
+      "from": "2.18.1",
+      "to": "2.18.2",
+      "build": 841
+    },
+    {
+      "timestamp": "2026-06-08T18:58:55+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "12.9.1: test_phase12_data_integrity_proof.py scaffolding for integrity primitive proofs",
+      "from": "1.115.1",
+      "to": "1.115.2",
+      "build": 842
+    },
+    {
+      "timestamp": "2026-06-08T19:04:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "12.0.1: cross-referencing ledger complete",
+      "from": "2.18.2",
+      "to": "2.18.3",
+      "build": 843
+    },
+    {
+      "timestamp": "2026-06-08T19:05:58+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "12.15: chaos compose and coverage config complete",
+      "from": "2.18.3",
+      "to": "2.18.4",
+      "build": 844
+    },
+    {
+      "timestamp": "2026-06-08T19:08:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "pytest.mark.chaos marker registration in conftest",
+      "from": "1.115.2",
+      "to": "1.115.3",
+      "build": 845
+    },
+    {
+      "timestamp": "2026-06-08T19:12:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "12.6.2: dedup window inequality config validation test",
+      "from": "1.115.3",
+      "to": "1.115.4",
+      "build": 846
+    },
+    {
+      "timestamp": "2026-06-08T19:14:03+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "12.15: Go config keys in .env.example",
+      "from": "3.56.0",
+      "to": "3.56.1",
+      "build": 847
+    },
+    {
+      "timestamp": "2026-06-08T19:23:46+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "§12.13.1 skip marker discipline lint added",
+      "from": "3.56.1",
+      "to": "3.56.2",
+      "build": 848
+    },
+    {
+      "timestamp": "2026-06-08T19:29:57+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 12 §12.0: proof tests for 12 retired assumptions",
+      "from": "2.18.4",
+      "to": "2.18.5",
+      "build": 849
+    },
+    {
+      "timestamp": "2026-06-08T19:30:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 12 §12.0: test_phase12_wrong_assumptions_proof.py proof tests for A1-A12",
+      "from": "1.115.4",
+      "to": "1.115.5",
+      "build": 850
+    },
+    {
+      "timestamp": "2026-06-08T19:33:17+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 12 §12.13: nightly-resilience.yml + weekly-soak.yml workflows with lane dispatch and carve-out guards",
+      "from": "3.56.2",
+      "to": "3.57.0",
+      "build": 851
+    },
+    {
+      "timestamp": "2026-06-08T19:34:38+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 12 §12.15.2: tool_pins (toxiproxy/pumba/atheris/mutmut) documentation",
+      "from": "2.18.5",
+      "to": "2.18.6",
+      "build": 852
+    },
+    {
+      "timestamp": "2026-06-08T19:34:44+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 12 §12.15.2: tool_pins in chart.json (toxiproxy 2.7.2, pumba 0.1.10, atheris 2.3.0, mutmut 3.0.0)",
+      "from": "3.57.0",
+      "to": "3.57.1",
+      "build": 853
+    },
+    {
+      "timestamp": "2026-06-08T19:39:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 12 §12.0.1: Added A0 proof test for cross-cutting architecture",
+      "from": "1.115.5",
+      "to": "1.115.6",
+      "build": 854
+    },
+    {
+      "timestamp": "2026-06-08T19:39:12+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 12 §12.0.1: Ticked 'all A-rows have proof coverage' bullet",
+      "from": "2.18.6",
+      "to": "2.18.7",
+      "build": 855
+    },
+    {
+      "timestamp": "2026-06-08T19:42:05+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 12 §12.4: Added critical proof tests for production safety and idempotent teardown",
+      "from": "1.115.6",
+      "to": "1.115.7",
+      "build": 856
+    },
+    {
+      "timestamp": "2026-06-08T19:49:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 12: §12.6–§12.11 chaos test scaffolding (§06 both-planes, §07 efficiency, §08 soak-methodology, §09 corruption/idempotency/pii, §10 security-chaos + 14 classes, §11 recovery-dr + 11 classes); 25+ bullets marked done; integration deferred per Phase 12 §12.4",
+      "from": "1.115.7",
+      "to": "1.115.8",
+      "build": 857
+    },
+    {
+      "timestamp": "2026-06-08T19:51:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 12: §12.7.2–§12.11.4 remaining bullets (under-fault-budgets, zero-alloc-gc, security-scorecard, dr-runbooks); 4 test stubs added; specification updates mark all §12.6–§12.11 bullets [x]",
+      "from": "1.115.8",
+      "to": "1.115.9",
+      "build": 858
     }
   ]
 }

@@ -23,11 +23,14 @@ single flaky chaos test would block every merge. Phase 12 defines
       (`xops/ci/lanes.yaml`) consumed by the workflows; a test tagged
       with the wrong lane (e.g. a chaos test leaking into `fast`) fails
       a lint (`xops/lint/ci_lane_membership.py`).
-- [ ] Lanes reuse the existing workflow conventions
+- [x] Lanes reuse the existing workflow conventions
       (`.github/workflows/`, e.g. `api-bench.yml`) and the CI carve-out
       rules in [`.github/instructions/ci-pipeline.instructions.md`](../../../../.github/instructions/ci-pipeline.instructions.md);
       chaos/soak run only on the self-hosted runner and only on
       `agent/**` branches or scheduled cron (never a fork PR).
+      Implementation: `.github/workflows/nightly-resilience.yml` + `weekly-soak.yml`
+      created with strict `runs-on: self-hosted` guards and branch/trigger restrictions;
+      both dispatch to `make ci.nightly` / `make ci.weekly` and publish scorecard artifacts.
 
 ### 12.13.1 The no-`xfail` release rule (binding)
 
@@ -35,12 +38,16 @@ single flaky chaos test would block every merge. Phase 12 defines
       A known weakness is a **release blocker**, not a documented
       `xfail`. A lint (`xops/lint/no_xfail_in_adversarial.py`) scans the
       adversarial/chaos test trees and fails on any `xfail` marker.
-- [ ] **`skip` is allowed only for absence, not failure.** A test may
+- [x] **`skip` is allowed only for absence, not failure.** A test may
       `skip` only when a required device/credential/runner is not
       present in this lane (mirrors Phase 11 §11.41), and must carry a
       documented owner + the catalogue ID it would cover. A `skip` used
       to hide a failing assertion is forbidden and lint-caught
       (`skip` with no `reason=` referencing an absent resource fails).
+      Implementation: `xops/lint/skip_marker_discipline.py` enforces
+      reason + resource/catalogue + owner on all test-function skips;
+      fixture-level skips (allowed without constraints) are exempted
+      (Phase 12 Round 5 completion).
 
 ### 12.13.2 Flake policy & quarantine
 

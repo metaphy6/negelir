@@ -1,0 +1,48 @@
+# Phase 12 §12.13 — Weekly soak & DR drills lane
+# Runs: full 24h soaks, GPU heat stress, full DR drill scenarios
+# Restrictions: self-hosted only, scheduled cron (per ci-pipeline.instructions.md §4)
+# This is the release gate — runs weekly only, never on PRs or user branches
+name: weekly-soak
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'    # weekly at 00:00 UTC Sunday
+  workflow_dispatch:        # manual trigger (operator only)
+
+jobs:
+  soak-and-dr:
+    runs-on: self-hosted
+    timeout-minutes: 1440   # 24 hours
+    # Safety guard: only scheduled or manual dispatch, never on PRs
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap env
+        run: make env
+
+      - name: Run weekly lane (24h soaks + GPU heat + full DR drills, ~24h)
+        run: make ci.weekly
+        env:
+          NEGELIR_ENV: test
+          NEGELIR_CHAOS_PROFILE: chaos
+
+      - name: Collect & publish scorecard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase12-scorecard-weekly
+          path: data/chaos/ledger.jsonl
+          retention-days: 90
+
+      - name: Publish soak metrics
+        if: success()
+        run: |
+          echo "✓ Weekly soak passed; MTBF trending at $(cat data/chaos/mtbf.txt 2>/dev/null || echo 'N/A')"
+
+      - name: Tear down all stacks
+        if: always()
+        run: make chaos.down || true
