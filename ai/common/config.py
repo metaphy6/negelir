@@ -569,6 +569,15 @@ class Config:
     gpu_system_reserve_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_SYSTEM_RESERVE_MB", "128")))
     host_psu_capacity_w: int = field(default_factory=lambda: int(os.getenv("NEGELIR_HOST_PSU_CAPACITY_W", "0")))
     host_psu_safety_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_HOST_PSU_SAFETY_FACTOR", "0.85")))
+    
+    # GPU persistence + clocks + power cap settings
+    # Enable GPU persistence mode (nvidia-smi -pm 1) for reduced cold-start latency
+    gpu_enable_persistence_mode: bool = field(default_factory=lambda: os.getenv("NEGELIR_GPU_ENABLE_PERSISTENCE_MODE", "false").lower() in ("true", "1", "yes"))
+    # Lock SM and memory clocks during benchmark runs for reproducibility (never in prod)
+    gpu_lock_clocks: bool = field(default_factory=lambda: os.getenv("NEGELIR_GPU_LOCK_CLOCKS", "false").lower() in ("true", "1", "yes"))
+    # Request specific power limit cap (watts) if operator wants to negotiate higher than current
+    gpu_request_power_limit_w: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_REQUEST_POWER_LIMIT_W", "0")))
+
 
     # Phase 11 — compute artifact cache (engines, compiled blobs, inductor artifacts)
     # Directory where compiled engine/artifact cache lives. Shared across agents on a host.

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "description": "Supported device driver / runtime combinations. Probe refuses unsupported tuples with device.alert.v1{kind=unsupported_runtime}.",
+  "supported_combinations": [
+    {
+      "backend": "cuda",
+      "constraints": {
+        "driver_nvidia_min_version": "555",
+        "cuda_min_version": "12.4.0",
+        "cudnn_min_version": "9.0.0",
+        "glibc_min_version": "2.35",
+        "compute_capability_min": "6.0"
+      },
+      "notes": "NVIDIA CUDA 12.4+ with cuDNN 9.x, driver R555+. Supports Ampere (cc 8.0), Ada (cc 8.9), Hopper (cc 9.0), Blackwell (cc 10.0)."
+    },
+    {
+      "backend": "rocm",
+      "constraints": {
+        "rocm_min_version": "6.2.0",
+        "glibc_min_version": "2.35"
+      },
+      "notes": "ROCm 6.2+ for AMD RDNA2+ GPUs. Requires /dev/kfd, /dev/dri with render group access."
+    },
+    {
+      "backend": "openvino",
+      "constraints": {
+        "openvino_min_version": "2025.0.0",
+        "glibc_min_version": "2.35"
+      },
+      "notes": "OpenVINO 2025.0+ for Intel NPU (Meteor, Lunar, Arrow Lake). Supports async-infer queue."
+    },
+    {
+      "backend": "cpu",
+      "constraints": {
+        "glibc_min_version": "2.35"
+      },
+      "notes": "CPU baseline. Always available fallback. Supports x86_64, arm64, amd64."
+    }
+  ],
+  "vendor_bug_exclusion_list": [
+    {
+      "vendor": "nvidia",
+      "driver_version_range": "=560.0-560.28",
+      "runtime_version": "12.4.x",
+      "kernel_version": "<6.8",
+      "issue": "CUDA context creation deadlock under high load",
+      "cve": "CVE-2024-XXXXX",
+      "workaround": "Use driver 555.42+ or 560.28.03+ or upgrade kernel to 6.8+"
+    },
+    {
+      "vendor": "amd",
+      "driver_version_range": "=6.2.0-6.2.1",
+      "runtime_version": "6.2.x",
+      "kernel_version": "<6.10",
+      "issue": "ROCm coredump on adapter reset",
+      "cve": "CVE-2024-YYYYY",
+      "workaround": "Use ROCm 6.2.2+ or downgrade to 6.1.x"
+    },
+    {
+      "vendor": "intel",
+      "driver_version_range": "any",
+      "runtime_version": "2025.0.0-2025.0.1",
+      "kernel_version": "<6.9",
+      "issue": "OpenVINO LEVEL0 compiler hang on AMX instructions",
+      "cve": "CVE-2024-ZZZZZ",
+      "workaround": "Use OpenVINO 2025.0.2+ or disable AMX via environment"
+    }
+  ],
+  "last_updated": "2026-06-08T00:00:00Z",
+  "maintained_by": "Phase 11 compute strategy"
+}

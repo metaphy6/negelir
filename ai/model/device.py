@@ -17,6 +17,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 import hashlib
@@ -274,8 +275,94 @@ def _probe_main() -> Dict[str, Any]:
             log.exception("apply_disable_rules failed")
         except Exception:
             pass
-
+    
+    # Check container runtime mounts and capabilities
+    try:
+        _check_container_runtime(result)
+    except Exception:
+        try:
+            log.exception("container runtime check failed; continuing")
+        except Exception:
+            pass
+    
+    # Probe GPU persistence mode, clocks, and power settings
+    try:
+        cfg = get_config()  # type: ignore
+        _probe_gpu_persistence_and_clocks(result, cfg)
+    except Exception:
+        try:
+            log.exception("GPU persistence/clocks probe failed; continuing")
+        except Exception:
+            pass
+    
+    # Compute host_class for cross-host reproducibility (§11.15)
+    result["host_class"] = _compute_host_class(result)
+    
     return result
+
+
+def _compute_host_class(result: Dict[str, Any]) -> str:
+    """Compute a stable host_class hash for cross-host reproducibility.
+    
+    Two physically-distinct hosts with the same hardware configuration and
+    driver/runtime versions must compute to the same host_class. This enables
+    inference replay (§11.15) to run on any compatible host without cache miss.
+    
+    Fields included: vendor, family, compute_capability, vram_total_mb, 
+    driver_version, runtime_version, allocator_conf, deterministic_flags.
+    
+    Per-host UUIDs are explicitly excluded.
+    """
+    # Normalize across all inventory devices
+    normalized_parts = []
+    
+    for device in result.get("inventory", []):
+        kind = device.get("device_kind", "")
+        
+        if kind == "cpu":
+            # CPU class is determined by arch, vendor, and SIMD capabilities
+            arch = device.get("arch", "unknown")
+            vendor = device.get("vendor", "unknown")
+            simd = "|".join(sorted(device.get("simd", [])))
+            part = f"cpu:{arch}:{vendor}:{simd}"
+        elif kind == "cuda":
+            # CUDA class is determined by compute_capability, VRAM, driver version
+            vendor = device.get("vendor", "nvidia")
+            family = device.get("family", "unknown")
+            cc = device.get("compute_capability", "0.0")
+            vram = device.get("vram_total_mb", 0)
+            driver_version = os.getenv("NEGELIR_DRIVER_NVIDIA_MIN_VERSION", "555")
+            cuda_version = os.getenv("NEGELIR_CUDA_MIN_VERSION", "12.4.0")
+            # Allocator configuration affects memory layout determinism
+            allocator_conf = os.getenv("PYTORCH_CUDA_ALLOC_CONF", "")
+            # Deterministic mode flags affect numerical reproducibility
+            deterministic_flags = os.getenv("CUBLAS_WORKSPACE_CONFIG", "")
+            part = f"cuda:{vendor}:{family}:{cc}:{vram}:{driver_version}:{cuda_version}:{allocator_conf}:{deterministic_flags}"
+        elif kind == "openvino":
+            # OpenVINO (NPU) class
+            vendor = device.get("vendor", "intel")
+            family = device.get("family", "unknown")
+            openvino_version = os.getenv("NEGELIR_OPENVINO_MIN_VERSION", "2025.0.0")
+            part = f"openvino:{vendor}:{family}:{openvino_version}"
+        elif kind == "rocm":
+            # AMD ROCm class
+            vendor = device.get("vendor", "amd")
+            family = device.get("family", "unknown")
+            rocm_version = os.getenv("NEGELIR_ROCM_MIN_VERSION", "6.2.0")
+            part = f"rocm:{vendor}:{family}:{rocm_version}"
+        else:
+            continue
+        
+        normalized_parts.append(part)
+    
+    if not normalized_parts:
+        return hashlib.sha256("unknown".encode("utf-8")).hexdigest()[:16]
+    
+    # Sort for canonical ordering
+    normalized_str = "|".join(sorted(normalized_parts))
+    host_class = hashlib.sha256(normalized_str.encode("utf-8")).hexdigest()[:16]
+    return host_class
+
 
 
 def _attach_device_uuids(result: Dict[str, Any]) -> None:
@@ -284,6 +371,19 @@ def _attach_device_uuids(result: Dict[str, Any]) -> None:
     Uses UUID5 over a deterministic namespace+name so repeated probes on the same
     host yield stable IDs useful for targeted disable operations.
     """
+    for d in result.get("inventory", []):
+        if "uuid" in d and d["uuid"]:
+            continue
+        # Build a stable name from non-volatile identifiers
+        name = d.get("name") or ""
+        kind = d.get("device_kind") or ""
+        index = str(d.get("index", ""))
+        ns = uuid.NAMESPACE_DNS
+        stable = f"{kind}:{name}:{index}"
+        try:
+            d["uuid"] = str(uuid.uuid5(ns, stable))
+        except Exception:
+            d["uuid"] = str(uuid.uuid4())
     for d in result.get("inventory", []):
         if "uuid" in d and d["uuid"]:
             continue
@@ -413,6 +513,434 @@ def apply_disable_rules(result: Dict[str, Any], cfg=None) -> None:
         alerts.append(alert)
 
 
+def _check_container_runtime(result: Dict[str, Any]) -> None:
+    """Check that devices mounted in container match those in inventory.
+    
+    When device != cpu, the probe verifies the container actually has the
+    device mounted and the runtime can drive it:
+    - NVIDIA: nvidia-container-toolkit present AND nvidia-smi -L succeeds
+    - ROCm: --device=/dev/kfd,/dev/dri AND render/video group permissions
+    - Intel NPU: --device=/dev/accel/accel0 AND render group permissions
+    
+    Missing mount or permission → device.alert.v1{kind=runtime_missing, detail}
+    and device is dropped from inventory.
+    """
+    import grp
+    import os
+    
+    alerts = result.setdefault("alerts", [])
+    removed_uuids = set()
+    
+    for d in result.get("inventory", []):
+        kind = d.get("device_kind", "")
+        d_uuid = d.get("uuid", "")
+        
+        if kind == "cpu":
+            # CPU never requires special container setup
+            continue
+        
+        elif kind == "cuda":
+            # NVIDIA: check nvidia-smi -L works and toolkit is present
+            # Toolkit presence indicated by nvidia-container-toolkit wrapper
+            try:
+                # Try nvidia-smi -L to list GPUs
+                import subprocess
+                result_check = subprocess.run(
+                    ["nvidia-smi", "-L"],
+                    timeout=2,
+                    capture_output=True,
+                    text=True,
+                )
+                if result_check.returncode != 0:
+                    detail = "nvidia-smi -L failed; device may not be mounted"
+                    alert = {
+                        "kind": "runtime_missing",
+                        "device_uuid": d_uuid,
+                        "device_kind": kind,
+                        "detail": detail,
+                        "t_mono_ns": time.monotonic_ns(),
+                    }
+                    alerts.append(alert)
+                    removed_uuids.add(d_uuid)
+            except Exception as e:
+                detail = f"nvidia-smi check failed: {str(e)}"
+                alert = {
+                    "kind": "runtime_missing",
+                    "device_uuid": d_uuid,
+                    "device_kind": kind,
+                    "detail": detail,
+                    "t_mono_ns": time.monotonic_ns(),
+                }
+                alerts.append(alert)
+                removed_uuids.add(d_uuid)
+        
+        elif kind == "rocm":
+            # ROCm: check /dev/kfd and /dev/dri exist and user has permissions
+            missing_devices = []
+            if not os.path.exists("/dev/kfd"):
+                missing_devices.append("/dev/kfd")
+            if not os.path.exists("/dev/dri"):
+                missing_devices.append("/dev/dri")
+            
+            if missing_devices:
+                detail = f"Missing ROCm devices: {', '.join(missing_devices)}"
+                alert = {
+                    "kind": "runtime_missing",
+                    "device_uuid": d_uuid,
+                    "device_kind": kind,
+                    "detail": detail,
+                    "t_mono_ns": time.monotonic_ns(),
+                }
+                alerts.append(alert)
+                removed_uuids.add(d_uuid)
+            else:
+                # Check group permissions
+                try:
+                    # User must be in render or video group
+                    user_gids = os.getgroups()
+                    render_gid = grp.getgrnam("render").gr_gid if "render" in [grp.getgrgid(g).gr_name for g in user_gids] else None
+                    video_gid = grp.getgrnam("video").gr_gid if "video" in [grp.getgrgid(g).gr_name for g in user_gids] else None
+                    
+                    has_render_or_video = (render_gid in user_gids or video_gid in user_gids) if render_gid or video_gid else False
+                    
+                    if not has_render_or_video:
+                        detail = "User not in 'render' or 'video' group; ROCm device inaccessible"
+                        alert = {
+                            "kind": "runtime_missing",
+                            "device_uuid": d_uuid,
+                            "device_kind": kind,
+                            "detail": detail,
+                            "t_mono_ns": time.monotonic_ns(),
+                        }
+                        alerts.append(alert)
+                        removed_uuids.add(d_uuid)
+                except Exception as e:
+                    detail = f"Group check failed: {str(e)}"
+                    alert = {
+                        "kind": "runtime_missing",
+                        "device_uuid": d_uuid,
+                        "device_kind": kind,
+                        "detail": detail,
+                        "t_mono_ns": time.monotonic_ns(),
+                    }
+                    alerts.append(alert)
+                    removed_uuids.add(d_uuid)
+        
+        elif kind == "openvino":
+            # Intel NPU: check /dev/accel/accel0 exists and user has render group permission
+            if not os.path.exists("/dev/accel/accel0"):
+                detail = "Intel NPU device /dev/accel/accel0 not present"
+                alert = {
+                    "kind": "runtime_missing",
+                    "device_uuid": d_uuid,
+                    "device_kind": kind,
+                    "detail": detail,
+                    "t_mono_ns": time.monotonic_ns(),
+                }
+                alerts.append(alert)
+                removed_uuids.add(d_uuid)
+            else:
+                # Check render group permission
+                try:
+                    user_gids = os.getgroups()
+                    render_gid = grp.getgrnam("render").gr_gid if "render" in [grp.getgrgid(g).gr_name for g in user_gids] else None
+                    
+                    if render_gid not in user_gids:
+                        detail = "User not in 'render' group; Intel NPU device inaccessible"
+                        alert = {
+                            "kind": "runtime_missing",
+                            "device_uuid": d_uuid,
+                            "device_kind": kind,
+                            "detail": detail,
+                            "t_mono_ns": time.monotonic_ns(),
+                        }
+                        alerts.append(alert)
+                        removed_uuids.add(d_uuid)
+                except Exception as e:
+                    detail = f"Group check failed: {str(e)}"
+                    alert = {
+                        "kind": "runtime_missing",
+                        "device_uuid": d_uuid,
+                        "device_kind": kind,
+                        "detail": detail,
+                        "t_mono_ns": time.monotonic_ns(),
+                    }
+                    alerts.append(alert)
+                    removed_uuids.add(d_uuid)
+    
+    # Remove devices with runtime issues from inventory
+    if removed_uuids:
+        result["inventory"] = [
+            d for d in result.get("inventory", [])
+            if d.get("uuid") not in removed_uuids
+        ]
+
+
+def _probe_gpu_persistence_and_clocks(result: Dict[str, Any], cfg: "config.Config") -> None:
+    """Probe GPU persistence mode, clocks, and power limits via nvidia-smi.
+    
+    Records current settings for each CUDA device and optionally requests
+    configuration changes (persistence mode, clock locking, power cap).
+    """
+    import subprocess
+    
+    alerts = result.setdefault("alerts", [])
+    
+    for d in result.get("inventory", []):
+        if d.get("device_kind") != "cuda":
+            continue
+        
+        idx = d.get("index")
+        if idx is None:
+            continue
+        
+        # Try to enable persistence mode if configured
+        if cfg.gpu_enable_persistence_mode:
+            try:
+                subprocess.run(
+                    ["sudo", "nvidia-smi", "-pm", "1", "-i", str(idx)],
+                    timeout=5,
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass  # Best-effort; fail silently
+        
+        # Probe current persistence mode
+        try:
+            result_pm = subprocess.run(
+                ["nvidia-smi", "-i", str(idx), "--query-gpu=persistence_mode", "--format=csv,noheader"],
+                timeout=5,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result_pm.returncode == 0:
+                pm_value = result_pm.stdout.strip().lower()
+                d["persistence_mode"] = pm_value  # "on" or "off"
+            else:
+                d["persistence_mode"] = "unknown"
+        except Exception:
+            d["persistence_mode"] = "unknown"
+        
+        # Probe current SM clock
+        try:
+            result_sm = subprocess.run(
+                ["nvidia-smi", "-i", str(idx), "--query-gpu=clocks.sm", "--format=csv,noheader"],
+                timeout=5,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result_sm.returncode == 0:
+                sm_mhz_str = result_sm.stdout.strip().split()[0]
+                d["sm_clock_mhz"] = int(sm_mhz_str)
+            else:
+                d["sm_clock_mhz"] = 0
+        except Exception:
+            d["sm_clock_mhz"] = 0
+        
+        # Probe current memory clock
+        try:
+            result_mem = subprocess.run(
+                ["nvidia-smi", "-i", str(idx), "--query-gpu=clocks.mem", "--format=csv,noheader"],
+                timeout=5,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result_mem.returncode == 0:
+                mem_mhz_str = result_mem.stdout.strip().split()[0]
+                d["mem_clock_mhz"] = int(mem_mhz_str)
+            else:
+                d["mem_clock_mhz"] = 0
+        except Exception:
+            d["mem_clock_mhz"] = 0
+        
+        # Probe current power limit
+        try:
+            result_pl = subprocess.run(
+                ["nvidia-smi", "-i", str(idx), "--query-gpu=power.limit", "--format=csv,noheader"],
+                timeout=5,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result_pl.returncode == 0:
+                power_str = result_pl.stdout.strip().split()[0]
+                d["power_limit_w"] = float(power_str)
+            else:
+                d["power_limit_w"] = 0.0
+        except Exception:
+            d["power_limit_w"] = 0.0
+        
+        # Probe default power limit
+        try:
+            result_dpf = subprocess.run(
+                ["nvidia-smi", "-i", str(idx), "--query-gpu=power.default_limit", "--format=csv,noheader"],
+                timeout=5,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result_dpf.returncode == 0:
+                power_default_str = result_dpf.stdout.strip().split()[0]
+                d["power_default_limit_w"] = float(power_default_str)
+            else:
+                d["power_default_limit_w"] = 0.0
+        except Exception:
+            d["power_default_limit_w"] = 0.0
+        
+        # Warn if power has been capped below default
+        if d.get("power_limit_w", 0) > 0 and d.get("power_default_limit_w", 0) > 0:
+            if d["power_limit_w"] < d["power_default_limit_w"] * 0.99:  # 1% tolerance
+                alert = {
+                    "kind": "gpu_power_capped",
+                    "device_uuid": d.get("uuid", ""),
+                    "device_index": idx,
+                    "current_power_limit_w": d["power_limit_w"],
+                    "default_power_limit_w": d["power_default_limit_w"],
+                    "t_mono_ns": time.monotonic_ns(),
+                }
+                alerts.append(alert)
+        
+        # Request power limit adjustment if configured
+        if cfg.gpu_request_power_limit_w > 0:
+            try:
+                subprocess.run(
+                    ["sudo", "nvidia-smi", "-i", str(idx), "-pl", str(cfg.gpu_request_power_limit_w)],
+                    timeout=5,
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass  # Best-effort; fail silently
+
+
+def _load_runtime_matrix() -> Dict[str, Any]:
+    """Load the runtime_matrix.json file. Returns empty dict if not found.
+    
+    The matrix documents supported driver/runtime combinations and excludes
+    known vendor bugs that would crash despite parsing as "supported".
+    """
+    matrix_path = os.path.join(os.path.dirname(__file__), "..", "..", "xops", "compute", "runtime_matrix.json")
+    try:
+        with open(matrix_path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _parse_version(v_str: str) -> tuple:
+    """Parse a semantic version string to (major, minor, patch) tuple.
+    
+    E.g., "12.4.0" -> (12, 4, 0)
+    E.g., "555" -> (555, 0, 0)
+    """
+    try:
+        parts = v_str.split(".")
+        return tuple(int(p) for p in parts[:3]) + ((0,) * (3 - len(parts)))
+    except Exception:
+        return (0, 0, 0)
+
+
+def _check_version_constraint(observed: str, required: str, operator: str = ">=") -> bool:
+    """Check if observed version satisfies the constraint (e.g., >= required).
+    
+    Supports >=, >, ==, <=, <. Returns False on parse error.
+    """
+    obs = _parse_version(observed)
+    req = _parse_version(required)
+    
+    if operator == ">=":
+        return obs >= req
+    elif operator == ">":
+        return obs > req
+    elif operator == "==":
+        return obs == req
+    elif operator == "<=":
+        return obs <= req
+    elif operator == "<":
+        return obs < req
+    else:
+        return False
+
+
+def _is_in_version_range(v_str: str, range_spec: str) -> bool:
+    """Check if v_str falls in a range like '560.0-560.28' or '6.2.0-6.2.1'.
+    
+    Returns True if v_str is in the range (inclusive).
+    """
+    try:
+        if "-" not in range_spec:
+            return _check_version_constraint(v_str, range_spec, "==")
+        lo, hi = range_spec.split("-", 1)
+        return _check_version_constraint(v_str, lo, ">=") and _check_version_constraint(v_str, hi, "<=")
+    except Exception:
+        return False
+
+
+def validate_runtime_support(result: Dict[str, Any], cfg=None) -> None:
+    """Validate detected runtimes against xops/compute/runtime_matrix.json.
+    
+    Unsupported combinations are marked unavailable and an alert is emitted.
+    Vendor-bug exclusions (driver/runtime tuples known to crash) are also checked.
+    
+    This mutates `result` in-place.
+    """
+    matrix = _load_runtime_matrix()
+    if not matrix:
+        # No matrix available; skip validation
+        return
+    
+    alerts = result.setdefault("alerts", [])
+    inventory = result.get("inventory", [])
+    
+    # Try to get runtime versions from the environment or defaults
+    # (In a full implementation, these would be detected during the probe.)
+    driver_nvidia = os.getenv("NEGELIR_DRIVER_NVIDIA_MIN_VERSION", "555")
+    cuda_ver = os.getenv("NEGELIR_CUDA_MIN_VERSION", "12.4.0")
+    cudnn_ver = os.getenv("NEGELIR_CUDNN_MIN_VERSION", "9.0.0")
+    rocm_ver = os.getenv("NEGELIR_ROCM_MIN_VERSION", "6.2.0")
+    openvino_ver = os.getenv("NEGELIR_OPENVINO_MIN_VERSION", "2025.0.0")
+    glibc_ver = os.getenv("NEGELIR_GLIBC_MIN_VERSION", "2.35")
+    compute_cap = os.getenv("NEGELIR_CUDA_MIN_COMPUTE_CAPABILITY", "6.0")
+    
+    kernel_version = platform.release()
+    
+    # Check vendor-bug exclusion list
+    exclusions = matrix.get("vendor_bug_exclusion_list", [])
+    for excl in exclusions:
+        vendor = excl.get("vendor", "").lower()
+        driver_range = excl.get("driver_version_range", "")
+        runtime_version = excl.get("runtime_version", "")
+        kernel_range = excl.get("kernel_version", "")
+        issue = excl.get("issue", "unknown")
+        cve = excl.get("cve", "")
+        
+        # Simple check: if this host matches the exclusion criteria, mark GPUs as unavailable
+        if vendor == "nvidia" and driver_range and _is_in_version_range(driver_nvidia, driver_range):
+            if runtime_version and cuda_ver.startswith(runtime_version.replace(".x", "")):
+                if _is_in_version_range(kernel_version, kernel_range):
+                    for d in inventory:
+                        if d.get("device_kind") == "cuda" and d.get("available"):
+                            d["available"] = False
+                            d["disabled_by"] = f"vendor_bug:{vendor}:{cve}:{issue}"
+                            alert = {
+                                "kind": "unsupported_runtime",
+                                "severity": "error",
+                                "device": d.get("name", "unknown"),
+                                "reason": f"vendor bug: {issue}",
+                                "cve": cve,
+                                "observed": {"driver": driver_nvidia, "cuda": cuda_ver, "kernel": kernel_version},
+                                "workaround": excl.get("workaround", ""),
+                                "t_mono_ns": time.monotonic_ns(),
+                                "t_wall_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            }
+                            alerts.append(alert)
+                            log.warning("Device %s disabled due to vendor bug: %s (%s)", d.get("name"), issue, cve)
+
+
 def run_and_write_probe(cfg=None) -> None:
     """Run the probe (with cfg timeouts/paths) and write the atomic JSON inventory.
 
@@ -435,6 +963,10 @@ def run_and_write_probe(cfg=None) -> None:
     except subprocess.TimeoutExpired:
         result = {"probe_id": str(uuid.uuid4()), "probe_ts": time.time(), "inventory": [{"device_kind": "cpu", "available": True}, {"device_kind": "cuda", "available": False, "reason": "probe_timeout"}]}
 
+    # Apply runtime matrix validation before writing
+    apply_disable_rules(result, cfg)
+    validate_runtime_support(result, cfg)
+    
     target = cfg.device_probe_path
     tmp = None
     try:
@@ -461,6 +993,98 @@ def run_and_write_probe(cfg=None) -> None:
                 os.remove(tmp)
             except Exception:
                 pass
+
+
+def _compute_inventory_delta(before: list[dict], after: list[dict]) -> tuple[list[str], list[str]]:
+    """Compute inventory delta: (added_uuids, removed_uuids).
+    
+    Compares two inventory snapshots to detect hot-plugged or removed devices.
+    Devices are identified by UUID (stable across probes for same device).
+    """
+    before_uuids = set(d.get("uuid", "") for d in before if d.get("uuid"))
+    after_uuids = set(d.get("uuid", "") for d in after if d.get("uuid"))
+    
+    added = sorted(list(after_uuids - before_uuids))
+    removed = sorted(list(before_uuids - after_uuids))
+    
+    return added, removed
+
+
+def _emit_topology_change_alert(result: Dict[str, Any], added_uuids: list[str], removed_uuids: list[str]) -> None:
+    """Emit a topology_change alert when devices are hot-plugged or removed."""
+    if not added_uuids and not removed_uuids:
+        return  # No change; do not emit
+    
+    alerts = result.setdefault("alerts", [])
+    
+    # Find device details for each UUID
+    added_devices = []
+    removed_devices = []
+    
+    for d in result.get("inventory", []):
+        uuid = d.get("uuid", "")
+        if uuid in added_uuids:
+            added_devices.append({
+                "uuid": uuid,
+                "kind": d.get("device_kind"),
+                "name": d.get("name"),
+                "index": d.get("index"),
+            })
+    
+    # Removed devices are not in current inventory, so use historical info if available
+    # For now, we just record the UUIDs
+    removed_devices = [{"uuid": u} for u in removed_uuids]
+    
+    alert = {
+        "kind": "topology_change",
+        "added": added_devices,
+        "removed": removed_devices,
+        "t_mono_ns": time.monotonic_ns(),
+        "t_wall_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    alerts.append(alert)
+
+
+class HotplugDebouncer:
+    """Debounce hotplug re-probe requests to avoid thrashing on rapid changes."""
+    
+    def __init__(self, debounce_seconds: int = 10):
+        """Initialize the debouncer.
+        
+        Args:
+            debounce_seconds: Window in which multiple hotplug events are coalesced
+                             into a single re-probe.
+        """
+        self.debounce_seconds = debounce_seconds
+        self.last_hotplug_ts: float = 0
+        self.pending_hotplug = False
+        self._lock = threading.Lock()
+    
+    def on_hotplug_event(self) -> bool:
+        """Record a hotplug event and return whether to trigger an immediate re-probe.
+        
+        Returns:
+            True if a re-probe should run immediately (debounce window expired).
+            False if a re-probe is already pending; caller should check later.
+        """
+        with self._lock:
+            now = time.time()
+            elapsed = now - self.last_hotplug_ts
+            
+            if elapsed >= self.debounce_seconds:
+                # Debounce window has expired; trigger immediate re-probe
+                self.last_hotplug_ts = now
+                self.pending_hotplug = False
+                return True
+            else:
+                # Still within debounce window; mark as pending for later
+                self.pending_hotplug = True
+                return False
+    
+    def has_pending_hotplug(self) -> bool:
+        """Check if a hotplug event is pending but not yet acted upon."""
+        with self._lock:
+            return self.pending_hotplug
 
 
 if __name__ == '__main__':

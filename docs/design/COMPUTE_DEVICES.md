@@ -56,3 +56,50 @@ Two ML-image flavors built from a common base:
 
 `docker-compose.yml` picks via `AI_IMAGE_FLAVOR=cpu|gpu` (default `gpu` on dev,
 `cpu` in `compose.prod.yml` unless explicitly switched).
+
+## 🪟 Platform-specific notes
+
+### WSL2 / Windows GPU
+
+**CUDA on WSL2 requires the host NVIDIA driver only** — do **not** install the CUDA toolkit or drivers inside the container.
+
+#### Setup
+
+1. **Host driver** (Windows only): Install NVIDIA driver for Windows (e.g., Game Ready Driver ≥ 530).
+   The driver automatically exposes `/dev/dxg` inside WSL2 containers.
+
+2. **Container setup**: `docker-compose.yml` must bind `/dev/dxg`:
+   ```yaml
+   services:
+     ai:
+       devices:
+         - /dev/dxg:/dev/dxg
+       environment:
+         CUDA_VISIBLE_DEVICES: "0"  # optional; auto-detected if not set
+   ```
+
+3. **Verify**: Inside the container, run `nvidia-smi -L`. If `/dev/dxg` is missing or `nvidia-smi` fails, WSL2 GPU acceleration is unavailable.
+
+#### Constraints
+
+- **WSL2 GPU is best-effort**: Performance is lower than native Linux or Windows CUDA due to inter-layer overhead. Use for dev/test only; do not pin production workloads to WSL2.
+- **Older WSL2 kernels** may not expose `/dev/dxg`. Update WSL2: `wsl --update`.
+- **Multi-GPU on WSL2**: Limited or unavailable. Single GPU workloads only.
+- The device probe (§11.1) checks for `/dev/dxg` presence when `NEGELIR_DEVICE=auto`. If absent, it falls back to CPU.
+
+#### Troubleshooting
+
+| Problem | Cause | Fix |
+|---|---|---|
+| `nvidia-smi: not found` | CUDA toolkit not installed on host | Install NVIDIA driver (not toolkit) on Windows host |
+| `CUDA_ERROR_UNKNOWN` during probe | `/dev/dxg` missing in container | Add `devices: [/dev/dxg:/dev/dxg]` to docker-compose.yml |
+| Device shows as `available=false` with reason `runtime_missing` | Container lacks `/dev/dxg` mount | Re-run `wsl --update` and rebuild compose stack |
+
+### Apple Silicon (MPS)
+
+**Apple MPS support is development-only** (`cfg.allow_mps=false` by default, production never selects MPS).
+
+- Requires `torch ≥ 2.0` with MPS backend enabled.
+- Known limitation: **no fp64 support**. Predictors that require fp64 anywhere in the graph fall back to CPU automatically.
+- The device probe marks MPS unavailable (`available=false`) if `torch.backends.mps.is_available()` returns false.
+- Nightly parity tests (maintainer-run, optional) catch MPS divergence early. Failure does not block CI.
