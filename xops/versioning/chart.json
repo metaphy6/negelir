@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 815,
+    "build": 816,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-06T17:06:30+00:00"
     },
     "docs": {
-      "version": "2.11.0",
+      "version": "2.12.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T13:11:07+00:00"
+      "last_changed": "2026-06-08T14:10:52+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -14572,6 +14572,15 @@
       "from": "2.10.1",
       "to": "2.11.0",
       "build": 815
+    },
+    {
+      "timestamp": "2026-06-08T14:10:52+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 12 (Adversarial & Chaos) deep-revision: modular docs/design/phase12/ folder (18 sections) + slim ROADMAP stub + reconciled chaos catalogue",
+      "from": "2.11.0",
+      "to": "2.12.0",
+      "build": 816
     }
   ]
 }

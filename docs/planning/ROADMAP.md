@@ -1500,40 +1500,104 @@ inherit the same routing matrix).
 
 ## 🧪 Phase 12 — Adversarial & Chaos Test Suite
 
-**Goal:** Make sure the system survives bad weather, bad neighbours, and bad actors.
-**Depends on:** Phase 7, Phase 9
+**Goal:** Turn every resilience claim scattered across the system into
+**executable, deterministic, CI-gated proof** — adversarial corpora,
+property/fuzz harnesses, fault injection, chaos drills, soak runs, and a
+coverage+mutation methodology — so the system provably survives bad
+weather (faults), bad neighbours (resource contention), and bad actors
+(adversarial input). Phase 12 owns the **single-source chaos catalogue**,
+the **fault-injection seam**, the **CI lane topology**, the **resilience
+scorecard** (MTTD / MTTR / undetected-attack count), and the
+**no-`xfail` release rule**. A known weakness is a release blocker, not
+a "known issue".
 
-### 12.1 Test taxonomy
+**Nature:** Phase 12 is a **cross-cutting verification phase**, not a
+one-shot. It owns no runtime component; it asserts properties of every
+other component and **grows monotonically** as each sister phase ships a
+resilience surface and registers a stub against the catalogue.
 
-| Layer | Kind | Examples |
+**Depends on (the surface under test must exist):** Phase 3 (bus/SDK),
+Phase 4 (agents/storage), Phase 5 (predictor/consensus), Phase 6
+(proofreader), Phase 7 (sec plane), Phase 8 (maint/ops), Phase 9 (Go
+API), Phase 10 (Turkish NLP), Phase 11 (compute).
+**Co-evolves with / asserts:** Phase 13 (catalog), Phase 14 (K8s),
+Phase 16 (emitter), Phase 17 (patcher), Phase 19 (long-tail), Phase 20
+(monetization tier-blindness), Phase 21 (enrichment) — each registers
+`chaos.*` stubs in the §12.5 catalogue and ships the matching proof in
+its **own** milestone (§12.16 ships-with-the-owner rule).
+
+**Anchor docs (binding):** [`design/TESTING_STRATEGY.md`](../design/TESTING_STRATEGY.md)
+(project testing doctrine), [`design/SECURITY.md`](../design/SECURITY.md)
+(threat model the corpora target),
+[`testing/phase12_catalogue.md`](../testing/phase12_catalogue.md) (the
+stable stub-ID registry).
+
+> 🧯 **Wrong-assumption ledger** (explicitly retired by this phase — full
+> text in [`design/phase12/sections/00-wrong-assumption-ledger.md`](../design/phase12/sections/00-wrong-assumption-ledger.md)):
+> A0 "depends only on Phase 7+9" → cross-cutting, gated per shipped
+> owning phase. A1 "flat ≥ 85 % line coverage suffices" → tiered +
+> branch + mutation + diff-coverage. A2 "`make chaos-redis-flap`
+> (hyphen)" → dot-style `chaos.redis-flap`. A3 "`boofuzz` is the fuzzer"
+> → Hypothesis + Atheris + `go test -fuzz`. A4 "fixtures are just files"
+> → governed corpora (provenance, two-reviewer, PII-scrub, rotation).
+> A5 "naming `pumba`/`toxiproxy` ⇒ a chaos lab" → a deterministic,
+> blast-radius-contained fault-injection framework. A6 "adversarial =
+> prompt injection at the API" → every trust boundary. A7 "chaos asserts
+> liveness" → chaos asserts a named degraded contract + bounded
+> MTTD/MTTR. A8 "everything runs per-push" → four cost-matched lanes.
+> A9 "`xfail` documents a weakness" → zero `xfail` in adversarial/chaos.
+> A10 "determinism is the framework's problem" → pinned profile, injected
+> clocks, seeded faults. A11 "coverage tooling exists" → it does not;
+> this phase introduces it. A12 "the catalogue is a Phase 7 artifact" →
+> it is the cross-phase single source (repaired by §12.5).
+
+**Detail folder:** [`design/phase12/`](../design/phase12/README.md) — **binding** per-section checkboxes live there.
+
+> **Why this is a stub.** Phase 12 was a ~60-line stub (one taxonomy
+> table, five corpus bullets, three chaos targets, two coverage gates)
+> while sister phases registered **dozens** of `chaos.*` stubs against it
+> as their single source of adversarial truth. It was carved out into
+> per-section files under
+> [`docs/design/phase12/sections/`](../design/phase12/sections/),
+> mirroring the Phase 10/11/13 pattern. Every `[ ]` checkbox state lives
+> in those files; this stub carries only the phase-rollup checkbox (last
+> bullet below).
+
+### 12.* Per-section binding files
+
+| Source | File | Theme |
 |---|---|---|
-| **Unit** | Pure logic | `test_dixon_coles_grid_sums_to_one` |
-| **Integration** | Agent ↔ bus ↔ agent | `test_scraper_to_storage_happy_path` |
-| **Contract** | OpenAPI / message schemas | `test_predict_final_matches_cddl` |
-| **Property** | Invariants under random input | `hypothesis` strategies for `Match` |
-| **Adversarial** | Prompt injection, payload abuse | `test_qa_resists_ignore_previous_instructions` |
-| **Fuzz** | Random bytes at every boundary | `boofuzz` against the API gateway |
-| **Chaos** | Kill agents, slow Redis, partition | `pumba` / `toxiproxy` in CI |
-| **Soak** | Long-run stability | overnight job in nightly CI |
+| §12.0 | [`00-wrong-assumption-ledger.md`](../design/phase12/sections/00-wrong-assumption-ledger.md) | Wrong-assumption ledger (retired by this phase) |
+| §12.1 | [`01-test-taxonomy-and-pyramid.md`](../design/phase12/sections/01-test-taxonomy-and-pyramid.md) | Test taxonomy, pyramid & ownership |
+| §12.2 | [`02-adversarial-corpus-discipline.md`](../design/phase12/sections/02-adversarial-corpus-discipline.md) | Adversarial corpus discipline (provenance, PII-scrub, rotation) |
+| §12.3 | [`03-property-based-and-fuzz-harness.md`](../design/phase12/sections/03-property-based-and-fuzz-harness.md) | Property-based & fuzz harness (Hypothesis / Atheris / `go test -fuzz`) |
+| §12.4 | [`04-fault-injection-framework.md`](../design/phase12/sections/04-fault-injection-framework.md) | Fault-injection framework (Toxiproxy / Pumba + in-process seam) |
+| §12.5 | [`05-chaos-catalogue-single-source-registry.md`](../design/phase12/sections/05-chaos-catalogue-single-source-registry.md) | Chaos catalogue — single-source stub registry & ID lifecycle |
+| §12.6 | [`06-bus-and-network-chaos.md`](../design/phase12/sections/06-bus-and-network-chaos.md) | Bus & network chaos (flap / partition / slow / reorder / duplicate) |
+| §12.7 | [`07-resource-exhaustion-and-performance-under-stress.md`](../design/phase12/sections/07-resource-exhaustion-and-performance-under-stress.md) | Resource exhaustion & performance-under-stress (latency-budget gates) |
+| §12.8 | [`08-soak-and-endurance.md`](../design/phase12/sections/08-soak-and-endurance.md) | Soak & endurance (leak detection, MTBF, long-run clock) |
+| §12.9 | [`09-data-integrity-and-corruption-injection.md`](../design/phase12/sections/09-data-integrity-and-corruption-injection.md) | Data-integrity & corruption injection (checksum / HMAC / audit chain) |
+| §12.10 | [`10-security-chaos-and-abuse.md`](../design/phase12/sections/10-security-chaos-and-abuse.md) | Security chaos & abuse (injection / homoglyph / cert / key-rotation) |
+| §12.11 | [`11-recovery-and-dr-drills.md`](../design/phase12/sections/11-recovery-and-dr-drills.md) | Recovery & DR drills (restore / cold-start / spool drain / handover) |
+| §12.12 | [`12-coverage-and-mutation-methodology.md`](../design/phase12/sections/12-coverage-and-mutation-methodology.md) | Coverage & mutation methodology (line+branch+mutation, diff-gate) |
+| §12.13 | [`13-ci-integration-lanes-and-flake-policy.md`](../design/phase12/sections/13-ci-integration-lanes-and-flake-policy.md) | CI integration, lanes & flake policy (nightly soak, quarantine) |
+| §12.14 | [`14-chaos-observability-and-scorecard.md`](../design/phase12/sections/14-chaos-observability-and-scorecard.md) | Chaos observability & resilience scorecard (MTTD / MTTR / run ledger) |
+| §12.15 | [`15-config-knobs-and-make-targets.md`](../design/phase12/sections/15-config-knobs-and-make-targets.md) | Config knobs & make-target inventory (single-source config) |
+| §12.16 | [`16-cross-phase-coupling-matrix.md`](../design/phase12/sections/16-cross-phase-coupling-matrix.md) | Cross-phase coupling matrix (closing audit) |
+| §12.17 | [`17-definition-of-done.md`](../design/phase12/sections/17-definition-of-done.md) | Definition of Done (Phase 12) |
 
-### 12.2 Adversarial corpus (`ai/tests/fixtures/adversarial/`)
+### 12.DoD Phase rollup
 
-- [ ] Prompt-injection set (Turkish + English).
-- [ ] Malformed HTML injections served by a chaos variant of the mock server.
-- [ ] Oversized / zero-width / RTL-flip Turkish queries.
-- [ ] Replayed real attacker traffic patterns (synthetic, generated for tests only).
-- [ ] **Each entry maps to the agent that must catch it.** A miss = a failing test.
-
-### 12.3 Chaos lab
-
-- [ ] `make chaos-redis-flap` — drops Redis for 5 s, asserts no message loss, no double-processing.
-- [ ] `make chaos-kill-predictor PCT=50` — kills half the predictors; consensus must still publish (with degraded confidence flag).
-- [ ] `make chaos-network-slow` — 500 ms added between agent ↔ bus; latency budgets must hold.
-
-### 12.4 Coverage gates
-
-- [ ] Per-package line coverage ≥ 85 %.
-- [ ] Adversarial suite must have zero `xfail` — a known weakness is a release blocker, not a known issue.
+- [ ] Every binding `[ ]` in §12.* (across all per-section files in
+      [`docs/design/phase12/sections/`](../design/phase12/sections/))
+      that belongs to a **shipped** owning phase is `[x]`; the framework
+      gates (§12.0–§12.5, §12.12–§12.15) are all green; the latest
+      resilience scorecard (§12.14) shows **zero undetected** attacks/
+      faults for every shipped surface with MTTD/MTTR within budget.
+      Unshipped phases' open stubs are tracked, not blocking
+      (§12.5.3 lifecycle). Tracker row + `make version.bump
+      COMPONENT=docs` recorded for every meaningful per-section edit
+      (per AGENTS.md §3 + §6.1).
 
 ---
 

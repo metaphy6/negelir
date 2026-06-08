@@ -1,16 +1,47 @@
-# Phase 12 — Adversarial Testing Catalogue (Phase 7 stubs)
+# Phase 12 — Adversarial & Chaos Catalogue (cross-phase single-source registry)
 
-> **Status:** Stub. Implementation lands with Phase 12 (System
-> Hardening). Each row below describes a defense-agent property
-> that the §7.1 / §7.2 / §7.3 producers must hold under adversarial
-> input. Bodies are deliberately marked `TBD — implementation
-> pending Phase 12` so the catalogue can be filled in alongside
-> the actual chaos / fuzzing harness without churning the row IDs.
+> **Status:** Stub registry. This file is the **single source of
+> truth** for every chaos / adversarial stub in the system, per
+> [`../design/phase12/sections/05-chaos-catalogue-single-source-registry.md`](../design/phase12/sections/05-chaos-catalogue-single-source-registry.md)
+> (§12.5). It was seeded from Phase 7 stubs and is being promoted to
+> the cross-phase registry: sister phases register a stable ID + a
+> property + the owning agent *as they design the resilience surface*;
+> Phase 12 fills in the body (the proof test) *as it hardens*. Bodies
+> marked `TBD — implementation pending Phase 12` are unimplemented
+> stubs.
+>
+> **ID scheme (§12.5.1).** `P12-<phase>-<seq>`. IDs are **append-only**:
+> once allocated, never re-numbered (test names reference them) and
+> never re-used after retirement. The owning phase is encoded in the
+> ID. Historical note: `P12-8-AM … P12-8-AT` describe **NLP** surfaces
+> (owning phase 10, §10.27/§10.28); they keep their 8-prefixed IDs for
+> stability but their `owning_phase` is 10.
+>
+> **Target naming (§12.0 A2, §12.5.1).** The **canonical** make-target
+> form is **dot-style** (`chaos.redis-flap`). The hyphen forms
+> (`chaos-fill-dlq`) in the §8 maint rows below are historical aliases:
+> `chaos-<x> ≡ chaos.<x>`. The full mechanical normalisation of every
+> row to dot-style lands with the implementation PR that wires the
+> `make chaos.*` targets (tracked by §12.5.4) — IDs are unchanged by
+> that rename.
+>
+> **Lifecycle (§12.5.3).** `status ∈ {stub, implemented, retired}`. A
+> stub does not count toward the §12.17 rollup until its owning phase
+> ships; a shipped phase may not go green while it has a `stub` row for
+> a surface it has already shipped (§12.5.5).
 
 The IDs are stable (Phase 12 fuzzers reference them in their
 test names) and match the `kind` enum in `KNOWN_SEC_ALERT_KINDS`
 (`ai/swarm/agents/payloads.py`) wherever the property fires the
 matching `sec.alert.v1` envelope.
+
+> **Cross-phase coverage at a glance.** The §7/§8/§10 families are
+> rowed in full below. The remaining families (Phase 5 / 9 / 11 / 13 /
+> 16) are indexed at the end of this file under
+> [Cross-phase families (indexed)](#cross-phase-families-indexed), each
+> citing the owning design section that authored the `chaos.*`
+> reference, so this catalogue is the complete single source §12.5
+> requires.
 
 ---
 
@@ -106,7 +137,8 @@ matching `sec.alert.v1` envelope.
 | P12-8-AI | `chaos-object-lock-permission-loss` | Configure MinIO with Object-Lock enabled but IAM policy missing `s3:PutObjectRetention`; §8.16.6 `S3CompatibleTarget.preflight()` probe uploads 1KB sentinel and calls `GetObjectRetention`; mismatch between intended and actual retention metadata triggers refuse with `fail_safe_offsite_retention_not_applied`; also simulate credential rotation mid-day that drops `s3:PutObjectRetention` after a previously-successful preflight; assert the recurring probe (`cfg.maint_backup_offsite_preflight_interval_h`) detects the loss, flips the agent to spool-mode, and emits `sec.alert.v1{kind=backup_offsite_preflight_failed, severity=critical}` with the specific failure reason; assert spool-mode blocks new offsite upload attempts until the next successful preflight. | TBD — implementation pending Phase 12 |
 | P12-8-AJ | `chaos-sec-plane-flood` | Inject `sec.alert.v1` at a rate that pushes consumer lag past `cfg.sec_plane_lag_alert_ms` (default 5000ms) sustained over `cfg.sec_plane_lag_alert_window_s` (default 60s); §8.16.11 tier-1 shedding must activate with exactly 1 `sec.alert.v1{kind=sec_plane_lag_high}` alert at the tier-transition boundary (no per-tick re-emission); ramp lag to tier-3 threshold; assert `maint.sec.v1` decimater agent STILL executes its Lua decimate call (emergency-override path) despite tier-3 shed; assert other §8.x sec-plane consumers (`maint.scaler.v1`, `maint.dlq.v1`) shed normally; clear lag and assert exactly 1 recovery event; assert maint-plane shed state is unaffected (independent state machines). | TBD — implementation pending Phase 12 |
 | P12-8-AK | `chaos-allowlist-fingerprint-collision` | Use a precomputed test vector of two distinct substrings whose plain-SHA-256-truncated-to-128-bits collide; assert §8.16.10 HMAC-SHA256 fingerprints differ (keyed secret prevents bypass); insert 100 legacy `s`-algorithm rows and run `make ops.allowlist-rehash`; assert exactly 100 new HMAC `h`-rows written + 100 legacy rows marked `state='e'` + exactly one `maint.event.v1{kind=pattern_allowlist_legacy_hit}` audit event per row (debounced); on eval-path match of a legacy `s`-row via either algorithm, assert `kind=pattern_allowlist_legacy_hit` fires; rotate HMAC key via `make ops.rotate-allowlist-key`; assert active-row count unchanged, new fingerprints match the new key, old fingerprints no longer match; key older than `cfg.sec_input_allowlist_hmac_key_max_age_days` must trigger `sec.alert.v1{kind=allowlist_hmac_key_rotation_overdue, severity=warn}` daily. | TBD — implementation pending Phase 12 |
-| P12-8-AL | `chaos-min-compatible-version-violation` | Synthesize `xops/versioning/chart.json` with `"swarm": {"min_compatible_with": {"ai": "9.99.0"}}` (unachievable floor); boot §8.13.1 `RegistryAuditor` against this chart; assert `xops/versioning/version.py::validate_compatibility()` raises and agent refuses to start with `fail_safe_lineage_writer_missing`; boot with a chart meeting the version floor; assert successful boot + legacy backfill path emits `kind=backup_model_lineage_legacy` for pre-existing artifacts (no warn alerts); assert `make version.compatibility-check` exits non-zero on the violating chart and zero on the conforming chart; assert round-trip test `test_chart_is_canonical` passes after adding the `compatibility` block. | TBD — implementation pending Phase 12 || P12-8-AM | `chaos.fixture-state-flap` | Assert dispatcher routes by observed fixture state, not assumed state. Flip a match from `scheduled` to `in_play_first_half` during an in-flight predict request; the system must decline the prediction and emit `meta.live_match_unsupported` instead of allowing `predict.final` to proceed. | TBD — implementation pending Phase 12 |
+| P12-8-AL | `chaos-min-compatible-version-violation` | Synthesize `xops/versioning/chart.json` with `"swarm": {"min_compatible_with": {"ai": "9.99.0"}}` (unachievable floor); boot §8.13.1 `RegistryAuditor` against this chart; assert `xops/versioning/version.py::validate_compatibility()` raises and agent refuses to start with `fail_safe_lineage_writer_missing`; boot with a chart meeting the version floor; assert successful boot + legacy backfill path emits `kind=backup_model_lineage_legacy` for pre-existing artifacts (no warn alerts); assert `make version.compatibility-check` exits non-zero on the violating chart and zero on the conforming chart; assert round-trip test `test_chart_is_canonical` passes after adding the `compatibility` block. | TBD — implementation pending Phase 12 |
+| P12-8-AM | `chaos.fixture-state-flap` | Assert dispatcher routes by observed fixture state, not assumed state. Flip a match from `scheduled` to `in_play_first_half` during an in-flight predict request; the system must decline the prediction and emit `meta.live_match_unsupported` instead of allowing `predict.final` to proceed. | TBD — implementation pending Phase 12 |
 | P12-8-AN | `chaos.kill-pattern-mass-arm` | Arm more than `cfg.nlp_kill_pattern_arm_max_concurrent` kill patterns concurrently; NLP must cap the active arms at the configured limit, emit `kind=nlp_kill_pattern_arm_limit_reached`, and not silently arm extra patterns. | TBD — implementation pending Phase 12 |
 | P12-8-AQ | `chaos.tr-pii-flood` | Flood the TR-PII detector with 200 RPS of PII-bearing input and verify p99 latency stays below `nlp_tr_pii_p99_max_ms=15` while still emitting `sec.alert.v1{kind=tr_pii_flood, severity=warn}` on overload. | TBD — implementation pending Phase 12 |
 | P12-8-AR | `chaos.compound-flood` | Deliver 1000 RPS of synthetic concatenated tokens to the compound splitter and assert it does not exceed the shared lookup budget; failures must degrade gracefully with `kind=compound_splitter_budget_exceeded` instead of crashing. | TBD — implementation pending Phase 12 |
@@ -114,3 +146,77 @@ matching `sec.alert.v1` envelope.
 | P12-8-AT | `chaos.runaway-normalize` | Feed a synthetic Symspell-pathological corpus to the normalize stage and assert the CPU budget gate catches 100% of malformed inputs without any pod OOMs. | TBD — implementation pending Phase 12 |
 | P12-8-AO | `chaos.lexicon-swap-staggered-pods` | Simultaneously update lexicon files on multiple pods; the cluster-wide swap window must remain under 1 s and no pod may serve answers with mixed lexicon versions. | TBD — implementation pending Phase 12 |
 | P12-8-AP | `chaos.client-pinned-old-schema-flood` | Flood the gateway with clients pinned to an old schema version; NLP must still honour downgrade negotiation and not crash or reject unpinned clients while serving the pinned ones at the negotiated compatibility level. | TBD — implementation pending Phase 12 |
+
+---
+
+## Cross-phase families (indexed)
+
+> These families are owned by sister phases that registered `chaos.*`
+> references in their own design docs. They are indexed here (with the
+> authoring §section) so this catalogue is the complete single source
+> §12.5 requires; the full per-row bodies land as each owning phase
+> ships its surface and Phase 12 promotes the stub to `implemented`.
+> IDs follow the `P12-<phase>-<seq>` scheme; representative IDs are
+> reserved below and extended in row form when implemented.
+
+### §5 — Predictor swarm & consensus (`P12-5-*`)
+
+| ID | Target | Property | Owning § |
+|----|--------|----------|----------|
+| P12-5-A | `chaos.kill-predictor` | Kill ≥ 50 % of predictors mid-request; consensus still publishes with `degraded=true` + `degraded_reason` and `consensus_min_voters` honoured. | ROADMAP §5.2 / §5.5 |
+| P12-5-B | `chaos.predict-approved-degraded-flood` | Flood `predict.approved.v1` with `degraded=true`; NLP surfaces a documented degraded answer, never a 5xx. | design/phase10 §10.0 |
+| P12-5-C | `chaos.citation-forgery` | Forge a `predict.approved.v1` citation HMAC with the wrong key; consumer drops it + `citation_signature_verify_failed`. | design/phase10 §10.21.8 |
+| P12-5-D | `chaos.consensus-quorum-empty` | All predictors silent; consensus emits the quorum-empty fallback flag, never a fabricated prediction. | ROADMAP §5.2 |
+
+### §9 — Go API gateway & identity (`P12-9-*`)
+
+| ID | Target | Property | Owning § |
+|----|--------|----------|----------|
+| P12-9-A | `chaos.api-breaker-trip` | Trip each upstream breaker (pg / redis / swarm-rpc); gateway sheds with the documented RFC 7807 status, no unhandled 5xx. | design/phase9 §9.17.4 |
+| P12-9-B | `chaos.api-hedge-budget` | Drive hedged predict requests; hedge budget is capped, dedup strips `:h1` at consensus. | design/phase9 §9.17.4 |
+| P12-9-C | `chaos.api-shed-burst` | 5xx rate > 2 % for 30 s engages adaptive shedding; lifts cleanly on recovery. | design/phase9 §9.17.9 |
+| P12-9-D | `chaos.api-cursor-timing` | Encrypted-cursor timing-oracle probe finds no observable difference. | design/phase9 §9.14 |
+| P12-9-E | `chaos.jwt-confusion` | `alg=none` / HS256-pubkey-confusion / kid-path-traversal all rejected. | design/phase9 §9.14 |
+
+### §10 — Turkish NLP (`P12-10-*`, plus historical `P12-8-AM…AT`)
+
+| ID | Target | Property | Owning § |
+|----|--------|----------|----------|
+| P12-10-A | `chaos.kill-humanizer` | Kill the humanizer subprocess mid-render; answer falls back to the proofread template, GPU lease released, breaker opens. | design/phase10 §10.0 / §10.25.11 |
+| P12-10-B | `chaos.lexicon-corrupt` | Corrupt a lexicon file; atomic swap reverts (all-or-nothing), prior generation keeps serving. | design/phase10 §10.21.3 |
+| P12-10-C | `chaos.intent-classifier-flap` | Flap the intent model; abstention floor + did-you-mean hold, no silent misroute. | design/phase10 §10.0 |
+| P12-10-D | `chaos.tr-normalize-spec-drift` | Mutate one byte of `tr_normalize_spec.json`; both Python + Go impls **refuse boot**. | design/phase10 §10.29.11 |
+| P12-10-E | `chaos.l0-cache-collision-injection` | Force an L0 subject-key collision; full-SHA verify drops + re-RPCs, no cross-answer leak. | design/phase10 §10.30.12 |
+| P12-10-F | `chaos.outbound-checksum-mutation-injection` | Mutate the answer body post-sign; outbound checksum gate blocks ship. | design/phase10 §10.31.11 |
+| P12-10-G | `chaos.inbound-checksum-mutation` | Flip a byte after the gateway inbound checksum; NLP drops + 504 + `inbound_checksum_mismatch`. | design/phase10 §10.34.4 |
+| P12-10-H | `chaos.lexicon-state-divergence-injection` | Corrupt one pod's lexicon set; gossip divergence detector quarantines within 5 min. | design/phase10 §10.32.12 |
+| — | *(historical)* `P12-8-AM…AT` | NLP fixture-state / kill-pattern / pii-flood / compound-flood / rebuild-storm / runaway-normalize / lexicon-swap / pinned-schema (IDs frozen). | §10.27 / §10.28 |
+
+### §11 — Compute (GPU/CPU/NPU) (`P12-11-*`)
+
+| ID | Target | Property | Owning § |
+|----|--------|----------|----------|
+| P12-11-A | `chaos.gpu.pull` | Driver removed mid-serve; agent drains to a peer / CPU baseline, no dropped request. | design/phase11 §11.10 |
+| P12-11-B | `chaos.gpu.thermal` / `chaos.gpu.oom` / `chaos.gpu.xid` | Thermal throttle / OOM / faked Xid each degrade within the documented budget. | design/phase11 §11.10 |
+| P12-11-C | `chaos.gpu.frag` / `chaos.gpu.ecc.retire` | VRAM fragmentation + ECC retired-page deltas; arbiter refuses paper-only placement. | design/phase11 §11.10 |
+| P12-11-D | `chaos.cpu.oversubscribe` | Spawn N > budget threads; governor bounds concurrency, predictor p95 SLO holds. | design/phase11 §11.10 |
+| P12-11-E | `chaos.inference.nan` | Adversarial input → NaN logit; guard catches it, no NaN reaches the user. | design/phase11 §11.10 |
+| P12-11-F | `chaos.compute.driver_upgrade` / `chaos.compute.hotremove` | Live drain + udev hot-remove; zero loss via §11.18 migration. | design/phase11 §11.10 / §11.18 |
+
+### §13 — League & competition catalog (`P12-13-*`)
+
+| ID | Target | Property | Owning § |
+|----|--------|----------|----------|
+| P12-13-A | `chaos.predictions.tamper` | Mutate a stored prediction envelope; audit detects within `cfg.predictions_tamper_detection_max_s`. | design/phase13 §13.54 |
+| P12-13-B | `chaos.storage.deny` | Deny DB/Redis at the network layer; replica cold-starts to `/livez=OK`, serves `503 storage_unavailable`. | design/phase13 §13.49 |
+| P12-13-C | `chaos.catalog.region-drift` | Diverge multi-region catalog; cross-region shaping refused while drift open. | design/phase13 §13.50 |
+| P12-13-D | `chaos.rolling.catalog` | Half v_{N-1} / half v_N replicas serve the full window with zero crashes. | design/phase13 §13.60 |
+| P12-13-E | `chaos.league.quarantine` | Force one league into quarantine; other leagues' SLOs unaffected. | design/phase13 §13.15 |
+| P12-13-F | `chaos.bracket.violate` | Inject a bracket-invariant violation; federation correction clears the gate within budget. | design/phase13 §13.57 |
+
+### §16 — Emitter & feed contract (`P12-16-*`)
+
+| ID | Target | Property | Owning § |
+|----|--------|----------|----------|
+| P12-16-A | `feeds.chaos.run TEST=…` | The emitter's own chaos harness (feed signing / parity / snapshot rebuild) runs each registered feed scenario. | design/phase16 §25 |
+| P12-16-B | `chaos.feed-signature-forge` | Forge a feed payload signature; consumer rejects swap + `lexicon_feed_signature_invalid`. | design/phase10 §10.22.12 / phase16 |
