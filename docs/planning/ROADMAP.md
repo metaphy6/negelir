@@ -16,19 +16,27 @@
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0 — Repo reset | ✅ done | P2P fully removed; `test_p2p_module_removed` guards regression. |
+| 0 — Repo reset | ✅ done | P2P fully removed; `test_p2p_module_removed` guards regression. Audit sweeps ongoing in-progress. |
 | 1 — Centralized config | ✅ done | Triangle test green; numeric/float-threshold AST scanner still on backlog (§1.4). |
 | 2 — Mock dev stack | ✅ done | All four vhosts live via `nginx-mock` → `mocksrv` (manifest-keyed seeds, **no postgres**). |
 | 2.8 — Source-watcher | ✅ done | Cron-driven; LLM summarizer stubbed behind `enabled=False` until Phase 8. |
 | 3 — Swarm foundation | ✅ done | SDK at `ai/swarm/sdk/`; all 7 §3.7 DoD tests green; NATS + bus auth deferred. |
 | 4 — Worker agents | ✅ done | All 6 Phase 4 topics flow end-to-end via `make swarm.demo`; Postgres-backed gates deferred to Phase 9. |
 | 5 — Predictor swarm | 🛠 design only | §5.1–§5.5 scoped + cross-phase contracts wired; no code yet. |
-| 6+ | ⏳ not started | Ordered per dependency graph. |
-| 10 — Turkish NLP | ✅ done | All 65+ checkboxes green across 15 addendum sections (§10.0–§10.34); normalize pipeline + intent/dispatch/render/proofread/audit gates; property-based tests (2,399 generated cases); docs v2.0.0. |
-| 13a Süper Lig seed | ✅ done | Other T1 leagues land with the 13a sprint. |
-| R1 — chart rename | 🟡 partial | All new chart keys seeded; `version.py rename` + the `source_watcher → datasource_watcher` collapse stay open. |
-| R2–R6 | ⏳ not started | Deferred-path window: lands between Phase 5 design and Phase 6 kickoff (see §Phase R sequencing note). |
-| 16/17/18 | ⏳ design only | Anchor docs (EMITTER, SCRAPER_PATCHER, COMPONENT_LAYOUT) are binding; no code yet. |
+| 6 — Proofreader | 🛠 in-progress | §6.x design + audit active; no code shipped yet. |
+| 7 — Defense agents | 🛠 in-progress | sec.input / sec.scrape / sec.rate design locked; Phase 12 chaos stubs registered; no prod code yet. |
+| 8 — Maint agents | 🛠 in-progress | §8.1–§8.16.16 design complete (backup/scaler/DLQ/opsctl/schema/sec reactors); swarm v0.50.10. |
+| 9 — Go REST API | ✅ done | All 18 section files 0 open bullets; 24 endpoints live, identity + rate-limit + TLS green. |
+| 10 — Turkish NLP | ✅ done | All 65+ checkboxes green across §10.0–§10.34; normalize + intent/dispatch/render/proofread/audit gates; 2,399 property-based cases; docs v2.0.0. |
+| 11 — Compute (GPU/CPU/NPU) | ✅ done | All 442 bullets green across §11.1–§11.46; device probe + GPU arbiter + CPU governor + heterogeneous router; heat-soak + driver-upgrade choreography; compute security (signed images, at-rest encryption). |
+| 12 — Adversarial & Chaos | 🛠 design only | Deep-revised 2026-06-08: carved into [`design/phase12/`](../design/phase12/README.md) (18 sections §12.0–§12.17); ROADMAP slimmed to stub; `docs/testing/phase12_catalogue.md` promoted to cross-phase single-source registry (P12-5/7/8/9/10/11/13/16 families, fixed malformed row); 13 wrong assumptions retired; **no code shipped yet** (catalogue stubs, no harness). |
+| 13 — League expansion | 🛠 design only | Modularised (57+ sections under `design/phase13/`); Süper Lig 13a seed ✅ done; T1 league rollout + cross-phase coupling matrix adapted. |
+| 14 — K8s packaging | ⏳ not started | — |
+| 15 — Frontend | ⏳ not started | — |
+| 16/17/18 — Emitter / Patcher / Cohesion | 🛠 design only | Anchor docs (EMITTER, SCRAPER_PATCHER, COMPONENT_LAYOUT) binding; no code yet. Phase 16 detail folder active. |
+| 19/20/21 — Long-tail / Monetization / Enrichment | 🛠 design only | Design stubs landed; no code. |
+| R1 — chart rename | 🟡 partial | All new chart keys seeded; `version.py rename` + `source_watcher → datasource_watcher` collapse still open. |
+| R2–R6 | ⏳ not started | Window: between Phase 5 design and Phase 6 kickoff. |
 
 **Doctrine reminder:** every checkbox flip ships in the same commit as
 the implementing code, the matching tracker row, and the
