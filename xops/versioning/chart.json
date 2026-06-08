@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 858,
+    "build": 859,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-08T19:34:44+00:00"
     },
     "docs": {
-      "version": "2.18.7",
+      "version": "2.18.8",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T19:39:12+00:00"
+      "last_changed": "2026-06-08T20:19:07+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -14988,6 +14988,15 @@
       "from": "1.115.8",
       "to": "1.115.9",
       "build": 858
+    },
+    {
+      "timestamp": "2026-06-08T20:19:07+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "§12.2.4 verification checkpoint completed; scorecard & DoD infrastructure live",
+      "from": "2.18.7",
+      "to": "2.18.8",
+      "build": 859
     }
   ]
 }

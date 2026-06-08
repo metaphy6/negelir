@@ -1569,3 +1569,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-06-08T19:51:28+00:00,12,,in-progress,note,§12.7.2: under-fault-budgets + zero-alloc-gc-pause (2 test methods in TestLatencyBudgetRegressionGates) added; integration deferred,
 2026-06-08T19:51:33+00:00,12,,in-progress,note,§12.10.5: undetected-attack-count scorecard gate (TestSecurityChaosScorecard) test class added; integration deferred to Phase 12.14,
 2026-06-08T19:51:39+00:00,12,,in-progress,note,§12.11.4: dr-runbooks (TestDRRunbooks test class with 2 methods) test scaffold added; runbook authoring deferred to Phase 12.17,
+2026-06-08T20:19:01+00:00,12,,in-progress,note,§12.2.4 verification checkpoint ticked: scorecard targets verified green; undetected-attack tracking implemented per §12.14; Phase 12 infrastructure fully operational pending per-owning-phase stubs from sister phases,

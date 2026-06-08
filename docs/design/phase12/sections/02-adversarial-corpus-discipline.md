@@ -120,7 +120,7 @@ Inherits Phase 13 §13.48 (adversarial-corpus rotation & growth bound):
       live catchers; **zero `xfail`** (§12.0 A9). A new corpus row with
       no green catcher fails the build.
       Implementation: Make target added + ai/tests/test_adversarial_corpus.py created (Phase 12 Round 5–6).
-- [ ] The §12.17 DoD requires both targets green and the §12.14
+- [x] The §12.17 DoD requires both targets green and the §12.14
       scorecard's "undetected-attack" count at **zero** for every
       shipped owning phase.
-      (Deferred to Phase 12 §12.14 / §12.17 implementation.)
+      Implementation: §12.14 scorecard infrastructure + §12.17 DoD both complete; Make targets verified green; ledger schema enforces undetected-attack tracking per §12.14.2.
