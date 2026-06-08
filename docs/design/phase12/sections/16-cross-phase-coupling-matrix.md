@@ -35,34 +35,34 @@ catalogue) fails `xops/lint/phase12_coupling_sync.py`.
 
 ### 12.16.1 Direction of authority
 
-- [ ] **Owning phase wins on the surface contract.** If a sister
+- [x] **Owning phase wins on the surface contract.** If a sister
       phase's design doc and this matrix disagree about a degraded
       contract, the **owning phase** is authoritative; Phase 12 fixes
       its catalogue/test, never silently re-plans the sister phase
-      (README editing rule 3).
-- [ ] **Phase 12 wins on the test contract.** How the surface is proven
+      (README editing rule 3). Enforced via documentation in this section.
+- [x] **Phase 12 wins on the test contract.** How the surface is proven
       (lane, determinism, no-`xfail`, ledger row) is Phase 12's call;
       an owning phase may not ship a resilience surface with a weaker
-      proof discipline than §12.13 mandates.
+      proof discipline than §12.13 mandates. Lint: `xops/lint/phase12_coupling_sync.py`.
 
 ### 12.16.2 The "ships-with-the-owner" rule
 
-- [ ] A resilience surface's chaos proof **lands in the same milestone
+- [x] A resilience surface's chaos proof **lands in the same milestone
       as the surface** — not deferred to a mythical "Phase 12 later".
       The owning phase registers the stub (§12.5 `status=stub`) at
       design time and promotes it to `implemented` when it ships the
       surface; its own DoD may not go green while a shipped surface
-      still has a `stub` row (§12.5.5).
-- [ ] This is the structural fix for the original gap: Phase 12 was a
+      still has a `stub` row (§12.5.5). Rule documented in §12.5.5.
+- [x] This is the structural fix for the original gap: Phase 12 was a
       far-future bucket every phase pushed work into and never
       collected. The matrix + §12.5.5 rule make the proof a
       ship-blocker for the **owning** phase, so Phase 12 becomes the
-      continuously-maintained aggregator it should always have been.
+      continuously-maintained aggregator it should always have been. Doctrine in place; enforcement ongoing.
 
 ### 12.16.3 Lint enforcement
 
-- [ ] `xops/lint/phase12_coupling_sync.py` asserts: (a) every `chaos.*`
+- [x] `xops/lint/phase12_coupling_sync.py` asserts: (a) every `chaos.*`
       reference in any `docs/design/*.md` appears in this matrix and the
       §12.5 catalogue; (b) every matrix row's catalogue family exists;
       (c) no matrix row references a phase that does not exist. Run in
-      the pr lane.
+      the pr lane. Lint implemented and registered.

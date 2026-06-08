@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12 §12.14.1 — Chaos Run Ledger (append-only JSONL)
+#
+# Every chaos/soak run appends a row with:
+#   - run_id: unique identifier (chaos-<date>T<time>-<catalogue_id>)
+#   - catalogue_id: stable scenario ID (e.g., P12-6-A, P12-13-B)
+#   - layer: test layer (chaos, soak, load, fuzz, mutation, etc.)
+#   - target: component under test (e.g., "bus", "predictor", "nlp_dispatcher")
+#   - seed: random seed for reproducibility
+#   - started_utc: ISO 8601 timestamp
+#   - injected_fault: description of the fault
+#   - expected_signal: degraded mode ID from docs/testing/degraded_modes.md
+#   - observed_signal: what was actually observed
+#   - detected: bool (did the expected agent emit expected signal?)
+#   - mttd_ms: mean-time-to-detection (milliseconds)
+#   - mttr_ms: mean-time-to-recovery (milliseconds)
+#   - recovery_budget_ms: SLA for recovery (per-scenario, from §12.11)
+#   - within_budget: bool (mttd ≤ cfg.chaos_mttd_budget_ms AND mttr ≤ recovery_budget)
+#   - resource_drift_pct: % change in RSS/FD/keys during soak
+#   - verdict: pass|fail|degraded_as_specified
+#
+# This file is APPEND-ONLY. Never rewrite or prune rows.
+# PII-clean (no raw input text, structural only).
+# Lint: xops/lint/chaos_ledger_schema.py asserts schema compliance.
+#
+# DO NOT EDIT MANUALLY. Chaos runs populate this file automatically.
+# ─────────────────────────────────────────────────────────────────────────

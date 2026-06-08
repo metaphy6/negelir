@@ -1,0 +1,31 @@
+# Phase 12 §12.2.1 — Rate abuse adversarial corpus (governance sidecar)
+# 
+# Credential stuffing, burst attacks, XFF spoofing, denylist evasion.
+# Owning phase: 7 (Defense); Catcher: sec.rate.v1; Catalogue family: P12-7.3
+
+version: 1
+seed: 42
+sha256: "TBD"
+
+provenance:
+  credential_stuffing:
+    - technique: "Rapid-fire /v1/auth/* attempts from single source"
+      cve: null
+      date_added: "2026-06-08"
+  xff_spoof:
+    - technique: "Forged X-Forwarded-For to bypass rate limits"
+      cve: null
+      date_added: "2026-06-08"
+  ipv6_spray:
+    - technique: "IPv6 /64 allocation spraying (one packet per address)"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"  # REQUIRED: sec CODEOWNER for rate_abuse
+  - "phase-7-defense-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"

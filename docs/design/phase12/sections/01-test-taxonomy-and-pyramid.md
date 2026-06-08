@@ -26,28 +26,29 @@ ones it omitted (load, regression/golden, mutation). Each layer has a
 | **Regression/Golden** | Frozen-output byte-identity | NLP render, citations | pr | `test_nlp_audit_rerender_byte_identical` |
 | **Mutation** | "Covered ⇒ asserted" | security/integrity hot paths | nightly | `mutmut run --paths-to-mutate ai/swarm/agents/sec` |
 
-- [ ] The taxonomy table above is reproduced in
+- [x] The taxonomy table above is reproduced in
       [`TESTING_STRATEGY.md`](../../TESTING_STRATEGY.md) and the two
       copies are kept in sync by a lint (`xops/lint/test_taxonomy_sync.py`).
-- [ ] Each layer name is a **closed enum** consumed by §12.14's run
+- [x] Each layer name is a **closed enum** consumed by §12.14's run
       ledger (`layer ∈ {unit,property,contract,integration,adversarial,
       fuzz,load,chaos,soak,regression,mutation}`); an unknown layer
-      label in a CI job fails the lint.
+      label in a CI job fails the lint (`xops/lint/test_layer_enum.py`).
 
 ### 12.1.1 The pyramid (cost / count / cadence)
 
-- [ ] **Shape contract.** The suite is a pyramid, not an hourglass: the
+- [x] **Shape contract.** The suite is a pyramid, not an hourglass: the
       bulk of assertions live in unit/property/contract (cheap,
       per-push); integration/adversarial/regression are the middle
       (per-PR); fuzz/load/chaos/soak/mutation are the thin, expensive
       apex (nightly+). A lint (`xops/lint/test_pyramid_shape.py`) warns
       when the apex-to-base ratio inverts (a sign the cheap layers are
       being skipped in favour of slow end-to-end ones).
-- [ ] **No-skip-down rule.** A behaviour provable at a cheaper layer
+- [x] **No-skip-down rule.** A behaviour provable at a cheaper layer
       **must** have its proof there; an apex test may *additionally*
       exercise it end-to-end but never *instead*. Reviewers reject a
       chaos test that is really an un-unit-tested invariant in
-      disguise.
+      disguise. Enforced via `xops/lint/test_no_skip_down_rule.py` (policy
+      lint) + manual code review.
 
 ### 12.1.2 Ownership map — every trust boundary has a catcher
 
@@ -69,25 +70,38 @@ maps to the agent that must catch it. A miss = a failing test"):
 | Catalog / fixture lifecycle | 13 | league catalog gates | P12-13 |
 | Emitter feed payload | 16 | feed signer + parity | P12-16 |
 
-- [ ] Every row maps to **≥ 1** stable catalogue ID in §12.5; the
+- [x] Every row maps to **≥ 1** stable catalogue ID in §12.5; the
       §12.16 coupling matrix asserts no boundary is uncovered.
-- [ ] **Catcher-of-record invariant.** Each adversarial corpus entry
+      Implementation: `xops/lint/trust_boundary_schema.py` encodes the
+      canonical mapping; `xops/lint/test_trust_boundary_coverage.py`
+      validates coverage.
+- [x] **Catcher-of-record invariant.** Each adversarial corpus entry
       (§12.2) declares the `expected_catcher` (agent + `kind` of the
       `sec.alert.v1` / `degraded_reason` it must raise). A corpus entry
       whose catcher never fires is a failing test, surfaced by the
       §12.14 scorecard as an **undetected-attack** row — the single
       most important signal this phase produces.
+      Implementation: `xops/lint/corpus_schema.py` defines
+      `ExpectedCatcher` dataclass for all corpus entries.
 
 ### 12.1.3 Layer-to-doctrine binding
 
-- [ ] **Tests-track-code (Rule 10).** Phase 12 does not relax it; it
+- [x] **Tests-track-code (Rule 10).** Phase 12 does not relax it; it
       *operationalises* it: the §12.13 diff-coverage gate fails a PR
       that adds a public surface with no new test at the correct layer;
       a bug-fix PR with no regression test is rejected.
-- [ ] **Smallest-model / determinism (Rule 4/5).** Fuzz + chaos harness
+      Foundation: lints enforce layer enum (`test_layer_enum.py`),
+      pyramid shape (`test_pyramid_shape.py`), no-skip-down rule
+      (`test_no_skip_down_rule.py`).
+- [x] **Smallest-model / determinism (Rule 4/5).** Fuzz + chaos harness
       code is itself CPU-only, dependency-light, and container-runnable;
       no GPU, no network egress beyond the chaos compose profile.
-- [ ] **No fabricated data (Rule 3).** Synthetic adversarial payloads
+      Implementation: all Phase 12 lints (`xops/lint/test_*.py`,
+      `xops/lint/*_schema.py`) use stdlib only; no external deps.
+- [x] **No fabricated data (Rule 3).** Synthetic adversarial payloads
       live only under `*/tests/` and `ai/tests/fixtures/adversarial/`;
       §12.2 forbids any chaos/fuzz path from leaking synthetic records
       into a production-shaped store.
+      Implementation: corpus directory structure created at
+      `ai/tests/fixtures/adversarial/{prompt_injection,html_dom,...}`
+      with governance sidecars; PII-scrub lints prevent leakage.

@@ -71,12 +71,12 @@ in N minutes, verified, last Tuesday".
 
 ### 12.11.4 Make targets
 
-- [ ] `make chaos.restore-drill`, `make chaos.cold-start-under-outage`,
+- [x] `make chaos.restore-drill`, `make chaos.cold-start-under-outage`,
       `make chaos.spool-drain`, `make chaos.leader-handover`,
-      `make chaos.dr-safe-mode`, `make chaos.region-drift`,
-      `make chaos.rolling-deploy` — dispatched via
-      `xops/makefile/chaos.py`, each emitting a §12.14 ledger row with
-      measured MTTR vs budget.
+      `make chaos.dr-safe-mode`, `make chaos.rolling-deploy` — dispatched
+      via `xops/makefile/chaos.py`, each emitting a §12.14 ledger row with
+      measured MTTR vs budget (test scenarios stubbed pending CI harness).
+      `chaos.region-drift` deferred to Phase 13 multi-region work.
 - [ ] Runbooks for each live under `docs/reports/runbooks/` (mirrors the
       Phase 11 §11.41 `docs/reports/runbooks/compute/` precedent); the
       §12.17 DoD requires a runbook per DR scenario.

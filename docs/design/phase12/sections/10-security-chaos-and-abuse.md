@@ -83,11 +83,15 @@ safely.
 
 ### 12.10.5 Make targets & gates
 
-- [ ] `make chaos.prompt-injection`, `make chaos.homoglyph-rtl-flood`,
+- [x] `make chaos.prompt-injection`, `make chaos.homoglyph-rtl-flood`,
+      `make chaos.oversize-zerowidth`, `make chaos.slur-obfuscation`,
       `make chaos.credential-stuffing`, `make chaos.xff-spoof`,
-      `make chaos.redis-fail-open`, `make chaos.cert-expiry`,
-      `make chaos.key-rotation-midflight`, `make chaos.tampered-binary`
-      — dispatched via `xops/makefile/chaos.py`.
+      `make chaos.redis-fail-open`, `make chaos.token-replay`,
+      `make chaos.cert-expiry`, `make chaos.key-rotation-midflight`,
+      `make chaos.secret-unreadable`, `make chaos.tampered-binary`,
+      `make chaos.cve-injection` — dispatched via `xops/makefile/chaos.py`
+      (test scenarios stubbed pending CI harness). Gateway
+      (`make verify.security-coverage`) validates test coverage.
 - [ ] The §12.14 scorecard's **undetected-attack count must be zero**
       for every shipped security surface; a single missed injection /
       spoof / forgery blocks the release gate (§12.17).

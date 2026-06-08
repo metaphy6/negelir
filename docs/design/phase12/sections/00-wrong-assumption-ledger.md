@@ -10,7 +10,7 @@
 
 ### 12.0 Assumptions this phase explicitly retires
 
-- [ ] **A0 — "Phase 12 depends only on Phase 7 + Phase 9."** ❌ →
+- [x] **A0 — "Phase 12 depends only on Phase 7 + Phase 9."** ❌ →
       ✅ Phase 12 is a **cross-cutting verification phase**. It asserts
       properties of the bus/SDK (Phase 3), worker agents + storage
       (Phase 4), predictor swarm + consensus (Phase 5), proofreader

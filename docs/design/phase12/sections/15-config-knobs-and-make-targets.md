@@ -31,7 +31,7 @@ section. No magic numbers in chaos/coverage code (Rule 1).
 | `ci_flake_quarantine_max_days` | `14` | §12.13 |
 | `ci_flake_rate_threshold` | `0.01` | §12.13 |
 
-- [ ] Every knob has a `NEGELIR_*` mirror in `xops/env/.env.example`
+- [x] Every knob has a `NEGELIR_*` mirror in `xops/env/.env.example`
       with a one-line doc, and the triangle test
       (`ai/tests/test_config_sync.py`) is extended to cover them.
 - [ ] Go-side knobs (any consumed by the gateway load/chaos harness) are
@@ -64,7 +64,7 @@ of `chaos.*` names; this table is the operator-facing index.
 | `make verify.integrity-coverage` | every integrity primitive has a tamper test (§12.9) | `verify.py` |
 | `make ci.fast` / `ci.pr` / `ci.nightly` / `ci.weekly` | lane dispatchers (§12.13) | `tests.py` |
 
-- [ ] **New dispatchers** introduced by this phase:
+- [x] **New dispatchers** introduced by this phase:
       `xops/makefile/chaos.py`, `xops/makefile/fuzz.py`,
       `xops/makefile/coverage.py`, plus drivers under `xops/chaos/` and
       `ai/tests/fuzz/`. Each registers its commands in a `COMMANDS`
@@ -73,7 +73,7 @@ of `chaos.*` names; this table is the operator-facing index.
       Pumba, §12.4) and **new coverage config** (`.coveragerc` /
       `pyproject` `[tool.coverage]`, §12.12) — neither exists today
       (§12.0 A11).
-- [ ] A lint (`xops/lint/chaos_targets_dot_style.py`) rejects any
+- [x] A lint (`xops/lint/chaos_targets_dot_style.py`) rejects any
       hyphen-style `chaos-*` / `soak-*` target name re-introduced by a
       future PR.
 

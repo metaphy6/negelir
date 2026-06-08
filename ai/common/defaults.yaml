@@ -369,6 +369,10 @@ phase10:
   nlp_singleflight_sweep_interval_s: 30    # NEGELIR_NLP_SINGLEFLIGHT_SWEEP_INTERVAL_S
   nlp_singleflight_event_max_age_s: 60     # NEGELIR_NLP_SINGLEFLIGHT_EVENT_MAX_AGE_S
   nlp_singleflight_max_inflight: 2048      # NEGELIR_NLP_SINGLEFLIGHT_MAX_INFLIGHT
+  # Phase 12 §12.2.3 — Adversarial corpus growth bound
+  adversarial_corpus_max_added_rows_per_quarter: 500  # NEGELIR_ADVERSARIAL_CORPUS_MAX_ADDED_ROWS_PER_QUARTER
+  # Phase 12 §12.3.3 — Fuzz nightly budget
+  fuzz_nightly_budget_s: 600               # NEGELIR_FUZZ_NIGHTLY_BUDGET_S
   # Bus circuit breaker: consecutive publish failures before spooling (§10.13).
   nlp_bus_failure_circuit_threshold: 3     # NEGELIR_NLP_BUS_FAILURE_CIRCUIT_THRESHOLD
   # Max spool entries per NLP agent before dropping oldest (§10.13).

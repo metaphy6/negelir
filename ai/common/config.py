@@ -289,6 +289,80 @@ class Config:
         "2526:2025-26,2425:2024-25,2324:2023-24,2223:2022-23,2122:2021-22,2021:2020-21,1920:2019-20,1819:2018-19",
     ))
 
+    # Phase 12 §12.4 — Fault injection (test-only seam, production-safe)
+    fault_injection_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_FAULT_INJECTION_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    # Chaos profile affinity: which compose profile allows chaos targets
+    chaos_compose_profile: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_CHAOS_COMPOSE_PROFILE", "chaos"
+    ).strip())
+
+    # Phase 12 §12.6 — Bus & network chaos parameters
+    chaos_redis_flap_s: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CHAOS_REDIS_FLAP_S", "5"
+    )))
+    chaos_net_added_latency_ms: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CHAOS_NET_ADDED_LATENCY_MS", "500"
+    )))
+    chaos_bus_corrupt_fraction: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CHAOS_BUS_CORRUPT_FRACTION", "0.01"
+    )))
+
+    # Phase 12 §12.7 — Resource exhaustion parameters
+    chaos_cpu_adversarial_timeout_s: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CHAOS_CPU_ADVERSARIAL_TIMEOUT_S", "60"
+    )))
+    load_regression_tolerance: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_LOAD_REGRESSION_TOLERANCE", "1.10"
+    )))
+
+    # Phase 12 §12.8 — Soak & endurance parameters
+    soak_resource_drift_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SOAK_RESOURCE_DRIFT_PCT", "2.0"
+    )))
+    soak_report_max_age_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SOAK_REPORT_MAX_AGE_DAYS", "30"
+    )))
+    soak_nightly_duration_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SOAK_NIGHTLY_DURATION_S", "3600"
+    )))
+
+    # Phase 12 §12.11 — Disaster recovery & restoration
+    dr_restore_max_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DR_RESTORE_MAX_MIN", "30"
+    )))
+
+    # Phase 12 §12.12 — Coverage & mutation testing
+    coverage_mutation_min_score: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_COVERAGE_MUTATION_MIN_SCORE", "0.80"
+    )))
+    coverage_mutation_budget_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COVERAGE_MUTATION_BUDGET_S", "1800"
+    )))
+    coverage_pragma_max_per_module: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COVERAGE_PRAGMA_MAX_PER_MODULE", "5"
+    )))
+
+    # Phase 12 §12.13 — CI lanes & flake policy
+    ci_flake_quarantine_max_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_CI_FLAKE_QUARANTINE_MAX_DAYS", "14"
+    )))
+    ci_flake_rate_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CI_FLAKE_RATE_THRESHOLD", "0.01"
+    )))
+
+    # Phase 12 §12.14 — Chaos observability & resilience
+    chaos_mttd_budget_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_CHAOS_MTTD_BUDGET_MS", "2000"
+    )))
+    chaos_mttr_budget_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_CHAOS_MTTR_BUDGET_MS", "5000"
+    )))
+    chaos_trend_regression_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CHAOS_TREND_REGRESSION_PCT", "10.0"
+    )))
+
     @property
     def scrape_mackolik_archive(self) -> str:
         """Base URL for the Mackolik historical archive (fallback source)."""
@@ -2469,6 +2543,23 @@ class Config:
     #   Bounded: 1..100000.  Default = 2048.
     nlp_singleflight_max_inflight: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_SINGLEFLIGHT_MAX_INFLIGHT", "2048"
+    )))
+
+    # ── Phase 12 — Adversarial & chaos test suite ────────────────────────
+    # §12.2.3 — Growth bound & rotation
+    # Maximum rows added to adversarial corpora per calendar quarter.
+    # Prevents unbounded corpus growth; new families need explicit reviewer
+    # ack (not silent addition). Bounded: 1..10000. Default 500.
+    adversarial_corpus_max_added_rows_per_quarter: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_ADVERSARIAL_CORPUS_MAX_ADDED_ROWS_PER_QUARTER", "500"
+    )))
+
+    # §12.3.3 — Fuzz harness time budgets
+    # Wall-clock budget (seconds) for nightly fuzz campaigns (make fuzz.api,
+    # make fuzz.nlp, make fuzz.wire). Each target gets this many seconds
+    # of coverage-guided fuzzing. Bounded: 30..3600. Default 600 (10 min).
+    fuzz_nightly_budget_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FUZZ_NIGHTLY_BUDGET_S", "600"
     )))
 
     # ── Phase 8 — Self-maintenance plane (ops console + maint.event/ack) ──

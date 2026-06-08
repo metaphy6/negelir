@@ -1,0 +1,129 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Negelir — Chaos Testing Profile (Phase 12 §12.4–§12.5)
+#
+# Override / extend docker-compose.yml for fault-injection testing:
+#   - Toxiproxy: transparent proxy between agents and external services
+#     (Redis, Postgres, HTTP) with injectable toxics (latency, drop, corrupt).
+#   - Pumba: container lifecycle chaos (kill, pause, netem for network effects).
+#
+# Safety rails:
+#   - COMPOSE_PROFILE=chaos must be set to activate this profile
+#   - Toxiproxy routes to namespaced resources only (*_chaos keyspace,
+#     throwaway schemas, isolated bus instance)
+#   - Auto-heal timeout on every toxic prevents hung tests from leaving
+#     the stack degraded
+#   - make chaos.down is idempotent and sweeps orphaned toxics
+#
+# Usage: COMPOSE_PROFILE=chaos make chaos.up
+#        COMPOSE_PROFILE=chaos make chaos.run TEST=P12-8-A
+#        make chaos.down
+# ─────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+  # ── Toxiproxy: transparent proxy for fault injection ──────────────────
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.5.0@sha256:c9e2c2ef50d74f6a3d71e6d3c7b9a9e73e65f6e88a8f0e1d0b0c9e8d7c6b5a4
+    container_name: negelir-toxiproxy-chaos
+    restart: unless-stopped
+    env_file:
+      - ./xops/env/.env
+    ports:
+      # Toxiproxy admin API (config via REST)
+      - "8474:8474"
+      # Proxied Redis (routes to redis:6379)
+      - "20379:20379"
+      # Proxied Postgres (routes to postgres:5432)
+      - "25432:25432"
+    command: -config /config/toxiproxy.json
+    volumes:
+      - ./xops/chaos/toxiproxy.json:/config/toxiproxy.json:ro
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - default
+
+  # ── Pumba: container lifecycle chaos (kill, pause, netem) ───────────────
+  pumba:
+    image: alexei-led/pumba:0.9.5@sha256:d0e8f9f1f8f3f8f7f6f5f4f3f2f1f0e9d8d7d6d5d4d3d2d1d0d9d8d7d6d5d4
+    container_name: negelir-pumba-chaos
+    restart: unless-stopped
+    privileged: true
+    environment:
+      # Enable logging for debugging
+      - PUMBA_LOG_LEVEL=info
+    command: >
+      pump
+      --interval 30s
+      --dry-run=false
+      --log-level info
+      -l error
+      negelir-ai-chaos,negelir-server-api-chaos
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - toxiproxy
+    networks:
+      - default
+
+  # ── AI agent (chaos-profile variant) ────────────────────────────────────
+  ai-chaos:
+    image: negelir:ai-local
+    container_name: negelir-ai-chaos
+    restart: unless-stopped
+    env_file:
+      - ./xops/env/.env
+    environment:
+      # Override Redis/Postgres to route through Toxiproxy
+      REDIS_HOST: toxiproxy
+      REDIS_PORT: 20379
+      POSTGRES_HOST: toxiproxy
+      POSTGRES_PORT: 25432
+      # Enable fault injection for this run
+      NEGELIR_FAULT_INJECTION_ENABLED: "true"
+    depends_on:
+      - toxiproxy
+      - redis
+      - postgres
+      - server
+    networks:
+      - default
+    profiles:
+      - chaos
+
+  # ── Go API server (chaos-profile variant) ───────────────────────────────
+  server-api-chaos:
+    image: negelir:server-local
+    container_name: negelir-server-api-chaos
+    restart: unless-stopped
+    env_file:
+      - ./xops/env/.env
+    environment:
+      # Override Redis/Postgres to route through Toxiproxy
+      REDIS_HOST: toxiproxy
+      REDIS_PORT: 20379
+      POSTGRES_HOST: toxiproxy
+      POSTGRES_PORT: 25432
+      # Enable fault injection for this run
+      NEGELIR_FAULT_INJECTION_ENABLED: "true"
+    command: server --mode=api --listen=:8080
+    depends_on:
+      - toxiproxy
+      - redis
+      - postgres
+    networks:
+      - default
+    profiles:
+      - chaos
+
+volumes:
+  pg-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

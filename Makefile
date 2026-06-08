@@ -94,6 +94,10 @@ verify.age-pin: ## Phase 8 §8.14.3 — verify age binary SHA-256 vs provenance 
 verify.dlq-replay-policy: ## Phase 8 §8.16.7 — verify DLQ replay overrides vs security exception registry
 	@$(XOPS)/verify.py dlq-replay-policy
 
+.PHONY: verify.adversarial-corpora
+verify.adversarial-corpora: ## Phase 12 §12.2 — verify adversarial corpus integrity (disjointness, PII, SHA256, reviewers)
+	@$(XOPS)/verify.py adversarial-corpora
+
 .PHONY: audit.verify-api
 audit.verify-api: ## §9.8 — walk api_audit_log HMAC chain; Phase 1 linkage check + Phase 2 HMAC recomputation (exit 1 on any break)
 	@$(XOPS)/audit_api.py verify-api
@@ -524,6 +528,234 @@ hosts.status: ## Show current /etc/hosts state for mock vhosts
 hosts.preview: ## Show the hostnames the mock stack will register
 	@$(XOPS)/hosts.py show
 
+# ══════════════════════════════════════════════════════════════
+#       PHASE 12 — ADVERSARIAL & CHAOS TEST SUITE (§12.4–§12.5)
+# ══════════════════════════════════════════════════════════════
+
+.PHONY: chaos.up
+chaos.up: env ## Bring up chaos profile (Toxiproxy + Pumba + chaos-tagged services)
+	@$(XOPS)/chaos.py up
+
+.PHONY: chaos.down
+chaos.down: ## Tear down chaos profile (idempotent; sweeps orphaned toxics)
+	@$(XOPS)/chaos.py down
+
+.PHONY: chaos.run
+chaos.run: ## Run one catalogue scenario by stable ID: TEST=<id> (e.g., P12-8-A)
+	@$(XOPS)/chaos.py run $(TEST)
+
+.PHONY: chaos.list
+chaos.list: ## Print the chaos catalogue (single source: docs/testing/phase12_catalogue.md)
+	@$(XOPS)/chaos.py list
+
+.PHONY: test.chaos.inproc
+test.chaos.inproc: ## Run in-process FaultInjector scenarios (deterministic, no compose)
+	@PYTHONPATH=ai $(PY) -m pytest ai/tests/test_phase12_fault_injector.py -q
+
+# ── §12.6 Bus & Network Chaos ──────────────────────────────
+
+.PHONY: chaos.redis-flap
+chaos.redis-flap: env ## [P12-6-A] Drop Redis mid-stream, assert at-least-once + idempotent
+	@$(XOPS)/chaos.py redis-flap
+
+.PHONY: chaos.bus-partition
+chaos.bus-partition: env ## [P12-6-B] Split producers/consumers, assert backpressure + spool drain
+	@$(XOPS)/chaos.py bus-partition
+
+.PHONY: chaos.network-slow
+chaos.network-slow: env chaos.up ## [P12-6-C] Inject latency via Toxiproxy, assert budget gates
+	@$(XOPS)/chaos.py network-slow
+
+.PHONY: chaos.bus-reorder
+chaos.bus-reorder: env ## [P12-6-D] Deliver envelopes out of order, assert no silent FIFO
+	@$(XOPS)/chaos.py bus-reorder
+
+.PHONY: chaos.bus-duplicate
+chaos.bus-duplicate: env ## [P12-6-E] Redeliver all envelopes twice, assert exactly-once effects
+	@$(XOPS)/chaos.py bus-duplicate
+
+.PHONY: chaos.bus-corrupt
+chaos.bus-corrupt: env ## [P12-6-F] Flip bytes in envelopes, assert DLQ routing + validation
+	@$(XOPS)/chaos.py bus-corrupt
+
+.PHONY: chaos.dlq-poison
+chaos.dlq-poison: env ## [P12-6-G] Inject poisoned DLQ entries, assert operator-confirm-only
+	@$(XOPS)/chaos.py dlq-poison
+
+.PHONY: chaos.redis-key-collision
+chaos.redis-key-collision: env ## [P12-6-H] Test Redis namespace isolation (datasource|swarm|server|common)
+	@$(XOPS)/chaos.py redis-key-collision
+
+# ── §12.7 Resource Exhaustion & Performance ─────────────────
+
+.PHONY: chaos.cpu-saturate
+chaos.cpu-saturate: env ## [P12-7-A] Pin all vCPUs, assert CPU budget gates + graceful degradation
+	@$(XOPS)/chaos.py cpu-saturate
+
+.PHONY: chaos.rss-pressure
+chaos.rss-pressure: env ## [P12-7-B] Drive RSS toward pod budget, assert RLIMIT + no OOM-kill
+	@$(XOPS)/chaos.py rss-pressure
+
+.PHONY: chaos.fd-exhaust
+chaos.fd-exhaust: env ## [P12-7-C] Exhaust file descriptors, assert bounded pools + graceful shed
+	@$(XOPS)/chaos.py fd-exhaust
+
+.PHONY: chaos.conn-pool-starve
+chaos.conn-pool-starve: env ## [P12-7-D] Starve PG connection pool, assert timeout → structured refusal
+	@$(XOPS)/chaos.py conn-pool-starve
+
+.PHONY: chaos.disk-pressure
+chaos.disk-pressure: env ## [P12-7-E] Fill data volume, assert pressure alert + refuse before corruption
+	@$(XOPS)/chaos.py disk-pressure
+
+.PHONY: chaos.queue-depth-flood
+chaos.queue-depth-flood: env ## [P12-7-F] Flood bus queue, assert humanizer-disable + adaptive-shed
+	@$(XOPS)/chaos.py queue-depth-flood
+
+.PHONY: chaos.cache-stampede
+chaos.cache-stampede: env ## [P12-7-G] N concurrent misses on hot key, assert singleflight collapses
+	@$(XOPS)/chaos.py cache-stampede
+
+.PHONY: load.api
+load.api: env up ## [P12-7 gate] Performance: k6 driver against API surface, assert p50/p95/p99 budgets
+	@$(XOPS)/chaos.py load.api
+
+.PHONY: load.nlp
+load.nlp: env up ## [P12-7 gate] Performance: Locust driver against NLP, assert latency budget
+	@$(XOPS)/chaos.py load.nlp
+
+.PHONY: load.predictor
+load.predictor: env up ## [P12-7 gate] Performance: synthetic prediction load, assert p99 latency
+	@$(XOPS)/chaos.py load.predictor
+
+# ── §12.8 Soak & Endurance ──────────────────────────────────
+
+.PHONY: soak.nightly
+soak.nightly: env ## [P12-8 nightly] Short soaks: soak.nlp.leak + soak.swarm.short (~1–2h)
+	@$(XOPS)/chaos.py soak.nightly
+
+.PHONY: soak.weekly
+soak.weekly: env ## [P12-8 weekly, self-hosted] 24h + GPU heat soaks (runs on self-hosted runner)
+	@$(XOPS)/chaos.py soak.weekly
+
+.PHONY: soak.report
+soak.report: env ## [P12-8 gate] Regenerate soak report from latest ledger rows (freshness-gated)
+	@$(XOPS)/chaos.py soak.report
+
+# ── §12.9 Data-Integrity & Corruption Injection ─────────────
+
+.PHONY: chaos.tamper-hmac
+chaos.tamper-hmac: env test.chaos.inproc ## [P12-9-A] Tamper with HMAC/signatures, assert detection
+	@$(XOPS)/chaos.py tamper-hmac
+
+.PHONY: chaos.checksum-mismatch
+chaos.checksum-mismatch: env test.chaos.inproc ## [P12-9-B] Inject checksum corruption, assert detection
+	@$(XOPS)/chaos.py checksum-mismatch
+
+.PHONY: chaos.audit-chain-break
+chaos.audit-chain-break: env test.chaos.inproc ## [P12-9-C] Corrupt audit-log hash-chain, assert detection
+	@$(XOPS)/chaos.py audit-chain-break
+
+.PHONY: chaos.replay-storm
+chaos.replay-storm: env ## [P12-9-D] Replay envelope stream 5× through idempotent consumers
+	@$(XOPS)/chaos.py replay-storm
+
+.PHONY: chaos.split-write
+chaos.split-write: env ## [P12-9-E] Kill agent mid multi-step write, assert clean recovery
+	@$(XOPS)/chaos.py split-write
+
+.PHONY: chaos.erasure-under-chaos
+chaos.erasure-under-chaos: env ## [P12-9-F] GDPR erasure during bus flap, assert idempotent cleanup
+	@$(XOPS)/chaos.py erasure-under-chaos
+
+.PHONY: chaos.audit-pii-scan
+chaos.audit-pii-scan: env ## [P12-9-G] Scan audit/spool/logs for residual PII after chaos run
+	@$(XOPS)/chaos.py audit-pii-scan
+
+.PHONY: verify.integrity-coverage
+verify.integrity-coverage: ## [P12-9 gate] Verify every integrity primitive has a proof test
+	@$(XOPS)/verify.py integrity-coverage
+
+# ── §12.10 Security Chaos & Abuse ──────────────────────────
+
+.PHONY: chaos.prompt-injection
+chaos.prompt-injection: env ## [P12-10-A] Replay prompt-injection corpus through gateway→NLP
+	@$(XOPS)/chaos.py prompt-injection
+
+.PHONY: chaos.homoglyph-rtl-flood
+chaos.homoglyph-rtl-flood: env ## [P12-10-B] Send confusable-char + RTL + zero-width payloads
+	@$(XOPS)/chaos.py homoglyph-rtl-flood
+
+.PHONY: chaos.oversize-zerowidth
+chaos.oversize-zerowidth: env ## [P12-10-C] Send oversized + zero-width-padded Turkish queries
+	@$(XOPS)/chaos.py oversize-zerowidth
+
+.PHONY: chaos.slur-obfuscation
+chaos.slur-obfuscation: env ## [P12-10-D] Replay obfuscated-slur corpus, assert ≥99% detection
+	@$(XOPS)/chaos.py slur-obfuscation
+
+.PHONY: chaos.credential-stuffing
+chaos.credential-stuffing: env ## [P12-10-D] Burst /v1/auth/*, assert rate caps + latency budgets
+	@$(XOPS)/chaos.py credential-stuffing
+
+.PHONY: chaos.xff-spoof
+chaos.xff-spoof: env ## [P12-10-E] Spoof X-Forwarded-For, assert trusted-proxy gate
+	@$(XOPS)/chaos.py xff-spoof
+
+.PHONY: chaos.redis-fail-open
+chaos.redis-fail-open: env ## [P12-10-F] Kill Redis during rate-limit, assert fail-open + secondary buckets
+	@$(XOPS)/chaos.py redis-fail-open
+
+.PHONY: chaos.token-replay
+chaos.token-replay: env ## [P12-10-G] Replay single-use + revoked tokens, assert rejection
+	@$(XOPS)/chaos.py token-replay
+
+.PHONY: chaos.cert-expiry
+chaos.cert-expiry: env ## [P12-10-H] Present expired/near-expiry mTLS cert, assert refusal
+	@$(XOPS)/chaos.py cert-expiry
+
+.PHONY: chaos.key-rotation-midflight
+chaos.key-rotation-midflight: env ## [P12-10-I] Rotate signing key during in-flight requests, assert grace window
+	@$(XOPS)/chaos.py key-rotation-midflight
+
+.PHONY: chaos.secret-unreadable
+chaos.secret-unreadable: env ## [P12-10-I-alt] Make key path unreadable mid-run, assert fail-safe
+	@$(XOPS)/chaos.py secret-unreadable
+
+.PHONY: chaos.tampered-binary
+chaos.tampered-binary: env ## [P12-10-J] Swap binary/image to unsigned substitute, assert supply-chain gate
+	@$(XOPS)/chaos.py tampered-binary
+
+.PHONY: chaos.cve-injection
+chaos.cve-injection: env ## [P12-10-K] Pin known-vulnerable dependency, assert CVE scan blocks
+	@$(XOPS)/chaos.py cve-injection
+
+# ── §12.11 Recovery & DR Drills ─────────────────────────────
+
+.PHONY: chaos.restore-drill
+chaos.restore-drill: env ## [P12-11-A] Full backup→restore→verify cycle, assert MTTR within budget
+	@$(XOPS)/chaos.py restore-drill
+
+.PHONY: chaos.cold-start-under-outage
+chaos.cold-start-under-outage: env ## [P12-11-B] Cold boot with DB + Redis denied, assert /livez within budget
+	@$(XOPS)/chaos.py cold-start-under-outage
+
+.PHONY: chaos.spool-drain
+chaos.spool-drain: env ## [P12-11-C] Bus partition then heal, assert spool drains in order
+	@$(XOPS)/chaos.py spool-drain
+
+.PHONY: chaos.leader-handover
+chaos.leader-handover: env ## [P12-11-D] Kill leader, assert standby takeover without duplicate
+	@$(XOPS)/chaos.py leader-handover
+
+.PHONY: chaos.dr-safe-mode
+chaos.dr-safe-mode: env ## [P12-11-E] Fail lexicon load, assert safe-mode + auto-exit
+	@$(XOPS)/chaos.py dr-safe-mode
+
+.PHONY: chaos.rolling-deploy
+chaos.rolling-deploy: env ## [P12-11-F] Mix v_{N-1} + v_N replicas, assert version tolerance
+	@$(XOPS)/chaos.py rolling-deploy
+
 # ── Source-watcher agent (Phase 2.8) ────────────────────────
 
 .PHONY: watch.run
@@ -553,6 +785,84 @@ test.fast: env ## Fast loop: full suite minus @pytest.mark.slow tests (audit P6)
 .PHONY: test.integration
 test.integration: env ## Full-pipeline integration test (skips cleanly if real data missing)
 	@$(XOPS)/tests.py test-integration
+
+.PHONY: test.adversarial
+test.adversarial: env ## Phase 12 — Run adversarial corpus tests; zero xfail (§12.2.4)
+	@PYTHONPATH=ai python3 -m pytest ai/tests/test_adversarial_corpus.py -q
+
+.PHONY: fuzz.smoke
+fuzz.smoke: ## Phase 12 — Replay persisted fuzz corpus (PR lane, deterministic)
+	@$(XOPS)/fuzz.py smoke
+
+.PHONY: fuzz.api
+fuzz.api: ## Phase 12 — Nightly Go-fuzz coverage run (api gateway + sec; timeout: FUZZ_NIGHTLY_BUDGET_S)
+	@$(XOPS)/fuzz.py api
+
+.PHONY: fuzz.nlp
+fuzz.nlp: ## Phase 12 — Nightly Atheris/libFuzzer coverage run (NLP; timeout: FUZZ_NIGHTLY_BUDGET_S)
+	@$(XOPS)/fuzz.py nlp
+
+.PHONY: fuzz.wire
+fuzz.wire: ## Phase 12 — Nightly schema-aware fuzzing (bus envelope, API DTOs via Hypothesis)
+	@$(XOPS)/fuzz.py wire
+
+.PHONY: fuzz.corpus.min
+fuzz.corpus.min: ## Phase 12 — Minimise + de-duplicate corpus after campaign (feeds growth-bound)
+	@$(XOPS)/fuzz.py corpus.min
+
+# ── §12.12 Coverage & Mutation Testing ──────────────────────
+
+.PHONY: coverage.report
+coverage.report: ## Phase 12 §12.12 — Line + branch coverage report (HTML + JSON artifact)
+	@$(XOPS)/coverage.py report
+
+.PHONY: coverage.diff
+coverage.diff: ## Phase 12 §12.12.3 — PR gate: changed lines meet their tier floor
+	@$(XOPS)/coverage.py diff
+
+.PHONY: coverage.regression-proof
+coverage.regression-proof: ## Phase 12 §12.12.3 — assert regression test fails before fix
+	@$(XOPS)/coverage.py regression-proof
+
+.PHONY: coverage.mutation
+coverage.mutation: ## Phase 12 §12.12.4 — Nightly mutation testing (Tier-1 only, time-boxed)
+	@$(XOPS)/coverage.py mutation
+
+.PHONY: coverage.ratchet
+coverage.ratchet: ## Phase 12 §12.12.5 — Coverage ratchet: per-module cannot decline
+	@$(XOPS)/coverage.py ratchet
+
+# ── §12.13 CI Lane Dispatchers ──────────────────────────────
+
+.PHONY: ci.fast
+ci.fast: ## Phase 12 §12.13 — Fast lane (<5min): unit+property+contract (per-push)
+	@$(XOPS)/tests.py ci-fast
+
+.PHONY: ci.pr
+ci.pr: ## Phase 12 §12.13 — PR lane (<20min): integration+adversarial+regression+diff-coverage
+	@$(XOPS)/tests.py ci-pr
+
+.PHONY: ci.nightly
+ci.nightly: ## Phase 12 §12.13 — Nightly lane (<90min, self-hosted): fuzz+load+chaos+mutation
+	@$(XOPS)/tests.py ci-nightly
+
+.PHONY: ci.weekly
+ci.weekly: ## Phase 12 §12.13 — Weekly lane (24h, self-hosted): full soaks+GPU heat+DR drills
+	@$(XOPS)/tests.py ci-weekly
+
+# ── §12.14 Chaos Observability & Ledger ────────────────────
+
+.PHONY: chaos.scorecard
+chaos.scorecard: ## Phase 12 §12.14.2 — Render resilience scorecard from ledger (MTTD/MTTR/coverage)
+	@$(XOPS)/chaos.py scorecard
+
+.PHONY: chaos.ledger.verify
+chaos.ledger.verify: ## Phase 12 §12.14.1 — Schema + PII lint on data/chaos/ledger.jsonl
+	@$(XOPS)/chaos.py ledger.verify
+
+.PHONY: chaos.trend
+chaos.trend: ## Phase 12 §12.14.2 — Compare current scorecard vs last-green baseline
+	@$(XOPS)/chaos.py trend
 
 # ══════════════════════════════════════════════════════════════
 #                       PHASE 4 SWARM DEMO

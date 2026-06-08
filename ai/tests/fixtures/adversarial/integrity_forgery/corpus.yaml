@@ -1,0 +1,28 @@
+# Phase 12 §12.2.1 — Integrity forgery adversarial corpus (governance sidecar)
+# 
+# HMAC forgery, citation forgery, audit-chain tampering.
+# Owning phase: 5 (Predictor); Catcher: consensus + citation HMAC
+# Catalogue family: P12-5
+
+version: 1
+seed: 42
+sha256: "TBD"
+
+provenance:
+  hmac_forgery:
+    - technique: "Forged HMAC-SHA256 on calibration envelope"
+      cve: null
+      date_added: "2026-06-08"
+  citation_forgery:
+    - technique: "Tampered citation with invalid signature"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"  # REQUIRED: sec CODEOWNER for integrity_forgery
+  - "phase-5-predictor-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"

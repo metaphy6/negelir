@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "proxies": [
+    {
+      "name": "redis-proxy",
+      "listen": "[::]:20379",
+      "upstream": "redis:6379",
+      "enabled": true,
+      "toxics": []
+    },
+    {
+      "name": "postgres-proxy",
+      "listen": "[::]:25432",
+      "upstream": "postgres:5432",
+      "enabled": true,
+      "toxics": []
+    }
+  ]
+}

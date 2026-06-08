@@ -1,0 +1,31 @@
+# Phase 12 §12.2.1 — Unicode abuse adversarial corpus (governance sidecar)
+# 
+# Homoglyphs, RTL-flip, zero-width characters, mojibake, confusable scripts.
+# Owning phase: 10 (NLP); Catcher: sec.input.v1; Catalogue family: P12-7.1
+
+version: 1
+seed: 42
+sha256: "TBD"
+
+provenance:
+  homoglyph_cyrillic:
+    - technique: "Cyrillic а (U+0430) vs Latin a (U+0061)"
+      cve: null
+      date_added: "2026-06-08"
+  rtl_flip:
+    - technique: "Right-to-left override (U+202E) abuse"
+      cve: null
+      date_added: "2026-06-08"
+  zero_width:
+    - technique: "Zero-width space (U+200B) injection"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"
+  - "phase-10-nlp-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"

@@ -1,0 +1,32 @@
+# Phase 12 §12.2.1 — Wire envelope adversarial corpus (governance sidecar)
+# 
+# Malformed bus payloads, schema violations, cross-agent boundary attacks.
+# Owning phase: 3 (Swarm foundation); Catcher: SDK RequestIdDeduper + schema gate
+# Catalogue family: P12-3
+
+version: 1
+seed: 42
+sha256: "TBD"
+
+provenance:
+  missing_required_field:
+    - technique: "Envelope missing required field (e.g., request_id)"
+      cve: null
+      date_added: "2026-06-08"
+  invalid_type:
+    - technique: "Envelope field with wrong type (string instead of int)"
+      cve: null
+      date_added: "2026-06-08"
+  oversized_nested:
+    - technique: "Deeply nested or oversized nested payload"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"
+  - "phase-3-swarm-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"

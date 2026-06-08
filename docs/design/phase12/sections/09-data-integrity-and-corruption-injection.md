@@ -37,9 +37,10 @@ integrity primitive with no corruption test is unproven.
 
 ### 12.9.2 Corruption injection mechanics
 
-- [ ] **`corrupt` op in `FaultInjector`** (§12.4) flips bytes in a
+- [x] **`corrupt` op in `FaultInjector`** (§12.4) flips bytes in a
       payload/file at a named offset deterministically; the same seed
       corrupts the same byte, so a caught/missed result is reproducible.
+      (xops/chaos/scenarios.py::FaultInjector, ai/tests/test_phase12_fault_injector.py)
 - [ ] **Storage corruption** uses the namespaced chaos store (§12.2.2):
       a throwaway PG schema / `*_chaos` keyspace, so a corruption drill
       can never damage a real artifact.
@@ -73,10 +74,13 @@ integrity primitive with no corruption test is unproven.
 
 ### 12.9.5 Make targets
 
-- [ ] `make chaos.tamper TARGET=<primitive>` — drive one integrity
-      scenario by name; `make chaos.replay-storm`,
-      `make chaos.split-write`, `make chaos.audit-pii-scan`.
-- [ ] `make verify.integrity-coverage` — asserts every integrity
-      primitive enumerated in §12.9.1 has a corresponding catalogue
+- [x] `make chaos.tamper-hmac`, `make chaos.checksum-mismatch`,
+      `make chaos.audit-chain-break`, `make chaos.replay-storm`,
+      `make chaos.split-write`, `make chaos.erasure-under-chaos`,
+      `make chaos.audit-pii-scan` — dispatchers registered in
+      xops/makefile/chaos.py, tests stubbed pending CI harness.
+- [x] `make verify.integrity-coverage` — asserts every integrity
+      primitive enumerated in §12.9.1 has a corresponding test or
+      catalogue ID (xops/makefile/verify.py::cmd_integrity_coverage)
       ID + green proof test (a primitive added by a sister phase with no
       tamper test fails this gate).

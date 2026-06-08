@@ -1,0 +1,102 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12 §12.12 — Coverage Tier Mapping (single-source registry)
+#
+# Criticality-based coverage targets. Tier assignments are reviewed;
+# no silent down-tiering to lower tiers (§12.12.1).
+#
+# ── Tier-1: Security / integrity / money / consensus ──
+# Requirement: ≥ 95% line AND ≥ 90% branch AND mutation score ≥ 0.80
+# Modules: security boundaries, auth, consensus, backup, crypto paths
+#
+# ── Tier-2: Ordinary business logic ──
+# Requirement: ≥ 85% line (no mutation required; diff-coverage applies)
+#
+# ── Tier-3: Glue / generated / tooling ──
+# Requirement: No hard floor (explicit allow-list reviewed per PR)
+# ─────────────────────────────────────────────────────────────────────────
+
+tiers:
+  tier_1:
+    description: "Security / integrity / consensus / money"
+    line_minimum: 95
+    branch_minimum: 90
+    mutation_required: true
+    mutation_min_score: 0.80  # Ovrides config default if needed
+    modules:
+      - ai/swarm/agents/sec/
+      - ai/swarm/agents/predictors/  # consensus fusion logic
+      - server/internal/sec/
+      - server/internal/auth/
+      - "*/crypto/"
+      - "ai/common/security/**"
+      - "xops/opsctl/**"
+      - "ai/swarm/agents/maint/backup**"
+      # Citation + HMAC paths (fraud prevention):
+      - "ai/nlp/cite_hmac**"
+      - "server/internal/api/hmac**"
+
+  tier_2:
+    description: "Ordinary business logic"
+    line_minimum: 85
+    branch_minimum: 0  # No branch requirement
+    mutation_required: false
+    modules:
+      - ai/scraper/
+      - ai/nlp/
+      - ai/model/
+      - ai/swarm/sdk/
+      - ai/swarm/agents/predictors/
+      - ai/common/
+      - server/internal/api/
+      - server/internal/models/
+
+  tier_3:
+    description: "Glue / generated / tooling (explicit allow-list)"
+    line_minimum: 0  # No hard floor
+    branch_minimum: 0
+    mutation_required: false
+    modules:
+      # Generated API handlers (oapi-codegen output):
+      - server/internal/handlers/generated.go
+      # Test helpers + scaffolding:
+      - "ai/tests/conftest.py"
+      - "ai/tests/fixtures/**"
+      - "server/internal/testhelpers/**"
+      # CLI / script entry points:
+      - xops/**
+      - "**/__main__.py"
+      # Build tools:
+      - "setup.py"
+      - "build/**"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Exclusions: modules NOT scanned by coverage gates (documented here)
+# ─────────────────────────────────────────────────────────────────────────
+
+exclusions:
+  comment: |
+    Modules excluded from coverage gates (must have inline justification).
+  paths:
+    # Mock-data helpers (Phase 2, test-only):
+    - xops/mock/**
+    # Deployment / K8s (Phase 14):
+    - infra/k8s/**
+    - xops/deploy/**
+    # Data files (not code):
+    - "*.json"
+    - "*.yaml"
+    - "*.csv"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Mutation testing scope (§12.12.4)
+# ─────────────────────────────────────────────────────────────────────────
+
+mutation_scope:
+  curated_set:
+    - ai/swarm/agents/sec/
+    - server/internal/sec/
+    - server/internal/auth/
+    - ai/swarm/agents/predictors/consensus_fusion.py
+    - ai/nlp/cite_hmac.py
+    - server/internal/api/hmac_validator.go
+  timeout_seconds: 1800  # Override via cfg.coverage_mutation_budget_s

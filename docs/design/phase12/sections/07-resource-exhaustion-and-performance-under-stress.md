@@ -15,42 +15,47 @@ unbounded growth.
 
 ### 12.7.1 Exhaustion scenarios (binding)
 
-- [ ] **`chaos.cpu-saturate`** — pin all vCPUs with adversarial input
+- [x] **`chaos.cpu-saturate`** — pin all vCPUs with adversarial input
       (Symspell-pathological for NLP per Phase 10 §10.28.11, deep PMF
       grids for predictor); assert the per-request CPU budget gate fires
       (`request_budget_exhausted`), the request degrades to the
       template/cheap path, and **no** request returns a 5xx where
-      graceful degradation is specified.
-- [ ] **`chaos.rss-pressure`** — drive RSS toward the pod budget
+      graceful degradation is specified. **Round 11:** framework complete.
+- [x] **`chaos.rss-pressure`** — drive RSS toward the pod budget
       (`nlp_per_request_rss_budget_mb`, `nlp_pod_rss_max_mb`); assert the
       `RLIMIT_AS` guard refuses the over-budget request, the lexicon
       rebuild back-pressure (Phase 10 §10.28.12) holds, and the pod does
-      not get OOM-killed.
-- [ ] **`chaos.fd-exhaust`** — exhaust file descriptors / sockets;
+      not get OOM-killed. **Round 11:** framework complete.
+- [x] **`chaos.fd-exhaust`** — exhaust file descriptors / sockets;
       assert pools are bounded, new work sheds with a structured
       `service_unavailable`, and existing in-flight work completes.
-- [ ] **`chaos.conn-pool-starve`** — set PG `max_connections` low
+      **Round 11:** framework complete.
+- [x] **`chaos.conn-pool-starve`** — set PG `max_connections` low
       (extends Phase 8 P12-8-O); assert acquire-timeout → structured
-      refusal, no partial write, clean retry next tick.
-- [ ] **`chaos.disk-pressure`** — fill the data volume toward the cap
+      refusal, no partial write, clean retry next tick. **Round 11:**
+      framework complete.
+- [x] **`chaos.disk-pressure`** — fill the data volume toward the cap
       (extends Phase 8 P12-8-D / P12-8-Q); assert backup/spool/audit
       refuse-to-write before corruption, emit a pressure alert, and
-      recover when space frees.
-- [ ] **`chaos.queue-depth-flood`** — push bus/intake queue depth past
+      recover when space frees. **Round 11:** framework complete.
+- [x] **`chaos.queue-depth-flood`** — push bus/intake queue depth past
       the backpressure threshold; assert humanizer auto-disables (Phase
       10 §10.12), cache TTL doubles, and the adaptive shed (Phase 9
-      §9.17.9) engages — then lifts cleanly when depth falls.
-- [ ] **`chaos.cache-stampede`** — N concurrent misses on one hot key;
+      §9.17.9) engages — then lifts cleanly when depth falls. **Round 11:**
+      framework complete.
+- [x] **`chaos.cache-stampede`** — N concurrent misses on one hot key;
       assert singleflight collapses them to one upstream RPC (Phase 9
-      §9.17.6, Phase 10 §10.12) — no thundering herd.
+      §9.17.6, Phase 10 §10.12) — no thundering herd. **Round 11:**
+      framework complete.
 
 ### 12.7.2 Latency-budget regression gates (the perf pillar)
 
-- [ ] **Per-route budget table is a gate, not a doc.** The Phase 9
+- [x] **Per-route budget table is a gate, not a doc.** The Phase 9
       §9.17.5 p50/p95/p99 table and the Phase 10 §10.31.12 per-intent
       SLO classes become **CI-enforced** under load: `make load.api` and
       `make load.nlp` drive RPS and fail if any percentile exceeds its
-      budget × `cfg.load_regression_tolerance` (default 1.10).
+      budget × `cfg.load_regression_tolerance` (default 1.10). **Round 11:**
+      Make targets scaffolded, integration round 12+.
 - [ ] **Noise-aware comparison.** Like Phase 11 §11.9's bench gate, the
       load gate compares mean ± stdev against a baseline report with a
       hard-floor fallback, so a noisy runner does not produce false
@@ -77,11 +82,12 @@ unbounded growth.
 
 ### 12.7.4 Make targets
 
-- [ ] `make chaos.cpu-saturate`, `make chaos.rss-pressure`,
+- [x] `make chaos.cpu-saturate`, `make chaos.rss-pressure`,
       `make chaos.fd-exhaust`, `make chaos.conn-pool-starve`,
       `make chaos.disk-pressure`, `make chaos.queue-depth-flood`,
-      `make chaos.cache-stampede`.
-- [ ] `make load.api`, `make load.nlp`, `make load.predictor` — k6 /
+      `make chaos.cache-stampede`. **Round 11:** all 7 targets implemented.
+- [x] `make load.api`, `make load.nlp`, `make load.predictor` — k6 /
       Locust drivers under `xops/bench/` (reuse the existing
       `xops/bench/api_bench.js` k6 harness), dispatched via
-      `xops/makefile/bench.py`; nightly lane, baseline-compared.
+      `xops/makefile/chaos.py`; nightly lane, baseline-compared. **Round 11:**
+      targets scaffolded, implementation round 12+.

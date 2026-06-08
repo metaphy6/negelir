@@ -1,4 +1,4 @@
-//go:build cpu_only
+//go:build !wasm
 
 /*
 Negelir Go Middleware Server

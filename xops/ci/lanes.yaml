@@ -1,0 +1,100 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12 §12.13 — CI Lane Configuration (single-source registry)
+#
+# This file defines:
+#   • Trigger cadence (fast/push, pr, nightly, weekly)
+#   • Test membership (which tests run in which lane)
+#   • Budget ceiling (max runtime per lane)
+#   • Block behaviour (does lane failure block the merge?)
+#
+# Usage: `xops/makefile/tests.py` consumes this to dispatch `make ci.*` targets.
+# Linters verify test tags match their assigned lanes (§12.13.5).
+# ─────────────────────────────────────────────────────────────────────────
+
+lanes:
+  fast:
+    description: "Per-push, <5 min: unit+property+contract+lint (Phase 12 §12.13)"
+    trigger: "every push"
+    budget_minutes: 5
+    blocks: true
+    members:
+      - test_layer: "unit"
+      - test_layer: "property"
+      - test_layer: "contract"
+      - test_layer: "lint"
+      - test_name: "test_*_smoke"        # fuzz.smoke only (persisted corpus replay, deterministic)
+    notes: |
+      Per-phase smoke tests only. No new exploration (nightly-only).
+      Lint gates: hardcode, NLP lexicon diff, chaos catalogue, adversarial corpus.
+
+  pr:
+    description: "Per-PR, <20 min: integration+adversarial+regression+diff-coverage (Phase 12 §12.13)"
+    trigger: "PR open/update"
+    budget_minutes: 20
+    blocks: true
+    members:
+      - test_layer: "integration"
+      - test_layer: "adversarial"
+      - test_layer: "regression_golden"
+      - test_name: "test_chaos_inproc*"  # In-process FaultInjector, deterministic
+      - test_name: "test_coverage_diff*" # Diff-coverage gate
+    notes: |
+      Integration = cross-service contracts (e.g., bus topic schemas).
+      Adversarial = threat-model and abuse corpus (zero xfail).
+      Regression = golden-output snapshots (captures behaviour deltas).
+      Diff-coverage enforces Rule 10 (tests track code).
+
+  nightly:
+    description: "Cron (self-hosted), <90 min: fuzz+load+chaos+mutation+soak (Phase 12 §12.13)"
+    trigger: "daily cron (self-hosted)"
+    budget_minutes: 90
+    blocks_release: true
+    members:
+      - test_name: "fuzz_*"              # Atheris + Go-fuzz (coverage-guided, new exploration)
+      - test_name: "test_load_*"         # Latency/throughput budgets
+      - test_name: "test_chaos_*"        # Toxiproxy/Pumba realistic plane scenarios
+      - test_name: "test_mutation_*"     # Mutation testing (Tier-1 only)
+      - test_name: "test_soak_nightly*"  # Short soaks (~1-2h runtime)
+    notes: |
+      Chaos/soak run only on self-hosted runner (Toxiproxy/Pumba not on shared runners).
+      Time-boxed so hung tests don't block. Ephemeral stack per job (idempotent teardown).
+      Mutation = nightly-only (time budget §12.12.4).
+
+  weekly:
+    description: "Cron (self-hosted), 24h: full soaks+GPU heat+DR drills (Phase 12 §12.13)"
+    trigger: "weekly cron (self-hosted)"
+    budget_minutes: 1440  # 24 hours
+    blocks_release: true
+    members:
+      - test_name: "test_soak_weekly*"   # 24h endurance soak (reports metrics)
+      - test_name: "test_soak_gpu_heat*" # GPU thermal+power soak
+      - test_name: "test_dr_drill*"      # Full backup→restore→verify DR cycle
+    notes: |
+      Weekly = longest window. Only production-scale scenarios run here.
+      GPU heat soak only if compute devices present (Phase 11).
+      DR drill asserts MTTR within budget (§12.11).
+
+# ─────────────────────────────────────────────────────────────────────────
+# Lint rules (§12.13.1)
+# ─────────────────────────────────────────────────────────────────────────
+
+lint_rules:
+  no_xfail_in_adversarial: |
+    Adversarial + chaos tests MUST NOT use xfail marker.
+    A known weakness = release blocker, not a documented skip.
+    Impl: xops/lint/no_xfail_in_adversarial.py (scans ai/tests/test_chaos_*.py)
+
+  skip_requires_resource_reason: |
+    Skip is allowed ONLY for absent resources (device/credential/runner).
+    Must include reason= parameter naming the absent resource.
+    Impl: xops/lint/no_skip_down_rule.py
+
+  ci_lane_membership_consistency: |
+    Every test tag (unit|property|contract|integration|adversarial|etc.)
+    must have exactly one lane assignment. Drift = lint failure.
+    Impl: xops/lint/ci_lane_membership.py (consumes this file)
+
+  chaos_targets_dot_style: |
+    All chaos/fuzz/soak targets MUST be dot-style (chaos.run, not chaos-run).
+    Hyphen-style names are lint-rejected (anti-pattern guard).
+    Impl: xops/lint/chaos_targets_dot_style.py (Makefile parser)

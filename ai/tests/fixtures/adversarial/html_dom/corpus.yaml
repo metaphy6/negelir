@@ -1,0 +1,32 @@
+# Phase 12 §12.2.1 — HTML/DOM adversarial corpus (governance sidecar)
+# 
+# Malformed HTML, oversized payloads, compression bombs, DOM anomalies.
+# Owning phase: 7 (Defense); Catcher: sec.scrape.v1; Catalogue family: P12-7.2
+
+version: 1
+seed: 42
+sha256: "TBD"
+
+provenance:
+  compression_bomb:
+    - technique: "Zip bomb / gzip bomb payload"
+      cve: "CWE-409"
+      date_added: "2026-06-08"
+  dom_nesting_bomb:
+    - technique: "Deep HTML nesting (10^5 depth)"
+      cve: null
+      date_added: "2026-06-08"
+  oversized_payload:
+    - technique: "Payload > sec_scrape_max_bytes"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"
+  - "phase-7-defense-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"
+  notes: "Re-run as part of corpus finalization"

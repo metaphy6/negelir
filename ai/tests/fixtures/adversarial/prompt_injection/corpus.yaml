@@ -1,0 +1,37 @@
+# Phase 12 §12.2.1 — Prompt injection adversarial corpus (governance sidecar)
+# 
+# Adversarial corpus for Turkish NLP prompt-injection detection.
+# Covers: jailbreaks, role-smuggling, instruction-override, system-prompt hijacks.
+# Owning phase: 10 (NLP); Catcher: sec.input.v1; Catalogue family: P12-7.1, P12-10
+
+version: 1
+seed: 42
+sha256: "TBD"  # Re-generate via: make verify.adversarial-corpora
+
+provenance:
+  prompt_injection_english:
+    - technique: "Classic 'ignore previous instructions' jailbreak"
+      cve: null
+      date_added: "2026-06-08"
+  prompt_injection_turkish:
+    - technique: "Turkish 'önceki talimatları unut' jailbreak"
+      cve: null
+      date_added: "2026-06-08"
+  role_smuggling:
+    - technique: "ChatML-style <|im_start|> system prompt hijack"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"
+  - "phase-10-nlp-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"
+  notes: "Re-run as part of corpus finalization"
+
+growth_cap:
+  max_added_per_quarter: 500
+  quarter: "Q2-2026"

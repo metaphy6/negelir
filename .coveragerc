@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Python Coverage Configuration (Phase 12 §12.12)
+#
+# Branch coverage enabled for Tier-1 gates (§12.12.2).
+# Parallel mode for multi-process worker tests (Hypothesis, swarm agents).
+# ─────────────────────────────────────────────────────────────────────────
+
+[run]
+# Enable branch coverage (not just line coverage)
+branch = True
+# Parallel mode: each process writes .coverage.NNN files
+parallel = True
+# Source root (coverage measures ai/ and server/ Python)
+source = ai,server
+# Don't measure test files themselves
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */.venv/*
+    */site-packages/*
+
+[report]
+# Report configuration
+precision = 2
+# Sort by coverage percentage (ascending = worst first)
+sort = Cover
+# Skip lines with this pragma comment
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @(abc\.)?abstractmethod
+    @overload
+
+[html]
+# HTML report output directory
+directory = data/coverage/html
+
+[json]
+# JSON report for CI consumption
+output = data/coverage/coverage.json
+pretty_print = True
+show_contexts = True

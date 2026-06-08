@@ -3,18 +3,23 @@
 > Companion to Phase 12 of [`../planning/ROADMAP.md`](../planning/ROADMAP.md).
 > **Mantra:** *every public surface has at least one fuzz / injection / chaos test.*
 
-## 🗂️ Test taxonomy
+## 🗂️ Test taxonomy (Phase 12 §12.1)
 
-| Layer | Tooling | Lives in | Runs in |
-|---|---|---|---|
-| Unit | `pytest`, `go test` | `**/tests/unit/` | every PR |
-| Integration | `pytest` + `InMemoryBus` / real Redis | `**/tests/integration/` | every PR |
-| Contract | `openapi-validator`, CDDL validator | `tests/contract/` | every PR |
-| Property | `hypothesis` (Py), `gopter` (Go) | inline w/ unit | every PR |
-| Adversarial | curated corpora + classifier suite | `tests/adversarial/` | every PR |
-| Fuzz | `boofuzz`, `cargo-fuzz` (if Rust), `go-fuzz` | `tests/fuzz/` | nightly |
-| Chaos | `pumba`, `toxiproxy` | `tests/chaos/` | nightly |
-| Soak | full stack, 8 h, synthetic load | `tests/soak/` | weekly |
+The eleven-layer test pyramid from Phase 12 §12.1. Each layer has a **single owning lane** (§12.13), a **determinism contract**, and an **example name** so the taxonomy is enforceable, not decorative.
+
+| Layer | Kind | Owns | Lane | Example |
+|---|---|---|---|---|
+| **Unit** | Pure logic, no I/O | every package | fast (push) | `test_dixon_coles_grid_sums_to_one` |
+| **Property** | Invariants under random input | every public type | fast (push) | `test_match_envelope_roundtrip_property` |
+| **Contract** | Wire schemas / OpenAPI | bus topics + API | fast (push) | `test_predict_final_matches_schema` |
+| **Integration** | Agent ↔ bus ↔ agent | swarm + storage | pr | `test_scraper_to_storage_happy_path` |
+| **Adversarial** | Injection / payload abuse / homoglyph | every trust boundary | pr | `test_qa_resists_ignore_previous_instructions` |
+| **Fuzz** | Coverage-guided random bytes | every parser/decoder | nightly | `fuzz_sec_input_sanitize` |
+| **Load** | Throughput + latency budgets under RPS | API + NLP + predictor | nightly | `load_qa_p99_within_budget` |
+| **Chaos** | Kill / slow / partition / corrupt | full stack | nightly | `chaos.redis-flap` |
+| **Soak** | Long-run leak / drift / MTBF | every long-lived agent | nightly + weekly | `soak.swarm.24h` |
+| **Regression/Golden** | Frozen-output byte-identity | NLP render, citations | pr | `test_nlp_audit_rerender_byte_identical` |
+| **Mutation** | "Covered ⇒ asserted" | security/integrity hot paths | nightly | `mutmut run --paths-to-mutate ai/swarm/agents/sec` |
 
 ## 🎯 Adversarial corpus
 

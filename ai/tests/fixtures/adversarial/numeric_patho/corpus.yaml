@@ -1,0 +1,32 @@
+# Phase 12 §12.2.1 — Numeric pathology adversarial corpus (governance sidecar)
+# 
+# NaN/Inf induction, Symspell pathological inputs, numeric overflow/underflow.
+# Owning phase: 11 (Compute); Catcher: predictor backend guards
+# Catalogue family: P12-11
+
+version: 1
+seed: 42
+sha256: "TBD"
+
+provenance:
+  nan_induction:
+    - technique: "0.0 / 0.0 or log(-1) → NaN"
+      cve: null
+      date_added: "2026-06-08"
+  inf_induction:
+    - technique: "1.0 / 0.0 → Inf"
+      cve: null
+      date_added: "2026-06-08"
+  symspell_pathological:
+    - technique: "Very long string with many edits (pathological case)"
+      cve: null
+      date_added: "2026-06-08"
+
+reviewers:
+  - "security-team@example.com"
+  - "phase-11-compute-lead@example.com"
+
+pii_scrub:
+  timestamp: "2026-06-08T14:40:00+00:00"
+  tool_version: "xops/lint/adversarial_pii_scan.py v1.0"
+  status: "pending"

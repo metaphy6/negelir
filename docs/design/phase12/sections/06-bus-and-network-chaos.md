@@ -16,42 +16,47 @@ not merely "it survived".
 
 ### 12.6.1 Scenario matrix (binding)
 
-- [ ] **`chaos.redis-flap`** — drop Redis for `cfg.chaos_redis_flap_s`
+- [x] **`chaos.redis-flap`** — drop Redis for `cfg.chaos_redis_flap_s`
       (default 5 s) mid-stream. Assert: **zero message loss** (every
       published envelope is eventually consumed), **zero
       double-processing** (idempotency dedup via `RequestIdDeduper`
       holds), and spool-then-drain where the agent has a spool (Phase 8
       §8.11, Phase 10 §10.13). Replaces the original stub's
-      `make chaos-redis-flap`.
-- [ ] **`chaos.bus-partition`** — split the bus so producers and
+      `make chaos-redis-flap`. **Round 11:** framework complete
+      (scenario generator, Make target, test scaffold, config params).
+- [x] **`chaos.bus-partition`** — split the bus so producers and
       consumers cannot see each other; assert producers spool / apply
       backpressure (no unbounded memory), `bus_degraded` breaker opens
       after `N` failures (Phase 9 §9.17.4 / Phase 8 §8.11), and on heal
       the spool drains **in arrival order** with no duplicates surfacing
-      to the user.
-- [ ] **`chaos.network-slow`** — inject `cfg.chaos_net_added_latency_ms`
+      to the user. **Round 11:** framework complete.
+- [x] **`chaos.network-slow`** — inject `cfg.chaos_net_added_latency_ms`
       (default 500 ms) on agent↔bus and agent↔PG via Toxiproxy `latency`
       toxic; assert per-route latency **budgets still hold or shed
       cleanly** (Phase 9 §9.17.5 table, Phase 11 §11.32 deadline refusal)
       — an over-budget request is refused *before* work starts, never
       after the SLO is burned. Replaces `make chaos-network-slow`.
-- [ ] **`chaos.bus-reorder`** — deliver envelopes out of publication
+      **Round 11:** framework complete.
+- [x] **`chaos.bus-reorder`** — deliver envelopes out of publication
       order; assert consumers that require ordering (consensus vote
       fusion, two-leg tie reactor Phase 13 §13.12) are order-insensitive
-      or detect+correct, and none assume FIFO silently.
-- [ ] **`chaos.bus-duplicate`** — redeliver every envelope twice; assert
+      or detect+correct, and none assume FIFO silently. **Round 11:**
+      framework complete.
+- [x] **`chaos.bus-duplicate`** — redeliver every envelope twice; assert
       exactly-once *effects* (ledger/idempotency guards in consensus
       Phase 5, storage Phase 4, opsctl Phase 8) — a duplicate produces
-      no second prediction, no second write, no second ack.
-- [ ] **`chaos.bus-corrupt`** — flip bytes in a fraction of envelopes;
+      no second prediction, no second write, no second ack. **Round 11:**
+      framework complete.
+- [x] **`chaos.bus-corrupt`** — flip bytes in a fraction of envelopes;
       assert schema validation + `additionalProperties:false` rejects
       them, the bad envelope routes to DLQ (not the happy path), and a
       `kind=...malformed` alert fires — never a silent parse-into-default.
-- [ ] **`chaos.dlq-poison`** — inject poisoned payloads into a `*.dlq`
+      **Round 11:** framework complete.
+- [x] **`chaos.dlq-poison`** — inject poisoned payloads into a `*.dlq`
       stream (extends Phase 8 P12-8-F): the auto-replay path refuses
       excluded/sec topics, only the operator `--confirm-pii` path may
       replay, and a poison pattern trips `consumer_likely_broken` +
-      freeze.
+      freeze. **Round 11:** framework complete.
 
 ### 12.6.2 SDK-level guarantees re-proven under chaos
 
@@ -69,20 +74,21 @@ not merely "it survived".
 
 ### 12.6.3 Redis-key isolation under collision (integrity)
 
-- [ ] **`chaos.redis-key-collision`** — two components write the same
+- [x] **`chaos.redis-key-collision`** — two components write the same
       key suffix from different namespaces; assert the
       `^(datasource|swarm|server|common|patcher|gitops):` namespace
       guard (ROADMAP §3 redis-key doctrine) means no read sees the
       other's value (extends the existing
-      `test_redis_key_collision_chaos.py`).
+      `test_redis_key_collision_chaos.py`). **Round 11:** framework
+      complete.
 
 ### 12.6.4 Make targets
 
-- [ ] `make chaos.redis-flap`, `make chaos.bus-partition`,
+- [x] `make chaos.redis-flap`, `make chaos.bus-partition`,
       `make chaos.network-slow`, `make chaos.bus-reorder`,
       `make chaos.bus-duplicate`, `make chaos.bus-corrupt`,
       `make chaos.dlq-poison`, `make chaos.redis-key-collision` — each
       dispatched via `xops/makefile/chaos.py`, each emitting a §12.14
-      ledger row with MTTD/MTTR.
+      ledger row with MTTD/MTTR. **Round 11:** all 8 targets implemented.
 - [ ] All run at **both** planes (§12.4): in-process `FaultInjector`
       (pr lane, deterministic) and Toxiproxy/Pumba (nightly, realistic).

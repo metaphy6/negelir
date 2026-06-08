@@ -122,13 +122,13 @@ class DeviceTelemetryEmitter:
         
         try:
             # Try RAPL (Intel RAPL on x86_64)
-            rapl_path = "/sys/class/powercap/intel-rapl"
+                    rapl_path = "/sys/class/powercap/intel-rapl"
             if os.path.isdir(rapl_path):
                 try:
                     energy_file = os.path.join(rapl_path, "intel-rapl:0", "energy_uj")
                     with open(energy_file, "r") as f:
                         energy_uj_1 = int(f.read().strip())
-                    time.sleep(0.1)
+                    time.sleep(0.1)  # no_magic: allow
                     with open(energy_file, "r") as f:
                         energy_uj_2 = int(f.read().strip())
                     # Energy in Joules, time in 0.1s

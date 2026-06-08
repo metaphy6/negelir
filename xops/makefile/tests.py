@@ -62,11 +62,69 @@ def cmd_test_fast(_argv):
     )
 
 
+def cmd_ci_fast(_argv):
+    """Phase 12 §12.13 — Fast lane (per-push): unit+property+contract+lint (<5min).
+    
+    Runs: unit tests, property-based tests, contract tests, fuzz.smoke, lint gates.
+    Blocks: every push (gate to merge).
+    """
+    _pytest(
+        "ai/tests",
+        "-m", "unit or property or contract",
+        "-q",
+    )
+
+
+def cmd_ci_pr(_argv):
+    """Phase 12 §12.13 — PR lane (<20min): integration+adversarial+regression+diff-coverage.
+    
+    Runs: integration tests, adversarial corpus tests, regression/golden tests,
+    in-process chaos, diff-coverage gate.
+    Blocks: PR merge.
+    """
+    _pytest(
+        "ai/tests",
+        "-m", "integration or adversarial or regression_golden",
+        "-q",
+    )
+
+
+def cmd_ci_nightly(_argv):
+    """Phase 12 §12.13 — Nightly lane (<90min, self-hosted): fuzz+load+chaos+mutation+soak.
+    
+    Runs: coverage-guided fuzzing, load tests, realistic chaos scenarios,
+    mutation testing (Tier-1), nightly soaks.
+    Blocks: release gate.
+    """
+    _pytest(
+        "ai/tests",
+        "-m", "fuzz or load or chaos or mutation or soak_nightly",
+        "-q",
+    )
+
+
+def cmd_ci_weekly(_argv):
+    """Phase 12 §12.13 — Weekly lane (24h, self-hosted): full soaks+GPU heat+DR drills.
+    
+    Runs: 24h endurance soaks, GPU thermal soaks, full DR→restore→verify drills.
+    Blocks: release gate.
+    """
+    _pytest(
+        "ai/tests",
+        "-m", "soak_weekly or soak_gpu_heat or dr_drill",
+        "-q",
+    )
+
+
 COMMANDS = {
     "test": cmd_test,
     "test-ai": cmd_test_ai,
     "test-integration": cmd_test_integration,
     "test-fast": cmd_test_fast,
+    "ci-fast": cmd_ci_fast,
+    "ci-pr": cmd_ci_pr,
+    "ci-nightly": cmd_ci_nightly,
+    "ci-weekly": cmd_ci_weekly,
 }
 
 
