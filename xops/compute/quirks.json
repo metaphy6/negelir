@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "quirks": {
+    "quirk_torch_inductor_dynamic_batch": {
+      "owner": "ai",
+      "driver_min": "0.0.0",
+      "driver_max": "999.0.0",
+      "runtime_min": "1.12.0",
+      "runtime_max": "1.13.9",
+      "symptom": "dynamic-batch path crashes on torch 1.12.x when using certain non-contiguous kernels",
+      "workaround": "disable_dynamic_batching",
+      "last_verified_at": "2026-05-01",
+      "source_url": "",
+      "severity": "warn",
+      "test_ref": "ai/tests/quirks/test_torch_inductor_dynamic_batch.py"
+    }
+  }
+}

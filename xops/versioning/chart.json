@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 778,
+    "build": 790,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.109.1",
+      "version": "1.109.3",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-08T08:49:54+00:00",
+      "last_changed": "2026-06-08T12:08:58+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-06T17:06:30+00:00"
     },
     "docs": {
-      "version": "2.0.0",
+      "version": "2.10.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T08:57:29+00:00"
+      "last_changed": "2026-06-08T12:00:20+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -14239,6 +14239,114 @@
       "from": "1.130.0",
       "to": "2.0.0",
       "build": 778
+    },
+    {
+      "timestamp": "2026-06-08T11:39:23+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11 section update",
+      "from": "2.0.0",
+      "to": "2.1.0",
+      "build": 779
+    },
+    {
+      "timestamp": "2026-06-08T11:44:06+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11 section update",
+      "from": "2.1.0",
+      "to": "2.2.0",
+      "build": 780
+    },
+    {
+      "timestamp": "2026-06-08T11:50:57+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 11 section update",
+      "from": "2.2.0",
+      "to": "2.3.0",
+      "build": 781
+    },
+    {
+      "timestamp": "2026-06-08T11:55:10+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.1: probe emits monotonic timestamps",
+      "from": "2.3.0",
+      "to": "2.4.0",
+      "build": 782
+    },
+    {
+      "timestamp": "2026-06-08T11:55:51+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.4: add npu_max_acc_drop_pct config",
+      "from": "2.4.0",
+      "to": "2.5.0",
+      "build": 783
+    },
+    {
+      "timestamp": "2026-06-08T11:56:47+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.4: add global_seed + propagate helper",
+      "from": "2.5.0",
+      "to": "2.6.0",
+      "build": 784
+    },
+    {
+      "timestamp": "2026-06-08T11:57:53+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.1: add host_compute_fingerprint to probe output",
+      "from": "2.6.0",
+      "to": "2.7.0",
+      "build": 785
+    },
+    {
+      "timestamp": "2026-06-08T11:58:52+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.1: add ctx_overhead_mb + host_psu config",
+      "from": "2.7.0",
+      "to": "2.8.0",
+      "build": 786
+    },
+    {
+      "timestamp": "2026-06-08T11:59:42+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.4: add allow_tf32 + deterministic + cuda_alloc_conf knobs",
+      "from": "2.8.0",
+      "to": "2.9.0",
+      "build": 787
+    },
+    {
+      "timestamp": "2026-06-08T12:00:20+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "11.4: add PMF finite-check helper",
+      "from": "2.9.0",
+      "to": "2.10.0",
+      "build": 788
+    },
+    {
+      "timestamp": "2026-06-08T12:07:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "11.1: Emergency kill-switch (device kill-switch, tests)",
+      "from": "1.109.1",
+      "to": "1.109.2",
+      "build": 789
+    },
+    {
+      "timestamp": "2026-06-08T12:08:58+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "11.1: CPU baseline fingerprint",
+      "from": "1.109.2",
+      "to": "1.109.3",
+      "build": 790
     }
   ]
 }

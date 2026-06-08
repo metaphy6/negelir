@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "engines": [
+    {
+      "name": "torch_inductor_fp32",
+      "vendor": "pytorch",
+      "runtime_min": "1.12.0",
+      "runtime_max": "999.0.0",
+      "supports_dtypes": ["fp32"],
+      "supports_dynamic_shape": true,
+      "supports_cuda_graphs": true,
+      "supports_paged_attention": false,
+      "deterministic_when": ["fp32+seed+no_tf32"],
+      "default_for": ["predictor_deep"],
+      "known_quirks_ref": "quirk_torch_inductor_dynamic_batch"
+    },
+    {
+      "name": "tensorrt_fp32",
+      "vendor": "nvidia",
+      "runtime_min": "8.0.0",
+      "runtime_max": "999.0.0",
+      "supports_dtypes": ["fp32"],
+      "supports_dynamic_shape": true,
+      "supports_cuda_graphs": true,
+      "supports_paged_attention": false,
+      "deterministic_when": ["fp32+seed+no_tf32"],
+      "default_for": ["predictor_deep"],
+      "known_quirks_ref": ""
+    }
+  ]
+}

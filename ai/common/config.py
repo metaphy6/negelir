@@ -294,6 +294,80 @@ class Config:
         """Base URL for the Mackolik historical archive (fallback source)."""
         return self.scrape_source_fallback
 
+    def __post_init__(self) -> None:
+        """Post-init validation for `device` selection policy.
+
+        Behaviour:
+        - Prefer `NEGELIR_DEVICE` env var if present, else fall back to the
+          existing `AI_DEVICE` value that was used to initialise `device`.
+        - Accept single-token values: `auto|cuda|rocm|npu|cpu` or a routing
+          table inline like `predictor=cpu,sec_input=npu` (simple validation).
+        - On malformed input emit a warning and fall back to `auto`.
+        """
+        # Prefer the new NEGELIR_DEVICE env var but stay compatible with AI_DEVICE.
+        env_val = os.getenv("NEGELIR_DEVICE")
+        raw = env_val.strip() if env_val and env_val.strip() else (self.device or "").strip()
+
+        if not raw:
+            self.device = "auto"
+            return
+
+        allowed = {"auto", "cuda", "rocm", "npu", "cpu"}
+
+        # Lazy import logger to avoid circular imports at module load time.
+        try:
+            from common.logger import get_logger
+
+            log = get_logger("config")
+        except Exception:
+            log = None
+
+        v = raw.lower()
+
+        # Routing-table form: key=val[,key2=val2]
+        if "=" in v:
+            ok = True
+            for part in [p.strip() for p in v.split(",") if p.strip()]:
+                if "=" not in part:
+                    ok = False
+                    break
+                k, val = (s.strip() for s in part.split("=", 1))
+                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+                    ok = False
+                    break
+                if val.lower() not in allowed:
+                    ok = False
+                    break
+            if not ok:
+                msg = f"Invalid NEGELIR_DEVICE routing-table: {raw!r}; falling back to 'auto'"
+                if log:
+                    log.warning(msg)
+                else:
+                    import warnings as _warnings
+
+                    _warnings.warn(msg)
+                self.device = "auto"
+            else:
+                self.device = v
+            return
+
+        # Single-token form
+        if v not in allowed:
+            msg = (
+                f"Invalid NEGELIR_DEVICE value: {raw!r}; expected one of "
+                f"{sorted(allowed)}; falling back to 'auto'"
+            )
+            if log:
+                log.warning(msg)
+            else:
+                import warnings as _warnings
+
+                _warnings.warn(msg)
+            self.device = "auto"
+            return
+
+        self.device = v
+
     @property
     def scrape_openfootball_base(self) -> str:
         """Base URL for openfootball GitHub JSON files (source 4)."""
@@ -482,6 +556,41 @@ class Config:
     backtest_window_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_WINDOW_WEEKS", "12")))
     backtest_min_n: int = field(default_factory=lambda: int(os.getenv("NEGELIR_BACKTEST_MIN_N", "20")))
     api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_API_CONSENSUS_OVERHEAD_MS", "200")))
+
+    # Phase 11 — Device probe defaults
+    # Path where the probe writes the atomic JSON inventory. Default is the tmpfs runtime dir.
+    device_probe_path: str = field(default_factory=lambda: os.getenv("NEGELIR_DEVICE_PROBE_PATH", "/var/run/negelir/device.json"))
+    # Probe subprocess hard timeout (seconds). A wedged driver must not stall startup.
+    device_probe_timeout_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DEVICE_PROBE_TIMEOUT_S", "5")))
+    # Hotplug debounce window (seconds) for udev-triggered re-probes.
+    device_probe_hotplug_debounce_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DEVICE_PROBE_HOTPLUG_DEBOUNCE_S", "10")))
+
+    # Host / GPU reserve and PSU settings
+    gpu_system_reserve_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GPU_SYSTEM_RESERVE_MB", "128")))
+    host_psu_capacity_w: int = field(default_factory=lambda: int(os.getenv("NEGELIR_HOST_PSU_CAPACITY_W", "0")))
+    host_psu_safety_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_HOST_PSU_SAFETY_FACTOR", "0.85")))
+
+    # Phase 11 — compute artifact cache (engines, compiled blobs, inductor artifacts)
+    # Directory where compiled engine/artifact cache lives. Shared across agents on a host.
+    compute_artifact_cache_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_COMPUTE_ARTIFACT_CACHE_DIR", "data/compute_artifacts"
+    ))
+    # Max size in MB for the compute artifact cache (LRU eviction).
+    compute_artifact_cache_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMPUTE_ARTIFACT_CACHE_MAX_MB", "10240")))
+    # Secret/HMAC key used to tag compiled artifacts (HMAC input + host fingerprint).
+    compute_artifact_cache_secret: str = field(default_factory=lambda: os.getenv("NEGELIR_COMPUTE_ARTIFACT_CACHE_SECRET", ""))
+
+    # NPU quantization acceptance threshold: max allowed accuracy drop (%) after INT8 calibration
+    npu_max_acc_drop_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_NPU_MAX_ACC_DROP_PCT", "1.0")))
+
+    # Global seed propagated to Python, NumPy, and vendor RNGs for determinism
+    global_seed: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GLOBAL_SEED", "42")))
+
+    # TF32 / deterministic kernels and allocator policy knobs
+    allow_tf32: bool = field(default_factory=lambda: os.getenv("NEGELIR_ALLOW_TF32", "false").lower() in ("true", "1", "yes"))
+    compute_deterministic_kernels: bool = field(default_factory=lambda: os.getenv("NEGELIR_DETERMINISTIC_KERNELS", "false").lower() in ("true", "1", "yes"))
+    # String form for PYTORCH_CUDA_ALLOC_CONF override (documented default used in tests)
+    cuda_alloc_conf: str = field(default_factory=lambda: os.getenv("NEGELIR_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb=256,garbage_collection_threshold:0.85"))
 
     # ── Phase 6 — Proofreader & drift swarm ─────────────────
     # The proofreader replica roster is *not* a config knob — it lives
