@@ -77,6 +77,10 @@
         "synthetic_prober": {
           "type": ["boolean", "null"],
           "description": "Synthetic prober signal for prober-dispatched qa.request.v1 envelopes."
+        },
+        "client_tz": {
+          "type": ["string", "null"],
+          "description": "Optional client timezone (IANA zone name like 'Europe/Berlin') for resolving relative dates like bugün/dün/yarın. When absent, defaults to Europe/Istanbul and emits a client_tz_assumed_default event."
         }
       },
       "additionalProperties": false

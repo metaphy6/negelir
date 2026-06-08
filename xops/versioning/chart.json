@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 765,
+    "build": 778,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.106.20",
+      "version": "1.109.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-07T21:28:17+00:00",
+      "last_changed": "2026-06-08T08:49:54+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-06T17:06:30+00:00"
     },
     "docs": {
-      "version": "1.124.12",
+      "version": "2.0.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T07:58:12+00:00"
+      "last_changed": "2026-06-08T08:57:29+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -14122,6 +14122,123 @@
       "from": "1.124.11",
       "to": "1.124.12",
       "build": 765
+    },
+    {
+      "timestamp": "2026-06-08T08:13:45+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "§10.34.1: client_tz field in qa.request.v1 for timezone-aware date resolution",
+      "from": "1.106.20",
+      "to": "1.107.0",
+      "build": 766
+    },
+    {
+      "timestamp": "2026-06-08T08:20:23+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.34.2: Normalize-chain perf budget infrastructure",
+      "from": "1.107.0",
+      "to": "1.108.0",
+      "build": 767
+    },
+    {
+      "timestamp": "2026-06-08T08:26:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.34.2 item 2: Single-pass DFA fast-path for clean input normalize optimization",
+      "from": "1.108.0",
+      "to": "1.108.1",
+      "build": 768
+    },
+    {
+      "timestamp": "2026-06-08T08:33:31+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.34.2: zero-copy guarantee on no-op normalize passes",
+      "from": "1.108.1",
+      "to": "1.108.2",
+      "build": 769
+    },
+    {
+      "timestamp": "2026-06-08T08:38:55+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 10 §10.34.2 item 4: Model warm-mmap infrastructure (os.posix_madvise, MADV_WILLNEED, boot integration)",
+      "from": "1.108.2",
+      "to": "1.109.0",
+      "build": 770
+    },
+    {
+      "timestamp": "2026-06-08T08:49:54+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 10 §10.34.2 item 5: degenerate input short-circuit gate before normalize pipeline",
+      "from": "1.109.0",
+      "to": "1.109.1",
+      "build": 771
+    },
+    {
+      "timestamp": "2026-06-08T08:53:01+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.33.1: dotted-i/dotless-i bidirectional alias enforcement in lexicon",
+      "from": "1.124.12",
+      "to": "1.125.0",
+      "build": 772
+    },
+    {
+      "timestamp": "2026-06-08T08:53:36+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.33.2: Turkish Q/F keyboard layout slip correction",
+      "from": "1.125.0",
+      "to": "1.126.0",
+      "build": 773
+    },
+    {
+      "timestamp": "2026-06-08T08:54:17+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.33.3: numeric voice disambiguation",
+      "from": "1.126.0",
+      "to": "1.127.0",
+      "build": 774
+    },
+    {
+      "timestamp": "2026-06-08T08:54:17+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.33.5: right-to-left text injection defense",
+      "from": "1.127.0",
+      "to": "1.128.0",
+      "build": 775
+    },
+    {
+      "timestamp": "2026-06-08T08:55:54+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.34.1: systematic diacritic loss and comma coordination",
+      "from": "1.128.0",
+      "to": "1.129.0",
+      "build": 776
+    },
+    {
+      "timestamp": "2026-06-08T08:55:54+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 10 §10.34: resilience and failure handling tests",
+      "from": "1.129.0",
+      "to": "1.130.0",
+      "build": 777
+    },
+    {
+      "timestamp": "2026-06-08T08:57:29+00:00",
+      "component": "docs",
+      "level": "major",
+      "note": "Phase 10 complete: 14th-15th pass addenda (§10.33-§10.34) with comprehensive Turkish input robustness, resilience under partial failure, end-to-end integrity, and cross-language byte-parity validation",
+      "from": "1.130.0",
+      "to": "2.0.0",
+      "build": 778
     }
   ]
 }

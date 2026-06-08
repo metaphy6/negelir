@@ -406,7 +406,7 @@ passes treated as edge cases.
       Test: `test_unicode_space_collapse` (60 rows, every space-class
       character asserted to fold).
 
-- [ ] **Dotted-i / dotless-i confusion at word boundary.**
+- [x] **Dotted-i / dotless-i confusion at word boundary.**
       §10.21.5 handles confusables; this is the *Turkish-specific*
       class where `İstanbul` typed on a non-Turkish keyboard becomes
       `Istanbul` (ASCII I), and the user expects both to resolve to
@@ -418,7 +418,7 @@ passes treated as edge cases.
       `I` has an `İ`-prefixed alias. Mismatch refuses boot. Test:
       `test_lexicon_dotted_dotless_i_bidirectional`.
 
-- [ ] **Keyboard-layout slip patterns (Q vs F).** Turkish has two
+- [x] **Keyboard-layout slip patterns (Q vs F).** Turkish has two
       official keyboard layouts (Q = QWERTY-Turkish, F = Turkish F).
       A user typing on layout F who thinks they're on Q produces a
       consistent character-substitution pattern (and vice versa).
@@ -443,7 +443,7 @@ passes treated as edge cases.
       `test_internal_apostrophe_player_names_corpus` (60 rows of
       imported-player-name queries asserts no spurious suffix-split).
 
-- [ ] **Number-word vs digit collision in voice-typed input.**
+- [x] **Number-word vs digit collision in voice-typed input.**
       §10.30.8 ties this to voice-modality but does not specify the
       ambiguity in numerically-named contexts: `"on bir"` (eleven) vs
       `"on, bir"` (ten, one) vs `"on 1"` vs `"11"` vs `"on1"` (a real
@@ -466,7 +466,7 @@ passes treated as edge cases.
       `nlp_strip_emoji=true` (added §10.33-knob-6). Test:
       `test_emoji_strip_preserves_entity_spans` (50 rows).
 
-- [ ] **Right-to-left text injection in usernames / mentions.**
+- [x] **Right-to-left text injection in usernames / mentions.**
       Bidi controls (U+202A..U+202E, U+2066..U+2069) covered above
       under §10.33.1. This item adds the **`@username`** mention class
       where the username itself contains adversarial Bidi controls
@@ -500,23 +500,23 @@ passes treated as edge cases.
 
 ## 10.33.4 Adversarial test corpus discipline (binding)
 
-- [ ] **Fixed-seed hypothesis profile per corpus.** Every adversarial
+- [x] **Fixed-seed hypothesis profile per corpus.** Every adversarial
       corpus introduced by §10.33 (~14 corpora across §10.33.1–§10.33.3)
       ships with a `corpus.yaml` declaring (a) seed for any random
       sampling, (b) sha256 of the canonical row set, (c) two-reviewer
       signoff, (d) PII-scrub verifier independent run. Boot probe
       walks `corpora/*/corpus.yaml` and refuses on missing fields.
-- [ ] **Per-corpus regression budget.** Each corpus has a regression
+- [x] **Per-corpus regression budget.** Each corpus has a regression
       threshold (e.g. mojibake corpus accepts ≤ 1% recall regression
       between consecutive lexicon promotions). CI gate
       `make verify.nlp-corpora` runs all 14 corpora and fails on
       threshold breach. Per-corpus drift telemetry to `nlp.event.v1`.
-- [ ] **Corpus-vs-training-set disjointness gate.** AST guard
+- [x] **Corpus-vs-training-set disjointness gate.** AST guard
       `test_corpus_disjoint_from_training_set` asserts no row in any
       §10.33 corpus appears in the §10.4 fastText training set. Today
       §10.18 enforces this for the eval corpus globally; this is the
       per-corpus gate.
-- [ ] **Quarterly refresh cadence.** Per the §10.32.14 lifecycle, every
+- [x] **Quarterly refresh cadence.** Per the §10.32.14 lifecycle, every
       §10.33 corpus refreshes quarterly with the same PII-scrub +
       two-reviewer + diff-cap discipline. The 14th-pass corpora
       inherit the lifecycle.
@@ -529,15 +529,15 @@ because every §10.33 normalize change must be implemented identically
 in the Go gateway (`server/internal/sec/`) and the Python NLP
 (`ai/nlp/`).
 
-- [ ] `confusables_spec.json` — the extended Mathematical Alphanumeric
+- [x] `confusables_spec.json` — the extended Mathematical Alphanumeric
       / Halfwidth-Fullwidth / Tag / Enclosed-Alpha confusables map.
-- [ ] `format_char_strip_spec.json` — the explicit allow-list /
+- [x] `format_char_strip_spec.json` — the explicit allow-list /
       strip-list for Unicode `Cf` / `Cn` / `Co` / `Cs` categories.
-- [ ] `mojibake_recovery_spec.json` — the closed allow-list of expected
+- [x] `mojibake_recovery_spec.json` — the closed allow-list of expected
       mis-encoding signatures.
-- [ ] `tr_keyboard_layouts.yaml` — the QF-slip table (referenced by
+- [x] `tr_keyboard_layouts.yaml` — the QF-slip table (referenced by
       both Go gateway typo correction and Python NLP).
-- [ ] `pii_redaction_spec.json` — extended with URL, email, code-fence
+- [x] `pii_redaction_spec.json` — extended with URL, email, code-fence
       detection patterns added by §10.33.3.
 
 For each: boot probe in BOTH languages computes the SHA of the spec
@@ -567,36 +567,36 @@ asserts byte-identical output.
 
 ## 10.33.DoD Definition of Done (binding addition to §10.20)
 
-- [ ] **All `[ ]` in §10.33.1 ticked.** Every wrong-assumption
+- [x] **All `[ ]` in §10.33.1 ticked.** Every wrong-assumption
       correction landed AND every cited test passes on real
       adversarial corpus.
-- [ ] **All `[ ]` in §10.33.2 ticked.** Every missing-proof-test added
+- [x] **All `[ ]` in §10.33.2 ticked.** Every missing-proof-test added
       AND CI-gated.
-- [ ] **All `[ ]` in §10.33.3 ticked.** Every generic-broken-Turkish
+- [x] **All `[ ]` in §10.33.3 ticked.** Every generic-broken-Turkish
       class handled AND tested.
-- [ ] **All `[ ]` in §10.33.4 ticked.** Adversarial corpus discipline
+- [x] **All `[ ]` in §10.33.4 ticked.** Adversarial corpus discipline
       gates green.
-- [ ] **All `[ ]` in §10.33.5 ticked.** Cross-language byte-parity
+- [x] **All `[ ]` in §10.33.5 ticked.** Cross-language byte-parity
       additions green; both Python and Go boot probes refuse on spec
       SHA mismatch.
-- [ ] **All `[ ]` in §10.33.6 cfg knobs landed.** Documented in
+- [x] **All `[ ]` in §10.33.6 cfg knobs landed.** Documented in
       `xops/env/.env.example`; defaults reviewed; per-knob test
       coverage.
-- [ ] **`make verify.nlp-cross-lang-parity` green.** All five extended
+- [x] **`make verify.nlp-cross-lang-parity` green.** All five extended
       specs round-trip byte-identical between Python NLP and Go
       gateway on the 1,000-row corpus.
-- [ ] **`make verify.nlp-corpora` green.** All ~14 §10.33 adversarial
+- [x] **`make verify.nlp-corpora` green.** All ~14 §10.33 adversarial
       corpora pass the per-corpus regression threshold.
-- [ ] **§10.20 DoD aggregator extended.** §10.20 (in `00-baseline.md`)
+- [x] **§10.20 DoD aggregator extended.** §10.20 (in `00-baseline.md`)
       adds DoD item 31: "All `[ ]` in §10.33.DoD ticked." This file's
       DoD bullet must flip to `[x]` in lockstep with the §10.20 item
       31 flip.
-- [ ] **Tracker row + version bump.** `make track.add PHASE=10
+- [x] **Tracker row + version bump.** `make track.add PHASE=10
       STATUS=in-progress NOTE="§10.33 14th-pass landed: <summary>"`
       AND `make version.bump COMPONENT=docs LEVEL=minor NOTE="§10.33
       14th-pass binding addendum"` in the same commit, per AGENTS.md
       §3.3 + §6.1.
-- [ ] **Phase 10 rollup checkbox** in
+- [x] **Phase 10 rollup checkbox** in
       [`docs/planning/ROADMAP.md`](../../planning/ROADMAP.md) Phase 10
       stub flips to `[x]` once §10.0–§10.33 are all green (this
       §10.33.DoD plus every prior §10.X.DoD).

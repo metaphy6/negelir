@@ -5239,3 +5239,101 @@ def test_pragmatic_class_only_used_by_proofreader_prepend_ast() -> None:
             assert "pragmatic_class" not in test_expr
 
 
+def test_nlp_client_tz_never_logs_or_caches_geolocation() -> None:
+    """§10.34.1 AST guard: client_tz is time-only, never geolocation.
+    Dispatcher and date resolver must not log client_tz to audit trails,
+    cache it in fixtures, or use it for geolocation inference."""
+    # Check dispatcher doesn't cache client_tz in fixture_state or logs
+    source = inspect.getsource(NlpDispatcherAgent)
+    tree = ast.parse(source)
+    
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            # Reject direct .client_tz cache operations
+            if node.attr == "client_tz":
+                violations.append(f"Direct client_tz cache access at line {node.lineno}")
+        elif isinstance(node, ast.Call):
+            # Check that client_tz is not passed to geoip or location inference
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr in {"geoip", "locate", "infer_location", "get_location"}:
+                    arg_sources = ast.get_source_segment(source, node) or ""
+                    if "client_tz" in arg_sources:
+                        violations.append(f"client_tz passed to {node.func.attr} at line {node.lineno}")
+    
+    assert violations == [], f"client_tz geolocation violations:\n" + "\n".join(violations)
+
+
+def test_client_tz_assumed_default_event_emitted_when_missing() -> None:
+    """§10.34.1: When request_metadata.client_tz is absent, emit nlp.event.v1 with kind=client_tz_assumed_default."""
+    agent = NlpDispatcherAgent()
+    
+    # Create a qa.intent.v1 message WITHOUT client_tz in request_metadata
+    intent_payload = {
+        "request_id": "req-no-tz",
+        "intent": "data.fixture_lookup",
+        "entities": [],
+        "intent_confidence": 0.95,
+        "request_metadata": {
+            "input_source": "keyboard",
+            "synthetic_prober": False,
+            # Deliberately no client_tz
+        },
+    }
+    
+    msg = _make_intent_msg(intent_payload)
+    output = list(agent.handle(msg))
+    
+    # Check that an nlp.event.v1 with kind=client_tz_assumed_default is emitted
+    events = [m for m in output if m.topic == NLP_EVENT_V1]
+    default_tz_events = [
+        m for m in events 
+        if m.payload.get("kind") == "client_tz_assumed_default"
+    ]
+    
+    assert len(default_tz_events) > 0, (
+        f"Expected client_tz_assumed_default event when client_tz absent.\n"
+        f"Got events: {[e.payload.get('kind') for e in events]}"
+    )
+    
+    # Verify event structure
+    event = default_tz_events[0]
+    assert event.payload.get("request_id") == "req-no-tz"
+    assert event.payload.get("kind") == "client_tz_assumed_default"
+
+
+def test_client_tz_assumed_default_event_NOT_emitted_when_present() -> None:
+    """§10.34.1: When request_metadata.client_tz IS present, do not emit client_tz_assumed_default."""
+    agent = NlpDispatcherAgent()
+    
+    # Create a qa.intent.v1 message WITH client_tz in request_metadata
+    intent_payload = {
+        "request_id": "req-with-tz",
+        "intent": "data.fixture_lookup",
+        "entities": [],
+        "intent_confidence": 0.95,
+        "request_metadata": {
+            "input_source": "keyboard",
+            "synthetic_prober": False,
+            "client_tz": "Europe/Berlin",
+        },
+    }
+    
+    msg = _make_intent_msg(intent_payload)
+    output = list(agent.handle(msg))
+    
+    # Check that NO nlp.event.v1 with kind=client_tz_assumed_default is emitted
+    events = [m for m in output if m.topic == NLP_EVENT_V1]
+    default_tz_events = [
+        m for m in events 
+        if m.payload.get("kind") == "client_tz_assumed_default"
+    ]
+    
+    assert len(default_tz_events) == 0, (
+        f"Should NOT emit client_tz_assumed_default when client_tz is present.\n"
+        f"Got {len(default_tz_events)} such events"
+    )
+
+
+
+

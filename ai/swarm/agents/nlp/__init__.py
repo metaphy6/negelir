@@ -198,6 +198,38 @@ def _is_synthetic_prober_payload(payload: dict[str, object]) -> bool:
     return bool(isinstance(request_metadata, dict) and request_metadata.get("synthetic_prober"))
 
 
+def _client_tz_from_request_metadata(payload: dict[str, object]) -> str | None:
+    """Extract client_tz from request_metadata (§10.34.1).
+    
+    Returns the IANA timezone string if present, None otherwise.
+    Never use this for geolocation — client_tz is strictly time-only.
+    """
+    request_metadata = payload.get("request_metadata")
+    if not isinstance(request_metadata, dict):
+        return None
+    client_tz = request_metadata.get("client_tz")
+    if not isinstance(client_tz, str) or not client_tz.strip():
+        return None
+    return client_tz.strip()
+
+
+def _make_client_tz_assumed_default_event(request_id: str) -> Message:
+    """Emit nlp.event.v1{kind=client_tz_assumed_default} when client_tz absent (§10.34.1).
+    
+    Signals downstream that the system defaulted to Europe/Istanbul for relative
+    date resolution. Product surfaces can use this to prompt time-zone confirmation
+    if the query produces an empty data set.
+    """
+    payload = {
+        "kind": "client_tz_assumed_default",
+        "producer": "nlp.dispatcher.v1",
+        "request_id": request_id or None,
+        "emitted_at": _utc_iso(),
+        "reason": "client_tz absent in request_metadata; defaulting to Europe/Istanbul",
+    }
+    return Message.new(topic=NLP_EVENT_V1, payload=payload, producer="nlp.dispatcher.v1")
+
+
 def _make_pro_drop_resolved_event(
     request_id: str,
     source: str,
@@ -3538,6 +3570,12 @@ class NlpDispatcherAgent:
         turn_index = 0
         qa_corr_in: str = str(payload.get("qa_correlation_id") or "")
         eviction_event_message: Message | None = None
+
+        # §10.34.1: Emit client_tz_assumed_default event if request_metadata exists
+        # but client_tz is missing (and not a synthetic prober)
+        request_metadata = payload.get("request_metadata")
+        if isinstance(request_metadata, dict) and _client_tz_from_request_metadata(payload) is None and not _is_synthetic_prober_payload(payload):
+            prelude_messages.append(_make_client_tz_assumed_default_event(request_id))
 
         def _build_context_msg() -> Message | None:
             if not conversation_id:

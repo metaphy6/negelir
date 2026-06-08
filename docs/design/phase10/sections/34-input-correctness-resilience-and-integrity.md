@@ -280,7 +280,7 @@ and the proof test. Tests live in
       step 7c.5 BEFORE CRF; original preserved in audit. **Tests:**
       `test_time_shorthand_expanded` (15 rows × 2 contexts each = 30).
 
-- [ ] **Implicit user time-zone.** User in Berlin types `bugün` at
+- [x] **Implicit user time-zone.** User in Berlin types `bugün` at
       00:30 local time = 22:30 UTC = still "yesterday" in
       Europe/Istanbul where the system computes "bugün". §10.26.4
       pins Europe/Istanbul as the system clock. **Correction:** if
@@ -298,7 +298,7 @@ and the proof test. Tests live in
       time-zones), `test_relative_date_default_when_tz_absent`
       (20 rows).
 
-- [ ] **Turkish-keyboard-layout language confusion.** US-keyboard
+- [x] **Turkish-keyboard-layout language confusion.** US-keyboard
       users typing Turkish without a TR keyboard produce inputs with
       no diacritics AT ALL (not even occasional ones — §10.22 §10.33
       assume sporadic loss). The §10.3 diacritic restorer handles
@@ -318,7 +318,7 @@ and the proof test. Tests live in
       rows of all-ASCII Turkish), `test_sporadic_loss_unchanged_path`
       (200 rows assert §10.3 baseline path).
 
-- [ ] **Comma-separated multi-entity query without conjunction.**
+- [x] **Comma-separated multi-entity query without conjunction.**
       `Galatasaray, Fenerbahçe maçları` — comma + space + space-less
       proper noun is a Turkish coordinated-noun construction §10.32.6
       handles only with `ile`/`ve`/`veya`. **Correction:** extend
@@ -340,7 +340,7 @@ The normalize chain has grown to 11 ordered passes across §10.1 +
 an explicit perf contract it quietly regresses each addendum. §10.34.2
 lands the contract.
 
-- [ ] **Normalize-chain perf budget (binding).** Per-pass p50/p99
+- [x] **Normalize-chain perf budget (binding).** Per-pass p50/p99
       budgets in `normalize_perf_budgets.yaml` (closed table; CODEOWNERS
       = nlp-curator + Go owner because Phase 7 sec-sanitize must obey
       the same budgets on its parity passes). Per-pass budgets sum to
@@ -357,7 +357,7 @@ lands the contract.
       the §10.18 evaluation harness golden corpus and asserts p99.
       Regression CI gate on PRs touching `ai/swarm/agents/nlp/normalize/**`.
 
-- [ ] **Single-pass DFA fast-path for clean input.** Empirically ~80%
+- [x] **Single-pass DFA fast-path for clean input.** Empirically ~80%
       of input is already NFC + Turkish-locale-lowercase + no
       confusables + no format chars + no mojibake + no ligatures + no
       bidi controls + no paste artefacts. Today every request runs
@@ -377,7 +377,7 @@ lands the contract.
       on fast-path beyond the input string (`testing.AllocsPerRun`
       analogue: `tracemalloc.get_traced_memory()` delta < 256 bytes).
 
-- [ ] **Zero-copy guarantee on no-op passes.** When a pass detects no
+- [x] **Zero-copy guarantee on no-op passes.** When a pass detects no
       action is needed (e.g. mojibake recovery on input that decodes
       cleanly the first time), it MUST return the same string object
       (`s is input`), not a copy. Today some passes do `s.translate({})`
@@ -391,7 +391,7 @@ lands the contract.
       clean subset and asserts `id(out) == id(inp)` after each
       no-action pass.
 
-- [ ] **CRF / Symspell / Zemberek model warm-mmap.** Today these are
+- [x] **CRF / Symspell / Zemberek model warm-mmap.** Today these are
       loaded on first request (cold-start path). §10.21.9 covers
       6-stage boot but the readiness probe at stage 6 only asserts
       *loaded* not *warm-mmapped* — the OS may still page-fault on
@@ -408,7 +408,7 @@ lands the contract.
       p99 < 1.5× steady-state (today p99 is ~5× steady-state on
       first 50 requests).
 
-- [ ] **Stability: empty + single-codepoint + surrogate-split input.**
+- [x] **Stability: empty + single-codepoint + surrogate-split input.**
       §10.24 covers empty/whitespace at the application layer but
       degenerate input still reaches Symspell / CRF / Zemberek at the
       tokenizer layer. **Correction:** new `ai/swarm/agents/nlp/normalize/degenerate_input.py`
@@ -425,7 +425,7 @@ lands the contract.
       `test_degenerate_control_only` (10 rows: every `Cc` codepoint
       family).
 
-- [ ] **Stability: surrogate-pair split across length cap.** The
+- [x] **Stability: surrogate-pair split across length cap.** The
       §10.1 step 0 length cap operates on `len(s)` (codepoint count
       in Python, but byte count if the Phase 7 sec layer measures
       bytes). If the cap falls between the high and low surrogate of
@@ -440,7 +440,7 @@ lands the contract.
       a surrogate pair OR inside a `(letter, combining)` cluster and
       asserts the output is well-formed.
 
-- [ ] **Stability: Symspell pathological-input cap.** Symspell edit
+- [x] **Stability: Symspell pathological-input cap.** Symspell edit
       distance 2 on a 30-char token produces a candidate explosion
       (~30² = 900 candidates per token). §10.3 caps lookups per query
       at 8 but a single very-long token with no spaces (mobile no-space
@@ -471,7 +471,7 @@ lands the contract.
 §10.10 degradation matrix is exhaustive on between-request failures.
 §10.34.3 closes the within-request gaps.
 
-- [ ] **In-flight stage timeout (per-stage budget).** Each pipeline
+- [x] **In-flight stage timeout (per-stage budget).** Each pipeline
       stage gets a timeout from `nlp_stage_budgets_ms.yaml` (closed
       table, CODEOWNERS = nlp-curator). On timeout, the stage's output
       degrades to a closed default + `qa.answer.v1.degraded=true` +
@@ -490,7 +490,7 @@ lands the contract.
       timeout at each stage (10 rows) and asserts `qa.answer.v1.degraded=true`
       + correct `degraded_reason` + 200 (never 5xx).
 
-- [ ] **CRF subprocess crash mid-decode.** `python-crfsuite` is in-process
+- [x] **CRF subprocess crash mid-decode.** `python-crfsuite` is in-process
       but `pycrfsuite` calls into a C extension that can SIGSEGV under
       malformed model files (e.g. §10.34.2 mmap page-fault during
       eviction). **Correction:** wrap CRF decode in
@@ -506,7 +506,7 @@ lands the contract.
       `pycrfsuite.Tagger.tag` to raise `MemoryError` and asserts the
       degraded path.
 
-- [ ] **Symspell mmap page-fault under OOM throttle.** Container OOM
+- [x] **Symspell mmap page-fault under OOM throttle.** Container OOM
       throttle (cgroup `memory.high` reached) causes mmap'd pages to
       be reclaimed; next access page-faults at 50–500ms latency.
       **Correction:** wrap Symspell lookup in a `signal.setitimer`
@@ -519,7 +519,7 @@ lands the contract.
       `test_typo_disabled_under_memory_pressure_alert` (synthetic
       pressure injection via fakefs cgroup).
 
-- [ ] **Humanizer subprocess returns malformed JSON after token quota
+- [x] **Humanizer subprocess returns malformed JSON after token quota
       burn.** §10.8 humanizer sub-process is supposed to return a
       JSON envelope with the rephrased text. Under a token quota burn
       it sometimes returns truncated JSON. **Correction:** on
@@ -531,7 +531,7 @@ lands the contract.
       `test_humanizer_malformed_json_falls_back_to_template` (10 rows
       of malformed responses).
 
-- [ ] **Lexicon-swap mid-request.** A `nlp.lexicon-deploy` (§10.27.9)
+- [x] **Lexicon-swap mid-request.** A `nlp.lexicon-deploy` (§10.27.9)
       lands while a request is in-flight. The request started with
       gen N, the dispatcher is using gen N+1 mid-response. Audit
       `lexicon_snapshot_sha` is now ambiguous. **Correction:** every
@@ -543,7 +543,7 @@ lands the contract.
       (synchronously triggers a swap mid-request via a barrier; asserts
       the audit row records the pre-swap SHA).
 
-- [ ] **Catastrophic regex backtracking.** Any closed pattern table
+- [x] **Catastrophic regex backtracking.** Any closed pattern table
       (`injection_patterns.yaml`, `obfuscated_slur.yaml`,
       `idioms.tr.yaml`, `score_notation_conventions.yaml`, …) added
       across the 14 prior passes can introduce a catastrophic-backtracking
@@ -559,7 +559,7 @@ lands the contract.
       synthetic adversarial fixture
       (`tests/fixtures/adversarial_backtracking_pattern.yaml`).
 
-- [ ] **Spool replay reliability.** §10.13 covers bus-down spooling
+- [x] **Spool replay reliability.** §10.13 covers bus-down spooling
       but not the "spool flushed during a partial bus recovery"
       scenario where bus accepts the publish but the broker drops it
       silently (no NACK, just no consumer ever sees it). **Correction:**
@@ -572,7 +572,7 @@ lands the contract.
       `nlp_spool_replay_consumed_grace_s=60`. **Test:**
       `test_spool_replay_unconsumed_alerts_within_grace`.
 
-- [ ] **Graceful shutdown drains in-flight humanizer subprocesses.**
+- [x] **Graceful shutdown drains in-flight humanizer subprocesses.**
       §10.21.9 covers shutdown drain for the main process but not the
       humanizer subprocesses. **Correction:** SIGTERM to main →
       send SIGTERM to every active humanizer subprocess → wait
@@ -589,7 +589,7 @@ lands the contract.
 §10.31.11 ships an outbound checksum proofreader → gateway. There is
 no symmetric inbound integrity. §10.34.4 closes the loop.
 
-- [ ] **Inbound checksum field on `qa.request.v1`.** Phase 9 gateway
+- [x] **Inbound checksum field on `qa.request.v1`.** Phase 9 gateway
       computes `inbound_checksum = sha256(canonical_json(body excluding self) || inbound_secret_per_pod)`
       after Phase 7 sec sanitize and BEFORE publishing to the bus.
       Field is added to `qa.request.v1` schema additively
@@ -602,14 +602,14 @@ no symmetric inbound integrity. §10.34.4 closes the loop.
       (synthetic mutation of the body between gateway sign and NLP
       verify).
 
-- [ ] **Inbound + outbound form a verifiable pair.** Audit row records
+- [x] **Inbound + outbound form a verifiable pair.** Audit row records
       both `inbound_checksum` (verified) AND `outbound_checksum`
       (signed) so a forensic complaint trace (§10.27.3) can prove
       the request body the user sent matches the answer body the
       user received with no in-pipeline mutation. **Test:**
       `test_audit_records_both_checksums_for_pair_replay`.
 
-- [ ] **Per-pod-secret rotation: two-key window.** During the 24h
+- [x] **Per-pod-secret rotation: two-key window.** During the 24h
       grace window after `make nlp.rotate-inbound-key`, NLP accepts
       both the old and the new key; gateway publishes with the new
       key. After the grace window, old-key checksums are rejected.
@@ -618,7 +618,7 @@ no symmetric inbound integrity. §10.34.4 closes the loop.
       old-key and new-key requests succeed during the window; only
       new-key after).
 
-- [ ] **AST guard: NLP never reads `inbound_secret` from anywhere
+- [x] **AST guard: NLP never reads `inbound_secret` from anywhere
       other than `cfg.nlp_inbound_secret_path` (mode 0400).** Mirrors
       §10.21.8 + §10.31.11 secret-handling discipline. **Test:**
       `test_nlp_inbound_secret_only_read_from_cfg_path` (AST scan).
@@ -628,12 +628,12 @@ no symmetric inbound integrity. §10.34.4 closes the loop.
 Six new specs land under `ai/common/text/` (or post-Pivot path), each
 mirroring the §10.21.5 / §10.29.11 / §10.32.5 / §10.33.5 pattern:
 
-- [ ] `length_cap_spec.json` (§10.34.2 surrogate / grapheme snap rules).
-- [ ] `ocr_confusables_spec.json` (§10.34.1 OCR repair table).
-- [ ] `paste_layout_spec.json` (§10.34.1 PDF / paste layout chars).
-- [ ] `single_emoji_intent_spec.json` (§10.34.1 single-emoji map).
-- [ ] `emoji_to_concept_spec.json` (§10.34.1 suffixed-emoji map).
-- [ ] `time_of_day_shorthand_spec.json` (§10.34.1).
+- [x] `length_cap_spec.json` (§10.34.2 surrogate / grapheme snap rules).
+- [x] `ocr_confusables_spec.json` (§10.34.1 OCR repair table).
+- [x] `paste_layout_spec.json` (§10.34.1 PDF / paste layout chars).
+- [x] `single_emoji_intent_spec.json` (§10.34.1 single-emoji map).
+- [x] `emoji_to_concept_spec.json` (§10.34.1 suffixed-emoji map).
+- [x] `time_of_day_shorthand_spec.json` (§10.34.1).
 
 For each: Python NLP and Go gateway boot-probe SHA + refuse on mismatch
 with `nlp.alert.v1{kind=cross_lang_spec_sha_mismatch, severity=critical}`.
@@ -647,14 +647,14 @@ Each new closed table introduced in §10.34.1 + §10.34.4 ships its own
 
 - [x] `predictive_text_known_overshoot.tr.yaml` (≥ 50 rows;
       reviewers = nlp-curator + nlp-domain-football)
-- [ ] `ocr_confusables.tr.yaml` (≥ 30 rows; reviewers = nlp-curator)
-- [ ] `paste_layout_spec.json` corpus (≥ 50 rows; reviewers = nlp-curator)
-- [ ] `single_emoji_intent.tr.yaml` (≥ 20 rows; reviewers = nlp-curator + nlp-compliance,
+- [x] `ocr_confusables.tr.yaml` (≥ 30 rows; reviewers = nlp-curator)
+- [x] `paste_layout_spec.json` corpus (≥ 50 rows; reviewers = nlp-curator)
+- [x] `single_emoji_intent.tr.yaml` (≥ 20 rows; reviewers = nlp-curator + nlp-compliance,
       since emoji-to-concept can encode unintended slurs)
-- [ ] `emoji_to_concept.tr.yaml` (≥ 30 rows; reviewers = nlp-curator + nlp-domain-football)
-- [ ] `time_of_day_shorthand.tr.yaml` (≥ 15 rows; reviewers = nlp-curator)
+- [x] `emoji_to_concept.tr.yaml` (≥ 30 rows; reviewers = nlp-curator + nlp-domain-football)
+- [x] `time_of_day_shorthand.tr.yaml` (≥ 15 rows; reviewers = nlp-curator)
 - [x] `numeric_redundant_restatement.tr.yaml` (≥ 40 rows; reviewers = nlp-curator)
-- [ ] `apostrophe_punctuation_substituted.tr.yaml` (≥ 90 rows;
+- [x] `apostrophe_punctuation_substituted.tr.yaml` (≥ 90 rows;
       reviewers = nlp-curator)
 
 `make verify.nlp-corpora` extends to all 8 new corpora; per-corpus
@@ -759,39 +759,39 @@ Each carries `event_correlation_id` per §8.16.9 + §10.32.18.
 Adds DoD item 32 to §10.20 (in `00-baseline.md`). This file is the
 authority for that item.
 
-- [ ] All `[ ]` items in §10.34.1–§10.34.4 ticked.
-- [ ] All 6 new cross-language specs in §10.34.5 ship with both
+- [x] All `[ ]` items in §10.34.1–§10.34.4 ticked.
+- [x] All 6 new cross-language specs in §10.34.5 ship with both
       Python and Go boot-probe SHAs and refuse boot on mismatch.
-- [ ] All 8 new corpora in §10.34.6 ship with `corpus.yaml` two-reviewer
+- [x] All 8 new corpora in §10.34.6 ship with `corpus.yaml` two-reviewer
       signoff per §10.33.4 discipline.
-- [ ] `make verify.nlp-cross-lang-parity` green at the new 1500-row
+- [x] `make verify.nlp-cross-lang-parity` green at the new 1500-row
       corpus floor.
-- [ ] `make verify.nlp-corpora` green for all `~22` cumulative §10.33 +
+- [x] `make verify.nlp-corpora` green for all `~22` cumulative §10.33 +
       §10.34 corpora (per-corpus drift threshold ≤ 1.0%).
-- [ ] `make nlp.bench` (in §10.20 DoD item 9) extended to assert the
+- [x] `make nlp.bench` (in §10.20 DoD item 9) extended to assert the
       §10.34.2 normalize-chain perf budgets per pass + total p99 ≤ 12ms.
-- [ ] All ≥ 20 cfg knobs in §10.34.7 land in the same triangle commit
+- [x] All ≥ 20 cfg knobs in §10.34.7 land in the same triangle commit
       as the §10.34 code (Python `ai/common/config.py` + `defaults.yaml`
       + `xops/env/.env.example` + Go `server/internal/config/config.go`
       sync test green).
-- [ ] All new `nlp.event.v1` and `nlp.alert.v1` kinds (§10.34.8) added
+- [x] All new `nlp.event.v1` and `nlp.alert.v1` kinds (§10.34.8) added
       to `KNOWN_NLP_EVENT_KINDS` / `KNOWN_NLP_ALERT_KINDS` open-enum
       registries; producer-set bound test re-asserted.
-- [ ] `qa.request.v1` schema bumped additively from v4 → v5 for the
+- [x] `qa.request.v1` schema bumped additively from v4 → v5 for the
       `inbound_checksum` field (§10.34.4); `qa.answer.v1` schema bumped
       additively for the `degraded_reason=stage_timeout:<stage>`
       enum extension (§10.34.3); both bumps land per §10.32.17
       breaking-schema migration playbook (additive paths skip the
       90-day window).
-- [ ] Tracker row (`make track.add PHASE=10 STATUS=in-progress
+- [x] Tracker row (`make track.add PHASE=10 STATUS=in-progress
       NOTE="Phase 10 §10.34 15th-pass — input correctness + resilience
       + integrity"`) and `make version.bump COMPONENT=docs LEVEL=minor`
       land in the same commit as this file (per AGENTS.md §3 + §6.1).
-- [ ] ROADMAP §10 stub table extended with the 15th-pass row pointing
+- [x] ROADMAP §10 stub table extended with the 15th-pass row pointing
       here.
-- [ ] `docs/design/phase10/README.md` table + cumulative surface block
+- [x] `docs/design/phase10/README.md` table + cumulative surface block
       extended with the 15th-pass row.
-- [ ] §10.20 DoD aggregator gains item 32 referencing §10.34.DoD.
+- [x] §10.20 DoD aggregator gains item 32 referencing §10.34.DoD.
 
 ## 10.34.10 Open questions / explicit non-goals (so a 16th pass starts with the right scope)
 

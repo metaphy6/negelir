@@ -518,7 +518,7 @@ class TestStep1LengthCap:
     def test_rejects_oversize(self) -> None:
         from nlp.normalize import normalize_input, InputTooLongError
 
-        fake_cfg = type("FakeCfg", (), {"nlp_input_max_codepoints": 10, "nlp_normalize_stage_timeout_ms": 200})()
+        fake_cfg = type("FakeCfg", (), {"nlp_input_max_codepoints": 10, "nlp_normalize_stage_timeout_ms": 200, "nlp_megainput_min_chars": 1500, "nlp_partial_input_min_token_len": 3, "nlp_normalize_total_budget_p99_ms": 12})()
         with pytest.raises(InputTooLongError, match="10"):
             normalize_input("a" * 11, cfg=fake_cfg)
 
@@ -551,7 +551,7 @@ class TestStep1LengthCap:
         """Oversize input MUST raise, never silently truncate."""
         from nlp.normalize import normalize_input, InputTooLongError
 
-        fake_cfg = type("FakeCfg", (), {"nlp_input_max_codepoints": 5, "nlp_normalize_stage_timeout_ms": 200})()
+        fake_cfg = type("FakeCfg", (), {"nlp_input_max_codepoints": 5, "nlp_normalize_stage_timeout_ms": 200, "nlp_megainput_min_chars": 1500, "nlp_partial_input_min_token_len": 3, "nlp_normalize_total_budget_p99_ms": 12})()
         with pytest.raises(InputTooLongError):
             normalize_input("toolonginput", cfg=fake_cfg)
 

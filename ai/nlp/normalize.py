@@ -61,6 +61,7 @@ from nlp._particle_normalize import (
 )
 from nlp.numeric_disambiguation import choose_numeric_parse
 from nlp.runtime.budget import BudgetExceeded, RequestBudget
+from nlp.degenerate_input import detect_degenerate_input
 from nlp.dialect_normalize import (    apply_dialect_normalize as _apply_dialect_normalize,
     _DialectNormalizer,
     load_abbreviations,
@@ -164,12 +165,57 @@ _PUNCT_TABLE: dict[int, str] = {
 _MULTI_SPACE_RE = re.compile(r" {2,}")
 
 # ---------------------------------------------------------------------------
+# Zero-copy guarantee helpers (Phase 10 §10.34.2)
+# ---------------------------------------------------------------------------
+def _has_punct_to_normalize(text: str) -> bool:
+    """Return True if text contains characters that _PUNCT_TABLE would change.
+    
+    Per §10.34.2, normalize passes must return the same string object
+    when no transformation is needed (zero-copy guarantee).
+    This predicate checks if punctuation normalization would make changes.
+    """
+    for ch in text:
+        if ord(ch) in _PUNCT_TABLE:
+            return True
+    return False
+
+
+def _has_unicode_spaces(text: str) -> bool:
+    """Return True if text contains Unicode space characters OTHER than ASCII space.
+    
+    Per §10.34.2, used to optimize _collapse_unicode_spaces to avoid
+    unnecessary allocation on clean input. ASCII space (U+0020) doesn't need
+    conversion, only other Unicode Zs/Zl/Zp categories.
+    """
+    for ch in text:
+        # Skip ASCII space (U+0020) - it's already normalized
+        if ch == ' ':
+            continue
+        # Check for other Unicode space separators
+        if unicodedata.category(ch) in ('Zs', 'Zl', 'Zp'):
+            return True
+    return False
+
+
+def _has_multi_spaces(text: str) -> bool:
+    """Return True if text contains multiple consecutive spaces.
+    
+    Per §10.34.2, used to optimize regex.sub() to avoid unnecessary
+    allocation on clean input.
+    """
+    return "  " in text
+
+
+# ---------------------------------------------------------------------------
 # Step 5a -- Unicode space collapse (Phase 10 §10.33.3)
 # ---------------------------------------------------------------------------
 # Collapse every Unicode Zs category to ASCII space before tokenization.
 # This prevents invisible whitespace from silently joining tokens.
 def _collapse_unicode_spaces(text: str, enabled: bool) -> str:
     if not enabled:
+        return text
+    # Zero-copy guarantee (§10.34.2): if no change needed, return same object
+    if not _has_unicode_spaces(text):
         return text
     return "".join(
         " " if unicodedata.category(ch) == "Zs" else ch for ch in text
@@ -1488,10 +1534,30 @@ def normalize_input(
     budget = RequestBudget(cfg=cfg, humanizer=False)
     budget_exhausted_reason: str | None = None
     budget_exhausted_stage: str | None = None
-    current_stage = "length_cap"
+    current_stage = "degenerate_check"
     try:
         budget.__enter__()
         try:
+            # -- Degenerate input check (§10.34.2) ---------------------------------
+            # BEFORE any normalization pass: hard-reject inputs that are provably
+            # malformed (empty, whitespace-only, single control char, lone surrogates,
+            # NUL bytes). These bypass Symspell/CRF/Zemberek and route to closed
+            # Turkish refusal templates.
+            is_degenerate, degenerate_meta_kind = detect_degenerate_input(text)
+            if is_degenerate:
+                # Map degenerate input to floor response
+                floor_kind = degenerate_meta_kind or "meta.empty_input"
+                steps = ("degenerate_check",)
+                current_stage = "length_cap"
+                return NormalizedInput(
+                    tokens=tuple(),
+                    steps_run=steps,
+                    original_codepoint_count=len(text),
+                    floor_kind=floor_kind,
+                    normalization_events=tuple(),
+                )
+            steps.append("degenerate_check")
+            
             _get_time = _clock if _clock is not None else time.monotonic
             _deadline_s = cfg.nlp_normalize_stage_timeout_ms / 1000.0
 
@@ -1593,10 +1659,16 @@ def normalize_input(
 
             current_stage = "punct_normalize"
             # -- Step 5: Punctuation normalization ----------------------------------
-            normalized = normalized.translate(_PUNCT_TABLE)
+            # Zero-copy guarantee (§10.34.2): return same object if no change needed
+            if _has_punct_to_normalize(normalized):
+                normalized = normalized.translate(_PUNCT_TABLE)
             collapse_unicode_spaces = getattr(cfg, "nlp_collapse_unicode_spaces", True)
             normalized = _collapse_unicode_spaces(normalized, collapse_unicode_spaces)
-            normalized = _MULTI_SPACE_RE.sub(" ", normalized).strip()
+            # Zero-copy on multi-space collapse (§10.34.2)
+            if _has_multi_spaces(normalized):
+                normalized = _MULTI_SPACE_RE.sub(" ", normalized).strip()
+            else:
+                normalized = normalized.strip()
             steps.append("punct_normalize")
 
             stripped_tail: str | None = None
@@ -1621,12 +1693,19 @@ def normalize_input(
                 normalized = _strip_generic_emoji_symbols(normalized, normalization_events)
             steps.append("emoji_hint_extract")
 
-            caseful_punct_normalized = caseful_normalized.translate(_PUNCT_TABLE)
+            # Zero-copy guarantee on caseful_punct_normalized (§10.34.2)
+            if _has_punct_to_normalize(caseful_normalized):
+                caseful_punct_normalized = caseful_normalized.translate(_PUNCT_TABLE)
+            else:
+                caseful_punct_normalized = caseful_normalized
             caseful_punct_normalized = _collapse_unicode_spaces(
                 caseful_punct_normalized,
                 collapse_unicode_spaces,
             )
-            caseful_punct_normalized = _MULTI_SPACE_RE.sub(" ", caseful_punct_normalized).strip()
+            if _has_multi_spaces(caseful_punct_normalized):
+                caseful_punct_normalized = _MULTI_SPACE_RE.sub(" ", caseful_punct_normalized).strip()
+            else:
+                caseful_punct_normalized = caseful_punct_normalized.strip()
             query_style = detect_search_operator_syntax_in_text(caseful_punct_normalized)
 
             # -- Steps 6-8 are the bounded "normalize+typo+diacritic" stage. --------

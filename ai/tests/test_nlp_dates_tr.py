@@ -615,3 +615,111 @@ def test_word_in_at_end() -> None:
 
 def test_word_in_missing() -> None:
     assert _word_in("perşembe", "cuma günü") is False
+
+
+# ── Client timezone (§10.34.1) ───────────────────────────────────────────
+
+def test_relative_date_resolves_against_client_tz_berlin() -> None:
+    """User in Berlin (UTC+1) types 'bugün' at 23:30 local time = 22:30 UTC.
+    In Berlin it's still 2026-01-02 (today), but in Istanbul (UTC+3) it's
+    2026-01-03 (tomorrow). The resolver should use Berlin TZ."""
+    # 2026-01-02 23:30 Berlin = 2026-01-02 22:30 UTC
+    clock = lambda: datetime.datetime(2026, 1, 2, 22, 30, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("bugün", client_tz="Europe/Berlin")
+    assert res is not None
+    # In Berlin time, this should be 2026-01-02
+    berlin_tz = ZoneInfo("Europe/Berlin")
+    expected_start = datetime.datetime(2026, 1, 2, 0, 0, tzinfo=berlin_tz).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.granularity == "day"
+
+
+def test_relative_date_resolves_against_client_tz_tokyo() -> None:
+    """User in Tokyo (UTC+9) types 'bugün' at 08:00 local time = 2026-01-01 23:00 UTC.
+    In Tokyo it's 2026-01-02, in Istanbul it's 2026-01-02."""
+    # 2026-01-02 08:00 Tokyo = 2026-01-01 23:00 UTC
+    clock = lambda: datetime.datetime(2026, 1, 1, 23, 0, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("bugün", client_tz="Asia/Tokyo")
+    assert res is not None
+    # In Tokyo time, this should be 2026-01-02
+    tokyo_tz = ZoneInfo("Asia/Tokyo")
+    expected_start = datetime.datetime(2026, 1, 2, 0, 0, tzinfo=tokyo_tz).astimezone(UTC)
+    assert res.start_utc == expected_start
+
+
+def test_relative_date_default_when_tz_absent() -> None:
+    """When client_tz is None, defaults to Europe/Istanbul."""
+    # 2026-04-29 14:35:10 UTC
+    res = _resolver().resolve("bugün", client_tz=None)
+    assert res is not None
+    # Should use Istanbul timezone
+    expected_start = datetime.datetime(2026, 4, 29, 0, 0, tzinfo=ISTANBUL_TZ).astimezone(UTC)
+    assert res.start_utc == expected_start
+
+
+def test_relative_date_defaults_to_istanbul() -> None:
+    """When client_tz is not provided (default arg), should use Istanbul."""
+    # 2026-04-29 14:35:10 UTC
+    res = _resolver().resolve("bugün")
+    assert res is not None
+    # Should use Istanbul timezone
+    expected_start = datetime.datetime(2026, 4, 29, 0, 0, tzinfo=ISTANBUL_TZ).astimezone(UTC)
+    assert res.start_utc == expected_start
+
+
+def test_relative_date_yarin_with_client_tz() -> None:
+    """'yarın' (tomorrow) should resolve relative to the client's timezone."""
+    # User in New York (UTC-5) types 'yarın' at 20:00 local = 2026-01-02 01:00 UTC
+    # In NY it's 2026-01-01, so 'yarın' = 2026-01-02
+    clock = lambda: datetime.datetime(2026, 1, 2, 1, 0, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("yarın", client_tz="America/New_York")
+    assert res is not None
+    ny_tz = ZoneInfo("America/New_York")
+    tomorrow_in_ny = datetime.date(2026, 1, 2)  # tomorrow from Jan 1
+    expected_start = datetime.datetime(2026, 1, 2, 0, 0, tzinfo=ny_tz).astimezone(UTC)
+    assert res.start_utc == expected_start
+
+
+def test_relative_date_dun_with_client_tz() -> None:
+    """'dün' (yesterday) should resolve relative to the client's timezone."""
+    # User in Sydney (UTC+11) types 'dün' at 10:00 local = 2026-01-01 23:00 UTC
+    # In Sydney it's 2026-01-02, so 'dün' = 2026-01-01
+    clock = lambda: datetime.datetime(2026, 1, 1, 23, 0, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("dün", client_tz="Australia/Sydney")
+    assert res is not None
+    sydney_tz = ZoneInfo("Australia/Sydney")
+    yesterday_in_sydney = datetime.date(2026, 1, 1)
+    expected_start = datetime.datetime(2026, 1, 1, 0, 0, tzinfo=sydney_tz).astimezone(UTC)
+    assert res.start_utc == expected_start
+
+
+def test_relative_date_with_time_and_client_tz() -> None:
+    """'bugün saat 21:30' with client_tz should resolve to the correct time in UTC."""
+    # User in Los Angeles (UTC-8) types at 14:00 local = 2026-04-29 22:00 UTC
+    # In LA it's 2026-04-29, so 'bugün 21:30' = 2026-04-29 21:30 LA time
+    clock = lambda: datetime.datetime(2026, 4, 29, 22, 0, tzinfo=UTC)
+    resolver = DateTimeResolver(clock_now=clock)
+    res = resolver.resolve("bugün saat 21:30", client_tz="America/Los_Angeles")
+    assert res is not None
+    la_tz = ZoneInfo("America/Los_Angeles")
+    expected_start = datetime.datetime(
+        2026, 4, 29, 21, 30, tzinfo=la_tz
+    ).astimezone(UTC)
+    assert res.start_utc == expected_start
+    assert res.granularity == "hour_minute"
+
+
+def test_weekday_with_client_tz_berlin() -> None:
+    """Named weekdays should resolve relative to the client's timezone."""
+    # Fixed: Wednesday 2026-04-29 14:35:10 UTC
+    # In Berlin (UTC+2 at that time): Wednesday 2026-04-29 16:35:10
+    # Next Friday in Berlin = 2026-05-01
+    res = _resolver().resolve("cuma", client_tz="Europe/Berlin")
+    assert res is not None
+    berlin_tz = ZoneInfo("Europe/Berlin")
+    expected_start = datetime.datetime(2026, 5, 1, 0, 0, tzinfo=berlin_tz).astimezone(UTC)
+    assert res.start_utc == expected_start

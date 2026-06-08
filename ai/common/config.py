@@ -1125,7 +1125,7 @@ class Config:
     # nlp_lexicon_feed_hmac_key_path: HMAC-SHA256 key file used to verify
     #   signed lexicon bundle artifacts in feed mode.
     nlp_lexicon_feed_hmac_key_path: str = field(default_factory=lambda: os.getenv(
-        "NEGELIR_NLP_LEXICON_FEED_HMAC_KEY_PATH", "/var/lib/negelir/secrets/nlp_lexicon_feed_hmac.key"
+        "NEGELIR_NLP_LEXICON_FEED_HMAC_KEY_PATH", "infra/nlp/lexicon_feed_hmac.key"
     ))
     # nlp_lexicon_feed_hmac_key_grace_s: dual-acceptance window (seconds)
     #   for the prior lexicon feed HMAC key after rotation.
@@ -1339,6 +1339,11 @@ class Config:
     #   and the caller emits nlp.event.v1{kind=normalize_timeout}.  Better a
     #   degraded answer than no answer.  Must be ≥ 1 ms.
     nlp_normalize_stage_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS", "20")))
+    # nlp_normalize_total_budget_p99_ms: total per-request p99 budget for the
+    #   entire normalize chain (all passes, all gates, end-to-end; §10.34.2).
+    #   Used for CI regression gates; no hard enforcement at runtime but violated
+    #   budgets are telemetry events. Must be >= 5 ms.
+    nlp_normalize_total_budget_p99_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_NLP_NORMALIZE_TOTAL_BUDGET_P99_MS", "12")))
     # nlp_collapse_unicode_spaces: collapse every Unicode Zs category to U+0020
     #   before tokenization. Prevents invisible paste whitespace from joining
     #   Turkish tokens silently.
@@ -1424,7 +1429,7 @@ class Config:
     #   canary intent model file path (`nlp_intent_model_path + ".canary"`).
     #   Controlled by pod startup env var `NEGELIR_NLP_CANARY_POD=1`.
     #   Default false.
-    nlp_canary_pod: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_CANARY_POD", "false").lower() in ("true", "1", "yes"))
+    nlp_canary_pod: bool = field(default_factory=lambda: os.getenv("NEGELIR_NLP_CANARY_POD", "0").lower() in ("true", "1", "yes"))
     # nlp_intent_model_canary_pct: target canary rollout percentage for intent
     #   model deploys (§10.23.2). This is an operator-side config for environment
     #   generation; on-pod load decisions still use nlp_canary_pod.
@@ -1710,13 +1715,13 @@ class Config:
     #   cache entries stored in `cache.v1` (Phase 10 §10.23.9). Mode should be
     #   0400 for production keys. Default path mirrors other NLP secret files.
     nlp_l1_cache_hmac_key_path: str = field(default_factory=lambda: os.getenv(
-        "NEGELIR_NLP_L1_CACHE_HMAC_KEY_PATH", "/var/lib/negelir/secrets/nlp_l1_cache_hmac.key"
+        "NEGELIR_NLP_L1_CACHE_HMAC_KEY_PATH", "infra/nlp/nlp_l1_cache_hmac.key"
     ))
     # qa_answer_hmac_key_path: HMAC-SHA256 key file used by nlp.answer.v1 to
     #   sign the answer envelope for schema_version 3 (Phase 10 §10.26.8).
     #   Mode should be 0400 for production keys. Optional for mock/dev.
     qa_answer_hmac_key_path: str = field(default_factory=lambda: os.getenv(
-        "NEGELIR_QA_ANSWER_HMAC_KEY_PATH", "/var/lib/negelir/secrets/qa_answer_hmac.key"
+        "NEGELIR_QA_ANSWER_HMAC_KEY_PATH", "infra/nlp/qa_answer_hmac.key"
     ))
     # qa_answer_hmac_grace_s: dual-acceptance window (seconds) for the previous
     #   q a answer envelope HMAC key during rotation.
@@ -1774,6 +1779,13 @@ class Config:
     nlp_entity_bench_latency_p95_threshold_ms: int = field(default_factory=lambda: int(os.getenv(
         "NEGELIR_NLP_ENTITY_BENCH_LATENCY_P95_THRESHOLD_MS", "8"
     )))
+    # nlp_model_warm_touch_enabled: enable warm-touch mmap for CRF/Symspell/intent
+    #   models at boot (§10.34.2). When enabled, models are pre-faulted into
+    #   RAM via os.posix_madvise(MADV_WILLNEED) to eliminate page faults on
+    #   first request. Default true.
+    nlp_model_warm_touch_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_NLP_MODEL_WARM_TOUCH_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
 
     # ── Phase 10 §10.5 — Date / time resolver injection point ─────────────
     #
@@ -4388,6 +4400,7 @@ class Config:
                 "must be >= 0.0 (§10.22.1 ASCII-vs-restored conflict policy)"
             )
         _bounded("nlp_normalize_stage_timeout_ms", self.nlp_normalize_stage_timeout_ms, 1, 60_000)
+        _bounded("nlp_normalize_total_budget_p99_ms", self.nlp_normalize_total_budget_p99_ms, 5, 30)
         _bounded("nlp_intent_model_max_size_mb", self.nlp_intent_model_max_size_mb, 1, 10_000)
         _bounded("nlp_intent_accuracy_floor", self.nlp_intent_accuracy_floor, 0.01, 0.9999)
         _bounded("nlp_quotative_min_confidence", self.nlp_quotative_min_confidence, 0.0, 1.0)

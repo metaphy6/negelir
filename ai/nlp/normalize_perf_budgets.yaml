@@ -1,0 +1,294 @@
+# Phase 10 §10.34.2 — Normalize-chain per-pass performance budgets (binding).
+#
+# The normalize pipeline has grown to 11+ passes across §10.1, §10.21, §10.22,
+# §10.28, §10.29, §10.30, §10.32, and §10.33. Without an explicit perf contract
+# it quietly regresses with each addendum. This table pins per-pass p50/p99
+# budgets (milliseconds) for the full input-to-tokens pipeline.
+#
+# Total budget: p99 ≤ 12ms (vs. §10.1 original 5ms; addenda required 7ms overhead).
+#
+# CODEOWNERS: nlp-curator + Go owner (Phase 7 sec-sanitize must obey same budgets
+# on its parity passes; this spec is shared via ai/common/text/normalize_perf_budgets.json).
+#
+# Closed table binding:
+#   * Entries cannot be reordered once pinned (matches normalize step order).
+#   * Pass names must match ai/nlp/normalize.py step names (for CI tracking).
+#   * Budgets are per-pass in isolation on the §10.18 golden corpus.
+#   * CI regression gate: test_normalize_per_pass_budgets compares current vs
+#     pinned and fails if any pass exceeds its p99 budget by > 10% (carve-out
+#     for cold-start, JIT, first-run effects).
+---
+passes:
+  - name: "length_cap"
+    p50_ms: 0.01
+    p99_ms: 0.05
+    gated: false
+    description: "Codepoint-length boundary check"
+
+  - name: "html_entity_unescape"
+    p50_ms: 0.02
+    p99_ms: 0.08
+    gated: true
+    gate_flag: "nlp_html_unescape_enabled"
+    description: "HTML entity decoding (e.g. &nbsp; → space)"
+
+  - name: "canonical_normalize"
+    p50_ms: 0.10
+    p99_ms: 0.30
+    gated: false
+    description: "NFC + control-char/zero-width/RTL strip (parity with Phase 7)"
+
+  - name: "compose_turkish_dotted_i"
+    p50_ms: 0.03
+    p99_ms: 0.10
+    gated: false
+    description: "Turkish dotted-i decomposition reassembly"
+
+  - name: "paste_layout_normalize"
+    p50_ms: 0.01
+    p99_ms: 0.20
+    gated: true
+    gate_flag: "nlp_paste_layout_enabled"
+    description: "PDF/paste layout char collapse (U+2028, U+2029, hard hyphens)"
+
+  - name: "confusables_fold"
+    p50_ms: 0.20
+    p99_ms: 0.60
+    gated: false
+    description: "Unicode confusables fold (Cyrillic/Greek → ASCII-Turkish)"
+
+  - name: "digit_letter_fold"
+    p50_ms: 0.01
+    p99_ms: 0.05
+    gated: true
+    gate_flag: "nlp_digit_letter_fold_enabled"
+    description: "Digit-letter confusable (0/O, 1/l/I)"
+
+  - name: "random_case_normalize"
+    p50_ms: 0.02
+    p99_ms: 0.10
+    gated: true
+    gate_flag: "nlp_random_case_enabled"
+    description: "Random-case noise folding (intra-token case-flip detection)"
+
+  - name: "lowercase_tr"
+    p50_ms: 0.05
+    p99_ms: 0.20
+    gated: false
+    description: "Turkish-aware lowercase (I→ı, İ→i, never str.lower())"
+
+  - name: "obfuscated_slur_normalize"
+    p50_ms: 0.10
+    p99_ms: 0.40
+    gated: false
+    description: "Obfuscated slur defense (§10.30.10)"
+
+  - name: "punct_normalize"
+    p50_ms: 0.03
+    p99_ms: 0.15
+    gated: false
+    description: "Punctuation normalization (curly quotes → straight, em-dash, etc.)"
+
+  - name: "citation_tail_strip"
+    p50_ms: 0.01
+    p99_ms: 0.08
+    gated: true
+    gate_flag: "nlp_citation_tail_strip_enabled"
+    description: "Strip copy-paste citation/URL tail"
+
+  - name: "social_hygiene"
+    p50_ms: 0.02
+    p99_ms: 0.10
+    gated: false
+    description: "Social-token normalization (@mentions, #hashtags)"
+
+  - name: "promote_suffixed_emoji"
+    p50_ms: 0.01
+    p99_ms: 0.08
+    gated: true
+    gate_flag: "nlp_suffixed_emoji_enabled"
+    description: "Turkish-suffixed emoji → concept entity (⚽nın → maç)"
+
+  - name: "emoji_hint_extract"
+    p50_ms: 0.02
+    p99_ms: 0.12
+    gated: true
+    gate_flag: "nlp_emoji_hint_enabled"
+    description: "Emoji hint extraction before strip (🔴🟡 → team colors)"
+
+  - name: "diacritic_restore"
+    p50_ms: 0.15
+    p99_ms: 0.80
+    gated: true
+    gate_flag: "nlp_diacritic_restore_enabled"
+    description: "Diacritic restoration table-driven (§10.3)"
+
+  - name: "strip_preamble"
+    p50_ms: 0.01
+    p99_ms: 0.08
+    gated: true
+    gate_flag: "nlp_preamble_strip_enabled"
+    description: "Voice-to-text preamble stripping (e.g. 'Hey Siri')"
+
+  - name: "ocr_confusion_repair"
+    p50_ms: 0.01
+    p99_ms: 0.80
+    gated: true
+    gate_flag: "nlp_ocr_repair_force"
+    description: "OCR confusion repair (ligatures, soft-hyphen; gated on ligature codepoints)"
+
+  - name: "regional_dialect_normalize"
+    p50_ms: 0.10
+    p99_ms: 0.60
+    gated: false
+    description: "Regional/diaspora dialect normalization (§10.32.4)"
+
+  - name: "apostrophe_proper_noun_repair"
+    p50_ms: 0.08
+    p99_ms: 0.40
+    gated: true
+    gate_flag: "nlp_harmony_tolerant_strip_enabled"
+    description: "Turkish suffix-harmony repair for proper nouns (§10.32.5)"
+
+  - name: "tokenize"
+    p50_ms: 0.02
+    p99_ms: 0.08
+    gated: false
+    description: "Whitespace + punctuation split"
+
+  - name: "split_questions"
+    p50_ms: 0.02
+    p99_ms: 0.12
+    gated: true
+    gate_flag: "nlp_compound_query_enabled"
+    description: "Turkish run-on/multi-question split (§10.24.5)"
+
+  - name: "strip_combining_marks"
+    p50_ms: 0.02
+    p99_ms: 0.10
+    gated: false
+    description: "Turkish combining mark hygiene (strip leftover diacritics)"
+
+  - name: "repeat_collapse"
+    p50_ms: 0.03
+    p99_ms: 0.12
+    gated: false
+    description: "Repeated-character collapse (aaaa → aa, guarded)"
+
+  - name: "numeric_redundant_collapse"
+    p50_ms: 0.01
+    p99_ms: 0.08
+    gated: true
+    gate_flag: "nlp_numeric_redundant_enabled"
+    description: "Numeric redundant restatement collapse (3 üç → 3)"
+
+  - name: "reduplication_collapse"
+    p50_ms: 0.04
+    p99_ms: 0.20
+    gated: true
+    gate_flag: "nlp_reduplication_collapse_enabled"
+    description: "Reduplicated-emphasis collapse (§10.29.7)"
+
+  - name: "predictive_overshoot"
+    p50_ms: 0.01
+    p99_ms: 0.08
+    gated: true
+    gate_flag: "nlp_predictive_overshoot_enabled"
+    description: "Predictive-text overshoot correction (§10.34.1)"
+
+  - name: "inline_self_correction"
+    p50_ms: 0.02
+    p99_ms: 0.10
+    gated: true
+    gate_flag: "nlp_inline_self_correction_enabled"
+    description: "Inline self-correction markers (§10.32.10)"
+
+  - name: "compound_split"
+    p50_ms: 0.05
+    p99_ms: 0.30
+    gated: true
+    gate_flag: "nlp_compound_split_enabled"
+    description: "No-space compound splitting (§10.28.3)"
+
+  - name: "morphology_candidate_normalize"
+    p50_ms: 0.10
+    p99_ms: 0.50
+    gated: true
+    gate_flag: "nlp_morphology_enabled"
+    description: "Morphology candidate filtering (topk, confidence)"
+
+  - name: "particle_normalize"
+    p50_ms: 0.08
+    p99_ms: 0.40
+    gated: false
+    description: "Turkish particle normalization (mi/mı/mu/mü detach)"
+
+  - name: "assimilation_fold"
+    p50_ms: 0.02
+    p99_ms: 0.15
+    gated: true
+    gate_flag: "nlp_assimilation_fold_enabled"
+    description: "Assimilation suffix folding (§10.28.2)"
+
+  - name: "postposition_stack"
+    p50_ms: 0.02
+    p99_ms: 0.10
+    gated: false
+    description: "Turkish 2-postposition stack detection (§10.32.3)"
+
+  - name: "consonant_alternation"
+    p50_ms: 0.05
+    p99_ms: 0.25
+    gated: true
+    gate_flag: "nlp_consonant_alternation_enabled"
+    description: "Consonant-alternation tolerance (softened/unsoftened, §10.28.1)"
+
+  - name: "vowel_drop_before_suffix"
+    p50_ms: 0.04
+    p99_ms: 0.20
+    gated: true
+    gate_flag: "nlp_vowel_drop_before_suffix_enabled"
+    description: "Vowel-drop-before-suffix tolerance (§10.29.2)"
+
+  - name: "loanword_singularisation"
+    p50_ms: 0.03
+    p99_ms: 0.15
+    gated: true
+    gate_flag: "nlp_loanword_singularisation_enabled"
+    description: "Loanword plural-as-singular repair (§10.29.5)"
+
+  - name: "geminate_restoration"
+    p50_ms: 0.05
+    p99_ms: 0.40
+    gated: true
+    gate_flag: "nlp_geminate_restoration_enabled"
+    description: "Geminate restoration (§10.29.1)"
+
+  - name: "dialect_normalize"
+    p50_ms: 0.15
+    p99_ms: 0.60
+    gated: false
+    description: "Multi-token compounds + phonological rules + vocative strip (§10.22.5)"
+
+  - name: "idiom_expand"
+    p50_ms: 0.08
+    p99_ms: 0.50
+    gated: false
+    description: "Idiom and collocation expansion"
+
+  - name: "pragmatic_class"
+    p50_ms: 0.03
+    p99_ms: 0.15
+    gated: false
+    description: "Pragmatic class detection (sarcasm, question tag, etc.)"
+
+# Total budget aggregation (for CI reporting).
+# Sum of all p99_ms values should not exceed this:
+total_budget_p99_ms: 12.0
+
+# Regression gate: tolerance on p99 before a failure is reported (10% = 1.1×).
+# This carve-out accounts for cold-start, JIT, and first-run effects.
+p99_regression_tolerance: 1.10
+
+# Per-pass regression gate: p99 must not exceed `budget * tolerance`.
+per_pass_p99_regression_tolerance: 1.20
