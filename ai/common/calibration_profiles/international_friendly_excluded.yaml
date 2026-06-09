@@ -1,0 +1,13 @@
+profile_id: international_friendly_excluded
+description: |
+  Friendlies — predictor refuses to publish public predictions.
+  Data captured for sentiment only (per COMPETITIONS.md §5.7).
+  Placeholder profile; no overlays meaningful as predictor does not emit predictions.
+
+elo_home_advantage_mult: 1.0
+dixon_coles_rho_add: 0.0
+draw_sample_weight_mult: 1.0
+poisson_max_goals_add: 0.0
+xg_elo_factor_range_mult: 1.0
+upset_prior: 0.0
+zero_home_advantage_when_venue_in: []

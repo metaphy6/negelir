@@ -8,4 +8,22 @@ intents:
   data.kickoff_time:
     - kind: team
       count: 2
+  data.competition_lookup:
+    - kind: competition
+      count: 1
+  data.transfer_lookup:
+    - kind: team
+      count: 1
+  data.injury_lookup:
+    - kind: team
+      count: 1
+  data.referee_lookup:
+    - kind: team
+      count: 2
+  data.weather_lookup:
+    - kind: team
+      count: 2
+  data.suspension_lookup:
+    - kind: team
+      count: 1
   meta.help: []

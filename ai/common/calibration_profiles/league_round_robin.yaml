@@ -1,0 +1,12 @@
+profile_id: league_round_robin
+description: |
+  All round_robin league competitions (default — existing behavior).
+  No overlays applied; baseline calibration per LeagueConfig.
+
+# No overlays — uses LeagueConfig values as-is
+elo_home_advantage_mult: 1.0
+dixon_coles_rho_add: 0.0
+draw_sample_weight_mult: 1.0
+poisson_max_goals_add: 0.0
+xg_elo_factor_range_mult: 1.0
+upset_prior: 0.0

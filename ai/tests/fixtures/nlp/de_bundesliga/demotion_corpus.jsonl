@@ -1,0 +1,5 @@
+{"query": "Fener", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fener must match Fenerbahçe, not demote to ambiguous"}
+{"query": "Bayern - Dortmund", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "borussia_dortmund"], "notes": "Hyphen separator without spaces"}
+{"query": "BAYERN", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "All-caps Bayern must still resolve"}
+{"query": "Bayern Múnchen", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern with non-standard accent (accent on u)"}
+{"query": "Düsseldorf Fortuna", "intent": "predict.match_outcome", "expected_entities": ["fortuna_dusseldorf"], "notes": "Fortuna with umlaut"}

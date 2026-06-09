@@ -1,0 +1,373 @@
+# Single source of truth for which leagues exist + their tier.
+# Read by: predictor swarm (filter), API (entitlements), NLP gazetteer,
+# monetization (per-league SKU map).
+# 
+# Adding a new league requires PR review by ops + ML; rows here are
+# what `xops/leagues/readiness.py` checks against.
+#
+# Schema: §3 in docs/design/LEAGUE_CATALOG.md
+
+schema_version: 1
+
+leagues:
+  # ===== PHASE 13a — Top-5 EU + TR + UEFA + WC/Euro (T1/T2) =====
+  
+  # T1 — GA (production)
+  
+  - league_id: tr_super_lig
+    name_en: "Turkish Süper Lig"
+    name_tr: "Türkiye Süper Lig"
+    country: TR
+    confederation: UEFA
+    tier: T1
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: tr_super_lig_round_robin
+      - competition_id: tr_super_lig_relegation_playoff
+    source_coverage:
+      reference: [openfootball, tff]
+      schedule: [mackolik, tff, nesine]
+      live: [mackolik]
+      editorial: [mackolik]
+      market: [nesine]
+  
+  - league_id: en_premier_league
+    name_en: "English Premier League"
+    name_tr: "İngiltere Premier Lig"
+    country: GB-ENG
+    confederation: UEFA
+    tier: T1
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: en_premier_league_round_robin
+      - competition_id: en_fa_cup
+      - competition_id: en_efl_cup
+      - competition_id: en_community_shield
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: es_la_liga
+    name_en: "Spanish La Liga"
+    name_tr: "İspanya La Liga"
+    country: ES
+    confederation: UEFA
+    tier: T1
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: es_la_liga_round_robin
+      - competition_id: es_copa_del_rey
+      - competition_id: es_supercopa_de_espana
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: de_bundesliga
+    name_en: "German Bundesliga"
+    name_tr: "Almanya Bundesliga"
+    country: DE
+    confederation: UEFA
+    tier: T1
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: de_bundesliga_round_robin
+      - competition_id: de_dfb_pokal
+      - competition_id: de_dfl_supercup
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: it_serie_a
+    name_en: "Italian Serie A"
+    name_tr: "İtalya Serie A"
+    country: IT
+    confederation: UEFA
+    tier: T1
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: it_serie_a_round_robin
+      - competition_id: it_coppa_italia
+      - competition_id: it_supercoppa_italiana
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: fr_ligue_1
+    name_en: "French Ligue 1"
+    name_tr: "Fransa Ligue 1"
+    country: FR
+    confederation: UEFA
+    tier: T1
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: fr_ligue_1_round_robin
+      - competition_id: fr_coupe_de_france
+      - competition_id: fr_trophee_des_champions
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  # T2 — Beta
+  
+  - league_id: uefa_champions_league
+    name_en: "UEFA Champions League"
+    name_tr: "UEFA Şampiyonlar Ligi"
+    country: null
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-09-01"
+    competitions:
+      - competition_id: uefa_champions_league_qualifying
+      - competition_id: uefa_champions_league_league_phase
+      - competition_id: uefa_champions_league_knockout
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: uefa_europa_league
+    name_en: "UEFA Europa League"
+    name_tr: "UEFA Avrupa Ligi"
+    country: null
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-09-01"
+    competitions:
+      - competition_id: uefa_europa_league_qualifying
+      - competition_id: uefa_europa_league_league_phase
+      - competition_id: uefa_europa_league_knockout
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: uefa_conference_league
+    name_en: "UEFA Conference League"
+    name_tr: "UEFA Konferans Ligi"
+    country: null
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-09-01"
+    competitions:
+      - competition_id: uefa_conference_league_qualifying
+      - competition_id: uefa_conference_league_league_phase
+      - competition_id: uefa_conference_league_knockout
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: fifa_world_cup
+    name_en: "FIFA World Cup"
+    name_tr: "FIFA Dünya Kupası"
+    country: null
+    confederation: FIFA
+    tier: T2
+    active_since: "2024-11-01"
+    competitions:
+      - competition_id: fifa_world_cup_group_stage
+      - competition_id: fifa_world_cup_knockout
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: uefa_euro
+    name_en: "UEFA EURO Championship"
+    name_tr: "UEFA EURO Şampiyonası"
+    country: null
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-06-01"
+    competitions:
+      - competition_id: uefa_euro_group_stage
+      - competition_id: uefa_euro_knockout
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: tr_super_lig_1
+    name_en: "Turkish Süper Lig 1"
+    name_tr: "Türkiye Süper Lig 1"
+    country: TR
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: tr_super_lig_1_round_robin
+    source_coverage:
+      reference: [openfootball, tff]
+      schedule: [mackolik, tff, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  # ===== PHASE 13b — +10 popular leagues (T2) =====
+  
+  - league_id: pt_primeira_liga
+    name_en: "Portuguese Primeira Liga"
+    name_tr: "Portekiz Primeira Liga"
+    country: PT
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: pt_primeira_liga_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: nl_eredivisie
+    name_en: "Dutch Eredivisie"
+    name_tr: "Hollanda Eredivisie"
+    country: NL
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: nl_eredivisie_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: be_pro_league
+    name_en: "Belgian Pro League"
+    name_tr: "Belçika Pro Ligi"
+    country: BE
+    confederation: UEFA
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: be_pro_league_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: br_serie_a
+    name_en: "Brazilian Série A"
+    name_tr: "Brezilya Série A"
+    country: BR
+    confederation: CONMEBOL
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: br_serie_a_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: ar_primera_division
+    name_en: "Argentine Primera División"
+    name_tr: "Arjantin Primera División"
+    country: AR
+    confederation: CONMEBOL
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: ar_primera_division_apertura
+      - competition_id: ar_primera_division_clausura
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: mx_liga_mx
+    name_en: "Mexican Liga MX"
+    name_tr: "Meksika Liga MX"
+    country: MX
+    confederation: CONCACAF
+    tier: T2
+    active_since: "2024-08-15"
+    competitions:
+      - competition_id: mx_liga_mx_apertura
+      - competition_id: mx_liga_mx_clausura
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: us_mls
+    name_en: "United States MLS"
+    name_tr: "ABD MLS"
+    country: US
+    confederation: CONCACAF
+    tier: T2
+    active_since: "2024-03-01"
+    competitions:
+      - competition_id: us_mls_regular_season
+      - competition_id: us_mls_playoffs
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: jp_j_league_1
+    name_en: "Japanese J League 1"
+    name_tr: "Japonya J League 1"
+    country: JP
+    confederation: AFC
+    tier: T2
+    active_since: "2024-03-01"
+    competitions:
+      - competition_id: jp_j_league_1_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: kr_k_league_1
+    name_en: "South Korean K League 1"
+    name_tr: "Güney Kore K League 1"
+    country: KR
+    confederation: AFC
+    tier: T2
+    active_since: "2024-03-01"
+    competitions:
+      - competition_id: kr_k_league_1_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]
+  
+  - league_id: au_a_league_men
+    name_en: "Australian A League Men"
+    name_tr: "Avustralya A League"
+    country: AU
+    confederation: AFC
+    tier: T2
+    active_since: "2024-10-01"
+    competitions:
+      - competition_id: au_a_league_men_round_robin
+    source_coverage:
+      reference: [openfootball]
+      schedule: [mackolik, nesine]
+      live: [mackolik]
+      market: [nesine]

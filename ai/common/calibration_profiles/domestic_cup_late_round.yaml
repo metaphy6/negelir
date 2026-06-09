@@ -1,0 +1,12 @@
+profile_id: domestic_cup_late_round
+description: |
+  Cup quarters / semis / final.
+  All top-tier teams by this stage; similar quality to league but knockout volatility applies.
+
+elo_home_advantage_mult: 0.95
+dixon_coles_rho_add: 0.03
+draw_sample_weight_mult: 0.75
+poisson_max_goals_add: 0.3
+xg_elo_factor_range_mult: 1.05
+upset_prior: 0.02
+zero_home_advantage_when_venue_in: ["neutral", "bubble"]

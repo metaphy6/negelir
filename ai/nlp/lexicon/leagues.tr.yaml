@@ -1,7 +1,7 @@
 _meta:
   schema_version: 1
-  lexicon_version: 1.0.1
-  generated_at_utc: '2026-05-31T20:27:01Z'
+  lexicon_version: 1.0.2
+  generated_at_utc: '2026-06-08T21:24:32Z'
   generator: nlp.lexicon-build
 entries:
 - canonical_id: tr_super_lig
@@ -37,6 +37,10 @@ entries:
   - pl
   - epl
   - ingiliz ligi
+  - premier lig
+  - premierlig
+  - premyer lig
+  - premir lig
 - canonical_id: de_bundesliga
   names:
   - Bundesliga

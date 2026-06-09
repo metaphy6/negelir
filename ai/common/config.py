@@ -77,6 +77,12 @@ class Config:
     league_catalog_active_season: str = field(default_factory=lambda: os.getenv(
         "NEGELIR_LEAGUE_CATALOG_ACTIVE_SEASON", ""
     ).strip())
+    league_catalog_load_max_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_LEAGUE_CATALOG_LOAD_MAX_MS", "50"
+    )))
+    league_preset_total_import_max_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_LEAGUE_PRESET_TOTAL_IMPORT_MAX_MS", "300"
+    )))
     mackolik_group_id: int = field(default_factory=lambda: int(os.getenv("NEGELIR_MACKOLIK_GROUP_ID", "1")))
     mackolik_league_name_filter: str = field(default_factory=lambda: os.getenv("NEGELIR_MACKOLIK_LEAGUE_FILTER", "Süper Lig"))
 
@@ -371,6 +377,154 @@ class Config:
     chaos_trend_regression_pct: float = field(default_factory=lambda: float(os.getenv(
         "NEGELIR_CHAOS_TREND_REGRESSION_PCT", "10.0"
     )))
+
+    # Phase 13 §13.4 — Cross-competition identity resolution (anchor resolver)
+    # Cosine similarity threshold for merging club anchor sets across sources.
+    # When multiple name forms for the same club are observed (e.g., Galatasaray,
+    # Gala, Galata), merge decisions are made when similarity ≥ this threshold.
+    # Uses a small ≤ 50 MB embedding model (fastText or similar).
+    identity_merge_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_IDENTITY_MERGE_THRESHOLD", "0.94"
+    )))
+    # Minimum anchor coverage (proportion of league teams observed) required
+    # before cup competitions (e.g., Türkiye Kupası) are ingested. Prevents
+    # low-confidence cross-competition joins that would lack identity backfill.
+    cup_identity_coverage_min: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_CUP_IDENTITY_COVERAGE_MIN", "0.95"
+    )))
+    # Maximum false-split errors (identity split when should have merged)
+    # permitted per week before alerting. Used by the 4-week soak test.
+    identity_false_split_max_per_week: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_IDENTITY_FALSE_SPLIT_MAX_PER_WEEK", "1"
+    )))
+
+    # Phase 13 §13.11 — NLP + competition gazetteer + Q&A intents
+    # nlp_promotion_recall_min: minimum entity-extraction recall on the per-league
+    #   test corpus required for T2 → T1 promotion (LEAGUE_CATALOG.md §2.2).
+    #   Recall is computed as (true_positives / (true_positives + false_negatives)).
+    #   Default 0.92 (92%).
+    nlp_promotion_recall_min: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_NLP_PROMOTION_RECALL_MIN", "0.92"
+    )))
+    # gazetteer_compile_max_ms: maximum time (milliseconds) to compile a single
+    #   league's gazetteer (one row in the lexicon). Per §13.11.8, must be ≤ 50 ms
+    #   to ensure full 50-league recompile completes in ≤ 1.5 seconds on cold start.
+    gazetteer_compile_max_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_GAZETTEER_COMPILE_MAX_MS", "50"
+    )))
+
+    # Phase 13 §13.4.5 — Cross-competition joins (identity + fatigue)
+    # fatigue_window_h: hours within which a player's recent international fixture
+    #   flags them for home-team fatigue in the predictor (default 72 h).
+    fatigue_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FATIGUE_WINDOW_H", "72"
+    )))
+
+    # Phase 13 §13.5 — Calibration tolerance per competition format
+    # competition_calibration_tolerance_<format>: multiplier on expected logloss
+    #   per format. Example: round_robin=1.10 means allow 10% worse logloss for
+    #   round-robin competitions. Formats: round_robin, single_knockout,
+    #   two_leg_knockout, group_round_robin, final_only, multi_stage_qualifier.
+    competition_calibration_tolerance_round_robin: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_ROUND_ROBIN", "1.10"
+        ))
+    )
+    competition_calibration_tolerance_single_knockout: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_SINGLE_KNOCKOUT", "1.20"
+        ))
+    )
+    competition_calibration_tolerance_two_leg_knockout: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_TWO_LEG_KNOCKOUT", "1.20"
+        ))
+    )
+    competition_calibration_tolerance_group_round_robin: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_GROUP_ROUND_ROBIN", "1.15"
+        ))
+    )
+    competition_calibration_tolerance_final_only: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_FINAL_ONLY", "1.30"
+        ))
+    )
+    competition_calibration_tolerance_multi_stage_qualifier: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMPETITION_CALIBRATION_TOLERANCE_MULTI_STAGE_QUALIFIER", "1.25"
+        ))
+    )
+
+    # Phase 13 §13.7 — Tier promotion gate
+    # league_readiness_report_max_age_h: maximum age in hours for a readiness
+    #   report before a T2→T1 promotion is blocked (default 168 h = 7 days).
+    league_readiness_report_max_age_h: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_LEAGUE_READINESS_REPORT_MAX_AGE_H", "168")
+    ))
+    # league_beta_min_days: minimum calendar days a league must remain in T2
+    #   (beta window) before it can promote to T1 (default 28 days).
+    league_beta_min_days: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_LEAGUE_BETA_MIN_DAYS", "28")
+    ))
+
+    # Phase 13 §13.9 — Performance & footprint
+    # league_catalog_max_rss_mb: maximum resident memory for a fully-loaded
+    #   50-league catalog (default 8 MB; includes all 200+ competitions).
+    league_catalog_max_rss_mb: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_LEAGUE_CATALOG_MAX_RSS_MB", "8")
+    ))
+
+    # Phase 13 §13.10 — Per-league observability
+    # league_t2_max_dwell_days: maximum wall-clock days a league can stay in T2
+    #   before auto-demotion to T3 (default 180 days). Prevents permanent-beta drift.
+    league_t2_max_dwell_days: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_LEAGUE_T2_MAX_DWELL_DAYS", "180")
+    ))
+    # league_demotion_evidence_window_h: required sustained breach window for
+    #   auto-demotion (default 6 hours). Single-spike SLO breaches don't flip tier.
+    league_demotion_evidence_window_h: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_LEAGUE_DEMOTION_EVIDENCE_WINDOW_H", "6")
+    ))
+    # league_demotion_min_days: minimum calendar days between demotion events
+    #   (default 14 days). Prevents thrashing tier.
+    league_demotion_min_days: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_LEAGUE_DEMOTION_MIN_DAYS", "14")
+    ))
+
+    # Phase 13 §13.5 — Calibration backfill & per-format backtest harness
+    # backtest_concurrency_max: maximum number of competitions to backtest in
+    #   parallel when running `make backtest --all` (default = vCPU count).
+    backtest_concurrency_max: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_BACKTEST_CONCURRENCY_MAX", "0")  # 0 = auto (vCPU count)
+    ))
+    # backtest_seed: deterministic seed for reproducible backtest runs.
+    backtest_seed: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_BACKTEST_SEED", "42")
+    ))
+    # cup_early_round_calibration_max_deviation: maximum absolute calibration
+    #   deviation allowed for domestic-cup early rounds (Süper Lig vs Lig 1),
+    #   where tier mismatch is expected (default 0.12).
+    cup_early_round_calibration_max_deviation: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_CUP_EARLY_ROUND_CALIBRATION_MAX_DEVIATION", "0.12")
+    ))
+    # league_calibration_max_deviation: maximum allowed absolute calibration
+    #   deviation for league competitions before re-training is mandated
+    #   (default 0.08, or 8 percentage points in accuracy).
+    league_calibration_max_deviation: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_LEAGUE_CALIBRATION_MAX_DEVIATION", "0.08")
+    ))
+    # era_drift_tolerance: maximum calibration plot drift allowed when
+    #   backtesting across era boundaries (away-goals rule, VAR intro, etc.)
+    #   (default 0.10, or 10 percentage points).
+    era_drift_tolerance: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_ERA_DRIFT_TOLERANCE", "0.10")
+    ))
+    # backtest_swarm_floor_pct: minimum accuracy floor as a percentage for swarm
+    #   backtests (CI gate). Below this, the backtest fails (default 0.01, or 1%).
+    backtest_swarm_floor_pct: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_BACKTEST_SWARM_FLOOR_PCT", "0.01")
+    ))
 
     @property
     def scrape_mackolik_archive(self) -> str:

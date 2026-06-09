@@ -155,3 +155,13 @@ entries:
   - manchester city
   - city
   - man city
+- canonical_id: team_bayern_munich
+  freeform: true
+  names:
+  - Bayern Münih
+  - Bayern Munich
+  aliases:
+  - bayern münih
+  - bayern munich
+  - bayern
+  - fcb

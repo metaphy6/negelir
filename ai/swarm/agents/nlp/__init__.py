@@ -2369,6 +2369,29 @@ class NlpIntentAgent:
                     if decision.emit:
                         results.append(self._make_asr_input_auto_detected_event(request_id))
 
+                # §10.30 meta-question short-circuit: detect conversational meta before intent classification
+                conversational_meta_intent = classify_conversational_meta(sanitized_text)
+                if conversational_meta_intent is not None:
+                    answer_text = self._render_conversational_meta_answer_text(
+                        conversational_meta_intent,
+                        conversation_id or None,
+                        sanitized_text,
+                    )
+                    answer_payload = _make_qa_answer_payload(
+                        request_id=request_id,
+                        qa_correlation_id=_new_id(),
+                        intent=conversational_meta_intent,
+                        kind=conversational_meta_intent,
+                        answer_text=answer_text,
+                        conversation_id=conversation_id,
+                        request_metadata=self._current_request_metadata,
+                        emitted_at_utc=_utc_iso(),
+                    )
+                    return self._with_tr_pii_alerts(
+                        [Message.new(topic=QA_ANSWER_V1, payload=answer_payload, producer=self.name)] + results,
+                        msg.payload,
+                    )
+
                 return self._with_tr_pii_alerts(results, msg.payload)
             finally:
                 self._current_request_metadata = None

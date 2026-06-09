@@ -1,0 +1,12 @@
+profile_id: domestic_cup_early_round
+description: |
+  Cup early rounds with cross-tier mismatches (Türkiye Kupası R1-R3, FA Cup R1-R3).
+  Higher upset variance due to quality imbalance; lower-league giant-killers are more common.
+
+elo_home_advantage_mult: 1.1
+dixon_coles_rho_add: 0.08
+draw_sample_weight_mult: 1.0
+poisson_max_goals_add: 0.5
+xg_elo_factor_range_mult: 1.15
+upset_prior: 0.05
+zero_home_advantage_when_venue_in: []

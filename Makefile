@@ -136,6 +136,18 @@ fix.lua: ## Phase 7 §7.3 — rewrite Lua SHA headers after intended edits
 scrape: env ## Scrape & cache real match data (LEAGUE=super_lig)
 	@$(XOPS)/ai_commands.py scrape --league $(LEAGUE)
 
+.PHONY: league.scaffold
+league.scaffold: env ## Phase 13.3 — scaffold new league preset (LEAGUE_ID=… COUNTRY=… CONFEDERATION=…)
+	@$(XOPS)/league.py scaffold
+
+.PHONY: identity.merge
+identity.merge: env ## Phase 13.4.4 — operator merge stable_ids (STABLE_IDS=a,b REASON="")
+	@$(XOPS)/identity.py merge --stable-ids "$(STABLE_IDS)" --reason "$(REASON)"
+
+.PHONY: identity.split
+identity.split: env ## Phase 13.4.4 — operator split stable_id (STABLE_ID=x INTO=a,b REASON="")
+	@$(XOPS)/identity.py split --stable-id "$(STABLE_ID)" --into "$(INTO)" --reason "$(REASON)"
+
 .PHONY: nlp.audit-rerender
 nlp.audit-rerender: env ## Operator-only runbook for NLP audit bundle re-render
 	@$(XOPS)/nlp.py nlp.audit-rerender
@@ -169,10 +181,14 @@ train-model: env ## Training pipeline stages 1-4 only (no verify/report)
 	@$(XOPS)/ai_commands.py train-model --league $(LEAGUE)
 
 .PHONY: backtest
-backtest: env ## Multi-market backtest (WEEKS=N MIN_CONFIDENCE=0.55 MARKETS=ms,au_2.5,…)
-	@$(XOPS)/ai_commands.py backtest --weeks $(WEEKS) \
+backtest: env ## Backtest: market (WEEKS=N) or competition calibration (COMPETITION=<id> [SEED=...] [WORKERS=...])
+	@$(XOPS)/ai_commands.py backtest \
+		$(if $(COMPETITION),--competition $(COMPETITION),--weeks $(or $(WEEKS),3)) \
 		$(if $(MIN_CONFIDENCE),--min-confidence $(MIN_CONFIDENCE),) \
-		$(if $(MARKETS),--markets $(MARKETS),)
+		$(if $(MARKETS),--markets $(MARKETS),) \
+		$(if $(SEED),--seed $(SEED),) \
+		$(if $(WORKERS),--workers $(WORKERS),) \
+		$(if $(ALL),--all,)
 
 .PHONY: swarm.backtest
 swarm.backtest: ## Phase 5.5 — replay swarm chain over historical matches (WEEKS=N)
@@ -509,6 +525,13 @@ mock.untrust: ## [sudo] Remove dev root CA from system + every Firefox profile
 .PHONY: mock.setup
 mock.setup: ## [sudo] One-shot: hosts.install + mock.trust + mock.up
 	@$(XOPS)/mock.py setup
+
+# ── League management (readiness, promotion, calibration) ────
+# Phase 13 — League catalog & tier system
+
+.PHONY: leagues.readiness
+leagues.readiness: ## Check league readiness for T2/T1 promotion (LEAGUE=<id> TARGET_TIER=<T2|T1>)
+	@$(XOPS)/makefile/leagues.py readiness $(LEAGUE) $(TARGET_TIER)
 
 # ── /etc/hosts integration ──────────────────────────────────
 

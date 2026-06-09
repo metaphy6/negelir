@@ -1,0 +1,5 @@
+{"query": "GS", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "GS abbreviation must resolve to Galatasaray, not ambiguous"}
+{"query": "Fener - FB", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fener and FB both resolve to same team"}
+{"query": "BJK", "intent": "predict.match_outcome", "expected_entities": ["besiktas_jk"], "notes": "BJK abbreviation must resolve"}
+{"query": "GALATASARAY", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "All-caps Galatasaray"}
+{"query": "Trabzonspor-Galatasaray", "intent": "predict.match_outcome", "expected_entities": ["trabzonspor", "galatasaray_sk"], "notes": "No space separator"}

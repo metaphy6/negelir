@@ -170,6 +170,32 @@
       "en_premier_league",
       "Premier Lig",
       0.0
+    ],
+    [
+      "en_premier_league",
+      "premier lig",
+      0.0
+    ]
+  ],
+  "premierlig": [
+    [
+      "en_premier_league",
+      "premierlig",
+      0.0
+    ]
+  ],
+  "premir lig": [
+    [
+      "en_premier_league",
+      "premir lig",
+      0.0
+    ]
+  ],
+  "premyer lig": [
+    [
+      "en_premier_league",
+      "premyer lig",
+      0.0
     ]
   ],
   "primera division": [

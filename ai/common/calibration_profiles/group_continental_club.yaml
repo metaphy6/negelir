@@ -1,0 +1,12 @@
+profile_id: group_continental_club
+description: |
+  UEFA Champions/Europa/Conference League group stage matches.
+  Group-stage draw incentives differ from league (teams seek point-sharing deals).
+
+elo_home_advantage_mult: 0.90
+dixon_coles_rho_add: 0.12
+draw_sample_weight_mult: 1.2
+poisson_max_goals_add: -0.2
+xg_elo_factor_range_mult: 0.95
+upset_prior: 0.02
+zero_home_advantage_when_venue_in: []

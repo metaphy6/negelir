@@ -1,0 +1,50 @@
+{"query": "Bayern tahmini ne", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern Turkish colloquial"}
+{"query": "Bayern Münih maç sonucu", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern Turkish form"}
+{"query": "Bayern Munich tahmini", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern English form"}
+{"query": "FCB kazanır mı", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern abbreviation"}
+{"query": "Bayern Dortmund derbi tahmini", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "borussia_dortmund"], "notes": "Derby match"}
+{"query": "Bayern - Dortmund maç tahmini", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "borussia_dortmund"], "notes": "Match separator"}
+{"query": "Bayern Münih'in haftası nasıl", "intent": "summary.matchday", "expected_entities": ["team_bayern_munich"], "notes": "Possessive suffix"}
+{"query": "Bayern'ın kadrosu kim", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern with Turkish postposition"}
+{"query": "Bayern Münih'de sakatlık var mı", "intent": "injury_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Locative suffix"}
+{"query": "Bayern Münih 1.5 altında", "intent": "predict.1x2_total_goals", "expected_entities": ["team_bayern_munich"], "notes": "Bayern with market"}
+{"query": "Bayern'ın sonraki maçı ne zaman", "intent": "match.kickoff_time", "expected_entities": ["team_bayern_munich"], "notes": "Bayern next match"}
+{"query": "Münih futbolcular transferi", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Shortened form"}
+{"query": "Bayern - Liverpool tahmini", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "liverpool_fc"], "notes": "Bayern vs Liverpool"}
+{"query": "Bayern Münih Real Madrid karşılaşması", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "real_madrid"], "notes": "Bayern vs Real Madrid"}
+{"query": "Bayern kaç tane şampiyon", "intent": "competition_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern championships"}
+{"query": "Bayern Münih'in teknik direktörü", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern coach"}
+{"query": "Bayern Munich dün kazandı mı", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern yesterday result"}
+{"query": "FC Bayern yeni transferleri", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich"], "notes": "FC Bayern full form"}
+{"query": "Bayern Münih Paris'e karşı", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "psg"], "notes": "Bayern vs PSG"}
+{"query": "Bayern'ın sezonun ilk maçı", "intent": "match.kickoff_time", "expected_entities": ["team_bayern_munich"], "notes": "Bayern first match of season"}
+{"query": "Dortmund tahmini", "intent": "predict.match_outcome", "expected_entities": ["borussia_dortmund"], "notes": "Dortmund only"}
+{"query": "Borussia Dortmund maç", "intent": "predict.match_outcome", "expected_entities": ["borussia_dortmund"], "notes": "Full Dortmund name"}
+{"query": "BVB kazanır", "intent": "predict.match_outcome", "expected_entities": ["borussia_dortmund"], "notes": "BVB abbreviation"}
+{"query": "Hamburg maç tahmini", "intent": "predict.match_outcome", "expected_entities": ["hamburger_sv"], "notes": "Hamburg"}
+{"query": "Schalke 04 tahmini", "intent": "predict.match_outcome", "expected_entities": ["fc_schalke_04"], "notes": "Schalke full name"}
+{"query": "Köln futbolcu transferi", "intent": "transfer_lookup", "expected_entities": ["fc_koeln"], "notes": "Cologne/Köln"}
+{"query": "Bayern'ın kötü dizilişi", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern performance context"}
+{"query": "Munich United derbi nasıl sonuçlandı", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "manchester_united"], "notes": "Mixed English/Turkish"}
+{"query": "Bayern vs Dortmund iddaa", "intent": "predict.1x2", "expected_entities": ["team_bayern_munich", "borussia_dortmund"], "notes": "Betting odds"}
+{"query": "Bayern Münih 3 gol atabilir mi", "intent": "predict.goals", "expected_entities": ["team_bayern_munich"], "notes": "Bayern goals prediction"}
+{"query": "Bayern şampiyonluğu kaptı", "intent": "competition_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Championship history"}
+{"query": "Bayern'ın eski yıldızı", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern past players"}
+{"query": "Bayern München kazanmış olur mu", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Subjunctive/conditional"}
+{"query": "Bayern Münih hangi ligde oynuyor", "intent": "competition_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern league query"}
+{"query": "FCB vs PSG tahmini", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "psg"], "notes": "FCB abbreviation match"}
+{"query": "Bayern'ın sezon performansı", "intent": "summary.next_week", "expected_entities": ["team_bayern_munich"], "notes": "Season performance"}
+{"query": "Bayern savunması zayıf mı", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern defense"}
+{"query": "Bayern Münih'e karşı nasıl oynayalım", "intent": "strategy.counter", "expected_entities": ["team_bayern_munich"], "notes": "Strategy against Bayern"}
+{"query": "Bayern'da yaralanma var", "intent": "injury_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern injuries"}
+{"query": "Bayern Manchester kimler oynuyor", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich", "manchester_city"], "notes": "Player lineup"}
+{"query": "Bayern haftanın en iyi takımı", "intent": "summary.matchday", "expected_entities": ["team_bayern_munich"], "notes": "Best team of week"}
+{"query": "Bayern Dortmund öncelikli bahis", "intent": "predict.1x2", "expected_entities": ["team_bayern_munich", "borussia_dortmund"], "notes": "Primary betting matchup"}
+{"query": "Bayern Munich'in yeni antrenörü", "intent": "transfer_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern new coach"}
+{"query": "Bayern Münih kaç yaşında", "intent": "competition_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern founding/history"}
+{"query": "Bayern sezonun gol krallığı", "intent": "predict.goals", "expected_entities": ["team_bayern_munich"], "notes": "Top scorer"}
+{"query": "Bayern'ın hava oyunu", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern aerial play"}
+{"query": "Bayern çıkışı ne zaman", "intent": "match.kickoff_time", "expected_entities": ["team_bayern_munich"], "notes": "Bayern departure time"}
+{"query": "Bayern Münih stadyumu", "intent": "competition_lookup", "expected_entities": ["team_bayern_munich"], "notes": "Bayern stadium"}
+{"query": "Bayern'ın hücum hattı", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich"], "notes": "Bayern attack line"}
+{"query": "Bayern Manchester final tahmini", "intent": "predict.match_outcome", "expected_entities": ["team_bayern_munich", "manchester_city"], "notes": "Bayern vs Man City final"}

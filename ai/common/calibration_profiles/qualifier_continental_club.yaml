@@ -1,0 +1,16 @@
+profile_id: qualifier_continental_club
+description: |
+  UEFA Champions/Europa/Conference League qualifying rounds.
+  Multi-round qualifier; seeded paths and aggregate ties over multiple legs.
+
+elo_home_advantage_mult: 0.75
+dixon_coles_rho_add: 0.06
+draw_sample_weight_mult: 0.8
+poisson_max_goals_add: 0.5
+xg_elo_factor_range_mult: 1.08
+upset_prior: 0.04
+zero_home_advantage_when_venue_in: ["neutral", "bubble"]
+two_leg:
+  away_goals_rule_active_until: "2021-05-31"
+  aggregate_logic: sum_goals
+  penalty_shootout_modeled: true

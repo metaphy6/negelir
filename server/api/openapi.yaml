@@ -446,6 +446,37 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /v1/catalog:
+    get:
+      operationId: getCatalog
+      summary: League catalog (admin-token-gated) — Phase 13.1
+      tags: [admin]
+      x-rate-cost: 0
+      x-tier-required: none
+      x-idempotent-mutation: false
+      description: |
+        Returns the canonical league catalog view + etag=catalog_sha256.
+        Requires admin token; clients cache against the etag.
+        Binding on Phase 13.1 — returns canonical YAML serialization as JSON.
+      responses:
+        "200":
+          description: League catalog
+          headers:
+            ETag:
+              schema:
+                type: string
+                description: "SHA-256 hash of the canonical catalog YAML"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
 # ── Components ────────────────────────────────────────────────────────────────
 
 components:
@@ -779,3 +810,87 @@ components:
         tier:
           type: string
           description: Dormant until Phase 20
+
+    CatalogResponse:
+      type: object
+      required: [schema_version, leagues]
+      properties:
+        schema_version:
+          type: integer
+          description: Catalog schema version (e.g., 1)
+        leagues:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogLeagueRow"
+      additionalProperties: false
+
+    CatalogLeagueRow:
+      type: object
+      required: [league_id, name_en, name_tr, confederation, tier, active_since, competitions, source_coverage]
+      properties:
+        league_id:
+          type: string
+          description: Stable league identifier (e.g., tr_super_lig)
+        name_en:
+          type: string
+          description: League name in English
+        name_tr:
+          type: string
+          description: League name in Turkish
+        country:
+          type: string
+          nullable: true
+          description: ISO-3166 country code or null for multi-national competitions
+        confederation:
+          type: string
+          enum: [UEFA, CONMEBOL, CONCACAF, AFC, CAF, OFC, FIFA]
+          description: Governing confederation
+        tier:
+          type: string
+          enum: [T1, T2, T3]
+          description: "Tier (T1=GA, T2=Beta, T3=Research)"
+        active_since:
+          type: string
+          format: date
+          description: ISO-8601 date when the league became active
+        competitions:
+          type: array
+          items:
+            type: object
+            required: [competition_id]
+            properties:
+              competition_id:
+                type: string
+                description: Unique competition identifier within the league
+            additionalProperties: false
+        source_coverage:
+          type: object
+          required: [reference, schedule, live, editorial, market]
+          properties:
+            reference:
+              type: array
+              items:
+                type: string
+              description: Reference data sources
+            schedule:
+              type: array
+              items:
+                type: string
+              description: Fixture schedule sources
+            live:
+              type: array
+              items:
+                type: string
+              description: Live match sources
+            editorial:
+              type: array
+              items:
+                type: string
+              description: Editorial/news sources
+            market:
+              type: array
+              items:
+                type: string
+              description: Betting market sources
+          additionalProperties: false
+      additionalProperties: false

@@ -2727,6 +2727,80 @@ class TestNlpDispatcherDeterministicBackoff:
         assert len(payload["qa_correlation_id"]) > 0
 
 
+class TestPhase13QuaIntents:
+    """Phase 13.11 — test 6 new Q&A intents route correctly (competition_lookup, transfer_lookup, injury_lookup, referee_lookup, weather_lookup, suspension_lookup)."""
+
+    @pytest.fixture
+    def agent(self) -> NlpDispatcherAgent:
+        return NlpDispatcherAgent()
+
+    def test_competition_lookup_routes_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """data.competition_lookup intent routes to data.request.v1."""
+        msg = _make_intent_msg({
+            "intent": "data.competition_lookup",
+            "entities": [_make_competition_entity("ucl")],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "competition_lookup"
+
+    def test_transfer_lookup_routes_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """data.transfer_lookup intent routes to data.request.v1."""
+        msg = _make_intent_msg({
+            "intent": "data.transfer_lookup",
+            "entities": [_make_team_entity("gs")],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "transfer_lookup"
+
+    def test_injury_lookup_routes_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """data.injury_lookup intent routes to data.request.v1."""
+        msg = _make_intent_msg({
+            "intent": "data.injury_lookup",
+            "entities": [_make_team_entity("fb")],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "injury_lookup"
+
+    def test_referee_lookup_routes_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """data.referee_lookup intent routes to data.request.v1."""
+        msg = _make_intent_msg({
+            "intent": "data.referee_lookup",
+            "entities": [_make_team_entity("gs"), _make_team_entity("fb")],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "referee_lookup"
+
+    def test_weather_lookup_routes_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """data.weather_lookup intent routes to data.request.v1."""
+        msg = _make_intent_msg({
+            "intent": "data.weather_lookup",
+            "entities": [_make_team_entity("gs"), _make_team_entity("fb")],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "weather_lookup"
+
+    def test_suspension_lookup_routes_to_data_request(self, agent: NlpDispatcherAgent) -> None:
+        """data.suspension_lookup intent routes to data.request.v1."""
+        msg = _make_intent_msg({
+            "intent": "data.suspension_lookup",
+            "entities": [_make_team_entity("gs")],
+        })
+        results = list(agent.handle(msg))
+        assert len(results) == 1
+        assert results[0].envelope.topic == DATA_REQUEST_V1
+        assert results[0].payload["kind"] == "suspension_lookup"
+
+
 class TestNlpDispatcherMatchSeparator:
     def test_nlp_team_pair_sorted_before_dispatch(
         self, agent: NlpDispatcherAgent

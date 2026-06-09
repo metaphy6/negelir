@@ -1,0 +1,299 @@
+{
+  "16'da": [
+    [
+      "stage_last16",
+      "16'da",
+      0.0
+    ]
+  ],
+  "ceyrek final": [
+    [
+      "stage_quarterfinal",
+      "Çeyrek Final",
+      0.0
+    ],
+    [
+      "stage_quarterfinal",
+      "çeyrek final",
+      0.0
+    ]
+  ],
+  "ceyrek finali": [
+    [
+      "stage_quarterfinal",
+      "Çeyrek Finali",
+      0.0
+    ],
+    [
+      "stage_quarterfinal",
+      "çeyrek finali",
+      0.0
+    ]
+  ],
+  "elemeler": [
+    [
+      "stage_prequalify",
+      "elemeler",
+      0.0
+    ]
+  ],
+  "grup": [
+    [
+      "stage_group",
+      "grup",
+      0.0
+    ]
+  ],
+  "grup asamasi": [
+    [
+      "stage_group",
+      "Grup Aşaması",
+      0.0
+    ],
+    [
+      "stage_group",
+      "grup aşaması",
+      0.0
+    ]
+  ],
+  "grup donemi": [
+    [
+      "stage_group",
+      "Grup Dönemi",
+      0.0
+    ]
+  ],
+  "grup maclari": [
+    [
+      "stage_group",
+      "grup maçları",
+      0.0
+    ]
+  ],
+  "gruplar": [
+    [
+      "stage_group",
+      "gruplar",
+      0.0
+    ]
+  ],
+  "karar maci": [
+    [
+      "stage_playoff",
+      "karar maçı",
+      0.0
+    ]
+  ],
+  "last 16": [
+    [
+      "stage_last16",
+      "last 16",
+      0.0
+    ]
+  ],
+  "on eleme": [
+    [
+      "stage_prequalify",
+      "Ön Eleme",
+      0.0
+    ],
+    [
+      "stage_prequalify",
+      "ön eleme",
+      0.0
+    ]
+  ],
+  "on elemeler": [
+    [
+      "stage_prequalify",
+      "Ön Elemeler",
+      0.0
+    ]
+  ],
+  "on elemeleri": [
+    [
+      "stage_prequalify",
+      "ön elemeleri",
+      0.0
+    ]
+  ],
+  "play off": [
+    [
+      "stage_playoff",
+      "play off",
+      0.0
+    ]
+  ],
+  "play-off": [
+    [
+      "stage_playoff",
+      "Play-off",
+      0.0
+    ],
+    [
+      "stage_playoff",
+      "play-off",
+      0.0
+    ]
+  ],
+  "playoff": [
+    [
+      "stage_playoff",
+      "playoff",
+      0.0
+    ]
+  ],
+  "playoff donemi": [
+    [
+      "stage_playoff",
+      "Playoff Dönemi",
+      0.0
+    ]
+  ],
+  "playoff maclari": [
+    [
+      "stage_playoff",
+      "playoff maçları",
+      0.0
+    ]
+  ],
+  "pre-qual": [
+    [
+      "stage_prequalify",
+      "pre-qual",
+      0.0
+    ]
+  ],
+  "preliminary": [
+    [
+      "stage_prequalify",
+      "preliminary",
+      0.0
+    ]
+  ],
+  "qf": [
+    [
+      "stage_quarterfinal",
+      "qf",
+      0.0
+    ]
+  ],
+  "quarter final": [
+    [
+      "stage_quarterfinal",
+      "quarter final",
+      0.0
+    ]
+  ],
+  "quarter finals": [
+    [
+      "stage_quarterfinal",
+      "quarter finals",
+      0.0
+    ]
+  ],
+  "quarter-final": [
+    [
+      "stage_quarterfinal",
+      "quarter-final",
+      0.0
+    ]
+  ],
+  "r16": [
+    [
+      "stage_last16",
+      "r16",
+      0.0
+    ]
+  ],
+  "round of 16": [
+    [
+      "stage_last16",
+      "round of 16",
+      0.0
+    ]
+  ],
+  "semi final": [
+    [
+      "stage_semifinal",
+      "semi final",
+      0.0
+    ]
+  ],
+  "semi finals": [
+    [
+      "stage_semifinal",
+      "semi finals",
+      0.0
+    ]
+  ],
+  "semi-final": [
+    [
+      "stage_semifinal",
+      "semi-final",
+      0.0
+    ]
+  ],
+  "sf": [
+    [
+      "stage_semifinal",
+      "sf",
+      0.0
+    ]
+  ],
+  "son 16": [
+    [
+      "stage_last16",
+      "Son 16",
+      0.0
+    ],
+    [
+      "stage_last16",
+      "son 16",
+      0.0
+    ]
+  ],
+  "son on alti": [
+    [
+      "stage_last16",
+      "Son On Altı",
+      0.0
+    ],
+    [
+      "stage_last16",
+      "son on altı",
+      0.0
+    ]
+  ],
+  "yari": [
+    [
+      "stage_semifinal",
+      "yarı",
+      0.0
+    ]
+  ],
+  "yari final": [
+    [
+      "stage_semifinal",
+      "Yarı Final",
+      0.0
+    ],
+    [
+      "stage_semifinal",
+      "yarı final",
+      0.0
+    ]
+  ],
+  "yari finali": [
+    [
+      "stage_semifinal",
+      "Yarı Finali",
+      0.0
+    ],
+    [
+      "stage_semifinal",
+      "yarı finali",
+      0.0
+    ]
+  ]
+}

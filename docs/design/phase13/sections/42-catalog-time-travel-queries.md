@@ -9,8 +9,8 @@
 
 > Retires assumption §13.0 #49.
 
-- [ ] **`/v1/catalog?asof=<utc>` endpoint.** Returns the catalog as it was at that UTC moment by replaying §13.21 audit-ledger entries onto a snapshot baseline.
-- [ ] **Bounded asof range.** `asof` accepted within `cfg.catalog_asof_max_age_days` (default 730 = 2 years); requests outside range return `400 + X-Reason: asof_out_of_range`.
-- [ ] **Replay determinism.** Two calls with the same `asof` return byte-identical bodies (proof test `test_catalog_asof_deterministic.py`).
-- [ ] **Audit integration.** Time-travel reads do not write audit entries (read-only) but emit a `catalog.timetravel.v1{actor, asof, etag}` low-volume log line.
-- [ ] **Patcher / ops-console consumption.** Phase 17 patcher and Phase 8 ops console can reproduce a historical decision by joining `prediction.created_at` with the catalog `asof`.
+- [x] **`/v1/catalog?asof=<utc>` endpoint.** Returns the catalog as it was at that UTC moment by replaying §13.21 audit-ledger entries onto a snapshot baseline.
+- [x] **Bounded asof range.** `asof` accepted within `cfg.catalog_asof_max_age_days` (default 730 = 2 years); requests outside range return `400 + X-Reason: asof_out_of_range`.
+- [x] **Replay determinism.** Two calls with the same `asof` return byte-identical bodies (proof test `test_catalog_asof_deterministic.py`).
+- [x] **Audit integration.** Time-travel reads do not write audit entries (read-only) but emit a `catalog.timetravel.v1{actor, asof, etag}` low-volume log line.
+- [x] **Patcher / ops-console consumption.** Phase 17 patcher and Phase 8 ops console can reproduce a historical decision by joining `prediction.created_at` with the catalog `asof`.

@@ -95,6 +95,37 @@
       0.0
     ]
   ],
+  "bayern": [
+    [
+      "team_bayern_munich",
+      "bayern",
+      0.0
+    ]
+  ],
+  "bayern munich": [
+    [
+      "team_bayern_munich",
+      "Bayern Munich",
+      0.0
+    ],
+    [
+      "team_bayern_munich",
+      "bayern munich",
+      0.0
+    ]
+  ],
+  "bayern munih": [
+    [
+      "team_bayern_munich",
+      "Bayern Münih",
+      0.0
+    ],
+    [
+      "team_bayern_munich",
+      "bayern münih",
+      0.0
+    ]
+  ],
   "besiktas": [
     [
       "besiktas_jk",
@@ -177,6 +208,13 @@
       0.0
     ]
   ],
+  "city": [
+    [
+      "manchester_city",
+      "city",
+      0.0
+    ]
+  ],
   "demirspor": [
     [
       "adana_demirspor",
@@ -202,6 +240,13 @@
     [
       "fenerbahce_sk",
       "FB",
+      0.0
+    ]
+  ],
+  "fcb": [
+    [
+      "team_bayern_munich",
+      "fcb",
       0.0
     ]
   ],
@@ -285,6 +330,23 @@
       0.0
     ]
   ],
+  "genclerbirligi": [
+    [
+      "genclerbirligi",
+      "Gençlerbirliği",
+      0.0
+    ],
+    [
+      "genclerbirligi",
+      "genclerbirligi",
+      0.0
+    ],
+    [
+      "genclerbirligi",
+      "gençlerbirliği",
+      0.0
+    ]
+  ],
   "gfk": [
     [
       "gaziantep_fk",
@@ -303,6 +365,18 @@
     [
       "giresunspor",
       "Giresunspor",
+      0.0
+    ]
+  ],
+  "goztepe": [
+    [
+      "goztepe",
+      "Göztepe",
+      0.0
+    ],
+    [
+      "goztepe",
+      "goztepe",
       0.0
     ]
   ],
@@ -415,6 +489,25 @@
     [
       "kasimpasa_sk",
       "KSK",
+      0.0
+    ]
+  ],
+  "man city": [
+    [
+      "manchester_city",
+      "man city",
+      0.0
+    ]
+  ],
+  "manchester city": [
+    [
+      "manchester_city",
+      "Manchester City",
+      0.0
+    ],
+    [
+      "manchester_city",
+      "manchester city",
       0.0
     ]
   ],

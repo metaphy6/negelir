@@ -1,0 +1,52 @@
+{"query": "Galatasaray tahmini ne", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray standard form"}
+{"query": "Galatasaray maç sonucu", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray match result"}
+{"query": "Gala derbi", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray nickname"}
+{"query": "GS kazanır mı", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray abbreviation"}
+{"query": "Galatasaray Fenerbahçe derbi tahmini", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk", "fenerbahce_sk"], "notes": "Galatasaray Fenerbahçe derby"}
+{"query": "Galatasaray'ın sonucu ne", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray with possessive suffix"}
+{"query": "Galatasaray'da sakatlık var mı", "intent": "injury_lookup", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray locative suffix"}
+{"query": "Fenerbahçe tahmini", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe standard form"}
+{"query": "Fenerbahçe Beşiktaş maçı", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk", "besiktas_jk"], "notes": "Fenerbahçe Beşiktaş match"}
+{"query": "Fener FB derbi", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe nickname"}
+{"query": "Beşiktaş tahmini", "intent": "predict.match_outcome", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş standard form"}
+{"query": "Beşiktaş şampiyon", "intent": "competition_lookup", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş championship"}
+{"query": "BJK kazanır", "intent": "predict.match_outcome", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş abbreviation"}
+{"query": "Trabzonspor kazanacak mı", "intent": "predict.match_outcome", "expected_entities": ["trabzonspor"], "notes": "Trabzonspor standard form"}
+{"query": "Trabzonspor Galatasaray", "intent": "predict.match_outcome", "expected_entities": ["trabzonspor", "galatasaray_sk"], "notes": "Trabzonspor vs Galatasaray"}
+{"query": "TS maçı", "intent": "predict.match_outcome", "expected_entities": ["trabzonspor"], "notes": "Trabzonspor abbreviation"}
+{"query": "Başakşehir tahmini", "intent": "predict.match_outcome", "expected_entities": ["istanbul_basaksehir"], "notes": "Başakşehir standard form"}
+{"query": "Başakşehir FK kazanır mı", "intent": "predict.match_outcome", "expected_entities": ["istanbul_basaksehir"], "notes": "Başakşehir full form"}
+{"query": "İstanbul Başakşehir", "intent": "predict.match_outcome", "expected_entities": ["istanbul_basaksehir"], "notes": "İstanbul Başakşehir"}
+{"query": "Kasımpaşa maçı", "intent": "predict.match_outcome", "expected_entities": ["kasimpasa"], "notes": "Kasımpaşa standard form"}
+{"query": "Konyaspor tahmini", "intent": "predict.match_outcome", "expected_entities": ["konyaspor"], "notes": "Konyaspor standard form"}
+{"query": "Konya maç", "intent": "predict.match_outcome", "expected_entities": ["konyaspor"], "notes": "Konyaspor shortened"}
+{"query": "Alanyaspor kazanacak", "intent": "predict.match_outcome", "expected_entities": ["alanyaspor"], "notes": "Alanyaspor standard form"}
+{"query": "Gaziantep FK tahmini", "intent": "predict.match_outcome", "expected_entities": ["gaziantep_fk"], "notes": "Gaziantep FK"}
+{"query": "Gaziantep maç", "intent": "predict.match_outcome", "expected_entities": ["gaziantep_fk"], "notes": "Gaziantep shortened"}
+{"query": "Kayserispor derbi", "intent": "predict.match_outcome", "expected_entities": ["kayserispor"], "notes": "Kayserispor standard form"}
+{"query": "Sivasspor maçı", "intent": "predict.match_outcome", "expected_entities": ["sivasspor"], "notes": "Sivasspor standard form"}
+{"query": "Riize FK", "intent": "predict.match_outcome", "expected_entities": ["rize_fk"], "notes": "Rize FK"}
+{"query": "Adana Demirspor tahmini", "intent": "predict.match_outcome", "expected_entities": ["adana_demirspor"], "notes": "Adana Demirspor"}
+{"query": "Hatayspor maç", "intent": "predict.match_outcome", "expected_entities": ["hatayspor"], "notes": "Hatayspor standard form"}
+{"query": "Galatasaray Fenerbahçe", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk", "fenerbahce_sk"], "notes": "Galatasaray vs Fenerbahçe"}
+{"query": "Galatasaray Beşiktaş Fenerbahçe", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk", "besiktas_jk", "fenerbahce_sk"], "notes": "Three big teams"}
+{"query": "Trabzonspor Galatasaray Fenerbahçe", "intent": "predict.match_outcome", "expected_entities": ["trabzonspor", "galatasaray_sk", "fenerbahce_sk"], "notes": "Four big teams"}
+{"query": "Galatasaray'ın kadrosu", "intent": "transfer_lookup", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray squad"}
+{"query": "Fenerbahçe'nin yeni transferleri", "intent": "transfer_lookup", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe transfers"}
+{"query": "Beşiktaş'ın sezon tahmini", "intent": "predict.match_outcome", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş season prediction"}
+{"query": "Galatasaray yarın maç yapacak mı", "intent": "match.kickoff_time", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray tomorrow"}
+{"query": "Fenerbahçe bu haftanın maçı", "intent": "match.kickoff_time", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe this week"}
+{"query": "Beşiktaş'ın haftası nasıl", "intent": "summary.matchday", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş week summary"}
+{"query": "GS Gala Cimbom", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray nicknames"}
+{"query": "Trabzonspor Bordo-Mavi", "intent": "predict.match_outcome", "expected_entities": ["trabzonspor"], "notes": "Trabzonspor color"}
+{"query": "Çaykur Rizespor FK", "intent": "predict.match_outcome", "expected_entities": ["rize_fk"], "notes": "Rize alternative name"}
+{"query": "Galatasaray'ın başkanı", "intent": "transfer_lookup", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray president"}
+{"query": "Fenerbahçe şampiyon tahmini", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe champion prediction"}
+{"query": "Beşiktaş sezonun ilk maçı", "intent": "match.kickoff_time", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş season opener"}
+{"query": "Trabzonspor sezonun son maçı", "intent": "match.kickoff_time", "expected_entities": ["trabzonspor"], "notes": "Trabzonspor season finale"}
+{"query": "GS FB BJK", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk", "fenerbahce_sk", "besiktas_jk"], "notes": "Big three abbreviations"}
+{"query": "Galatasaray FC", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Galatasaray English form"}
+{"query": "Fenerbahçe SK", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe SK form"}
+{"query": "Beşiktaş JK", "intent": "predict.match_outcome", "expected_entities": ["besiktas_jk"], "notes": "Beşiktaş JK form"}
+{"query": "Cimbom derbi", "intent": "predict.match_outcome", "expected_entities": ["galatasaray_sk"], "notes": "Cimbom Galatasaray nickname"}
+{"query": "Sarı-Kırmızılar Fenerbahçe", "intent": "predict.match_outcome", "expected_entities": ["fenerbahce_sk"], "notes": "Fenerbahçe color reference"}

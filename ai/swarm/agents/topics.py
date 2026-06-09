@@ -210,11 +210,19 @@ NLP_PROBER_V1 = Topic("nlp.prober.v1")
 PREDICT_REQUEST_V1 = Topic("predict.request.v1")
 DATA_REQUEST_V1 = Topic("data.request.v1")
 
+# Phase 13 §13.4 — Identity management + cross-competition joins
+# `identity.merge.v1` — audit topic for all identity merge / split decisions.
+# Every merge / split decision emits {decision, similarity, anchor_set_before,
+# anchor_set_after, actor=resolver|operator}. Consumed by Phase 8 ops console
+# and replayable to reconstruct resolver state at any past time (Phase 13.4 DoD).
+IDENTITY_MERGE_V1 = Topic("identity.merge.v1")
+
 
 __all__ = [
     "API_REQUEST_V1",
     "API_RESPONSE_V1",
     "DATA_REQUEST_V1",
+    "IDENTITY_MERGE_V1",
     "NLP_ALERT_V1",
     "NLP_EVENT_V1",
     "NLP_GOSSIP_V1",

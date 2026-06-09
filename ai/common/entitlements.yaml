@@ -1,0 +1,161 @@
+# Entitlements catalog for Negelir
+# Maps league_id → access tiers (free/pro/premium)
+# Phase 13: Catalog & schema authority
+# Updated: 2026-06-08
+
+# T1 (tier-1 priority leagues)
+tr_super_lig:
+  name: "Turkish Süper Lig"
+  tier: T1
+  entitlements:
+    - free
+    - pro
+    - premium
+
+en_premier_league:
+  name: "English Premier League"
+  tier: T1
+  entitlements:
+    - free
+    - pro
+    - premium
+
+es_la_liga:
+  name: "Spanish La Liga"
+  tier: T1
+  entitlements:
+    - pro
+    - premium
+
+de_bundesliga:
+  name: "German Bundesliga"
+  tier: T1
+  entitlements:
+    - pro
+    - premium
+
+it_serie_a:
+  name: "Italian Serie A"
+  tier: T1
+  entitlements:
+    - pro
+    - premium
+
+fr_ligue_1:
+  name: "French Ligue 1"
+  tier: T1
+  entitlements:
+    - pro
+    - premium
+
+# European Cups (T2)
+uefa_champions_league:
+  name: "UEFA Champions League"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+uefa_europa_league:
+  name: "UEFA Europa League"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+uefa_conference_league:
+  name: "UEFA Conference League"
+  tier: T2
+  entitlements:
+    - premium
+
+# International Tournaments (T2)
+fifa_world_cup:
+  name: "FIFA World Cup"
+  tier: T2
+  entitlements:
+    - free
+    - pro
+    - premium
+
+uefa_euro:
+  name: "UEFA European Championship"
+  tier: T2
+  entitlements:
+    - free
+    - pro
+    - premium
+
+# T2 (tier-2 secondary leagues)
+tr_super_lig_1:
+  name: "Turkish 1. Lig (Division 2)"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+pt_primeira_liga:
+  name: "Portuguese Primeira Liga"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+nl_eredivisie:
+  name: "Dutch Eredivisie"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+be_pro_league:
+  name: "Belgian Pro League"
+  tier: T2
+  entitlements:
+    - premium
+
+br_serie_a:
+  name: "Brazilian Serie A"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+ar_primera_division:
+  name: "Argentine Primera División"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+mx_liga_mx:
+  name: "Mexican Liga MX"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+us_mls:
+  name: "Major League Soccer (USA)"
+  tier: T2
+  entitlements:
+    - pro
+    - premium
+
+jp_j_league_1:
+  name: "Japanese J-League 1"
+  tier: T2
+  entitlements:
+    - premium
+
+kr_k_league_1:
+  name: "South Korean K-League 1"
+  tier: T2
+  entitlements:
+    - premium
+
+au_a_league_men:
+  name: "Australian A-League Men"
+  tier: T2
+  entitlements:
+    - premium

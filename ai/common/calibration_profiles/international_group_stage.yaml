@@ -1,0 +1,12 @@
+profile_id: international_group_stage
+description: |
+  EURO/World Cup/Copa América/AFCON group stage matches.
+  National-team scope; draw deals are explicit (see COMPETITIONS.md §5.4).
+
+elo_home_advantage_mult: 0.70
+dixon_coles_rho_add: 0.15
+draw_sample_weight_mult: 1.3
+poisson_max_goals_add: -0.3
+xg_elo_factor_range_mult: 0.90
+upset_prior: 0.03
+zero_home_advantage_when_venue_in: []

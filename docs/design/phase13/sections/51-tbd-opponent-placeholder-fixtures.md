@@ -11,8 +11,8 @@
 > slots whose opponents are still TBD; predictor must surface
 > partial markets without inventing a concrete fixture.
 
-- [ ] **`Fixture.opponent_placeholder` field.** Schema-level reference: `{role: "home"|"away", source_slot_id: "winner_of(quarter_final_3)"|"runner_up_of(group_b)", expected_resolution_by_utc}`; mutually exclusive with the corresponding `*_team_id` field.
-- [ ] **Predictor partial-market policy.** With one placeholder, predictor publishes `competition.qualify` and `competition.advance` markets (consume the bracket flow §13.53); refuses 1X2, BTTS, scoreline (proof test `test_placeholder_fixture_partial_markets.py`).
-- [ ] **Materialisation event.** `fixture.placeholder.resolved.v1{fixture_id, role, resolved_team_id}` triggers full re-prediction with `revision++`.
-- [ ] **Stale-placeholder watchdog.** A placeholder past `expected_resolution_by_utc + cfg.placeholder_stale_grace_h` (default 24 h) emits `proof.flag.v1{kind=placeholder_stale}` so ops chases the federation.
-- [ ] **No fabrication.** Lint refuses any code path that synthesises a synthetic team for a placeholder (doctrine #3).
+- [x] **`Fixture.opponent_placeholder` field.** Schema-level reference: `{role: "home"|"away", source_slot_id: "winner_of(quarter_final_3)"|"runner_up_of(group_b)", expected_resolution_by_utc}`; mutually exclusive with the corresponding `*_team_id` field.
+- [x] **Predictor partial-market policy.** With one placeholder, predictor publishes `competition.qualify` and `competition.advance` markets (consume the bracket flow §13.53); refuses 1X2, BTTS, scoreline (proof test `test_placeholder_fixture_partial_markets.py`).
+- [x] **Materialisation event.** `fixture.placeholder.resolved.v1{fixture_id, role, resolved_team_id}` triggers full re-prediction with `revision++`.
+- [x] **Stale-placeholder watchdog.** A placeholder past `expected_resolution_by_utc + cfg.placeholder_stale_grace_h` (default 24 h) emits `proof.flag.v1{kind=placeholder_stale}` so ops chases the federation.
+- [x] **No fabrication.** Lint refuses any code path that synthesises a synthetic team for a placeholder (doctrine #3).

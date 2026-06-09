@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calibration_profile.yaml (v1)",
+  "description": "Phase 13.2 — Calibration profile YAML per docs/design/COMPETITIONS.md §4. Loaded at boot by CalibrationProfileLoader; validates profile_id uniqueness, required fields, and numeric ranges.",
+  "type": "object",
+  "required": ["profile_id", "description"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9_]+$",
+      "description": "Unique profile identifier used by Competition.calibration_profile_id and CompetitionStage.calibration_profile_id overrides. Filename MUST match this value."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable description of when/why this profile is used."
+    },
+    "elo_home_advantage_mult": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2.0,
+      "description": "Multiplicative overlay on LeagueConfig.elo_home_advantage (e.g. 0.5 for cup neutral venues). Default 1.0 if absent."
+    },
+    "dixon_coles_rho_add": {
+      "type": "number",
+      "minimum": -0.5,
+      "maximum": 0.5,
+      "description": "Additive adjustment to Dixon-Coles rho (low-scoring inflation). Default 0.0 if absent."
+    },
+    "draw_sample_weight_mult": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 2.0,
+      "description": "Multiplicative overlay on draw sample weight (e.g. 0.7 for KO draws being artifacts). Default 1.0 if absent."
+    },
+    "poisson_max_goals_add": {
+      "type": "number",
+      "minimum": -2,
+      "maximum": 3,
+      "description": "Additive adjustment to max goals in tail distribution. Default 0.0 if absent."
+    },
+    "xg_elo_factor_range_mult": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 2.0,
+      "description": "Multiplicative variance scale for xG-Elo interaction. Default 1.0 if absent."
+    },
+    "upset_prior": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.2,
+      "description": "Additive prior on the underdog column of 1X2 predictions. Default 0.0 if absent."
+    },
+    "zero_home_advantage_when_venue_in": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["neutral", "bubble", "host_country"]
+      },
+      "description": "List of venue_policy values that force home_advantage to zero regardless of elo_home_advantage_mult. Typical: [\"neutral\", \"bubble\"]."
+    },
+    "two_leg": {
+      "type": "object",
+      "description": "Optional section: tie-aggregation rules for two_leg_knockout format.",
+      "properties": {
+        "away_goals_rule_active_until": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ISO-8601 date after which away-goals rule is no longer active (e.g., '2021-05-31' for pre-2021/22 UCL). Null for competitions where rule is perpetually active."
+        },
+        "aggregate_logic": {
+          "type": "string",
+          "enum": ["sum_goals"],
+          "description": "How goals are aggregated (currently only 'sum_goals' supported)."
+        },
+        "penalty_shootout_modeled": {
+          "type": "boolean",
+          "description": "Whether penalties are explicitly modeled vs skipped. Default true."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

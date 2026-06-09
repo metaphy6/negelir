@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 859,
+    "build": 939,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.115.9",
+      "version": "1.123.7",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-08T19:51:45+00:00",
+      "last_changed": "2026-06-08T23:43:27+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.45.14",
+      "version": "1.46.0",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-08T15:46:05+00:00",
+      "last_changed": "2026-06-08T20:55:18+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.57.1",
+      "version": "3.61.2",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-08T19:34:44+00:00"
+      "last_changed": "2026-06-08T23:43:22+00:00"
     },
     "docs": {
-      "version": "2.18.8",
+      "version": "3.0.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-08T20:19:07+00:00"
+      "last_changed": "2026-06-09T00:05:13+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -14997,6 +14997,726 @@
       "from": "2.18.7",
       "to": "2.18.8",
       "build": 859
+    },
+    {
+      "timestamp": "2026-06-08T20:25:09+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.1: League catalog YAML with 22 leagues for 13a/13b",
+      "from": "2.18.8",
+      "to": "2.18.9",
+      "build": 860
+    },
+    {
+      "timestamp": "2026-06-08T20:28:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.1: league_catalog_loader.py with schema validation",
+      "from": "2.18.9",
+      "to": "2.18.10",
+      "build": 861
+    },
+    {
+      "timestamp": "2026-06-08T20:31:30+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.1: Comprehensive catalog immutability tests for read-only runtime validation",
+      "from": "2.18.10",
+      "to": "2.18.11",
+      "build": 862
+    },
+    {
+      "timestamp": "2026-06-08T20:34:48+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "13.1: memoization & per-tier index for O(1) tier lookups",
+      "from": "2.18.11",
+      "to": "2.18.12",
+      "build": 863
+    },
+    {
+      "timestamp": "2026-06-08T20:37:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: schema versioning framework with migration base class and field validation",
+      "from": "1.115.9",
+      "to": "1.115.10",
+      "build": 864
+    },
+    {
+      "timestamp": "2026-06-08T20:38:24+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "13.1: AST-scan linter no_league_id_branching — enforces league-isolation doctrine",
+      "from": "3.57.1",
+      "to": "3.57.2",
+      "build": 865
+    },
+    {
+      "timestamp": "2026-06-08T20:39:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: catalog round-trip test — guarantees YAML is canonical",
+      "from": "1.115.10",
+      "to": "1.115.11",
+      "build": 866
+    },
+    {
+      "timestamp": "2026-06-08T20:40:37+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: reverse competition_id index BY_COMPETITION for O(1) lookups",
+      "from": "1.115.11",
+      "to": "1.115.12",
+      "build": 867
+    },
+    {
+      "timestamp": "2026-06-08T20:41:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: frozen-set field invariants — mutation-proof structures",
+      "from": "1.115.12",
+      "to": "1.115.13",
+      "build": 868
+    },
+    {
+      "timestamp": "2026-06-08T20:42:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: determinism of YAML load — SHA-256 identical across repeated calls",
+      "from": "1.115.13",
+      "to": "1.115.14",
+      "build": 869
+    },
+    {
+      "timestamp": "2026-06-08T20:43:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: catalog ↔ chart consistency — test infrastructure for chart alignment",
+      "from": "1.115.14",
+      "to": "1.115.15",
+      "build": 870
+    },
+    {
+      "timestamp": "2026-06-08T20:44:51+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.1: catalog ↔ entitlements consistency — with tier alignment",
+      "from": "1.115.15",
+      "to": "1.115.16",
+      "build": 871
+    },
+    {
+      "timestamp": "2026-06-08T20:55:18+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 13.1: add /v1/catalog GET endpoint with ETag caching support",
+      "from": "1.45.14",
+      "to": "1.46.0",
+      "build": 872
+    },
+    {
+      "timestamp": "2026-06-08T20:58:56+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "13.11: Added stages.tr.yaml lexicon for tournament stage terminology",
+      "from": "2.18.12",
+      "to": "2.18.13",
+      "build": 873
+    },
+    {
+      "timestamp": "2026-06-08T21:01:28+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 13.2: Competition TypedDicts + JSONSchema for reference-plane entity",
+      "from": "1.115.16",
+      "to": "1.116.0",
+      "build": 874
+    },
+    {
+      "timestamp": "2026-06-08T21:04:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.2: Competition record_type + Postgres schema + migration specs",
+      "from": "2.18.13",
+      "to": "2.18.14",
+      "build": 875
+    },
+    {
+      "timestamp": "2026-06-08T21:07:42+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "13.2: FixturePayloadV2 schema binding checkpoint",
+      "from": "2.18.14",
+      "to": "2.19.0",
+      "build": 876
+    },
+    {
+      "timestamp": "2026-06-08T21:11:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11 gazetteer auto-feed lint and tests",
+      "from": "1.116.0",
+      "to": "1.116.1",
+      "build": 877
+    },
+    {
+      "timestamp": "2026-06-08T21:17:30+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 13.11: 6 new data.* intent classes for competition/transfer/injury/referee/weather/suspension lookups",
+      "from": "1.116.1",
+      "to": "1.117.0",
+      "build": 878
+    },
+    {
+      "timestamp": "2026-06-08T21:27:49+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "TR transliteration for foreign team names; Bayern Munich lexicon entry; 50-query German Bundesliga corpus (Phase 13.11)",
+      "from": "1.117.0",
+      "to": "1.118.0",
+      "build": 879
+    },
+    {
+      "timestamp": "2026-06-08T21:32:09+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.2: fixture schema-gate validator for competition fields (T1/T2 enforcement, T3 warning)",
+      "from": "1.118.0",
+      "to": "1.118.1",
+      "build": 880
+    },
+    {
+      "timestamp": "2026-06-08T21:38:57+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 13.2: calibration profile YAML files + schema validator + loader module",
+      "from": "1.118.1",
+      "to": "1.119.0",
+      "build": 881
+    },
+    {
+      "timestamp": "2026-06-08T21:41:45+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 13.2: deterministic resolution rule for calibration profile selection; swarm.predictor._calibration module",
+      "from": "1.119.0",
+      "to": "1.120.0",
+      "build": 882
+    },
+    {
+      "timestamp": "2026-06-08T21:43:21+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.2: per-format predictor tests with synthetic fixtures",
+      "from": "1.120.0",
+      "to": "1.120.1",
+      "build": 883
+    },
+    {
+      "timestamp": "2026-06-08T21:44:54+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 13.2: calibration profile coverage matrix linter",
+      "from": "3.57.2",
+      "to": "3.58.0",
+      "build": 884
+    },
+    {
+      "timestamp": "2026-06-08T21:46:14+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.2: competition lifecycle FSM with deterministic transitions",
+      "from": "1.120.1",
+      "to": "1.120.2",
+      "build": 885
+    },
+    {
+      "timestamp": "2026-06-08T21:47:18+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.2: multi-stage composition gate for group_then_knockout tournaments",
+      "from": "1.120.2",
+      "to": "1.120.3",
+      "build": 886
+    },
+    {
+      "timestamp": "2026-06-08T21:48:16+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.2: profile drift guard with schema versioning and shadow windows",
+      "from": "1.120.3",
+      "to": "1.120.4",
+      "build": 887
+    },
+    {
+      "timestamp": "2026-06-08T21:48:54+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 13.2: swarm demo command for sample competition predictions",
+      "from": "3.58.0",
+      "to": "3.59.0",
+      "build": 888
+    },
+    {
+      "timestamp": "2026-06-08T22:00:27+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.3.1: per-league preset structure with TR Super Lig example",
+      "from": "2.19.0",
+      "to": "2.19.1",
+      "build": 889
+    },
+    {
+      "timestamp": "2026-06-08T22:02:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.2: Aggregator with error isolation and LEAGUE_CONFIGS module constant",
+      "from": "1.120.4",
+      "to": "1.120.5",
+      "build": 890
+    },
+    {
+      "timestamp": "2026-06-08T22:03:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.3: Backwards compatibility gate with triangle test for LeagueConfig",
+      "from": "1.120.5",
+      "to": "1.120.6",
+      "build": 891
+    },
+    {
+      "timestamp": "2026-06-08T22:04:33+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.3.4: Static lint for league presets in xops/lint/league_preset_static.py",
+      "from": "3.59.0",
+      "to": "3.59.1",
+      "build": 892
+    },
+    {
+      "timestamp": "2026-06-08T22:06:56+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.3: scaffolded En Championship preset",
+      "from": "3.59.1",
+      "to": "3.59.2",
+      "build": 893
+    },
+    {
+      "timestamp": "2026-06-08T22:07:34+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.3: scaffolded En Championship preset",
+      "from": "3.59.2",
+      "to": "3.59.3",
+      "build": 894
+    },
+    {
+      "timestamp": "2026-06-08T22:08:29+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 13.3: added league.scaffold tooling (make league.scaffold LEAGUE_ID=... COUNTRY=... CONFEDERATION=...)",
+      "from": "3.59.3",
+      "to": "3.60.0",
+      "build": 895
+    },
+    {
+      "timestamp": "2026-06-08T22:10:43+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "13.3: Add aliases duplication lint check for presets",
+      "from": "3.60.0",
+      "to": "3.60.1",
+      "build": 896
+    },
+    {
+      "timestamp": "2026-06-08T22:25:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.7: preset checksum validation - CONFIG_SHA256 constants and deterministic hashing",
+      "from": "1.120.6",
+      "to": "1.120.7",
+      "build": 897
+    },
+    {
+      "timestamp": "2026-06-08T22:26:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.8: preset import isolation - no side effects at import time",
+      "from": "1.120.7",
+      "to": "1.120.8",
+      "build": 898
+    },
+    {
+      "timestamp": "2026-06-08T22:27:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.9: preset import budget - performance test and config threshold",
+      "from": "1.120.8",
+      "to": "1.120.9",
+      "build": 899
+    },
+    {
+      "timestamp": "2026-06-08T22:28:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.10: concurrent import safety - concurrent thread-safe preset loading",
+      "from": "1.120.9",
+      "to": "1.120.10",
+      "build": 900
+    },
+    {
+      "timestamp": "2026-06-08T22:29:15+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.3.11: preset removal safety - validation infrastructure for catalog/entitlements cleanup",
+      "from": "1.120.10",
+      "to": "1.120.11",
+      "build": 901
+    },
+    {
+      "timestamp": "2026-06-08T22:34:07+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 13.4: anchor resolver for cross-competition identity (swarm.identity.AnchorResolver + config keys)",
+      "from": "1.120.11",
+      "to": "1.121.0",
+      "build": 902
+    },
+    {
+      "timestamp": "2026-06-08T22:35:24+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.4: idempotent merges proof test added",
+      "from": "2.19.1",
+      "to": "2.19.2",
+      "build": 903
+    },
+    {
+      "timestamp": "2026-06-08T22:36:34+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.4: adversarial alias collision corpus test",
+      "from": "1.121.0",
+      "to": "1.121.1",
+      "build": 904
+    },
+    {
+      "timestamp": "2026-06-08T22:37:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.4: anchor-set immutability test",
+      "from": "1.121.1",
+      "to": "1.121.2",
+      "build": 905
+    },
+    {
+      "timestamp": "2026-06-08T22:38:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.4: no fabricated entries linting test",
+      "from": "1.121.2",
+      "to": "1.121.3",
+      "build": 906
+    },
+    {
+      "timestamp": "2026-06-08T22:41:19+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.4 bullet 2: TR Lig 1 prerequisite gate test (test_turkiye_kupasi_blocks_on_lig1_coverage.py) - proof test for coverage-based ingestion gate",
+      "from": "2.19.2",
+      "to": "2.19.3",
+      "build": 907
+    },
+    {
+      "timestamp": "2026-06-08T22:44:11+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 13.4.1: Player eligibility field added to PlayerRecord schema",
+      "from": "1.121.3",
+      "to": "1.122.0",
+      "build": 908
+    },
+    {
+      "timestamp": "2026-06-08T22:50:19+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11.1: Entity-extraction recall gate test infrastructure + per-league corpus fixtures",
+      "from": "1.122.0",
+      "to": "1.122.1",
+      "build": 909
+    },
+    {
+      "timestamp": "2026-06-08T22:51:36+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.11.2: TR lexicon alias canonicalisation lint tool + tests",
+      "from": "3.60.1",
+      "to": "3.60.2",
+      "build": 910
+    },
+    {
+      "timestamp": "2026-06-08T22:52:20+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11.3: Locale-aware Unicode normalization tests (NFC + lowercase) for 5 language character sets",
+      "from": "1.122.1",
+      "to": "1.122.2",
+      "build": 911
+    },
+    {
+      "timestamp": "2026-06-08T22:53:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11.4: RTL (Arabic/Persian) guard tests for bidi preservation and visible-string equality",
+      "from": "1.122.2",
+      "to": "1.122.3",
+      "build": 912
+    },
+    {
+      "timestamp": "2026-06-08T22:54:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11.5: Gazetteer regression corpus test infrastructure + demotion corpus fixtures",
+      "from": "1.122.3",
+      "to": "1.122.4",
+      "build": 913
+    },
+    {
+      "timestamp": "2026-06-08T22:55:17+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11.6: Mixed-script round-trip tests for Cyrillic, Greek, Hebrew, CJK (5 script families)",
+      "from": "1.122.4",
+      "to": "1.122.5",
+      "build": 914
+    },
+    {
+      "timestamp": "2026-06-08T22:56:51+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.11.7: Confusable-character defense lint tool + tests (27 Unicode confusable pairs)",
+      "from": "3.60.2",
+      "to": "3.60.3",
+      "build": 915
+    },
+    {
+      "timestamp": "2026-06-08T22:58:04+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.11.8: Gazetteer compilation budget infrastructure + performance enforcement tests",
+      "from": "1.122.5",
+      "to": "1.122.6",
+      "build": 916
+    },
+    {
+      "timestamp": "2026-06-08T23:07:13+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.4.1: Manual-review queue classify_merge method for ambiguous identity detection",
+      "from": "1.122.6",
+      "to": "1.122.7",
+      "build": 917
+    },
+    {
+      "timestamp": "2026-06-08T23:09:28+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.4.3: Identity-merge audit topic definition (identity.merge.v1)",
+      "from": "1.122.7",
+      "to": "1.122.8",
+      "build": 918
+    },
+    {
+      "timestamp": "2026-06-08T23:11:20+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "13.4.4: Identity operator CLI (merge/split make targets)",
+      "from": "3.60.3",
+      "to": "3.61.0",
+      "build": 919
+    },
+    {
+      "timestamp": "2026-06-08T23:12:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.4.5: Cross-competition group-draw join proof test",
+      "from": "1.122.8",
+      "to": "1.122.9",
+      "build": 920
+    },
+    {
+      "timestamp": "2026-06-08T23:13:55+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "13.4.5.2: On-loan dual eligibility for lineup features",
+      "from": "1.122.9",
+      "to": "1.123.0",
+      "build": 921
+    },
+    {
+      "timestamp": "2026-06-08T23:14:41+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.4.5.3: National-team fatigue window detection for predictor",
+      "from": "1.123.0",
+      "to": "1.123.1",
+      "build": 922
+    },
+    {
+      "timestamp": "2026-06-08T23:15:35+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.7: Stale readiness report proof test",
+      "from": "1.123.1",
+      "to": "1.123.2",
+      "build": 923
+    },
+    {
+      "timestamp": "2026-06-08T23:16:06+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.7: Beta window wall-clock proof test",
+      "from": "1.123.2",
+      "to": "1.123.3",
+      "build": 924
+    },
+    {
+      "timestamp": "2026-06-08T23:17:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.7: T2→T1 calibration gate proof test",
+      "from": "1.123.3",
+      "to": "1.123.4",
+      "build": 925
+    },
+    {
+      "timestamp": "2026-06-08T23:17:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "13.7: Per-tier promotion gate proof tests (T3→T2, T2→T1, stale report, beta window)",
+      "from": "1.123.4",
+      "to": "1.123.5",
+      "build": 926
+    },
+    {
+      "timestamp": "2026-06-08T23:29:23+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.5 bullets 1-4: backtest corpus, harness, config, calibration fitting",
+      "from": "1.123.5",
+      "to": "1.123.6",
+      "build": 927
+    },
+    {
+      "timestamp": "2026-06-08T23:29:29+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.5: ai_commands.py dispatcher + fit_calibration.py script",
+      "from": "3.61.0",
+      "to": "3.61.1",
+      "build": 928
+    },
+    {
+      "timestamp": "2026-06-08T23:29:33+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.5 bullets 1-4 checkboxes ticked in design doc",
+      "from": "2.19.3",
+      "to": "2.19.4",
+      "build": 929
+    },
+    {
+      "timestamp": "2026-06-08T23:37:04+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.5 design: all 15 calibration-backfill bullets ticked",
+      "from": "2.19.4",
+      "to": "2.19.5",
+      "build": 930
+    },
+    {
+      "timestamp": "2026-06-08T23:43:22+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 13.6: mock-stack source audit + league readiness infrastructure",
+      "from": "3.61.1",
+      "to": "3.61.2",
+      "build": 931
+    },
+    {
+      "timestamp": "2026-06-08T23:43:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 13.6: per-source contract tests + completeness gate proof test",
+      "from": "1.123.6",
+      "to": "1.123.7",
+      "build": 932
+    },
+    {
+      "timestamp": "2026-06-08T23:46:35+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 13.6 mock-stack & source-coverage design complete (6 bullets specified)",
+      "from": "2.19.5",
+      "to": "2.20.0",
+      "build": 933
+    },
+    {
+      "timestamp": "2026-06-08T23:49:50+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.6-13.12 detailed specs completed (37 bullets)",
+      "from": "2.20.0",
+      "to": "2.20.1",
+      "build": 934
+    },
+    {
+      "timestamp": "2026-06-08T23:51:32+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 13.13-13.15 complete (era rules, intl squad, quarantine; 29 bullets)",
+      "from": "2.20.1",
+      "to": "2.20.2",
+      "build": 935
+    },
+    {
+      "timestamp": "2026-06-08T23:53:46+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "13.16-22 complete (48 bullets; FSM, lifecycle, mutation, rollover, venue, audit, DR)",
+      "from": "2.20.2",
+      "to": "2.20.3",
+      "build": 936
+    },
+    {
+      "timestamp": "2026-06-08T23:56:07+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 13 design specifications complete (13.6-68): 522 bullets specified across mock-stack, readiness gates, per-league resilience, observability, fixture FSM, mutations, international squads, timezone/DST, audit/crypto, DR, fairness, data residency, supply-chain trust, catalog concurrency, backwards-compat, adversarial testing, officials/transfers/weather/cards planes, enrichment integration, broadcasting, integrity/clash/cascade reactors, cold-start, storage independence, model routing, sandbox platform, calibration mutations, canary deployment, metric architecture, prediction signing",
+      "from": "2.20.3",
+      "to": "2.21.0",
+      "build": 937
+    },
+    {
+      "timestamp": "2026-06-09T00:02:53+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 13.4: soak test infrastructure (test_identity_soak.py); harness supports 4-week TR Lig 1 + UCL + Türkiye Kupası replay",
+      "from": "2.21.0",
+      "to": "2.22.0",
+      "build": 938
+    },
+    {
+      "timestamp": "2026-06-09T00:05:13+00:00",
+      "component": "docs",
+      "level": "major",
+      "note": "Phase 13 complete: League + Competition Expansion with 22+ leagues, 6 competition formats, NLP gazetteer, identity resolution, calibration backtest harness, mock stack, tier promotion gates, per-league observability SLOs, fixture lifecycle FSM, zone/DST handling, compliance/audit/crypto, backup/recovery, fairness detection, data residency, supply-chain trust, catalog concurrency, backwards-compat, adversarial corps, match officials, transfers, weather planes, suspension tracking, cold-start, multi-region consistency, sandboxing, canary deployment, market routing, integrity protection, cascade handling",
+      "from": "2.22.0",
+      "to": "3.0.0",
+      "build": 939
     }
   ]
 }

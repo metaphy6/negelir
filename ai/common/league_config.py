@@ -235,3 +235,59 @@ def get_league_config(league_id: str = "tr_super_lig") -> LeagueConfig:
     resolved = normalize_league_id(league_id)
     factory = LEAGUE_REGISTRY.get(resolved, turkish_super_lig)
     return factory()
+
+
+def compute_config_sha256(config: LeagueConfig) -> str:
+    """Compute SHA256 checksum of a LeagueConfig object.
+    
+    Uses canonical serialization via dataclasses.asdict() to ensure
+    deterministic hash across Python versions and imports (Phase 13.3.7).
+    
+    Args:
+        config: LeagueConfig instance
+        
+    Returns:
+        Hex-encoded SHA256 hash (64 chars)
+    """
+    import hashlib
+    import json
+    from dataclasses import asdict
+    
+    def _serialize_special(obj):
+        """Custom serializer for non-JSON types, with deterministic ordering."""
+        if isinstance(obj, frozenset):
+            # For frozenset (e.g., a single derby pair like frozenset({'Team A', 'Team B'}))
+            # Convert to sorted list of strings for JSON serialization
+            return sorted([str(i) for i in obj])
+        elif isinstance(obj, set):
+            # For regular sets (e.g., the derbies field is a set of frozensets)
+            # Need to recursively handle frozensets inside the set
+            items = []
+            for item in obj:
+                if isinstance(item, frozenset):
+                    # Recursively serialize each frozenset to a sorted list
+                    items.append(sorted([str(i) for i in item]))
+                else:
+                    # Handle other types in the set
+                    items.append(str(item))
+            # Sort the list of items for determinism
+            return sorted(items)
+        # For other types, use str()
+        return str(obj)
+    
+    # Convert to dict with deterministic serialization
+    config_dict = asdict(config)
+    
+    # Serialize to JSON with sorted keys for determinism.
+    # Use ensure_ascii=False to avoid Unicode escaping changes,
+    # then encode UTF-8 for consistent byte representation.
+    canonical_json = json.dumps(
+        config_dict,
+        sort_keys=True,
+        separators=(',', ':'),
+        default=_serialize_special,
+        ensure_ascii=False,
+    )
+    
+    # Compute SHA256 over UTF-8 bytes
+    return hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()

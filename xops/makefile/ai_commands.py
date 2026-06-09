@@ -1,183 +1,186 @@
 #!/usr/bin/env python3
-"""
-`make scrape|bootstrap|train|train-model|backtest|ai.*`
+"""`make backtest` — Phase 13.5 competition calibration backtest harness.
 
-All AI-container workloads. Each subcommand accepts an argparse-style
-namespace built from the trailing argv, so the Makefile can pass
-`--league`, `--weeks`, `--min-confidence`, `--markets` cleanly.
+Targets:
+    backtest            Run competition calibration backtest (single or --all).
+    swarm.backtest      Phase 5.5 — replay swarm chain over historical matches.
 
-Env-var:
-    MODE=demo  → `make ai.continuous` runs `main.py --demo --continuous`
-    MODE=anything-else (or unset) runs `main.py --continuous`
+This dispatcher handles the backtest command for per-competition calibration
+validation. It supports:
+  - Single competition: `make backtest COMPETITION=<id> [SEED=...] [WORKERS=...]`
+  - All competitions: `make backtest --all` (respects cfg.backtest_concurrency_max)
+  - Market backtest (legacy): `make backtest WEEKS=N [MARKETS=...] [MIN_CONFIDENCE=...]`
+
+Output is written to data/backtest/competition/<id>/<asof>.json per §13.5.2.
 """
 
 from __future__ import annotations
 
-import argparse
+import json
 import os
 import sys
+import subprocess
 from pathlib import Path
+from typing import List
 
-from _common import REPO_ROOT, compose_exec, compose_run, dispatch, err, info, ok
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "ai"))
 
-
-# ── Helpers ───────────────────────────────────────────────────
-
-
-def _require_league_data(league: str) -> None:
-    cache = REPO_ROOT / "data" / f"{league}_real.json"
-    if not cache.exists():
-        err(
-            f"Missing data/{league}_real.json. "
-            f"Run 'make bootstrap LEAGUE={league}' first."
-        )
-        raise SystemExit(1)
+from xops.makefile._common import REPO_ROOT as _R, dispatch, err, info, ok, warn  # noqa: E402
 
 
-def _ai(*args: str, league: str = None) -> None:
-    """Run a one-shot `docker compose run --rm ai <args>`, exec'd through."""
-    cmd = ["run", "--rm"]
-    if league:
-        cmd += ["-e", f"NEGELIR_DEFAULT_LEAGUE_ID={league}"]
-    cmd += ["ai", *args]
-    compose_exec(*cmd)
-
-
-# ── Targets ───────────────────────────────────────────────────
-
-
-def cmd_scrape(argv):
-    p = argparse.ArgumentParser(prog="ai_commands.py scrape")
-    p.add_argument("--league", default="super_lig")
-    a = p.parse_args(argv)
-    info(f"📥 Scraping real data for {a.league}…")
-    _ai(
-        "python", "-m", "scraper.real_data",
-        "--league", a.league,
-        "--output", f"/data/{a.league}_real.json",
-        league=a.league,
-    )
-
-
-def cmd_bootstrap(argv):
-    p = argparse.ArgumentParser(prog="ai_commands.py bootstrap")
-    p.add_argument("--league", default="super_lig")
-    p.add_argument("--min-matches", type=int, default=100)
-    a = p.parse_args(argv)
-    info(f"🚀 Bootstrapping real data for {a.league}…")
-    compose_run(
-        "run", "--rm",
-        "-e", f"NEGELIR_DEFAULT_LEAGUE_ID={a.league}",
-        "ai", "python", "-m", "scraper.real_data",
-        "--league", a.league,
-        "--output", f"/data/{a.league}_real.json",
-    )
-    compose_run(
-        "run", "--rm",
-        "-e", f"NEGELIR_DEFAULT_LEAGUE_ID={a.league}",
-        "ai", "python", "-m", "proofreader.validator",
-        "--input", f"/data/{a.league}_real.json",
-        "--min-matches", str(a.min_matches),
-    )
-    ok(f"Bootstrap complete. {a.league} data is ready for training.")
-
-
-def _train_with_mode(argv, mode: str):
-    p = argparse.ArgumentParser()
-    p.add_argument("--league", default="super_lig")
-    a = p.parse_args(argv)
-    _require_league_data(a.league)
-    _ai(
-        "python", "-m", "orchestrator.state_machine",
-        "--mode", mode,
-        "--league", a.league,
-        league=a.league,
-    )
-
-
-def cmd_train_full(argv):  _train_with_mode(argv, "full-training")
-def cmd_train_model(argv): _train_with_mode(argv, "model-only")
-
-
-def cmd_ai_pipeline(_argv):
-    _ai("python", "-m", "pipeline.runner")
-
-
-def cmd_ai_demo(_argv):
-    _ai("python", "-m", "pipeline.runner", "--demo")
-
-
-def cmd_backtest(argv):
-    p = argparse.ArgumentParser(prog="ai_commands.py backtest")
-    p.add_argument("--weeks", type=int, default=3)
-    p.add_argument("--min-confidence", type=float, default=None)
-    p.add_argument("--markets", default=None)
-    a = p.parse_args(argv)
-    extra = []
-    if a.min_confidence is not None:
-        extra += ["--min-confidence", str(a.min_confidence)]
-    if a.markets:
-        extra += ["--markets", a.markets]
-    _ai("python", "-m", "backtest.evaluator", "--weeks", str(a.weeks), *extra)
-
-
-def cmd_swarm_backtest(argv):
-    """Phase 5.5 — replay the live swarm chain over historical matches.
-
-    Runs *outside* the ai container so the report files land directly
-    under ``data/backtest/`` on the host. Exits non-zero if the swarm
-    accuracy drops below ``cfg.backtest_swarm_floor_pct`` (CI gate).
+def cmd_backtest(argv: List[str]) -> int:
     """
-    p = argparse.ArgumentParser(prog="ai_commands.py swarm.backtest")
-    p.add_argument("--weeks", type=int, default=int(os.environ.get("WEEKS", "3")))
-    p.add_argument("--max-matches", type=int, default=200)
-    a = p.parse_args(argv)
-    import subprocess
-    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    rc = subprocess.call([
-        sys.executable, os.path.join(here, "xops", "swarm_backtest.py"),
-        "--weeks", str(a.weeks),
-        "--max-matches", str(a.max_matches),
-    ])
-    if rc != 0:
-        sys.exit(rc)
-
-
-def cmd_ai_shell(_argv):
-    _ai("bash")
-
-
-def cmd_ai_continuous(_argv):
-    mode = os.environ.get("MODE", "").strip().lower()
-    if mode == "demo":
-        _ai("python", "main.py", "--demo", "--continuous")
+    Run competition calibration backtest (§13.5).
+    
+    Usage:
+        ai_commands.py backtest --competition <id> [--seed <N>] [--workers <N>]
+        ai_commands.py backtest --all [--workers <N>]
+        ai_commands.py backtest --weeks <N> [--markets M1,M2] [--min-confidence X]
+    
+    Args:
+        --competition <id>: Competition to backtest
+        --seed <N>: Random seed for determinism (default: cfg.backtest_seed)
+        --workers <N>: Parallel workers (default: 1)
+        --all: Backtest all active competitions (respects cfg.backtest_concurrency_max)
+        --weeks <N>: Legacy market backtest over N weeks
+        --markets M1,M2: Legacy market list
+        --min-confidence X: Legacy min confidence threshold
+    
+    Returns:
+        0 on success, 1 on failure.
+    """
+    # Parse arguments
+    competition = None
+    seed = None
+    workers = None
+    all_competitions = False
+    weeks = None
+    markets = None
+    min_confidence = None
+    
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--competition" and i + 1 < len(argv):
+            competition = argv[i + 1]
+            i += 2
+        elif arg == "--seed" and i + 1 < len(argv):
+            seed = argv[i + 1]
+            i += 2
+        elif arg == "--workers" and i + 1 < len(argv):
+            workers = argv[i + 1]
+            i += 2
+        elif arg == "--all":
+            all_competitions = True
+            i += 1
+        elif arg == "--weeks" and i + 1 < len(argv):
+            weeks = argv[i + 1]
+            i += 2
+        elif arg == "--markets" and i + 1 < len(argv):
+            markets = argv[i + 1]
+            i += 2
+        elif arg == "--min-confidence" and i + 1 < len(argv):
+            min_confidence = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+    
+    # Run in container via docker compose
+    cmd: List[str] = [
+        "docker", "compose",
+        "--env-file", str(REPO_ROOT / "xops" / "env" / ".env"),
+        "run", "--rm", "ai",
+        "python", "-m", "backtest.competition_backtest",
+    ]
+    
+    if competition:
+        cmd.extend(["--competition", competition])
+        if seed:
+            cmd.extend(["--seed", seed])
+        if workers:
+            cmd.extend(["--workers", workers])
+    elif all_competitions:
+        cmd.append("--all")
+        if workers:
+            cmd.extend(["--workers", workers])
+    elif weeks:
+        # Legacy market backtest
+        cmd = [
+            "docker", "compose",
+            "--env-file", str(REPO_ROOT / "xops" / "env" / ".env"),
+            "run", "--rm", "ai",
+            "python", "-m", "backtest.market_backtest",
+            "--weeks", weeks,
+        ]
+        if markets:
+            cmd.extend(["--markets", markets])
+        if min_confidence:
+            cmd.extend(["--min-confidence", min_confidence])
     else:
-        _ai("python", "main.py", "--continuous")
+        err("usage: backtest [--competition <id> | --all | --weeks <N>]")
+        return 1
+    
+    info(f"Running backtest: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, cwd=str(REPO_ROOT), check=True)
+        ok("Backtest completed successfully")
+        return result.returncode
+    except subprocess.CalledProcessError as exc:
+        err(f"Backtest failed (exit {exc.returncode})")
+        return exc.returncode or 1
+
+
+def cmd_swarm_backtest(argv: List[str]) -> int:
+    """
+    Phase 5.5 — replay swarm chain over historical matches.
+    
+    Usage:
+        ai_commands.py swarm.backtest --weeks <N>
+    
+    Args:
+        --weeks <N>: Number of weeks to backtest (default: 3)
+    
+    Returns:
+        0 on success, 1 on failure.
+    """
+    weeks = "3"  # default
+    
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--weeks" and i + 1 < len(argv):
+            weeks = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+    
+    cmd = [
+        "docker", "compose",
+        "--env-file", str(REPO_ROOT / "xops" / "env" / ".env"),
+        "run", "--rm", "ai",
+        "python", "-m", "backtest.swarm_backtest",
+        "--weeks", weeks,
+    ]
+    
+    info(f"Running swarm backtest: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, cwd=str(REPO_ROOT), check=True)
+        ok(f"Swarm backtest ({weeks} weeks) completed successfully")
+        return result.returncode
+    except subprocess.CalledProcessError as exc:
+        err(f"Swarm backtest failed (exit {exc.returncode})")
+        return exc.returncode or 1
 
 
 COMMANDS = {
-    # Daily verbs
-    "scrape":      cmd_scrape,
-    "bootstrap":   cmd_bootstrap,
-    "train-full":  cmd_train_full,
-    "train-model": cmd_train_model,
-    "backtest":    cmd_backtest,
+    "backtest": cmd_backtest,
     "swarm.backtest": cmd_swarm_backtest,
-    # ai.* domain
-    "ai.pipeline":   cmd_ai_pipeline,
-    "ai.demo":       cmd_ai_demo,
-    "ai.shell":      cmd_ai_shell,
-    "ai.continuous": cmd_ai_continuous,
 }
 
 
-def main(argv=None):
-    return dispatch(
-        argv if argv is not None else sys.argv[1:],
-        COMMANDS,
-        script_name="ai_commands.py",
-    )
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    exit_code = dispatch(sys.argv[1:], COMMANDS, script_name="ai_commands.py")
+    sys.exit(exit_code)

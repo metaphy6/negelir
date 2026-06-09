@@ -188,6 +188,14 @@ if _PROMETHEUS_AVAILABLE:
         "nlp_lexicon_version",
         "Loaded lexicon version metadata",
     )
+
+    # Phase 13.2 — fixture schema-gate metrics
+    # negelir_fixture_competition_missing_total{league_id} — counter of fixtures missing required competition fields for T3 leagues
+    FIXTURE_COMPETITION_MISSING_TOTAL = Counter(
+        "negelir_fixture_competition_missing_total",
+        "Fixtures with missing competition fields (T3 tier allowed with warning)",
+        labelnames=["league_id"],
+    )
 else:
     NLP_PIPELINE_LATENCY = None
     NLP_INTENT_CONFIDENCE = None
@@ -198,6 +206,7 @@ else:
     NLP_FLAME_CAPTURE_ARMED_COUNT = None
     NLP_LEXICON_VERSION = None
     NLP_CLASSIFIER_EXTRACTOR_SKEW = None
+    FIXTURE_COMPETITION_MISSING_TOTAL = None
 
 
 class TelemetrySink:

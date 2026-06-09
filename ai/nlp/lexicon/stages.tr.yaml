@@ -1,0 +1,81 @@
+# Negelir — NLP lexicon: Tournament stages / rounds (Phase 13.11)
+# Maps Turkish tournament stage terminology to canonical identifiers.
+# Used by entity-extraction to identify competition rounds.
+# Managed by: Phase 13.11 NLP + competition gazetteer
+
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-06-08T00:00:00Z"
+  generator: nlp.lexicon-build
+  phase: "13.11"
+
+entries:
+  - canonical_id: stage_group
+    names:
+      - Grup Aşaması
+      - Grup Dönemi
+    aliases:
+      - grup
+      - grup aşaması
+      - gruplar
+      - grup maçları
+
+  - canonical_id: stage_prequalify
+    names:
+      - Ön Eleme
+      - Ön Elemeler
+    aliases:
+      - ön eleme
+      - ön elemeleri
+      - preliminary
+      - pre-qual
+      - elemeler
+
+  - canonical_id: stage_playoff
+    names:
+      - Play-off
+      - Playoff Dönemi
+    aliases:
+      - playoff
+      - play-off
+      - play off
+      - playoff maçları
+      - karar maçı
+
+  - canonical_id: stage_last16
+    names:
+      - Son 16
+      - Son On Altı
+    aliases:
+      - son 16
+      - last 16
+      - 16'da
+      - son on altı
+      - round of 16
+      - r16
+
+  - canonical_id: stage_quarterfinal
+    names:
+      - Çeyrek Final
+      - Çeyrek Finali
+    aliases:
+      - çeyrek final
+      - çeyrek finali
+      - quarter final
+      - quarter-final
+      - quarter finals
+      - qf
+
+  - canonical_id: stage_semifinal
+    names:
+      - Yarı Final
+      - Yarı Finali
+    aliases:
+      - yarı final
+      - yarı finali
+      - semi final
+      - semi-final
+      - semi finals
+      - sf
+      - yarı

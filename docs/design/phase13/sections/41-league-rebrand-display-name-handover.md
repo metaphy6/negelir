@@ -9,8 +9,8 @@
 
 > Retires assumption §13.0 #48.
 
-- [ ] **`LeagueRow.legal_name`, `LeagueRow.display_name`, `LeagueRow.aliases`.** `league_id` is the join key and never changes; `legal_name` and `display_name` mutate via signed audit per §13.21.
-- [ ] **`make leagues.rename LEAGUE=<id> DISPLAY=<new> REASON=""`** writes the audit + tracker row + chart-bump (per §13.21 / §13.27); refuses to mutate `league_id`.
-- [ ] **Search alias propagation.** Old `display_name` is auto-added to `aliases[]` so historical queries still resolve; gazetteer (§13.11) auto-feeds.
-- [ ] **Country-split / merger drill.** Yugoslav-style federation split → multiple new `league_id` rows seeded from the dissolved league's history (manual mapping audited); proof test `test_federation_split_audit_trail.py`.
-- [ ] **API stability.** `/v1/catalog` returns both `legal_name` and `display_name`; clients are expected to render `display_name`.
+- [x] **`LeagueRow.legal_name`, `LeagueRow.display_name`, `LeagueRow.aliases`.** `league_id` is the join key and never changes; `legal_name` and `display_name` mutate via signed audit per §13.21.
+- [x] **`make leagues.rename LEAGUE=<id> DISPLAY=<new> REASON=""`** writes the audit + tracker row + chart-bump (per §13.21 / §13.27); refuses to mutate `league_id`.
+- [x] **Search alias propagation.** Old `display_name` is auto-added to `aliases[]` so historical queries still resolve; gazetteer (§13.11) auto-feeds.
+- [x] **Country-split / merger drill.** Yugoslav-style federation split → multiple new `league_id` rows seeded from the dissolved league's history (manual mapping audited); proof test `test_federation_split_audit_trail.py`.
+- [x] **API stability.** `/v1/catalog` returns both `legal_name` and `display_name`; clients are expected to render `display_name`.

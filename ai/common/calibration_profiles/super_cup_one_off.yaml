@@ -1,0 +1,12 @@
+profile_id: super_cup_one_off
+description: |
+  Single-match super cups (TFF Süper Kupa, UEFA Super Cup, Community Shield).
+  One-shot between previous season winners; form features less predictive.
+
+elo_home_advantage_mult: 0.85
+dixon_coles_rho_add: 0.02
+draw_sample_weight_mult: 0.9
+poisson_max_goals_add: 0.0
+xg_elo_factor_range_mult: 1.0
+upset_prior: 0.01
+zero_home_advantage_when_venue_in: ["neutral", "bubble"]

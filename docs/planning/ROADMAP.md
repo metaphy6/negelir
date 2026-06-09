@@ -1705,7 +1705,7 @@ stable stub-ID registry).
 
 ### 13.DoD Phase rollup
 
-- [ ] Every binding `[ ]` in §13.* (across all per-section files
+- [x] Every binding `[ ]` in §13.* (across all per-section files
       in [`docs/design/phase13/sections/`](../design/phase13/sections/))
       is `[x]`. Tracker row + `make version.bump COMPONENT=docs`
       recorded for every meaningful per-section edit (per AGENTS.md

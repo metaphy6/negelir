@@ -1,0 +1,17 @@
+profile_id: knockout_continental_club
+description: |
+  UEFA Champions/Europa/Conference League knockout legs.
+  Higher upset variance than league play; draw weight reduced for legs without
+  home/away advantage; cup-final neutral-venue zero.
+
+elo_home_advantage_mult: 0.50
+dixon_coles_rho_add: 0.05
+draw_sample_weight_mult: 0.7
+poisson_max_goals_add: 1.0
+xg_elo_factor_range_mult: 1.10
+upset_prior: 0.03
+zero_home_advantage_when_venue_in: ["neutral", "bubble"]
+two_leg:
+  away_goals_rule_active_until: "2021-05-31"
+  aggregate_logic: sum_goals
+  penalty_shootout_modeled: true

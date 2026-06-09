@@ -1,1 +1,1 @@
-"""xops.lint — repository-wide static checks (Phase 1.4)."""
+"""Linting utilities for CI/CD validation."""

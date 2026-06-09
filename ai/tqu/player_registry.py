@@ -1,10 +1,13 @@
 """
 Negelir — Player registry + fuzzy player name resolution.
 Phase 5: Dynamic player→team lookup replacing hardcoded _PLAYER_TEAMS.
+Phase 13.4.5.2: On-loan dual eligibility for predictor lineup features.
 """
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
 
 from common.logger import get_logger
 from tqu.normalizer import asciify
@@ -20,6 +23,51 @@ class PlayerRecord:
     team_id: str
     position: str = ""
     active: bool = True
+    eligibility: list[str] = field(default_factory=list)  # national_team_id list for Phase 13.4
+    
+    # Phase 13.4.5.2 — On-loan tracking
+    on_loan_from: Optional[str] = None  # Parent club if on loan
+    loan_end_date: Optional[str] = None  # ISO 8601 date when loan ends (YYYY-MM-DD)
+    
+    def is_on_loan(self) -> bool:
+        """Check if player is currently on loan."""
+        return self.on_loan_from is not None
+    
+    def eligible_at(self, date_str: str) -> list[str]:
+        """
+        Get list of clubs this player is eligible for on a given date.
+        
+        Per Phase 13.4.5.2: A player on loan retains eligibility for both
+        the parent club and the loan club until loan_end_date (inclusive).
+        
+        Args:
+            date_str: ISO 8601 date string (YYYY-MM-DD)
+        
+        Returns:
+            List of eligible club team_ids for that date
+        """
+        if not self.is_on_loan():
+            # Not on loan: eligible for current team only
+            return [self.team_id]
+        
+        # On loan: check if loan is still active
+        if self.loan_end_date is None:
+            # No end date: assume permanent move
+            return [self.team_id]
+        
+        try:
+            fixture_date = datetime.fromisoformat(date_str).date()
+            loan_end = datetime.fromisoformat(self.loan_end_date).date()
+        except (ValueError, TypeError):
+            # Invalid date: return only current team (conservative)
+            return [self.team_id]
+        
+        if fixture_date <= loan_end:
+            # Loan still active: eligible for both clubs
+            return sorted([self.team_id, self.on_loan_from])
+        else:
+            # Loan expired: eligible for parent club only
+            return [self.on_loan_from] if self.on_loan_from else [self.team_id]
 
 
 @dataclass

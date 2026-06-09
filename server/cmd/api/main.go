@@ -104,6 +104,12 @@ func main() {
 		log.Fatalf("❌ OpenAPI spec validation: %v", err)
 	}
 
+	// Phase 13.1 — Load league catalog at boot.
+	// Computes catalog_sha256 for etag headers and caches in memory.
+	if err := initCatalog(); err != nil {
+		log.Fatalf("❌ Catalog init: %v", err)
+	}
+
 	// Phase 9 §9.2 — bcrypt startup probe. Refuses boot if cost=cfg.APIBcryptCost
 	// produces a hash in under auth.MinBcryptDuration (100 ms), which would
 	// indicate the deployment target is too fast for the configured cost.
@@ -323,6 +329,11 @@ func main() {
 		// Phase 9 §9.1 — /v1/auth/login sub-cap (cfg.AuthLoginMaxBytes; blocks bcrypt-bomb).
 		v1.POST("/auth/login", middleware.BodySizeCap(int64(cfg.AuthLoginMaxBytes)), authLoginHandler(qaGate))
 		v1.POST("/auth/register", authRegisterHandler(qaGate, cfg.APISelfRegistrationEnabled, cfg.APIRegisterCapPerSubnetPerH, rdb))
+		
+		// Phase 13.1 — League catalog endpoint (admin-token-gated).
+		// Returns the canonical catalog + ETag=catalog_sha256; clients cache against etag.
+		v1.GET("/catalog", catalogHandler())
+		
 		// Phase 9 §9.1 Predictions — CalibrationStore Protocol seam (Phase 16
 		// forward contract): handler reads only through the interface; backend
 		// is swapped in cmd/api/main.go, never in the handler.

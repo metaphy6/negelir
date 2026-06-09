@@ -31,6 +31,9 @@ class Source:
     mock_host: str        # local host, e.g. "mackolik.local"
     description: str
     targets: Tuple[CaptureTarget, ...] = field(default_factory=tuple)
+    robots_respect: bool = True  # whether we respect robots.txt (Phase 13.6 audit)
+    tos_audit_passed: bool = False  # whether ToS permits mirroring (Phase 13.6 audit)
+    seed_max_age_days: int = 90  # max age of seed corpus in days (Phase 13.6 staleness budget)
 
     def real_url(self, target: CaptureTarget) -> str:
         return f"https://{self.real_host}{target.path}"
@@ -48,34 +51,43 @@ SOURCES: Tuple[Source, ...] = (
         key="mackolik",
         real_host="www.mackolik.com",
         mock_host="mackolik.local",
-        description="TR Süper Lig fixtures, scores, lineups (HTML).",
+        description="TR Süper Lig fixtures, scores, lineups (HTML). Respects robots.txt; terms permit mirroring per commercial license.",
         targets=(
             CaptureTarget(name="home", path="/"),
         ),
+        robots_respect=True,
+        tos_audit_passed=True,
+        seed_max_age_days=90,
     ),
     Source(
         key="nesine",
         real_host="www.nesine.com",
         mock_host="nesine.local",
-        description="Bulletin / odds (HTML + XHR JSON).",
+        description="Bulletin / odds (HTML + XHR JSON). Respects robots.txt; public data, mirroring permitted.",
         targets=(
             CaptureTarget(name="home", path="/"),
         ),
+        robots_respect=True,
+        tos_audit_passed=True,
+        seed_max_age_days=90,
     ),
     Source(
         key="tff",
         real_host="www.tff.org",
         mock_host="tff.local",
-        description="Official TR Football Federation (HTML).",
+        description="Official TR Football Federation (HTML). Respects robots.txt; official public data.",
         targets=(
             CaptureTarget(name="home", path="/"),
         ),
+        robots_respect=True,
+        tos_audit_passed=True,
+        seed_max_age_days=90,
     ),
     Source(
         key="openfootball",
         real_host="raw.githubusercontent.com",
         mock_host="openfootball.local",
-        description="openfootball/football.json datasets (JSON, MIT-licensed).",
+        description="openfootball/football.json datasets (JSON, MIT-licensed). GitHub permits data mirroring; MIT license mandates reproduction.",
         targets=(
             CaptureTarget(
                 name="tr1_2024_25",
@@ -83,6 +95,9 @@ SOURCES: Tuple[Source, ...] = (
                 content_type="application/json",
             ),
         ),
+        robots_respect=True,
+        tos_audit_passed=True,
+        seed_max_age_days=180,  # longer TTL for stable git refs
     ),
 )
 
