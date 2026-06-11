@@ -526,6 +526,139 @@ class Config:
         os.getenv("NEGELIR_BACKTEST_SWARM_FLOOR_PCT", "0.01")
     ))
 
+    # Phase 16 — Emitter & Feed Contract
+    # Payload size cap per Record (bytes). Records exceeding this are truncated
+    # with truncated_at_bytes envelope field set and proof.flag{kind=record_oversize} raised.
+    emitter_max_payload_bytes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_MAX_PAYLOAD_BYTES", str(64 * 1024)
+    )))
+    # Management port for the emitter's read-only HTTP endpoints (e.g., GET /schemas).
+    # FeedReader uses this to verify schema consistency on startup.
+    emitter_management_port: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_MANAGEMENT_PORT", "9101"
+    )))
+    # Per-source fairness floor (%) — bursty sources throttled to at least this % of
+    # write capacity when quieter sources have pending writes (default 5%).
+    emitter_per_source_floor_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_PER_SOURCE_FLOOR_PCT", "5.0"
+    )))
+    # Token bucket burst factor for per-source fairness (multiplicative over floor).
+    # Allows a source to accumulate up to burst_factor * floor_pct capacity (default 4x).
+    emitter_source_burst_factor: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_SOURCE_BURST_FACTOR", "4.0"
+    )))
+    # Token bucket window (seconds) over which to measure source fairness (default 1s).
+    emitter_source_burst_window_s: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_SOURCE_BURST_WINDOW_S", "1.0"
+    )))
+    # Clock skew alert threshold (milliseconds). If deviation between requested
+    # and actual clock exceeds this, emit sec.alert.v1{kind=emitter_clock_skew} (default 500ms).
+    emitter_clock_skew_alert_ms: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_CLOCK_SKEW_ALERT_MS", "500.0"
+    )))
+    # Whether to use CLOCK_TAI (International Atomic Time) for captured_at if available
+    # (default True). Falls back to CLOCK_REALTIME if TAI unavailable (default True).
+    emitter_use_clock_tai: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_EMITTER_USE_CLOCK_TAI", "true"
+    ).lower() in ("true", "1", "yes"))
+    # Fsync mode for durability: "always" (every write), "batch" (every N ms), "off" (test only).
+    # Default "always" for production (ledger #14).
+    emitter_fsync_mode: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_EMITTER_FSYNC_MODE", "always"
+    ))
+    # Batch fsync interval (milliseconds) when fsync_mode=batch (default 100ms).
+    emitter_fsync_batch_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_FSYNC_BATCH_MS", "100"
+    )))
+    # Compression codec for NDJSON (zstd|gzip|off; default zstd).
+    emitter_compression_codec: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_EMITTER_COMPRESSION_CODEC", "zstd"
+    ))
+    # Compression level (1-22 for zstd; default 9 for balance).
+    emitter_compression_level: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_COMPRESSION_LEVEL", "9"
+    )))
+    # Per-record CRC32C checksum trailer for torn-write detection (ledger #10).
+    # Format: `{json} deadbeef` (CRC last 8 hex chars). Default on.
+    emitter_record_crc: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_EMITTER_RECORD_CRC", "on"
+    ))
+    # Disk usage warning threshold (%, default 80). >= warn → sec.alert.v1{kind=feeds_disk_warn}
+    emitter_disk_usage_warn_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_DISK_USAGE_WARN_PCT", "80"
+    )))
+    # Disk usage block threshold (%, default 95). >= block → writer pauses, proof.flag{kind=feeds_disk_blocked}
+    emitter_disk_usage_block_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_DISK_USAGE_BLOCK_PCT", "95"
+    )))
+    # Intra-day compaction threshold (bytes, default 256 MiB). When hot file exceeds this, rotate to part-NN.
+    emitter_intraday_compact_bytes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_INTRADAY_COMPACT_BYTES", str(256 * 1024 * 1024)
+    )))
+    
+    # Manifest update frequency (seconds, default 30). How often to persist manifest metrics.
+    emitter_manifest_update_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_MANIFEST_UPDATE_INTERVAL_S", "30"
+    )))
+    
+    # Manifest max age before alarm (ms, default 30000). Alert if manifest > this old.
+    emitter_manifest_max_age_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_MANIFEST_MAX_AGE_MS", "30000"
+    )))
+    
+    # Phase 16.3 — Parquet training snapshots
+    # Maximum size per parquet part file (bytes, default 128 MiB).
+    # Snapshot builder splits into multiple parts when a part exceeds this size.
+    emitter_parquet_max_part_bytes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_PARQUET_MAX_PART_BYTES", str(128 * 1024 * 1024)
+    )))
+    
+    # Grace period (minutes, default 10) after hour boundary before snapshot closes.
+    # Snapshot for hour H closes at H+1 + cfg.emitter_snapshot_grace_minutes,
+    # capturing all records with captured_at in [H, H+1).
+    emitter_snapshot_grace_minutes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_SNAPSHOT_GRACE_MINUTES", "10"
+    )))
+    
+    # Snapshot writer thread pool size (default CPU count // 2, max 8).
+    # Applies when building multiple snapshots in parallel across planes/sources.
+    emitter_snapshot_writer_threads: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_SNAPSHOT_WRITER_THREADS",
+        str(max(1, min(8, __import__('os').cpu_count() // 2)))
+    )))
+    
+    # Bloom filter false-positive rate target (Phase 16.3, bullet 9).
+    # Filter sized to achieve this FPR on point lookups (ledger #28).
+    emitter_snapshot_bloom_fpr_max: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_EMITTER_SNAPSHOT_BLOOM_FPR_MAX", "0.01"
+    )))
+    
+    # Snapshot mode: full or delta (Phase 16.3, bullet 10, ledger #39).
+    # delta: Each hour writes only deltas vs prior sealed snapshot
+    # full: Each hour is a complete snapshot (default: delta for storage savings)
+    emitter_snapshot_mode: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_EMITTER_SNAPSHOT_MODE", "delta"
+    ))
+    
+    # Delta compaction interval in hours (Phase 16.3, bullet 10).
+    # After N hours of deltas, merge back into a full snapshot (default 24h).
+    emitter_snapshot_compaction_hours: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_EMITTER_SNAPSHOT_COMPACTION_HOURS", "24"
+    )))
+
+    # Phase 16.4 — FeedReader configuration
+    # Tombstone LRU size for stream() when apply_tombstones=True.
+    # Tracks (stable_id) → tombstoned state with bounded memory. Default 50k.
+    feed_reader_tombstone_lru_size: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEED_READER_TOMBSTONE_LRU_SIZE", "50000"
+    )))
+    
+    # Dedup LRU size for stream() when using FeedReader.dedup().
+    # Bounded LRU keyed by sha256(stable_id || captured_at). Default 100k.
+    feed_reader_dedup_lru_size: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEED_READER_DEDUP_LRU_SIZE", "100000"
+    )))
+
     @property
     def scrape_mackolik_archive(self) -> str:
         """Base URL for the Mackolik historical archive (fallback source)."""

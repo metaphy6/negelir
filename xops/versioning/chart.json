@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.5.1",
-    "build": 939,
+    "build": 980,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.123.7",
+      "version": "1.137.2",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-08T23:43:27+00:00",
+      "last_changed": "2026-06-09T08:17:22+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.61.2",
+      "version": "3.62.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-08T23:43:22+00:00"
+      "last_changed": "2026-06-09T06:35:30+00:00"
     },
     "docs": {
-      "version": "3.0.0",
+      "version": "3.6.3",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-09T00:05:13+00:00"
+      "last_changed": "2026-06-09T08:07:29+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -96,9 +96,9 @@
       }
     },
     "common": {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "(Pivot v3) Shared libraries — config schema, Record envelope, feed manifests, bus SDK.",
-      "last_changed": "2026-04-24T13:51:12+00:00"
+      "last_changed": "2026-06-09T06:15:29+00:00"
     },
     "competitions": {
       "version": "0.1.0",
@@ -15717,6 +15717,375 @@
       "from": "2.22.0",
       "to": "3.0.0",
       "build": 939
+    },
+    {
+      "timestamp": "2026-06-09T06:07:11+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.1: feed registry.json with v1 for all base + cross-phase record types",
+      "from": "3.0.0",
+      "to": "3.0.1",
+      "build": 940
+    },
+    {
+      "timestamp": "2026-06-09T06:11:42+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.1.2: Added JSONSchema 2020-12 files for all 12 feed planes (reference, schedule, score, lineup, editorial, market, feature_vectors, sec_quarantine, match_outcomes, calibration, competition, predict_invalidated)",
+      "from": "3.0.1",
+      "to": "3.0.2",
+      "build": 941
+    },
+    {
+      "timestamp": "2026-06-09T06:15:29+00:00",
+      "component": "common",
+      "level": "minor",
+      "note": "Phase 16.1.3: Record envelope schema (envelope.v1.json) with reserved fields and contract tests",
+      "from": "0.2.0",
+      "to": "0.3.0",
+      "build": 942
+    },
+    {
+      "timestamp": "2026-06-09T06:20:41+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.1.4 per-plane semantic invariants checklist ticked; 12 invariant check functions + 24 tests landed",
+      "from": "3.0.2",
+      "to": "3.0.3",
+      "build": 943
+    },
+    {
+      "timestamp": "2026-06-09T06:25:21+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.1 canonical encoder implementation + 41 conformance tests",
+      "from": "3.0.3",
+      "to": "3.1.0",
+      "build": 944
+    },
+    {
+      "timestamp": "2026-06-09T06:30:46+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.1: added emitter_max_payload_bytes config key and truncated_at_bytes envelope field",
+      "from": "1.123.7",
+      "to": "1.124.0",
+      "build": 945
+    },
+    {
+      "timestamp": "2026-06-09T06:35:25+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.15: Reserved envelope fields for signing (signature_alg, signing_key_id) - non-breaking schema extension with null defaults",
+      "from": "3.1.0",
+      "to": "3.2.0",
+      "build": 946
+    },
+    {
+      "timestamp": "2026-06-09T06:35:30+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 16.15: Added feeds_signature_optional lint rule to ensure verify_signature passes on null signatures",
+      "from": "3.61.2",
+      "to": "3.62.0",
+      "build": 947
+    },
+    {
+      "timestamp": "2026-06-09T06:41:21+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.1: FeedReader + FeedCursor with registry SHA snapping at stream-open time",
+      "from": "1.124.0",
+      "to": "1.125.0",
+      "build": 948
+    },
+    {
+      "timestamp": "2026-06-09T06:45:56+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.1 schema discoverability: emitter management port + FeedReader verification + 13 tests",
+      "from": "1.125.0",
+      "to": "1.126.0",
+      "build": 949
+    },
+    {
+      "timestamp": "2026-06-09T06:46:01+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.1 schema discoverability bullet marked complete",
+      "from": "3.2.0",
+      "to": "3.3.0",
+      "build": 950
+    },
+    {
+      "timestamp": "2026-06-09T06:51:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.1 contract tests: registry_consistent (10 tests), schemas_additionalProperties_false (4 tests), envelope_reserved_fields (9 tests). Binding contracts for Phase 16 feed architecture validated.",
+      "from": "3.3.0",
+      "to": "3.4.0",
+      "build": 951
+    },
+    {
+      "timestamp": "2026-06-09T06:58:35+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 FeedWriter: single-writer lease coordination, append-only writes, atomic daily rotation (ai/common/feeds/writer.py + 4 test modules)",
+      "from": "1.126.0",
+      "to": "1.127.0",
+      "build": 952
+    },
+    {
+      "timestamp": "2026-06-09T06:58:36+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.2 first bullet completed: FeedWriter with lease + NDJSON + rotation",
+      "from": "3.4.0",
+      "to": "3.5.0",
+      "build": 953
+    },
+    {
+      "timestamp": "2026-06-09T07:03:31+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 bullet 2: Per-source fairness floor token-bucket enforcement with WriterPool",
+      "from": "1.127.0",
+      "to": "1.128.0",
+      "build": 954
+    },
+    {
+      "timestamp": "2026-06-09T07:05:24+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 bullet 3: TAI/NTP-disciplined clock support with monotonic rotation safety net",
+      "from": "1.128.0",
+      "to": "1.129.0",
+      "build": 955
+    },
+    {
+      "timestamp": "2026-06-09T07:07:16+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 bullet 4: FileRotator with compression, checksums, and atomic durability",
+      "from": "1.129.0",
+      "to": "1.130.0",
+      "build": 956
+    },
+    {
+      "timestamp": "2026-06-09T07:08:59+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 bullet 5: Per-record CRC32C trailer for torn-write detection",
+      "from": "1.130.0",
+      "to": "1.131.0",
+      "build": 957
+    },
+    {
+      "timestamp": "2026-06-09T07:10:43+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 bullet 7: Disk usage backpressure monitoring and write blocking",
+      "from": "1.131.0",
+      "to": "1.132.0",
+      "build": 958
+    },
+    {
+      "timestamp": "2026-06-09T07:12:49+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 bullet 8: Intra-day compaction with size-threshold partition sealing",
+      "from": "1.132.0",
+      "to": "1.133.0",
+      "build": 959
+    },
+    {
+      "timestamp": "2026-06-09T07:21:07+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.2 bullet 9: atomic manifest updates with runtime metrics (disk_usage_pct, clock_skew_ms, fairness_floor_violations_window, parts_per_date)",
+      "from": "1.133.0",
+      "to": "1.133.1",
+      "build": 960
+    },
+    {
+      "timestamp": "2026-06-09T07:24:45+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.2 bullet 10: crash-recovery startup with deterministic decision tree (detect half-states, RESUME/ROLLBACK)",
+      "from": "1.133.1",
+      "to": "1.133.2",
+      "build": 961
+    },
+    {
+      "timestamp": "2026-06-09T07:26:26+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.2 bullet 11: proof tests (167 tests, all passing) covering all major writer properties",
+      "from": "1.133.2",
+      "to": "1.133.3",
+      "build": 962
+    },
+    {
+      "timestamp": "2026-06-09T07:34:30+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.2 §12-15: property fuzzer, idempotency keys, pre-flush validation, per-plane compression. 77 binding test cases across 4 new test files.",
+      "from": "1.133.3",
+      "to": "1.134.0",
+      "build": 963
+    },
+    {
+      "timestamp": "2026-06-09T07:38:29+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.3 bullet 1: hourly hive-partitioned snapshot builder with deterministic ordering and configurable part size",
+      "from": "1.134.0",
+      "to": "1.135.0",
+      "build": 964
+    },
+    {
+      "timestamp": "2026-06-09T07:39:43+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 2: watermark-driven close with late record metrics and snapshot-ready events",
+      "from": "1.135.0",
+      "to": "1.135.1",
+      "build": 965
+    },
+    {
+      "timestamp": "2026-06-09T07:40:46+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 5: idempotent rebuild with registry pin, determinism validation, and SHA256 verification",
+      "from": "1.135.1",
+      "to": "1.135.2",
+      "build": 966
+    },
+    {
+      "timestamp": "2026-06-09T07:41:11+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 4: deterministic ordering within part files by (captured_at, stable_id)",
+      "from": "1.135.2",
+      "to": "1.135.3",
+      "build": 967
+    },
+    {
+      "timestamp": "2026-06-09T07:41:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 6: footer metadata with all required fields persisted in snapshots",
+      "from": "1.135.3",
+      "to": "1.135.4",
+      "build": 968
+    },
+    {
+      "timestamp": "2026-06-09T07:43:10+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 3: tombstone application at close with plane-specific filtering and count tracking",
+      "from": "1.135.4",
+      "to": "1.135.5",
+      "build": 969
+    },
+    {
+      "timestamp": "2026-06-09T07:45:44+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 7: schema generator with TypedDict-to-pyarrow conversion and three-way consistency validation",
+      "from": "1.135.5",
+      "to": "1.135.6",
+      "build": 970
+    },
+    {
+      "timestamp": "2026-06-09T07:47:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 9: bloom filter sidecars with FPR-sized parameters for fast stable_id point lookups",
+      "from": "1.135.6",
+      "to": "1.135.7",
+      "build": 971
+    },
+    {
+      "timestamp": "2026-06-09T07:48:50+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.3 bullet 10: delta snapshot mode with configurable compaction interval and snapshot chain support",
+      "from": "1.135.7",
+      "to": "1.136.0",
+      "build": 972
+    },
+    {
+      "timestamp": "2026-06-09T07:50:03+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.3 bullet 11: comprehensive proof tests with 31 binding test cases covering all Phase 16.3 functionality",
+      "from": "1.136.0",
+      "to": "1.136.1",
+      "build": 973
+    },
+    {
+      "timestamp": "2026-06-09T07:54:17+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.4 bullet 1: FeedReader.stream/snapshot with registry freezing, cursor resumption, NDJSON+Parquet reading",
+      "from": "1.136.1",
+      "to": "1.137.0",
+      "build": 974
+    },
+    {
+      "timestamp": "2026-06-09T07:59:52+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.4 bullet 2: FeedReader cursor/offset API with manifest-based offset mapping; survives midnight rotation and intra-day splits; registry skew telemetry",
+      "from": "3.5.0",
+      "to": "3.6.0",
+      "build": 975
+    },
+    {
+      "timestamp": "2026-06-09T08:03:44+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.4 bullet 3: dedup helper shipped",
+      "from": "3.6.0",
+      "to": "3.6.1",
+      "build": 976
+    },
+    {
+      "timestamp": "2026-06-09T08:05:09+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.4 bullet 4: path/checksum validation shipped",
+      "from": "3.6.1",
+      "to": "3.6.2",
+      "build": 977
+    },
+    {
+      "timestamp": "2026-06-09T08:07:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.4 bullet 5: telemetry signals complete; 44 tests passing",
+      "from": "3.6.2",
+      "to": "3.6.3",
+      "build": 978
+    },
+    {
+      "timestamp": "2026-06-09T08:11:41+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.4 bullet 6: FeedReader version negotiation (version_pin parameter)",
+      "from": "1.137.0",
+      "to": "1.137.1",
+      "build": 979
+    },
+    {
+      "timestamp": "2026-06-09T08:17:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 16.4 bullet 7: Tombstone handling on stream with LRU-bounded per-stream tracking",
+      "from": "1.137.1",
+      "to": "1.137.2",
+      "build": 980
     }
   ]
 }

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lineup Payload (v1) — Live-plane entity",
+  "description": "Phase 16 — Team lineups (confirmed starting XI, bench). Per EMITTER.md §3.3, unconfirmed lineups are emitted with confirmed=false. One Record per (match, side) pair.",
+  "type": "object",
+  "required": [
+    "match_stable_id",
+    "side",
+    "starters",
+    "formation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "match_stable_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for the match."
+    },
+    "side": {
+      "type": "string",
+      "enum": ["home", "away"],
+      "description": "Which team this lineup applies to."
+    },
+    "starters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["player_id", "position", "number"],
+        "additionalProperties": false,
+        "properties": {
+          "player_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable player identifier."
+          },
+          "position": {
+            "type": "string",
+            "enum": ["goalkeeper", "defender", "midfielder", "forward"],
+            "description": "Field position."
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "Jersey number."
+          },
+          "player_name": {
+            "type": ["string", "null"],
+            "description": "Display name."
+          }
+        }
+      },
+      "description": "Starting XI players in order."
+    },
+    "bench": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["player_id", "number"],
+        "additionalProperties": false,
+        "properties": {
+          "player_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable player identifier."
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "Jersey number."
+          },
+          "player_name": {
+            "type": ["string", "null"],
+            "description": "Display name."
+          }
+        }
+      },
+      "description": "Substitutes bench list."
+    },
+    "formation": {
+      "type": "string",
+      "pattern": "^[0-9]+-[0-9]+-[0-9]+$",
+      "description": "Formation (e.g. 4-3-3, 5-3-2). Pattern is defenders-midfielders-forwards."
+    },
+    "confirmed": {
+      "type": "boolean",
+      "description": "True if lineup is officially confirmed; false if inferred or preliminary."
+    }
+  }
+}

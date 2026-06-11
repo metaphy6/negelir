@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Predict Invalidated Payload (v1) — Predict-invalidated-plane entity",
+  "description": "Phase 16 — Cascade invalidation events (Phase 13.51). Per EMITTER.md cross-phase alignment, predict.invalidated.v1 is both a control-plane bus topic AND a feed. The emitter writes both under a single transactional barrier.",
+  "type": "object",
+  "required": [
+    "prediction_id",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "prediction_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier of the prediction being invalidated."
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["data_retracted", "anomaly_detected", "cascade_invalidation"],
+      "description": "Reason for invalidation."
+    },
+    "affected_match_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Match IDs affected by this invalidation event."
+    },
+    "invalidated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC when the invalidation was triggered."
+    }
+  }
+}
