@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.6.0",
-    "build": 18,
+    "build": 21,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-12T07:12:16+00:00"
     },
     "docs": {
-      "version": "3.11.0",
+      "version": "3.12.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-12T12:35:54+00:00"
+      "last_changed": "2026-06-12T13:34:56+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -16289,6 +16289,33 @@
       "from": "3.10.0",
       "to": "3.11.0",
       "build": 18
+    },
+    {
+      "timestamp": "2026-06-12T13:21:35+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "ROADMAP: remove standalone Phase R; re-home restructure as deferred Phase 22 (gated on 18/19/21, 20 optional); revise Phase 18 deps (drop 17 + restructure); Phase 17 ships last; fix intro/IAS/TOC/overview/dep-diagram R refs",
+      "from": "3.11.0",
+      "to": "3.12.0",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-06-12T13:29:31+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 18: reframe residual cutover bullets (§18.3 shim+ai/ deletion, §18.4 mock-overlay deletion, §18.5 ai-eol+rename+≥1.0.0, §18.24 DoD) so the gate/contract stays in Phase 18 but the destructive delete/move/rename/eol is explicitly executed in Phase 22 — Phase 18 now moves/deletes nothing",
+      "from": "3.12.0",
+      "to": "3.12.1",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-06-12T13:34:56+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 18 §18.3: rewrote confusing shim-deletion banner into 4 labeled paras (what 18 ships vs what 22 runs / gate-is-only-evidence / agent rule / recovery); fixed stale R2 prose labels in bullets; no content removed",
+      "from": "3.12.1",
+      "to": "3.12.2",
+      "build": 21
     }
   ]
 }
