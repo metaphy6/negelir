@@ -36,7 +36,7 @@
 | 16/17/18 — Emitter / Patcher / Cohesion | 🛠 design only | Anchor docs (EMITTER, SCRAPER_PATCHER, COMPONENT_LAYOUT) binding; no code yet. Phase 16 detail folder active. |
 | 19/20/21 — Long-tail / Monetization / Enrichment | 🛠 design only | Design stubs landed; no code. |
 | R1 — chart rename | 🟡 partial | All new chart keys seeded; `version.py rename` + `source_watcher → datasource_watcher` collapse still open. |
-| R2–R6 | ⏳ not started | Window: between Phase 5 design and Phase 6 kickoff. |
+| R2–R6 | ⏳ not started — **overdue** | Originally scheduled "between Phase 5 and Phase 6 kickoff", but Phases 6–13 all shipped under the transitional `ai/` paths, so **R2 (the module move) has never run** — the entire implementation still lives under `ai/`. Any Phase 18 "delete `ai/`" step is therefore blocked until R2 runs (proven by `make isolation.shims-only`, never by a ticked box). |
 
 **Doctrine reminder:** every checkbox flip ships in the same commit as
 the implementing code, the matching tracker row, and the
@@ -206,7 +206,7 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 | **15** | Frontend Handoff (Flutter) | API contract frozen, sample client | 9 |
 | **16** | **Emitter & Feed Contract** *(Pivot v3)* | DB/Redis state → NDJSON/Parquet feeds; swarm stops reading DB | R2 |
 | **17** | **Scraper-Patcher + GitOps** *(Pivot v3)* | Auto-patching scraper with 5-gate 7-day auto-merge | 16, R3 |
-| **18** | **Datasource Cohesion & Swarm Isolation** *(Pivot v3)* | Three-way isolation tests green; `ai/` tree deleted | 16, 17, R4 |
+| **18** | **Datasource Cohesion & Swarm Isolation** *(Pivot v3)* | Three-way isolation tests green; `ai/` tree deleted **(only after R2 physically moves the modules — gated by `make isolation.shims-only`, never by a ticked box)** | 16, 17, R2, R4 |
 | **19** | **Global Catalog (deferred long-tail)** | Pluggable catalog architecture for every league listed on mackolik/nesine + every WC qualifier confederation. T3 (research) rows added now; promotion to T2/T1 deferred per business demand. | 13c |
 | **20** | **Monetization (built-but-dormant)** | Tier-based entitlement engine + per-token quotas at the Go API. `MONETIZATION_ENABLED=false` default; flips on via single config change. Per [`design/MONETIZATION.md`](../design/MONETIZATION.md). | 9, 13a |
 | **21** | **Enrichment Data Planes** | Add planes 6-9 (transfers, injuries/availability, referees, weather/pitch) + four derived views (market-movement, fixture-congestion, card-context, narrative-pressure). Per [`design/ENRICHMENT_DATA.md`](../design/ENRICHMENT_DATA.md). | 4, 6 |
@@ -2269,9 +2269,12 @@ The Phase 17 design baseline started simple and grew into the contract in SCRAPE
 **Goal:** Land the steady-state, three-way isolation between
 `datasource/`, `swarm/`, and `server/` (with `common/` as the shared
 schema/contract layer) — and *prove* it stays that way with mechanical,
-recurring gates rather than one-shot tests. Delete `ai/` and the
-mock-overlay compose file once the gates are green and a documented
-rollback path is rehearsed. The phase covers **all five layers** at
+recurring gates rather than one-shot tests. Delete `ai/` — **only
+after Phase R2 has actually moved every module out of it and the
+`make isolation.shims-only` gate proves `ai/` is shim-only (never on
+the strength of a ticked checkbox)** — and the mock-overlay compose
+file once the gates are green and a documented rollback path is
+rehearsed. The phase covers **all five layers** at
 which isolation can break: (1) **source code** (imports, public
 symbols, path-drift), (2) **supply chain** (transitive deps, lockfiles,
 base images, SBOM), (3) **build artefacts** (per-component Dockerfiles,
@@ -2285,6 +2288,17 @@ gates so developers don't silently bypass them).
 **Depends on:** Phase 16 (feeds — the only sanctioned data path between
 `datasource/` and `swarm/`), Phase R1–R4 (renames, moves, shim
 deletion), Phase 14 (telemetry — isolation-violation alerts).
+
+> 🛑 **Hard precondition — R2 must really have run before any `ai/`
+> deletion.** Every "delete `ai/`" bullet in this phase (§18.3, §18.24)
+> and in R4 is blocked until Phase **R2** has physically moved the
+> modules into `datasource/` / `swarm/` / `common/` and
+> `make isolation.shims-only` proves `ai/` holds only re-export shims.
+> As of this writing **R2 has not run** — the entire implementation
+> (Phases 3–13) still lives under `ai/`. Deleting `ai/` before R2 wipes
+> the live codebase; an orchestrated run did exactly that once and the
+> tree had to be restored from git. The gate is executable, not prose:
+> a ticked checkbox is **not** evidence that R2 happened.
 
 **Defers to Phase 19:** Patcher integration gates (ledger #21) — the
 layout-freeze window and Phase 17 watchdog coordination move to Phase 19
@@ -2416,12 +2430,34 @@ applies and pass the same gates.
 - [ ] **Phase 18 conformance gate** (ledger #30). `xops/lint/phase18_conformance.py` runs on every PR that touches `common/` or any component root; refuses merge without the conformance checkbox flipped (which proves snapshot + policy + smoke matrix were considered).
 - [ ] Proof tests: `test_isolation_job_runs_first.py`, `test_isolation_failure_short_circuits_pipeline.py`, `test_components_declare_public_api_via_all.py`, `test_cross_component_review_required_on_common_schemas.py`, `test_cross_component_review_required_on_bus_topics.py`, `test_cross_component_move_requires_marker.py`, `test_cross_component_move_requires_dual_codeowner.py`, `test_cross_component_move_updates_snapshot.py`, `test_phase18_conformance_checkbox_blocks_pr.py`, `test_downstream_phases_inherit_isolation_dod.py`, `test_new_boundary_file_updates_snapshot.py`.
 
-### 18.3 Shim deletion (R4)
+### 18.3 Shim deletion (R4) — HARD-GATED ON PHASE R2
 
-- [ ] **Pre-conditions** (ledger #5). All three signals green for 14 days: zero `ai.*-shim` `DeprecationWarning`s in CI (≥ 50 pipelines), zero hits in production runtime logs (`make shim.runtime.report`), CODEOWNERS ACK from each component checked into `docs/tracking/phase18_shim_deletion_acks.md`. (Phase 19 adds a fourth gate: zero `ai/` references in Phase 17 patcher bundle storage.)
+> 🛑 **Binding precondition (executable, not prose).** The `ai/`
+> tree may be deleted **only** after Phase **R2** has actually moved
+> every module into `datasource/` / `swarm/` / `common/` and `ai/`
+> contains nothing but re-export shims. This is proven by an
+> **executable gate**, `make isolation.shims-only`, which fails
+> (non-zero) if any file under `ai/` still carries real
+> implementation rather than a shim re-export. A ticked R2 checkbox,
+> a "design landed" tracker row, or this roadmap's prose are **NOT**
+> evidence — the deletion bullets below stay blocked until that gate
+> is green in CI. Any agent draining this section MUST treat an
+> unmet precondition as a hard blocker (see
+> [`.github/agents/phase-implementer.agent.md`](../../.github/agents/phase-implementer.agent.md)
+> → "Unmet upstream-phase precondition").
+>
+> 🔁 **Recovery note.** An orchestrated run once drained the "delete
+> `ai/`" bullet while R2 had never run, deleting the entire live
+> implementation (Phases 3–13 all still live under `ai/`). The work
+> was restored from git; this hard gate plus the phase-implementer
+> blocker exist so it cannot recur.
+
+- [ ] **R2-complete shim-only gate** (binding). `make isolation.shims-only` (driver `xops/lint/ai_shims_only.py`) parses every file under `ai/` and fails unless each is a pure re-export shim of a `datasource.*` / `swarm.*` / `common.*` module; the deletion bullets below are blocked until this gate is green in CI across the pre-condition window.
+- [ ] **Pre-conditions** (ledger #5). After the R2-complete shim-only gate is green, all three signals green for 14 days: zero `ai.*-shim` `DeprecationWarning`s in CI (≥ 50 pipelines), zero hits in production runtime logs (`make shim.runtime.report`), CODEOWNERS ACK from each component checked into `docs/tracking/phase18_shim_deletion_acks.md`. (Phase 19 adds a fourth gate: zero `ai/` references in Phase 17 patcher bundle storage.)
 - [ ] **Two-PR sequence** (ledger #4). PR #1 deletes the shim and lands `xops/lint/ai_tree_resurrection.py`; PR #2 (after the deprecation window) flips the lint into a permanent CI gate (`test_ai_tree_gone.py`); both PRs CODEOWNERS-protected.
-- [ ] `ai/` directory removed (along with its empty `__init__.py`).
+- [ ] `ai/` directory removed (along with its empty `__init__.py`) — **only** with `make isolation.shims-only` green and the three pre-condition signals satisfied.
 - [ ] `test_ai_tree_gone.py` — asserts the path does not exist; prevents accidental recreation.
+- [ ] `test_ai_deletion_blocked_until_r2_shims_only.py` — the executable form of the precondition: asserts the deletion lint refuses to run while any `ai/` file is still real implementation (red until R2 is genuinely complete).
 - [ ] Proof tests: `test_shim_deletion_requires_three_signals.py`, `test_shim_runtime_report_covers_prod.py`, `test_shim_codeowner_acks_recorded.py`, `test_ai_tree_resurrection_blocked_by_lint.py`, `test_ai_tree_removal_two_pr_sequence_documented.py`.
 
 ### 18.4 Compose cohesion (R4)
@@ -2716,7 +2752,7 @@ applies and pass the same gates.
 - [ ] **Redis & cache-key namespace isolation** complete (§18.21): every Redis key prefixed `<component>:`, `common/bus/redis_client.py` enforces, raw `redis.Redis` forbidden outside `common.bus.*`, key-collision chaos test green, unbounded `SET` (no TTL, not on persistent allow-list) refused.
 - [ ] **Supply-chain automation, tracker continuity & runner hygiene** complete (§18.22): Renovate / Dependabot route through lockfile-review, bot never satisfies cross-component review, bot config CODEOWNERS-protected, `make track.show` translates renamed components both during and after the alias window, `phases.csv` history mutation refused, CI runner image is hash-pinned + transitive-forbidden-dep clean + monthly-refreshed, tests run inside per-component containers (never on the runner host's Python).
 - [ ] **Operational vocabularies & ordering** complete (§18.23): correlation IDs propagate end-to-end (HTTP → bus → feeds → swarm) with handler-coverage lint, error-code vocabulary in `common/errors/codes.yaml` with no free-form codes at boundaries, stack-wide drain ordering YAML governs `make stack.down`/`up`, deprecation calendar covers every alias / EOL with 14-day pre-EOL paging, container clock-skew gate blocks boot above threshold and pages above the alert threshold, every base image carries a time-discipline daemon, random-seed determinism enforced via `common.lifecycle.seeds`.
-- [ ] **Shim deletion** complete with all four pre-condition signals recorded; `ai/` tree removed; resurrection lint active; layout-freeze window expired clean.
+- [ ] **Shim deletion** complete: `make isolation.shims-only` green (R2 verifiably moved every module; `ai/` is shim-only) **before** removal; all four pre-condition signals recorded; `ai/` tree removed; resurrection lint active; layout-freeze window expired clean.
 - [ ] **Compose cohesion** complete: single `docker-compose.yml`, per-component Dockerfiles in place, `docker-compose.mock.yml` removed (after the deprecation stub window), per-profile-tuple smoke matrix green for the canonical six tuples, boundary smoke green, readiness-budget smoke green.
 - [ ] **Versioning finalization** complete: chart keys at the right names + tiers, `ai` `eol`, `source_watcher → datasource_watcher` aliased per ledger #8, every `≥ 1.0.0` component carries `PUBLIC_API.md` + compat-test suite + deprecation-policy doc.
 - [ ] **Runtime DB / bus / API isolation** complete (§18.6): per-component DB roles + table ownership + bus-topic ownership + `server/internal` contract descriptor all enforced at runtime, not just in tests.
@@ -2906,6 +2942,16 @@ applies and pass the same gates.
 > therefore lands between Phase 5 design completion and Phase 6
 > implementation kickoff. Estimated 1–2 weeks of focused work. Each
 > sub-phase is individually reversible within the sprint.
+>
+> ⚠️ **Reality check (2026-06-12).** This did **not** happen on
+> schedule. Phases 6–13 all shipped under the transitional `ai/`
+> paths, and **R2 (the actual `git mv` into `datasource/` / `swarm/`
+> / `common/`) has still not run** — every module remains under
+> `ai/`. Until R2 lands, treat any "delete `ai/`" / "remove shim"
+> bullet (R4, §18.3, §18.24) as **blocked**: the executable gate
+> `make isolation.shims-only` must prove `ai/` is shim-only first. An
+> orchestrated run that ignored this precondition once deleted the
+> entire live tree; it was restored from git.
 **Anchor doc:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 7.
 
 ### R1 — Rename + path aliases
@@ -2930,8 +2976,16 @@ applies and pass the same gates.
 
 ### R4 — Shim deletion + tree removal
 
+> 🛑 **Hard-gated on R2.** "Delete shims" / "`ai/` tree removed"
+> presupposes **R2 has actually moved every module** and `ai/` is
+> shim-only — proven by `make isolation.shims-only` (see §18.3), not
+> by a ticked box. Do not drain these bullets until that gate is
+> green: an orchestrated run once deleted the whole live `ai/` tree
+> because this precondition was prose rather than an executable gate.
+
+- [ ] R2 verified complete: `make isolation.shims-only` green (every `ai/` file is a pure re-export shim).
 - [ ] Zero shim warnings in CI for two consecutive weeks → delete shims.
-- [ ] `ai/` tree removed.
+- [ ] `ai/` tree removed (only after the two bullets above).
 - [ ] Isolation tests turned on (§18.1).
 
 ### R5 — Mock absorption

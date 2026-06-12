@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.6.0",
-    "build": 17,
+    "build": 18,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-12T07:12:16+00:00"
     },
     "docs": {
-      "version": "3.10.0",
+      "version": "3.11.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-12T06:57:36+00:00"
+      "last_changed": "2026-06-12T12:35:54+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -16280,6 +16280,15 @@
       "from": "1.140.1",
       "to": "1.140.2",
       "build": 17
+    },
+    {
+      "timestamp": "2026-06-12T12:35:54+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "ROADMAP §18.3/R4 hard-gate ai/ deletion behind executable make isolation.shims-only probe (R2-complete); fix stale R2 timing (IAS+Phase R); add unmet-precondition blocker to phase-implementer; add negelir admin agent",
+      "from": "3.10.0",
+      "to": "3.11.0",
+      "build": 18
     }
   ]
 }

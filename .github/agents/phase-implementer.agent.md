@@ -144,6 +144,28 @@ continue?" — is **not** a blocker.
   §2). Record `make orchestrate.advance … STATUS=blocked
   OUTCOME=blocked NOTES="cross-phase: needs <other-id>"`, end
   your reply with `remaining: <unchanged N>`.
+- **Unmet upstream-phase precondition (destructive bullets).**
+  A bullet whose literal text **deletes, removes, drops, or
+  truncates** a tree, module, table, or file (e.g. "delete
+  `ai/`", "remove the shim", "drop the legacy table",
+  "`ai/` tree removed") is safe **only** once the upstream work
+  that makes it safe has *actually shipped* — not merely been
+  ticked or described in prose. Before draining any such bullet
+  you MUST confirm the precondition with an **executable probe**:
+  a passing `make` / test target that the bullet (or its section)
+  names — e.g. `make isolation.shims-only` for the `ai/`
+  deletion, which proves Phase R2 moved every module and `ai/`
+  is shim-only. An adjacent `[x]` checkbox, a "design landed"
+  tracker row, or roadmap prose is **NOT** sufficient evidence.
+  If the probe does not exist yet, or does not pass, the
+  precondition is unmet: do **not** delete. Record
+  `make orchestrate.advance … STATUS=blocked OUTCOME=blocked
+  NOTES="unmet precondition: <destructive bullet> needs <probe>
+  green"` and stop on that bullet. *(This rule exists because an
+  orchestrated run once drained the §18.3 "delete `ai/`" bullet
+  while Phase R2 had never moved the modules — wiping the entire
+  live implementation. The deletion looked drainable; the
+  precondition was prose, not a gate.)*
 - **Doctrine conflict.** A bullet directly contradicts
   `AGENTS.md` §2 or `CLAUDE.md`. Record the same way with
   `NOTES="doctrine conflict: <which rule>"`.
