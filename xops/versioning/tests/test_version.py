@@ -227,3 +227,70 @@ def test_compatibility_block_round_trip() -> None:
         "chart.json with compatibility block is not in canonical form; "
         "only edit through `make version.bump`."
     )
+
+
+# ── Rename operation ──────────────────────────────────────────
+
+
+def test_rename_component_preserves_version() -> None:
+    """Rename should move the component and preserve its version."""
+    chart = _fresh_chart()
+    old_version = chart["components"]["source_watcher"]["version"]
+    entry = v.rename_component(
+        chart,
+        old_name="source_watcher",
+        new_name="datasource_watcher",
+        note="rename test",
+        timestamp="2030-01-01T00:00:00+00:00",
+    )
+
+    # Check that the rename happened
+    assert "source_watcher" not in chart["components"]
+    assert "datasource_watcher" in chart["components"]
+    assert chart["components"]["datasource_watcher"]["version"] == old_version
+    assert chart["components"]["datasource_watcher"]["description"] == "Source watcher"
+
+    # Check changelog entry
+    assert entry["from"] == "source_watcher"
+    assert entry["to"] == "datasource_watcher"
+    assert entry["version"] == old_version
+    assert entry["level"] == "rename"
+    assert entry["note"] == "rename test"
+    assert chart["changelog"][-1] == entry
+
+
+def test_rename_unknown_component_raises() -> None:
+    """Renaming a nonexistent component should raise."""
+    chart = _fresh_chart()
+    with pytest.raises(v.VersionChartError, match="not found"):
+        v.rename_component(chart, "nonexistent", "new_name")
+
+
+def test_rename_to_existing_name_raises() -> None:
+    """Renaming to a name that already exists should raise."""
+    chart = _fresh_chart()
+    with pytest.raises(v.VersionChartError, match="already exists"):
+        v.rename_component(chart, "source_watcher", "ai")
+
+
+def test_rename_updates_changelog() -> None:
+    """Rename should create a changelog entry."""
+    chart = _fresh_chart()
+    initial_len = len(chart["changelog"])
+    v.rename_component(chart, "source_watcher", "datasource_watcher")
+    assert len(chart["changelog"]) == initial_len + 1
+
+
+def test_rename_save_and_load_round_trip(tmp_path: Path) -> None:
+    """Renamed components should survive save and load."""
+    chart = _fresh_chart()
+    v.rename_component(chart, "source_watcher", "datasource_watcher", note="test rename")
+    out = tmp_path / "chart.json"
+    v.save_chart(chart, path=out)
+    reloaded = v.load_chart(path=out)
+
+    assert "source_watcher" not in reloaded["components"]
+    assert "datasource_watcher" in reloaded["components"]
+    rename_entry = reloaded["changelog"][-1]
+    assert rename_entry["from"] == "source_watcher"
+    assert rename_entry["to"] == "datasource_watcher"

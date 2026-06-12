@@ -1122,6 +1122,10 @@ version.show: ## Print project + component versions (CHANGELOG=N for log tail)
 version.bump: ## Bump COMPONENT=<key> LEVEL=<major|minor|patch> [NOTE="..."]
 	@$(XOPS)/version.py bump
 
+.PHONY: version.rename
+version.rename: ## Rename COMPONENT=<old_key> NEW_NAME=<new_key> [NOTE="..."]
+	@$(XOPS)/version.py rename
+
 .PHONY: version.validate
 version.validate: ## Validate chart.json schema
 	@$(XOPS)/version.py validate

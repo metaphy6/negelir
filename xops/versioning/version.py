@@ -220,6 +220,52 @@ def bump_component(
     return entry
 
 
+# ── Rename operation ──────────────────────────────────────────
+
+
+def rename_component(
+    chart: Dict[str, Any],
+    old_name: str,
+    new_name: str,
+    note: str = "",
+    *,
+    timestamp: str = "",
+) -> Dict[str, Any]:
+    """Rename a component key in the chart and record the change.
+
+    Preserves the version number and all metadata. Returns the changelog entry.
+    """
+    ts = timestamp or now_utc()
+
+    components = chart["components"]
+    if old_name not in components:
+        raise VersionChartError(
+            f"component {old_name!r} not found; known: {sorted(components)}"
+        )
+    if new_name in components:
+        raise VersionChartError(
+            f"component {new_name!r} already exists in chart"
+        )
+
+    # Move the component data
+    old_data = components.pop(old_name)
+    old_version = old_data.get("version", "")
+    components[new_name] = old_data
+
+    # Record the rename in the changelog
+    entry: Dict[str, Any] = {
+        "timestamp": ts,
+        "component": f"{old_name} → {new_name}",
+        "level": "rename",
+        "from": old_name,
+        "to": new_name,
+        "version": old_version,
+        "note": note,
+    }
+    chart.setdefault("changelog", []).append(entry)
+    return entry
+
+
 # ── CLI ───────────────────────────────────────────────────────
 
 
@@ -263,6 +309,21 @@ def cmd_bump(args: argparse.Namespace) -> int:
     print(
         f"✅ {entry['component']}: {entry['from']} → {entry['to']} "
         f"({entry['level']}); project build = {chart[PROJECT_KEY]['build']}"
+    )
+    return 0
+
+
+def cmd_rename(args: argparse.Namespace) -> int:
+    chart = load_chart()
+    entry = rename_component(
+        chart,
+        old_name=args.component,
+        new_name=args.new_name,
+        note=args.note or "",
+    )
+    save_chart(chart)
+    print(
+        f"✅ {entry['from']} → {entry['to']} (v{entry['version']})"
     )
     return 0
 
@@ -374,6 +435,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Short human note appended to the changelog entry.",
     )
     bump.set_defaults(func=cmd_bump)
+
+    rename = sub.add_parser("rename", help="Rename a component key.")
+    rename.add_argument(
+        "--component",
+        required=True,
+        help="Current component key to rename.",
+    )
+    rename.add_argument(
+        "--new-name",
+        required=True,
+        dest="new_name",
+        help="New component key name.",
+    )
+    rename.add_argument(
+        "--note",
+        default="",
+        help="Short human note appended to the changelog entry.",
+    )
+    rename.set_defaults(func=cmd_rename)
 
     val = sub.add_parser("validate", help="Validate chart.json.")
     val.set_defaults(func=cmd_validate)

@@ -46,6 +46,22 @@ def cmd_bump(_argv: List[str]) -> int:
     return v.main(args)
 
 
+def cmd_rename(_argv: List[str]) -> int:
+    component = _env("COMPONENT")
+    new_name = _env("NEW_NAME")
+    note = _env("NOTE")
+    if not component or not new_name:
+        err(
+            "usage: make version.rename COMPONENT=<old_key> NEW_NAME=<new_key> "
+            "[NOTE=\"...\"]"
+        )
+        return 64
+    args = ["rename", "--component", component, "--new-name", new_name]
+    if note:
+        args += ["--note", note]
+    return v.main(args)
+
+
 def cmd_validate(_argv: List[str]) -> int:
     return v.main(["validate"])
 
@@ -57,6 +73,7 @@ def cmd_compatibility_check(_argv: List[str]) -> int:
 COMMANDS = {
     "show": cmd_show,
     "bump": cmd_bump,
+    "rename": cmd_rename,
     "validate": cmd_validate,
     "compatibility-check": cmd_compatibility_check,
 }
