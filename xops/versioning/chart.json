@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.5.1",
-    "build": 980,
+    "version": "1.6.0",
+    "build": 17,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.137.2",
+      "version": "1.140.2",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-09T08:17:22+00:00",
+      "last_changed": "2026-06-12T07:22:27+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.62.0",
+      "version": "3.63.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-09T06:35:30+00:00"
+      "last_changed": "2026-06-12T07:12:16+00:00"
     },
     "docs": {
-      "version": "3.6.3",
+      "version": "3.10.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-09T08:07:29+00:00"
+      "last_changed": "2026-06-12T06:57:36+00:00"
     },
     "infra_mock": {
       "version": "1.5.1",
@@ -83,9 +83,14 @@
       "last_changed": "2026-04-24T12:23:53+00:00"
     },
     "datasource_emitter": {
-      "version": "0.1.0",
-      "description": "(Pivot v3) Projects DB/Redis state into NDJSON+Parquet feeds. R3 scaffold.",
-      "last_changed": "2026-04-24T12:23:53+00:00"
+      "version": "1.0.0",
+      "description": "(Pivot v3) Projects DB/Redis state into NDJSON+Parquet feeds. Phase 16 §16.12 landed.",
+      "last_changed": "2026-06-12T07:00:00+00:00"
+    },
+    "common_feeds": {
+      "version": "1.0.0",
+      "description": "(Pivot v3) Shared feed schema, manifest, lifecycle, and retention contracts. Phase 16 §16.1–§16.31.",
+      "last_changed": "2026-06-12T07:00:00+00:00"
     },
     "swarm": {
       "version": "0.54.0",
@@ -16086,6 +16091,195 @@
       "from": "1.137.1",
       "to": "1.137.2",
       "build": 980
+    },
+    {
+      "timestamp": "2026-06-12T06:22:59+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.2: OpenTelemetry traceparent propagation (ledger #31)",
+      "from": "3.6.3",
+      "to": "3.6.4",
+      "build": 981
+    },
+    {
+      "timestamp": "2026-06-12T06:28:18+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.4 bullet 8: FeedReader.snapshot() with column projection and predicate pushdown; FeedReader.iter_snapshot() for batch streaming; Predicate protocol",
+      "from": "1.137.2",
+      "to": "1.138.0",
+      "build": 982
+    },
+    {
+      "timestamp": "2026-06-12T06:31:39+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.4 §9: Added visibility_horizon_ms() and wait_for_visibility() methods to FeedReader (ledger #34)",
+      "from": "1.138.0",
+      "to": "1.139.0",
+      "build": 983
+    },
+    {
+      "timestamp": "2026-06-12T06:37:12+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 16.4: FeedReader.joined_snapshot() for atomic multi-plane reads with bus-based synchronization",
+      "from": "1.5.1",
+      "to": "1.6.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-12T06:41:15+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.29: manifest changelog module + tests",
+      "from": "3.6.4",
+      "to": "3.7.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-12T06:41:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.0: ledger lint infrastructure",
+      "from": "3.7.0",
+      "to": "3.7.1",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-06-12T06:42:25+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.16: coupling matrix lint",
+      "from": "3.7.1",
+      "to": "3.7.2",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-06-12T06:43:07+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.29: bullets 1-2 snapshots + replay complete",
+      "from": "3.7.2",
+      "to": "3.8.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-06-12T06:43:14+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.15: reserved envelope fields and field-provenance",
+      "from": "3.8.0",
+      "to": "3.8.1",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-06-12T06:45:51+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 16.4: FeedReader.time_travel() implementation + tests",
+      "from": "1.139.0",
+      "to": "1.140.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-06-12T06:46:28+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.29 bullets 1-2: Manifest changelog API fixes and context manager support",
+      "from": "3.8.1",
+      "to": "3.8.2",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-06-12T06:46:45+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16.4/16.29: time-travel reads + manifest changelog PITR infrastructure with 18 proof tests",
+      "from": "3.8.2",
+      "to": "3.9.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-06-12T06:50:01+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.29 bullet 3: PITR restore (make feeds.pitr.restore) implementation",
+      "from": "3.9.0",
+      "to": "3.9.1",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-06-12T06:51:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.29 bullet 4: Changelog retention and cold storage rotation",
+      "from": "3.9.1",
+      "to": "3.9.2",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-06-12T06:52:11+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.29 bullet 5: PITR runbook documentation",
+      "from": "3.9.2",
+      "to": "3.9.3",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-06-12T06:54:29+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 16.29 bullet 6: PITR proof tests (4 new tests, 18 total passing)",
+      "from": "3.9.3",
+      "to": "3.9.4",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-06-12T06:57:36+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 16 design completed: 40 sections + all 200 binding bullets resolved; emitter feed contract binding",
+      "from": "3.9.4",
+      "to": "3.10.0",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-06-12T07:04:27+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 16 feed operations: added 14 Make targets (up, down, tail, snapshot.rebuild, prune, fsck, manifest.rebuild, parity, schema.review, schema.audit, backfill, backfill.promote, chaos.run, cost.report, tombstone.audit)",
+      "from": "3.62.0",
+      "to": "3.63.0",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-06-12T07:12:16+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Makefile dispatcher path bug fix: corrected 16 feeds.* targets from @python3 xops/makefile/makefile/feeds.py to @python3 xops/makefile/feeds.py",
+      "from": "3.63.0",
+      "to": "3.63.1",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-06-12T07:12:22+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Exception handler violation fix: replaced blanket 'except Exception' with specific exceptions (ImportError, AttributeError, FileNotFoundError) in ai/common/feeds/reader.py per AGENTS.md §2 Rule 10",
+      "from": "1.140.0",
+      "to": "1.140.1",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-06-12T07:22:27+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "fixed missing @dataclass decorator on FeedManifest (Phase 16.2)",
+      "from": "1.140.1",
+      "to": "1.140.2",
+      "build": 17
     }
   ]
 }

@@ -201,7 +201,23 @@
         "null"
       ],
       "default": null,
-      "description": "Optional distributed tracing context (e.g. OpenTelemetry trace/span IDs) for observability. Null if not provided."
+      "description": "Optional W3C Trace Context (Phase 16 ledger #31) for distributed tracing. When present, contains traceparent and optional tracestate per W3C Trace Context standard (https://www.w3.org/TR/trace-context/). Null if not provided. Preserved end-to-end (extractor → writer → reader → consumer).",
+      "additionalProperties": false,
+      "properties": {
+        "traceparent": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+          "description": "W3C Trace Context traceparent: version-trace_id-parent_id-trace_flags (https://www.w3.org/TR/trace-context/#traceparent-header-field-values). Never reconstructed; always passed through from extractor."
+        },
+        "tracestate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional W3C Trace Context tracestate: vendor-specific trace state. Preserved as-is when present."
+        }
+      }
     },
     "truncated_at_bytes": {
       "type": [

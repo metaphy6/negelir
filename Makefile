@@ -526,6 +526,73 @@ mock.untrust: ## [sudo] Remove dev root CA from system + every Firefox profile
 mock.setup: ## [sudo] One-shot: hosts.install + mock.trust + mock.up
 	@$(XOPS)/mock.py setup
 
+# ── Feeds operations (PITR, manifest, retention) ────
+# Phase 16 — Datasource emitter & feed contract
+
+.PHONY: feeds.up
+feeds.up: env ## Start feed infrastructure (Postgres, Redis, NATS)
+	@$(XOPS)/feeds.py up
+
+.PHONY: feeds.down
+feeds.down: ## Stop and drain feed infrastructure
+	@$(XOPS)/feeds.py down
+
+.PHONY: feeds.tail
+feeds.tail: ## Tail live feed emissions (STREAM=<stream_id>)
+	@$(XOPS)/feeds.py tail $(STREAM)
+
+.PHONY: feeds.snapshot.rebuild
+feeds.snapshot.rebuild: ## Rebuild snapshot partition (SOURCE=<id> [AFTER=<utc-iso>])
+	@$(XOPS)/feeds.py snapshot.rebuild $(SOURCE) $(AFTER)
+
+.PHONY: feeds.prune
+feeds.prune: ## Prune expired records before cutoff (BEFORE=<utc-iso> [DRY_RUN=1])
+	@$(XOPS)/feeds.py prune $(BEFORE) $(DRY_RUN)
+
+.PHONY: feeds.fsck
+feeds.fsck: ## Filesystem integrity check on /data/feeds tree and manifest hashes
+	@$(XOPS)/feeds.py fsck
+
+.PHONY: feeds.manifest.rebuild
+feeds.manifest.rebuild: ## Rebuild manifest.json from current partition tree (operator runbook)
+	@$(XOPS)/feeds.py manifest.rebuild
+
+.PHONY: feeds.parity
+feeds.parity: ## Run parity test: live feed vs snapshot vs NDJSON (SOURCE=<id>)
+	@$(XOPS)/feeds.py parity $(SOURCE)
+
+.PHONY: feeds.schema.review
+feeds.schema.review: ## Manual review of feed schema and partitioning strategy
+	@$(XOPS)/feeds.py schema.review
+
+.PHONY: feeds.schema.audit
+feeds.schema.audit: ## Audit schema compatibility across all feed versions
+	@$(XOPS)/feeds.py schema.audit
+
+.PHONY: feeds.backfill
+feeds.backfill: ## Backfill missing feed partitions (SOURCE=<id> FROM=<utc-iso> TO=<utc-iso>)
+	@$(XOPS)/feeds.py backfill $(SOURCE) $(FROM) $(TO)
+
+.PHONY: feeds.backfill.promote
+feeds.backfill.promote: ## Promote backfilled partitions from staging to live feed tree
+	@$(XOPS)/feeds.py backfill.promote
+
+.PHONY: feeds.chaos.run
+feeds.chaos.run: ## Run chaos scenario on feeds (SCENARIO=<id>)
+	@$(XOPS)/feeds.py chaos.run $(SCENARIO)
+
+.PHONY: feeds.cost.report
+feeds.cost.report: ## Report storage + compute cost of feed tree (by source, region, retention)
+	@$(XOPS)/feeds.py cost.report
+
+.PHONY: feeds.tombstone.audit
+feeds.tombstone.audit: ## Audit tombstone (deleted record) coverage and retention policy compliance
+	@$(XOPS)/feeds.py tombstone.audit
+
+.PHONY: feeds.pitr.restore
+feeds.pitr.restore: ## Rebuild feeds manifest tree at target time — TARGET=<utc-iso> ROOT=<path> [REGION=eu]
+	@$(XOPS)/feeds.py pitr.restore $(TARGET) $(ROOT) $(REGION)
+
 # ── League management (readiness, promotion, calibration) ────
 # Phase 13 — League catalog & tier system
 

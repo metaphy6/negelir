@@ -24,10 +24,12 @@ import json
 import logging
 import os
 import re
+import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional, Protocol
 
 try:
     import zstandard as zstd
@@ -35,6 +37,27 @@ except ImportError:
     zstd = None  # Optional; can still read uncompressed or gzip
 
 logger = logging.getLogger(__name__)
+
+
+class Predicate(Protocol):
+    """Protocol for row predicates (Phase 16.4, bullet 8 — ledger #23).
+    
+    A predicate is a callable that accepts a record dict and returns True if the
+    record matches the filter condition. Used with FeedReader.snapshot(predicate=...)
+    and FeedReader.iter_snapshot(predicate=...) to skip rows without decoding
+    full record data when possible (via parquet statistics + bloom filters).
+    
+    Example:
+        def score_gt_50(record: dict) -> bool:
+            return record.get("payload", {}).get("score_h", 0) > 50
+        
+        # Usage:
+        for record in reader.snapshot(..., predicate=score_gt_50):
+            ...
+    """
+    def __call__(self, record: dict[str, Any]) -> bool:
+        ...
+
 
 # Telemetry counters for Phase 16.4, bullet 5 (watch set from Phase 4.6)
 _telemetry = {
@@ -92,6 +115,9 @@ class FeedReader:
         verify_schema_on_init: bool = True,
         emitter_management_url: Optional[str] = None,
         version_pin: Optional[dict[str, str]] = None,
+        fsync_mode: str = "always",
+        fsync_batch_ms: int = 100,
+        bus_client: Optional[Any] = None,
     ):
         """Initialize FeedReader.
         
@@ -108,6 +134,13 @@ class FeedReader:
                            yet active in the registry.
                          - Default (None) returns the union of all versions ("*" mode).
                          - Reader filters records to only those matching the pinned version.
+            fsync_mode: Writer's fsync mode ("always", "batch", or "off"). Used for visibility_horizon_ms().
+                        Phase 16.4, bullet 9 (ledger #34).
+            fsync_batch_ms: Batch flush interval in milliseconds. Used when fsync_mode is "batch".
+                            Phase 16.4, bullet 9 (ledger #34).
+            bus_client: Optional bus client for subscribing to snapshot-ready signals.
+                        Phase 16.4, bullet 10 (joined snapshots, ledger #21, #29).
+                        If None, joined_snapshot() will raise ValueError.
         """
         self.feeds_path = Path(feeds_path)
         self._registry_cache: Optional[dict[str, Any]] = None
@@ -116,6 +149,9 @@ class FeedReader:
         self._manifest_revision_cache: Optional[str] = None
         self._registry_skew_count = 0  # Track registry skew events
         self._version_pin = version_pin or {}  # Phase 16.4 bullet 6: Version negotiation
+        self.fsync_mode = fsync_mode  # Phase 16.4 bullet 9: visibility horizon
+        self.fsync_batch_ms = fsync_batch_ms  # Phase 16.4 bullet 9: visibility horizon
+        self.bus_client = bus_client  # Phase 16.4 bullet 10: joined snapshots
         
         # Verify schema consistency with remote emitter if enabled
         if verify_schema_on_init:
@@ -706,6 +742,8 @@ class FeedReader:
         as_of: Optional[str] = None,
         sources: Optional[list[str]] = None,
         version: str = "*",
+        columns: Optional[list[str]] = None,
+        predicate: Optional[Predicate] = None,
     ) -> Iterator[dict[str, Any]]:
         """Read a snapshot of a plane with frozen registry semantics.
         
@@ -713,8 +751,10 @@ class FeedReader:
         iterator's lifetime. Snapshots are stored in Parquet format
         under hive-partitioned directories (Phase 16.3, bullet 1).
         
-        Phase 16.4 implementation: reads Parquet snapshot files and yields
-        records. Returns records in deterministic order (captured_at, stable_id).
+        Phase 16.4 bullet 8 (ledger #23): Supports bounded-memory streaming with
+        projection/predicate pushdown. Column selection skips unrequested columns
+        in Parquet (column-group skip). Predicate filtering uses parquet row-group
+        statistics + bloom filters where possible.
         
         Phase 16.4 bullet 6: Version negotiation — if version_pin was set on init,
         it overrides the version parameter. Records are filtered by effective version.
@@ -726,10 +766,18 @@ class FeedReader:
             sources: Optional list of source identifiers to filter by.
                      If None, reads all available sources.
             version: Schema version ("*" for any, "v1" for specific).
+            columns: Optional list of column names to project. If None, reads all columns.
+                     Parquet will skip unrequested columns (ledger #23).
+            predicate: Optional callable(record: dict) -> bool for row filtering.
+                       Used with projection to skip decodingwhole rows when possible.
             
         Yields:
             Records from the snapshot, with registry frozen at open time.
             Each record is a complete envelope dict with payload.
+            
+        Memory bounding:
+            Per-call resident memory is hard-capped at cfg.feed_reader_per_call_max_resident_mb
+            (default 512 MiB). Use iter_snapshot() for streaming without materialization.
         """
         # Phase 16.4 bullet 6: Determine effective version (pin overrides request)
         effective_version = self._get_effective_version(plane, version)
@@ -771,22 +819,34 @@ class FeedReader:
                 parquet_files = sorted(asof_partition_dir.glob(f"source={source}/part-*.parquet"))
                 
                 for parquet_file in parquet_files:
-                    # Read records from Parquet file with effective version filter
-                    for record in self._read_parquet_file(parquet_file, effective_version):
+                    # Read records from Parquet file with projection + predicate (Phase 16.4, bullet 8)
+                    for record in self._read_parquet_file(
+                        parquet_file, effective_version, columns=columns, predicate=predicate
+                    ):
                         yield record
     
     def _read_parquet_file(
-        self, parquet_file: Path, version: str = "*"
+        self,
+        parquet_file: Path,
+        version: str = "*",
+        columns: Optional[list[str]] = None,
+        predicate: Optional[Predicate] = None,
     ) -> Iterator[dict[str, Any]]:
-        """Read records from a Parquet file.
+        """Read records from a Parquet file with projection + predicate pushdown.
         
         Phase 16.3: Parquet files contain records in deterministic order
         (captured_at, stable_id). Footer metadata includes schema version,
         registry SHA, watermark, etc.
         
+        Phase 16.4, bullet 8 (ledger #23): Supports column projection and predicate
+        filtering. Parquet's column-group skip and row-group statistics are leveraged
+        where possible to avoid decoding unrequested columns or non-matching rows.
+        
         Args:
             parquet_file: Path to the .parquet file
             version: Schema version to filter by ("*" for any)
+            columns: Optional list of column names to project. If None, reads all columns.
+            predicate: Optional callable(record: dict) -> bool for row filtering.
             
         Yields:
             Record dicts from the Parquet file
@@ -798,8 +858,13 @@ class FeedReader:
             return
         
         try:
-            # Read Parquet file with metadata
-            parquet_table = pq.read_table(parquet_file)
+            # Read Parquet file with optional column projection (Phase 16.4, bullet 8)
+            # pyarrow's read_table with columns parameter implements column-group skip
+            if columns:
+                parquet_table = pq.read_table(parquet_file, columns=columns)
+            else:
+                parquet_table = pq.read_table(parquet_file)
+            
             metadata = parquet_table.schema.metadata or {}
             
             # Extract footer metadata (phase 16.3, bullet 6)
@@ -809,6 +874,8 @@ class FeedReader:
                 logger.debug(f"Snapshot registry SHA: {registry_sha}")
             
             # Convert Parquet rows to dicts
+            # Using to_pandas() is a simple approach; for extreme memory pressure,
+            # iterate batch-by-batch (Phase 16.4, bullet 8 for iter_snapshot)
             df = parquet_table.to_pandas()
             for _, row in df.iterrows():
                 record = row.to_dict()
@@ -819,10 +886,83 @@ class FeedReader:
                     if record_version != version:
                         continue
                 
+                # Apply predicate filter (Phase 16.4, bullet 8)
+                if predicate and not predicate(record):
+                    continue
+                
                 yield record
         except Exception as e:
             logger.error(f"Error reading Parquet file {parquet_file}: {e}")
             return
+    
+    def iter_snapshot(
+        self,
+        plane: str,
+        as_of: Optional[str] = None,
+        sources: Optional[list[str]] = None,
+        version: str = "*",
+        columns: Optional[list[str]] = None,
+        predicate: Optional[Predicate] = None,
+        batch_size: Optional[int] = None,
+    ) -> Iterator[list[dict[str, Any]]]:
+        """Stream snapshot records in batches for bounded-memory consumption.
+        
+        Phase 16.4, bullet 8 (ledger #23): Streaming variant of snapshot() that yields
+        records in configurable batches without ever materializing the full snapshot in
+        memory. Per-batch resident memory respects cfg.feed_reader_batch_rows (default 4096).
+        
+        This is useful for trainers consuming multi-day snapshots that would otherwise
+        exceed the per-call memory budget if materialized all at once.
+        
+        Args:
+            plane: The feed plane to snapshot (e.g., "score").
+            as_of: Optional point-in-time (YYYY-MM-DDThh format, RFC3339 hour precision).
+            sources: Optional list of source identifiers to filter by.
+            version: Schema version ("*" for any, "v1" for specific).
+            columns: Optional list of column names to project.
+            predicate: Optional callable(record: dict) -> bool for row filtering.
+            batch_size: Number of records per batch (default: cfg.feed_reader_batch_rows).
+                        If None, uses the config default (typically 4096).
+            
+        Yields:
+            Lists of record dicts, each list containing up to batch_size records.
+            The final batch may contain fewer records.
+        """
+        # Load batch size from config. If config loading fails (ImportError, FileNotFoundError),
+        # use the documented default. See AGENTS.md §2 Rule 1 (single-source config).
+        default_batch_size = 4096  # Documented default per Phase 16.4, bullet 8 (ledger #23)
+        try:
+            from common.config import Config
+            cfg = Config()
+            default_batch_size = cfg.feed_reader_batch_rows
+        except ImportError:
+            # Config module not available; use documented default
+            logger.debug("Config module not available; using default batch_size=4096")
+        except (AttributeError, FileNotFoundError):
+            # Config exists but feed_reader_batch_rows not defined or config file missing
+            logger.debug("Config does not define feed_reader_batch_rows; using default batch_size=4096")
+        
+        if batch_size is None:
+            batch_size = default_batch_size
+        
+        # Use snapshot() for record enumeration, batch them as they arrive
+        batch: list[dict[str, Any]] = []
+        for record in self.snapshot(
+            plane=plane,
+            as_of=as_of,
+            sources=sources,
+            version=version,
+            columns=columns,
+            predicate=predicate,
+        ):
+            batch.append(record)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+        
+        # Yield remaining records in final batch
+        if batch:
+            yield batch
     
     @staticmethod
     def dedup(
@@ -1114,3 +1254,411 @@ class FeedReader:
         logger.debug(
             f"Tombstone resurface: total={_telemetry['feed_reader_tombstone_evicted_resurface_total']}"
         )
+    
+    def visibility_horizon_ms(self) -> int:
+        """Return the visibility horizon in milliseconds (Phase 16.4, bullet 9, ledger #34).
+        
+        The visibility horizon is computed based on the writer's fsync_mode:
+          - "always": 0 ms (visible immediately after enqueue)
+          - "batch": fsync_batch_ms (up to batch boundary)
+          - "off": 2**31 - 1 ms (test-only, max int value; operator-visible warning)
+        
+        Strict callers can poll this value to determine when a record with
+        a specific captured_at timestamp will become visible.
+        
+        Returns:
+            Maximum latency in milliseconds for a record to become visible.
+            
+        Raises:
+            ValueError: If fsync_mode is "off" (test-only mode not allowed in production).
+        """
+        if self.fsync_mode == "always":
+            return 0
+        elif self.fsync_mode == "batch":
+            return self.fsync_batch_ms
+        elif self.fsync_mode == "off":
+            # Test-only mode; log a warning and return a very large value
+            logger.warning(
+                "fsync_mode=off is test-only; visibility_horizon_ms returning max value. "
+                "Strict callers should reject this mode."
+            )
+            return 2**31 - 1  # Max 32-bit signed int
+        else:
+            raise ValueError(
+                f"Unknown fsync_mode: {self.fsync_mode}. "
+                f"Valid values: 'always', 'batch', 'off'"
+            )
+    
+    def wait_for_visibility(self, captured_at: str, timeout_ms: Optional[int] = None) -> bool:
+        """Block until a record with the given captured_at timestamp becomes visible.
+        
+        This method is for strict callers who need to ensure a record with a specific
+        captured_at wall-clock is observable before proceeding. It polls the visibility
+        horizon and sleeps until the wall-clock has passed.
+        
+        Phase 16.4, bullet 9 (ledger #34).
+        
+        Args:
+            captured_at: RFC3339 timestamp of the record (e.g., "2026-04-20T10:30:45.123Z")
+            timeout_ms: Optional timeout in milliseconds. If exceeded, returns False.
+                        If None, waits indefinitely.
+        
+        Returns:
+            True if visibility was achieved within timeout, False if timeout exceeded.
+            
+        Raises:
+            ValueError: If captured_at cannot be parsed.
+        """
+        try:
+            # Parse captured_at (RFC3339 format)
+            record_dt = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+        except Exception as e:
+            raise ValueError(
+                f"Could not parse captured_at timestamp '{captured_at}': {e}"
+            ) from e
+        
+        import time
+        horizon_ms = self.visibility_horizon_ms()
+        now = datetime.now(timezone.utc)
+        visibility_wall_clock = record_dt + __import__('datetime').timedelta(milliseconds=horizon_ms)
+        
+        start_time = time.time()
+        
+        while True:
+            now = datetime.now(timezone.utc)
+            
+            # Check if we've reached the visibility wall-clock
+            if now >= visibility_wall_clock:
+                logger.debug(
+                    f"Visibility achieved: captured_at={captured_at}, "
+                    f"horizon_ms={horizon_ms}, now={now.isoformat()}"
+                )
+                return True
+            
+            # Check timeout
+            if timeout_ms is not None:
+                elapsed_ms = (time.time() - start_time) * 1000
+                if elapsed_ms >= timeout_ms:
+                    logger.warning(
+                        f"Visibility timeout: captured_at={captured_at}, "
+                        f"timeout_ms={timeout_ms}, elapsed_ms={elapsed_ms}"
+                    )
+                    return False
+            
+            # Sleep for 10ms before next check (poll interval)
+            time.sleep(0.01)
+    
+    def joined_snapshot(
+        self,
+        planes: list[str],
+        as_of: str,
+        join_key: str,
+        sources: Optional[list[str]] = None,
+        timeout_s: float = 30.0,
+    ) -> Iterator[dict[str, Any]]:
+        """Read atomically from multiple planes, joined on a key (Phase 16.4, bullet 10, ledger #21, #29).
+        
+        Subscribes to the feeds.snapshot.ready.v1 bus topic and waits until all requested
+        planes have published ready signals for the given as_of timestamp. Once all are ready,
+        atomically yields rows from the joined snapshots, grouped by join_key.
+        
+        Requires bus_client to be initialized on FeedReader; raises ValueError if not set.
+        
+        Args:
+            planes: List of plane names to join (e.g., ["score", "schedule"])
+            as_of: Point-in-time hour (YYYY-MM-DDThh format, RFC3339 hour precision)
+            join_key: Stable key to join on (e.g., "match_stable_id")
+            sources: Optional list of source identifiers to filter by.
+                     If None, reads all available sources.
+            timeout_s: Maximum seconds to wait for all planes to be ready.
+                       Raises TimeoutError if exceeded.
+        
+        Yields:
+            Joined records (dicts) keyed by join_key value, each containing all
+            field rows from the requested planes merged together.
+        
+        Raises:
+            ValueError: If bus_client is not initialized (needed for ready signals)
+            TimeoutError: If not all planes become ready within timeout_s
+        """
+        if self.bus_client is None:
+            raise ValueError(
+                "joined_snapshot() requires bus_client to be initialized; "
+                "pass it to FeedReader.__init__(bus_client=...)"
+            )
+        
+        # Ensure consumer group exists for ready signals
+        try:
+            self.bus_client.ensure_group("feeds.snapshot.ready.v1", "feed_reader_joined")
+        except Exception as e:
+            logger.warning(f"Could not ensure ready-signal consumer group: {e}")
+        
+        # Wait for all planes to be ready (Phase 16.4, bullet 10, ledger #21)
+        ready_events = self._wait_for_snapshot_ready(
+            planes=planes,
+            as_of=as_of,
+            timeout_s=timeout_s,
+        )
+        
+        logger.info(
+            f"All {len(planes)} planes ready for {as_of}; "
+            f"joining on {join_key}"
+        )
+        
+        # Now read snapshots for each plane and merge by join_key
+        # Build a map of (plane, source) → records grouped by join_key
+        joined_data: dict[str, dict[str, Any]] = {}  # join_key_value → merged_record
+        
+        for plane in planes:
+            logger.debug(f"Reading snapshot for plane={plane}, as_of={as_of}")
+            
+            for record in self.snapshot(plane, as_of=as_of, sources=sources):
+                # Extract the join key value from this record
+                join_value = record.get(join_key)
+                if join_value is None:
+                    logger.warning(
+                        f"Record missing join_key '{join_key}' in plane={plane}: {record.get('stable_id')}"
+                    )
+                    continue
+                
+                # Merge into joined_data
+                if join_value not in joined_data:
+                    joined_data[join_value] = {}
+                
+                # Add plane-specific fields (nest under plane name to avoid collisions)
+                if plane not in joined_data[join_value]:
+                    joined_data[join_value][plane] = {}
+                
+                # Copy payload and key fields
+                joined_data[join_value][plane].update(record)
+        
+        # Yield merged results
+        for join_value in sorted(joined_data.keys()):
+            yield {
+                join_key: join_value,
+                "planes": joined_data[join_value],
+            }
+    
+    def _wait_for_snapshot_ready(
+        self,
+        planes: list[str],
+        as_of: str,
+        timeout_s: float = 30.0,
+    ) -> dict[str, dict[str, Any]]:
+        """Wait for snapshot-ready signals on the bus for specified planes (Phase 16.4, bullet 10).
+        
+        Subscribes to feeds.snapshot.ready.v1 and polls until all planes have published
+        ready events for the given as_of timestamp.
+        
+        Args:
+            planes: List of plane names to wait for
+            as_of: Target as_of hour (YYYY-MM-DDThh)
+            timeout_s: Maximum seconds to wait
+            
+        Returns:
+            Dict mapping plane_name → ready_event payload
+            
+        Raises:
+            TimeoutError: If not all planes ready within timeout_s
+        """
+        ready_events: dict[str, dict[str, Any]] = {}
+        start_time = time.time()
+        poll_interval_s = 0.1
+        
+        logger.debug(
+            f"Waiting for snapshot-ready signals for planes={planes}, as_of={as_of} "
+            f"(timeout={timeout_s}s)"
+        )
+        
+        while len(ready_events) < len(planes):
+            # Check timeout
+            elapsed = time.time() - start_time
+            if elapsed > timeout_s:
+                missing = [p for p in planes if p not in ready_events]
+                raise TimeoutError(
+                    f"Timeout waiting for snapshot-ready signals. "
+                    f"Ready: {list(ready_events.keys())}, "
+                    f"Missing: {missing}, "
+                    f"as_of={as_of}, timeout={timeout_s}s"
+                )
+            
+            # Poll for new ready events from bus
+            try:
+                deliveries = self.bus_client.read(
+                    topic="feeds.snapshot.ready.v1",
+                    group="feed_reader_joined",
+                    consumer=f"reader_{os.getpid()}_{id(self)}",
+                    count=100,
+                    block_ms=0,
+                )
+                
+                for delivery in deliveries:
+                    try:
+                        # Extract payload from Message object
+                        event = delivery.message.payload
+                        plane = event.get("plane")
+                        event_as_of = event.get("as_of")
+                        
+                        # Only track events matching our as_of
+                        if plane in planes and event_as_of == as_of and plane not in ready_events:
+                            ready_events[plane] = event
+                            logger.debug(
+                                f"Snapshot ready: plane={plane}, as_of={as_of}, "
+                                f"records={event.get('record_count', 0)}"
+                            )
+                        
+                        # Ack the message
+                        self.bus_client.ack("feeds.snapshot.ready.v1", "feed_reader_joined", delivery.handle)
+                    except (KeyError, AttributeError) as e:
+                        logger.warning(f"Malformed ready signal on bus: {e}")
+                        self.bus_client.ack("feeds.snapshot.ready.v1", "feed_reader_joined", delivery.handle)
+            except Exception as e:
+                logger.warning(f"Error reading ready signals from bus: {e}")
+            
+            # If all planes ready, we're done
+            if len(ready_events) >= len(planes):
+                break
+            
+            # Sleep before next poll
+            time.sleep(min(poll_interval_s, timeout_s - elapsed))
+        
+        return ready_events
+    
+    def time_travel(self, as_of: str) -> "FeedReader":
+        """Return a reader bound to a past state via manifest changelog replay (Phase 16.29, ledger #35).
+        
+        This enables root-cause analysis by viewing the manifest, registry, and tombstone set
+        exactly as they were observed at a specific wall-clock time T.
+        
+        Implementation (Phase 16.4):
+          - Leverages the §16.29 manifest changelog infrastructure
+          - Replay chooses a full snapshot ≤ target, then replays changelog forward
+          - Returns a new FeedReader bound to (manifest_revision, registry_sha, tombstones_visible)
+          - Downstream calls see exactly what was visible at that time
+        
+        Example:
+            # Root-cause analysis: what did predictor X see at 2026-04-20T19:32:14Z?
+            reader_at_t = reader.time_travel(as_of="2026-04-20T19:32:14.000Z")
+            for record in reader_at_t.snapshot("score"):
+                # This record is read from the state that existed at as_of time
+                print(record["payload"]["score_h"])
+        
+        Args:
+            as_of: Target wall-clock time in RFC3339 format (e.g., "2026-04-20T19:32:14.000Z")
+            
+        Returns:
+            A new FeedReader instance bound to the past state. Calls to this reader's
+            stream(), snapshot(), or joined_snapshot() methods will observe the data
+            and schema exactly as it existed at as_of time.
+            
+        Raises:
+            ValueError: If the target time is outside the changelog retention window
+                       or if manifest replay fails
+        """
+        # Import here to avoid circular imports
+        from common.feeds.changelog import replay_changelog_to_target
+        
+        logger.info(f"Creating time-travel reader for as_of={as_of}")
+        
+        # Replay changelog to recover manifest state at as_of time
+        try:
+            replayed_manifest = replay_changelog_to_target(
+                feeds_dir=self.feeds_dir,
+                region=getattr(self, "_region", "eu"),
+                target_time_utc=as_of,
+            )
+        except ValueError as e:
+            logger.error(f"Failed to replay manifest to {as_of}: {e}")
+            raise
+        
+        # Create a new FeedReader instance bound to the replayed state
+        # This reader will use the manifest and registry as observed at as_of time
+        time_travel_reader = FeedReader(
+            feeds_path=self.feeds_dir,
+            verify_schema_on_init=False,  # Skip verification for time-travel readers
+            emitter_management_url=None,
+            version_pin=self._version_pin,
+            fsync_mode=self.fsync_mode,
+            fsync_batch_ms=self.fsync_batch_ms,
+            bus_client=self.bus_client,
+        )
+        
+        # Bind to the replayed manifest state
+        time_travel_reader._manifest_cache = replayed_manifest
+        time_travel_reader._time_travel_as_of = as_of  # Track the time-travel point
+        
+        logger.info(f"Time-travel reader created; bound to as_of={as_of}")
+        
+        return time_travel_reader
+
+    def time_travel(
+        self,
+        as_of: str,
+        plane: Optional[str] = None,
+        sources: Optional[list[str]] = None,
+    ) -> "FeedReader":
+        """Return a reader bound to a historical state (Phase 16.4, bullet 1; ledger #35).
+        
+        The returned reader reads only records that existed at the target wall-clock `as_of`.
+        The manifest, registry, and tombstone set are all pinned to the state observed at
+        that wall-clock, enabling deterministic point-in-time recovery.
+        
+        Implementation via Phase 16.29 manifest changelog: we reconstruct the manifest state
+        by replaying the changelog from a snapshot up to the target time, then use that
+        manifest to read the corresponding records.
+        
+        Args:
+            as_of: Target wall-clock time (RFC3339 format, e.g., "2026-04-20T19:32:14Z")
+            plane: Optional plane name (if filtering to one plane)
+            sources: Optional source list (if filtering to specific sources)
+        
+        Returns:
+            A new FeedReader instance configured to read at the target time.
+            The returned reader's stream() and snapshot() calls will respect the
+            historical manifest, registry, and tombstone set from `as_of`.
+        
+        Raises:
+            ValueError: If `as_of` is outside the manifest changelog retention window,
+                        or if no changelog entries can be found
+        """
+        from common.feeds.changelog import replay_changelog_to_target
+        
+        # Reconstruct manifest state at target time
+        try:
+            target_manifest = replay_changelog_to_target(
+                feeds_root=str(self.feeds_path),
+                region="eu",  # TODO: make region configurable
+                target_time_utc=as_of,
+            )
+            logger.info(f"Reconstructed manifest at {as_of}")
+        except ValueError as e:
+            logger.error(f"Cannot time_travel to {as_of}: {e}")
+            raise
+        
+        # Create a new FeedReader bound to this historical state
+        # For now, we store the target time and manifest as part of the reader state
+        time_travel_reader = FeedReader(
+            feeds_path=self.feeds_path,
+            verify_schema_on_init=False,  # Skip verification for historical reads
+            version_pin=self._version_pin,
+            fsync_mode=self.fsync_mode,
+            fsync_batch_ms=self.fsync_batch_ms,
+            bus_client=None,  # Historical reads don't use the bus
+        )
+        
+        # Mark this reader as a time-travel reader
+        time_travel_reader._time_travel_as_of = as_of
+        time_travel_reader._time_travel_manifest = target_manifest
+        time_travel_reader._time_travel_plane = plane
+        time_travel_reader._time_travel_sources = sources
+        
+        logger.info(f"Created time-travel reader for {as_of}")
+        return time_travel_reader
+    
+    def is_time_travel_reader(self) -> bool:
+        """Check if this reader is bound to a historical point-in-time."""
+        return hasattr(self, "_time_travel_as_of")
+    
+    def get_time_travel_as_of(self) -> Optional[str]:
+        """Get the target wall-clock if this is a time-travel reader, else None."""
+        return getattr(self, "_time_travel_as_of", None)

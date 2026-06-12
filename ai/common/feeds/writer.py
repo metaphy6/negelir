@@ -9,6 +9,9 @@ Core properties (binding per Phase 16.2):
   - On lease loss: writer flushes, marks not-ready, exits with code 1
   - Per-source fairness floor (ledger #8): WriterPool enforces token-bucket
     fairness to prevent bursty sources from monopolizing writes
+  - OpenTelemetry traceparent propagation (Phase 16.2 ledger #31):
+    writer preserves trace_context.traceparent end-to-end and emits
+    spans per enqueue(); traceparent is never reconstructed.
 
 This module contains:
   - FeedWriter: core single-writer for a (plane, source) pair
@@ -22,13 +25,110 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+
+# ── W3C Trace Context utilities (Phase 16.2 ledger #31) ────────────────────
+# Per https://www.w3.org/TR/trace-context/
+# Format: version(2) - trace_id(32) - parent_id(16) - trace_flags(2)
+# Example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+# Only version 00 is currently valid; case-insensitive hex.
+
+_TRACEPARENT_PATTERN = re.compile(
+    r"^00-[0-9a-fA-F]{32}-[0-9a-fA-F]{16}-[0-9a-fA-F]{2}$"
+)
+
+
+def _is_valid_traceparent(traceparent: str) -> bool:
+    """Validate traceparent format per W3C Trace Context spec.
+    
+    Format: version(2)-trace_id(32)-parent_id(16)-trace_flags(2)
+    Currently only version 00 is valid.
+    Hex characters are case-insensitive.
+    """
+    return bool(_TRACEPARENT_PATTERN.match(traceparent))
+
+
+
+def _extract_trace_context(record: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Extract trace_context from record, validating traceparent if present.
+    
+    Returns the trace_context dict if valid, or None if not present/invalid.
+    Never modifies or reconstructs the traceparent (Phase 16.2 constraint).
+    """
+    trace_context = record.get("trace_context")
+    if not trace_context:
+        return None
+    
+    if not isinstance(trace_context, dict):
+        logger.warning(f"Invalid trace_context type: {type(trace_context)}")
+        return None
+    
+    traceparent = trace_context.get("traceparent")
+    if traceparent and not _is_valid_traceparent(traceparent):
+        logger.warning(f"Invalid traceparent format: {traceparent}")
+        return None
+    
+    return trace_context
+
+
+@contextmanager
+def _span_from_traceparent(
+    plane: str,
+    source: str,
+    traceparent: Optional[str],
+):
+    """Context manager for emitting a span linked to upstream traceparent.
+    
+    Per Phase 16.2 ledger #31: writer emits a span per enqueue() linked to
+    the upstream traceparent. The traceparent is never reconstructed; we
+    always use what was provided by the extractor.
+    
+    Args:
+        plane: Feed plane (e.g., "score")
+        source: Data source (e.g., "mackolik")
+        traceparent: Optional W3C traceparent string (never reconstructed)
+    
+    Usage:
+        with _span_from_traceparent(plane, source, traceparent):
+            # ... do work ...
+    """
+    start_time = time.time()
+    start_mono = time.monotonic()
+    
+    try:
+        yield
+    finally:
+        duration_ms = (time.monotonic() - start_mono) * 1000
+        
+        # Log the span event (structured logging for observability)
+        # In a full OTEL implementation, this would create an actual span.
+        # For Phase 16.2, we use structured logs that can be ingested by
+        # OpenTelemetry Collector or similar.
+        log_data = {
+            "event": "feed_writer_span",
+            "plane": plane,
+            "source": source,
+            "duration_ms": f"{duration_ms:.2f}",
+            "timestamp": datetime.fromtimestamp(start_time, tz=timezone.utc).isoformat(),
+        }
+        
+        if traceparent:
+            log_data["traceparent"] = traceparent
+            log_data["trace_propagated"] = True
+        else:
+            log_data["trace_propagated"] = False
+        
+        logger.debug(json.dumps(log_data))
+
 
 
 @dataclass
@@ -193,8 +293,12 @@ class FeedWriter:
     def enqueue(self, record: dict[str, Any]) -> None:
         """Append a canonical NDJSON line to the feed.
         
+        Per Phase 16.2 ledger #31, preserves trace_context.traceparent
+        end-to-end and emits a span per enqueue() linked to the upstream
+        traceparent. Traceparent is never reconstructed.
+        
         Args:
-            record: The record dictionary (typically a Feed Record)
+            record: The record dictionary (typically a Feed Record envelope)
             
         Raises:
             RuntimeError: If writer is not open or lease is lost
@@ -202,26 +306,33 @@ class FeedWriter:
         if not self.is_open:
             raise RuntimeError(f"Writer not open for {self.plane}/{self.source}")
         
-        # Check and renew lease if needed
-        if not self._renew_lease_if_needed():
-            raise RuntimeError(
-                f"Lost lease for {self.plane}/{self.source}; exiting"
-            )
+        # Extract trace context (validation happens in helper)
+        trace_context = _extract_trace_context(record)
+        traceparent = trace_context.get("traceparent") if trace_context else None
         
-        # Check for midnight rotation
-        if self._should_rotate():
-            self._rotate_file()
-        
-        # Encode and write (using canonical encoding)
-        from ai.common.feeds.canonical import encode
-        canonical_bytes = encode(record)
-        
-        self.current_file_handle.write(canonical_bytes)
-        if self.fsync_mode == "always":
-            self._fsync_if_enabled(self.current_file_handle)
-        
-        self.manifest.records_written += 1
-        self.manifest.bytes_written += len(canonical_bytes)
+        # Emit span linked to upstream traceparent (Phase 16.2 ledger #31)
+        with _span_from_traceparent(self.plane, self.source, traceparent):
+            # Check and renew lease if needed
+            if not self._renew_lease_if_needed():
+                raise RuntimeError(
+                    f"Lost lease for {self.plane}/{self.source}; exiting"
+                )
+            
+            # Check for midnight rotation
+            if self._should_rotate():
+                self._rotate_file()
+            
+            # Encode and write (using canonical encoding)
+            # Canonical encoding preserves trace_context as-is
+            from ai.common.feeds.canonical import encode
+            canonical_bytes = encode(record)
+            
+            self.current_file_handle.write(canonical_bytes)
+            if self.fsync_mode == "always":
+                self._fsync_if_enabled(self.current_file_handle)
+            
+            self.manifest.records_written += 1
+            self.manifest.bytes_written += len(canonical_bytes)
     
     def _try_acquire_lease(self) -> bool:
         """Try to acquire single-writer lease via Redis SET NX."""

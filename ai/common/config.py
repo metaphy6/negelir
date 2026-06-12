@@ -659,6 +659,30 @@ class Config:
         "NEGELIR_FEED_READER_DEDUP_LRU_SIZE", "100000"
     )))
 
+    # Phase 16.4 bullet 8 — Bounded-memory streaming + projection/predicate pushdown (ledger #23)
+    # Per-call resident memory hard cap for snapshot() (default 512 MiB).
+    feed_reader_per_call_max_resident_mb: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEED_READER_PER_CALL_MAX_RESIDENT_MB", "512"
+    )))
+    
+    # Batch size for iter_snapshot() streaming yields (default 4096 rows).
+    feed_reader_batch_rows: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEED_READER_BATCH_ROWS", "4096"
+    )))
+
+    # Phase 16.29 — Point-in-time recovery (PITR) & manifest changelog
+    # Manifest changelog retention (days, default 90).
+    # Changelog entries older than this are rotated to cold storage.
+    feeds_manifest_changelog_retention_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEEDS_MANIFEST_CHANGELOG_RETENTION_DAYS", "90"
+    )))
+    
+    # Manifest snapshot interval (minutes, default 60).
+    # Full snapshot created every N minutes; restore replays changelog forward.
+    feeds_manifest_snapshot_interval_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEEDS_MANIFEST_SNAPSHOT_INTERVAL_MIN", "60"
+    )))
+
     @property
     def scrape_mackolik_archive(self) -> str:
         """Base URL for the Mackolik historical archive (fallback source)."""

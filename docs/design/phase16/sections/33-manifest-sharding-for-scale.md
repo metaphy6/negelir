@@ -7,9 +7,9 @@
 
 ### 16.33 Manifest sharding for scale (NEW; ledger #37)
 
-- [ ] **Sharded manifest layout.** `feeds/region=<r>/_manifest/<plane>/<source>/manifest.json` per `(plane, source)`; top-level `feeds/region=<r>/_manifest/index.json` lists all shards with their current sha256.
-- [ ] **Index rebuild only on topology change.** Adding/removing a `(plane, source)` shard rebuilds the index; routine writes update only the relevant shard. Index uses optimistic-concurrency (`If-Match: <etag>` on S3, file-lock on local disk).
-- [ ] **Reader walks index then shards.** `FeedReader` reads `index.json` once per `cfg.feeds_index_refresh_s` (default 30) plus on `feeds.pointer.v1` wake-up; per-call shard reads are cached per process.
-- [ ] **Shard contention test.** `test_concurrent_writers_no_index_contention.py` runs 32 writers for 60 s against a shared index — zero index-rewrite collisions.
-- [ ] **Migration from monolithic manifest** (one-time): `make feeds.manifest.shard` walks the existing single manifest and splits into shards atomically; original kept as `manifest.json.preshard` for one retention window.
-- [ ] Proof tests: `test_manifest_sharded_per_plane_source.py`, `test_manifest_index_rebuild_only_on_topology_change.py`, `test_concurrent_writers_no_index_contention.py`, `test_manifest_shard_migration_atomic.py`, `test_index_optimistic_concurrency.py`.
+- [x] **Sharded manifest layout.** `feeds/region=<r>/_manifest/<plane>/<source>/manifest.json` per `(plane, source)`; top-level `feeds/region=<r>/_manifest/index.json` lists all shards with their current sha256.
+- [x] **Index rebuild only on topology change.** Adding/removing a `(plane, source)` shard rebuilds the index; routine writes update only the relevant shard. Index uses optimistic-concurrency (`If-Match: <etag>` on S3, file-lock on local disk).
+- [x] **Reader walks index then shards.** `FeedReader` reads `index.json` once per `cfg.feeds_index_refresh_s` (default 30) plus on `feeds.pointer.v1` wake-up; per-call shard reads are cached per process.
+- [x] **Shard contention test.** `test_concurrent_writers_no_index_contention.py` runs 32 writers for 60 s against a shared index — zero index-rewrite collisions.
+- [x] **Migration from monolithic manifest** (one-time): `make feeds.manifest.shard` walks the existing single manifest and splits into shards atomically; original kept as `manifest.json.preshard` for one retention window.
+- [x] Proof tests: `test_manifest_sharded_per_plane_source.py`, `test_manifest_index_rebuild_only_on_topology_change.py`, `test_concurrent_writers_no_index_contention.py`, `test_manifest_shard_migration_atomic.py`, `test_index_optimistic_concurrency.py`.
