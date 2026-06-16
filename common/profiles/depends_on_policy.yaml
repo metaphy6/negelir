@@ -1,0 +1,11 @@
+# Stack-wide drain/shutdown ordering
+version: 1
+shutdown_order:
+  - server
+  - swarm
+  - datasource_emitter_writer
+  - datasource_extractors
+  - patcher_workers
+  - bus_consumers
+  - redis
+  - postgres

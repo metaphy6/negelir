@@ -40,7 +40,7 @@ ai:
 
 # ── Runtime defaults (league + season identity) ──────────────────────────────
 runtime:
-  default_league_id: super_lig            # NEGELIR_DEFAULT_LEAGUE_ID
+  default_league_id: super_lig            # NEGELIR_COMMON_DEFAULT_LEAGUE_ID
   # default_season is date-derived (common.season.current_season, July rollover)
   # when the env var is unset/empty; pin explicitly only to override.
   default_season: ""                      # NEGELIR_DEFAULT_SEASON
@@ -886,6 +886,11 @@ phase8:
   maint_backup_model_offsite_retention_days: 30     # NEGELIR_MAINT_BACKUP_MODEL_OFFSITE_RETENTION_DAYS
   maint_backup_model_lineage_missing_debounce_h: 24 # NEGELIR_MAINT_BACKUP_MODEL_LINEAGE_MISSING_DEBOUNCE_H
 
+# ── Phase 18 — Datasource Cohesion & Swarm Isolation (ledger #2) ────────────
+# CI pipeline infrastructure: isolation job runs first with short-circuit on failure.
+phase18:
+  ci_isolation_max_seconds: 60           # NEGELIR_CI_ISOLATION_MAX_SECONDS — max wall-clock budget for isolation check
+
 # ── Storage paths ────────────────────────────────────────────────────────────
 paths:
   data_dir: /data            # DATA_DIR
@@ -903,7 +908,7 @@ verification:
 
 # ── Operational toggles ───────────────────────────────────────
 operational:
-  strict: false              # NEGELIR_STRICT  (1/true → fail validate() on unknown reserved-prefix env keys)
+  strict: false              # NEGELIR_COMMON_STRICT  (1/true → fail validate() on unknown reserved-prefix env keys)
 
 # ── LeagueConfig (per-league overrides; see ai/common/league_config.py) ──────
 # Numbers below are the Turkish Süper Lig defaults. Each preset in

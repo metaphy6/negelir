@@ -23,7 +23,7 @@ from unittest import mock
 
 import pytest
 
-from ai.common.feeds.reader import FeedReader
+from common.feeds.reader import FeedReader
 from ai.swarm.sdk.bus import InMemoryBus
 from ai.swarm.sdk.types import Message
 

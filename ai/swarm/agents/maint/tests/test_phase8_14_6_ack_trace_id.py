@@ -340,7 +340,7 @@ def test_legacy_schema_alert_emitted_for_schema_version_1(monkeypatch) -> None:
     }
     event_msg = Message(envelope=event_env, payload=event_payload)
 
-    from ai.common.config import Config
+    from common.config import Config
     cfg = Config()
     monkeypatch.setattr(cfg, "opsctl_ack_timeout_ms", 100, raising=False)
 

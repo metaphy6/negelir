@@ -1,88 +1,33 @@
-# ─────────────────────────────────────────────────────────
-#  Negelir — Phase 2 Mock-Data Dev Stack (overlay)
-#  Usage:
-#    docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d
-#    (or via `make mock.up`)
+# Phase 18.4 — Deprecation stub for docker-compose.mock.yml
 #
-#  This overlay adds two services:
-#    • mocksrv     — Go binary that serves seed payloads from infra/mock/seeds
-#    • nginx-mock  — TLS-terminating reverse proxy, one vhost per fake domain
+# This file is deprecated and will be removed in Phase 22.
+# The 'mock' profile is now integrated into the main docker-compose.yml.
 #
-#  Both run on a dedicated internal network. Agent containers (ai, server,
-#  future swarm workers) join the same network via extra_hosts so the mock
-#  vhosts resolve to nginx-mock.
-# ─────────────────────────────────────────────────────────
+# Migration path:
+#   OLD: docker compose -f docker-compose.yml -f docker-compose.mock.yml up
+#   NEW: docker compose --profile core,mock up
+#
+# See docs/design/COMPONENT_LAYOUT.md §4 for profile documentation.
 
+version: "3.8"
+
+# Placeholder to render YAML-valid but non-functional
 services:
-  mocksrv:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    command: ["/bin/mocksrv", "-addr", ":8090", "-seeds", "/seeds"]
-    volumes:
-      - ./infra/mock/seeds:/seeds:ro
-    expose:
-      - "8090"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/__mocksrv/health || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    networks:
-      - mocknet
-
-  nginx-mock:
-    image: nginx:1.27-alpine
-    depends_on:
-      mocksrv:
-        condition: service_healthy
-    volumes:
-      - ./infra/mock/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infra/mock/nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./infra/mock/certs:/etc/nginx/certs:ro
-    ports:
-      - "127.0.0.1:443:443"
-      - "127.0.0.1:80:80"
-    networks:
-      mocknet:
-        aliases:
-          - mackolik.local
-          - nesine.local
-          - tff.local
-          - openfootball.local
-
-  # Agent containers (ai, server) join mocknet so DNS for mackolik.local etc.
-  # resolves to nginx-mock via its network aliases — no extra_hosts needed.
-  ai:
-    volumes:
-      - ./infra/mock/ca/root.crt:/etc/ssl/negelir-ca.crt:ro
-    environment:
-      NEGELIR_SCRAPE_PROFILE: mock
-      SSL_CERT_FILE: /etc/ssl/negelir-ca.crt
-      REQUESTS_CA_BUNDLE: /etc/ssl/negelir-ca.crt
-    networks:
-      - mocknet
-      - default
-
-  server:
-    volumes:
-      - ./infra/mock/ca/root.crt:/etc/ssl/negelir-ca.crt:ro
-    networks:
-      - mocknet
-      - default
-
-  # Phase 9 API container — when mock overlay is active, also wait for
-  # mocksrv and join mocknet so the scraper vhosts resolve correctly.
-  api:
-    depends_on:
-      mocksrv:
-        condition: service_healthy
-    volumes:
-      - ./infra/mock/ca/root.crt:/etc/ssl/negelir-ca.crt:ro
-    networks:
-      - mocknet
-      - default
-
-networks:
-  mocknet:
-    driver: bridge
+  _deprecation_notice:
+    image: busybox:latest
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "ERROR: docker-compose.mock.yml is deprecated as of Phase 18.4"
+        echo ""
+        echo "This overlay file will be removed in Phase 22."
+        echo "Use the 'mock' profile instead:"
+        echo ""
+        echo "  docker compose --profile core,mock up"
+        echo ""
+        echo "For more information, see:"
+        echo "  docs/design/COMPONENT_LAYOUT.md §4"
+        echo "  docs/design/DATA_SOURCE.md §5"
+        echo ""
+        exit 1

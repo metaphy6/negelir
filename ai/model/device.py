@@ -60,6 +60,34 @@ def detect_device() -> str:
     return "cpu"
 
 
+def get_xgb_params(device: str, league_config: "LeagueConfig | None" = None, random_seed: int = 42) -> dict:
+    """Generate XGBoost hyperparameters, auto-selecting GPU/CPU tree method.
+
+    Args:
+        device: 'cuda' or 'cpu', returned from detect_device()
+        league_config: optional LeagueConfig (unused, kept for future parametrization)
+        random_seed: random state for reproducibility
+
+    Returns:
+        dict of XGBoost parameters suitable for xgb.XGBClassifier(**params)
+    """
+    tree_method = "gpu_hist" if device == "cuda" else "hist"
+    
+    return {
+        "objective": "multi:softmax",
+        "num_class": 3,
+        "tree_method": tree_method,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "n_estimators": 100,
+        "min_child_weight": 1,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "random_state": random_seed,
+        "eval_metric": "mlogloss",
+    }
+
+
 def _probe_main() -> Dict[str, Any]:
     """Enumerate present backends. Heavy SDK imports happen only here.
 

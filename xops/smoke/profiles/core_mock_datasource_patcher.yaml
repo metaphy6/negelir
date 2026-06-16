@@ -1,0 +1,15 @@
+# Phase 18.4 — Smoke matrix for core,mock,datasource,patcher profile tuple
+profiles: ["core", "mock", "datasource", "patcher"]
+description: "Core + mock + datasource + auto-patcher loop"
+expected_services:
+  - postgres
+  - redis
+  - ai
+readiness_timeout_s: 60
+checks:
+  - name: postgres_healthy
+    type: tcp_port
+    target: postgres:5432
+  - name: redis_healthy
+    type: tcp_port
+    target: redis:6379

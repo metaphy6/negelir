@@ -1,0 +1,11 @@
+# Cross-component error code registry
+version: 1
+codes:
+  DATASOURCE_SCRAPE_FAILURE: "Scraper failed for source"
+  DATASOURCE_SCHEMA_MISMATCH: "Record schema mismatch"
+  SWARM_FEED_LAG_EXCEEDED: "Feed consumer lag too high"
+  SWARM_PREDICTION_TIMEOUT: "Prediction inference timeout"
+  SERVER_UNAUTHORIZED_CROSS_COMPONENT: "Cross-component auth failed"
+  SERVER_REDIS_UNAVAILABLE: "Redis unavailable, degraded mode"
+  COMMON_CONFIG_INVALID: "Configuration validation failed"
+  EMITTER_MISSING_IDEMPOTENCY_KEY: "Idempotency key missing"

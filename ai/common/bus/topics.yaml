@@ -1,0 +1,81 @@
+# Phase 18.6 §18.6 ledger #12 — Bus topic ownership declarations
+#
+# Declares every Redis Streams / NATS topic with schema, owner component,
+# and consumers. Publishing outside the owner component is refused at runtime.
+#
+# Schema:
+#   topics:
+#     <topic_name>:
+#       schema_path: <path/to/schema.json>
+#       owner_component: datasource|swarm|server|patcher|common
+#       consumers:
+#         - <component>
+#       retention_days: <days>
+
+topics:
+  # Datasource-published topics (ingestion → pipeline)
+  scrape.matched.v1:
+    schema_path: common/schemas/feeds/scrape_matched_v1.json
+    owner_component: datasource
+    consumers:
+      - datasource      # enricher, extractor consume
+      - swarm           # predictor consumes
+    retention_days: 90
+
+  # Swarm-published topics (predictions → server / datasource)
+  predict.approved.v1:
+    schema_path: common/schemas/feeds/predict_approved_v1.json
+    owner_component: swarm
+    consumers:
+      - server
+      - datasource      # refresher tracks prediction freshness
+    retention_days: 180
+
+  # Server-published topics (client interactions)
+  query.received.v1:
+    schema_path: common/schemas/feeds/query_received_v1.json
+    owner_component: server
+    consumers:
+      - swarm           # NLP consumes for analytics
+    retention_days: 30
+
+  # Defense topics (security alerts)
+  sec.alert.v1:
+    schema_path: common/schemas/feeds/sec_alert_v1.json
+    owner_component: common
+    consumers:
+      - datasource
+      - swarm
+      - server
+    retention_days: 365
+
+  # Maintenance topics (ops console, maint agents)
+  maint.event.v1:
+    schema_path: common/schemas/feeds/maint_event_v1.json
+    owner_component: common
+    consumers:
+      - datasource
+      - swarm
+      - server
+    retention_days: 30
+
+  maint.ack.v1:
+    schema_path: common/schemas/feeds/maint_ack_v1.json
+    owner_component: datasource
+    consumers:
+      - common
+    retention_days: 7
+
+  # Patcher topics (auto-patching feedback)
+  patcher.feedback.v1:
+    schema_path: common/schemas/feeds/patcher_feedback_v1.json
+    owner_component: datasource
+    consumers:
+      - patcher
+    retention_days: 90
+
+# Topic rename alias window (ledger #8 pattern)
+# When topics are renamed, old names are aliased to new names for one release.
+# Structure: old_name -> new_name
+# Example: scrape.v0 -> scrape.matched.v1
+aliases: {}

@@ -1,0 +1,51 @@
+# Phase 18 - Isolation policy file (CODEOWNERS-protected)
+# Declares per-component import allow-list, cross-component allowed imports, forbidden imports
+version: 1
+last_audited_at: "2026-06-15T00:00:00Z"
+
+components:
+  swarm:
+    allowed_imports:
+      - common.schemas
+      - common.feeds
+      - common.bus
+      - common.observability
+      - common.lifecycle
+      - common.config
+    forbidden_imports:
+      - psycopg
+      - psycopg2
+      - asyncpg
+      - sqlalchemy
+      - datasource
+
+  datasource:
+    allowed_imports:
+      - common.schemas
+      - common.feeds
+      - common.bus
+      - common.config
+      - common.observability
+    forbidden_imports:
+      - fastapi
+      - flask
+      - starlette
+      - uvicorn
+      - swarm
+
+  server:
+    allowed_imports:
+      - common.api
+      - common.schemas
+      - common.config
+      - common.observability
+    forbidden_imports:
+      - xgboost
+      - torch
+      - sklearn
+      - tensorflow
+      - datasource
+
+  common:
+    allowed_imports: []
+    forbidden_imports: []

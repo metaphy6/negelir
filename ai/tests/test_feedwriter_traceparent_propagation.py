@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai.common.feeds.writer import (
+from common.feeds.writer import (
     FeedWriter,
     _extract_trace_context,
     _is_valid_traceparent,
@@ -126,7 +126,7 @@ class TestWriterTraceparentPropagation:
 
     def test_span_context_manager_with_traceparent(self, caplog):
         """Span context manager emits span with traceparent."""
-        from ai.common.feeds.writer import _span_from_traceparent
+        from common.feeds.writer import _span_from_traceparent
 
         with caplog.at_level(logging.DEBUG):
             with _span_from_traceparent("score", "mackolik", VALID_TRACEPARENT):
@@ -146,7 +146,7 @@ class TestWriterTraceparentPropagation:
 
     def test_span_context_manager_without_traceparent(self, caplog):
         """Span context manager emits span even without traceparent."""
-        from ai.common.feeds.writer import _span_from_traceparent
+        from common.feeds.writer import _span_from_traceparent
 
         with caplog.at_level(logging.DEBUG):
             with _span_from_traceparent("score", "mackolik", None):
@@ -262,7 +262,7 @@ class TestSpanContextStructure:
 
     def test_span_emits_required_fields(self, caplog):
         """Span events include all required observability fields."""
-        from ai.common.feeds.writer import _span_from_traceparent
+        from common.feeds.writer import _span_from_traceparent
 
         with caplog.at_level(logging.DEBUG):
             with _span_from_traceparent("score", "mackolik", VALID_TRACEPARENT):

@@ -1,0 +1,28 @@
+# Volume mount policy - declares ownership and RO/RW access
+version: 1
+volumes:
+  - name: feeds
+    owner_component: datasource
+    mode_per_consumer:
+      datasource: rw
+      swarm: ro
+      server: ro
+
+  - name: feeds_backfill
+    owner_component: datasource
+    mode_per_consumer:
+      datasource: rw
+
+  - name: postgres_data
+    owner_component: infra
+    mode_per_consumer:
+      datasource: rw
+      server: ro
+      swarm: none
+
+  - name: redis_data
+    owner_component: infra
+    mode_per_consumer:
+      datasource: ro
+      swarm: ro
+      server: ro

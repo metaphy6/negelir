@@ -1,0 +1,35 @@
+# Negelir — Go linter configuration (Phase 18.7 ledger #27)
+# All Go lint configuration is canonical here.
+# Per-component overrides forbidden by xops/lint/no_per_component_lint_override.py
+
+version: 1.59.0
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - gosimple
+    - typecheck
+    - goimports
+    - revive
+    - gocritic
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - vendor
+    - test
+
+severity:
+  default-severity: error
+  rules:
+    - linter: revive
+      severity: warning

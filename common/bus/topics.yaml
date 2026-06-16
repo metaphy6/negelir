@@ -1,0 +1,20 @@
+# Bus topic ownership and configuration
+version: 1
+topics:
+  - name: datasource.scrape.v1
+    schema_path: common/schemas/events/scrape.json
+    owner_component: datasource
+    consumers: [swarm, server]
+    retention_hours: 168
+
+  - name: swarm.predict.v1
+    schema_path: common/schemas/events/predict.json
+    owner_component: swarm
+    consumers: [server]
+    retention_hours: 24
+
+  - name: sec.alert.v1
+    schema_path: common/schemas/events/alert.json
+    owner_component: common
+    consumers: [server, patcher]
+    retention_hours: 2160

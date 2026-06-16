@@ -20,7 +20,7 @@ from typing import Any, Dict
 
 import pytest
 
-from ai.common.feeds.writer import FeedWriter
+from common.feeds.writer import FeedWriter
 
 
 class TestPreFlushValidation:

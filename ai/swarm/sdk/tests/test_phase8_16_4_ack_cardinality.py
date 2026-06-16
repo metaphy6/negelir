@@ -100,7 +100,7 @@ class TestDebugCardinalityGuard(unittest.TestCase):
         """With a tight cap=800, 50×9×2=900 projected series → CardinalityGuardError."""
         os.environ["NEGELIR_TELEMETRY_DEBUG_MAX_SERIES"] = "800"
         try:
-            from ai.common.config import Config  # reload env
+            from common.config import Config  # reload env
             metrics = AckMetrics(cfg=Config(), debug_enabled=True)
             with self.assertRaises(CardinalityGuardError) as ctx:
                 metrics.check_debug_cardinality(

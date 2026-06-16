@@ -1,0 +1,22 @@
+# Phase 18.4 — Smoke matrix for core,server profile tuple
+profiles: ["core", "server"]
+description: "Core infrastructure + REST API"
+expected_services:
+  - postgres
+  - redis
+  - server
+  - api
+readiness_timeout_s: 30
+checks:
+  - name: postgres_healthy
+    type: tcp_port
+    target: postgres:5432
+  - name: redis_healthy
+    type: tcp_port
+    target: redis:6379
+  - name: server_healthy
+    type: http
+    url: http://server:8080/health
+  - name: api_healthy
+    type: http
+    url: http://api:8080/health

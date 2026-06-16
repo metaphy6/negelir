@@ -373,7 +373,7 @@ class TestKindRegistration:
         assert schema_path.exists(), f"Sub-schema not found: {schema_path}"
 
     def test_maint_spool_entry_max_age_h_in_config(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
         assert hasattr(cfg, "maint_spool_entry_max_age_h")
         assert cfg.maint_spool_entry_max_age_h == 168
@@ -710,7 +710,7 @@ class TestBullet2ConfigAndRegistry:
     """Verify config, payloads registry and sub-schema for bullet 2."""
 
     def test_swarm_min_supported_schema_version_in_config(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
         assert hasattr(cfg, "swarm_min_supported_schema_version")
         assert cfg.swarm_min_supported_schema_version == 1

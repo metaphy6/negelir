@@ -1,0 +1,23 @@
+# Disk quota allocation on feeds volume
+version: 1
+total_quota_pct: 100
+jobs:
+  - name: live_writer
+    quota_pct: 60
+    action_on_exceed: pause
+
+  - name: snapshot_builder
+    quota_pct: 20
+    action_on_exceed: throttle
+
+  - name: backfill_writer
+    quota_pct: 10
+    action_on_exceed: throttle
+
+  - name: cold_rollup
+    quota_pct: 5
+    action_on_exceed: page
+
+  - name: fsck_evidence
+    quota_pct: 5
+    action_on_exceed: page

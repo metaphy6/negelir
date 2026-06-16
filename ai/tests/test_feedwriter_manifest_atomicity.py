@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai.common.feeds.writer import FeedWriter, FeedManifest
+from common.feeds.writer import FeedWriter, FeedManifest
 
 
 @pytest.fixture

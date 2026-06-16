@@ -19,7 +19,7 @@ from unittest import mock
 
 import pytest
 
-from ai.common.feeds.snapshot import SnapshotBuilder, SnapshotMetadata, SnapshotWatermarkScheduler
+from common.feeds.snapshot import SnapshotBuilder, SnapshotMetadata, SnapshotWatermarkScheduler
 
 
 @pytest.fixture
@@ -431,7 +431,7 @@ class TestIdempotentRebuild:
     
     def test_rebuild_requires_registry_sha(self, tmp_feeds_dir, mock_config):
         """Rebuild refuses to proceed without REGISTRY_SHA (bullet 5)."""
-        from ai.common.feeds.snapshot import rebuild_snapshot_with_registry_pin
+        from common.feeds.snapshot import rebuild_snapshot_with_registry_pin
         
         # Create minimal feed structure
         now = datetime.now(timezone.utc)
@@ -453,7 +453,7 @@ class TestIdempotentRebuild:
     
     def test_rebuild_snapshot_deterministic_with_pin(self, tmp_feeds_dir, mock_config):
         """Rebuilt snapshot matches original when using same registry pin (bullet 5)."""
-        from ai.common.feeds.snapshot import (
+        from common.feeds.snapshot import (
             rebuild_snapshot_with_registry_pin,
             validate_snapshot_determinism,
         )
@@ -499,7 +499,7 @@ class TestIdempotentRebuild:
     
     def test_rebuild_emits_correct_metadata(self, tmp_feeds_dir, mock_config):
         """Rebuilt snapshot has correct metadata with pinned registry (bullet 5)."""
-        from ai.common.feeds.snapshot import rebuild_snapshot_with_registry_pin
+        from common.feeds.snapshot import rebuild_snapshot_with_registry_pin
         
         builder = SnapshotBuilder(
             plane="score",

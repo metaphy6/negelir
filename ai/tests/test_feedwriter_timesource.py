@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
-from ai.common.feeds.timesource import TimeSource, ClockSnapshot
+from common.feeds.timesource import TimeSource, ClockSnapshot
 
 
 class TestClockSnapshot:

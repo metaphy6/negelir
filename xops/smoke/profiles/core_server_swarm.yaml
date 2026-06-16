@@ -1,0 +1,19 @@
+# Phase 18.4 — Smoke matrix for core,server,swarm profile tuple
+profiles: ["core", "server", "swarm"]
+description: "Core + server + swarm AI"
+expected_services:
+  - postgres
+  - redis
+  - server
+  - api
+readiness_timeout_s: 60
+checks:
+  - name: postgres_healthy
+    type: tcp_port
+    target: postgres:5432
+  - name: redis_healthy
+    type: tcp_port
+    target: redis:6379
+  - name: server_healthy
+    type: http
+    url: http://server:8080/health

@@ -17,8 +17,8 @@ import logging
 import time
 from typing import Dict, Optional, Any
 
-from ai.common.feeds.fairness import PerSourceFairnessFloor
-from ai.common.feeds.writer import FeedWriter
+from common.feeds.fairness import PerSourceFairnessFloor
+from common.feeds.writer import FeedWriter
 
 logger = logging.getLogger(__name__)
 

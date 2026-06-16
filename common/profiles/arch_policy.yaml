@@ -1,0 +1,4 @@
+# Architecture support policy
+version: 1
+default_archs: [amd64, arm64]
+arch_skips: []  # Components that cannot ship certain archs

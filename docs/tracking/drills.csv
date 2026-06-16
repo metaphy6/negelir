@@ -1,0 +1,2 @@
+timestamp,drill_type,status,slo_minutes,paged_human,notes
+2026-06-15T00:00:00+00:00,rollback,scheduled,60,true,"Phase 18.9 drills infrastructure bootstrapped; quarterly cadence enabled"

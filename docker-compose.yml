@@ -15,6 +15,16 @@ services:
   # ── PostgreSQL ────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    profiles:
+      - core
+      - server
+      - internal
+      - mock
+      - datasource
+      - patcher
+      - swarm
+      - observability
+      - all
     restart: unless-stopped
     env_file:
       - ./xops/env/.env
@@ -60,6 +70,16 @@ services:
   # ── Redis ─────────────────────────────────────────────
   redis:
     image: redis:7-alpine
+    profiles:
+      - core
+      - server
+      - internal
+      - mock
+      - datasource
+      - patcher
+      - swarm
+      - observability
+      - all
     restart: unless-stopped
     command:
       - redis-server
@@ -94,6 +114,11 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    profiles:
+      - server
+      - internal
+      - swarm
+      - all
     restart: unless-stopped
     ports:
       - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
@@ -124,6 +149,9 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    profiles:
+      - server
+      - all
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -152,6 +180,8 @@ services:
     image: swaggerapi/swagger-ui:v5.17.14
     profiles:
       - docs
+      - observability
+      - all
     ports:
       - "8081:8080"
     environment:
@@ -168,6 +198,10 @@ services:
     build:
       context: ./ai
       dockerfile: Dockerfile
+    profiles:
+      - datasource
+      - mock
+      - all
     env_file:
       - ./xops/env/.env
     environment:

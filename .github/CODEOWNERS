@@ -13,3 +13,6 @@
 /ai/nlp/lang_tr/voice_number_context.tr.yaml @nlp-curator
 /ai/nlp/lang_tr/offensive_obfuscated.tr.yaml @nlp-curator @nlp-compliance
 /ai/nlp/lang_tr/venues.tr.yaml @nlp-curator
+/common/isolation/ @platform-team
+/xops/docker/ @platform-team
+/common/isolation/policy.yaml @platform-team @platform-lead

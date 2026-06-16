@@ -1,4 +1,4 @@
-from ai.common.numerics import is_valid_pmf
+from common.numerics import is_valid_pmf
 
 
 def test_is_valid_pmf_accepts_good_distribution() -> None:

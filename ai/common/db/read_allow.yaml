@@ -1,0 +1,70 @@
+# Phase 18.6 §18.6 ledger #24 — Table read-allow-list policy
+#
+# Defines which roles may READ (SELECT) from each table.
+# Writes are restricted to the table owner's role.
+#
+# Schema:
+#   tables:
+#     <table_name>:
+#       owner: datasource|swarm|server|patcher|common
+#       allow_read_from:
+#         - <role>      # e.g., datasource_writer, server_reader
+
+tables:
+  # Data plane tables (owned by datasource_writer)
+  matches:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - server_reader    # server can expose match data via REST
+      - swarm_reader     # swarm consumes via feeds, not direct DB read
+  
+  players:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - server_reader
+  
+  teams:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - server_reader
+  
+  leagues:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - server_reader
+
+  # Lookup tables (owned by datasource, readable by all)
+  betting_markets:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - server_reader
+
+  # Patcher control tables
+  patcher_status:
+    owner: patcher
+    allow_read_from:
+      - patcher_writer
+
+  patcher_log:
+    owner: patcher
+    allow_read_from:
+      - patcher_writer
+      - datasource_writer    # datasource can inspect patcher logs
+
+  # Audit tables (owned by datasource, readable for audit)
+  api_audit_log:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - negelir_backup    # backup role can dump for compliance
+
+  api_audit_log_quarantine:
+    owner: datasource
+    allow_read_from:
+      - datasource_writer
+      - negelir_backup

@@ -1,0 +1,27 @@
+# UID/GID allocation per component (no root, UIDs from 65000+ range)
+version: 1
+components:
+  datasource:
+    uid: 65000
+    gid: 65000
+    supplementary_gids: []
+
+  swarm:
+    uid: 65001
+    gid: 65001
+    supplementary_gids: []
+
+  server:
+    uid: 65002
+    gid: 65002
+    supplementary_gids: []
+
+  patcher:
+    uid: 65003
+    gid: 65003
+    supplementary_gids: []
+
+  common_init:
+    uid: 65100
+    gid: 65100
+    supplementary_gids: []

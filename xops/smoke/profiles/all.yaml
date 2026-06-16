@@ -1,0 +1,24 @@
+# Phase 18.4 — Smoke matrix for all profile tuple
+profiles: ["all"]
+description: "Kitchen sink — everything"
+expected_services:
+  - postgres
+  - redis
+  - server
+  - api
+  - ai
+  - api-docs
+readiness_timeout_s: 120
+checks:
+  - name: postgres_healthy
+    type: tcp_port
+    target: postgres:5432
+  - name: redis_healthy
+    type: tcp_port
+    target: redis:6379
+  - name: server_healthy
+    type: http
+    url: http://server:8080/health
+  - name: datasource_healthy
+    type: tcp_port
+    target: ai:9091

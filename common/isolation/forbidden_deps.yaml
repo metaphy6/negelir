@@ -1,0 +1,20 @@
+# Forbidden transitive dependencies per component
+version: 1
+swarm:
+  - psycopg
+  - psycopg2
+  - asyncpg
+  - sqlalchemy
+  - alembic
+  - redis-py-cluster
+
+datasource:
+  - fastapi
+  - flask
+  - starlette
+  - uvicorn
+
+server:
+  - xgboost
+  - torch
+  - torch-cuda

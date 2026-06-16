@@ -21,7 +21,7 @@ xops/lint/no_magic.py             # lint that forbids magic numbers
 
 | Prefix | Owner | Example |
 |---|---|---|
-| `NEGELIR_` | shared (Python + Go) | `NEGELIR_DEFAULT_LEAGUE_ID` |
+| `NEGELIR_` | shared (Python + Go) | `NEGELIR_COMMON_DEFAULT_LEAGUE_ID` |
 | `SCRAPE_` | scrapers | `SCRAPE_RATE_LIMIT_SECONDS` |
 | `AI_` | AI image / runtime hints | `AI_DEVICE`, `AI_IMAGE_FLAVOR` |
 | `SERVER_` | Go API / mock server | `SERVER_PORT`, `SERVER_MODE` |
@@ -36,7 +36,7 @@ marks it `# shared`. The meta-test enforces this.
 
 - Every key in `xops/env/.env.example` is read by at least one config layer.
 - Every config field has a sane default; validation rejects out-of-range values on startup.
-- Strict mode (`NEGELIR_STRICT=1`) refuses unknown keys with our prefixes — catches typos and stale configs.
+- Strict mode (`NEGELIR_COMMON_STRICT=1`) refuses unknown keys with our prefixes — catches typos and stale configs.
 - Tuple-range fields (e.g. `feature_ranges`) check `lo < hi`.
 - Day-of-week fields check valid weekday names.
 - URL fields check scheme.

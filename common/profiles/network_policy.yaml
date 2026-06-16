@@ -1,0 +1,24 @@
+# Network policies - declares which containers can reach which ports
+version: 1
+networks:
+  feeds_data_net:
+    owner_component: datasource
+    allowed_consumers:
+      - component: swarm
+        ports: []  # Read via mount, not network
+
+  bus_net:
+    owner_component: infra
+    allowed_consumers:
+      - component: datasource
+        ports: [6379]
+      - component: swarm
+        ports: [6379]
+      - component: server
+        ports: [6379]
+
+  internal_api_net:
+    owner_component: server
+    allowed_consumers:
+      - component: swarm
+        ports: [5000]  # server/internal prediction write endpoint

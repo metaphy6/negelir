@@ -1,0 +1,18 @@
+# Graceful shutdown drain budgets
+version: 1
+components:
+  datasource_emitter_writer:
+    drain_max_s: 30
+    fsync_max_s: 5
+
+  swarm:
+    drain_max_s: 10
+    fsync_max_s: 2
+
+  server:
+    drain_max_s: 5
+    fsync_max_s: 1
+
+  patcher_workers:
+    drain_max_s: 60
+    fsync_max_s: 10

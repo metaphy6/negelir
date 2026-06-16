@@ -1,0 +1,17 @@
+# Random seed configuration for reproducibility
+version: 1
+components:
+  datasource:
+    default_seed: 42
+    env_override_var: NEGELIR_DATASOURCE_SEED
+    use_real_entropy: false
+
+  swarm:
+    default_seed: 43
+    env_override_var: NEGELIR_SWARM_SEED
+    use_real_entropy: false
+
+  server:
+    default_seed: 44
+    env_override_var: NEGELIR_SERVER_SEED
+    use_real_entropy: false

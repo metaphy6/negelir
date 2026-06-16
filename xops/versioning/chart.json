@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.6.0",
-    "build": 21,
+    "version": "1.12.2",
+    "build": 2,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.140.2",
+      "version": "1.146.2",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-12T07:22:27+00:00",
+      "last_changed": "2026-06-15T16:32:57+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.46.0",
+      "version": "1.47.0",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-08T20:55:18+00:00",
+      "last_changed": "2026-06-15T14:48:16+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -35,19 +35,19 @@
       }
     },
     "xops": {
-      "version": "3.63.1",
+      "version": "3.70.1",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-12T07:12:16+00:00"
+      "last_changed": "2026-06-15T16:32:51+00:00"
     },
     "docs": {
-      "version": "3.12.2",
+      "version": "3.13.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-12T13:34:56+00:00"
+      "last_changed": "2026-06-15T14:48:16+00:00"
     },
     "infra_mock": {
-      "version": "1.5.1",
+      "version": "1.6.0",
       "description": "Mock-data dev stack (Phase 2: nginx-mock, CA, seeds).",
-      "last_changed": "2026-05-26T06:20:11+00:00",
+      "last_changed": "2026-06-15T14:48:16+00:00",
       "min_compatible_with": {
         "swarm": "0.22.0"
       }
@@ -55,55 +55,74 @@
     "source_watcher": {
       "version": "3.0.3",
       "description": "Source-watcher AI agent (Phase 2.8: schema drift detector).",
-      "last_changed": "2026-05-21T06:01:41+00:00"
+      "last_changed": "2026-05-21T06:01:41+00:00",
+      "aliased_to": "datasource_watcher",
+      "alias_eol_days": 90,
+      "alias_note": "Renamed to datasource_watcher in R1 (ROADMAP §22.1); alias window lasts 90 days from alias activation"
     },
     "datasource_scraper": {
       "version": "0.1.0",
       "description": "(Pivot v3) Scraper component — fetches bytes from real or mock upstreams. R2 scaffold.",
-      "last_changed": "2026-04-24T12:23:53+00:00"
+      "last_changed": "2026-04-24T12:23:53+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A"
     },
     "datasource_watcher": {
       "version": "0.1.0",
       "description": "(Pivot v3) Source-watcher (renamed from source_watcher in R1). R2 scaffold.",
-      "last_changed": "2026-04-24T12:23:53+00:00"
+      "last_changed": "2026-04-24T12:23:53+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A"
     },
     "datasource_refresher": {
       "version": "0.1.0",
       "description": "(Pivot v3) Content-freshness agent (per-Record change detection). R3 scaffold.",
-      "last_changed": "2026-04-24T12:23:53+00:00"
+      "last_changed": "2026-04-24T12:23:53+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A"
     },
     "datasource_patcher": {
       "version": "0.1.0",
       "description": "(Pivot v3) Auto-patching scraper. R3 scaffold; gated by NEGELIR_PATCHER=1.",
-      "last_changed": "2026-04-24T12:23:53+00:00"
+      "last_changed": "2026-04-24T12:23:53+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A"
     },
     "datasource_gitops": {
       "version": "0.1.0",
       "description": "(Pivot v3) PR driver + auto-merge policy. R3 scaffold.",
-      "last_changed": "2026-04-24T12:23:53+00:00"
+      "last_changed": "2026-04-24T12:23:53+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A"
     },
     "datasource_emitter": {
       "version": "1.0.0",
       "description": "(Pivot v3) Projects DB/Redis state into NDJSON+Parquet feeds. Phase 16 §16.12 landed.",
-      "last_changed": "2026-06-12T07:00:00+00:00"
+      "last_changed": "2026-06-12T07:00:00+00:00",
+      "public_api_status": "frozen (Phase 16)"
     },
     "common_feeds": {
       "version": "1.0.0",
       "description": "(Pivot v3) Shared feed schema, manifest, lifecycle, and retention contracts. Phase 16 §16.1–§16.31.",
-      "last_changed": "2026-06-12T07:00:00+00:00"
+      "last_changed": "2026-06-12T07:00:00+00:00",
+      "public_api_status": "frozen (Phase 16)"
     },
     "swarm": {
       "version": "0.54.0",
       "description": "(Pivot v3) AI consumers — predictors, proofreaders, drift, defense, NLP, reactors. Inherits ai/model/nlp share.",
       "last_changed": "2026-06-06T02:55:37+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A",
       "min_compatible_with": {
         "ai": "1.5.0"
       }
     },
     "common": {
-      "version": "0.3.0",
+      "version": "0.7.0",
       "description": "(Pivot v3) Shared libraries — config schema, Record envelope, feed manifests, bus SDK.",
-      "last_changed": "2026-06-09T06:15:29+00:00"
+      "last_changed": "2026-06-15T14:48:16+00:00",
+      "will_reach_1_0_0_in_phase": 22,
+      "public_api_target": "Phase 22 Appendix A"
     },
     "competitions": {
       "version": "0.1.0",
@@ -16316,6 +16335,510 @@
       "from": "3.12.1",
       "to": "3.12.2",
       "build": 21
+    },
+    {
+      "timestamp": "2026-06-15T10:41:02+00:00",
+      "component": "common",
+      "level": "minor",
+      "note": "Phase 18.0: AST-based isolation checking with policy.yaml support",
+      "from": "0.3.0",
+      "to": "0.4.0",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-06-15T10:48:50+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18.2 ledger #2: Added ci_isolation_max_seconds config field and validation; proof test infrastructure for CI isolation job",
+      "from": "1.140.2",
+      "to": "1.140.3",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-06-15T10:49:48+00:00",
+      "component": "common",
+      "level": "patch",
+      "note": "Phase 18.2 ledger #2: Added second proof test file test_isolation_failure_short_circuits_pipeline.py with 6 tests",
+      "from": "0.4.0",
+      "to": "0.4.1",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-06-15T10:59:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18: Isolation proof tests #1-#2 green; policy.yaml + check.py infrastructure verified",
+      "from": "1.140.3",
+      "to": "1.140.4",
+      "build": 25
+    },
+    {
+      "timestamp": "2026-06-15T11:07:06+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18: Fixed 2x blanket except clauses in test_isolation_job_runs_first.py; replaced with specific yaml.YAMLError + logging per AGENTS.md Rule 10",
+      "from": "1.140.4",
+      "to": "1.140.5",
+      "build": 26
+    },
+    {
+      "timestamp": "2026-06-15T11:15:58+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.1 ledger #3: Go isolation checker (go_check.go) with AST parsing + policy.yaml, proof tests",
+      "from": "3.63.1",
+      "to": "3.63.2",
+      "build": 27
+    },
+    {
+      "timestamp": "2026-06-15T11:20:19+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 18.1: import_graph.snapshot.json generation + make isolation.snapshot.refresh target; graph_builder.py + isolation.py dispatcher; 15 snapshot tests",
+      "from": "1.6.0",
+      "to": "1.7.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T11:23:05+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.1: isolation audit command (make isolation.audit) + quarterly diff vs snapshot; 4 tests",
+      "from": "3.63.2",
+      "to": "3.63.3",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-15T11:25:08+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 18.1: rollback runbook for isolation enforcement gates",
+      "from": "3.12.2",
+      "to": "3.12.3",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-06-15T11:27:27+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 18.1: proof tests for isolation contract (64 tests passing)",
+      "from": "1.7.0",
+      "to": "1.7.1",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T11:39:11+00:00",
+      "component": "common",
+      "level": "minor",
+      "note": "Phase 18.2: Added test_swarm_isolation.py, test_datasource_isolation.py, test_server_isolation.py isolation gate tests (32 tests); tests dynamically load policy.yaml; no hardcoded import lists",
+      "from": "0.4.1",
+      "to": "0.5.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-15T11:44:10+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 18.2 ledger #25: Cross-component public-symbol gate — extends check.py with public_symbols enforcement; adds xops/lint for CI validation",
+      "from": "1.140.5",
+      "to": "1.141.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-06-15T11:46:23+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 18.2 bullet 3: CI pipeline order proof tests (ledger #2)",
+      "from": "1.141.0",
+      "to": "1.142.0",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-06-15T11:47:42+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 18.2 bullet 4: Cross-component review gate lint (ledger #10)",
+      "from": "3.63.3",
+      "to": "3.64.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-06-15T11:49:07+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 18.2 bullet 5: Component path-drift gate lint (ledger #16)",
+      "from": "3.64.0",
+      "to": "3.65.0",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-06-15T11:50:17+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 18.2 bullet 6: Phase 18 conformance gate lint (ledger #30)",
+      "from": "3.65.0",
+      "to": "3.66.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-06-15T11:51:10+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 18.2 complete: 7/7 bullets closed - isolation gates in CI with lint + 52 proof tests",
+      "from": "1.142.0",
+      "to": "1.143.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-06-15T11:55:51+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Fixed blanket except Exception clauses in lint modules per AGENTS.md §2 Rule 10 — specific exception types + logging",
+      "from": "3.66.0",
+      "to": "3.66.1",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-06-15T12:09:57+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.3: ai_tree_resurrection lint + two-PR sequence design + deletion tests + proof tests",
+      "from": "3.66.1",
+      "to": "3.66.2",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-06-15T12:10:02+00:00",
+      "component": "common",
+      "level": "patch",
+      "note": "Phase 18.3: resurrection lint tests, two-PR docs tests, deletion tests, proof tests",
+      "from": "0.5.0",
+      "to": "0.5.1",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-06-15T12:23:17+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.4: Compose profiles, lint gates, smoke matrix",
+      "from": "3.66.2",
+      "to": "3.66.3",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-06-15T12:36:05+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.5 Bullet 1: rolling alias window support (resolve_component_alias function)",
+      "from": "3.66.3",
+      "to": "3.66.4",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-06-15T12:36:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.5 Bullet 2: 1.0.0 freeze gate with three-artifact validation",
+      "from": "3.66.4",
+      "to": "3.66.5",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-06-15T12:36:21+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.5 Bullet 3: Generated PUBLIC_API.md for all components",
+      "from": "3.66.5",
+      "to": "3.66.6",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-06-15T12:36:27+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 18.5 Bullet 4: Added component_versioning.md policy doc",
+      "from": "3.12.3",
+      "to": "3.12.4",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-06-15T12:36:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18.5 Bullet 5: Added 13 proof tests for alias window, 1.0.0 gate, and docs.api",
+      "from": "1.143.0",
+      "to": "1.143.1",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-06-15T12:44:35+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 18.5: alias window machinery, public-API freeze gate, deprecation policy, generated public-API dispatcher",
+      "from": "3.66.6",
+      "to": "3.66.7",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-06-15T12:51:29+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 18.6.1: per-component Postgres roles + pg_hba template",
+      "from": "1.7.1",
+      "to": "1.8.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T12:53:10+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 18.6.2: per-table ownership + runtime checks",
+      "from": "1.8.0",
+      "to": "1.9.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T12:55:03+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 18.6.3: bus-topic ownership + publisher auth",
+      "from": "1.9.0",
+      "to": "1.10.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T12:57:11+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 18.6.4: server/internal contract descriptor",
+      "from": "1.10.0",
+      "to": "1.11.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T12:57:55+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 18.6.5: all 14 proof tests pass (58 tests)",
+      "from": "1.11.0",
+      "to": "1.12.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T13:08:37+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 18.7 bullet 1-2: component-namespaced env vars (ledger #28), canonical lint config at root (ledger #27), lint enforcement lints",
+      "from": "3.66.7",
+      "to": "3.67.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-15T13:08:37+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 18.7 bullet 3-4: metric naming convention (ledger #18), isolation telemetry metrics",
+      "from": "1.143.1",
+      "to": "1.144.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-06-15T13:29:28+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "18.7 transitional: common/config bridge module enables PYTHONPATH=ai import pattern for Phase 18-22",
+      "from": "3.12.4",
+      "to": "3.12.5",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-06-15T13:38:33+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18.7: Configuration & telemetry cohesion proof tests",
+      "from": "1.144.0",
+      "to": "1.144.1",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-06-15T13:47:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "18.8: added docs_max_staleness_days config and 6 proof tests",
+      "from": "1.144.1",
+      "to": "1.144.2",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-06-15T13:47:30+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "18.8: added docs.verify target and docs_anchor_lint.py anchor reference validator",
+      "from": "3.67.0",
+      "to": "3.68.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-06-15T13:47:35+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "18.8: added anchor-doc front-matter timestamps and runbook quarterly drills",
+      "from": "3.12.5",
+      "to": "3.12.6",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-06-15T14:04:24+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "18.8: fixed test regression with get_xgb_params and telemetry metrics",
+      "from": "1.144.2",
+      "to": "1.144.3",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-06-15T14:30:47+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 18.9: Added dod_smoke_min_cpu, dod_smoke_min_mem_gb, burn_in_window_days, isolation_relax_max_hours config keys (ledgers #15, #20, #29)",
+      "from": "1.144.3",
+      "to": "1.145.0",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-06-15T14:30:47+00:00",
+      "component": "common",
+      "level": "minor",
+      "note": "Phase 18.9: Added 5 burn-in metrics with helper functions to observability layer (ledger #29)",
+      "from": "0.5.1",
+      "to": "0.6.0",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-06-15T14:30:47+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 18.9: Added drills.py dispatcher for rollback drill + burn-in gate tracking (ledger #20)",
+      "from": "3.68.0",
+      "to": "3.69.0",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-06-15T14:30:47+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 18.9: Initialized docs/tracking/drills.csv for drill audit trail (ledger #20)",
+      "from": "3.12.6",
+      "to": "3.12.7",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-06-15T14:39:09+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "fixed PYTHONPATH=ai test import error by clearing cached ai/common module in pytest_configure",
+      "from": "3.69.0",
+      "to": "3.69.1",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-06-15T14:48:16+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 18.10-18.12, 18.21: supply-chain, test isolation, redis namespace",
+      "from": "1.145.0",
+      "to": "1.146.0",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-06-15T14:48:16+00:00",
+      "component": "common",
+      "level": "minor",
+      "note": "Phase 18.13-18.14, 18.18, 18.23: governance, shutdown, secrets, vocabularies",
+      "from": "0.6.0",
+      "to": "0.7.0",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-06-15T14:48:16+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 18.15-18.16, 18.19-18.20, 18.22: budgets, builds, compose, automation",
+      "from": "3.69.1",
+      "to": "3.70.0",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-06-15T14:48:16+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 18.17: network policy & auth",
+      "from": "1.46.0",
+      "to": "1.47.0",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-06-15T14:48:16+00:00",
+      "component": "infra_mock",
+      "level": "minor",
+      "note": "Phase 18.16: container resources & identity",
+      "from": "1.5.1",
+      "to": "1.6.0",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-06-15T14:48:16+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 18.24: definition of done",
+      "from": "3.12.7",
+      "to": "3.13.0",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-06-15T15:20:02+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18.7 config sync: fixed 19 test suite and resolved environment variable synchronization blocker",
+      "from": "1.146.0",
+      "to": "1.146.1",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-06-15T15:33:30+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 18.0: Implemented AST-based isolation checking infrastructure; fixed critical ai→common import paths",
+      "from": "1.12.0",
+      "to": "1.12.1",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T16:13:38+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 18.7 env var namespacing completed: all 200+ NEGELIR_* vars now follow component namespace pattern",
+      "from": "1.12.1",
+      "to": "1.12.2",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-15T16:32:51+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Fixed env var sync: documented 12 undocumented AI vars, removed spurious Go-only shared markers",
+      "from": "3.70.0",
+      "to": "3.70.1",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-15T16:32:57+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 18 env var sync gates: all 4 verifier gates now passing",
+      "from": "1.146.1",
+      "to": "1.146.2",
+      "build": 2
     }
   ]
 }

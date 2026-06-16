@@ -324,7 +324,7 @@ class FeedWriter:
             
             # Encode and write (using canonical encoding)
             # Canonical encoding preserves trace_context as-is
-            from ai.common.feeds.canonical import encode
+            from common.feeds.canonical import encode
             canonical_bytes = encode(record)
             
             self.current_file_handle.write(canonical_bytes)

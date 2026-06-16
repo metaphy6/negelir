@@ -1,0 +1,9 @@
+# Allowed licenses for dependencies
+version: 1
+allowed_licenses:
+  - MIT
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - PSF
+  - MPL-2.0

@@ -1,0 +1,24 @@
+# Phase 18.6 §18.6 ledger #11 — Per-component Postgres pg_hba.conf policy
+#
+# Purpose: Enforce cross-role connection isolation. Each component connects
+# under its designated role; pg_hba.conf refuses connections that attempt
+# to cross component boundaries.
+#
+# TYPE  DATABASE        USER                  ADDRESS             METHOD
+# Local connections (always allowed for backup and admin)
+local   all             negelir_backup                            trust
+local   all             postgres                                  trust
+
+# Host connections by component role
+# All host connections require SSL and are IP-restricted to internal VPC/network
+hostssl negelir         datasource_writer     127.0.0.1/32        scram-sha-256
+hostssl negelir         server_reader         127.0.0.1/32        scram-sha-256
+hostssl negelir         patcher_writer        127.0.0.1/32        scram-sha-256
+
+# Swarm reader is explicitly FORBIDDEN at the connection layer
+# (swarm consumes feeds, never queries the DB directly)
+hostrejection negelir   swarm_reader          127.0.0.1/32
+
+# Catchall: reject any unknown role
+host    all             all                   127.0.0.1/32        reject
+host    all             all                   ::1/128             reject

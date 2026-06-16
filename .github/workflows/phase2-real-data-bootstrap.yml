@@ -30,7 +30,7 @@ jobs:
       - name: Bootstrap real data cache
         working-directory: ai
         env:
-          NEGELIR_DEFAULT_LEAGUE_ID: super_lig
+          NEGELIR_COMMON_DEFAULT_LEAGUE_ID: super_lig
           DATA_DIR: ../data
         run: |
           mkdir -p ../data ../data/models
@@ -48,7 +48,7 @@ jobs:
       - name: Train model smoke test
         working-directory: ai
         env:
-          NEGELIR_DEFAULT_LEAGUE_ID: super_lig
+          NEGELIR_COMMON_DEFAULT_LEAGUE_ID: super_lig
           DATA_DIR: ../data
           MODEL_DIR: ../data/models
         run: |

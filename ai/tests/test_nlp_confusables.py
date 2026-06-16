@@ -240,7 +240,7 @@ class TestConfusablesTablePin:
         assert _CONFUSABLES_TABLE[0x0430] == "a", "Cyrillic а must map to Latin a"
 
         # Check type hints if available
-        import ai.common.text.normalize as norm_mod
+        import common.text.normalize as norm_mod
         source = open(norm_mod.__file__).read()
         assert "dict[int, str]" in source, "Table type hint must be dict[int, str]"
 

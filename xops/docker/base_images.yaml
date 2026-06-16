@@ -1,0 +1,19 @@
+# Curated base images (digest-pinned)
+version: 1
+images:
+  - name: python:3.12-slim
+    registry: docker.io
+    digest: "sha256:abc123def456"  # Example digest
+    last_refreshed_at: "2026-06-15T00:00:00Z"
+
+  - name: golang:1.23-bookworm
+    registry: docker.io
+    digest: "sha256:xyz789uvw012"
+
+  - name: redis:7.2-alpine
+    registry: docker.io
+    digest: "sha256:aabbccddee00"
+
+  - name: postgres:17-bookworm
+    registry: docker.io
+    digest: "sha256:11223344ff55"

@@ -59,8 +59,16 @@ env: ## Bootstrap xops/env/.env from xops/env/.env.example
 	@$(XOPS)/env.py env
 
 .PHONY: up
-up: env ## Start all services (DETACH=1 for background)
+up: env ## Start all services (DETACH=1 for background; PROFILES=... to override default)
 	@$(XOPS)/services.py up
+
+.PHONY: up-dev
+up-dev: env ## DEPRECATED (Phase 18.4) — use 'make up PROFILES=core,mock,datasource'
+	@$(XOPS)/services.py up-dev
+
+.PHONY: up-mock
+up-mock: env ## DEPRECATED (Phase 18.4) — use 'make up PROFILES=core,mock'
+	@$(XOPS)/services.py up-mock
 
 .PHONY: down
 down: ## Stop and remove all containers
@@ -97,6 +105,18 @@ verify.dlq-replay-policy: ## Phase 8 §8.16.7 — verify DLQ replay overrides vs
 .PHONY: verify.adversarial-corpora
 verify.adversarial-corpora: ## Phase 12 §12.2 — verify adversarial corpus integrity (disjointness, PII, SHA256, reviewers)
 	@$(XOPS)/verify.py adversarial-corpora
+
+.PHONY: isolation.snapshot.refresh
+isolation.snapshot.refresh: env ## Phase 18 §18.1 — regenerate common/isolation/import_graph.snapshot.json
+	@PYTHONPATH=. $(XOPS)/isolation.py snapshot.refresh
+
+.PHONY: isolation.audit
+isolation.audit: env ## Phase 18 §18.1 — run quarterly audit: diff fresh scan vs snapshot (ledger #9)
+	@PYTHONPATH=. $(XOPS)/isolation.py audit
+
+.PHONY: isolation.shims-only
+isolation.shims-only: env ## Phase 18.3 §18.3 — gate: ai/ is shim-only (blocking condition for Phase 22 §22.4 deletion)
+	@PYTHONPATH=. $(XOPS)/isolation.py shims-only
 
 .PHONY: audit.verify-api
 audit.verify-api: ## §9.8 — walk api_audit_log HMAC chain; Phase 1 linkage check + Phase 2 HMAC recomputation (exit 1 on any break)
@@ -1134,6 +1154,33 @@ version.validate: ## Validate chart.json schema
 version.compatibility-check: ## Validate top-level compatibility constraints in chart.json
 	@$(XOPS)/version.py compatibility-check
 
+#                        DOCUMENTATION
+.PHONY: docs.api
+docs.api: ## Phase 18.5 — Regenerate PUBLIC_API.md for all components from __all__
+	@$(XOPS)/docs.py api
+
+.PHONY: docs.verify
+docs.verify: ## Phase 18.8 — Verify that all anchor docs are current (not stale)
+	@$(XOPS)/docs.py verify
+
+# ══════════════════════════════════════════════════════════════
+#              PHASE 18.9 — DRILLS & BURN-IN
+# ══════════════════════════════════════════════════════════════
+#  Quarterly rollback drill, DoD smoke in fresh runner, 30-day burn-in window.
+#  See docs/tracking/drills.csv and ROADMAP §18.9 (ledgers #15, #20, #29).
+
+.PHONY: phase18.rollback.drill
+phase18.rollback.drill: ## Phase 18.9 §18.9 — Run quarterly rollback drill against ephemeral env (ledger #20)
+	@$(XOPS)/makefile/drills.py rollback_drill_run
+
+.PHONY: phase18.check-drill-compliance
+phase18.check-drill-compliance: ## Phase 18.9 §18.9 — Check rollback drill SLO compliance (two consecutive misses ⇒ remove hatch)
+	@$(XOPS)/makefile/drills.py check_missed_drills
+
+.PHONY: phase18.burn-in-status
+phase18.burn-in-status: ## Phase 18.9 §18.9 — Report burn-in gate status (isolation, shim, drills, relax) (ledger #29)
+	@$(XOPS)/makefile/drills.py burn_in_status
+
 # ══════════════════════════════════════════════════════════════
 #                CODEGRAPH (dev MCP index)
 # ══════════════════════════════════════════════════════════════
@@ -1285,3 +1332,7 @@ help: ## Show this help message
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 # ══════════════════════════════════════════════════════════════
+
+.PHONY: base_images.refresh
+base_images.refresh:
+	@echo "Phase 18: Base images refresh (quarterly cadence)"

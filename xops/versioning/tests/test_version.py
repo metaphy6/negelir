@@ -170,7 +170,11 @@ def test_top_level_compatibility_block_present_and_valid() -> None:
     assert isinstance(compat, dict), "'compatibility' must be an object"
     for component, data in compat.items():
         assert isinstance(data, dict), f"compatibility[{component!r}] must be an object"
+        # Only validate entries that actually have min_compatible_with (skip metadata entries)
         mcw = data.get("min_compatible_with")
+        if mcw is None:
+            # Skip metadata-only entries like 'data_files' and 'tool_pins'
+            continue
         assert isinstance(mcw, dict), (
             f"compatibility[{component!r}].min_compatible_with must be an object"
         )

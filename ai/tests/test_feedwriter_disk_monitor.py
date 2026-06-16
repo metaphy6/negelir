@@ -13,7 +13,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from ai.common.feeds.disk_monitor import DiskMonitor, DiskUsage
+from common.feeds.disk_monitor import DiskMonitor, DiskUsage
 import time
 
 

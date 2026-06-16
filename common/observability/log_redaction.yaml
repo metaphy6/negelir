@@ -1,0 +1,13 @@
+# Per-component log redaction policy
+version: 1
+components:
+  swarm:
+    forbidden_field_names: [password, token, secret, api_key]
+    regex_patterns:
+      - "(?i)(postgres|mysql)://[^\\s]*"
+      - "(?i)bearer\\s+[a-z0-9-]*"
+
+  datasource:
+    forbidden_field_names: [password, token, secret, upstream_url]
+    regex_patterns:
+      - "(?i)(postgres|mysql)://[^\\s]*"

@@ -1,3 +1,8 @@
+<!-- 
+  last_verified_against_code: 2026-06-15
+  This document was last verified to be accurate against the live codebase on the above date.
+  See ROADMAP.md Phase 18.8 for staleness policy.
+-->
 # 🐝 Swarm Design
 
 > Companion to [`../planning/ROADMAP.md`](../planning/ROADMAP.md), Phase 3 onward.

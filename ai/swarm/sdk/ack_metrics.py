@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from ai.common.config import Config
+from common.config import Config
 
 __all__ = [
     "AckMetrics",

@@ -119,6 +119,35 @@ def validate_chart(chart: Dict[str, Any]) -> None:
         raise VersionChartError("chart.changelog must be a list")
 
 
+def resolve_component_alias(chart: Dict[str, Any], component_key: str) -> Tuple[str, bool]:
+    """Resolve a component key through the alias window.
+
+    Returns (canonical_key, is_alias) where is_alias=True if the input key
+    was an alias. Raises VersionChartError if the key is not found or the
+    alias target does not exist.
+    """
+    components = chart.get("components", {})
+    
+    if component_key not in components:
+        raise VersionChartError(
+            f"component {component_key!r} not found; "
+            f"known: {sorted(components)}"
+        )
+    
+    data = components[component_key]
+    if isinstance(data, dict) and "aliased_to" in data:
+        # This key is an alias
+        target = data["aliased_to"]
+        if target not in components:
+            raise VersionChartError(
+                f"component {component_key!r} aliases to unknown target {target!r}"
+            )
+        return (target, True)
+    
+    # This key is canonical (not an alias)
+    return (component_key, False)
+
+
 def validate_compatibility(chart: Dict[str, Any]) -> None:
     """Validate per-component compatibility floors.
 
@@ -280,9 +309,12 @@ def cmd_show(args: argparse.Namespace) -> int:
     width = max(len(name) for name in chart["components"])
     for name in sorted(chart["components"]):
         data = chart["components"][name]
+        # Check if this component is an alias
+        is_deprecated = "aliased_to" in data
+        status_mark = " ⚠️  (deprecated)" if is_deprecated else ""
         print(
             f"  {name.ljust(width)}  v{data['version']}  "
-            f"— {data['description']}"
+            f"— {data['description']}{status_mark}"
         )
     if args.changelog:
         print()
@@ -299,6 +331,59 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_bump(args: argparse.Namespace) -> int:
     chart = load_chart()
+    
+    # Handle --to-1.0.0 gate (Bullet 2)
+    if args.to_1_0_0:
+        component = args.component
+        canonical, is_alias = resolve_component_alias(chart, component)
+        
+        # Check three required conditions for 1.0.0 bump
+        repo_root = CHART_PATH.parent.parent.parent
+        
+        # (a) <component>/PUBLIC_API.md must exist
+        component_path = repo_root / component.replace("_", "/")
+        # For Phase 18 (still in ai/ layout), also check under ai/
+        if not component_path.exists():
+            component_path = repo_root / "ai" / component.replace("_", "/")
+        
+        public_api_path = component_path / "PUBLIC_API.md"
+        if not public_api_path.exists():
+            raise VersionChartError(
+                f"cannot bump {component!r} to 1.0.0: "
+                f"{public_api_path} does not exist"
+            )
+        
+        # (b) <component>/tests/test_public_api_compat.py must exist
+        compat_test_path = component_path / "tests" / "test_public_api_compat.py"
+        if not compat_test_path.exists():
+            raise VersionChartError(
+                f"cannot bump {component!r} to 1.0.0: "
+                f"{compat_test_path} does not exist"
+            )
+        
+        # (c) docs/coding/component_versioning.md must exist
+        versioning_doc = repo_root / "docs" / "coding" / "component_versioning.md"
+        if not versioning_doc.exists():
+            raise VersionChartError(
+                f"cannot bump {component!r} to 1.0.0: "
+                f"{versioning_doc} does not exist"
+            )
+        
+        # All checks passed; bump to 1.0.0
+        entry = bump_component(
+            chart,
+            component=canonical,
+            level="major",  # Semantic: move from 0.x.x to 1.0.0
+            note=args.note or "frozen public API",
+        )
+        save_chart(chart)
+        print(
+            f"✅ {entry['component']}: {entry['from']} → {entry['to']} "
+            f"({entry['level']}); project build = {chart[PROJECT_KEY]['build']}"
+        )
+        return 0
+    
+    # Standard bump (no --to-1.0.0)
     entry = bump_component(
         chart,
         component=args.component,
@@ -425,16 +510,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bump.add_argument(
         "--level",
-        required=True,
+        default=None,
         choices=LEVELS,
-        help="SemVer level to bump.",
+        help="SemVer level to bump (ignored if --to-1.0.0 used).",
+    )
+    bump.add_argument(
+        "--to-1.0.0",
+        dest="to_1_0_0",
+        action="store_true",
+        help="Bump to 1.0.0 (frozen API). Requires PUBLIC_API.md, test_public_api_compat.py, and component_versioning.md.",
     )
     bump.add_argument(
         "--note",
         default="",
         help="Short human note appended to the changelog entry.",
     )
-    bump.set_defaults(func=cmd_bump)
+    
+    def validate_bump_args(args: argparse.Namespace) -> None:
+        if args.to_1_0_0:
+            if args.level:
+                raise argparse.ArgumentTypeError("--level and --to-1.0.0 are mutually exclusive")
+        else:
+            if not args.level:
+                raise argparse.ArgumentTypeError("--level required unless --to-1.0.0 is used")
+    
+    bump.set_defaults(func=cmd_bump, validate=validate_bump_args)
 
     rename = sub.add_parser("rename", help="Rename a component key.")
     rename.add_argument(
@@ -473,6 +573,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: List[str]) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    
+    # Call validate if it exists (used by bump command)
+    if hasattr(args, 'validate'):
+        try:
+            args.validate(args)
+        except argparse.ArgumentTypeError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            return 2
+    
     try:
         return int(args.func(args))
     except VersionChartError as exc:

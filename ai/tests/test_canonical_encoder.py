@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ai.common.feeds.canonical import encode, idempotency_key
+from common.feeds.canonical import encode, idempotency_key
 
 
 class TestCanonicalEncoderBasics:
@@ -344,7 +344,7 @@ class TestConformance:
         """Verify encode() is the canonical serializer (check in real linting)."""
         # This is a reminder that feeds writer code must ONLY use encode()
         # Lint checks (xops/lint/feeds_no_json_dumps.py) enforce this
-        from ai.common.feeds.canonical import encode
+        from common.feeds.canonical import encode
         # Just verify it's importable and callable
         assert callable(encode)
 

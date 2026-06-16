@@ -1,0 +1,20 @@
+# Phase 18.4 — Smoke matrix for core,server,internal,swarm,observability tuple
+profiles: ["core", "server", "internal", "swarm", "observability"]
+description: "Full stack with telemetry"
+expected_services:
+  - postgres
+  - redis
+  - server
+  - api
+  - api-docs
+readiness_timeout_s: 90
+checks:
+  - name: postgres_healthy
+    type: tcp_port
+    target: postgres:5432
+  - name: redis_healthy
+    type: tcp_port
+    target: redis:6379
+  - name: server_healthy
+    type: http
+    url: http://server:8080/health

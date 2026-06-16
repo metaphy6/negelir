@@ -198,7 +198,7 @@ Most-touched knobs:
 | Variable | Default | Purpose |
 |---|---|---|
 | `POSTGRES_PASSWORD` | _(required)_ | Postgres credential — no default by design |
-| `NEGELIR_DEFAULT_LEAGUE_ID` | `super_lig` | League id used when `LEAGUE=` is omitted |
+| `NEGELIR_COMMON_DEFAULT_LEAGUE_ID` | `super_lig` | League id used when `LEAGUE=` is omitted |
 | `AI_DEVICE` | `auto` | `cpu` / `cuda` / `auto` for ML compute |
 | `AI_LOG_LEVEL` | `DEBUG` | Python log verbosity |
 | `BOOTSTRAP_MIN_MATCHES` | `100` | Gate before training is allowed |

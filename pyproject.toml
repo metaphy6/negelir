@@ -1,0 +1,59 @@
+# Negelir — Python project configuration (Phase 18.7 ledger #27)
+# All Python lint, format, and test configuration is canonical here.
+# Per-component overrides forbidden by xops/lint/no_per_component_lint_override.py
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "negelir"
+version = "3.0.0"
+description = "Football prediction swarm & datasource orchestration"
+
+[tool.black]
+line-length = 120
+target-version = ["py38", "py39", "py310", "py311"]
+extend-exclude = '(xops|docs|data|migrations|build|dist)'
+
+[tool.isort]
+profile = "black"
+line_length = 120
+skip_gitignore = true
+known_first_party = ["ai", "common", "datasource", "swarm", "server", "xops"]
+known_third_party = ["pytest", "redis", "psycopg", "numpy", "pandas"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict = false
+
+[tool.pytest.ini_options]
+addopts = "-v --tb=short"
+testpaths = ["ai/tests", "common/tests", "swarm/tests", "server/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["ai", "common", "datasource", "swarm", "server"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/site-packages/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

@@ -1,0 +1,22 @@
+# Per-service readiness probe warm-up budget
+version: 1
+services:
+  datasource_emitter_writer:
+    check_endpoint: /readyz
+    readiness_timeout_s: 10
+
+  swarm:
+    check_endpoint: /readyz
+    readiness_timeout_s: 15
+
+  server:
+    check_endpoint: /readyz
+    readiness_timeout_s: 5
+
+  postgres:
+    check_endpoint: 5432
+    readiness_timeout_s: 5
+
+  redis:
+    check_endpoint: 6379
+    readiness_timeout_s: 3

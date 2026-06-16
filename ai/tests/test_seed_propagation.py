@@ -3,7 +3,7 @@ import random
 import numpy as np
 
 from common.config import Config
-from ai.common.seed import propagate_global_seed
+from common.seed import propagate_global_seed
 
 
 def test_propagate_global_seed_python_and_numpy_consistent() -> None:
