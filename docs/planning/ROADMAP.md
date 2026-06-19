@@ -2805,28 +2805,252 @@ applies and pass the same gates.
 
 ## 🌐 Phase 19 — Global Catalog (deferred long-tail)
 
-**Goal:** Per user directive #6 — *"add all the football leagues like Korean or Brazilian that're listed on mackolik.com and nesine.com alongside world cups (eliminations and championships) … not implementing it yet but revise and set the system ready for such change."* Phase 19 makes the long-tail addition a **single YAML edit per league** with zero platform changes.
+**Goal:** Per user directive #6 — *"add all the football leagues like Korean or Brazilian that're listed on mackolik.com and nesine.com alongside world cups (eliminations and championships) … not implementing it yet but revise and set the system ready for such change."* Phase 19 makes the long-tail addition a **single YAML-driven batch operation per league**, with an automated onboarding harness, guaranteed zero-disruption to T1/T2 leagues, resource governance for 200+ concurrent T3 pipelines, a complete international-tournament model, and a catalog that can scale to every league on either source.
 
-**Anchor doc:** [`design/LEAGUE_CATALOG.md`](../design/LEAGUE_CATALOG.md) §5.
+**Depends on:**
+- Phase 13 (pluggable catalog platform; per-league preset discipline; tier-promotion gate; reactor isolation; competition platform)
+- Phase 16 (emitter feeds — sanctioned data path for T3 pipeline output)
+- Phase 17 (patcher — Phase 19 §19.1 closes the patcher integration gates explicitly deferred from Phase 18 ledger #21)
+- Phase 18 (isolation gates and contracts must be green; Phase 19 inherits the Phase 18 conformance checkbox per Phase 18 §18.24)
 
-### 19.1 Catalog-pluggable architecture (delivered with 13a; verified here)
+**Deferred from Phase 18 (mandatory §19.1):** Patcher integration gates (Phase 18 ledger #21) — layout-freeze window, Phase 17 watchdog coordination, and the fourth shim-deletion signal (zero `ai/` references in Phase 17 patcher bundle storage). These are the **first** bullets drained in Phase 19.
 
-- [ ] Unit test: AST scan of `ai/` and `server/` rejects any `if league_id == "..."` literal — every league branch reads `league_catalog.yaml`.
-- [ ] T3 has zero maintenance cost when empty: no predictor retraining, no NLP gazetteer hit, no monetization SKU.
-- [ ] Identity strategy stays generic — `stable_id` minting in `CONTENT_FRESHNESS.md` §2 does not bake in any country list.
-- [ ] Source-registry pluggable — adding a new long-tail-league source is a `xops/mock/sources.py` row + extractor + differ; no pipeline changes.
+**Feeds into:** Phase 20 (per-league entitlement rows; T3 rows need monetization SKU stubs before flip-on), Phase 21 (enrichment planes are scoped per competition format; long-tail leagues inherit the same enrichment contract), Phase 22 (catalog file moves from `ai/common/league_catalog.yaml` → `common/catalog/league_catalog.yaml` as part of §22.2 — the catalog loader must be shim-ready).
 
-### 19.2 Long-tail ingest (deferred batches; pulled when business demand justifies)
+**Anchor docs (binding):**
+- [`design/LEAGUE_CATALOG.md`](../design/LEAGUE_CATALOG.md) (tier system, readiness gates, catalog file format — especially §2 readiness checklist, §3 catalog file shape, §4 initial roster)
+- [`design/COMPETITIONS.md`](../design/COMPETITIONS.md) (cup / tournament shapes and `CompetitionFormat` enum)
+- [`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md) (identity & `stable_id` for long-tail sources; freshness rules per-plane)
+- [`design/DATA_SOURCE.md`](../design/DATA_SOURCE.md) (source-registry pluggability; `xops/mock/sources.py` schema)
+- [`design/TURKISH_NLP.md`](../design/TURKISH_NLP.md) (gazetteer bulk-loading, transliteration rules, foreign-name corpus)
+- [`design/MONETIZATION.md`](../design/MONETIZATION.md) (T3 rows need SKU stubs before Phase 20 flag flip; per-league entitlement rows)
+- [`design/SECURITY.md`](../design/SECURITY.md) (per-source trust level; onboarding a new source inherits scraper supply-chain trust)
 
-- [ ] Per-batch process: capture seeds → add a T3 row to `league_catalog.yaml` → backtest → promote per LEAGUE_CATALOG.md §2. **No platform changes per league.**
-- [ ] Initial deferred targets: every league listed on mackolik.com bulletin pages + every league on nesine.com that has odds coverage + every WC qualifier confederation not in 13a/c.
-- [ ] Catalog roster grows in the YAML only — Phase 19 does not require new code.
+**Phase 18 conformance (binding):** Every PR that touches `ai/common/league_catalog.yaml`, `ai/common/leagues/`, `infra/mock/seeds/`, or `common/isolation/policy.yaml` must pass `xops/lint/phase18_conformance.py` in CI. This is enforced by §19.1 and verified by §19.12.
 
-### 19.3 Definition of Done
+---
 
-- [ ] AST-scan test green.
-- [ ] At least 5 T3 rows committed (sample from CONCACAF / AFC / OFC tier-2 leagues) to prove the pluggability — rows stay T3 (admin-only) until business signs off.
-- [ ] Catalog round-trip test (load → serialize → diff = empty) passes.
+### 19.0 Wrong-assumption ledger (binding)
+
+Every row retires a wrong assumption that, if left uncorrected, would silently corrupt the long-tail expansion. Same format and binding rules as Phase 18 §18.0: each row is append-only; a future PR that restores a wrong assumption must add a new row explaining why the old reasoning no longer applies and pass the same gates. `xops/lint/phase19_ledger.py` enforces density (no row gaps) and append-only invariant — a PR that adds a ledger row must also ship the named proof test in the same diff.
+
+| # | Wrong assumption (retired) | Why it is wrong | Proof test |
+|---|---|---|---|
+| 1 | "Adding a new league is a pure YAML edit — no code changes needed." | A new long-tail league requires: (a) a source-registry entry in `xops/mock/sources.py` (or proof the source already covers that league), (b) at least one mock-vhost seed bundle in `infra/mock/seeds/<source>/<league>/`, (c) NLP gazetteer entries for team names and non-Turkish transliterations, (d) a `LeagueConfig` preset in `ai/common/leagues/`, (e) a `CompetitionConfig` for at least one format, and (f) a calibration backtest run. "YAML-only" is accurate only after the onboarding harness (§19.3) exists and has pre-assembled (a)–(f); a raw YAML row edit without the harness silently misses all six. | `test_19_0_new_league_requires_complete_onboarding_bundle.py` |
+| 2 | "T3 leagues are free — they cost zero platform resources." | A T3 league still runs the full data pipeline (scraper → differ → storage agent → emitter → predictor fan-out). At 200+ leagues (every league on mackolik/nesine), naive T3 ingestion saturates scrape rate limits, Redis bus throughput, Postgres write capacity, and predictor CPU — even at one request per league per day. T3 leagues require a dedicated scrape lane (separate concurrency pool and rate-limit envelope), a per-league compute cap, and a lazy-load model for `LeagueConfig` / `CalibrationProfile` objects. Exceeding the cap shelves the league without affecting T1/T2. | `test_19_0_t3_scrape_budget_enforced.py`, `test_19_0_t3_compute_cap_enforced.py` |
+| 3 | "An AST scan for `if league_id == '...'` in Python catches all hardcoded-league-branch violations." | The AST scan covers Python literals under `ai/` but not: Go source literals in `server/internal/`, feature-toggle config files that embed a league allow-list, generated stubs (OpenAPI / protobuf), Jinja / Helm templates in compose and k8s charts, and inline `league_id` strings in YAML config overrides. Phase 19 widens the pluggability gate to cover all five surfaces, each with a dedicated lint rule. | `test_19_0_go_pluggability_gate.py`, `test_19_0_no_league_literal_in_generated_stubs.py`, `test_19_0_config_no_league_literal.py` |
+| 4 | "Source availability for a long-tail league is someone else's concern — the scraper just retries." | A source permanently unavailable for a T3 league exhausts its daily scrape budget in constant retries, producing a misleading "pipeline running" metric while ingesting zero records. The onboarding harness (§19.3) checks source availability as a pre-condition; the T3 pipeline publishes a `datasource_t3_source_available` gauge; zero value after `cfg.t3_source_grace_period_hours` (default 48 h) shelves the league automatically and posts to the ops-admin bus topic. | `test_19_0_unavailable_source_shelves_t3_league.py` |
+| 5 | "A new league's calibration backtest can be skipped if the league is 'obviously similar' to an existing T1 league." | Similarity is not transferable: a league sharing a confederation with a T1 league may have a different home-advantage distribution, market-coverage gaps, or a scraper that yields only final scores without live odds. Skipping the backtest produces a T3→T2 promotion based on data volume alone, without log-loss or Brier score evidence. Phase 19 verifies the tier-promotion gate (Phase 13 §13.7) cannot be bypassed by YAML manipulation (e.g. setting `calibration_status: "exempt"`). | `test_19_0_calibration_exempt_flag_refused.py`, `test_19_0_t3_to_t2_requires_backtest.py` |
+| 6 | "NLP gazetteer updates for long-tail leagues can be batched and done later." | A T3 row in the catalog without gazetteer entries produces silent entity-extraction failures: a user query mentioning a Korean or Brazilian team name resolves to `None` rather than an error; downstream intents silently degrade. Phase 19 makes gazetteer coverage a hard pre-condition for catalog-row insertion, enforced by a CI lint gate. | `test_19_0_catalog_row_requires_gazetteer_coverage.py`, `test_19_0_missing_gazetteer_blocks_catalog_insert.py` |
+| 7 | "The patcher (Phase 17) works across all leagues automatically — no per-league scoping needed." | The patcher's scope contract (`CLAUDE.md` §2) is per-extractor, not per-league. A single extractor covering multiple leagues (e.g. a mackolik extractor handling all leagues on the site) requires patcher-bundle scoping at `(extractor_id, league_id)` granularity; without this, a patcher run for one league can corrupt extractor logic for another and mischarge the cost ledger. Phase 19 §19.1 enforces two-key bundle paths and verifies all legacy flat-path bundles are migrated. | `test_19_0_patcher_bundle_scoped_per_extractor_league.py` |
+| 8 | "WC qualifiers are a normal round-robin league — the catalog handles them identically." | FIFA World Cup qualifiers use confederation-specific groups with carry-forward rules, cross-confederation play-off ties, and a participant list that crystallises after each matchday rather than before the season. Modeling them as `round_robin` silently miscalibrates qualification-probability outputs. Phase 19 ships a `wc_qualifier` `CompetitionFormat` with sub-group decomposition, inter-confederation play-off fixture generation, and a participant-crystallisation gate (§19.5). | `test_19_0_wc_qualifier_format_required.py`, `test_19_0_confederation_subgroup_decomposition.py` |
+| 9 | "200+ T3 leagues distribute naturally across the existing scheduler without affecting T1/T2 scraping." | The existing scheduler (Phase 4) uses a priority queue keyed on tier + freshness score. At 200 T3 leagues with a 10 s daily budget each, aggregate scrape time (33 min/day) exceeds the mackolik `robots.txt`-compliant request budget for T1/T2 by 4× if they share the same executor and rate-limit envelope. Phase 19 introduces a dedicated T3 scrape lane with a separate concurrency pool, rate-limit, and failure domain. | `test_19_0_t3_scrape_lane_isolated_from_t1_t2.py`, `test_19_0_t3_lane_respects_rate_limit_envelope.py` |
+| 10 | "Catalog YAML load is fast regardless of size — no need to bound it." | A YAML file with 500+ entries (each with `source_coverage`, `competitions`, and `aliases` sub-keys) takes measurably longer to parse and validate; the Phase 13 §13.26 atomic-reload lock holds for the entire parse duration. Phase 19 adds a binary-serialised cache (`catalog.msgpack.gz`, rebuild-on-change) that the hot path reads while a reload is in flight, keeping catalog-read latency independent of catalog size. | `test_19_0_catalog_reload_latency_under_slo.py`, `test_19_0_msgpack_cache_serves_hot_path.py` |
+| 11 | "Removing a league is as simple as deleting its YAML row." | A league that has progressed through T3 ingest has: mock-seed bundles in `infra/mock/seeds/`, NLP gazetteer entries, a `LeagueConfig` preset, `CompetitionConfig`(s), Postgres rows in the reference + schedule planes, and a patcher-bundle directory. Deleting the YAML row without decommissioning these orphans them indefinitely and leaks disk, Redis memory, and Grafana panel slots. Phase 19 ships `make league.decommission` that performs full cleanup and verifies zero artifacts remain. | `test_19_0_decommission_removes_all_artifacts.py`, `test_19_0_orphan_artifacts_blocked_by_lint.py` |
+| 12 | "International tournament rows only need a `CompetitionFormat` — the rest is automatic." | International tournaments differ from domestic leagues in: squad size (23/26 vs starting-11 rotation models), fixture-density scheduling (group stage 3 games in 7 days), tournament-specific tiebreaker rules that change between editions, and a participant list that is not year-round stable (crystallises only after qualifiers). Each international tournament requires a `tournament_profile.yaml` and must use the `InternationalTournamentCalibrationProfile` subclass; falling back to `CalibrationProfile` silently misapplies home-advantage and rotation priors. | `test_19_0_international_tournament_requires_tournament_profile.py`, `test_19_0_tournament_profile_uses_correct_calibration_subclass.py` |
+| 13 | "The Phase 18 conformance checkbox is a one-time thing — Phase 19 just inherits it passively." | Every new league row may introduce a new extractor module that crosses a component boundary. Without running `xops/lint/phase18_conformance.py` per new league PR, the conformance checkbox becomes a rubber stamp — a new extractor that imports from `swarm/` or `server/` silently violates the isolation contract. Phase 19 wires the conformance check directly into the onboarding harness (§19.3) so it runs automatically for every new league. | `test_19_0_onboarding_harness_runs_phase18_conformance.py` |
+
+---
+
+### 19.1 Phase 18 conformance & patcher integration gates (deferred from Phase 18 ledger #21)
+
+> **Mandate:** Phase 18 ledger #21 explicitly deferred these bullets to Phase 19 as a prerequisite. They are the **first** work drained in this phase — they must be green before any catalog-growth work starts, because the patcher-bundle scope, the Phase 18 fourth shim-deletion signal, and the `ai/` layout-freeze all affect the onboarding harness (§19.3).
+
+- [ ] **Patcher bundle storage is `(extractor_id, league_id)`-scoped.** Every patcher artifact is stored at `xops/patcher/bundles/<extractor_id>/<league_id>/`; legacy flat-path bundles (keyed on `extractor_id` only) are refused by `xops/lint/patcher_bundle_scope.py` at CI. `make patcher.bundle.migrate` migrates existing flat-path bundles to the two-key layout; a 90-day alias window keeps the old path readable (with a `DeprecationWarning`) before the lint hardens. `test_19_1_patcher_bundle_two_key_path.py` asserts: (a) new bundles use two-key path, (b) flat-path bundles emit a warning and are migrated, (c) after the window the flat path is refused.
+- [ ] **Zero `ai/` references in Phase 17 patcher bundle storage** — the fourth shim-deletion signal (Phase 18 §18.3 pre-condition). `make patcher.bundle.scan-ai-refs` queries all stored bundle artifacts for `ai/` import paths and must return zero. Gate result is recorded as the fourth signal row in `docs/tracking/phase18_shim_deletion_acks.md` before Phase 22 §22.4 can proceed. `test_19_1_ai_refs_zero_in_patcher_bundles.py`.
+- [ ] **`ai/` layout freeze.** `xops/lint/ai_layout_freeze.py` refuses any new `ai/<module>/` top-level directory that is not a pre-existing stub from Phase 18 §18.3. Existing modules continue unchanged; the freeze applies only to *new* top-level additions. This is the precondition for the orderly Phase 22 module move. `test_19_1_layout_freeze_blocks_new_ai_module.py`.
+- [ ] **Phase 17 watchdog coordination gate.** If the patcher watchdog (`ai/swarm/agents/patcher/watchdog.py`) is active, Phase 19 verifies the watchdog's per-league artifact inventory references no frozen `ai/` path before a new T3 league is onboarded. This check runs as part of `make league.onboard` (§19.3). `test_19_1_watchdog_inventory_no_frozen_path.py`.
+- [ ] **Phase 18 conformance wired into all onboarding PRs.** `xops/lint/phase18_conformance.py` runs in CI on every PR touching `ai/common/league_catalog.yaml`, `ai/common/leagues/`, `infra/mock/seeds/<source>/`, or `common/isolation/import_graph.snapshot.json`. Failure blocks merge — no override. `test_19_1_phase18_conformance_blocks_bad_onboarding_pr.py`.
+- [ ] Proof tests: `test_19_1_patcher_bundle_two_key_path.py`, `test_19_1_ai_refs_zero_in_patcher_bundles.py`, `test_19_1_layout_freeze_blocks_new_ai_module.py`, `test_19_1_watchdog_inventory_no_frozen_path.py`, `test_19_1_phase18_conformance_blocks_bad_onboarding_pr.py`.
+
+---
+
+### 19.2 Pluggable-architecture hardening (beyond Phase 13)
+
+> Phase 13 §13.1 established pluggability with a Python AST scan. Phase 19 closes the five gap surfaces identified in ledger #3 and asserts cost invariants for T3 lanes.
+
+- [ ] **Python AST pluggability gate** (from Phase 13 §13.1; re-asserted). CI asserts zero `if league_id == '...'` or `league_id in [...]` literals in `ai/**/*.py`. Verified still green after all Phase 19 catalog additions. `test_19_2_python_pluggability_gate.py`.
+- [ ] **Go pluggability gate** (new). `xops/lint/go_no_league_literal.py` walks Go source under `server/` and asserts zero `"<league_id>"` string literals that are not read from the catalog or from a typed config struct. Test fixtures (under `*_test.go` files) and generated code (`# negelir-generated-from:` header) are excluded. `test_19_2_go_pluggability_gate.py`.
+- [ ] **Generated-stub pluggability gate** (new). `xops/lint/no_league_literal_in_generated.py` asserts generated files (OpenAPI stubs, protobuf, Jinja templates) carry no literal league IDs. Generated files are identified by the `# negelir-generated-from:` header (Phase 18 ledger #33); the lint fails if a generated file carries a league literal that is not passed in from a caller-supplied catalog lookup. `test_19_2_generated_stub_pluggability.py`.
+- [ ] **YAML-config pluggability gate** (new). YAML config overrides (`xops/env/*.yaml`, `infra/**/*.yaml`, compose files) are linted by `xops/lint/config_no_league_literal.py` for any value field whose content is a bare league ID string. Valid references use the `catalog_lookup:` wrapper key. `test_19_2_config_override_no_league_literal.py`.
+- [ ] **T3 zero-cost invariant** (asserted mechanically, not assumed). `xops/leagues/readiness.py` exposes `t3_marginal_cost(league_id) -> int` which returns `0` for a T3 league: no predictor publishing path, no SLO-driven paging, no monetization SKU row. CI asserts this invariant holds — any code change that incidentally acquires a non-zero cost for a T3 league fails the gate. `test_19_2_t3_cost_estimate_zero.py`.
+- [ ] **`stable_id` minting stays generic.** The identity strategy in `CONTENT_FRESHNESS.md` §2 must not reference any confederation enum, country list, or league-ID range in its minting logic. An AST scan verifies. `test_19_2_stable_id_minting_no_country_list.py`.
+- [ ] **Source-registry pluggability.** Adding a new long-tail source is a `xops/mock/sources.py` row + extractor + differ; no existing pipeline file needs modification. Verified by a diff-check test: a synthetic new-source addition (using the onboarding dry-run in §19.3) must produce zero diffs to any file outside `xops/mock/sources.py`, the new extractor file, the new differ file, and the mock seed directory. `test_19_2_new_source_touches_only_expected_files.py`.
+- [ ] Proof tests: `test_19_2_python_pluggability_gate.py`, `test_19_2_go_pluggability_gate.py`, `test_19_2_generated_stub_pluggability.py`, `test_19_2_config_override_no_league_literal.py`, `test_19_2_t3_cost_estimate_zero.py`, `test_19_2_stable_id_minting_no_country_list.py`, `test_19_2_new_source_touches_only_expected_files.py`.
+
+---
+
+### 19.3 Source discovery & onboarding harness
+
+> Implements the automated "new league onboarding" workflow. Each long-tail league can be added by running one `make` target rather than hand-editing six files.
+
+- [ ] **Source discovery scanner** (`xops/leagues/source_discovery.py`). Parses mackolik.com and nesine.com bulletin pages (via mock vhosts in dev/CI; real sources during a sanctioned capture run) and produces `source_discovery_report.yaml`: league name, source URL pattern, observed fixture count, observed market types, inferred confederation. The scanner is idempotent: a second run adds only new rows; it never removes rows. `test_19_3_discovery_scanner_idempotent.py`.
+- [ ] **Onboarding bundle spec** (`xops/leagues/onboarding_bundle.py`). Serialisable to `onboarding_bundle.yaml`; defines the required artifact set: `{league_id, LeagueConfig preset path, CompetitionConfig path(s), mock seed bundle path, NLP gazetteer coverage assertion, patcher bundle path, Phase 18 conformance checkpoint, source availability check result}`. `test_19_3_onboard_produces_complete_bundle.py`.
+- [ ] **`make league.onboard LEAGUE_ID=... SOURCE=...`** — single-command entry point. Steps: (1) creates stub `onboarding_bundle.yaml`; (2) checks source availability in mock mode (refuses if zero fixtures returned); (3) captures mock seeds via `make mock.capture SOURCE=<source> FILTER=<league>`; (4) scaffolds the `LeagueConfig` preset; (5) appends skeleton NLP gazetteer entries to `data/nlp/<league_id>.gazetteer.yaml`; (6) runs `xops/lint/phase18_conformance.py`; (7) checks the Phase 17 watchdog inventory (§19.1); (8) runs `xops/leagues/readiness.py t3-checklist`; (9) writes the T3 catalog row to `ai/common/league_catalog.yaml` only if all checks pass. Failure at any step is a named error that prints the remediation command.
+- [ ] **Onboarding idempotency.** Re-running `make league.onboard` for an already-onboarded league produces no file diff. `test_19_3_onboard_idempotent.py`.
+- [ ] **Dry-run mode** (`make league.onboard --dry-run`). Runs all checks, reports the artifact list that would be created or modified, writes nothing. `test_19_3_dry_run_writes_nothing.py`.
+- [ ] **Batch onboarding** (`make league.onboard.batch FILE=leagues.csv`). Runs `league.onboard` for each row in a CSV; collects per-league pass/fail; writes `batch_onboarding_report.yaml`. Failures for individual leagues do not block subsequent ones. Batch is rate-limited to `cfg.t3_onboarding_concurrent` concurrent onboardings (default 3). `test_19_3_batch_rate_limited.py`, `test_19_3_batch_failure_does_not_block_others.py`.
+- [ ] **Source-availability pre-check enforced.** Onboarding refuses with a named error if the source mock returns zero fixtures. `test_19_3_unavailable_source_blocks_onboard.py`.
+- [ ] Proof tests: `test_19_3_discovery_scanner_idempotent.py`, `test_19_3_onboard_produces_complete_bundle.py`, `test_19_3_onboard_idempotent.py`, `test_19_3_dry_run_writes_nothing.py`, `test_19_3_batch_rate_limited.py`, `test_19_3_batch_failure_does_not_block_others.py`, `test_19_3_unavailable_source_blocks_onboard.py`.
+
+---
+
+### 19.4 NLP gazetteer bulk-loading & transliteration
+
+> Every long-tail league adds team names (and optionally player names) in non-Turkish scripts. Gazetteer entries must be generated deterministically without manual per-team edits.
+
+- [ ] **Bulk gazetteer loader** (`ai/nlp/gazetteer_bulk_loader.py`). Accepts a league's `LeagueConfig.team_name_map` and auto-generates: Turkish transliterations from `ai/nlp/transliteration_rules.yaml`, phonetic aliases, short-form aliases. The loader is fully deterministic and idempotent — same input always produces identical output, no stochastic path. `test_19_4_bulk_loader_deterministic.py`.
+- [ ] **Transliteration rule coverage for all catalog scripts.** `ai/nlp/transliteration_rules.yaml` must have coverage for every script used by any league in `league_catalog.yaml`. CI asserts: for each league row, every team name's Unicode script is covered by at least one transliteration rule. `test_19_4_transliteration_covers_all_scripts.py`.
+- [ ] **NLP recall gate blocks T3 row without coverage.** `xops/leagues/readiness.py t3-checklist` runs the NLP entity-extraction recall check (≥ `cfg.nlp_promotion_recall_min` = 0.92 on a ≥ 50-query league-specific corpus) as a hard pre-condition before writing the T3 catalog row. `test_19_4_nlp_recall_gate_blocks_row_without_coverage.py`.
+- [ ] **Gazetteer auto-update on team-name-map change.** A PR that modifies any `LeagueConfig.team_name_map` field triggers an automatic re-run of `gazetteer_bulk_loader` for that league; the diff is committed in the same PR. CI refuses a PR where the team-name map changed but the gazetteer diff is absent. `test_19_4_gazetteer_updated_on_team_name_change.py`.
+- [ ] **Foreign-name Turkish query corpus per league.** For each onboarded league, ≥ 10 Turkish-language sample queries referencing team names are added to `ai/tests/fixtures/turkish_queries.yaml` with expected entity-extraction output. CI asserts the corpus grows monotonically (new leagues only add; nothing removes). `test_19_4_query_corpus_grows_on_onboard.py`.
+- [ ] **Transliteration round-trip integrity.** `test_19_4_transliteration_round_trip.py` runs the bulk loader, re-runs entity extraction on the generated entries, and asserts a recall ≥ 0.95 on the self-generated corpus (prevents a loader bug that generates un-extractable entries).
+- [ ] Proof tests: `test_19_4_bulk_loader_deterministic.py`, `test_19_4_transliteration_covers_all_scripts.py`, `test_19_4_nlp_recall_gate_blocks_row_without_coverage.py`, `test_19_4_gazetteer_updated_on_team_name_change.py`, `test_19_4_query_corpus_grows_on_onboard.py`, `test_19_4_transliteration_round_trip.py`.
+
+---
+
+### 19.5 WC qualifiers, continental championships & international tournament support
+
+> Ledger #8 and #12 both address international tournaments. This sub-phase delivers the `CompetitionFormat` extensions, calibration subclass, and participant-crystallisation gate that domestic-league formats do not provide.
+
+- [ ] **`wc_qualifier` `CompetitionFormat`** added to the `CompetitionFormat` enum. Required fields: `confederation_groups: list[ConfoederationGroup]` (each with `size`, `carry_forward_rules`, `automatic_qualifier_slots`, `playoff_slots`), `inter_confederation_paths: list[InterConfederationPath]`, `participant_count_range: {min, max}`, and `qualification_matrix_schema_version` (detects mid-edition rule changes that break the table model). `test_19_5_wc_qualifier_format_fields_required.py`.
+- [ ] **`continental_championship` `CompetitionFormat`** (UEFA Euros, Copa América, AFCON, OFC Nations Cup, CONCACAF Gold Cup). Required fields: `group_stage: GroupStageConfig`, `knockout_phase: KnockoutPhaseConfig`, `tiebreaker_rules: TournamentTiebreakerRules` (separate from Phase 13 §13.52 domestic-league tiebreakers), `host_nation_flag: bool` (adjusts home-advantage calculations for the host team). `test_19_5_continental_championship_tiebreakers_independent.py`.
+- [ ] **`InternationalTournamentCalibrationProfile`** subclass of `CalibrationProfile`. Key overrides: `squad_rotation_model: TournamentRotationModel` (higher rotation probability than domestic leagues), `fixture_density_penalty_curve: list[DensityPenaltyBin]` (affects injury + fatigue features at group-stage pace), `home_advantage_host_adjustment: float` (applied only when `host_nation_flag=true`). A catalog row using `wc_qualifier` or `continental_championship` format must declare this subclass; falling back to `CalibrationProfile` is refused by `xops/leagues/readiness.py`. `test_19_5_tournament_profile_uses_correct_calibration_subclass.py`.
+- [ ] **Participant-crystallisation gate.** A `wc_qualifier` or `continental_championship` row may only advance to T2 after the participant list is final. Gate declared in `CompetitionConfig.participant_crystallisation_gate: {type: qualifier_legs_resolved | draw_held, competition_id: str}` and enforced by `xops/leagues/readiness.py t2-checklist`. `test_19_5_participant_crystallisation_gate_blocks_promotion.py`.
+- [ ] **Inter-confederation play-off neutral prior.** A fixture between a CONMEBOL team and a CAF team in a WC inter-confederation play-off has no historical home-advantage baseline. The calibration profile defaults to `home_advantage: neutral` unless `cfg.wc_playoff_home_advantage_prior` is explicitly set. `test_19_5_inter_confederation_neutral_home_advantage.py`.
+- [ ] **WC group-stage qualification-probability simulation.** Predictor swarm supports `simulate_wc_group(group_id, n_iterations)` returning a qualification-probability distribution per team. Result stored as a T3 record (`prediction.wc_qualification_probability`); never published until T1 promotion. `test_19_5_group_stage_simulation_stores_not_publishes.py`.
+- [ ] **TBD-opponent placeholder handling.** WC qualifiers with unresolved play-off opponents use the Phase 13 §13.51 `TbdOpponentPlaceholder` fixture type. The predictor publishes a degenerate prediction (`home_win_prob: null`) for TBD-opponent fixtures rather than a fabricated prior. `test_19_5_tbd_opponent_produces_null_prediction.py`.
+- [ ] Proof tests: `test_19_5_wc_qualifier_format_fields_required.py`, `test_19_5_continental_championship_tiebreakers_independent.py`, `test_19_5_tournament_profile_uses_correct_calibration_subclass.py`, `test_19_5_participant_crystallisation_gate_blocks_promotion.py`, `test_19_5_inter_confederation_neutral_home_advantage.py`, `test_19_5_group_stage_simulation_stores_not_publishes.py`, `test_19_5_tbd_opponent_produces_null_prediction.py`.
+
+---
+
+### 19.6 T3 resource governance & scrape-lane isolation
+
+> Ledger #2 and #9 establish that 200+ T3 leagues require dedicated resource governance. This sub-phase delivers the guardrails.
+
+- [ ] **T3 scrape lane.** Separate concurrency pool with: `cfg.t3_scrape_concurrency` workers (default 2), `cfg.t3_scrape_rate_limit_rps` (default 0.05 rps per source), `cfg.t3_scrape_budget_per_league_s` (default 10 s of wall-clock scrape time per league per day). Workers in the T3 lane hold a separate semaphore and write to a separate Redis queue prefix (`datasource:t3:scrape_queue:`). T3 scrape failures do not propagate to the T1/T2 failure-rate metric. `test_19_6_t3_lane_does_not_block_t1_t2.py` (chaos: saturate T3 lane, assert T1 scrape latency P99 unaffected).
+- [ ] **T3 compute cap.** Predictor fan-out for T3 leagues is capped at `cfg.t3_predictor_max_cpu_cores` (default 0.25 cores/league). Excess predictor jobs are queued in a `t3_low_priority` Redis queue and processed only when T1/T2 fan-out is idle. `test_19_6_t3_compute_cap_enforced.py`.
+- [ ] **Automatic shelving.** A T3 league whose source gauge (`datasource_t3_source_available`) has been zero for > `cfg.t3_source_grace_period_hours` (default 48 h) is shelved: pipeline paused, Redis queue drained, `datasource_t3_shelved_total` counter incremented, ops-admin bus topic receives `datasource.alert.v1{kind=t3_shelved, league_id=...}`. Unshelving requires operator command: `make league.unshelve LEAGUE_ID=...`. `test_19_6_unavailable_source_shelves_league.py`.
+- [ ] **Lazy load for T3 `LeagueConfig` and `CalibrationProfile`.** These objects are loaded on first pipeline execution, not at process start. A T3 league that has never been scheduled incurs zero memory at startup. `test_19_6_t3_lazy_load_on_first_schedule.py`.
+- [ ] **T3 Redis key namespace.** Every Redis key for a T3 league uses the prefix `datasource:t3:<league_id>:` (never `datasource:<league_id>:` which is reserved for T1/T2). `common/bus/redis_client.py` enforces the namespace at key construction; `xops/lint/redis_key_namespace.py` catches bare key strings in source. `test_19_6_t3_redis_keys_namespaced.py`.
+- [ ] **Catalog scale smoke test.** `make catalog.scale.smoke N=200` populates 200 synthetic T3 league rows from a fixture generator, boots the pipeline in mock mode, and asserts: catalog reload latency ≤ `cfg.catalog_reload_slo_ms` (default 500 ms), T1 scrape latency P99 within 5% of the pre-smoke baseline, total Redis memory growth ≤ `cfg.t3_redis_memory_per_league_kb` × 200 (default 512 KB × 200 = 100 MB). `test_19_6_catalog_scale_smoke_200_leagues.py`.
+- [ ] **Budget exhaustion metric.** `datasource_t3_budget_exhausted_total{league_id}` is incremented whenever a T3 league's daily scrape budget is fully consumed before the day ends. This serves as an early signal that the budget needs raising before the league can be promoted. `test_19_6_budget_exhaustion_metric_emitted.py`.
+- [ ] Proof tests: `test_19_6_t3_lane_does_not_block_t1_t2.py`, `test_19_6_t3_compute_cap_enforced.py`, `test_19_6_unavailable_source_shelves_league.py`, `test_19_6_t3_lazy_load_on_first_schedule.py`, `test_19_6_t3_redis_keys_namespaced.py`, `test_19_6_catalog_scale_smoke_200_leagues.py`, `test_19_6_budget_exhaustion_metric_emitted.py`.
+
+---
+
+### 19.7 Catalog integrity & consistency at scale
+
+> As the catalog grows past 100 entries, integrity operations that ran in milliseconds at 10 entries must remain bounded and correct under concurrent access and bulk-onboarding batches.
+
+- [ ] **Binary-serialised cache** (`catalog.msgpack.gz`). Built from YAML on every `make up` or catalog-file change (file watcher). Hot read path uses the msgpack cache; falls back to YAML parse on cache miss. Cache validity proved by content-hash comparison; stale cache refused (not silently used). `test_19_7_msgpack_cache_serves_hot_path.py`, `test_19_7_cache_invalidated_on_yaml_change.py`.
+- [ ] **Catalog reload latency SLO.** Full catalog reload (YAML parse → validation → atomic swap) must complete in ≤ `cfg.catalog_reload_slo_ms` (default 500 ms) for up to `cfg.catalog_max_leagues` (default 500) entries. CI measures and fails the build if the SLO is exceeded. `test_19_7_reload_latency_slo.py`.
+- [ ] **Incremental catalog validation in O(changed_rows).** `xops/leagues/catalog_validator.py` validates only the changed rows (plus their referenced IDs) during PR CI; the full O(N) sweep runs nightly. `test_19_7_incremental_validation_only_changed_rows.py`.
+- [ ] **Catalog uniqueness at scale in O(N log N).** `xops/lint/catalog_uniqueness.py` (Phase 13 §13.64) is verified to complete in O(N log N) time. CI asserts no uniqueness violation is introduced by any onboarding batch. `test_19_7_uniqueness_check_o_n_log_n.py`.
+- [ ] **Atomic reload under concurrent catalog growth.** If a T3 row is being added by the onboarding harness at the same moment a reload is in flight, the reload sees either the old snapshot or the new snapshot — never a partial intermediate. `test_19_7_concurrent_add_and_reload_atomic.py` (50 concurrent writes + 10 concurrent reloads; assert no partial state across all iterations).
+- [ ] **Audit log grows monotonically under bulk onboarding.** Phase 13 §13.21 covers per-row cryptographic signing. Phase 19 verifies the audit log grows monotonically even when a batch of 50 leagues is onboarded simultaneously. `test_19_7_audit_log_grows_monotonically_under_bulk.py`.
+- [ ] **Catalog round-trip test.** `make catalog.validate` (load → re-serialise → diff = empty) passes for the fully expanded catalog including all T3 rows. `test_19_7_catalog_round_trip_full.py`.
+- [ ] Proof tests: `test_19_7_msgpack_cache_serves_hot_path.py`, `test_19_7_cache_invalidated_on_yaml_change.py`, `test_19_7_reload_latency_slo.py`, `test_19_7_incremental_validation_only_changed_rows.py`, `test_19_7_uniqueness_check_o_n_log_n.py`, `test_19_7_concurrent_add_and_reload_atomic.py`, `test_19_7_audit_log_grows_monotonically_under_bulk.py`, `test_19_7_catalog_round_trip_full.py`.
+
+---
+
+### 19.8 Per-league observability & SLOs for long-tail leagues
+
+> T3 leagues need lightweight observability (enough to detect a shelved or stalled pipeline) without the full T1/T2 dashboard overhead.
+
+- [ ] **T3 metric set.** Every T3 league emits a minimal named set — all carry the `t3_` prefix to distinguish from T1/T2 metrics: `datasource_t3_records_ingested_total{league_id}`, `datasource_t3_source_available{league_id, source}` (gauge 0/1), `datasource_t3_shelved{league_id}` (gauge), `datasource_t3_scrape_budget_used_s{league_id}`, `datasource_t3_budget_exhausted_total{league_id}`. `test_19_8_t3_metric_names_carry_t3_prefix.py`.
+- [ ] **T3 pipeline staleness alert.** If `datasource_t3_records_ingested_total` has not increased in > `cfg.t3_staleness_alert_hours` (default 72 h) for a non-shelved T3 league, emits `datasource.alert.v1{kind=t3_pipeline_stale, league_id=...}` on the bus (ops-admin topic only; does not page on-call). `test_19_8_t3_staleness_alert_fires.py`, `test_19_8_t3_staleness_alert_does_not_page_oncall.py`.
+- [ ] **T3 SLO exclusion.** T3 leagues are explicitly excluded from T1 and T2 SLO calculations. `xops/leagues/slo_report.py` asserts no T3 `league_id` appears in a T1 or T2 SLO table. `test_19_8_t3_excluded_from_t1_t2_slos.py`.
+- [ ] **Promotion readiness report.** `make league.readiness.report LEAGUE_ID=...` prints (and emits as JSON with `--format=json`) a per-league readiness summary: checklist status, calibration log-loss and Brier score, days since last ingest, NLP recall score, source availability. `test_19_8_readiness_report_machine_readable.py`.
+- [ ] **Bulk readiness report.** `make league.readiness.report.all` produces `batch_readiness_report.yaml` with one row per T3 league, sorted by promotion-readiness score (descending). Used by ops to prioritise next T2 promotion candidates. `test_19_8_bulk_readiness_report_sortable.py`.
+- [ ] **Auto-generated T3 Grafana panels.** A single collapsed Grafana row per T3 league with the five T3 metrics is generated from `xops/leagues/grafana_t3_template.json`; adding a T3 league auto-generates its panel on next `make grafana.provision`. Panels are collapsed by default — they do not pollute the T1/T2 dashboard. `test_19_8_grafana_panel_generated_per_t3_league.py`.
+- [ ] Proof tests: `test_19_8_t3_metric_names_carry_t3_prefix.py`, `test_19_8_t3_staleness_alert_fires.py`, `test_19_8_t3_staleness_alert_does_not_page_oncall.py`, `test_19_8_t3_excluded_from_t1_t2_slos.py`, `test_19_8_readiness_report_machine_readable.py`, `test_19_8_bulk_readiness_report_sortable.py`, `test_19_8_grafana_panel_generated_per_t3_league.py`.
+
+---
+
+### 19.9 Security, supply-chain & adversarial corpus for long-tail leagues
+
+> New long-tail leagues introduce new scrapers; new scrapers introduce new attack surface. The same supply-chain and adversarial discipline from Phase 13 §13.25 and §13.28 applies to every batch-onboarded league.
+
+- [ ] **Source supply-chain trust level.** Each source entry in `xops/mock/sources.py` carries `trust_level: verified | unverified | sandboxed`. A league onboarded via a new unverified source runs its extractor in a restricted OS namespace (`seccomp` profile `xops/security/extractor_sandbox.json`); its output is quarantined for `cfg.source_quarantine_days` (default 7) before entering the main pipeline. Graduating from `unverified` to `verified` requires one CODEOWNERS ACK. `test_19_9_unverified_source_sandboxed.py`, `test_19_9_sandboxed_extractor_quarantined.py`.
+- [ ] **Adversarial corpus grows per batch.** For each batch of T3 leagues onboarded, ≥ 1 adversarial test is added to `ai/tests/adversarial/` per new extractor: a malformed fixture response, a charset-injection attempt, and a SQL-injection probe in any field that reaches Postgres. CI asserts the corpus grows monotonically. `test_19_9_adversarial_corpus_grows_per_batch.py`.
+- [ ] **SBOM regen on new dependency.** If a new extractor introduces a new Python package (direct or transitive), `make sbom.regen COMPONENT=datasource` runs and the updated `datasource/sbom.spdx.json` is committed in the same onboarding PR. The onboarding harness refuses to write the T3 row if the SBOM diff introduces a package on the forbidden-dep list. `test_19_9_sbom_regen_on_new_dep.py`.
+- [ ] **Catalog-field input sanitiser.** All string fields in `league_catalog.yaml` (team names, league names, aliases, editorial descriptions) pass through `common/security/input_sanitiser.py` before reaching the NLP layer or Postgres. The sanitiser is deterministic and idempotent; it must not alter semantically valid Turkish or Latin text. `test_19_9_catalog_field_sanitiser_idempotent.py`, `test_19_9_catalog_field_sanitiser_blocks_injection.py`.
+- [ ] **Isolation conformance for new extractors.** A new extractor that introduces a forbidden cross-component import (violating `common/isolation/policy.yaml`) fails the Phase 18 conformance check (§19.1) and is blocked at CI. `test_19_9_new_extractor_obeys_isolation_policy.py`.
+- [ ] **Per-league red-team corpus** (inherits Phase 13 §13.28). Each newly onboarded T3 league must add ≥ 1 entry to the per-league adversarial corpus in `ai/tests/adversarial/per_league/`. The corpus covers at least: a truncated response for the league's primary source, an encoding-error response, and a schema-drift response (field renamed). `test_19_9_per_league_adversarial_corpus_minimum.py`.
+- [ ] Proof tests: `test_19_9_unverified_source_sandboxed.py`, `test_19_9_sandboxed_extractor_quarantined.py`, `test_19_9_adversarial_corpus_grows_per_batch.py`, `test_19_9_sbom_regen_on_new_dep.py`, `test_19_9_catalog_field_sanitiser_idempotent.py`, `test_19_9_catalog_field_sanitiser_blocks_injection.py`, `test_19_9_new_extractor_obeys_isolation_policy.py`, `test_19_9_per_league_adversarial_corpus_minimum.py`.
+
+---
+
+### 19.10 Catalog decommissioning & disaster recovery
+
+> Ledger #11 proves that removing a league requires more than deleting a YAML row. This sub-phase provides the scaffolding.
+
+- [ ] **`make league.decommission LEAGUE_ID=...`** — ordered cleanup sequence: (a) marks the league `tier: decommissioned` in `league_catalog.yaml` and triggers an atomic catalog reload; (b) shelves the T3 pipeline (§19.6); (c) removes mock seed bundles after `cfg.league_decommission_seed_grace_days` (default 30) unless `--keep-seeds` is passed; (d) removes NLP gazetteer entries for the league within a 90-day DeprecationWarning alias window (matching ledger #8 alias-window pattern); (e) removes the `LeagueConfig` preset and `CompetitionConfig` after the alias window; (f) removes the patcher bundle directory for the league; (g) writes a decommission row to the catalog audit log and to `docs/tracking/phases.csv`. `test_19_10_decommission_leaves_no_artifacts.py`.
+- [ ] **Orphan-artifact lint.** `xops/lint/no_orphan_league_artifacts.py` runs on every PR and asserts: every mock-seed bundle, NLP gazetteer file, `LeagueConfig` preset, and `CompetitionConfig` file references a non-decommissioned `league_id`. `test_19_10_orphan_artifact_lint.py`.
+- [ ] **Backup scope extension.** Phase 13 §13.22 covers per-league DR. Phase 19 extends the backup scope to include: the `onboarding_bundle.yaml`, the `source_discovery_report.yaml` snapshot, and the `batch_readiness_report.yaml`. `test_19_10_backup_covers_onboarding_bundle.py`.
+- [ ] **Catalog rollback.** `make catalog.rollback COMMIT=<sha>` restores `ai/common/league_catalog.yaml` to the state at a given commit, re-validates, re-runs Phase 18 conformance, and re-runs the catalog round-trip test. Used when a bad bulk-onboarding batch is discovered after merge. `test_19_10_catalog_rollback_revalidates.py`, `test_19_10_catalog_rollback_runs_conformance.py`.
+- [ ] **Decommission audit trail.** Each `make league.decommission` run appends a signed row to the catalog audit log (Phase 13 §13.21): `{event: decommission, league_id, timestamp, reason, operator}`. The row cannot be deleted or amended — same append-only contract as `phases.csv`. `test_19_10_decommission_audit_row_append_only.py`.
+- [ ] Proof tests: `test_19_10_decommission_leaves_no_artifacts.py`, `test_19_10_orphan_artifact_lint.py`, `test_19_10_backup_covers_onboarding_bundle.py`, `test_19_10_catalog_rollback_revalidates.py`, `test_19_10_catalog_rollback_runs_conformance.py`, `test_19_10_decommission_audit_row_append_only.py`.
+
+---
+
+### 19.11 Initial long-tail T3 roster (sample batch)
+
+> Proves the pluggability end-to-end by committing a representative set of T3 rows across every confederation. All rows stay T3 (admin-only, predictions stored but never published) until business sign-off triggers individual T2 promotion per Phase 13 §13.7.
+
+- [ ] At least **10 T3 domestic-league rows** committed, with ≥ 1 row per confederation group:
+  - **AFC:** ≥ 2 (e.g. `kr_k_league_2`, `cn_super_league`, `au_a_league_men`, `in_isl`)
+  - **CONCACAF:** ≥ 2 (e.g. `us_usl_championship`, `ca_canadian_premier_league`, `gt_liga_nacional`)
+  - **CONMEBOL:** ≥ 2 (e.g. `br_serie_b`, `ar_primera_nacional`, `co_categoria_primera_a`)
+  - **OFC:** ≥ 1 (e.g. `nz_national_league`, `fj_vodafone_premier_league`)
+  - **CAF:** ≥ 1 (e.g. `eg_premier_league`, `ng_npfl`, `za_dstv_premiership`)
+  - **UEFA tier-2/3:** ≥ 2 (e.g. `tr_tff_first_league`, `gb-sct_premiership`, `be_pro_league`)
+- [ ] At least **2 international tournament rows** using the formats from §19.5:
+  - 1 `wc_qualifier` row (e.g. `wc_qualifier_uefa_2026` or `wc_qualifier_conmebol_2026`) with at least one `confederation_groups` entry and `inter_confederation_paths` populated.
+  - 1 `continental_championship` row (e.g. `euro_2028`, `copa_america_2028`, or `afcon_2027`) with `tournament_profile.yaml` committed.
+- [ ] Every committed T3 row passes `make league.onboard --dry-run` before merge. The dry-run output is included in the PR description.
+- [ ] **Catalog round-trip test** (`make catalog.validate`) passes for the fully expanded catalog. `test_19_11_catalog_round_trip_with_t3_rows.py`.
+- [ ] **Readiness report runs for all T3 rows.** `make league.readiness.report.all` completes without error and produces a machine-readable `batch_readiness_report.yaml`. `test_19_11_readiness_report_runs_for_all_t3.py`.
+- [ ] **NLP gazetteer coverage verified for all T3 rows.** `xops/leagues/readiness.py t3-checklist` passes (NLP recall ≥ 0.92) for each committed row. `test_19_11_all_t3_rows_pass_nlp_recall.py`.
+- [ ] Proof tests: `test_19_11_catalog_round_trip_with_t3_rows.py`, `test_19_11_readiness_report_runs_for_all_t3.py`, `test_19_11_all_t3_rows_pass_nlp_recall.py`.
+
+---
+
+### 19.12 Downstream coordination & Phase 22 pre-positioning
+
+> Closes the loop on Phase 18 conformance propagation and positions the catalog for the Phase 22 module move.
+
+- [ ] **Phase 18 conformance on every onboarding PR.** `xops/lint/phase18_conformance.py` runs in CI on every PR that touches `ai/common/league_catalog.yaml`, `ai/common/leagues/`, or `infra/mock/seeds/<source>/`. Failure blocks merge — verified by `test_19_12_conformance_runs_on_onboarding_pr.py`.
+- [ ] **`import_graph.snapshot.json` updated on new extractor imports.** If a new league's extractor introduces a new cross-component import that is legitimate per `common/isolation/policy.yaml`, the snapshot is updated in the same PR. CI refuses any PR where the extractor adds a new import not present in the snapshot. `test_19_12_snapshot_updated_on_new_extractor_import.py`.
+- [ ] **Phase 19 aliases in the deprecation calendar.** Every alias or deprecation window introduced in Phase 19 (patcher bundle flat-path alias, NLP gazetteer decommission alias, source discovery report schema version) has a row in `xops/lifecycle/deprecation_calendar.yaml`. `test_19_12_phase19_aliases_in_calendar.py`.
+- [ ] **Catalog loader is shim-ready for Phase 22.** `ai/common/league_catalog_loader.py`'s public API must not bake the `ai/` path into its callable signature (e.g. no `ai/common/...` string in `__all__` or in the public `load_catalog()` function body). An AST gate verifies: the function must read its path from `cfg.catalog_yaml_path` (a config key, not a hardcoded string). `test_19_12_catalog_loader_path_from_config.py`.
+- [ ] **Phase 20 SKU-stub pre-condition verified.** Every T3 row committed in §19.11 must have a corresponding stub row in `xops/monetization/entitlements.yaml` (a `league_tier_access` entry with `tier: T3`) so Phase 20's entitlement engine does not raise a `KeyError` on a T3 league before the flag flip. `test_19_12_t3_rows_have_sku_stubs.py`.
+- [ ] Proof tests: `test_19_12_conformance_runs_on_onboarding_pr.py`, `test_19_12_snapshot_updated_on_new_extractor_import.py`, `test_19_12_phase19_aliases_in_calendar.py`, `test_19_12_catalog_loader_path_from_config.py`, `test_19_12_t3_rows_have_sku_stubs.py`.
+
+---
+
+### 19.13 Definition of Done
+
+- [ ] **Phase 18 conformance + patcher gates** (§19.1): all 5 bullets [x]; patcher bundle two-key path verified; zero `ai/` refs in patcher bundles confirmed and recorded as the fourth shim-deletion signal; layout freeze active; Phase 18 conformance wired into CI for all onboarding PRs.
+- [ ] **Wrong-assumption ledger §19.0**: all 13 rows have green proof tests committed in the same diff as each test; ledger is dense (no row gaps) and append-only (enforced by `xops/lint/phase19_ledger.py`).
+- [ ] **Pluggable-architecture hardening** (§19.2): all 7 gates green — Python AST, Go AST, generated-stub, YAML-config, T3 zero-cost invariant, `stable_id` generic, new-source file-scope.
+- [ ] **Onboarding harness** (§19.3): `make league.onboard` end-to-end green; idempotent; dry-run writes nothing; batch mode rate-limited and failure-isolated; source availability pre-check enforced; Phase 18 conformance wired.
+- [ ] **NLP gazetteer bulk-loading** (§19.4): bulk loader deterministic; transliteration covers all catalog scripts; NLP recall gate blocks row without coverage; gazetteer auto-updates on team-name-map change; query corpus grows on onboard; round-trip integrity ≥ 0.95.
+- [ ] **WC qualifiers & international tournaments** (§19.5): `wc_qualifier` and `continental_championship` formats implemented with all required fields; `InternationalTournamentCalibrationProfile` subclass required and enforced; participant-crystallisation gate blocks T2 promotion; inter-confederation neutral prior declared; group-stage simulation stores but does not publish; TBD-opponent produces null prediction.
+- [ ] **T3 resource governance** (§19.6): scrape lane isolated from T1/T2; compute cap enforced; shelving works at 48 h; lazy load verified; Redis key namespace correct; catalog scale smoke with N=200 passes all three assertions; budget-exhaustion metric emitted.
+- [ ] **Catalog integrity at scale** (§19.7): msgpack cache on hot path; reload SLO ≤ 500 ms for 500 leagues; incremental validation O(changed_rows); uniqueness check O(N log N); concurrent add-and-reload atomic; audit log monotonic under bulk; catalog round-trip passes.
+- [ ] **Observability & SLOs** (§19.8): T3 metric prefix enforced; staleness alert fires + does not page on-call; T3 excluded from T1/T2 SLOs; readiness report machine-readable; bulk readiness report sortable; Grafana panels auto-generated and collapsed by default.
+- [ ] **Security & adversarial corpus** (§19.9): unverified sources sandboxed + quarantined; adversarial corpus grows per batch; SBOM regens on new dep; catalog field sanitiser idempotent and blocks injection; new extractor obeys isolation policy; per-league adversarial corpus minimum satisfied.
+- [ ] **Decommissioning & DR** (§19.10): `make league.decommission` leaves no artifacts; orphan-artifact lint green; backup covers onboarding bundle; catalog rollback re-validates and re-runs conformance; decommission audit row is append-only.
+- [ ] **Initial T3 roster** (§19.11): ≥ 10 domestic T3 rows (≥ 1 per confederation) + ≥ 2 international tournament rows; all pass dry-run; catalog round-trip green; readiness report runs for all; NLP recall ≥ 0.92 for all.
+- [ ] **Downstream coordination** (§19.12): Phase 18 conformance on every onboarding PR; snapshot updated on new extractor imports; Phase 19 aliases in deprecation calendar; catalog loader reads path from config (shim-ready for §22.2); T3 rows have monetization SKU stubs.
+- [ ] **Phase 18 conformance inherited** (mandatory per Phase 18 §18.24 and AGENTS.md Rule 11).
+- [ ] **Version bumps** (in the same commits as the implementing code):
+  - `make version.bump COMPONENT=docs LEVEL=minor NOTE="Phase 19 comprehensive redesign"` — for this ROADMAP revision
+  - `make version.bump COMPONENT=xops LEVEL=minor NOTE="Phase 19 onboarding harness + league.onboard target"` — when §19.3 ships
+  - `make version.bump COMPONENT=ai LEVEL=minor NOTE="Phase 19 gazetteer bulk loader + WC tournament formats"` — when §19.4/§19.5 ship
+- [ ] **Tracker:** ≥ 1 `make track.add PHASE=19 STATUS=...` row per sub-phase completed (§§19.1–19.12 = 12 rows minimum).
 
 ---
 

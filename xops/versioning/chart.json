@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.12.2",
-    "build": 2,
+    "build": 3,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-15T16:32:51+00:00"
     },
     "docs": {
-      "version": "3.13.0",
+      "version": "3.14.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-15T14:48:16+00:00"
+      "last_changed": "2026-06-19T14:57:55+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -16839,6 +16839,15 @@
       "from": "1.146.1",
       "to": "1.146.2",
       "build": 2
+    },
+    {
+      "timestamp": "2026-06-19T14:57:55+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 19 comprehensive redesign: 13-entry wrong-assumption ledger, 12 sub-phases, 80+ proof tests",
+      "from": "3.13.0",
+      "to": "3.14.0",
+      "build": 3
     }
   ]
 }
