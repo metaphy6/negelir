@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.13.0",
-    "build": 13,
+    "build": 14,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-20T09:05:36+00:00"
     },
     "docs": {
-      "version": "3.18.0",
+      "version": "3.19.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-20T10:26:40+00:00"
+      "last_changed": "2026-06-20T10:45:59+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -17163,6 +17163,15 @@
       "from": "3.17.0",
       "to": "3.18.0",
       "build": 13
+    },
+    {
+      "timestamp": "2026-06-20T10:45:59+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 21 thorough revision: added sub-phases 21.21-21.26 (placeholder migration, backfill bootstrap, model compat, perf SLA, compliance audit log, canonical DoD); fixed Redis key, N_FEATURES derivation, congestion column names, dedup-window ambiguity, health endpoint cold-start, down script spec, DPA expiry handling; enhanced adversarial test coverage",
+      "from": "3.18.0",
+      "to": "3.19.0",
+      "build": 14
     }
   ]
 }
