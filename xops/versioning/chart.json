@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.14.0",
-    "build": 17,
+    "build": 19,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-20T13:45:19+00:00"
     },
     "docs": {
-      "version": "3.24.0",
+      "version": "3.24.2",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-20T15:41:36+00:00"
+      "last_changed": "2026-06-20T16:13:57+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -17662,6 +17662,24 @@
       "from": "3.23.0",
       "to": "3.24.0",
       "build": 17
+    },
+    {
+      "timestamp": "2026-06-20T16:06:05+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 22 thorough revision: corrected verified-wrong assumptions (file counts, common overlap, Go go:embed, shim direction, Makefile count, conftest inventory), +7 ledger rows (42 total), conditional patcher migration, lockfile/SBOM + bytecode + data-contract coverage, real chart keys",
+      "from": "3.24.0",
+      "to": "3.24.1",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-06-20T16:13:57+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 22 nothing-lost gates: corrected ledger #27 (isolation has 0 net-new ai files; all colliding files differ), +3 rows (43 file-accountability, 44 symbol-union, 45 content-hash), hard rule 12 no-clobber, resolved intl_tournament_profiles+__init__ collisions, per-file decision for all 11 colliding files",
+      "from": "3.24.1",
+      "to": "3.24.2",
+      "build": 19
     }
   ]
 }

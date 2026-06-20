@@ -4195,22 +4195,37 @@ Enrichment latency budget:
 
 **Goal:** Flatten the entire codebase from the transitional `ai/` sub-tree
 directly into the **repo root**, eliminating both the `ai/` folder and the
-root-level `datasource/` stub from the Python package tree. At the time this
-phase runs the `ai/` tree has **~1 059 Python files** with **~446 files
-containing `from ai.` imports inside `ai/`** and **~55 non-`ai/` files**
-(in `common/`, `swarm/`, `xops/`, `server/`) also importing from `ai.*`. Both
-populations must be migrated by the same automated tooling — hand-editing
-is prohibited.
-
-Every Python package that today lives under `ai/` moves to the repo root.
-Four root-level folders already exist in both locations and need conflict-aware
-merging: `common/`, `swarm/`, `docs/`, and `tests/` (the last as `ai/tests/`).
-All imports, tests, Dockerfiles, Makefiles, CI workflows, k8s manifests,
-`pyproject.toml`, Redis key prefixes, patcher cassettes, Grafana dashboards,
-alert rules, and documentation references are updated by automated tooling.
+root-level `datasource/` stub from the Python package tree. Every Python
+package that today lives under `ai/` moves to the repo root; all imports,
+tests, Dockerfiles, Makefiles, CI workflows, k8s manifests, `pyproject.toml`,
+per-component lockfiles/SBOMs, Grafana dashboards, alert rules, Go path
+constants, and documentation references are updated by automated tooling.
 This is the final structural step; the codebase must be
 **100% correct, fully tested, and 30-day burn-in clean** before this phase
 closes.
+
+> **📐 Verified inventory baseline (audit 2026-06-20 — refresh with
+> `make phase22.inventory` at execution time; these numbers drive the
+> ledger and the move plan).** The codemod must be re-pointed at the live
+> counts before any commit — the figures below are the *audited starting
+> point*, not a contract:
+>
+> | Fact | Verified value | Source of truth |
+> |---|---|---|
+> | Python files under `ai/` | **1 059** | `find ai -name '*.py' \| wc -l` |
+> | `ai/` files importing `ai.*` | **458** | `grep -rlE 'from ai\.\|import ai\.'` |
+> | non-`ai/` Python files importing `ai.*` | **55** | same grep, `grep -v '^ai/'` |
+> | non-`ai/` importer breakdown | **44 `xops/`, 10 `common/`, 1 `docs/`** | per-dir `uniq -c` |
+> | overlapping `common/` sub-packages | **5** (`bus`, `db`, `isolation`, `observability`, `security`) | `ls common/ ∩ ai/common/` |
+> | root `common/` sub-packages that are **shims re-exporting `ai.*`** | **`bus`, `config`** (authoritative copy is in `ai/`) | `grep 'from ai\.' common/<sub>/` |
+> | `Makefile` `PYTHONPATH=ai` occurrences | **2** (not "7+") | `grep -n 'PYTHONPATH=ai' Makefile` |
+> | `conftest.py` files in the tree | **6** (root, `common/tests`, `ai/tests`, `ai/swarm/agents/tests`, `ai/swarm/agents/maint/tests`, `xops/backup/tests`) | `find . -name conftest.py` |
+>
+> **There are no `swarm/` or `server/` Python importers of `ai.*`** — `server/`
+> is Go and references `ai/` only in comments, one runtime path constant, and a
+> parity-test source-path table (§22.5). Any per-package "~N files" figure in
+> the draft move plan is superseded by the live `make phase22.import-report`
+> output; the ROADMAP prose is informational, the report is authoritative.
 
 **Why flat-to-root, not `datasource/`?**
 - `PYTHONPATH=.` covers the entire Python codebase with one entry — no
@@ -4227,6 +4242,18 @@ the transitional layout first — they protect the move), Phase **19** (global
 catalog), Phase **21** (enrichment planes). Phase **20** (monetization) is
 **optional** — it may land on either side of this phase.
 
+> **🕓 Phase 17 ships *after* Phase 22 (binding sequencing fact).** The
+> Scraper-Patcher (Phase 17) is explicitly unblocked *by* this phase (see
+> §22.DoD). At Phase 22 execution time the patcher/gitops packages do **not**
+> exist (`ai/datasource/patcher`, `ai/datasource/gitops`, `xops/patcher/cassettes`,
+> `feeds/ops/bundles` are all absent — verified 2026-06-20). Therefore every
+> patcher-artifact migration step in this phase (§22.12 cassettes/bundles,
+> ledger #24) is **conditional**: it migrates artifacts *if present* and
+> asserts *empty if absent*. The `datasource_patcher` / `datasource_gitops`
+> `1.0.0` bumps in §22.10 are likewise deferred to Phase 17 unless those
+> packages have already landed. Do not write a migration that assumes Phase 17
+> artifacts exist.
+
 > **Sequencing note.** An earlier draft ran "R1–R6" as a stop-the-world sprint.
 > That never executed — Phases 6–21 all shipped under the transitional `ai/`
 > paths, and an orchestrated run that deleted `ai/` before the move once wiped
@@ -4241,12 +4268,15 @@ catalog), Phase **21** (enrichment planes). Phase **20** (monetization) is
 > before the tree is removed (§22.7). This gate was shipped in Phase 18 §18.3.
 > A ticked checkbox, a tracker row, or this roadmap's prose are NOT evidence.
 >
-> 🧰 **Automated tooling is mandatory.** ~1 059 Python files under `ai/` —
-> ~446 of which contain `from ai.` imports — plus ~55 non-`ai/` files in
-> `common/`, `swarm/`, `xops/`, and `server/` that also import from `ai.*` —
-> cannot be safely rewritten by hand. `libcst`-based codemod scripts
+> 🧰 **Automated tooling is mandatory.** 1 059 Python files under `ai/` — 458
+> of which contain `from ai.` imports — plus 55 non-`ai/` files (44 in `xops/`,
+> 10 in `common/`, 1 in `docs/`) that also import from `ai.*` cannot be safely
+> rewritten by hand. `libcst`-based codemod scripts
 > (`xops/codemod/phase22_rewriter.py`, dispatched via `xops/makefile/phase22.py`)
-> perform all import rewrites; diffs are reviewed, not authored.
+> perform all import rewrites; diffs are reviewed, not authored. Non-Python
+> artefacts the codemod must **not** touch (per-component `requirements.lock`,
+> `sbom.spdx.json`, compiled `__pycache__`) are handled by dedicated
+> migration steps (§22.5, §22.11), not the import rewriter.
 
 **Hard rules binding every sub-step:**
 1. **No `datasource/` folder** at root or anywhere in the Python tree after §22.4.
@@ -4266,12 +4296,40 @@ catalog), Phase **21** (enrichment planes). Phase **20** (monetization) is
    isolation gate. Two consecutive rollbacks in the same step without a fix
    ⇒ the migration is paused and escalated to the next planning cycle.
 8. **Non-`ai/` callers migrate in the same commit** as their target package. The
-   ~55 non-`ai/` files that import from `ai.*` must be co-updated by the codemod
-   in the same PR as the package they reference. Leaving them to a later "catch-up"
-   PR creates an import-error window where those packages fail to import for callers.
+   55 non-`ai/` files that import from `ai.*` (44 `xops/`, 10 `common/`, 1 `docs/`)
+   must be co-updated by the codemod in the same PR as the package they reference.
+   Leaving them to a later "catch-up" PR creates an import-error window where
+   those packages fail to import for callers.
 9. **Isolation snapshot is refreshed per commit**, not per phase. §22.4 makes
    this a per-step gate; skipping any refresh causes false-positive isolation
    violations in subsequent CI runs.
+10. **Per-component lockfiles & SBOMs travel with their package.** `ai/swarm/`
+    and `ai/datasource/` each carry a `requirements.lock` + `sbom.spdx.json`
+    (Phase 18 §18.10 artefacts) whose internal paths and provenance reference
+    `ai/`. The codemod never edits them; instead each move regenerates them via
+    `make lockfiles.regen` + `make sbom.gen` for the new root path and passes the
+    Phase 18 §18.10 lockfile-review gate **in the same commit**. A move that ships
+    a stale lockfile/SBOM is reverted.
+11. **No stale bytecode crosses the move.** `git mv` does not move `__pycache__/`,
+    but a developer's working tree may carry stale `ai/**/__pycache__/*.pyc` that
+    shadows a fresh import after the move. Every move commit runs
+    `find . -name '__pycache__' -prune -exec rm -rf {} +` before the test gate;
+    CI runs with `PYTHONDONTWRITEBYTECODE=1`.
+12. **No-clobber, no-loss moves (binding).** No `git mv` uses `-f`/`--force`. A
+    pre-move assertion confirms the destination path does **not** already exist
+    for a verbatim move, **or** is an explicitly-decided merge target with a
+    per-file resolution recorded in `docs/decisions/phase22/`. Every move/merge
+    commit is gated by three mechanical "nothing-lost" checks (ledger #43–#45):
+    (a) **file-accountability** — every `ai/` source file lands at exactly one
+    destination or is deleted-with-reason, and no destination receives two
+    sources without a recorded decision; (b) **symbol-union preservation** — the
+    post-merge module's public surface is a superset of the union of both source
+    copies' public surfaces, minus an explicit `dropped_symbols.md` allow-list
+    (each entry carrying a no-live-caller proof); (c) **content-hash
+    preservation** — every verbatim-moved file is byte-identical (blob SHA
+    unchanged) except the intended codemod import rewrites. `make test` green is
+    *necessary but not sufficient* — it proves tested code still imports, not that
+    every public symbol survived.
 
 **Anchor docs (all updated in this phase):**
 - [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 5, 7
@@ -4294,10 +4352,10 @@ invariant across this table.
 | # | Wrong assumption (retired) | Why it is wrong | Proof test |
 |---|---|---|---|
 | 1 | "grep + sed is sufficient for rewriting `ai.*` imports." | Grep cannot distinguish an import inside a string literal, a `TYPE_CHECKING` block, a `__future__` annotation context, or a `Pydantic` `model_rebuild()` call from a live import statement. AST-level rewriting via `libcst` is mandatory for correctness; manual sed produces subtle runtime breakage that only surfaces under specific code paths. | `test_22_0_codemod_handles_type_checking_block.py`, `test_22_0_codemod_rewrites_pydantic_forward_ref.py` |
-| 2 | "`common/` and `ai/common/` have no overlapping Python modules." | `common/logger.py` and `common/international_tournament_profiles.py` already exist at the repo root (different, simpler versions). `ai/common/` also contains overlapping sub-packages: `bus/`, `db/`, `feeds/`, `isolation/`, `observability/`, `security/`, and `api/` all exist in both trees. A naive `git mv` silently overwrites the Phase-18-governed root copies, destroying the isolation gates themselves. Every overlap requires an explicit diff-audit and authoritative-copy decision before any move. | `test_22_0_common_overlap_audit_complete.py`, `test_22_0_ai_common_isolation_not_authoritative.py` |
+| 2 | "`common/` and `ai/common/` have no overlapping Python modules." | `common/logger.py` and `common/international_tournament_profiles.py` already exist at the repo root as top-level files (different, simpler versions). The **overlapping sub-packages are exactly five** — `bus/`, `db/`, `isolation/`, `observability/`, `security/` exist in *both* `common/` and `ai/common/` (verified 2026-06-20). `ai/common/feeds/` and `ai/common/api/` are **`ai`-only** (no root counterpart) — they are *move-ins*, not merges, and the draft's claim that they overlap is wrong. A naive `git mv` over any of the five real overlaps silently overwrites the Phase-18-governed root copies, destroying the isolation gates. Each of the five requires an explicit diff-audit and an authoritative-copy decision (which copy wins is **heterogeneous** — see ledger #36). | `test_22_0_common_overlap_is_exactly_five_subpackages.py`, `test_22_0_feeds_and_api_are_ai_only_move_ins.py` |
 | 3 | "`ai/tests/` → `tests/` is a simple folder rename." | Root `conftest.py` already exists and detects the Phase 22 layout via `_phase22_layout = (ROOT / "common" / "config" / "__init__.py").exists()`. `ai/tests/conftest.py` performs its own `sys.path.insert(0, _ai_path)` and also clears `sys.modules` of stale `common.*` entries. After the move both conftests are in scope for the same test session; conflicting `sys.path` mutations and `sys.modules` clears cause non-deterministic import resolution and test isolation failures. All conftest files must be audited and explicitly consolidated — not mechanically concatenated. | `test_22_0_conftest_hierarchy_conflict_detected.py`, `test_22_0_merged_conftest_no_sys_modules_clear.py` |
 | 4 | "The root `datasource/` folder only contains `quarantine.py` and can be deleted as-is." | `datasource/quarantine.py` is the only file at root, but `ai/datasource/` is a completely different sub-tree with `enrichment/`, `t3_resource_manager.py`, patcher context, and `__init__.py`. The two `datasource` names coexist under different roots. After migration `enrichment/` and `t3_resource_manager.py` become root-level packages; `datasource/quarantine.py` moves to `scraper/quarantine.py`. Treating the root `datasource/` as "empty or ignorable" orphans the entire enrichment sub-tree. | `test_22_0_datasource_folders_both_inventoried.py`, `test_22_0_ai_datasource_enrichment_lands_at_root.py` |
-| 5 | "`PYTHONPATH=.` is already the universal setting across all tooling." | `Makefile` contains at least 7 explicit `PYTHONPATH=ai` overrides (confirmed: `make test.phase12`, `make test.adversarial_corpus`). `pyproject.toml` lists `"ai"` in `known_first_party`. The `common/config/__init__.py` imports from `ai.common.config` transitionally. Leaving any `PYTHONPATH=ai` occurrence active after the move causes those targets to fail silently or import from the post-deletion void. Every occurrence must be enumerated, migrated, and lint-gated. | `test_22_0_pythonpath_ai_occurrences_enumerated.py`, `test_22_0_no_pythonpath_ai_after_migration.py` |
+| 5 | "`PYTHONPATH=.` is already the universal setting across all tooling." | The `Makefile` contains **2** explicit `PYTHONPATH=ai` overrides (verified: lines for `test.phase12` and `test.adversarial_corpus`; *not* the "7+" an earlier draft guessed). `pyproject.toml` lists `"ai"` in `known_first_party` **and** in `coverage.run source`. `common/config/__init__.py` and `common/bus/` re-export from `ai.*` transitionally. Leaving any `PYTHONPATH=ai` occurrence (Makefile, CI, compose, k8s) active after the move causes those targets to import from the post-deletion void. Every occurrence must be enumerated from the live tree (not guessed), migrated, and lint-gated. | `test_22_0_pythonpath_ai_occurrences_enumerated.py`, `test_22_0_no_pythonpath_ai_after_migration.py` |
 | 6 | "Docker layer cache self-heals after file paths change." | BuildKit caches layers by content hash. A `COPY ai/ ./ai/` directive that becomes `COPY . .` changes the COPY instruction itself, busting all cached layers. The first post-migration build is a full cold build. Additionally, `.dockerignore` must explicitly exclude `xops/`, `docs/`, `data/`, `infra/`, `migrations/`, and `server/` to prevent bloating the Python image with non-Python artefacts. Post-migration image size must be verified within ±10% of the pre-migration baseline. | `test_22_0_docker_image_size_within_tolerance.py`, `test_22_0_dockerignore_excludes_non_python_dirs.py` |
 | 7 | "`ai/common/schemas/` has no root `common/` counterpart — it moves wholesale without governance." | `common/schemas/` is not yet listed as an explicit Phase 18 governed sub-package in `common/SUBPACKAGE_CHARTER.md`. `ai/common/schemas/` contains JSONSchema feed definitions, the `records.py` enum (extended by Phase 21 to 10 enrichment types), and generated TypedDicts. Moving it requires triple CODEOWNERS ACK and a new sub-package charter entry per Phase 18 §18.13. The move must be gated on that ACK before any file is touched. | `test_22_0_common_schemas_subpackage_charter_exists.py`, `test_22_0_schemas_move_requires_codeowner_ack.py` |
 | 8 | "The isolation snapshot can be refreshed after the move as a cleanup step." | `common/isolation/import_graph.snapshot.json` was built against the `ai/` transitional layout. Any CI run between a package move and the snapshot refresh will compare the updated import graph (root-level packages) against the stale snapshot (`ai.*` references) and generate false-positive isolation violations that block unrelated PRs. The snapshot MUST be refreshed atomically in the same commit as each package move. | `test_22_0_snapshot_refreshed_after_each_move_commit.py`, `test_22_0_snapshot_stale_blocks_ci.py` |
@@ -4306,7 +4364,7 @@ invariant across this table.
 | 11 | "Rollback is `git revert <move-commit>`." | Structural refactor commits are large and dense; `git revert` frequently produces merge conflicts in files that were also touched by concurrent feature PRs. The correct rollback path is: (a) reverse-order per-step `git revert` of the migration commits, (b) `make isolation.check --full`, (c) `PYTHONPATH=. make test`, (d) snapshot refresh. `make phase22.rollback STEP=N` automates all four steps. Two consecutive failed rollback attempts within one step trigger a migration pause and escalation. | `test_22_0_rollback_target_registered_for_each_step.py`, `test_22_0_rollback_reruns_isolation_check.py` |
 | 12 | "The `source_watcher → datasource_watcher` alias cleanup is automatic." | The alias window was activated at a specific calendar date. If Phase 22 runs more than 90 days after activation, the window has expired; the old key should be `eol` already. If it runs within the window, the CLI translation layer must be verified active before EOL is flipped. Neither transition is automatic — Phase 22 §22.10 explicitly executes the EOL flip and verifies the translation layer preserves historical tracker queries. | `test_22_0_source_watcher_alias_eol_executed_in_phase22.py`, `test_22_0_historical_tracker_queries_resolve_via_translation.py` |
 | 13 | "k8s manifests in `infra/k8s/` do not embed Python paths." | k8s ConfigMap objects, Deployment spec `command:` / `env:` blocks, and init-container specs may contain `PYTHONPATH=ai`, `python ai/main.py`, or `mountPath: /app/ai` volume references. These are YAML documents not caught by Python AST or grep on `*.py` files. A dedicated YAML-aware scanner (`xops/lint/phase22_k8s_paths.py`) must run over all files in `infra/k8s/`, `infra/redis/`, and any Helm chart values files, and must be wired into CI before any file moves. | `test_22_0_k8s_manifests_scanned_for_ai_paths.py`, `test_22_0_k8s_scanner_wired_in_ci_before_first_move.py` |
-| 14 | "Generated file headers (`negelir-generated-from: <path>@<sha256>`) are stable across the move." | Generated stubs under `ai/common/schemas/_generated/` and `ai/swarm/clients/server_internal/` carry `negelir-generated-from: ai/common/schemas/...@<sha256>` headers. After the move the descriptor lives at `common/schemas/...`; the Phase 18 §18.11 generation-parity lint fails on stale paths. The codemod rewrites provenance headers in generated files (pattern 7 — beyond the six import patterns); `make codegen` is re-run to regenerate with correct headers; the parity lint runs before the commit. | `test_22_0_generated_file_headers_updated_after_move.py`, `test_22_0_codegen_rerun_after_descriptor_move.py` |
+| 14 | "Generated file headers (`negelir-generated-from: <path>@<sha256>`) are stable across the move." | A small set of files carry a `# negelir-generated-from:` provenance header (audited: **3** such files under `ai/` as of 2026-06-20). The previously-assumed locations `ai/common/schemas/_generated/` and `ai/swarm/clients/server_internal/` **do not exist** — do not migrate phantom directories. For the real generated files, the descriptor path inside the header becomes stale after the move (`ai/common/...` → `common/...`); the Phase 18 §18.11 generation-parity lint fails on the stale path. The codemod rewrites provenance headers (pattern 7); `make codegen` is re-run to regenerate against the new descriptor path; the parity lint runs before the commit. The live generated-file set is discovered by `make phase22.inventory`, never hard-coded. | `test_22_0_generated_file_headers_updated_after_move.py`, `test_22_0_codegen_rerun_after_descriptor_move.py` |
 | 15 | "`requirements.txt` merge is safe as a file concatenation." | `ai/requirements.txt` exists; no root-level `requirements.txt` exists today, but `ai/requirements-dev.txt` adds dev-only pins. Simply moving `ai/requirements.txt` to the root and adding the dev file risks introducing version specifier drift from any future root-level additions. The merge must use `pip-compile` on a combined `.in` file; the output `requirements.lock` must pass the Phase 18 §18.10 SBOM diff gate before any container build references the new lockfile. | `test_22_0_requirements_merge_uses_pip_compile.py`, `test_22_0_requirements_lock_passes_sbom_gate.py` |
 | 16 | "Phase 17 ROADMAP bullets referencing `datasource/patcher/` are just text — no runtime effect." | `xops/lint/phase17_ledger.py` validates that filesystem paths cited in ROADMAP Phase 17 bullets resolve to real paths. After the move `datasource/patcher/` becomes `patcher/`; the lint rejects the stale paths and blocks unrelated PRs until §22.12 updates all references. This must be coordinated — §22.12 runs the path sweep and validates the ledger lint before declaring done. | `test_22_0_phase17_ledger_lint_passes_after_path_update.py`, `test_22_0_phase18_ledger_lint_passes_after_path_update.py` |
 | 17 | "Dead-code analysis is optional — whatever was in `ai/` comes to root as-is." | Bringing unreachable symbols to root inflates every root package's public surface, making Phase 18's `__all__`-based isolation gate harder to enforce and triggering false positives in `vulture`'s post-migration pass. Any dead symbol that also appears in a patcher bundle scope contract causes a false-positive patcher artifact rejection after the move. A `vulture` scan of `ai/` must be committed to `docs/tracking/phase22_dead_code_candidates.md` **before the first package move**; confirmed dead code must be removed in dedicated cleanup PRs. | `test_22_0_vulture_dead_code_scan_committed.py`, `test_22_0_no_confirmed_dead_symbols_at_root.py` |
@@ -4319,17 +4377,27 @@ invariant across this table.
 | 24 | "Patcher cassettes and bundle metadata are unaffected by the move." | Phase 17 patcher cassettes under `xops/patcher/cassettes/` record file paths in tool-call outputs (e.g. `Read: ai/scraper/extractors/mackolik/...`). After the move these paths are stale; the cassette drift probe (Phase 17 §17.6a) false-positives on every replay, exhausting the cassette drift budget. §22.12 runs `make patcher.cassette.migrate` which rewrites all cassette path strings, re-signs each cassette HMAC-SHA256 sidecar, and updates `MANIFEST.sha256`. Bundle metadata JSONs in `feeds/ops/bundles/` with `failing_code_path` referencing `ai/` are similarly migrated. | `test_22_0_patcher_cassette_paths_migrated.py`, `test_22_0_patcher_bundle_metadata_paths_migrated.py` |
 | 25 | "The Phase 19 catalog loader shim contract is already satisfied." | Phase 19 §19.12 ships `ai/common/league_catalog_loader.py` reading its path from `cfg.catalog_yaml_path`. Phase 22 §22.3a moves the loader to `common/catalog/league_catalog_loader.py`. The Phase 19 shim test (`test_19_12_catalog_loader_importable_via_shim_path.py`) must continue to pass throughout the shim window and post-deletion — the shim re-exports from the new path, not from `ai.*`. Failing to verify the shim contract produces a silent regression in the catalog API during the transition period. | `test_22_0_catalog_loader_importable_at_both_old_and_new_path_during_shim_window.py`, `test_22_0_catalog_loader_shim_emits_deprecation_warning.py` |
 | 26 | "The root `common/config/__init__.py` already provides the canonical config — no migration needed." | `common/config/__init__.py` currently imports from `ai.common.config` transitionally (confirmed by `grep`). It is not a standalone config; it is a bridge that will break the moment `ai/` is deleted. The real config implementation lives in `ai/common/config.py` and must be moved to `common/config/ai_pipeline.py` (§22.3a) before `common/config/__init__.py` is updated to re-export from the new path. Treating the root config as "already there" skips the move of ~1 000 lines of config logic. | `test_22_0_root_config_init_does_not_import_from_ai_after_migration.py`, `test_22_0_config_logic_at_canonical_path.py` |
-| 27 | "The `ai/common/isolation/` sub-package is the same as `common/isolation/`." | `ai/common/isolation/` contains `check.py`, `policy.py`, `policy.yaml`, and `dpa_validator.py` (Phase 19 DPA validation). `common/isolation/` contains the Phase 18 authoritative implementation: `check.py`, `go_check.go`, `import_graph.snapshot.json`, `policy.yaml`, and the full graph builder. The `ai/` copy is a superset in some areas (DPA) and a subset in others (no Go gate). Moving the `ai/` copy on top of the `common/` copy destroys the Phase 18 `go_check.go` and the snapshot. `common/isolation/` is the authoritative copy; the `dpa_validator.py` is the only file the `ai/` copy contributes as a net addition. | `test_22_0_ai_common_isolation_dpa_validator_migrated_not_overwritten.py`, `test_22_0_go_check_survives_merge.py` |
-| 28 | "Non-`ai/` files that import from `ai.*` will be caught by the codemod when their packages move." | There are ~55 non-`ai/` files (in `common/`, `swarm/`, `xops/`, `server/`) that import from `ai.*`. These files' host packages — `common`, `swarm`, `xops` — have already been moved to root and are NOT scheduled to move in Phase 22's package-move phase. They remain broken with stale `ai.*` imports after §22.4. These files must be co-updated by the codemod in the **same commit** as the `ai/` package they reference, not in a separate catch-up PR. The §22.1 inventory must enumerate them per-package alongside the `ai/` files. | `test_22_0_non_ai_callers_co_updated_with_target_package.py`, `test_22_0_inventory_includes_non_ai_callers.py` |
+| 27 | "The `ai/common/isolation/` sub-package is the same as `common/isolation/`, and `dpa_validator.py` is the only net-new file the `ai/` copy contributes." | **Verified 2026-06-20 — both halves of this assumption are wrong.** `ai/common/isolation/` contributes **zero net-new source files** (its only `ai`-unique entries are `__pycache__/*.pyc` bytecode); `dpa_validator.py` exists in **both** trees and **differs**. Every one of the four colliding files — `check.py`, `policy.py`, `dpa_validator.py`, `__init__.py` — **differs** between the two copies, so a blind "root wins" silently discards whatever the `ai/` versions added (Phase-19 DPA-aware logic), and a blind "ai wins" destroys the **root-only** files `go_check.go`, `graph_builder.py`, `forbidden_deps.yaml`, and `import_graph.snapshot.json` (the Phase 18 gate itself). The correct action is a **per-file diff-audit + symbol-union merge** for the four colliding files (not a discard), with the four root-only files preserved untouched. | `test_22_0_isolation_root_only_files_preserved.py`, `test_22_0_isolation_colliding_files_symbol_union_merged.py` |
+| 28 | "Non-`ai/` files that import from `ai.*` will be caught by the codemod when their packages move." | There are **55** non-`ai/` files that import from `ai.*`, distributed as **44 in `xops/`, 10 in `common/`, 1 in `docs/`** (verified 2026-06-20). There are **no `swarm/` or `server/` Python importers** (`server/` is Go). These files' host packages — `xops`, `common`, `docs` — already live at root and are **not** scheduled to move in Phase 22's package-move phase. They remain broken with stale `ai.*` imports after §22.4 unless co-updated by the codemod in the **same commit** as the `ai/` package they reference (via `--include-non-ai-callers`). The §22.1 inventory enumerates them per-package alongside the `ai/` files. | `test_22_0_non_ai_callers_co_updated_with_target_package.py`, `test_22_0_inventory_includes_non_ai_callers.py` |
 | 29 | "`CURRENT_SEASON` is a runtime config value — its hardcoding is harmless post-migration." | `ai/common/constants.py` has `CURRENT_SEASON = "2025-2026"` as a module-level constant. Phase 22 §22.6 requires all such hardcoded season strings to be replaced by `cfg.current_season` (from `common/config/defaults.yaml`). If `CURRENT_SEASON` survives the migration as a root-level constant (now `constants.CURRENT_SEASON`), all downstream code that reads it will silently use the stale season after a season boundary, causing wrong freshness windows, retrain triggers, and schedule-plane queries. `xops/lint/no_hardcoded_season.py` must gate this before the constant moves. | `test_22_0_current_season_not_a_constant_after_migration.py`, `test_22_0_current_season_reads_from_config.py` |
-| 30 | "The `N_FEATURES` constant will be 147 after Phase 21 — Phase 22 just moves it." | Phase 21 §21.26 (the canonical DoD) states `N_FEATURES = 157` (120 original + 10 QID + 27 enrichment). An earlier draft of Phase 21 incorrectly stated 145 or 147. Any Phase 22 snapshot test, model compat test, or feature-column count assertion that hardcodes 147 will fail against the real Phase 21 output. The codemod must NOT update numeric constants — `N_FEATURES` must be derived as `len(FEATURE_COLUMNS)` (asserting `N_FEATURES == 157` post-Phase-21, before Phase 22 moves the file). Phase 22 moves the file; Phase 21 sets the value. | `test_22_0_n_features_is_157_not_147_when_all_planes_active.py`, `test_22_0_n_features_is_len_feature_columns_not_hardcoded.py` |
-| 31 | "Go source files in `server/` reference `ai/` only in comments — no runtime breakage." | Confirmed via analysis: `server/cmd/swarmctl/main.go`, `server/internal/sec/embed.go`, `server/internal/config/config.go`, and `server/internal/config/sync_test.go` all contain `ai/` path strings. Some are `embed.FS` directives (`//go:embed ai/...`) or runtime path resolution. `//go:embed` directives that reference `ai/` paths cause a **build failure** if those paths no longer exist; they cannot be left as comments. The Phase 22 k8s/build artefact migration (§22.5) must include a Go source scan and fix all `//go:embed ai/...` directives before the packages move. | `test_22_0_go_embed_directives_reference_new_paths.py`, `test_22_0_go_server_builds_after_path_migration.py` |
+| 30 | "The `N_FEATURES` constant is a fixed integer Phase 22 can hardcode in a snapshot test." | `N_FEATURES` is **derived** — `common/constants.py` carries `N_FEATURES: int = len(FEATURE_COLUMNS)`. There is a **live discrepancy to reconcile, not a number to assert**: the `constants.py` comment currently says “147 after Phase 21.16” while the Phase 21 canonical DoD (§21.26) says **157** (120 + 10 QID + 27 enrichment). Phase 22 must NOT hardcode either integer in any snapshot / model-compat test, must NOT edit the value during the move, and reconciles only the stale *comment* to match the actual `len(FEATURE_COLUMNS)` Phase 21 left in place. A divergence between `len(FEATURE_COLUMNS)` and the Phase 21 canonical value is a **Phase 21 defect** — recorded as a tracker row and fixed in Phase 21 scope, never silently patched during the move. | `test_22_0_n_features_is_len_feature_columns_not_hardcoded.py`, `test_22_0_n_features_matches_phase21_canonical_not_a_literal.py` |
+| 31 | "Go source files in `server/` reference `ai/` only in comments — no runtime breakage." | The draft over-corrected to claim `//go:embed ai/...` directives exist — they **do not** (verified 2026-06-20). The real Go `ai/` references are three distinct kinds, only one of which is runtime-load-bearing: (a) **a runtime path constant** — `server/internal/sec/sanitize.go` has `const defaultTRNormalizeSpecPath = "ai/common/text/tr_normalize_spec.json"`; this breaks at runtime if the path moves; (b) **a parity-test source-path table** — `server/internal/sec/embedded_parity_test.go` lists canonical `ai/common/security/*.yaml` / `ai/swarm/sdk/schemas/*.json` paths that are `cp`-mirrored into `server/internal/sec/embedded/` (the Go `//go:embed` targets are the *local* `embedded/` copies, never `ai/`); the parity test fails if the canonical source path is stale; (c) **doc comments** in `main.go`, `envelope.go`, `config.go`, `sync_test.go`, `patterns.go`. §22.5 fixes (a) and (b) as load-bearing and sweeps (c). There is no `go:embed` directive to fix. | `test_22_0_go_runtime_path_const_updated.py`, `test_22_0_go_parity_table_source_paths_updated.py`, `test_22_0_go_server_builds_after_path_migration.py` |
 | 32 | "Redis key prefixes in the enrichment feature store are pure strings — no `ai.` reference." | Phase 21 §21.16 defines Redis keys as `f"enrich:{league_id}:{fixture_id}:{plane_id}"` — these do not include module paths. However, the Phase 8 `maint.*` reactor identity keys, the Phase 17 patcher leader-lease key (`patcher:leader`), and the Phase 21 circuit-breaker state keys (`enrich:circuit:{plane}`) are all path-independent. No Redis key migration is required. This wrong assumption is **pre-emptively retired** to confirm the analysis was done and no key migration is silently overlooked. | `test_22_0_redis_keys_have_no_ai_path_components.py` |
 | 33 | "The `pyproject.toml` `known_first_party` list is updated in §22.5 with the new root packages — no impact before then." | `pyproject.toml` `known_first_party = ["ai", "common", "datasource", "swarm", ...]` is used by `isort` on every developer's machine and in CI to classify imports. A package that was `known_first_party` as `ai.scraper` but is not yet listed as `scraper` will be classified as a third-party import by isort, producing spurious lint failures for every developer working on the migrated package. The `known_first_party` list must be updated **in the same commit** as each package's migration, not in a batch at §22.5. | `test_22_0_isort_known_first_party_updated_per_package_commit.py`, `test_22_0_no_third_party_isort_classification_after_move.py` |
 | 34 | "`ai/swarm/` and root `swarm/` merge cleanly — `swarm/` is just an agents/ folder." | Root `swarm/` has `agents/` and `tests/`. `ai/swarm/` has `agents/`, `identity/`, `predictor/`, `sdk/`, `source_watcher/`, `tests/`, and `bootstrap.py`. Both `agents/` sub-trees exist and must be merged without name collisions. `swarm/agents/` at root contains Phase 8 maintenance agents (`maint.scaler.v1`, `maint.backup.v1`, `maint.dlq.v1`, etc.) that are explicitly NOT owned by the AI pipeline patcher (per `CLAUDE.md`). Any agent module name collision between the two trees requires explicit renaming with a 90-day alias. A pre-merge collision scan is mandatory. | `test_22_0_swarm_agents_no_name_collision_before_merge.py`, `test_22_0_maint_agents_survive_swarm_merge.py` |
 | 35 | "Migration telemetry is a nice-to-have — the burn-in dashboard is sufficient." | The 30-day burn-in (§22.13) requires tracking five counters daily. Without a dedicated `make phase22.burn-in.status` target that queries these from Redis / the Phase 14 dashboard, the burn-in is tracked manually via ad-hoc log searches — a failure mode that has caused missed signals in Phase 18's burn-in. `make phase22.burn-in.status` must be implemented before the burn-in starts, not after. The five counters (isolation regressions, `ai.` import errors, resurrections, metric-name violations, rollback invocations) each have a Redis key written by the CI post-merge hook; the status command reads them. | `test_22_0_burn_in_status_command_reads_five_counters.py`, `test_22_0_burn_in_status_implemented_before_burn_in_starts.py` |
+| 36 | "The authoritative copy for every overlapping `common/` sub-package is the Phase-18 root version." | The shim direction is **heterogeneous** and the draft's blanket \"root wins\" rule is wrong (verified 2026-06-20): `common/bus/` (2 files) and `common/config/` (1 file) are **shims that re-export from `ai.common.*`** — for those the *authoritative implementation lives in `ai/`* and the move *flips the shim* (real code moves `ai/common/bus` → `common/bus`, the shim is deleted). `common/db/`, `common/isolation/`, `common/observability/`, `common/security/` are **real root implementations** (root authoritative; `ai/` additions merged in). Applying \"root authoritative\" to `bus`/`config` would discard the real implementation and leave a shim pointing at a deleted tree. The per-sub-package direction must be declared explicitly in `docs/decisions/phase22/common_merge.md` and machine-checked. | `test_22_0_common_bus_and_config_are_ai_authoritative_shims.py`, `test_22_0_common_db_isolation_obs_sec_are_root_authoritative.py` |
+| 37 | "Per-component lockfiles and SBOMs are plain files that `git mv` handles." | `ai/swarm/` and `ai/datasource/` each carry a hash-pinned `requirements.lock` + `sbom.spdx.json` (Phase 18 §18.10). Their content encodes the component path and dependency provenance; moving them verbatim leaves the SBOM `documentNamespace` / file-path entries pointing at `ai/`, and the Phase 18 §18.10 lockfile-review + SBOM-diff gate fails. Each must be **regenerated** for the new root path (`make lockfiles.regen` + `make sbom.gen`) and re-pass the gate in the **same commit** as the package move — not carried over byte-for-byte. The codemod (which only touches `*.py`) never sees them, so a separate step owns them. | `test_22_0_per_component_lockfile_regenerated_for_new_path.py`, `test_22_0_per_component_sbom_passes_review_after_move.py` |
+| 38 | "Phase 17 patcher cassettes and bundles exist at Phase 22 time and must be migrated." | Phase 17 (Scraper-Patcher) ships **after** Phase 22 (it is unblocked *by* this phase). At execution time `ai/datasource/patcher`, `ai/datasource/gitops`, `xops/patcher/cassettes/`, and `feeds/ops/bundles/` **do not exist** (verified 2026-06-20 — only `xops/patcher/` is present, empty of cassettes/bundles). The cassette/bundle migration (§22.12) must therefore be **conditional**: migrate-if-present, assert-empty-if-absent. An unconditional `make patcher.cassette.migrate` that globs a non-existent directory either no-ops silently (masking a real future need) or errors (blocking the phase). The step must branch on artefact existence and record which branch it took. | `test_22_0_patcher_artifact_migration_is_conditional.py`, `test_22_0_patcher_migration_asserts_empty_when_phase17_unshipped.py` |
+| 39 | "There is a single `enrichment` chart component to bump to `1.0.0`." | `xops/versioning/chart.json` has **no `enrichment` key** (verified 2026-06-20). Enrichment is four plane-scoped components — `enrichment_roster`, `enrichment_health`, `enrichment_officials`, `enrichment_environment` (seeded `0.1.0` in Phase 21 §21.0) — plus the path-move of `ai/datasource/enrichment/` → `enrichment/` which is governed by **no single chart key**. §22.10's \"`enrichment` 1.0.0 bump\" references a key that does not exist; the bump list must name the real keys (and the `datasource_patcher` / `datasource_gitops` keys belong to the unshipped Phase 17, so their `1.0.0` bumps defer to that phase). | `test_22_0_no_single_enrichment_chart_key.py`, `test_22_0_version_bump_list_matches_real_chart_keys.py` |
+| 40 | "`git mv` is enough — leftover bytecode is harmless." | `git mv ai/<pkg> <pkg>` does not move `__pycache__/`, but a developer's (or CI runner's) working tree often retains stale `ai/**/__pycache__/*.pyc`. Python's finder can import the stale compiled module under the *old* `ai.<pkg>` name during the transition window, masking import errors and producing non-deterministic test results that pass locally and fail on a fresh clone. Every move commit purges `__pycache__` before the test gate and CI sets `PYTHONDONTWRITEBYTECODE=1`; the fresh-clone DoD smoke (§22.13) is the authoritative check. | `test_22_0_no_stale_pycache_after_move.py`, `test_22_0_fresh_clone_has_no_orphan_pyc.py` |
+| 41 | "There are two conftest.py files to reconcile (root + `ai/tests/`)." | There are **six** (verified 2026-06-20): `./conftest.py`, `common/tests/conftest.py`, `ai/tests/conftest.py`, `ai/swarm/agents/tests/conftest.py`, `ai/swarm/agents/maint/tests/conftest.py`, `xops/backup/tests/conftest.py`. The two nested `ai/swarm/agents/**` conftests move during the **swarm** merge (§22.3c), not the tests merge; `common/tests/conftest.py` and `xops/backup/tests/conftest.py` already live at root and must be left untouched. Reconciling only the two the draft saw leaves the swarm-test conftests with stale `sys.path`/marker logic and risks duplicate-marker warnings across four registration sites. The full inventory drives the consolidation. | `test_22_0_all_six_conftests_inventoried.py`, `test_22_0_swarm_nested_conftests_reconciled_in_22_3c.py` |
+| 42 | "`betting_markets.json` and `entitlements.yaml` are plain config files that move verbatim." | `ai/common/betting_markets.json` is read via a config key and is consumed by both the Python pipeline and (indirectly) the Go entitlement edge; moving it to `data/betting_markets.json` is a **data-contract change** requiring `cfg.betting_markets_path` to update atomically. `entitlements.yaml` exists in **two** places — `ai/common/entitlements.yaml` and `xops/monetization/entitlements.yaml` (Phase 20 canonical) — so the move is a **de-duplication**, not a relocation: the `ai/common/` copy is reconciled against (and likely deleted in favour of) the `xops/monetization/` canonical, with a diff-audit committed. Treating either as a verbatim `git mv` forks the data contract. | `test_22_0_betting_markets_path_is_config_driven_after_move.py`, `test_22_0_entitlements_deduplicated_against_monetization_canonical.py` |
+| 43 | "`git mv` plus the no-duplicate-symbols test guarantees nothing is lost or overwritten." | `git mv` into an existing path either errors (good) or, with `-f`, **silently clobbers** — and the no-duplicate-symbols test proves the *opposite* property (no collision), not preservation. Neither proves that every source file reached a destination, nor that a discarded copy's unique content was salvaged. Phase 22 adds a **file-accountability manifest** (`docs/tracking/phase22_file_accountability.json`, built by `make phase22.inventory`, excluding `__pycache__`): every `ai/` source path maps to exactly one destination action (`move` / `merge:<decision-doc>` / `delete:<reason>`); post-migration a gate asserts (a) every source path is accounted for, (b) no destination received two sources without a recorded merge decision, and (c) no `git mv` was run with `-f`. | `test_22_0_every_source_file_accounted_for.py`, `test_22_0_no_destination_has_two_unrecorded_sources.py`, `test_22_0_no_forced_git_mv_in_migration.py` |
+| 44 | "Choosing an authoritative copy for a colliding file is safe because CI would catch a lost symbol." | CI green proves only that **tested** code still imports; a public symbol that existed in the discarded copy but has no test silently vanishes and ships. Phase 22 adds a **symbol-union preservation gate**: for every merged module, collect the public surface (`__all__` if present, else module-level names not starting with `_`) of *both* pre-move copies; assert the post-merge module's public surface is a **superset** of their union, except names explicitly listed in `docs/decisions/phase22/dropped_symbols.md` — and each dropped name must carry a `vulture`/grep-backed "no live caller" proof in the same decision row. This is the actual "nothing lost" guarantee for the heterogeneous merges. | `test_22_0_merge_preserves_symbol_union.py`, `test_22_0_dropped_symbol_has_no_live_caller_proof.py` |
+| 45 | "A verbatim package move is byte-for-byte safe by definition." | A "verbatim" move still runs the codemod (import rewrites), and a careless tool can reflow, re-encode line endings, or strip a trailing newline — changing bytes the migration never intended to touch. Phase 22 emits a **content-hash manifest** (`make phase22.inventory` records each file's pre-move blob SHA) and a post-move gate asserts every moved file is byte-identical **except** the specific lines the codemod was authorised to rewrite (verified by re-deriving the rewrite and diffing). A file whose hash changed without a corresponding authorised rewrite fails the gate. | `test_22_0_verbatim_move_preserves_blob_hash.py`, `test_22_0_only_authorised_lines_changed_in_moved_file.py` |
 
-`xops/lint/phase22_ledger.py` enforces: every retired-row PR ships a green proof test in the same diff; the ledger is dense (no row gaps) and append-only (no row deletion).
+`xops/lint/phase22_ledger.py` enforces: every retired-row PR ships a green proof test in the same diff; the ledger is dense (no row gaps) and append-only (no row deletion). **45 rows total.**
 
 ---
 
@@ -4340,39 +4408,52 @@ file, its destination, and any merge conflicts. Verify all Phase 18 pre-conditio
 and install the automated codemod engine. **This sub-phase ships infrastructure
 only — zero package moves.**
 
-**Complete directory move plan (canonical):**
+**Complete directory move plan (canonical).** The `Non-`ai/` callers` column
+is **not hand-counted** — exact per-package caller sets come from
+`make phase22.import-report` (the 55 non-`ai/` importers are distributed
+**44 `xops/` + 10 `common/` + 1 `docs/`**, no `swarm/`/`server/`). The values
+below mark only *whether* a package has non-`ai/` callers; the report is
+authoritative for *which*.
 
 | Source | Destination | Action | Overlap? | Non-`ai/` callers? |
 |---|---|---|---|---|
-| `ai/scraper/` | `scraper/` | Move | No | ~8 files in `common/`, `xops/` |
-| `ai/model/` | `model/` | Move | No | ~12 files in `common/`, `swarm/` |
-| `ai/nlp/` | `nlp/` | Move | No | ~6 files |
-| `ai/orchestrator/` | `orchestrator/` | Move | No | ~3 files |
-| `ai/pipeline/` | `pipeline/` | Move | No | ~5 files |
-| `ai/proofreader/` | `proofreader/` | Move | No | ~4 files |
-| `ai/qid/` | `qid/` | Move | No | ~2 files |
-| `ai/tqu/` | `tqu/` | Move | No | ~3 files |
-| `ai/trc/` | `trc/` | Move | No | ~2 files |
-| `ai/backtest/` | `backtest/` | Move | No | ~2 files |
-| `ai/tests/` | `tests/` | **Merge** (§22.3b) | Yes — conftest, fixtures | — |
-| `ai/datasource/enrichment/` | `enrichment/` | Move | No | ~5 files |
-| `ai/datasource/t3_resource_manager.py` | `enrichment/t3_resource_manager.py` | Move | No | ~2 files |
-| `datasource/quarantine.py` (root stub) | `scraper/quarantine.py` | Move | No | ~1 file |
+| `ai/scraper/` | `scraper/` | Move | No | per import-report (`xops/`, `common/`) |
+| `ai/model/` | `model/` | Move | No | per import-report |
+| `ai/nlp/` | `nlp/` | Move | No | per import-report |
+| `ai/orchestrator/` | `orchestrator/` | Move | No | per import-report |
+| `ai/pipeline/` | `pipeline/` | Move | No | per import-report |
+| `ai/proofreader/` | `proofreader/` | Move | No | per import-report |
+| `ai/qid/` | `qid/` | Move | No | per import-report |
+| `ai/tqu/` | `tqu/` | Move | No | per import-report |
+| `ai/trc/` | `trc/` | Move | No | per import-report |
+| `ai/backtest/` | `backtest/` | Move | No | per import-report |
+| `ai/tests/` | `tests/` | **Merge** (§22.3b) | Partial — root `tests/` does **not** exist; created by this move | — |
+| `ai/datasource/enrichment/` | `enrichment/` | Move | No | per import-report |
+| `ai/datasource/t3_resource_manager.py` | `enrichment/t3_resource_manager.py` | Move | No | per import-report |
+| `ai/datasource/requirements.lock` | `enrichment/requirements.lock` | **Regenerate** (ledger #37) | No | — |
+| `ai/datasource/sbom.spdx.json` | `enrichment/sbom.spdx.json` | **Regenerate** (ledger #37) | No | — |
+| `datasource/quarantine.py` (root stub) | `scraper/quarantine.py` | Move | No | per import-report |
 | `datasource/` (root stub, now empty) | (deleted) | Delete | — | — |
 | `ai/main.py` | `main.py` | Move | No | — |
 | `ai/scheduler.py` | `scheduler.py` | Move | No | — |
 | `ai/data_showcase.py` | `data_showcase.py` | Move | No | — |
 | `ai/requirements.txt` | `requirements.txt` | pip-compile merge | Partial — no root counterpart | — |
 | `ai/requirements-dev.txt` | `requirements-dev.txt` | pip-compile merge | Partial | — |
-| `ai/Dockerfile` | `Dockerfile` | Merge/replace | No — only server/ has another Dockerfile | — |
-| `ai/common/` | `common/` | **Merge** (§22.3a) | Yes — 8 sub-packages + 2 top-level files | ~55 non-`ai/` files total |
-| `ai/swarm/` | `swarm/` | **Merge** (§22.3c) | Yes — `agents/` + `tests/` | ~10 files in `server/` |
+| `ai/Dockerfile` | `Dockerfile` | Merge/replace | No — only `server/` has another Dockerfile | — |
+| `ai/common/` | `common/` | **Merge** (§22.3a) | Yes — **5** overlapping sub-pkgs (`bus`,`db`,`isolation`,`observability`,`security`) + 2 top files; `feeds`/`api` are `ai`-only move-ins | per import-report (`xops/`, `common/`) |
+| `ai/common/betting_markets.json` | `data/betting_markets.json` | **Data-contract move** (ledger #42) | No | config key |
+| `ai/common/entitlements.yaml` | (de-dup vs `xops/monetization/entitlements.yaml`) | **De-duplicate** (ledger #42) | Yes — Phase 20 canonical exists | — |
+| `ai/swarm/` | `swarm/` | **Merge** (§22.3c) | Yes — `agents/` + `tests/` + 2 nested conftests | per import-report |
+| `ai/swarm/requirements.lock` | `swarm/requirements.lock` | **Regenerate** (ledger #37) | Yes — root `swarm/` is a Phase 18 component | — |
+| `ai/swarm/sbom.spdx.json` | `swarm/sbom.spdx.json` | **Regenerate** (ledger #37) | Yes | — |
 | `ai/docs/` | `docs/ai_pipeline/` | **Merge** (§22.3d) | Partial | — |
 | `ai/reports/` | `docs/reports/ai_pipeline/` | Move | No | — |
 
 Non-`ai/` files that import `ai.*` (ledger #28) are co-updated in the **same
 commit** as the package they reference. The §22.1 inventory must enumerate
-every such file per-package, not just the `ai/` files.
+every such file per-package, not just the `ai/` files. **`server/` is Go** — its
+`ai/` references (one runtime path constant + a parity-test source-path table +
+doc comments, ledger #31) are handled by §22.5, not the Python codemod.
 
 **Pre-flight checklist (ALL must be green before the first file move):**
 
@@ -4410,9 +4491,38 @@ every such file per-package, not just the `ai/` files.
 - [ ] Swarm agents collision scan: `make phase22.swarm-collision-check` enumerates
   module names in `ai/swarm/agents/` vs `swarm/agents/` and asserts zero
   collisions; any collision is resolved (rename + 90-day alias) before §22.3c.
-- [ ] Go source scan: `make phase22.go-embed-check` scans all `*.go` files for
-  `//go:embed ai/` directives and path string literals; any hit is documented
-  in `docs/tracking/phase22_go_path_hits.txt` for §22.5.
+- [ ] Go source scan: `make phase22.go-path-check` scans all `*.go` files for
+  `ai/` path **string literals** (the runtime const `defaultTRNormalizeSpecPath`,
+  the `embedded_parity_test.go` source-path table, and doc comments — there are
+  **no `//go:embed ai/`** directives, ledger #31); every hit is documented in
+  `docs/tracking/phase22_go_path_hits.txt`, tagged load-bearing vs comment, for §22.5.
+- [ ] Conftest inventory: `make phase22.conftest-inventory` lists all **6**
+  `conftest.py` files (ledger #41), classifies each as *move* (`ai/tests`,
+  `ai/swarm/agents/tests`, `ai/swarm/agents/maint/tests`), *root-merge target*
+  (`./conftest.py`), or *untouched* (`common/tests`, `xops/backup/tests`), and
+  records the marker-registration and `sys.path`/`sys.modules` surface of each.
+- [ ] Shim-direction decision: `docs/decisions/phase22/common_merge.md` committed
+  declaring, per overlapping `common/` sub-package, whether the authoritative copy
+  is the `ai/` real implementation (`bus`, `config` — flip the shim) or the root
+  real implementation (`db`, `isolation`, `observability`, `security`) — ledger #36.
+- [ ] Phase 17 artefact-absence probe: `make phase22.patcher-artifact-probe`
+  records whether `xops/patcher/cassettes/` and `feeds/ops/bundles/` exist
+  (ledger #38). If absent (expected — Phase 17 unshipped), §22.12 runs in
+  assert-empty mode; if present, it runs in migrate mode. The probe result is
+  written to `docs/tracking/phase22_patcher_artifact_state.txt`.
+- [ ] Per-component lockfile/SBOM baseline: `make phase22.lockfile-baseline`
+  records the pre-move `requirements.lock` + `sbom.spdx.json` digests for
+  `ai/swarm/` and `ai/datasource/` so §22.4 can prove regeneration (not verbatim
+  carry-over) per ledger #37.
+- [ ] **Nothing-lost manifest (ledger #43–#45):** `make phase22.inventory` emits
+  `docs/tracking/phase22_file_accountability.json` mapping **every** `ai/` source
+  file (excluding `__pycache__`) to exactly one destination action
+  (`move` / `merge:<decision-doc>` / `delete:<reason>`) **and** records each
+  file's pre-move blob SHA. `make phase22.collision-map` cross-checks every
+  destination for two-source collisions and emits
+  `docs/decisions/phase22/common_merge.md` stubs for each colliding+differing
+  file (the 3 top-level + isolation/observability/security/bus collisions
+  enumerated in §22.3a). A destination with two unrecorded sources is a hard stop.
 
 - [ ] **`make phase22.inventory`** target in `xops/makefile/phase22.py` produces
   `docs/tracking/phase22_move_plan.yaml` with every `(source_path, dest_path,
@@ -4427,7 +4537,14 @@ every such file per-package, not just the `ai/` files.
   - `test_22_1_rollback_runbook_committed_and_covers_all_steps.py` — runbook exists and contains a section for each of the 14 migration steps.
   - `test_22_1_cycle_baseline_committed.py` — `phase22_pre_migration_cycle_graph.json` exists.
   - `test_22_1_swarm_collision_check_is_clean.py` — no agent module name collisions before §22.3c.
-  - `test_22_1_go_embed_check_produces_hit_list.py` — scanner runs and produces either an empty list or a documented hit list.
+  - `test_22_1_go_path_check_produces_classified_hit_list.py` — scanner runs and tags each `ai/` Go reference load-bearing vs comment (no `go:embed` hits expected).
+  - `test_22_1_conftest_inventory_lists_all_six.py` — all six conftests inventoried and classified (ledger #41).
+  - `test_22_1_common_merge_decision_doc_committed.py` — per-sub-package authoritative-copy direction declared (ledger #36).
+  - `test_22_1_patcher_artifact_probe_records_state.py` — probe writes present/absent for cassettes + bundles (ledger #38).
+  - `test_22_1_lockfile_baseline_recorded.py` — pre-move lock/SBOM digests captured for `ai/swarm`, `ai/datasource` (ledger #37).
+  - `test_22_1_file_accountability_manifest_complete.py` — every `ai/` source file (minus `__pycache__`) maps to exactly one destination action (ledger #43).
+  - `test_22_1_collision_map_has_decision_stub_per_colliding_file.py` — every colliding+differing file has a `common_merge.md` decision stub (ledger #27/#44).
+  - `test_22_1_blob_sha_baseline_recorded.py` — pre-move blob SHA captured for every file (ledger #45).
   - `test_22_1_burn_in_status_exits_zero_before_migration.py` — `make phase22.burn-in.status` exits 0 with zeroed counters.
 
 ---
@@ -4441,17 +4558,29 @@ file moves. **Zero package moves — tooling only.**
 - [ ] **`xops/makefile/phase22.py`** ships the full command surface:
   - `make phase22.inventory` — produce `phase22_move_plan.yaml`.
   - `make phase22.codemod DRY_RUN=1 PACKAGE=<pkg>` — preview rewrites for one package; unified diff only, nothing written.
-  - `make phase22.codemod PACKAGE=<pkg>` — apply rewrites for one package (all import sites in `ai/` **and** the ~55 non-`ai/` callers of that package).
+  - `make phase22.codemod PACKAGE=<pkg>` — apply rewrites for one package (all import sites in `ai/` **and** that package's non-`ai/` callers — the relevant subset of the 55 total).
   - `make phase22.codemod.all DRY_RUN=1` — preview all rewrites; diff committed as `docs/tracking/phase22_codemod_preview.diff`.
   - `make phase22.cycle-check` — `pydeps`-based cycle analysis pre/post move; fails on any new cycle.
   - `make phase22.import-report` — per-file import-site count report.
   - `make phase22.dead-code` — `vulture ai/` scan.
-  - `make phase22.go-embed-check` — scan Go source for `//go:embed ai/` and `ai/` path strings.
+  - `make phase22.go-path-check` — scan Go source for `ai/` path string literals (runtime const + parity-test table + comments; **no `//go:embed ai/`**, ledger #31).
   - `make phase22.swarm-collision-check` — check swarm agents for name collisions.
+  - `make phase22.conftest-inventory` — list + classify all six `conftest.py` files (ledger #41).
+  - `make phase22.patcher-artifact-probe` — record presence/absence of Phase 17 cassettes + bundles (ledger #38).
+  - `make phase22.lockfile-baseline` / `make phase22.lockfile-migrate PACKAGE=<pkg>` — capture pre-move lock/SBOM digests, then regenerate for the new path (ledger #37).
+  - `make phase22.collision-map` — cross-check every destination for two-source collisions; emit `common_merge.md` decision stubs (ledger #27/#43/#44).
+  - `make phase22.verify-no-loss PACKAGE=<pkg>` — assert file-accountability + blob-SHA preservation + no `git mv -f` for a package (ledger #43–#45).
   - `make phase22.rollback STEP=<N>` — reverse-order revert + isolation check + test run.
   - `make phase22.burn-in.status` — five burn-in counter report.
   - `make phase22.k8s-scan` — scan `infra/k8s/` for `ai/` path references.
   - `make phase22.metric-scan` — list non-conforming metric names from `TelemetrySink` calls.
+
+- [ ] **Codemod scope boundary (binding).** The `libcst` engine touches **only**
+  `*.py` files. It must **never** edit `requirements.lock`, `*.sbom.spdx.json`,
+  `*.pyc`, `*.json` data files (`betting_markets.json`, `league_catalog.yaml`),
+  `*.yaml` config, or Go source. Those are owned by dedicated steps (§22.4 lock/SBOM
+  regen, §22.5 Go, §22.3a data-contract moves). A test asserts the codemod's file
+  filter rejects every non-`.py` extension.
 
 - [ ] **`xops/codemod/phase22_rewriter.py`** (`libcst.CSTTransformer` subclass)
   handles **seven** rewrite patterns (one more than the original six):
@@ -4461,7 +4590,7 @@ file moves. **Zero package moves — tooling only.**
   4. `TYPE_CHECKING` block imports (same as patterns 1/2, including `typing_extensions.TYPE_CHECKING`)
   5. `__all__` re-exports that reference `ai.*` fully-qualified names
   6. Pydantic `model_rebuild()` / `update_forward_refs()` calls that carry old module names
-  7. **Generated file provenance headers**: `# negelir-generated-from: ai/<path>@<sha256>` → `# negelir-generated-from: <path>@<sha256>` (only in files that match the generated-file header pattern from Phase 18 §18.11)
+  7. **Generated file provenance headers**: `# negelir-generated-from: ai/<path>@<sha256>` → `# negelir-generated-from: <path>@<sha256>` (only in the **3** files that actually carry the header — discovered by `make phase22.inventory`, not the phantom `ai/common/schemas/_generated/` or `ai/swarm/clients/` of ledger #14).
 
 - [ ] **`xops/codemod/tests/annotation_corpus.py`** contains ≥ 15 representative
   patterns (Pydantic models with forward refs, TypedDicts, Protocol definitions,
@@ -4509,6 +4638,7 @@ file moves. **Zero package moves — tooling only.**
   - `test_22_2_codemod_rewrites_pydantic_forward_ref.py` — `model_rebuild()` call updated.
   - `test_22_2_codemod_rewrites_annotation_string_literals.py` — quoted type names in `Annotated[...]` and `TypeVar` bounds updated.
   - `test_22_2_codemod_rewrites_generated_provenance_headers.py` — `# negelir-generated-from: ai/...` header lines updated.
+  - `test_22_2_codemod_rejects_non_py_extensions.py` — engine refuses to edit `.lock`/`.json`/`.yaml`/`.go`/`.pyc` files (scope boundary, ledger #37/#42).
   - `test_22_2_codemod_full_package_completes_within_60s.py` — `@pytest.mark.perf` timing gate.
 
 ---
@@ -4521,28 +4651,67 @@ dependency order, before any non-conflicting package moves. Each is a
 
 #### 22.3a — Merge `ai/common/` → `common/`
 
-Root `common/` is the Phase 18 governance-layer shared library.
-`ai/common/` is the larger AI-pipeline shared library. Both contain overlapping
-sub-packages: `bus/`, `db/`, `feeds/`, `isolation/`, `observability/`, `security/`,
-and `api/` all exist in both trees. Two top-level files also conflict:
-`common/logger.py` vs `ai/common/logger.py`, and
-`common/international_tournament_profiles.py` vs `ai/common/international_tournament_profiles.py`.
+Root `common/` is the Phase 18 governance-layer shared library. `ai/common/` is
+the larger AI-pipeline shared library. **Exactly five** sub-packages overlap
+(`bus/`, `db/`, `isolation/`, `observability/`, `security/`); `ai/common/feeds/`
+and `ai/common/api/` have **no root counterpart** (they are move-ins, not
+merges). Two top-level files also conflict: `common/logger.py` vs
+`ai/common/logger.py`, and `common/international_tournament_profiles.py` vs
+`ai/common/international_tournament_profiles.py`.
+
+> **⚠️ The authoritative copy is heterogeneous (ledger #36).** Two of the five
+> overlapping root sub-packages are **shims that re-export from `ai.common.*`** —
+> verified 2026-06-20: `common/bus/` (`__init__.py` + `publisher.py`) and
+> `common/config/__init__.py`. For those the **real implementation is in `ai/`**
+> and the move *flips the shim* (real code moves to root, the shim is deleted).
+> The other three (`db`, `isolation`, `observability`, `security`) are **real
+> root implementations** and the `ai/` copy contributes only net-additional
+> symbols. Applying a single "root wins" rule to all five — as the draft did —
+> would delete the real `bus`/`config` implementation and leave a shim pointing
+> at a deleted tree.
+
+*Per-sub-package authoritative-copy decision (committed to
+`docs/decisions/phase22/common_merge.md` before any file moves):*
+
+| Overlap | Today | Authoritative copy | Move action |
+|---|---|---|---|
+| `common/bus/` | root is a **shim** → `ai.common.bus` | **`ai/common/bus/`** | move real impl to `common/bus/`, delete shim, codemod its importers |
+| `common/config/` | `__init__.py` is a **shim** → `ai.common.config` | **`ai/common/config.py`** | move to `common/config/ai_pipeline.py`, repoint `__init__.py` |
+| `common/db/` | real root impl | **root** | merge `ai/` net-additional symbols only |
+| `common/isolation/` | real root impl (Phase 18 `go_check.go` + snapshot) | **root** | 4 root-only files preserved; 4 colliding+differing files symbol-union merged onto root base (ledger #27) |
+| `common/observability/` | real root impl | **root** | merge `ai/` net-additional symbols only |
+| `common/security/` | real root impl | **root** | merge `ai/` net-additional symbols only |
 
 *Conflict-resolution protocol — applied to every overlapping file and sub-package:*
-1. Diff the two copies and choose the **authoritative copy** (rule: the Phase 18
-   root version is canonical for all Phase-18-governed sub-packages; the `ai/`
-   version is canonical only for symbols it contributes that the root version
-   lacks).
-2. **`common/isolation/` is always the authoritative root version.** `ai/common/isolation/`
-   contributes only `dpa_validator.py` (Phase 19); that file is merged into
-   `common/isolation/dpa_validator.py`. The Phase 18 `go_check.go` and
-   `import_graph.snapshot.json` must survive untouched.
-3. For `common/logger.py` vs `ai/common/logger.py`: the `ai/` version is richer;
-   it becomes `common/logger.py`. The discarded root copy is a documented
-   decision in `docs/decisions/phase22/common_merge.md`.
-4. The non-authoritative copy of each conflicting file becomes a 90-day alias
-   shim (`from common.<subpkg> import *` with `DeprecationWarning`), logged in
-   `xops/lifecycle/deprecation_calendar.yaml`.
+1. Diff the two copies and apply the **direction declared in the table above**;
+   never assume a uniform winner. For a root-authoritative sub-package, only
+   symbols the `ai/` copy uniquely contributes are merged in. For an
+   `ai/`-authoritative shim, the real implementation moves to root and the shim
+   is deleted (not aliased — a shim pointing at a deleted tree is the bug this
+   row prevents).
+2. **The four root-only isolation files survive untouched** — `go_check.go`,
+   `graph_builder.py`, `forbidden_deps.yaml`, `import_graph.snapshot.json` exist
+   only in root `common/isolation/` and carry the Phase 18 gate itself. The four
+   files that collide and **differ** (`check.py`, `policy.py`, `dpa_validator.py`,
+   `__init__.py`) each get a **per-file diff-audit + symbol-union merge** (root
+   base, `ai/`-unique public symbols folded in), recorded in
+   `docs/decisions/phase22/common_merge.md` — **not** a blind discard of either
+   side (ledger #27).
+3. For `common/logger.py` vs `ai/common/logger.py` (both differ): the `ai/`
+   version is richer; it becomes `common/logger.py` after a symbol-union check
+   (ledger #44) confirms no public symbol of the root copy is lost. The decision
+   is documented in `docs/decisions/phase22/common_merge.md`.
+4. For `common/international_tournament_profiles.py` vs
+   `ai/common/international_tournament_profiles.py` (both differ — verified
+   2026-06-20, **previously unresolved**): diff-audit both, choose the
+   authoritative copy, symbol-union the loser's unique public names, record the
+   decision. The top-level `__init__.py` collision is resolved the same way (its
+   `__all__` is the union of both).
+5. Where a 90-day alias is genuinely needed (a *consumer* still importing the
+   old path that cannot be co-updated in the same commit), the alias is a
+   `DeprecationWarning` re-export logged in `xops/lifecycle/deprecation_calendar.yaml`.
+   Shims that re-export from a *deleted* tree are forbidden — alias only ever
+   points at a live root path.
 
 **Files unique to `ai/common/` → move verbatim:**
 - `ai/common/calibration_profiles/` → `common/calibration_profiles/`
@@ -4578,36 +4747,60 @@ and `api/` all exist in both trees. Two top-level files also conflict:
 - `ai/common/betting_markets.json` → `data/betting_markets.json` (config key `cfg.betting_markets_path` updated)
 - `ai/common/entitlements.yaml` → deduplicated against `xops/monetization/entitlements.yaml`
 
-**Overlapping sub-packages — authoritative-copy selection:**
-- `ai/common/bus/` vs `common/bus/`: root `common/bus/` is Phase-18-governed and authoritative; `ai/common/bus/` symbols not present in the root version are merged in; the root `common/bus/publisher.py` (which currently has `from ai.` imports) is updated by the codemod.
-- `ai/common/db/` vs `common/db/`: same rule — root is authoritative; `ai/` additions merged in.
-- `ai/common/feeds/` vs `common/feeds/`: root is authoritative.
-- `ai/common/isolation/` vs `common/isolation/`: **root is always authoritative**; only `dpa_validator.py` is migrated from `ai/` copy (ledger #27).
-- `ai/common/observability/` vs `common/observability/`: root is authoritative; `ai/` additions merged.
-- `ai/common/security/` vs `common/security/`: root is authoritative; `ai/` additions merged.
+**Overlapping sub-packages — authoritative-copy selection (heterogeneous, ledger #36):**
+- `ai/common/bus/` vs `common/bus/`: **`ai/` is authoritative** (root `common/bus/__init__.py` + `publisher.py` are shims re-exporting `ai.common.bus`). The real implementation moves to `common/bus/`; the shim is **deleted**; every importer (including the 10 `common/` and 44 `xops/` non-`ai/` callers) is repointed by the codemod in the same commit.
+- `ai/common/config.py` vs `common/config/`: **`ai/` is authoritative** (root `common/config/__init__.py` is a shim with a `sys.path.insert`). The real config moves to `common/config/ai_pipeline.py`; `__init__.py` is rewritten to `from common.config.ai_pipeline import Config, cfg` with the `sys.path` hack removed.
+- `ai/common/db/` vs `common/db/`: **root is authoritative**; only `ai/`-unique symbols merged in.
+- `ai/common/isolation/` vs `common/isolation/`: **heterogeneous, per-file** (ledger #27). Four root-only files (`go_check.go`, `graph_builder.py`, `forbidden_deps.yaml`, `import_graph.snapshot.json`) are preserved untouched; four colliding+differing files (`check.py`, `policy.py`, `dpa_validator.py`, `__init__.py`) are symbol-union merged onto the root base. There are **no net-new `ai/` source files** here — the earlier "only `dpa_validator.py`" claim was wrong.
+- `ai/common/observability/` vs `common/observability/`: **root is authoritative**; the colliding+differing `metrics.py`, `alerts.py`, `__init__.py` get a per-file symbol-union merge (not a discard); `ai/`-unique modules merged.
+- `ai/common/security/` vs `common/security/`: **root is authoritative**; the colliding+differing `input_sanitiser.py` gets a per-file symbol-union merge; `ai/`-unique modules merged. (Note: `server/internal/sec/` mirrors `ai/common/security/*.yaml` via the §22.5 parity table — the canonical-source path in `embedded_parity_test.go` updates to `common/security/...` in the same window.)
+- `ai/common/feeds/`, `ai/common/api/`: **`ai`-only — no overlap.** Pure move-ins to `common/feeds/`, `common/api/`. (`common/feeds/` is governed by the `common_feeds` chart key.)
 
 `common/SUBPACKAGE_CHARTER.md` extended with entries for: `common.schemas`, `common.calibration_profiles`, `common.catalog`, `common.text`, `common.nlp_vocab`, `common.leagues`, `common.numerics`, `common.parity`, `common.season`, `common.season_calendar`, `common.fixture_state`, `common.fixture_timezone_resolver`, `common.fixture_validator` (all require triple CODEOWNERS ACK before move).
 
 - [ ] No symbol defined in more than one module under `common/`.
+- [ ] **Nothing-lost gates green for the merge (ledger #43–#45):**
+  - File-accountability: every `ai/common/**` source file mapped to exactly one
+    destination action; no destination received two sources without a recorded
+    decision; no `git mv -f` used.
+  - Symbol-union: every merged module's public surface ⊇ union of both source
+    copies' public surfaces, minus the `dropped_symbols.md` allow-list (each
+    entry with a no-live-caller proof).
+  - Content-hash: every verbatim-moved file byte-identical except authorised
+    codemod rewrites.
+- [ ] `docs/decisions/phase22/common_merge.md` records the per-file resolution for **every** colliding file: 3 top-level (`__init__.py`, `logger.py`, `international_tournament_profiles.py`) + isolation (`check.py`, `policy.py`, `dpa_validator.py`, `__init__.py`) + observability (`metrics.py`, `alerts.py`, `__init__.py`) + security (`input_sanitiser.py`) + bus (`__init__.py`, `publisher.py`).
 - [ ] `xops/lint/no_top_level_common_files.py` still green.
 - [ ] `common/SUBPACKAGE_CHARTER.md` entries committed before the move.
-- [ ] `common/config/__init__.py` no longer imports from `ai.*` after the move.
+- [ ] `common/config/__init__.py` no longer imports from `ai.*` (shim flipped) after the move.
+- [ ] `common/bus/` real implementation present; **no `common/bus/*` file re-exports from `ai.common.bus`** (shim deleted, ledger #36).
+- [ ] No `common/**` module re-exports from a path under `ai/` (i.e. no shim points at the soon-to-be-deleted tree).
 - [ ] `common/isolation/go_check.go` byte-identical to pre-merge version.
-- [ ] Proof tests: `test_22_3a_common_merge_no_duplicate_symbols.py`, `test_22_3a_common_schemas_subpackage_charter.py`, `test_22_3a_ai_common_nlp_becomes_nlp_vocab.py`, `test_22_3a_logger_conflict_resolved_single_authoritative.py`, `test_22_3a_config_init_no_longer_imports_ai.py`, `test_22_3a_go_check_survives_merge.py`, `test_22_3a_dpa_validator_merged_not_overwritten.py`, `test_22_3a_betting_markets_config_key_updated.py`.
+- [ ] `data/betting_markets.json` present and `cfg.betting_markets_path` updated; old `ai/common/betting_markets.json` gone (ledger #42).
+- [ ] `ai/common/entitlements.yaml` reconciled against `xops/monetization/entitlements.yaml`; diff-audit committed; no forked second copy (ledger #42).
+- [ ] Proof tests: `test_22_3a_common_merge_no_duplicate_symbols.py`, `test_22_3a_merge_preserves_symbol_union.py`, `test_22_3a_file_accountability_complete.py`, `test_22_3a_no_forced_git_mv.py`, `test_22_3a_isolation_root_only_files_preserved.py`, `test_22_3a_intl_tournament_profiles_conflict_resolved.py`, `test_22_3a_top_level_init_union_resolved.py`, `test_22_3a_common_schemas_subpackage_charter.py`, `test_22_3a_ai_common_nlp_becomes_nlp_vocab.py`, `test_22_3a_logger_conflict_resolved_single_authoritative.py`, `test_22_3a_config_init_no_longer_imports_ai.py`, `test_22_3a_bus_shim_flipped_no_reexport_from_ai.py`, `test_22_3a_no_common_module_reexports_from_ai_tree.py`, `test_22_3a_go_check_survives_merge.py`, `test_22_3a_dpa_validator_symbol_union_merged.py`, `test_22_3a_feeds_and_api_are_pure_move_ins.py`, `test_22_3a_betting_markets_config_key_updated.py`, `test_22_3a_entitlements_deduplicated.py`.
 
 #### 22.3b — Merge `ai/tests/` → `tests/`
 
 There is no root-level `tests/` directory today. This step creates it by
-moving `ai/tests/` and reconciling with the root `conftest.py`.
+moving `ai/tests/` and reconciling with the root `conftest.py`. **Six conftests
+exist** (ledger #41); this step touches only the test-tree ones, leaving the
+already-rooted `common/tests/conftest.py` and `xops/backup/tests/conftest.py`
+untouched, and deferring the two nested `ai/swarm/agents/**/conftest.py` to the
+swarm merge (§22.3c).
 
-- [ ] Root `conftest.py` Phase 22 layout detection (`_phase22_layout`) retained.
+- [ ] Conftest reconciliation map (from `make phase22.conftest-inventory`):
+  `./conftest.py` = **merge target** (keep, strip the now-dead `ai/` layout
+  branch per §22.5); `ai/tests/conftest.py` = **move + clean**;
+  `ai/swarm/agents/tests/conftest.py` + `ai/swarm/agents/maint/tests/conftest.py`
+  = **deferred to §22.3c**; `common/tests/conftest.py` + `xops/backup/tests/conftest.py`
+  = **untouched**.
 - [ ] `ai/tests/conftest.py` `sys.path.insert(0, _ai_path)` lines removed.
 - [ ] `ai/tests/conftest.py` `sys.modules` cache-clearing logic removed (no longer needed post-move — ledger #3).
-- [ ] All `pytest.mark` marker registrations deduplicated against root `conftest.py`.
+- [ ] All `pytest.mark` marker registrations deduplicated across **all** retained conftests (no marker registered at two scopes — pytest warns and degrades output).
 - [ ] Any `ai/tests/conftest.py` marker that does not exist in root `conftest.py` is added to root with a comment indicating its origin.
 - [ ] `pyproject.toml` `testpaths` updated from `["ai/tests", "common/tests", "swarm/tests", "server/tests"]` to `["tests", "common/tests", "swarm/tests", "server/tests"]` only after this step completes.
 - [ ] No duplicate test filenames between the merged `tests/` and any sub-component test folder; any collision is resolved by prefixing with the package name.
-- [ ] Proof tests: `test_22_3b_merged_conftest_no_duplicate_markers.py`, `test_22_3b_no_sys_path_ai_in_merged_conftest.py`, `test_22_3b_no_sys_modules_clear_in_merged_conftest.py`, `test_22_3b_testpaths_updated_in_pyproject.py`, `test_22_3b_no_duplicate_test_filenames_across_tree.py`.
+- [ ] Proof tests: `test_22_3b_merged_conftest_no_duplicate_markers.py`, `test_22_3b_no_sys_path_ai_in_merged_conftest.py`, `test_22_3b_no_sys_modules_clear_in_merged_conftest.py`, `test_22_3b_rooted_conftests_untouched.py`, `test_22_3b_testpaths_updated_in_pyproject.py`, `test_22_3b_no_duplicate_test_filenames_across_tree.py`.
 
 #### 22.3c — Merge `ai/swarm/` → `swarm/`
 
@@ -4616,19 +4809,27 @@ Root `swarm/` has `agents/` (Phase 8 maintenance agents) and `tests/`.
 
 Merge rules:
 - `ai/swarm/agents/` → merged into `swarm/agents/`. The Phase 8 maint agents (`maint.scaler.v1`, `maint.backup.v1`, `maint.dlq.v1`, `maint.schema.v1`, `maint.sec.v1`) in root `swarm/agents/` are **CODEOWNERS-protected from patcher scope** per `CLAUDE.md`. Any naming collision with `ai/swarm/agents/` requires an explicit rename decision, documented in `docs/decisions/phase22/swarm_agent_collision_<name>.md`, and a 90-day alias.
+- `ai/swarm/agents/tests/conftest.py` + `ai/swarm/agents/maint/tests/conftest.py` → moved with their `agents/` sub-trees; `sys.path`/`sys.modules` manipulation stripped and markers deduplicated against the root conftest (deferred from §22.3b, ledger #41).
 - `ai/swarm/identity/` → `swarm/identity/`
 - `ai/swarm/predictor/` → `swarm/predictor/`
 - `ai/swarm/sdk/` → `swarm/sdk/`
 - `ai/swarm/source_watcher/` → `swarm/source_watcher/`
 - `ai/swarm/tests/` → merged into `swarm/tests/` (no duplicate test file names)
 - `ai/swarm/bootstrap.py` → `swarm/bootstrap.py`
-- `ai/swarm/clients/server_internal/` → `swarm/clients/server_internal/` (generated stubs: run `make codegen` after codemod rewrites provenance headers)
+- `ai/swarm/requirements.lock` + `ai/swarm/sbom.spdx.json` → **regenerated** for the merged `swarm/` component (ledger #37), not carried over; re-pass the Phase 18 §18.10 lockfile-review gate in the same commit.
+
+> **No `ai/swarm/clients/` exists** (verified 2026-06-20) — the draft's
+> `ai/swarm/clients/server_internal/` generated-stub move is a phantom. The
+> Go↔Python wire-contract parity (`server/internal/sec/` mirroring
+> `ai/swarm/sdk/schemas/*.json`) is a **Go-side** concern handled by the §22.5
+> parity-table update, not a Python stub move here.
 
 - [ ] The swarm collision check (§22.1 pre-flight) confirmed clean before this step runs.
-- [ ] All `from ai.swarm.` imports updated to `from swarm.` by the codemod engine (including the ~10 files in `server/`).
+- [ ] All `from ai.swarm.` imports updated to `from swarm.` by the codemod engine. **`server/` is Go** and does not `import ai.swarm` — its references are doc comments + the wire-contract parity table, updated in §22.5 (not here).
 - [ ] `swarm/agents/` has no two modules with the same `__name__` post-merge.
-- [ ] `make codegen` re-run for `swarm/clients/server_internal/` stubs.
-- [ ] Proof tests: `test_22_3c_swarm_merge_no_module_name_collision.py`, `test_22_3c_swarm_importable_from_root.py`, `test_22_3c_no_duplicate_swarm_test_files.py`, `test_22_3c_maint_agents_survive_swarm_merge.py`, `test_22_3c_swarm_clients_stubs_regenerated.py`.
+- [ ] Two nested `agents/**/conftest.py` reconciled (no stale `sys.path`, no duplicate markers).
+- [ ] `swarm/requirements.lock` + `swarm/sbom.spdx.json` regenerated and lockfile-review green.
+- [ ] Proof tests: `test_22_3c_swarm_merge_no_module_name_collision.py`, `test_22_3c_swarm_importable_from_root.py`, `test_22_3c_no_duplicate_swarm_test_files.py`, `test_22_3c_maint_agents_survive_swarm_merge.py`, `test_22_3c_nested_swarm_conftests_reconciled.py`, `test_22_3c_swarm_lockfile_regenerated_not_carried_over.py`.
 
 #### 22.3d — Merge `ai/docs/` → `docs/ai_pipeline/`
 
@@ -4659,7 +4860,7 @@ matches `phase22_pre_migration_cycle_graph.json` before proceeding):
 8. `pipeline/` — (depends on `common/`, `model/`, `scraper/`, `proofreader/`)
 9. `orchestrator/` — (depends on `common/`, `pipeline/`)
 10. `backtest/` — (depends on `common/`, `model/`, `scraper/`)
-11. `enrichment/` — from `ai/datasource/enrichment/` + `ai/datasource/t3_resource_manager.py` (depends on `common/`, `scraper/`, `model/`)
+11. `enrichment/` — from `ai/datasource/enrichment/` + `ai/datasource/t3_resource_manager.py` (depends on `common/`, `scraper/`, `model/`); also regenerate `ai/datasource/requirements.lock` + `sbom.spdx.json` for the new `enrichment/` path (ledger #37). **No single `enrichment` chart key exists** (ledger #39) — versioning is per the four `enrichment_*` plane keys, handled in §22.10.
 12. Root entry-point files: `main.py`, `scheduler.py`, `data_showcase.py`
 13. `ai/reports/` → `docs/reports/ai_pipeline/`
 
@@ -4670,16 +4871,26 @@ matches `phase22_pre_migration_cycle_graph.json` before proceeding):
 **Per-package commit protocol (mandatory for every package):**
 
 1. `make phase22.codemod PACKAGE=<pkg>` — rewrites import sites in `ai/` **and**
-   all non-`ai/` callers of `<pkg>` identified in the inventory.
+   all non-`ai/` callers of `<pkg>` identified in the inventory (`--include-non-ai-callers`).
 2. `git mv ai/<pkg>/ <pkg>/` — move the directory.
-3. Update `pyproject.toml` `known_first_party` to include `<pkg>` and remove
+3. `find . -name '__pycache__' -prune -exec rm -rf {} +` — purge stale bytecode
+   that could shadow the moved module (ledger #40).
+4. **If `<pkg>` carries a `requirements.lock` / `sbom.spdx.json`** (`swarm/`,
+   `enrichment/`): `make phase22.lockfile-migrate PACKAGE=<pkg>` regenerates them
+   for the new path and re-passes the Phase 18 §18.10 lockfile-review gate (ledger #37).
+5. Update `pyproject.toml` `known_first_party` to include `<pkg>` and remove
    `ai.<pkg>` (ledger #33).
-4. `make isolation.snapshot.refresh` — rebuild snapshot (mandatory per ledger #8).
-5. `make isolation.check --full` — must exit 0.
-6. `PYTHONPATH=. make test` — full suite green.
-7. `make phase22.cycle-check` — no new cycles.
-8. `git commit -m "phase22: move <pkg>/ to root"` — single atomic commit
-   covering: moved files + rewritten import sites + `pyproject.toml` + snapshot.
+6. `make isolation.snapshot.refresh` — rebuild snapshot (mandatory per ledger #8).
+7. `make isolation.check --full` — must exit 0.
+8. `PYTHONPATH=. make test` — full suite green (fresh-bytecode run).
+9. `make phase22.cycle-check` — no new cycles.
+10. `make phase22.verify-no-loss PACKAGE=<pkg>` — assert (a) every source file of
+    `<pkg>` is accounted for in the manifest, (b) every verbatim-moved file's
+    blob SHA matches the baseline except authorised codemod rewrites, (c) no
+    `git mv -f` was used (ledger #43–#45).
+11. `git commit -m "phase22: move <pkg>/ to root"` — single atomic commit
+    covering: moved files + rewritten import sites + regenerated lock/SBOM +
+    `pyproject.toml` + snapshot. **PR stays under 150 changed files** (ledger #19).
 
 **After all 13 moves:**
 
@@ -4688,7 +4899,14 @@ matches `phase22_pre_migration_cycle_graph.json` before proceeding):
 - [ ] `pyproject.toml` `isort known_first_party` updated to remove `"ai"` and list all new root packages explicitly.
 - [ ] `grep -rn "from ai\." . --include="*.py" | grep -v "^./ai/"` returns **zero hits** — no non-`ai/` caller still imports from `ai.*`.
 - [ ] `make isolation.snapshot.refresh` run one final time after all 13 commits.
-- [ ] Proof tests: `test_22_4_all_13_packages_importable_from_root.py` (parameterised), `test_22_4_no_datasource_folder_at_root.py`, `test_22_4_no_ai_imports_outside_shim_layer.py`, `test_22_4_coverage_source_excludes_ai.py`, `test_22_4_isort_config_has_no_ai_namespace.py`, `test_22_4_each_package_move_has_snapshot_refresh_in_same_commit.py`.
+- [ ] No `__pycache__/` directory contains stale `ai.*` bytecode (ledger #40).
+- [ ] `swarm/` and `enrichment/` lock/SBOM regenerated (not verbatim) and lockfile-review green (ledger #37).
+- [ ] **Nothing-lost final reconciliation (ledger #43–#45):** every entry in
+  `phase22_file_accountability.json` is in a terminal state (moved / merged /
+  deleted-with-reason); no source file is orphaned; the union of all destination
+  public surfaces ⊇ the pre-move union minus the `dropped_symbols.md` allow-list;
+  every verbatim-moved file's blob SHA is preserved modulo authorised rewrites.
+- [ ] Proof tests: `test_22_4_all_13_packages_importable_from_root.py` (parameterised), `test_22_4_no_datasource_folder_at_root.py`, `test_22_4_no_ai_imports_outside_shim_layer.py`, `test_22_4_coverage_source_excludes_ai.py`, `test_22_4_isort_config_has_no_ai_namespace.py`, `test_22_4_each_package_move_has_snapshot_refresh_in_same_commit.py`, `test_22_4_each_move_pr_under_150_files.py`, `test_22_4_no_stale_pycache_after_moves.py`, `test_22_4_every_source_file_in_terminal_state.py`, `test_22_4_verbatim_moves_preserve_blob_sha.py`, `test_22_4_no_forced_git_mv_anywhere.py`.
 
 ---
 
@@ -4707,12 +4925,24 @@ Every build and operations artefact must reference the new layout. Run after
   - Post-migration image size verified within ±10% of pre-migration baseline
     (ledger #6).
 
-- [ ] **Go source files** — Phase 22 Go scan resolves all hits from `make phase22.go-embed-check`:
-  - Any `//go:embed ai/<path>` directives updated to `//go:embed <path>`.
-  - Path strings in `server/internal/config/config.go` and `sync_test.go` that
-    reference `ai/` updated.
-  - `server/internal/sec/embed.go` embed directives updated.
-  - `go build ./server/...` must succeed after changes (ledger #31).
+- [ ] **Go source files** — Phase 22 Go scan resolves all hits from `make phase22.go-path-check` (ledger #31; there are **no `//go:embed ai/`** directives):
+  - **Load-bearing #1 — runtime path constant.** `server/internal/sec/sanitize.go`
+    `const defaultTRNormalizeSpecPath = "ai/common/text/tr_normalize_spec.json"`
+    → `"common/text/tr_normalize_spec.json"`. Breaks Turkish input sanitisation
+    at runtime if missed.
+  - **Load-bearing #2 — parity-test source-path table.**
+    `server/internal/sec/embedded_parity_test.go` lists canonical source paths
+    (`ai/common/security/injection_patterns.yaml`,
+    `ai/common/security/endpoint_costs.yaml`, `ai/swarm/sdk/schemas/qa.request.v1.json`)
+    that are `cp`-mirrored into `server/internal/sec/embedded/`. Update each to the
+    new root path (`common/security/...`, `swarm/sdk/schemas/...`); the `//go:embed`
+    targets remain the *local* `embedded/` copies (unchanged). The parity test
+    proves the embedded copy still matches its (now-moved) canonical source.
+  - **Comments.** Doc-comment `ai/` references in `main.go`, `bus/envelope.go`,
+    `config.go`, `sync_test.go`, `sec/doc.go`, `sec/patterns.go`, `sec/embed.go`
+    swept to the new paths.
+  - `go build ./server/...` and `go test ./server/internal/sec/...` (parity) must
+    pass after the changes (ledger #31).
 
 - [ ] **k8s manifests** (`infra/k8s/`): every `PYTHONPATH=ai`, `python ai/`,
   and volume mount referencing `/app/ai` corrected. `xops/lint/phase22_k8s_paths.py`
@@ -4744,7 +4974,7 @@ Every build and operations artefact must reference the new layout. Run after
 
 - [ ] **`xops/lint/phase22_k8s_paths.py`** wired into CI as a blocking step.
 
-- [ ] Proof tests: `test_22_5_no_ai_dockerfile_exists.py`, `test_22_5_root_dockerfile_builds_successfully.py`, `test_22_5_no_pythonpath_ai_in_makefile.py`, `test_22_5_no_pythonpath_ai_in_ci_workflows.py`, `test_22_5_k8s_manifests_no_ai_paths.py`, `test_22_5_docker_image_size_within_tolerance.py`, `test_22_5_make_test_ai_alias_emits_deprecation.py`, `test_22_5_go_build_succeeds_after_path_migration.py`, `test_22_5_go_embed_directives_reference_new_paths.py`, `test_22_5_conftest_is_unconditional.py`.
+- [ ] Proof tests: `test_22_5_no_ai_dockerfile_exists.py`, `test_22_5_root_dockerfile_builds_successfully.py`, `test_22_5_no_pythonpath_ai_in_makefile.py`, `test_22_5_no_pythonpath_ai_in_ci_workflows.py`, `test_22_5_k8s_manifests_no_ai_paths.py`, `test_22_5_docker_image_size_within_tolerance.py`, `test_22_5_make_test_ai_alias_emits_deprecation.py`, `test_22_5_go_build_succeeds_after_path_migration.py`, `test_22_5_go_runtime_path_const_updated.py`, `test_22_5_go_parity_table_source_paths_updated.py`, `test_22_5_go_sec_parity_test_passes_after_move.py`, `test_22_5_conftest_is_unconditional.py`.
 
 ---
 
@@ -4760,11 +4990,18 @@ becomes the **single source** for all default values, shared by Python
   `xops/lint/no_hardcoded_season.py` asserts zero bare `CURRENT_SEASON` literals
   outside `common/config/`.
 
-- [ ] **`N_FEATURES` is derived, not hardcoded** (ledger #30): `common/constants.py`
-  carries `N_FEATURES: int = len(FEATURE_COLUMNS)`. After Phase 21 this evaluates
-  to 157 (120 original + 10 QID + 27 enrichment). Phase 22 must not change this
-  value; it moves the file. A snapshot assertion `test_22_6_n_features_is_157_post_phase_21.py`
-  ensures no accidental reset during the move.
+- [ ] **`N_FEATURES` is derived, never hardcoded, and Phase 22 does not change its
+  value** (ledger #30). `common/constants.py` carries
+  `N_FEATURES: int = len(FEATURE_COLUMNS)`. **There is a live inconsistency to
+  reconcile, not propagate:** the comment in `constants.py` currently reads
+  “Auto-resolves to 147 after Phase 21.16 lands,” while the Phase 21 canonical
+  DoD (§21.26) states the final value is **157** (120 + 10 QID + 27 enrichment).
+  Phase 22 **moves the file unchanged** and reconciles only the stale *comment*
+  to match the actual `len(FEATURE_COLUMNS)` that Phase 21 left in place — it
+  asserts the derived identity, never a literal. If `len(FEATURE_COLUMNS)` does
+  not equal the Phase 21 canonical value at migration time, that is a Phase 21
+  defect surfaced here, recorded as a tracker row, and fixed in Phase 21’s
+  scope, not silently “fixed” by editing the constant during the move.
 
 - [ ] **`make config.export-env`** generates `xops/env/.env.example` from
   `common/config/defaults.yaml` + Config field metadata. A `# GENERATED BY make
@@ -4790,7 +5027,7 @@ becomes the **single source** for all default values, shared by Python
 - [ ] `ai/common/` path references in `common/config/ai_pipeline.py` are zero:
   the file reads only from `common.*` sub-packages.
 
-- [ ] Proof tests: `test_22_6_env_example_generated_matches_defaults.py`, `test_22_6_configuration_doc_generated_matches_defaults.py`, `test_22_6_go_config_generated_matches_defaults.py`, `test_22_6_no_hardcoded_current_season.py`, `test_22_6_n_features_is_157_post_phase_21.py`, `test_22_6_config_round_trip_all_enrichment_keys.py`, `test_22_6_config_exports_are_idempotent.py`.
+- [ ] Proof tests: `test_22_6_env_example_generated_matches_defaults.py`, `test_22_6_configuration_doc_generated_matches_defaults.py`, `test_22_6_go_config_generated_matches_defaults.py`, `test_22_6_no_hardcoded_current_season.py`, `test_22_6_n_features_is_len_feature_columns_not_literal.py`, `test_22_6_n_features_matches_phase21_canonical_value.py`, `test_22_6_n_features_stale_comment_reconciled.py`, `test_22_6_config_round_trip_all_enrichment_keys.py`, `test_22_6_config_exports_are_idempotent.py`.
 
 ---
 
@@ -4899,9 +5136,11 @@ Phase 18 §18.5 gates each `≥ 1.0.0` bump: `PUBLIC_API.md` +
 - [ ] `xops/versioning/chart.json` — `ai` chart key marked `eol` immediately
   after the §22.7 deletion commit.
 
-- [ ] `source_watcher` alias EOL: mark `source_watcher` as `eol` in `chart.json`;
-  verify `make track.show COMPONENT=source_watcher` still returns historical
-  tracker rows via the CLI translation layer (ledger #12).
+- [ ] `source_watcher` alias EOL: `datasource_watcher` is the **canonical** key and
+  `source_watcher` is the **old alias** going `eol` in `chart.json` (verified
+  2026-06-20: both keys currently coexist). Mark `source_watcher` `eol`; verify
+  `make track.show COMPONENT=source_watcher` still returns historical tracker
+  rows via the CLI translation layer (ledger #12).
 
 - [ ] For each component reaching `≥ 1.0.0`: commit `<component>/PUBLIC_API.md`
   (auto-generated from `__all__` by `make docs.api`),
@@ -4909,17 +5148,27 @@ Phase 18 §18.5 gates each `≥ 1.0.0` bump: `PUBLIC_API.md` +
   a section in `docs/coding/component_versioning.md` declaring the deprecation
   policy. `xops/versioning/version.py` refuses the bump without all three.
 
-- [ ] Components bumped to `1.0.0` in this phase:
-  - `scraper` (formerly `datasource_scraper`)
-  - `datasource_watcher` (EOL alias for `source_watcher`)
+- [ ] Components bumped to `1.0.0` in this phase (using the **real `chart.json`
+  keys** — ledger #39):
+  - `datasource_scraper` (package now physically at `scraper/`)
   - `datasource_refresher`
-  - `datasource_patcher`
-  - `datasource_gitops`
-  - `enrichment` (the flat-root package combining `ai/datasource/enrichment/`)
+  - `datasource_emitter`
+  - `datasource_watcher` (canonical; `source_watcher` is its `eol` alias)
+  - `swarm`
+  - `common`
+  - `common_feeds` (the moved `ai/common/feeds/` → `common/feeds/`)
+
+- [ ] **Deferred to Phase 17 (not bumped here):** `datasource_patcher` and
+  `datasource_gitops` — their packages do not exist at Phase 22 time (ledger #38);
+  their `1.0.0` bumps ship with Phase 17.
+- [ ] **Owned by Phase 21 (not bumped here):** the four `enrichment_*` plane keys
+  reach `1.0.0` per Phase 21 §21.26 DoD. There is **no single `enrichment` chart
+  key** to bump (ledger #39); the `ai/datasource/enrichment/` → `enrichment/`
+  move is a path change, not a versioned-component creation.
 
 - [ ] `make version.validate` exits 0 after every individual bump.
 
-- [ ] Proof tests: `test_22_10_ai_chart_key_eol.py`, `test_22_10_source_watcher_alias_eol_history_preserved.py`, `test_22_10_each_1_0_0_component_has_public_api_doc.py`, `test_22_10_each_1_0_0_component_has_compat_tests.py`, `test_22_10_version_chart_round_trips_after_all_bumps.py`, `test_22_10_version_bump_refused_without_artefacts.py`.
+- [ ] Proof tests: `test_22_10_ai_chart_key_eol.py`, `test_22_10_source_watcher_alias_eol_history_preserved.py`, `test_22_10_each_1_0_0_component_has_public_api_doc.py`, `test_22_10_each_1_0_0_component_has_compat_tests.py`, `test_22_10_version_bump_list_uses_real_chart_keys.py`, `test_22_10_patcher_gitops_bumps_deferred_to_phase17.py`, `test_22_10_version_chart_round_trips_after_all_bumps.py`, `test_22_10_version_bump_refused_without_artefacts.py`.
 
 ---
 
@@ -4951,8 +5200,13 @@ Phase 18 §18.5 gates each `≥ 1.0.0` bump: `PUBLIC_API.md` +
   mode is only required for newly moved packages that had passing strict in `ai/`;
   packages that were previously excluded from strict remain excluded.
 
-- [ ] **SBOM update**: `make sbom.gen COMPONENT=datasource` re-runs for the
-  merged `scraper/`, `enrichment/` packages; SBOM diff gate passes.
+- [ ] **SBOM final verification**: the per-component lock/SBOM regeneration
+  already happened in each move commit (§22.4 step 4, ledger #37). This step is
+  the post-merge audit: `make sbom.gen COMPONENT=swarm` and
+  `make sbom.gen COMPONENT=enrichment` produce **no diff** (proving the in-commit
+  regen was complete), and the Phase 18 §18.10 SBOM-diff gate is green across the
+  whole tree. There is **no `datasource` SBOM component** — the old
+  `ai/datasource/` SBOM is superseded by `enrichment/`.
 
 - [ ] Proof tests: `test_22_11_dead_code_scan_report_committed.py`, `test_22_11_no_confirmed_dead_symbols_at_root.py`, `test_22_11_v0_2_proxy_annotations_present_after_move.py`, `test_22_11_all_root_packages_have_explicit_all.py`, `test_22_11_schema_validate_zero_warnings.py`, `test_22_11_mypy_strict_passes_on_moved_packages.py`, `test_22_11_sbom_updated_after_merge.py`.
 
@@ -4963,8 +5217,10 @@ Phase 18 §18.5 gates each `≥ 1.0.0` bump: `PUBLIC_API.md` +
 - [ ] **ROADMAP path reference sweep**: every occurrence of `datasource/patcher/`,
   `datasource/gitops/`, `ai/common/`, `ai/scraper/`, `ai/swarm/`, etc. in
   `docs/planning/ROADMAP.md` §§17.1–17.9, §18.x, §19.x, §21.x is updated to
-  the new root path. After the sweep: `xops/lint/phase17_ledger.py` and
-  `xops/lint/phase18_ledger.py` re-validated.
+  the new root path. After the sweep, **re-validate every phase-ledger lint that
+  actually exists** (`xops/lint/phase16_ledger.py` is present today; the
+  `phase17`/`phase18` ledger lints are re-validated only if/when they exist —
+  do not gate the sweep on a lint file that has not been written).
 
 - [ ] **Anchor design docs** (`docs/design/COMPONENT_LAYOUT.md`, `DATA_PIPELINE.md`,
   `EMITTER.md`, `SCRAPER_PATCHER.md`, `SECURITY.md`, `TESTING_STRATEGY.md`):
@@ -4979,24 +5235,30 @@ Phase 18 §18.5 gates each `≥ 1.0.0` bump: `PUBLIC_API.md` +
   human request naming them, but the path sweep is explicitly part of Phase 22
   scope.
 
-- [ ] **Patcher cassette path migration** (`make patcher.cassette.migrate`):
-  - Reads every cassette YAML in `xops/patcher/cassettes/`.
-  - Rewrites all file-path strings referencing `ai/` prefixes (`Read: ai/...` → `Read: scraper/...`, etc.).
-  - Re-signs each cassette HMAC-SHA256 sidecar after rewrite.
-  - Updates `xops/patcher/cassettes/MANIFEST.sha256`.
-  - `make patcher.cassette.drift` run to confirm no structural drift from the rewrite.
+- [ ] **Patcher cassette path migration — CONDITIONAL (ledger #38).** Branch on the
+  §22.1 `make phase22.patcher-artifact-probe` result:
+  - **If `xops/patcher/cassettes/` is absent or empty** (the expected state —
+    Phase 17 ships *after* Phase 22): assert empty and record the no-op in
+    `docs/tracking/phase22_patcher_artifact_state.txt`. Do **not** create the
+    directory or invent cassettes.
+  - **If cassettes exist** (Phase 17 already landed): `make patcher.cassette.migrate`
+    rewrites every `ai/` path string in cassette tool-call outputs
+    (`Read: ai/...` → `Read: scraper/...`), re-signs each HMAC-SHA256 sidecar,
+    updates `xops/patcher/cassettes/MANIFEST.sha256`, and `make patcher.cassette.drift`
+    confirms no structural drift.
 
-- [ ] **Bundle metadata migration** (`make patcher.bundle.migrate-paths`):
-  historical bundle JSONs in `feeds/ops/bundles/` that record `ai/*` module
-  paths in `failing_code_path`, `failing_code_excerpt`, or any scope-path field
-  are rewritten (path string only; payload bytes unchanged). The HMAC signature
-  on the bundle envelope is re-computed after the rewrite (per Phase 17 §17.2b
-  `datasource/patcher/bundle_sign.py`).
+- [ ] **Bundle metadata migration — CONDITIONAL (ledger #38).** Same branch on
+  `feeds/ops/bundles/`:
+  - **If absent** (expected): assert empty, record the no-op.
+  - **If present**: `make patcher.bundle.migrate-paths` rewrites `ai/*` module
+    paths in `failing_code_path` / `failing_code_excerpt` / scope-path fields
+    (path string only; payload bytes unchanged) and re-computes the bundle
+    envelope HMAC (per Phase 17 §17.2b `datasource/patcher/bundle_sign.py`).
 
 - [ ] `docs/design/COMPONENT_LAYOUT.md` §§3, 5, 7 rewritten to document the
   flat root layout (no `datasource/`, no `ai/`, no `ai/datasource/`).
 
-- [ ] Proof tests: `test_22_12_roadmap_no_ai_path_backtick_references.py`, `test_22_12_phase17_ledger_lint_passes_after_update.py`, `test_22_12_phase18_ledger_lint_passes_after_update.py`, `test_22_12_docs_verify_passes_after_sweep.py`, `test_22_12_cassette_paths_migrated_and_sidecar_valid.py`, `test_22_12_bundle_metadata_paths_migrated_and_resigned.py`, `test_22_12_anchor_docs_last_verified_updated.py`, `test_22_12_cassette_drift_probe_clean_after_migration.py`.
+- [ ] Proof tests: `test_22_12_roadmap_no_ai_path_backtick_references.py`, `test_22_12_present_phase_ledger_lints_pass_after_update.py`, `test_22_12_docs_verify_passes_after_sweep.py`, `test_22_12_patcher_migration_conditional_on_artifact_presence.py`, `test_22_12_patcher_no_op_recorded_when_phase17_unshipped.py`, `test_22_12_cassette_paths_migrated_and_sidecar_valid_when_present.py`, `test_22_12_bundle_metadata_paths_migrated_and_resigned_when_present.py`, `test_22_12_anchor_docs_last_verified_updated.py`, `test_22_12_cassette_drift_probe_clean_after_migration_when_present.py`.
 
 ---
 
@@ -5005,6 +5267,15 @@ Phase 18 §18.5 gates each `≥ 1.0.0` bump: `PUBLIC_API.md` +
 The formal sign-off gate. Every test, lint, smoke check, and operational signal
 must be green on a **fresh clone** with no host caches before the burn-in starts,
 then held green for 30 calendar days.
+
+> **🧪 Full migration rehearsal (reliability gate, run before §22.3 starts).**
+> `make phase22.rehearse` replays the entire codemod + move + snapshot-refresh
+> sequence on an **ephemeral throwaway branch** in CI, asserts `PYTHONPATH=. make
+> test` green at every simulated commit, then **discards the branch**. The
+> rehearsal proves the dependency order, the cycle-check, and the per-commit
+> green-bar end-to-end *before* a single real commit lands on a working branch.
+> A failed rehearsal blocks the real migration; its report is archived to
+> `docs/tracking/phase22_rehearsal_<date>.json`.
 
 **Verification checklist (fresh clone, no host caches):**
 
@@ -5057,7 +5328,7 @@ with a single green/red status.
 The phase tracker row is written `completed` **only** at burn-in end with all
 five counters at zero.
 
-- [ ] Proof tests: `test_22_13_no_ai_import_anywhere.py`, `test_22_13_no_ai_path_in_docs.py`, `test_22_13_no_pythonpath_ai_anywhere.py`, `test_22_13_go_server_builds_clean.py`, `test_22_13_make_help_lists_phase22_targets.py`, `test_22_13_burn_in_window_required.py`, `test_22_13_burn_in_five_counters_all_tracked.py`, `test_22_13_burn_in_dashboard_panel_exists.py`, `test_22_13_burn_in_zero_isolation_regressions.py`, `test_22_13_burn_in_zero_ai_import_errors.py`.
+- [ ] Proof tests: `test_22_13_rehearsal_runs_on_ephemeral_branch.py`, `test_22_13_no_ai_import_anywhere.py`, `test_22_13_no_ai_path_in_docs.py`, `test_22_13_no_pythonpath_ai_anywhere.py`, `test_22_13_go_server_builds_clean.py`, `test_22_13_make_help_lists_phase22_targets.py`, `test_22_13_burn_in_window_required.py`, `test_22_13_burn_in_five_counters_all_tracked.py`, `test_22_13_burn_in_dashboard_panel_exists.py`, `test_22_13_burn_in_zero_isolation_regressions.py`, `test_22_13_burn_in_zero_ai_import_errors.py`.
 
 ---
 
@@ -5066,7 +5337,7 @@ five counters at zero.
 - [ ] **Precondition:** Phases **18, 19, and 21** are `completed` (Phase **20**
   optional). All Phase 22 §22.1 pre-flight checks are green on the current layout.
 
-- [ ] **Wrong-assumption ledger** (§22.0): all 35 rows have green proof tests
+- [ ] **Wrong-assumption ledger** (§22.0): all **45** rows have green proof tests
   committed in the same diff; ledger is dense and append-only
   (`xops/lint/phase22_ledger.py` enforces).
 
@@ -5075,11 +5346,19 @@ five counters at zero.
   verified; rollback safety tested; 60 s performance gate green.
 
 - [ ] **Conflicting folder merges** (§22.3):
-  - `common/`: no duplicate symbols; `go_check.go` survives; `config/__init__.py`
-    no longer imports `ai.*`; Phase 18 isolation policy intact; SUBPACKAGE_CHARTER updated.
-  - `tests/`: conftest merged (no `sys.path` or `sys.modules` manipulation);
+  - `common/`: no duplicate symbols; **heterogeneous shim direction honoured**
+    (`bus`/`config` flipped from shim to real impl with the shim deleted, ledger
+    #36; `db`/`isolation`/`observability`/`security` root-authoritative);
+    no `common/**` module re-exports from `ai/`; `go_check.go` survives;
+    `config/__init__.py` no longer imports `ai.*`; isolation policy intact;
+    `SUBPACKAGE_CHARTER` updated; `betting_markets.json`→`data/` and
+    `entitlements.yaml` de-duplicated (ledger #42).
+  - `tests/`: all **six** conftests reconciled (ledger #41) — no `sys.path`/
+    `sys.modules` manipulation, no duplicate markers, rooted conftests untouched;
     no duplicate test filenames.
-  - `swarm/`: agents no collision; maint agents intact; generated stubs regenerated.
+  - `swarm/`: agents no collision; maint agents intact; nested conftests
+    reconciled; lock/SBOM **regenerated** (ledger #37); no phantom
+    `swarm/clients/` move.
   - `docs/ai_pipeline/`: no orphans.
 
 - [ ] **Non-conflicting package moves** (§22.4): all 13 packages importable from
@@ -5087,14 +5366,25 @@ five counters at zero.
   updated; `isort known_first_party` updated; zero `from ai.` imports outside
   the shim layer; isolation snapshot refreshed per commit.
 
+- [ ] **Nothing overwritten or lost** (ledger #27, #43–#45): the
+  file-accountability manifest shows every `ai/` source file in a terminal state
+  (moved / merged-with-decision / deleted-with-reason); no `git mv -f` anywhere;
+  every colliding+differing file (3 top-level + isolation/observability/security/bus)
+  has a recorded per-file decision; the post-merge public-symbol union ⊇ the
+  pre-move union minus the proven-dead `dropped_symbols.md` allow-list; verbatim
+  moves are blob-SHA-preserving modulo authorised rewrites.
+
 - [ ] **Build, CI, k8s, Go** (§22.5): single root `Dockerfile` builds and
   image size within ±10%; all CI workflows use `PYTHONPATH=.`; k8s manifests
-  have no `ai/` references; Go source builds; all `//go:embed ai/` directives
-  updated; `make test.ai` deprecated alias present.
+  have no `ai/` references; **Go runtime path constant + parity-test source-path
+  table updated and `go build ./server/...` + `sec` parity test green** (there are
+  no `//go:embed ai/` directives, ledger #31); `make test.ai` deprecated alias present.
 
 - [ ] **Config single-source** (§22.6): `make config.export-env` and
   `make config.export-doc` green; Go config generated and in sync; CI drift
-  check passes; `CURRENT_SEASON` is config-driven; `N_FEATURES == 157` post-Phase-21.
+  check passes; `CURRENT_SEASON` is config-driven; `N_FEATURES` is derived
+  (`== len(FEATURE_COLUMNS)`), equals the Phase 21 canonical value, and the
+  stale `147` comment is reconciled (ledger #30) — no literal hardcoded.
 
 - [ ] **`ai/` deletion** (§22.7): all four pre-condition signals recorded with
   timestamps; `test_ai_tree_gone.py` green; `import ai` raises
@@ -5108,16 +5398,22 @@ five counters at zero.
   dual-emission window active.
 
 - [ ] **Versioning** (§22.10): `ai` chart key `eol`; `source_watcher` alias EOL
-  with historical tracker queries preserved; six Pivot v3 components at `1.0.0`
-  with `PUBLIC_API.md` + compat tests; `make version.validate` green.
+  (canonical is `datasource_watcher`) with historical tracker queries preserved;
+  the **seven real chart keys** (`datasource_scraper`, `datasource_refresher`,
+  `datasource_emitter`, `datasource_watcher`, `swarm`, `common`, `common_feeds`)
+  at `1.0.0` with `PUBLIC_API.md` + compat tests; `datasource_patcher`/
+  `datasource_gitops` deferred to Phase 17; no fictitious single `enrichment`
+  key bumped (ledger #39); `make version.validate` green.
 
 - [ ] **Dead-code and schema pruning** (§22.11): `vulture` report committed; no
   confirmed dead symbols at root; all root packages have explicit `__all__`;
   `make schema.validate` zero warnings; SBOM updated.
 
 - [ ] **Path reference sweep** (§22.12): ROADMAP has no `ai/` backtick-paths;
-  Phase 17/18 ledger lints pass; `make docs.verify` passes; patcher cassettes
-  re-signed; bundle metadata migrated and re-signed.
+  every **present** phase-ledger lint passes (not lints that don't exist yet);
+  `make docs.verify` passes; **patcher cassette/bundle migration is conditional**
+  — a no-op recorded when Phase 17 is unshipped (the expected state), full
+  re-sign only when artefacts exist (ledger #38).
 
 - [ ] **Full verification + 30-day burn-in** (§22.13): all verification tests
   green on fresh clone; 30-day burn-in elapsed clean (all five counters at zero).
@@ -5130,9 +5426,9 @@ five counters at zero.
   - `make version.bump COMPONENT=docs LEVEL=minor NOTE="Phase 22 — flat-root migration: ROADMAP, design docs, SETUP updated"`
   - `make version.bump COMPONENT=xops LEVEL=minor NOTE="Phase 22 codemod engine, phase22.py targets, k8s scanner, metric-scan, burn-in status"`
   - `make version.bump COMPONENT=ai LEVEL=major NOTE="Phase 22 EOL: ai/ tree deleted; all packages at root"` — at the §22.7 deletion commit
-  - Six individual `1.0.0` bumps per §22.10 component list
+  - Seven individual `1.0.0` bumps per the §22.10 real-chart-key list (`datasource_patcher` / `datasource_gitops` deferred to Phase 17)
 
-- [ ] **Tracker:** `make track.add PHASE=22 STATUS=completed NOTE="30-day burn-in clean; all 13 packages at root; ai/ deleted; N_FEATURES=157"` run **after** all five burn-in counters have been zero for 30 days.
+- [ ] **Tracker:** `make track.add PHASE=22 STATUS=completed NOTE="30-day burn-in clean; all 13 packages at root; ai/ deleted; N_FEATURES derived"` run **after** all five burn-in counters have been zero for 30 days.
 
 - [ ] **Phase 17 (Scraper-Patcher)** is now unblocked to ship natively with
   correct `patcher/` and `gitops/` root paths.
