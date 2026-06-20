@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.14.0",
-    "build": 14,
+    "build": 15,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-20T13:45:19+00:00"
     },
     "docs": {
-      "version": "3.21.2",
+      "version": "3.22.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-20T14:31:28+00:00"
+      "last_changed": "2026-06-20T15:00:58+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -17635,6 +17635,15 @@
       "from": "1.48.1",
       "to": "1.49.0",
       "build": 14
+    },
+    {
+      "timestamp": "2026-06-20T15:00:58+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 22 rewritten: repo-root flat-layout migration replacing datasource-centric restructure plan",
+      "from": "3.21.2",
+      "to": "3.22.0",
+      "build": 15
     }
   ]
 }

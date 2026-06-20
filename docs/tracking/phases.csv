@@ -1975,3 +1975,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-06-20T14:31:08+00:00,21,,in-progress,note,"21.30: observability complete (Prometheus metrics, alert rules, runbook)",
 2026-06-20T14:31:08+00:00,21,,in-progress,note,"21.31: smoke tests complete (end-to-end validation, all 4 planes, isolation)",
 2026-06-20T14:44:04+00:00,21,,in-progress,note,Added enrichment tier access gate (EnrichmentAllowed) in server/internal/enrichment/gates.go — plane constants + deny-by-default tier checks for Phase 21.18,
+2026-06-20T15:00:51+00:00,22,,in-progress,note,Rewrote Phase 22 plan: flat-to-root migration (no ai/ no datasource/); 9 sub-steps with merge strategy for common/ swarm/ docs/; full verification pass; updated Phase 16/17 goal/depends lines,

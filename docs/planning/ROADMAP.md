@@ -4,7 +4,7 @@
 > **Date:** 2026-04-20
 > **Status:** Active. Single source of truth.
 > **Supersedes:** v2.0.0 Swarm Pivot (all prior prior roadmaps already superseded by v2).
-> The **phase numbering from v2.0.0 is preserved intact** — Phases 0–15 still carry the same meaning and the same completion status. v3 **adds** three new feature phases (**16 Emitter**, **17 Patcher + GitOps**, **18 Datasource Cohesion**) plus a **deferred datasource-centric restructure (Phase 22)** that re-shape ownership boundaries for everything from Phase 3 onward. The restructure (formerly the standalone **“R1–R6”** track) now runs **last** — it begins only after Phases **18, 19, and 21** have landed (Phase **20** optional) — so all feature work ships under the transitional `ai/` layout and the physical `ai/` → `datasource/` / `swarm/` / `common/` move happens once, at the end. **Phase 17 (Scraper-Patcher) ships after the restructure**, natively on the moved layout.
+> The **phase numbering from v2.0.0 is preserved intact** — Phases 0–15 still carry the same meaning and the same completion status. v3 **adds** three new feature phases (**16 Emitter**, **17 Patcher + GitOps**, **18 Datasource Cohesion**) plus a **deferred repo-root flat-layout migration (Phase 22)** that moves all Python code from the transitional `ai/` sub-tree directly to the repo root with no `ai/` or `datasource/` folder remaining. The migration (formerly the standalone **“R1–R6”** track) runs **last** — it begins only after Phases **18, 19, and 21** have landed (Phase **20** optional) — so all feature work ships under the transitional `ai/` layout and the physical move happens once, at the end. **Phase 17 (Scraper-Patcher) ships after the migration**, natively on the flat root layout.
 
 ---
 
@@ -106,7 +106,7 @@ The replacement is a **Swarm-AI Agents architecture**:
 - [Phase 19 — Global Catalog (deferred long-tail)](#-phase-19--global-catalog-deferred-long-tail)
 - [Phase 20 — Monetization (built-but-dormant)](#-phase-20--monetization-built-but-dormant)
 - [Phase 21 — Enrichment Data Planes](#-phase-21--enrichment-data-planes)
-- [Phase 22 — Datasource-Centric Restructure (deferred)](#-phase-22--datasource-centric-restructure-deferred)
+- [Phase 22 — Repo-Root Flat-Layout Migration (deferred)](#-phase-22--repo-root-flat-layout-migration-deferred)
 - [Appendix A — Decision Log](#-appendix-a--decision-log)
 - [Appendix B — Definition of Done (Per Phase)](#-appendix-b--definition-of-done-per-phase)
 
@@ -212,7 +212,7 @@ Legend: `Scrp`=Scraper, `Catger`=Categorizer, `Procr`=Processor,
 | **19** | **Global Catalog (deferred long-tail)** | Pluggable catalog architecture for every league listed on mackolik/nesine + every WC qualifier confederation. T3 (research) rows added now; promotion to T2/T1 deferred per business demand. | 13c |
 | **20** | **Monetization (built-but-dormant)** | Tier-based entitlement engine + per-token quotas at the Go API. `MONETIZATION_ENABLED=false` default; flips on via single config change. Per [`design/MONETIZATION.md`](../design/MONETIZATION.md). | 9, 13a |
 | **21** | **Enrichment Data Planes** | Add planes 6-9 (transfers, injuries/availability, referees, weather/pitch) + four derived views (market-movement, fixture-congestion, card-context, narrative-pressure). Per [`design/ENRICHMENT_DATA.md`](../design/ENRICHMENT_DATA.md). | 4, 6 |
-| **22** | **Datasource-Centric Restructure** *(Pivot v3; deferred)* | Formerly the “R1–R6” track. Complete the chart rename (R1 ✅ done), `git mv` `ai/` → `datasource/`/`swarm/`/`common/`, scaffold new components, delete shims + the `ai/` tree, absorb mock into `server`, collapse the config triangle. Runs **last**, once the feature surface is stable. | 18, 19, 21 (20 optional) |
+| **22** | **Repo-Root Flat-Layout Migration** *(Pivot v3; deferred)* | Flatten `ai/` directly to repo root — no `ai/` folder, no `datasource/` folder. Merge conflicting roots (`common/`, `swarm/`, `docs/`), move all other packages to root, rewrite all imports to `PYTHONPATH=.`, delete `ai/` tree, absorb mock into `server`, collapse the config triangle. Runs **last**, once the feature surface is stable. | 18, 19, 21 (20 optional) |
 
 ```
 0 ─→ 1 ─→ 2 ─→ 3 ─→ 4 ─→ 5 ─→ 6 ─→ 9 ─→ 14 ─→ 15
@@ -1775,7 +1775,7 @@ stable stub-ID registry).
 ## 📤 Phase 16 — Emitter & Feed Contract (Production Pivot v3)
 
 
-**Goal:** A dedicated `datasource/emitter` component projects Postgres + Redis state into NDJSON live feeds and Parquet training snapshots that the swarm and trainer consume. After this phase, **no file under `swarm/` opens a database connection or touches the bus' high-volume data topics directly** — every byte of ingested data the swarm sees flows through `FeedReader`.
+**Goal:** A dedicated `emitter` component (lives at `emitter/` in the repo root after Phase 22; ships under the transitional `ai/` layout in this phase) projects Postgres + Redis state into NDJSON live feeds and Parquet training snapshots that the swarm and trainer consume. After this phase, **no file under `swarm/` opens a database connection or touches the bus' high-volume data topics directly** — every byte of ingested data the swarm sees flows through `FeedReader`.
 **Depends on:** Phase 4.6 (telemetry watch set), Phase 5 (`CalibrationStore` Protocol seam in place), Phase 6 (`MatchOutcome` dataclass), Phase 7 (`QuarantineSample` dataclass), Phase 9 (auth surface for the read-side ACL), Phase 11 (compute governor + `data_class` labels). **Ships under the transitional `ai/` layout** — the emitter's steady-state home is `datasource/emitter/`, but the physical move is the deferred **Phase 22** restructure; design and import the package so that move is a `git mv`, not a rewrite.
 **Anchor docs:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md), [`design/EMITTER.md`](../design/EMITTER.md), [`design/DATA_PIPELINE.md`](../design/DATA_PIPELINE.md), [`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md), [`design/SECURITY.md`](../design/SECURITY.md).
 
@@ -1872,9 +1872,9 @@ stable stub-ID registry).
 
 ## 🛠️ Phase 17 — Scraper-Patcher + GitOps (Production Pivot v3)
 
-**Goal:** Close the loop between "a scraper broke" and "a PR fixed it." Ship the `datasource/patcher` + `datasource/gitops` components with the guardrails specified in [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md), wired so that *every* code path that could write to the repo, spend money on an LLM, or relax a detector is gated, observable, reversible, and reproducible.
-**Depends on:** Phase 4 (telemetry & alerting), Phase 6 (proofreader / parity baselines), Phase 8 (schema-fingerprint events), Phase 9 (auth & secrets), Phase 14 (observability + tracing), Phase 16 (feed contract — bundles consume the registry; shadow gate consumes snapshots; signing field hooks land here), Phase 22 (the datasource restructure — `datasource/patcher` + `datasource/gitops` only exist after the `ai/` → `datasource/` move).
-**Sequencing:** Phase 17 **ships last** — after *every* other phase, including the Phase 22 restructure — per owner directive. It is the riskiest phase (it grants an AI component write access to the repo), so it lands only once the feature surface and the moved four-component layout are stable; there is no transitional `ai/` shim to maintain for it.
+**Goal:** Close the loop between “a scraper broke” and “a PR fixed it.” Ship the `patcher` + `gitops` components (at `patcher/` and `gitops/` in the repo root after Phase 22; Phase 17’s implementation bullets reference the transitional `datasource/patcher/` and `datasource/gitops/` paths — §22.3 renames them) with the guardrails specified in [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md), wired so that *every* code path that could write to the repo, spend money on an LLM, or relax a detector is gated, observable, reversible, and reproducible.
+**Depends on:** Phase 4 (telemetry & alerting), Phase 6 (proofreader / parity baselines), Phase 8 (schema-fingerprint events), Phase 9 (auth & secrets), Phase 14 (observability + tracing), Phase 16 (feed contract — bundles consume the registry; shadow gate consumes snapshots; signing field hooks land here), Phase 22 (the flat-layout migration — `patcher/` + `gitops/` live at the repo root after the `ai/` → root move).
+**Sequencing:** Phase 17 **ships last** — after *every* other phase, including the Phase 22 flat-layout migration — per owner directive. It is the riskiest phase (it grants an AI component write access to the repo), so it lands only once the feature surface and the flat root layout are stable; there is no transitional `ai/` shim to maintain for it.
 **Feeds-into:** Ongoing operations — once live (last), the auto-patch loop maintains every `datasource/` extractor (including all Phase 13 / 19 / 21 league + enrichment scrapers) without further hand-written code.
 **Anchor docs:** [`design/SCRAPER_PATCHER.md`](../design/SCRAPER_PATCHER.md), [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md), [`design/CONTENT_FRESHNESS.md`](../design/CONTENT_FRESHNESS.md), [`design/EMITTER.md`](../design/EMITTER.md), [`design/SECURITY.md`](../design/SECURITY.md).
 
@@ -4191,135 +4191,363 @@ Enrichment latency budget:
 
 ---
 
-## 🧩 Phase 22 — Datasource-Centric Restructure (deferred)
+## 🧩 Phase 22 — Repo-Root Flat-Layout Migration (deferred)
 
-**Goal:** Move the code into its steady-state four-component layout
-(`server/`, `datasource/`, `swarm/`, `common/`) and delete the
-transitional `ai/` tree — **without breaking anything**. This is the
-physical realisation of the layout that every phase from 3 onward has
-been *designed* against (and has shipped against under the transitional
-`ai/` paths). It was formerly the standalone **"Restructure Track
-(R1–R6)"**; that stop-the-world, run-between-Phase-5-and-6 framing has
-been **retired** — the move now runs **last**, once the feature surface
-is stable.
+**Goal:** Flatten the entire codebase from the transitional `ai/` sub-tree
+directly into the **repo root**, with no `ai/` folder and no `datasource/`
+folder remaining anywhere in the Python tree. Every Python package that today
+lives under `ai/` moves to the root of the repository. The three root-level
+folders that already exist in both locations (`common/`, `swarm/`, `docs/`)
+are **merged** with their `ai/` counterparts. All imports, tests, Dockerfiles,
+Makefiles, CI workflows, `pyproject.toml`, and documentation references are
+updated to match the new paths. This is the final step — the codebase must be
+**100% correct and fully tested** before this phase closes.
 
-**Depends on:** Phase **18** (isolation gates + contracts must be green
-against the transitional layout first — they protect the move), Phase
-**19** (global catalog), Phase **21** (enrichment planes). Phase **20**
-(monetization) is **optional** — it may land on either side of this
-phase. This phase is **not** blocked by Phase 17; instead **Phase 17
-ships after it**, natively on the moved layout.
+**Why flat-to-root, not `datasource/`?**
+- `PYTHONPATH=.` covers the entire Python codebase with one entry; no
+  per-component path juggling.
+- Developers write `import scraper.extractors` not `from ai.scraper.extractors`.
+- There is no folder named `datasource`; the scraper, pipeline, enrichment,
+  and data-source modules are first-class root packages.
+- `server/` remains the only sub-tree that is not a Python package (it is Go).
 
-> **Sequencing (decided 2026-06-12).** Earlier drafts ran "R1–R6" as a
-> stop-the-world sprint between Phase 5 and Phase 6. That never
-> executed — Phases 6–13 all shipped under the transitional `ai/`
-> paths, and an orchestrated run that deleted `ai/` before the move
-> once wiped the entire live tree (restored from git). The restructure
-> is therefore **deferred to the end of the feature work**: it begins
-> only after Phases **18, 19, and 21** have landed (Phase **20**
-> optional). Doing the move last — once the feature surface is stable
-> and Phase 18's isolation gates are green against the transitional
-> layout — minimises blast radius and the number of in-flight modules
-> that would otherwise need a mid-flight rewrite. Each sub-step is
-> individually reversible.
+**Depends on:** Phase **18** (isolation gates + contracts must be green against
+the transitional layout first — they protect the move), Phase **19** (global
+catalog), Phase **21** (enrichment planes). Phase **20** (monetization) is
+**optional** — it may land on either side of this phase.
+
+> **Sequencing note.** An earlier draft ran "R1–R6" as a stop-the-world sprint.
+> That never executed — Phases 6–21 all shipped under the transitional `ai/`
+> paths, and an orchestrated run that deleted `ai/` before the move once wiped
+> the entire live tree (restored from git). The restructure therefore runs
+> **last**, once all feature work is stable. Each sub-step is individually
+> reversible and `make test` must be green after every sub-step, not just at the
+> end.
 >
-> 🛑 **The `ai/` deletion is gated by an executable check, never a
-> ticked box.** `make isolation.shims-only` must prove every file under
-> `ai/` is a pure re-export shim before the tree is removed (§22.4).
->
-> 🧭 **Label compatibility.** Sub-steps keep their historical **R1–R6**
-> identifiers so the "until R2 lands, ship under `ai/`" transitional
-> notes in Phases 3–8, the `R3.x` rollout labels in Phases 16/17, and
-> the `R2` / `R4` references in Phase 18 still resolve here:
-> **R1** = §22.1 (chart rename), **R2** = §22.2 (module move),
-> **R3** = §22.3 (component scaffold), **R4** = §22.4 (shim deletion +
-> `ai/` removal), **R5** = §22.5 (mock absorption), **R6** = §22.6
-> (config single-source).
-**Anchor doc:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 7.
+> 🛑 **`ai/` deletion is gated by an executable check, never a ticked box.**
+> `make isolation.shims-only` must confirm `ai/` contains only re-export shims
+> before the tree is removed (§22.5). This gate was shipped in Phase 18 §18.3.
 
-### 22.1 — Rename + path aliases (R1) ✅ done
+**Hard rules binding every sub-step:**
+1. **No `datasource/` folder** at root or anywhere in the Python tree.
+2. **No `ai/` folder** after §22.5 completes.
+3. Every move is a separate commit; `make test` is green after each commit.
+4. Phase 18 isolation gates remain green throughout every sub-step.
+5. `make isolation.shims-only` is the executable gate for deletion — prose
+   and ticked boxes are not evidence.
 
-- [x] New chart keys added to `xops/versioning/chart.json`: `datasource_scraper`, `datasource_watcher`, `datasource_refresher`, `datasource_patcher`, `datasource_gitops`, `datasource_emitter`, `swarm`, `common` (all seeded at `0.1.0` / `0.2.x`; verified 2026-04-28).
-- [x] `version.py rename` subcommand lands; used to rename `source_watcher → datasource_watcher` in a single changelog row. *(Today both keys coexist — `source_watcher@1.4.0` and `datasource_watcher@0.1.0`. The rename ships with the actual file move in §22.2.)*
-- [x] No files move yet; chart is the only change so far.
+**Anchor doc:** [`design/COMPONENT_LAYOUT.md`](../design/COMPONENT_LAYOUT.md) §§3, 7 (updated in this phase to reflect the new flat layout).
 
-### 22.2 — Scraper + watcher move (R2)
+---
 
-- [ ] `ai/scraper/` → `datasource/scraper/`.
-- [ ] `ai/swarm/source_watcher/` → `datasource/watcher/`.
-- [ ] `ai/pipeline/`, `ai/qid/`, `ai/proofreader/` (scrape-time) → `datasource/pipeline/`, `datasource/qid/`, `datasource/proofreader/`.
-- [ ] Shim packages (`ai/scraper/__init__.py`, `ai/swarm/source_watcher/__init__.py`) re-export the new paths; a `DeprecationWarning` fires on import. CI records the warning count per build.
-- [ ] Proof test: `test_shim_import_works.py`, `test_warning_count_non_increasing.py`.
+### 22.0 — Pre-flight inventory
 
-### 22.3 — New components scaffold (R3)
+Before any file moves, document the full source → destination mapping, identify
+every import reference, and verify Phase 18 pre-conditions are satisfied.
 
-- [ ] `datasource/refresher/`, `datasource/patcher/`, `datasource/gitops/`, `datasource/emitter/` all land as skeletons with their contract tests in place (Phases 16 and 17 fill in the logic — note that under the deferred sequencing Phase 16 has *already* shipped its logic under the transitional `ai/` layout, so this step formalises the move rather than the first scaffold).
-- [ ] `server/cmd/mock/` (renamed from `mocksrv`) lands; `mocksrv` alias retained for one release.
-- [ ] `common/` tree created: `common/config/`, `common/schemas/`, `common/feeds/`, `common/bus/`.
+**Complete directory move plan:**
 
-### 22.4 — Shim deletion + tree removal (R4)
+| Source (under `ai/`) | Destination (repo root) | Action |
+|---|---|---|
+| `ai/scraper/` | `scraper/` | Move |
+| `ai/model/` | `model/` | Move |
+| `ai/nlp/` | `nlp/` | Move |
+| `ai/orchestrator/` | `orchestrator/` | Move |
+| `ai/pipeline/` | `pipeline/` | Move |
+| `ai/proofreader/` | `proofreader/` | Move |
+| `ai/qid/` | `qid/` | Move |
+| `ai/tqu/` | `tqu/` | Move |
+| `ai/trc/` | `trc/` | Move |
+| `ai/backtest/` | `backtest/` | Move |
+| `ai/tests/` | `tests/` | Move |
+| `ai/datasource/enrichment/` | `enrichment/` | Move (see below) |
+| `ai/main.py` | `main.py` | Move |
+| `ai/scheduler.py` | `scheduler.py` | Move |
+| `ai/data_showcase.py` | `data_showcase.py` | Move |
+| `ai/requirements.txt` | `requirements.txt` | Merge with any root copy |
+| `ai/requirements-dev.txt` | `requirements-dev.txt` | Merge with any root copy |
+| `ai/Dockerfile` | `Dockerfile` | Replace / merge |
+| `ai/common/` | `common/` | **Merge** (§22.1a) |
+| `ai/swarm/` | `swarm/` | **Merge** (§22.1b) |
+| `ai/docs/` | `docs/` | **Merge** (§22.1c) |
 
-> 🛑 **Hard-gated on the §22.2 module move.** "Delete shims" / "`ai/`
-> tree removed" presupposes **§22.2 has actually moved every module**
-> and `ai/` is shim-only — proven by `make isolation.shims-only` (the
-> gate shipped in Phase 18 §18.3), not by a ticked box. Do not drain
-> these bullets until that gate is green: an orchestrated run once
-> deleted the whole live `ai/` tree because this precondition was prose
-> rather than an executable gate.
+**Additional root-level cleanup:**
+- `datasource/quarantine.py` → `scraper/quarantine.py`; `datasource/` folder deleted.
+- `ai/datasource/` (the `ai/`-internal copy, contains `enrichment/`) → `enrichment/` at root. The name `datasource` is retired entirely.
+- `ai/reports/` content → `docs/reports/ai_pipeline/`.
 
-- [ ] §22.2 verified complete: `make isolation.shims-only` green (every `ai/` file is a pure re-export shim).
-- [ ] Zero shim warnings in CI for two consecutive weeks → delete shims.
-- [ ] `ai/` tree removed (only after the two bullets above).
-- [ ] Phase 18 isolation gates re-pointed from the transitional `ai/` sub-trees to the top-level `datasource/` / `swarm/` / `common/` dirs and still green (§18.1).
+- [ ] `make phase22.inventory` (new xops target, `xops/makefile/phase22.py`) produces
+  `docs/tracking/phase22_move_plan.yaml` listing every `(source_path, dest_path,
+  conflict_type)` tuple; exits non-zero if any destination already contains
+  conflicting content not yet audited.
+- [ ] `make isolation.shims-only` is green (every `ai/` file is either a pure re-export
+  shim or a real implementation not yet moved — the gate passes when there are zero
+  real-implementation files left after §22.1–§22.4).
+- [ ] `PYTHONPATH=. make test` is green on the current layout — baseline established
+  before any move. Note: `pyproject.toml` already has `pythonpath = ["."]` so root
+  imports work today; the remaining work is moving the files and updating references.
+- [ ] Proof test: `test_22_0_inventory_complete.py` — asserts `phase22_move_plan.yaml`
+  accounts for every file under `ai/` with a destination entry; fails on any
+  unmapped file.
 
-### 22.5 — Mock absorption (R5)
+---
 
-- [ ] `docker-compose.mock.yml` removed; `mock` becomes a profile of the base compose (coordinates with Phase 18 §18.4 compose cohesion).
-- [ ] `server` binary gains `MODE=mock`; `mocksrv` dropped entirely.
-- [ ] `make up PROFILES=core,mock` brings up only the mock stack; scraper validation works identically to today.
+### 22.1 — Merge conflicting folders
 
-### 22.6 — Config single-source consolidation (R6)
+The three folders that exist at both `ai/<name>/` and root `<name>/` are merged
+first, before any non-conflicting moves. This is the highest-risk step; each
+merge is a separate commit with a full test run.
+
+**22.1a — Merge `ai/common/` → `common/`**
+
+Root `common/` is the Phase 18 governance-layer shared library (bus, config,
+db, errors, isolation, lifecycle, observability, profiles, security,
+test_fixtures). `ai/common/` is the AI pipeline's richer shared library that
+grew alongside it. Both are absorbed into a single root `common/`.
+
+Sub-packages **unique to `ai/common/`** — move verbatim into root `common/`:
+- `ai/common/calibration_profiles/` → `common/calibration_profiles/`
+- `ai/common/calibration_profile_loader.py` → `common/calibration_profile_loader.py`
+- `ai/common/catalog_api_models.py` → `common/catalog_api_models.py`
+- `ai/common/catalog_cache.py` → `common/catalog_cache.py`
+- `ai/common/competition_fsm.py` → `common/competition_fsm.py`
+- `ai/common/competition_multistage.py` → `common/competition_multistage.py`
+- `ai/common/config.py` → `common/config/ai_pipeline.py`; `common/config/__init__.py` re-exports it as `from common.config.ai_pipeline import Config`
+- `ai/common/constants.py` → `common/constants.py`
+- `ai/common/defaults.yaml` → `common/config/defaults.yaml`
+- `ai/common/fixture_state.py` → `common/fixture_state.py`
+- `ai/common/fixture_timezone_resolver.py` → `common/fixture_timezone_resolver.py`
+- `ai/common/fixture_validator.py` → `common/fixture_validator.py`
+- `ai/common/league_catalog.yaml` → `common/catalog/league_catalog.yaml`
+- `ai/common/league_catalog_loader.py` → `common/catalog/league_catalog_loader.py`
+- `ai/common/league_config.py` → `common/league_config.py`
+- `ai/common/leagues/` → `common/leagues/`
+- `ai/common/locale_loader.py` → `common/locale_loader.py`
+- `ai/common/locale_tr.yaml` → `common/locale_tr.yaml`
+- `ai/common/nlp/` → `common/nlp_vocab/` (renamed to avoid conflict with root-level `nlp/` package)
+- `ai/common/numerics.py` → `common/numerics.py`
+- `ai/common/parity.py` → `common/parity.py`
+- `ai/common/profile_drift_guard.py` → `common/profile_drift_guard.py`
+- `ai/common/season.py` → `common/season.py`
+- `ai/common/season_calendar.py` → `common/season_calendar.py`
+- `ai/common/seed.py` → `common/seed.py`
+- `ai/common/standings_accumulator.py` → `common/standings_accumulator.py`
+- `ai/common/telemetry.py` → `common/telemetry.py`
+- `ai/common/text/` → `common/text/`
+- `ai/common/api/` → `common/api/` (merge with root `common/api/` if present)
+- `ai/common/betting_markets.json` → `data/betting_markets.json`
+- `ai/common/entitlements.yaml` → `xops/monetization/entitlements.yaml` (canonical location per Phase 20; deduplicate if the file already exists there)
+
+Sub-packages **overlapping with root `common/`** — diff and merge:
+- `ai/common/bus/` + `common/bus/` → merged `common/bus/` (keep Phase 18 version as base; absorb AI-specific extensions as new functions/classes; never delete existing Phase 18 symbols)
+- `ai/common/db/` + `common/db/` → merged `common/db/`
+- `ai/common/feeds/` + `common/feeds/` (if present) → merged `common/feeds/`
+- `ai/common/isolation/` + `common/isolation/` → merged `common/isolation/`
+- `ai/common/logger.py` + `common/logger.py` → keep the more complete version; the other becomes a re-export shim for one release cycle
+- `ai/common/observability/` + `common/observability/` → merged `common/observability/`
+- `ai/common/security/` + `common/security/` → merged `common/security/`
+- `ai/common/international_tournament_profiles.py` + `common/international_tournament_profiles.py` → keep the more recent; eliminate the duplicate
+
+`common/SUBPACKAGE_CHARTER.md` updated to document all newly added sub-packages (require triple CODEOWNERS ACK per Phase 18 §18.13 rule).
+
+- [ ] All merges produce a valid `common/` tree where every file has a single
+  authoritative owner with no duplicate symbols across the merge boundary.
+- [ ] `xops/lint/no_top_level_common_files.py` (Phase 18 §18.13) still green after merge.
+- [ ] `common/SUBPACKAGE_CHARTER.md` updated.
+- [ ] Proof test: `test_22_1a_common_merge_no_duplicates.py` — asserts no symbol is
+  defined in more than one module under `common/`; asserts no `ai/common/` file
+  lacks a corresponding destination.
+
+**22.1b — Merge `ai/swarm/` → `swarm/`**
+
+Root `swarm/` currently contains only `agents/` and `tests/`. `ai/swarm/` has
+the full swarm implementation: `agents/`, `identity/`, `predictor/`, `sdk/`,
+`source_watcher/`, `tests/`, `bootstrap.py`.
+
+- `ai/swarm/agents/` → merge into `swarm/agents/` (diff sub-directories; no two agent module names may collide; rename any colliding agent with a `_v2` suffix in a deprecation window)
+- `ai/swarm/identity/` → `swarm/identity/`
+- `ai/swarm/predictor/` → `swarm/predictor/`
+- `ai/swarm/sdk/` → `swarm/sdk/`
+- `ai/swarm/source_watcher/` → `swarm/source_watcher/`
+- `ai/swarm/tests/` → merge into `swarm/tests/` (no duplicate test file names)
+- `ai/swarm/bootstrap.py` → `swarm/bootstrap.py`
+- `requirements.lock` and `sbom.spdx.json` from `ai/swarm/` → `swarm/`
+
+- [ ] All `from ai.swarm.` imports updated to `from swarm.`.
+- [ ] Proof test: `test_22_1b_swarm_merge_complete.py` — asserts no `ai/swarm/` path
+  has an unreachable destination.
+
+**22.1c — Merge `ai/docs/` → `docs/`**
+
+`ai/docs/README.md` is absorbed into root `docs/`. Any additional content in
+`ai/docs/` is placed under `docs/ai_pipeline/`. No existing root `docs/` file
+is overwritten without explicit review.
+
+- [ ] Proof test: `test_22_1c_docs_merge_no_orphans.py`.
+
+---
+
+### 22.2 — Move non-conflicting `ai/` packages to root
+
+All packages with no root-level name conflict are moved in dependency order
+(most-depended-upon first). Each package is a separate commit; `make test`
+is green before the next package moves.
+
+Move order:
+1. `scraper/` — also absorbs `datasource/quarantine.py` as `scraper/quarantine.py`
+2. `pipeline/`
+3. `model/`
+4. `nlp/`
+5. `qid/`
+6. `tqu/`
+7. `trc/`
+8. `proofreader/`
+9. `orchestrator/`
+10. `backtest/`
+11. `enrichment/` — from `ai/datasource/enrichment/` (the folder `datasource` is never created at root)
+12. `tests/` — merged with root `conftest.py`; `pyproject.toml` `testpaths` updated from `["ai/tests", ...]` to `["tests", ...]`
+13. Root files: `main.py`, `scheduler.py`, `data_showcase.py`
+14. `ai/reports/` → `docs/reports/ai_pipeline/`
+
+For each package, after `git mv`:
+- `grep -r "from ai\.<package>" . --include="*.py"` is run; every hit is rewritten.
+- `grep -r "import ai\.<package>" . --include="*.py"` is run; every hit is rewritten.
+- `make test` is run; must be green before the next package is moved.
+
+After all moves:
+- `datasource/quarantine.py` moved → `datasource/` directory deleted. `test_22_2_no_datasource_folder.py` green immediately.
+- `coverage.run source` in `pyproject.toml` updated from `["ai", "common", "datasource", "swarm", "server"]` to `["scraper", "model", "nlp", "pipeline", "qid", "tqu", "trc", "proofreader", "orchestrator", "backtest", "enrichment", "swarm", "common", "server"]`.
+
+- [ ] Proof test: `test_22_2_all_packages_importable_from_root.py` — for every package in the inventory, `importlib.import_module("<package>")` succeeds with `PYTHONPATH=.`.
+- [ ] `test_22_2_no_datasource_folder.py` — asserts `Path("datasource")` does not exist in the repo root.
+
+---
+
+### 22.3 — Global import rewrite and entrypoint updates
+
+After all moves are complete, a final sweep eliminates every remaining `ai.*`
+reference across the entire repo.
+
+- [ ] `grep -rn "from ai\." . --include="*.py"` returns **zero hits** (excluding the shim layer under `ai/` itself, which is deleted in §22.5).
+- [ ] `grep -rn "import ai\b" . --include="*.py"` returns **zero hits** (same exclusion).
+- [ ] `Makefile` — all `PYTHONPATH=ai` occurrences replaced with `PYTHONPATH=.`.
+- [ ] `docker-compose.yml`, `docker-compose.mock.yml`, `docker-compose.chaos.yml` — any `PYTHONPATH=ai` references replaced with `PYTHONPATH=.`; volume mounts referencing `/app/ai` updated to `/app`.
+- [ ] `ai/Dockerfile` renamed to `Dockerfile` (or merged with an existing root `Dockerfile`); all `COPY ai/ .` directives replaced with `COPY . .` (excluding non-Python trees); all `PYTHONPATH=ai` environment variables replaced with `PYTHONPATH=.`.
+- [ ] `pyproject.toml`:
+  - `testpaths` updated to `["tests", "common/tests", "swarm/tests", "server/tests"]`.
+  - `coverage.run source` updated per §22.2 final bullet.
+  - `pythonpath = ["."]` already correct — no change needed.
+- [ ] Root `conftest.py` updated to reflect new package roots (no `sys.path.insert(0, "ai")` or equivalent).
+- [ ] All `docs/design/*.md` references to `ai/<path>` updated to `<path>`.
+- [ ] `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.github/instructions/**` — all `ai/` path references updated to root paths.
+- [ ] `docs/planning/ROADMAP.md` Phase 17 implementation bullets that reference `datasource/patcher/` and `datasource/gitops/` updated to `patcher/` and `gitops/`; Phase 18 bullets referencing `datasource/` component paths updated to match root-level package names. (Phase 16 and Phase 17 goal/depends/sequencing lines were pre-updated when Phase 22 was rewritten; only the per-bullet implementation paths inside §17.2–§17.6 need a final sweep here.)
+- [ ] `xops/versioning/chart.json` — the `ai` chart key is marked `eol`; `datasource_*` chart keys that no longer match a real folder are renamed to reflect their new root-level package name (e.g. `datasource_scraper` → `scraper`, `datasource_emitter` → `emitter`) using the alias-window pattern (§18.5); `make version.validate` is green throughout.
+- [ ] Phase 18 isolation policy regenerated: `make isolation.snapshot.refresh` rebuilds `common/isolation/import_graph.snapshot.json` against the new root-level package layout; `make isolation.check --full` is green.
+- [ ] `docs/design/COMPONENT_LAYOUT.md` §§3, 5, 7 rewritten to document the flat root layout (no `datasource/`, no `ai/`); `last_verified_against_code` front-matter field updated.
+
+- [ ] Proof tests:
+  - `test_22_3_no_ai_imports_in_source.py` — `ast.walk` over every `.py` file at and below the repo root (excluding `ai/` shims); asserts zero `ImportFrom` nodes with `module` starting `"ai."` and zero `Import` nodes for `"ai"` or `"ai.*"`.
+  - `test_22_3_pythonpath_dot_in_all_entrypoints.py` — reads `Makefile`, `pyproject.toml`, all `docker-compose*.yml`, all `.github/workflows/*.yml`; asserts zero occurrences of `PYTHONPATH=ai`.
+  - `test_22_3_isolation_snapshot_reflects_new_layout.py` — asserts `import_graph.snapshot.json` was regenerated after the last move (checks its `last_regenerated_at` timestamp is newer than the oldest §22.2 move commit).
+
+---
+
+### 22.4 — Dockerfile, CI workflow, and Makefile target updates
+
+Every build and CI artefact must reference the new layout before the `ai/`
+shim layer is deleted in §22.5.
+
+- [ ] Single root `Dockerfile` builds the Python pipeline image; multi-stage if needed for dev vs prod. Base image digest-pinned per Phase 18 §18.10.
+- [ ] `ai/Dockerfile` deleted (after content has been merged into root `Dockerfile`).
+- [ ] All `.github/workflows/*.yml` `PYTHONPATH` overrides updated; any `working-directory: ai` directives removed.
+- [ ] `make test.ai` target in `Makefile` updated — runs `PYTHONPATH=. pytest tests/` (was `PYTHONPATH=ai pytest ai/tests/`); old target kept as a deprecated alias for one release cycle with a deprecation message.
+- [ ] `make help` output updated — all renamed / removed targets documented.
+- [ ] Proof test: `test_22_4_no_ai_dockerfile_at_ai_path.py`.
+
+---
+
+### 22.5 — `ai/` shim layer and tree removal
+
+> 🛑 **Hard-gated.** Do not start this step until §22.1–§22.4 are complete,
+> `make test` is green on the fully-migrated layout, and
+> `make isolation.shims-only` confirms that every remaining file under `ai/`
+> is a pure re-export shim (no real implementation left).
+
+- [ ] `make isolation.shims-only` green — every `ai/` file is a re-export shim with a `DeprecationWarning`.
+- [ ] Zero shim `DeprecationWarning`s in CI for two consecutive weeks.
+- [ ] `git rm -r ai/` — tree deleted.
+- [ ] `test_ai_tree_gone.py` green.
+- [ ] `xops/lint/ai_tree_resurrection.py` (Phase 18 §18.3) active and refusing any PR that re-adds `ai/`.
+
+---
+
+### 22.6 — Mock absorption and compose cleanup
+
+- [ ] `docker-compose.mock.yml` removed; `mock` is a compose profile in the base `docker-compose.yml` (Phase 18 §18.4 compose cohesion, finalised here).
+- [ ] `server` binary gains `MODE=mock`; `mocksrv` alias retired.
+- [ ] `make up PROFILES=core,mock` works with the new root-level layout.
+- [ ] `datasource/` directory confirmed absent from repo root: `test_22_6_no_datasource_folder.py` green.
+
+---
+
+### 22.7 — Config single-source consolidation
 
 **Goal:** end the three-way hand-sync between `defaults.yaml`, `.env.example`,
-and `Config`. Make `defaults.yaml` the single hand-edited source for default
-*values*; promote `Config` (Python) and `server/internal/config` (Go) to the
-single source for *schema*; reduce `.env.example` and `CONFIGURATION.md` to
-generated artifacts.
+and `Config`. `common/config/defaults.yaml` (moved from `ai/common/defaults.yaml`
+in §22.1a) becomes the single source for default values; `Config` (Python) and
+`server/internal/config` (Go) are the single source for schema; `.env.example`
+and `CONFIGURATION.md` become generated artefacts.
 
-Motivation: today the triangle test catches drift but does not prevent it —
-contributors must remember to touch all three files. After this step the
-triangle becomes a build step.
-
-- [ ] `defaults.yaml` becomes the single hand-edited home for default values
-      (today it is partly redundant with `.env.example`).
 - [ ] `make config.export-env` generates `xops/env/.env.example` from
-      `defaults.yaml` + `Config` field metadata (descriptions, types,
-      `# shared` markers). Header line warns the file is generated.
+  `common/config/defaults.yaml` + `Config` field metadata. Header line warns the
+  file is generated.
 - [ ] `make config.export-doc` generates the registry section of
-      `docs/design/CONFIGURATION.md` between `<!-- BEGIN GENERATED -->` /
-      `<!-- END GENERATED -->` fences. Narrative prose stays hand-edited
-      above/below the fence.
+  `docs/design/CONFIGURATION.md` between `<!-- BEGIN GENERATED -->` /
+  `<!-- END GENERATED -->` fences. Narrative prose stays hand-edited above/below
+  the fence.
 - [ ] CI runs both generators and `git diff --exit-code` on the outputs.
-      Drift = red build, not a runtime bug.
-- [ ] The existing triangle tests in `ai/tests/test_config_sync.py` stay
-      green during the transition; they are deleted only after one full
-      release cycle of green generator-diff CI.
-- [ ] Go reads the same `defaults.yaml` (or a generated `.env.defaults`
-      shim that Compose `env_file:`-loads) so server and Python share one
-      source of truth.
+  Drift = red build, not a runtime bug.
+- [ ] `tests/test_config_sync.py` (moved from `ai/tests/` in §22.2) stays green
+  during transition; deleted after one full release cycle of green generator-diff CI.
+- [ ] `server/internal/config` reads the same `common/config/defaults.yaml` (or a
+  generated `.env.defaults` shim that Compose `env_file:`-loads) so Python and Go
+  share one source of truth for default values.
 
-**Out of scope for §22.6:** switching to a different config library
-(Pydantic / viper). The dataclass + struct-tag shape stays.
+---
+
+### 22.8 — Full verification pass (100% correctness gate)
+
+The formal sign-off. Every test, lint, and smoke check must be green on a
+**fresh clone** with no host caches.
+
+- [ ] `PYTHONPATH=. make test` green — full suite including `@pytest.mark.slow` and `@pytest.mark.smoke`.
+- [ ] `make lint` green — `ruff`, `mypy --strict` on all root packages, `golangci-lint`, `no_magic.py`, all Phase 18 isolation lints.
+- [ ] `make isolation.check --full` green — policy verified against new root-level package layout.
+- [ ] `make smoke` green — boundary smoke, per-profile-tuple smoke matrix (Phase 18 §18.4).
+- [ ] `make codegraph.reindex` executed; `make codegraph.status` reports healthy index against new layout.
+- [ ] `test_22_8_no_ai_import_anywhere.py` — `ast.walk` over every `.py` in the repo; zero `ImportFrom` or `Import` nodes referencing `ai` or `ai.*`.
+- [ ] `test_22_8_no_ai_path_in_docs.py` — grep all `docs/`, `AGENTS.md`, `CLAUDE.md`, `.github/` for backtick-enclosed paths starting with `ai/`; zero hits.
+- [ ] `test_22_8_pythonpath_dot_in_all_entrypoints.py` — Makefile, pyproject.toml, all docker-compose files, all CI workflows use `PYTHONPATH=.`; zero `PYTHONPATH=ai` occurrences.
+- [ ] `test_22_8_no_datasource_folder.py` — `Path("datasource").exists()` is `False` at repo root.
+- [ ] `test_ai_tree_gone.py` green.
+- [ ] `make help` updated and correct — all new `make` targets introduced in §22.0–§22.7 are listed.
+- [ ] CHANGELOG.md "Unreleased" entry added describing the flat-layout migration.
+
+---
 
 ### 22.DoD — Definition of Done
 
-- [ ] **Precondition:** Phases **18, 19, and 21** are `completed` (Phase **20** optional). The restructure does not start until then.
-- [ ] All six sub-steps green (§22.1–§22.6 / R1–R6).
-- [ ] `ai/` path does not exist; `test_ai_tree_gone.py` green.
-- [ ] Every component listed in COMPONENT_LAYOUT §5 has an entry in the chart and a non-empty directory.
-- [ ] Phase 18's isolation gates re-pointed from the transitional `ai/` sub-trees to the top-level `datasource/` / `swarm/` / `common/` dirs and still green.
-- [ ] `make up PROFILES=all` brings every service up and the smoke test passes end-to-end.
-- [ ] Phase 17 (Scraper-Patcher) is now unblocked to ship last, natively on the moved layout.
+- [ ] **Precondition:** Phases **18, 19, and 21** are `completed` (Phase **20** optional).
+- [ ] All eight sub-steps green (§22.0–§22.8).
+- [ ] `ai/` path does not exist anywhere in the repo. `test_ai_tree_gone.py` green.
+- [ ] `datasource/` path does not exist anywhere in the repo. `test_22_8_no_datasource_folder.py` green.
+- [ ] No Python source file contains `from ai.` or `import ai` statements. `test_22_8_no_ai_import_anywhere.py` green.
+- [ ] `PYTHONPATH=.` is the only Python-path setting across all Makefiles, Docker files, and CI workflows. Zero `PYTHONPATH=ai` occurrences.
+- [ ] Phase 18 isolation gates re-pointed to the new root-level package layout and green.
+- [ ] `make up PROFILES=all` brings every service up and `make smoke` passes end-to-end.
+- [ ] CodeGraph index (`make codegraph.reindex`) rebuilt; `make codegraph.status` healthy.
+- [ ] `make version.bump COMPONENT=docs LEVEL=minor NOTE="Phase 22 flat-layout migration — no ai/, no datasource/"` run.
+- [ ] Phase 17 (Scraper-Patcher) is now unblocked to ship, natively on the flat root layout.
 
 ---
 
