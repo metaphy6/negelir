@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.14.0",
-    "build": 13,
+    "build": 14,
     "released": null
   },
   "components": {
@@ -22,9 +22,9 @@
       }
     },
     "server": {
-      "version": "1.48.1",
+      "version": "1.49.0",
       "description": "Go REST API + mocksrv binary.",
-      "last_changed": "2026-06-20T14:31:28+00:00",
+      "last_changed": "2026-06-20T14:44:10+00:00",
       "go_min_versions": {
         "github.com/sony/gobreaker": "1.0.0",
         "go.uber.org/automaxprocs": "1.6.0",
@@ -17626,6 +17626,15 @@
       "from": "3.21.1",
       "to": "3.21.2",
       "build": 13
+    },
+    {
+      "timestamp": "2026-06-20T14:44:10+00:00",
+      "component": "server",
+      "level": "minor",
+      "note": "Phase 21.18 — enrichment tier access gate (EnrichmentAllowed + plane constants)",
+      "from": "1.48.1",
+      "to": "1.49.0",
+      "build": 14
     }
   ]
 }

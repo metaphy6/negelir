@@ -1974,3 +1974,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-06-20T14:31:08+00:00,21,,in-progress,note,"21.29: cross-plane consistency complete (5 invariants, auto-heal for suspension sync)",
 2026-06-20T14:31:08+00:00,21,,in-progress,note,"21.30: observability complete (Prometheus metrics, alert rules, runbook)",
 2026-06-20T14:31:08+00:00,21,,in-progress,note,"21.31: smoke tests complete (end-to-end validation, all 4 planes, isolation)",
+2026-06-20T14:44:04+00:00,21,,in-progress,note,Added enrichment tier access gate (EnrichmentAllowed) in server/internal/enrichment/gates.go — plane constants + deny-by-default tier checks for Phase 21.18,
