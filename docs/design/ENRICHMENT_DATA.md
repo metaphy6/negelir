@@ -184,7 +184,9 @@ class InjuryPayload(TypedDict):
     diagnosed_at: str
     expected_return: str | None    # ISO date, null if unknown
     confidence: Literal["club_statement", "press", "rumour"]
-    source_url_hash: str           # provenance, not the URL itself
+    source_url_hash: str           # SHA-256(canonical_url.encode('utf-8')).hexdigest()
+                                   # provenance fingerprint — raw URL never stored
+                                   # canonical form per CONTENT_FRESHNESS.md §2.2
 
 class AvailabilityPayload(TypedDict):
     availability_id: str
@@ -535,19 +537,17 @@ single template-driven query — **no LLM**, per AGENTS.md rule #4.
 Per plane (#6, #7, #8, #9):
 
 - [ ] Source row in `xops/mock/sources.py` with `make mock.capture`
-      seed verified.
-- [ ] Extractor + differ committed and unit-tested (≥ 5 tests).
-- [ ] Postgres migration in `migrations/`.
-- [ ] Storage-agent writer path added; unique-key collision tests
-      pass.
-- [ ] At least one freshness rule in `CONTENT_FRESHNESS.md` §7.
-- [ ] At least one feature in `feature_store/enrichment_<plane>.py`.
-- [ ] Predictor includes the feature behind the
-      `cfg.enrichment_<plane>_enabled` flag.
-- [ ] Tier mapping row in `entitlements.yaml` for any market that
-      depends on this plane.
-- [ ] NLP intent + sample TR query in
-      `ai/tests/fixtures/turkish_queries.yaml`.
+      seed verified; TLS vhost cert issued by project CA.
+- [ ] Extractor + differ committed and unit-tested (**≥ 7 tests, including ≥ 2 adversarial**; aligns with ROADMAP Phase 21 per-plane test floor).
+- [ ] Postgres migration in `migrations/`; migration rollback test green.
+- [ ] Storage-agent writer path added; unique-key collision tests pass; player-ID integrity guard present.
+- [ ] **At least two** freshness rules in `CONTENT_FRESHNESS.md` §7 (one normal-cadence + one override rule — per ROADMAP §21.15 and §21.20).
+- [ ] Feature columns added to `ai/model/features.py` `FEATURE_COLUMNS` and `N_FEATURES` updated in `ai/common/constants.py` (per ROADMAP §21.16).
+- [ ] `record_type` enum entry added to `common/schemas/records.py` and corresponding JSONSchema added to `common/schemas/feeds/` (per ROADMAP §21.17).
+- [ ] Predictor includes the feature behind the `cfg.enrichment_<plane>_enabled` flag; Redis cache layer tested.
+- [ ] Tier mapping row in `entitlements.yaml` for any market that depends on this plane.
+- [ ] NLP intent + sample TR query in `ai/tests/fixtures/turkish_queries.yaml`.
+- [ ] Per-plane circuit breaker and DLQ wiring active (per ROADMAP §21.19).
 - [ ] Component bump on `enrichment_<plane>` chart key.
 
 ---
