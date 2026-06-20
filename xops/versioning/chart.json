@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.14.0",
-    "build": 15,
+    "build": 16,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-20T13:45:19+00:00"
     },
     "docs": {
-      "version": "3.22.0",
+      "version": "3.23.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-20T15:00:58+00:00"
+      "last_changed": "2026-06-20T15:18:01+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -17644,6 +17644,15 @@
       "from": "3.21.2",
       "to": "3.22.0",
       "build": 15
+    },
+    {
+      "timestamp": "2026-06-20T15:18:01+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 22 comprehensive revision: 25-entry wrong-assumption ledger, 14 sub-phases, automated codemod engine, metric migration, versioning finalization, dead-code elimination, cassette path migration, 30-day burn-in",
+      "from": "3.22.0",
+      "to": "3.23.0",
+      "build": 16
     }
   ]
 }
