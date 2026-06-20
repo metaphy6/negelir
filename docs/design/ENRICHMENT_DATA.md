@@ -534,6 +534,8 @@ single template-driven query — **no LLM**, per AGENTS.md rule #4.
 
 ## 12. Definition-of-Done for "enrichment"
 
+> **Note.** This section is a condensed summary for quick reference. The canonical, authoritative Definition of Done is **ROADMAP §21.26** in `docs/planning/ROADMAP.md`. §21.26 extends and supersedes the checklist below. When the two diverge, §21.26 governs.
+
 Per plane (#6, #7, #8, #9):
 
 - [ ] Source row in `xops/mock/sources.py` with `make mock.capture`
@@ -574,4 +576,5 @@ Per plane (#6, #7, #8, #9):
    record types.
 4. `MONETIZATION.md` §4 — how each enrichment-derived market is
    tier-gated.
-5. ROADMAP Phase 13a/b/c and Phase 20 — when each plane lands.
+5. ROADMAP Phase 21 (§21.26 for the canonical Definition of Done;
+   §21.0 for dependency ordering and config stubs).

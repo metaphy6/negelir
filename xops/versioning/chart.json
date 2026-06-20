@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.13.0",
-    "build": 14,
+    "build": 15,
     "released": null
   },
   "components": {
@@ -40,9 +40,9 @@
       "last_changed": "2026-06-20T09:05:36+00:00"
     },
     "docs": {
-      "version": "3.19.0",
+      "version": "3.20.0",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-20T10:45:59+00:00"
+      "last_changed": "2026-06-20T11:01:47+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -17172,6 +17172,15 @@
       "from": "3.18.0",
       "to": "3.19.0",
       "build": 14
+    },
+    {
+      "timestamp": "2026-06-20T11:01:47+00:00",
+      "component": "docs",
+      "level": "minor",
+      "note": "Phase 21 planning revision: 3 new sub-phases, 7 DoD cross-ref fixes, 8 sub-phase enhancements, ENRICHMENT_DATA.md canonical DoD reference",
+      "from": "3.19.0",
+      "to": "3.20.0",
+      "build": 15
     }
   ]
 }

@@ -3311,6 +3311,9 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
   - `ENRICHMENT_BACKFILL_MODE` (bool, default false — when true, disables coalescing and bus emission for derived-view reactors; §21.22; never enabled in production except by explicit operator command)
   - `ENRICHMENT_RETRAIN_FLAG_PATH` (str, default `data/enrichment_retrain_needed.flag` — written by the retrain gate when all four planes reach `1.0.0`; §21.23)
   - `DB_POOL_MAX_ENRICHMENT` (int, default 5 — max connections in the storage-agent enrichment writer pool; §21.7)
+  - `ENRICHMENT_FEED_BACKPRESSURE_THRESHOLD` (int, default 10000 — feed-registry receive buffer depth at which the storage-agent writer pauses and starts back-off retries; §21.8)
+  - `ENRICHMENT_FEED_BACKPRESSURE_RETRY_BASE_MS` (int, default 200 — base delay in ms for exponential back-off when feed buffer is full; §21.8)
+  - `ENRICHMENT_FEED_BACKPRESSURE_MAX_RETRIES` (int, default 5 — max back-off retries before routing an in-flight enrichment write to the DLQ; §21.8)
 - [ ] Tests — `test_21_0_config_stubs.py`:
   - `test_all_enrichment_feature_flags_present_with_correct_types` — asserts every flag exists in the config object with its expected Python type and default value; fails fast if any key is missing or wrongly typed.
   - `test_all_numeric_tunables_within_valid_range` — sanity bounds (e.g. `departure_shock` ∈ [0.0, 1.0], `wind_threshold_kph` > 0, `enrichment_circuit_failure_threshold` ≥ 1).
@@ -3383,7 +3386,8 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
 - [ ] Home-bias correction: when `home_win_pct > cfg.referee_home_bias_clamp`, a per-fixture Elo nudge is applied at predict-time; the nudge is clamped and never compounds across re-predictions for the same fixture.
 - [ ] `last_minute_change=true` flow: invalidates cached cards/penalty derived features for that fixture and enqueues a recompute with the new assignment within one scrape cycle.
 - [ ] Assignment uniqueness: `(fixture_id)` is a unique constraint in Postgres; a duplicate assignment for the same fixture is treated as an update (last-write-wins within a 5-min **writer-side** deduplication window keyed by `(fixture_id, main_referee_id, announced_at)` — this is distinct from the 24-hour `last_minute_change` detection window). The two windows serve different purposes: the 5-min writer window prevents burst duplicates within a single scrape cycle; the 24h window detects genuine last-minute reassignments between separate scrape cycles. A reassignment from referee A to referee B that arrives within 5 min of the previous write is still a `last_minute_change=true` event if the gap between the original `announced_at` and the new `announced_at` is < 24h.
-- [ ] Tests — `test_21_3_officials_plane.py` (≥ 7 tests, including ≥ 2 adversarial):
+- [ ] **Rolling-stats warm-start**: when the Officials plane is first deployed in a fresh environment (zero `referee_profiles` exist), historical match records already present in the Live plane (plane 3) are replayed to bootstrap `rolling_stats` for every referee found therein. The warm-start replay respects the `cfg.enrichment_referee_window_matches` (default 50) window and produces correct per-referee stats even before the first live scrape cycle. The warm-start is invoked by `make enrichment.bootstrap` (§21.22) and is also triggered automatically on the first call to the Officials extractor when the `referee_profiles` table is empty. **Without the warm-start, all referees start with zero rolling stats regardless of match history** — this would make the Officials plane useless on first deployment and corrupt the cards/penalty feature columns.
+- [ ] Tests — `test_21_3_officials_plane.py` (≥ 8 tests, including ≥ 2 adversarial):
   - `test_rolling_stats_recomputed_on_match_finalize`
   - `test_rolling_stats_debounced_on_batch_finalize`
   - `test_home_bias_correction_clamped_at_configured_threshold`
@@ -3392,6 +3396,8 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
   - `test_cards_and_penalty_features_correct_for_known_referee`
   - `test_unknown_referee_id_raises_extraction_error` *(adversarial)*
   - `test_last_minute_reassignment_sets_flag_only_within_24h` *(edge case)*
+  - `test_rolling_stats_warm_start_computes_correct_stats_from_historical_plane_3_data` *(cold-start integrity: zero profiles → replay → correct stats)*
+  - `test_warm_start_respects_referee_window_matches_config` *(boundary: only last N matches per referee are used, not the entire history)*
 
 ---
 
@@ -3503,6 +3509,7 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
 - [ ] Each storage-agent writer emits a bus event on every committed write; event schema: `{record_type, stable_id, plane, event_id, committed_at, provisional: bool}`. Schema versioned per `EMITTER.md` — a schema-breaking payload change requires a version bump and a simultaneous `v1`/`v2` feed transition period.
 - [ ] Consumers (predictor, proofreader) subscribe using existing Phase 16 reader infra — no bespoke per-plane subscription code added to those components.
 - [ ] Derived-view reactors (§21.5) subscribe to the relevant enrichment feeds and fire on each incoming event; they do not poll.
+- [ ] **Backpressure guard**: the storage-agent enrichment feed writer monitors the Phase 16 feed-registry receive buffer depth per feed. When depth exceeds `cfg.enrichment_feed_backpressure_threshold` (default 10 000 pending events), the writer pauses new writes and emits `predictor.warning{kind: "enrichment_feed_backpressure", plane}`. The writer retries with exponential back-off (`cfg.enrichment_feed_backpressure_retry_base_ms`, default 200 ms); after `cfg.enrichment_feed_backpressure_max_retries` (default 5) retries, the in-flight write is routed to the DLQ (§21.19) and the writer resumes on the next scrape cycle. This prevents the enrichment bus from OOM-killing the storage agent on a scrape burst (e.g., a transfer-window replay).
 - [ ] Tests — `test_21_8_bus_emission.py`:
   - `test_roster_write_emits_enrich_roster_v1_event`
   - `test_health_write_emits_enrich_health_v1_event`
@@ -3511,6 +3518,8 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
   - `test_provisional_flag_true_on_agreed_transfer_event`
   - `test_no_event_emitted_when_write_is_rejected_by_confidence_gate` *(correctness: rumour writes do not produce roster-plane bus events)*
   - `test_all_four_enrichment_feeds_appear_in_feeds_manifest_after_registration` *(registry integrity: feeds/manifest.json lists all four enrich feeds)*
+  - `test_enrichment_feed_writer_retries_with_backoff_and_routes_to_dlq_when_backpressure_threshold_exceeded` *(backpressure: no OOM on burst)*
+  - `test_backpressure_warning_emitted_with_correct_plane_when_buffer_threshold_exceeded` *(observability)*
 
 ---
 
@@ -3535,6 +3544,7 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
   - `test_flag_change_does_not_corrupt_in_flight_inference`
   - `test_all_planes_disabled_still_produces_valid_prediction_output` *(worst-case degradation)*
   - `test_all_enrichment_columns_are_non_nan_under_every_degradation_scenario` *(NaN-freedom proof: parameterize over all 8 degradation combinations — each plane individually disabled, all-off)*
+  - `test_all_enrichment_columns_non_nan_when_redis_connection_fails_completely` *(adversarial: entire Redis unreachable — connection error, not just a cache miss — must fall back gracefully to per-league mean or zero-sentinel, never raise)*
 
 ---
 
@@ -3568,10 +3578,12 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
 
 - [ ] `make calibration.enrichment` target added under `xops/makefile/calibration.py` — runs the full calibration harness outside the normal test suite; writes `data/enrichment_baseline.json` and `data/enrichment_fallback_values.json`; exits non-zero if any plane fails the logloss delta threshold.
 - [ ] Held-out evaluation harness `ai/tests/test_21_enrichment_calibration.py` measures log-loss delta from enabling each enrichment plane incrementally on the same held-out match window used in Phase 5b.
-- [ ] Log-loss baseline (planes 1–5 only) is computed once and written to `data/enrichment_baseline.json`; CI asserts the baseline is reproducible within ± 0.001 log-loss across re-runs (no random seed variance).
+- [ ] Log-loss baseline (planes 1–5 only) is computed once and written to `data/enrichment_baseline.json`; CI asserts the baseline is reproducible within ± 0.001 log-loss across re-runs (no random seed variance). **Seeding**: the baseline computation uses random seed `cfg.enrichment_calibration_seed` (default 42; configurable via `ENRICHMENT_CALIBRATION_SEED` in `ai/common/config.py`); the seed is fixed per-run to ensure reproducibility across machines. The held-out window is the same time slice used in Phase 5b (`cfg.calibration_holdout_start` to `cfg.calibration_holdout_end`); those keys are already in config and shared by both sub-phases.
 - [ ] Per-plane delta must individually meet `cfg.enrichment_promotion_logloss_delta ≥ 0.005` before that plane is declared production-ready. A plane that does not meet the threshold is flagged `degraded` in `data/enrichment_baseline.json`; CI marks that plane's §21.0 chart key as `0.x.0` (not promoted to `1.0.0`).
 - [ ] The combined delta (all four planes + all four derived views enabled) is measured and compared to the individual deltas; regression from combining is flagged.
 - [ ] Per-league mean feature values for the fallback table (`cfg.enrichment_fallback_values_path`) are computed as a by-product of the calibration run and written to `data/enrichment_fallback_values.json`.
+- [ ] **Feature distribution stability check**: after the calibration run, `make calibration.enrichment` asserts that no enrichment column is >95% zero-valued in the held-out dataset. A column that is >95% zero has been computed incorrectly (signal never arrived, the extraction or feature computation is broken). Failing columns are listed in `data/enrichment_baseline.json` under `"zero_dominated_columns"` and block plane promotion even if logloss meets the threshold.
+- [ ] Add config key `ENRICHMENT_CALIBRATION_SEED` (int, default 42) to `ai/common/config.py` and `xops/env/.env.example` (§21.0 config stubs are updated to include this key).
 - [ ] Tests — `test_21_11_calibration.py` *(all `@pytest.mark.slow`)*:
   - `test_planes_1_5_baseline_logloss_is_reproducible`
   - `test_plane_6_roster_improves_logloss_above_threshold`
@@ -3580,6 +3592,9 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
   - `test_plane_9_environment_improves_logloss_above_threshold`
   - `test_all_planes_combined_meets_or_exceeds_sum_of_individual_deltas`
   - `test_fallback_values_json_written_and_non_empty`
+  - `test_no_enrichment_column_is_95pct_zero_valued_in_holdout_dataset` *(feature distribution stability: a mostly-zero column means extraction is broken)*
+  - `test_calibration_holdout_window_has_no_future_leakage_relative_to_training_window` *(no-leakage: training data cutoff is strictly before holdout start)*
+  - `test_baseline_logloss_identical_across_two_runs_with_same_seed` *(reproducibility: deterministic given the fixed seed)*
 
 ---
 
@@ -3737,6 +3752,8 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
 - [ ] **Referee rolling-stats batch cap**: the debounced reactor (§21.3) processes at most `cfg.enrichment_referee_batch_max` (default 50) referees per batch to bound compute on busy match-day cadences; excess events are re-queued (not dropped).
 - [ ] **Weather write deduplication window**: the environment writer deduplicates `WeatherForecastPayload` inserts within a `cfg.enrichment_weather_dedup_window_s` (default 3600s) window keyed by `(venue_id, valid_at, conditions_hash)` to prevent the hourly tick from generating phantom updates.
 - [ ] `make health.enrichment` target added to `xops/makefile/health.py`; wired into `make health` standard call.
+- [ ] **Circuit-breaker state persistence**: circuit-breaker state (current state + failure counter + last-failure timestamp) is persisted in Redis under key `enrich:circuit:{plane}` with no TTL. On application startup, each plane's circuit breaker reads its persisted state from Redis and resumes from there — a process restart does **not** reset an open breaker to `closed`. On Redis unavailability at startup, the circuit breaker defaults to `closed` (optimistic) and emits `predictor.warning{reason: "circuit_breaker_state_unreadable", plane}`. **Without persistence, a deployment restart would silently clear an open breaker, re-exposing a broken enrichment source to the prediction path.**
+- [ ] **Cross-replica circuit-breaker state**: because the circuit-breaker state lives in Redis, all worker replicas share the same per-plane breaker state. A failure on replica A trips the breaker for all replicas (global per-plane state, not per-instance). The failure counter key uses atomic Redis `INCR`; the state-transition key uses a `SET NX` compare-and-swap pattern to prevent split-brain during simultaneous failures on multiple replicas.
 - [ ] Tests — `test_21_19_monitoring.py`:
   - `test_circuit_breaker_opens_after_threshold_consecutive_failures`
   - `test_circuit_breaker_enters_half_open_after_cooldown`
@@ -3747,6 +3764,9 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
   - `test_referee_batch_max_respected_with_excess_events_requeued_not_dropped` *(performance + integrity)*
   - `test_weather_dedup_window_prevents_phantom_hourly_updates` *(integrity)*
   - `test_tripped_circuit_breaker_engages_graceful_degradation_for_plane` *(integration with §21.9)*
+  - `test_circuit_breaker_state_persists_in_redis_across_process_restart` *(persistence: open state survives restart)*
+  - `test_circuit_breaker_state_shared_across_replicas_via_redis` *(cross-replica: failure on one replica trips the breaker globally)*
+  - `test_circuit_breaker_defaults_to_closed_and_emits_warning_when_redis_unavailable_at_startup` *(adversarial: Redis down at startup must not prevent application from starting)*
 
 ---
 
@@ -3852,6 +3872,7 @@ Rules:
 - [ ] Bootstrap corpus lives under `data/enrichment_bootstrap/` (gitignored); generated by `make enrichment.bootstrap --synthetic`. The bootstrap target emits a manifest `data/enrichment_bootstrap/manifest.json` listing the planes and date ranges covered.
 - [ ] After bootstrap, the calibration pipeline (§21.11) can run immediately (`make calibration.enrichment`) to produce `data/enrichment_fallback_values.json` and `data/enrichment_baseline.json`.
 - [ ] CI bootstrap (for CI only, not production): `make test.ai` automatically invokes a minimal in-memory bootstrap (2 weeks of synthetic data per plane, ≤ 5 s) so that §21.9 fallback paths are exercised in the standard fast-test suite without requiring a full `make enrichment.bootstrap` run.
+- [ ] **Backfill error isolation**: backfill errors (extraction or storage failures during `make enrichment.bootstrap`) are written to a dedicated `data/enrichment_backfill_errors.log` (newline-delimited JSON) — they are **not** routed to the production `maint.dlq.v1` bus topic. Polluting the production DLQ with synthetic bootstrap failures would corrupt the DLQ metrics the Phase 8 maint supervisor uses for alerting. The backfill error log is gitignored.
 - [ ] Tests — `test_21_22_backfill_bootstrap.py`:
   - `test_backfill_mode_drops_records_after_as_of_date` *(no-future-leakage)*
   - `test_backfill_mode_disables_event_coalescing_for_derived_views`
@@ -3860,6 +3881,8 @@ Rules:
   - `test_bootstrap_manifest_json_written_after_successful_run`
   - `test_calibration_pipeline_succeeds_immediately_after_bootstrap`
   - `test_backfill_flag_rejected_in_non_bootstrap_invocation_outside_ci` *(safety: backfill mode must not run silently in production)*
+  - `test_backfill_errors_do_not_pollute_production_dlq` *(isolation: backfill failures go to the backfill error log, not maint.dlq.v1)*
+  - `test_backfill_error_log_is_valid_ndjson_when_errors_occur` *(format: each line is parseable JSON)*
 
 ---
 
@@ -3907,6 +3930,7 @@ Enrichment latency budget:
   - `test_enrichment_total_overhead_under_30ms_in_fast_path` *(measures time added to `extract_features_for_match()` when all planes are active and Redis-warm)*
   - `test_msgpack_serialization_reduces_redis_key_size_vs_json` *(efficiency proof)*
   - `test_batch_fetch_issues_single_redis_mget_not_n_separate_gets` *(efficiency proof: one round-trip regardless of plane count)*
+  - `test_enrichment_batch_overhead_under_30ms_for_full_matchday_10_fixtures` *(batch prediction: fetching enrichment for all 10 fixtures of a typical matchday in a single Redis `mget` call must stay under the 30ms per-fixture SLA at a batch level — this is the realistic production workload for a Sunday evening briefing)*
 
 ---
 
@@ -3943,6 +3967,88 @@ Enrichment latency budget:
 
 ---
 
+### 21.27 Derived-View Reactor Watchdog
+
+> **Reliability gate for long-running reactors.** Derived-view reactors run asynchronously; they can silently stall (e.g., if the upstream event bus topic is drained but the reactor hangs on a compute step). Without a watchdog, a stalled reactor produces stale derived-view features indefinitely while appearing healthy. This sub-phase wires the reactor lifecycle into the Phase 8 supervisor.
+
+- [ ] **Watchdog heartbeats**: each derived-view reactor (§21.5 — market-movement, fixture-congestion, card-context, narrative-pressure) emits a `reactor.heartbeat` Redis key `enrich:reactor:{view_name}:last_run_at` (epoch float) on every successful compute cycle. The TTL on the key is `cfg.enrichment_reactor_heartbeat_ttl_s` (default `cfg.enrichment_derived_view_coalesce_ms / 1000 × 10`, floor 60 s) — if the key expires, the reactor has not run in over 10× its expected cycle time.
+- [ ] **Watchdog agent**: a lightweight supervisor loop (`ai/datasource/enrichment/reactor_watchdog.py`) runs at `cfg.enrichment_reactor_watchdog_interval_s` (default 30 s). For each reactor, it checks `enrich:reactor:{view_name}:last_run_at`. If the key is absent (expired or never written), the watchdog emits `predictor.warning{kind: "enrichment_reactor_stalled", view: <view_name>, last_run_at: <epoch | null>}` and writes a `maint.event.v1{kind: "reactor_stall_alert", component: "enrichment_reactor"}` event so the Phase 8 maint supervisor can page the operator.
+- [ ] **Restart policy**: the reactor watchdog does **not** restart stalled reactors automatically (that would introduce double-computation and potentially duplicate features). It alerts; a human or the Phase 8 ops console decides whether to force-restart.
+- [ ] **Wired into Phase 8 supervisor**: `maint.backup.v1` watches `maint.event.v1{kind: "reactor_stall_alert"}` events and escalates to `maint.ack.v1` after `cfg.enrichment_reactor_stall_escalation_count` (default 3) consecutive stall alerts for the same reactor within one scrape window.
+- [ ] Add config keys to `ai/common/config.py` and `xops/env/.env.example` (§21.0 stubs):
+  - `ENRICHMENT_REACTOR_HEARTBEAT_TTL_S` (int, default 60)
+  - `ENRICHMENT_REACTOR_WATCHDOG_INTERVAL_S` (int, default 30)
+  - `ENRICHMENT_REACTOR_STALL_ESCALATION_COUNT` (int, default 3)
+- [ ] `make health.enrichment` (§21.19) extended to include reactor heartbeat status in the output alongside per-plane stale alerts.
+- [ ] Tests — `test_21_27_reactor_watchdog.py`:
+  - `test_reactor_heartbeat_key_written_after_successful_derive_cycle`
+  - `test_expired_heartbeat_triggers_stall_warning_event`
+  - `test_stall_alert_published_to_maint_event_v1_after_threshold_consecutive_misses`
+  - `test_watchdog_does_not_restart_stalled_reactor_automatically` *(architecture contract: alert only, no auto-restart)*
+  - `test_health_enrichment_includes_reactor_heartbeat_status`
+  - `test_reactor_heartbeat_ttl_is_at_least_10x_coalesce_window` *(config sanity: TTL must give reactors time to run before being marked stalled)*
+  - `test_watchdog_handles_all_four_derived_views_independently` *(each view has its own heartbeat key; stalling one does not alert the others)*
+
+---
+
+### 21.28 Enrichment REST Query Endpoints
+
+> **Direct enrichment data access.** The prediction endpoints expose enrichment-derived features only indirectly (as part of the prediction payload). Operators, dashboards, and premium users need to query enrichment state directly — e.g., "is this player available?", "who is refereeing tonight?", "what's the weather forecast for the venue?". This sub-phase adds read-only REST endpoints for each enrichment plane.
+
+- [ ] Add four endpoints to `server/internal/enrichment/` (new handlers, same package as §21.18):
+  - `GET /v1/enrichment/roster/{team_id}` — returns current transfer and suspension state for all active squad members at `team_id`. Filters: `?as_of=<ISO-date>` (time-travel; defaults to now); `?confidence=official|agreed|rumour` (filter by confidence level). Response includes `transfers[]`, `suspensions[]`, `contracts[]` with provenance timestamps.
+  - `GET /v1/enrichment/health/{team_id}` — returns current injury and availability records for `team_id`. Filters: `?fixture_id=<id>` (per-fixture view); `?status=fit|doubtful|out|suspended|international_duty`. Response includes `injuries[]`, `availability[]` with source confidence and asserted timestamps.
+  - `GET /v1/enrichment/officials/{fixture_id}` — returns the referee assignment for `fixture_id` plus the full rolling-stats profile of the main referee. Returns HTTP 404 when no assignment exists yet; HTTP 200 with `last_minute_change` flag when an assignment is present.
+  - `GET /v1/enrichment/environment/{fixture_id}` — returns the latest weather forecast (and actual if available) for the venue of `fixture_id` plus the pitch condition record. Returns the most recent forecast within `cfg.enrichment_weather_forecast_max_age_h` hours; returns HTTP 404 when no valid forecast exists and no actual is available.
+- [ ] All four endpoints are **tier-gated** per §21.12: `/roster` and `/health` require `pro` tier; `/officials` is `pro`; `/environment` is `free` (weather is a marketing-friendly free feature). The tier enforcement uses the same `EnrichmentAllowed` gate (§21.18) that the prediction middleware uses.
+- [ ] All four endpoints are **jurisdiction-aware**: `/roster` and `/health` return HTTP 451 (Unavailable for Legal Reasons) for leagues where the roster/health planes are suppressed by jurisdiction gating (§21.10), with a `{reason: "data_suppressed_by_jurisdiction"}` body. `/officials` and `/environment` are never suppressed.
+- [ ] Endpoints support `?as_of=<ISO-datetime>` time-travel parameter (required for backtesting use-cases); when `as_of` is provided, the query reads historical rows from Postgres (not from the Redis cache).
+- [ ] Added to `docs/design/API.md §9.20` (new section "Enrichment query endpoints") with response shapes, tier requirements, and example responses.
+- [ ] Go tests in `server/internal/enrichment/` package:
+  - `TestRosterEndpoint_ReturnsSuspensionsAndTransfersForTeam`
+  - `TestRosterEndpoint_FiltersOutRumoursWhenConfidenceOfficialRequested`
+  - `TestHealthEndpoint_ReturnsAvailabilityVectorForFixture`
+  - `TestOfficialsEndpoint_Returns404WhenNoAssignment`
+  - `TestOfficialsEndpoint_IncludesLastMinuteChangeFlagWhenSet`
+  - `TestEnvironmentEndpoint_Returns404WhenForecastTooStale`
+  - `TestRosterEndpoint_Returns451ForJurisdictionSuppressedLeague` *(legal gate)*
+  - `TestHealthEndpoint_Returns451ForJurisdictionSuppressedLeague` *(legal gate)*
+  - `TestOfficialsEndpoint_NotSuppressedByJurisdiction` *(architecture contract)*
+  - `TestAllEnrichmentEndpoints_RequireCorrectTier` *(tier gate)*
+  - `TestRosterEndpoint_TimeTravelAsOfParamQueriesHistoricalRows` *(backtesting use-case)*
+  - `TestEnvironmentEndpoint_ActualOverridesForecastWhenBothPresent` *(correct override semantics)*
+
+---
+
+### 21.29 Cross-Plane Consistency Invariants
+
+> **Data integrity across enrichment planes.** Individual plane extractors and reactors are tested in isolation (§21.1–§21.5). However, cross-plane consistency is never tested: a player marked `suspended` in the suspension records (plane 6) should also appear as `status: suspended` in the availability records (plane 7); a referee in an assignment (plane 8) must have a profile row; a weather forecast (plane 9) must reference a venue that exists in the Reference plane. Without cross-plane validation, silent inconsistencies degrade prediction quality without surfacing in any per-plane test.
+
+- [ ] **Consistency invariant definitions** (`ai/datasource/enrichment/consistency.py`):
+  - **Invariant 1 — Suspension ↔ Availability sync**: any player with an active suspension record in `suspensions` (plane 6) must have a matching `availability` row (plane 7) with `status=suspended` for the same `(player_id, competition_id)`. Violation = suspension record exists but availability row is missing or has a conflicting status.
+  - **Invariant 2 — Referee assignment ↔ Profile**: every `referee_assignment` row must have a corresponding `referee_profiles` row with the same `referee_id`. Violation = assignment without a profile (unknown referee slipped through the extractor guard).
+  - **Invariant 3 — Environment venue ↔ Reference**: every `weather_forecast` and `pitch_condition` row must reference a `venue_id` present in the Reference plane's venues table. Violation = orphaned weather/pitch record with a dangling venue_id.
+  - **Invariant 4 — Transfer ↔ Reference player**: every `transfer` and `contract` row must reference a `player_id` present in the Reference plane's players table. Violation = player-id integrity guard (§21.7) was bypassed or the Reference plane lost the row after writing.
+  - **Invariant 5 — Post-match availability retroactive fix**: every player who appeared in a confirmed `starting_xi` or `substitutes` lineup in the Live plane (plane 3) must have an `availability` row (plane 7) with `status=fit` for that fixture. Violation = post-match truth correction reactor (§21.2) did not fire.
+- [ ] **Consistency checker reactor** (`ai/datasource/enrichment/consistency_reactor.py`): runs asynchronously at `cfg.enrichment_consistency_check_interval_s` (default 3600 s — hourly). For each invariant, it queries the relevant tables, detects violations, emits `predictor.warning{kind: "enrichment_consistency_violation", invariant: <N>, plane_a, plane_b, example_violation}` per violation found, and writes a summary to `data/enrichment_consistency_report.json` (gitignored; refreshed on each run).
+- [ ] **Auto-heal for Invariant 1**: when a suspension record is found without a matching availability row, the consistency reactor creates the missing `availability` row with `status=suspended`, `source_confidence=inferred`, `asserted_at=now()`. This is the only invariant with auto-heal; the others page the operator because the root cause is structural (orphaned FK, bypassed guard, stale plane).
+- [ ] **CI gate**: a fast consistency check (reads the last 48h of records from each plane) is added to `make test.ai` as `test_21_29_consistency_invariants.py::test_consistency_check_passes_on_ci_minimal_bootstrap_data`. This ensures the CI bootstrap data (§21.22) is internally consistent; a failing invariant in bootstrap data would indicate a bug in the synthetic data generator.
+- [ ] Add config keys to `ai/common/config.py` and `xops/env/.env.example`:
+  - `ENRICHMENT_CONSISTENCY_CHECK_INTERVAL_S` (int, default 3600)
+- [ ] Tests — `test_21_29_consistency_invariants.py`:
+  - `test_suspension_without_availability_row_triggers_invariant_1_violation`
+  - `test_invariant_1_auto_heal_creates_availability_row_with_inferred_confidence`
+  - `test_referee_assignment_without_profile_triggers_invariant_2_violation`
+  - `test_invariant_2_emits_warning_not_auto_heal` *(architecture: structural violations page the operator)*
+  - `test_orphaned_weather_venue_id_triggers_invariant_3_violation`
+  - `test_orphaned_transfer_player_id_triggers_invariant_4_violation` *(regression: player-id guard must catch this before write; this test proves it also catches it via consistency check if guard was bypassed)*
+  - `test_missing_post_match_availability_triggers_invariant_5_violation`
+  - `test_consistency_checker_emits_predictor_warning_per_violation`
+  - `test_consistency_check_passes_on_ci_minimal_bootstrap_data` *(CI gate: synthetic data must be self-consistent)*
+  - `test_consistency_report_json_written_and_contains_all_five_invariant_results`
+
+---
+
 ### 21.26 Definition of Done
 
 > **Canonical DoD.** §21.15 (earlier in this phase) is the original partial list; this section supersedes it and is the authoritative gate. All items in §21.15 are repeated here and extended.
@@ -3951,15 +4057,15 @@ Enrichment latency budget:
 - [ ] All four derived views implemented as idempotent reactors with determinism proof tests and coalescing guards; §21.5.
 - [ ] `migrations/017_enrichment_planes.sql` applied on a fresh DB; migration down script removes all ten tables cleanly; rollback test green; `make test` green.
 - [ ] `migrations/018_enrichment_audit.sql` applied; append-only constraint enforced; §21.25 tests green.
-- [ ] At least **two** freshness rules per plane documented in `CONTENT_FRESHNESS.md §7` (§7.7–§7.10 added per §21.19; §15 updated for derived-view coalescing); §21.19 tests green.
+- [ ] At least **two** freshness rules per plane documented in `CONTENT_FRESHNESS.md §7` (§7.7–§7.10 added per §21.20; §15 updated for derived-view coalescing); §21.20 tests green.
 - [ ] `ENRICHMENT_DATA.md §8` migration reference is `017_enrichment_planes.sql`; §9 feature-flag table includes "supersedes v0.2 column" column; §21.21 placeholder migration complete.
 - [ ] Jurisdiction gating enforced for GDPR/KVKK/LGPD/PIPL leagues; `xops/legal/dpa_registry.yaml` scaffold committed; CI gate (`test_21_10_jurisdiction_gate.py`) active; audit log live (§21.25).
 - [ ] Five mock sources registered in `xops/mock/sources.py`; seeds present; TLS certs issued by project CA; `make mock.verify` green.
 - [ ] Four enrichment feeds registered in Phase 16 feed registry; feeds appear in `feeds/manifest.json`; bus emission verified end-to-end; backpressure guard in place (§21.8).
-- [ ] **Feature store**: `FEATURE_COLUMNS` extended to 145 entries; `N_FEATURES` auto-resolves to 145 via `len(FEATURE_COLUMNS)`; 25 enrichment columns appended (never interleaved); Redis key format is `f"enrich:{league_id}:{fixture_id}:{plane_id}"`; batch `mget` API in `EnrichmentSource`; `msgpack` serialization; NaN-freedom proof green; §21.15 + §21.24 tests green.
-- [ ] **Schema registry**: all 10 enrichment `record_type` enum values present; 10 JSONSchema files in `common/schemas/feeds/`; `make schema.validate` green; §21.16 tests green.
-- [ ] **Go API enrichment middleware**: `server/internal/enrichment/` package shipped; `/v1/enrichment/health` endpoint live (HTTP 503 on cold start when no plane has ever written; HTTP 207 on partial staleness; Redis + circuit-breaker + DLQ depth included in health payload); tier-gating middleware registered; `docs/design/API.md §9.19` added; §21.17 Go tests green.
-- [ ] **Monitoring + circuit breakers + reactor watchdog**: per-plane circuit breakers and DLQ wiring active; per-plane staleness alerts wired into `make health.enrichment`; derived-view reactor watchdog wired into Phase 8 `maint.backup.v1` supervisor; §21.18 tests green.
+- [ ] **Feature store**: `FEATURE_COLUMNS` extended to 145 entries; `N_FEATURES` auto-resolves to 145 via `len(FEATURE_COLUMNS)`; 25 enrichment columns appended (never interleaved); Redis key format is `f"enrich:{league_id}:{fixture_id}:{plane_id}"`; batch `mget` API in `EnrichmentSource`; `msgpack` serialization; NaN-freedom proof green; §21.16 + §21.24 tests green.
+- [ ] **Schema registry**: all 10 enrichment `record_type` enum values present; 10 JSONSchema files in `common/schemas/feeds/`; `make schema.validate` green; §21.17 tests green.
+- [ ] **Go API enrichment middleware**: `server/internal/enrichment/` package shipped; `/v1/enrichment/health` endpoint live (HTTP 503 on cold start when no plane has ever written; HTTP 207 on partial staleness; Redis + circuit-breaker + DLQ depth included in health payload); tier-gating middleware registered; `docs/design/API.md §9.19` added; §21.18 Go tests green.
+- [ ] **Monitoring + circuit breakers + circuit-state persistence**: per-plane circuit breakers (Redis-persisted, cross-replica shared) and DLQ wiring active; per-plane staleness alerts wired into `make health.enrichment`; §21.19 tests green.
 - [ ] **Calibration**: all four planes individually meet `cfg.enrichment_promotion_logloss_delta ≥ 0.005` (0.5%) on the held-out window; `data/enrichment_baseline.json` and `data/enrichment_fallback_values.json` written; feature distribution stability proof (no enrichment column is >95% zero-valued) green; `make calibration.enrichment` target green.
 - [ ] **Historical backfill**: `make enrichment.bootstrap` target green; no-future-leakage proof passes; CI minimal bootstrap runs in ≤ 5 s; §21.22 tests green.
 - [ ] **Model compatibility**: `ModelShim` for 120-feature saved models tested; retraining gate detects all-four-planes-at-`1.0.0` and emits the retrain event; `make train.enriched` produces `models/predictor_v145.pkl`; §21.23 tests green.
@@ -3970,13 +4076,16 @@ Enrichment latency budget:
 - [ ] Six NLP intents active; Turkish sample queries present (≥ 5 per intent); zero LLM invocations in enrichment intent path proven by test; Phase 10 lexicon YAML files updated with new entity classes; §21.13 tests green.
 - [ ] Adversarial + integration suite green (§21.14): injection, float-overflow, no-future-fixture-leakage, unknown-venue-id, unknown-player-id, replay idempotency, two-plane partial failure; isolation gate still green.
 - [ ] `xops/legal/dpa_registry.yaml` scaffold present with KVKK stub for `tr_super_lig`; DPA expiry handling tested; schema validated by test.
-- [ ] CONTENT_FRESHNESS.md §7.7–§7.10 present and complete; §15 updated for derived-view coalescing spec (§21.5 window and backfill-mode flag); §21.19 tests green.
+- [ ] CONTENT_FRESHNESS.md §7.7–§7.10 present and complete; §15 updated for derived-view coalescing spec (§21.5 window and backfill-mode flag); §21.20 tests green.
 - [ ] Placeholder migration complete: eight v0.2 proxy columns annotated `# DEPRECATED`; enrichment-plane values override synthetic values when planes are active; §21.21 tests green.
 - [ ] Component versions bumped via `make version.bump`:
   - `enrichment_roster 0.1.0 → 1.0.0`
   - `enrichment_health 0.1.0 → 1.0.0`
   - `enrichment_officials 0.1.0 → 1.0.0`
   - `enrichment_environment 0.1.0 → 1.0.0`
+- [ ] **Reactor watchdog**: all four derived-view reactors emit heartbeat keys in Redis; watchdog alerts on stall via `predictor.warning` and `maint.event.v1`; watchdog wired into Phase 8 `maint.backup.v1` supervisor for escalation after `cfg.enrichment_reactor_stall_escalation_count` misses; `make health.enrichment` includes reactor heartbeat status; §21.27 tests green.
+- [ ] **Enrichment REST endpoints**: `/v1/enrichment/roster/{team_id}`, `/health/{team_id}`, `/officials/{fixture_id}`, `/environment/{fixture_id}` live; tier-gated per §21.12; jurisdiction-aware (HTTP 451 for suppressed leagues); `?as_of` time-travel parameter supported; `docs/design/API.md §9.20` added; §21.28 Go tests green.
+- [ ] **Cross-plane consistency**: five consistency invariants defined in `ai/datasource/enrichment/consistency.py`; consistency-checker reactor runs hourly; Invariant 1 auto-heal active (suspension without availability row is auto-corrected); `data/enrichment_consistency_report.json` written after each check; CI gate passes on bootstrap data; §21.29 tests green.
 - [ ] CHANGELOG.md "Unreleased" entry added (one paragraph, English) describing the Phase 21 user-visible delta.
 
 ---
