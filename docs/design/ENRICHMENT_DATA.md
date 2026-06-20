@@ -87,7 +87,7 @@ and recomputed when the upstream record changes.
 
 | Derived view | Source planes | Computation | Cache |
 |---|---|---|---|
-| **Market-movement** | Market (5) | First-tick odds vs closing-tick odds; drift % per market | Per fixture |
+| **Market-movement** | Market (5) | First-tick odds vs closing-tick odds; drift % per market. **6 output fields**: `drift_1x2_home_pct`, `drift_1x2_draw_pct`, `drift_1x2_away_pct`, `drift_total_pct`, `implied_prob_shift_max`, `high_drift_flag` | Per fixture |
 | **Fixture-congestion** | Schedule (2) + Live (3) | Days-since-last-match, matches-in-last-N-days, travel km between consecutive venues | Per team-day |
 | **Card-context overlay** | Officials (8) + history aggregates from Live (3) | Referee mean cards/match × team mean cards/match, smoothed | Per fixture |
 | **Public-narrative pressure** | Editorial (4) | Article volume × sentiment polarity in the 72h pre-KO | Per fixture |
@@ -469,16 +469,18 @@ schemas land at `017`).
 Each enrichment plane is **independently togglable** via
 `cfg.enrichment_<plane>_enabled` flags. Default state:
 
-| Plane | Dev | Test/CI | Prod (post-13a) |
-|---|---|---|---|
-| 6 Roster-state | on | on | on |
-| 7 Health | on | on | on |
-| 8 Officials | on | on | on |
-| 9 Environment | on | on | on |
-| Derived: market-movement | on | on | on |
-| Derived: fixture-congestion | on | on | on |
-| Derived: card-context | on | on | tier-gated (Premium) per [`MONETIZATION.md`](MONETIZATION.md) |
-| Derived: narrative-pressure | on | on | on |
+| Plane | Dev | Test/CI | Prod (post-13a) | Supersedes v0.2 column(s) |
+|---|---|---|---|---|
+| 6 Roster-state | on | on | on | *(none — new signal)* |
+| 7 Health | on | on | on | *(none — new signal)* |
+| 8 Officials | on | on | on | *(none — new signal)* |
+| 9 Environment | on | on | on | `temperature_bucket`, `precipitation_flag`, `wind_category`, `venue_type` |
+| Derived: market-movement | on | on | on | *(none — new signal)* |
+| Derived: fixture-congestion | on | on | on | `home_fixture_congestion_7d`, `away_fixture_congestion_7d`, `home_fixture_congestion_14d`, `away_fixture_congestion_14d` |
+| Derived: card-context | on | on | tier-gated (Premium) per [`MONETIZATION.md`](MONETIZATION.md) | *(none — new signal)* |
+| Derived: narrative-pressure | on | on | on | *(none — new signal)* |
+
+> **Supersedes semantics.** When a plane is active, the enrichment-plane value **always wins** over the v0.2 synthetic formula for the superseded column. The v0.2 synthetic formula remains the fallback for when the plane is disabled (§21.9). The superseded columns are annotated `# DEPRECATED: superseded by enrichment plane <N>` in `ai/model/features.py` (§21.21) but are **not removed** — they preserve backward compatibility for consumers that load saved 120-feature models. Removal is deferred to Phase 22 (R4 cleanup).
 
 Disabling a plane causes the predictor to fall back to its **last
 known features** (no enrichment) and emits a `predictor.warning`
@@ -535,21 +537,25 @@ single template-driven query — **no LLM**, per AGENTS.md rule #4.
 ## 12. Definition-of-Done for "enrichment"
 
 > **Note.** This section is a condensed summary for quick reference. The canonical, authoritative Definition of Done is **ROADMAP §21.26** in `docs/planning/ROADMAP.md`. §21.26 extends and supersedes the checklist below. When the two diverge, §21.26 governs.
+>
+> **Feature count.** The total enrichment-column count is **27** (not 25 as earlier drafts stated). The market-movement derived view contributes 6 columns (`drift_1x2_home_pct`, `drift_1x2_draw_pct`, `drift_1x2_away_pct`, `drift_total_pct`, `implied_prob_shift_max`, `high_drift_flag`); earlier drafts omitted `drift_total_pct` and `implied_prob_shift_max`. `N_FEATURES` = 120 + 27 = **147**.
 
 Per plane (#6, #7, #8, #9):
 
 - [ ] Source row in `xops/mock/sources.py` with `make mock.capture`
       seed verified; TLS vhost cert issued by project CA.
 - [ ] Extractor + differ committed and unit-tested (**≥ 7 tests, including ≥ 2 adversarial**; aligns with ROADMAP Phase 21 per-plane test floor).
-- [ ] Postgres migration in `migrations/`; migration rollback test green.
+- [ ] Postgres migration in `migrations/`; **migration down script** present; rollback test green.
 - [ ] Storage-agent writer path added; unique-key collision tests pass; player-ID integrity guard present.
 - [ ] **At least two** freshness rules in `CONTENT_FRESHNESS.md` §7 (one normal-cadence + one override rule — per ROADMAP §21.15 and §21.20).
-- [ ] Feature columns added to `ai/model/features.py` `FEATURE_COLUMNS` and `N_FEATURES` updated in `ai/common/constants.py` (per ROADMAP §21.16).
+- [ ] Feature columns added to `ai/model/features.py` `FEATURE_COLUMNS` and `N_FEATURES` auto-resolved in `ai/common/constants.py` (per ROADMAP §21.16; `N_FEATURES = len(FEATURE_COLUMNS)` — never a hardcoded literal).
 - [ ] `record_type` enum entry added to `common/schemas/records.py` and corresponding JSONSchema added to `common/schemas/feeds/` (per ROADMAP §21.17).
-- [ ] Predictor includes the feature behind the `cfg.enrichment_<plane>_enabled` flag; Redis cache layer tested.
+- [ ] Predictor includes the feature behind the `cfg.enrichment_<plane>_enabled` flag; Redis cache layer tested; `msgpack` serialization used for cache values.
 - [ ] Tier mapping row in `entitlements.yaml` for any market that depends on this plane.
-- [ ] NLP intent + sample TR query in `ai/tests/fixtures/turkish_queries.yaml`.
-- [ ] Per-plane circuit breaker and DLQ wiring active (per ROADMAP §21.19).
+- [ ] NLP intent + ≥ 5 sample TR queries in `ai/tests/fixtures/turkish_queries.yaml` (including ≥ 1 negation and ≥ 1 misspelling variant).
+- [ ] Per-plane circuit breaker and DLQ wiring active (per ROADMAP §21.19); circuit-breaker state persisted in Redis (process restart does not reset an open breaker).
+- [ ] Per-plane Prometheus metrics registered in `TelemetrySink` (per ROADMAP §21.30); alert rule present in `xops/monitoring/enrichment_alerts.yaml`.
+- [ ] Smoke test exercises the plane end-to-end (`make smoke.enrichment` passes; per ROADMAP §21.31).
 - [ ] Component bump on `enrichment_<plane>` chart key.
 
 ---
@@ -573,8 +579,10 @@ Per plane (#6, #7, #8, #9):
    contract you must respect.
 2. This doc up to §6 — the four new planes + four derived views.
 3. `CONTENT_FRESHNESS.md` §7 — how to add a differ for the new
-   record types.
+   record types. Also read §15 for the derived-view coalescing spec.
 4. `MONETIZATION.md` §4 — how each enrichment-derived market is
    tier-gated.
-5. ROADMAP Phase 21 (§21.26 for the canonical Definition of Done;
-   §21.0 for dependency ordering and config stubs).
+5. ROADMAP Phase 21: start with §21.0 (config stubs and dependency
+   ordering), then §21.26 (canonical Definition of Done). For
+   observability requirements read §21.30; for end-to-end smoke tests
+   read §21.31; for cross-plane consistency invariants read §21.29.
