@@ -20,7 +20,7 @@ from backtest.competition_backtest import (
     CompetitionBacktestCorpus,
     DeterministicBacktestRunner,
 )
-from common.config import cfg
+from ai.common.config import cfg
 
 
 class TestBacktestCorpus:

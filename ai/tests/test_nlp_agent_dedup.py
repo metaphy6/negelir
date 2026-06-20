@@ -15,21 +15,21 @@ from __future__ import annotations
 
 import pytest
 
-from swarm.agents.nlp import (
+from ai.swarm.agents.nlp import (
     NlpAnswerAgent,
     NlpDispatcherAgent,
     NlpIntentAgent,
     NlpProofreaderAgent,
 )
-from swarm.agents.topics import (
+from ai.swarm.agents.topics import (
     NLP_EVENT_V1,
     PREDICT_APPROVED,
     QA_ANSWER_V1,
     QA_INTENT_V1,
     QA_REQUEST_V1,
 )
-from swarm.sdk import RequestIdDeduper
-from swarm.sdk.types import Message
+from ai.swarm.sdk import RequestIdDeduper
+from ai.swarm.sdk.types import Message
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ class TestAuditKeyVersioning:
         """The audit key for tracking requests includes qa_correlation_id,
         intent_model_version, and calibration_version.
         """
-        from swarm.agents.nlp import audit_key
+        from ai.swarm.agents.nlp import audit_key
 
         qa_corr = "corr-abc"
         model_v = "1.2.3"
@@ -402,7 +402,7 @@ class TestAuditKeyVersioning:
         """Two requests with the same qa_correlation_id but different
         model/calibration versions produce distinct audit keys.
         """
-        from swarm.agents.nlp import audit_key
+        from ai.swarm.agents.nlp import audit_key
 
         qa_corr = "corr-001"
 
@@ -420,7 +420,7 @@ class TestAuditKeyVersioning:
 
     def test_audit_key_stable_across_calls(self) -> None:
         """Same inputs produce the same audit key (deterministic)."""
-        from swarm.agents.nlp import audit_key
+        from ai.swarm.agents.nlp import audit_key
 
         key1 = audit_key("corr-001", "1.0.0", "2.0.0")
         key2 = audit_key("corr-001", "1.0.0", "2.0.0")
@@ -429,7 +429,7 @@ class TestAuditKeyVersioning:
 
     def test_audit_key_handles_empty_versions(self) -> None:
         """Empty version strings are valid (pre-train / dev scenario)."""
-        from swarm.agents.nlp import audit_key
+        from ai.swarm.agents.nlp import audit_key
 
         key = audit_key("corr-001", "", "")
         assert isinstance(key, str)
@@ -441,7 +441,7 @@ class TestAuditKeyVersioning:
 
     def test_cache_key_includes_versions(self) -> None:
         """§10.12 L1 cache keys include both model_version and calibration_version."""
-        from swarm.agents.nlp import cache_key_for_intent
+        from ai.swarm.agents.nlp import cache_key_for_intent
 
         intent = "predict.match_outcome"
         entity_hash = "abcd1234"
@@ -505,7 +505,7 @@ class TestAuditKeyVersioning:
 
     def test_cache_key_includes_disclosures_snapshot(self) -> None:
         """Cache keys change when the disclosure snapshot changes."""
-        from swarm.agents.nlp import cache_key_for_intent
+        from ai.swarm.agents.nlp import cache_key_for_intent
 
         key1 = cache_key_for_intent(
             "predict.match_outcome",
@@ -534,7 +534,7 @@ class TestAuditKeyVersioning:
 
     def test_cache_key_stable_across_calls(self) -> None:
         """Cache key is deterministic for same inputs."""
-        from swarm.agents.nlp import cache_key_for_intent
+        from ai.swarm.agents.nlp import cache_key_for_intent
 
         key1 = cache_key_for_intent(
             "predict.match_outcome",

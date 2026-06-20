@@ -126,7 +126,7 @@ class TestBidiStripCoverage:
         # LRI, RLI, FSI, PDI (U+2066-U+2069)
         
         # Verify by checking the regex covers these ranges
-        from common.text.normalize import _STRIP_RE
+        from ai.common.text.normalize import _STRIP_RE
         
         pattern_str = _STRIP_RE.pattern
         
@@ -192,7 +192,7 @@ class TestConfusablesBoundary:
         assert "def normalize_input" in source
 
         # The function docstring and comments should document password exclusion
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
         doc = confusables_fold.__doc__
         assert doc is not None
         assert "password" in doc.lower(), "confusables_fold docstring must mention password exclusion"
@@ -218,7 +218,7 @@ class TestConfusablesTablePin:
         assert "cardinality" in entry, "Must document table size"
 
         # Verify the table size matches
-        from common.text.normalize import _CONFUSABLES_TABLE
+        from ai.common.text.normalize import _CONFUSABLES_TABLE
         expected_size = len(_CONFUSABLES_TABLE)
         assert entry["cardinality"] == expected_size, \
             f"Chart says {entry['cardinality']} entries, actual table has {expected_size}"
@@ -232,7 +232,7 @@ class TestConfusablesTablePin:
 
     def test_confusables_table_is_immutable_dict(self) -> None:
         """The table must be dict[int, str], not a mutable structure."""
-        from common.text.normalize import _CONFUSABLES_TABLE
+        from ai.common.text.normalize import _CONFUSABLES_TABLE
 
         assert isinstance(_CONFUSABLES_TABLE, dict), "Must be a dict"
         # Check a sample entry
@@ -240,7 +240,7 @@ class TestConfusablesTablePin:
         assert _CONFUSABLES_TABLE[0x0430] == "a", "Cyrillic а must map to Latin a"
 
         # Check type hints if available
-        import common.text.normalize as norm_mod
+        import ai.common.text.normalize as norm_mod
         source = open(norm_mod.__file__).read()
         assert "dict[int, str]" in source, "Table type hint must be dict[int, str]"
 
@@ -250,7 +250,7 @@ class TestHomoglyphCanonicalIdResolution:
 
     def test_gazetteer_matches_on_folded_form(self) -> None:
         """After confusables fold, gazetteer uses folded text for matching."""
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
 
         # Input with Cyrillic 'а' (U+0430)
         raw_text = "Gal\u0430tasaray"  # Galаtasaray (Cyrillic а)
@@ -264,7 +264,7 @@ class TestHomoglyphCanonicalIdResolution:
 
     def test_original_text_preserved_when_confusables_differ(self) -> None:
         """If folded differs from raw, preserve original in entities[].original_text."""
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
 
         # Raw with confusable
         raw_text = "Gal\u0430tasaray"
@@ -314,7 +314,7 @@ class TestHomoglyphCanonicalIdResolution:
 
     def test_confusables_count_increments_per_resolved_entity(self) -> None:
         """confusables_resolved_count = count of entities where folded != raw."""
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
 
         # Scenario: 2 entities, one with confusable, one without
         entity1_raw = "Gal\u0430tasaray"  # Has confusable
@@ -337,7 +337,7 @@ class TestHomoglyphCanonicalIdResolution:
 
     def test_confusables_resolved_zero_when_no_confusables(self) -> None:
         """confusables_resolved_count=0 when no entities had confusables."""
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
 
         # Clean inputs (no confusables)
         inputs = ["Galatasaray", "Fenerbahçe", "Beşiktaş"]
@@ -350,7 +350,7 @@ class TestHomoglyphCanonicalIdResolution:
 
     def test_multiple_confusables_in_one_entity_counts_as_one(self) -> None:
         """One entity with multiple confusables still counts as 1 resolved entity."""
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
 
         # Entity with 3 confusables: Gal<CYRILLIC-а>t<GREEK-α>s<CYRILLIC-о>ray
         raw = "Gal\u0430t\u03B1s\u043Eray"
@@ -362,7 +362,7 @@ class TestHomoglyphCanonicalIdResolution:
 
     def test_audit_preserves_raw_form_for_forensics(self) -> None:
         """original_text is preserved for audit/forensics when confusables were resolved."""
-        from common.text.normalize import confusables_fold
+        from ai.common.text.normalize import confusables_fold
 
         # Attack vector: Cyrillic lookalike
         raw = "Gal\u0430tasaray"

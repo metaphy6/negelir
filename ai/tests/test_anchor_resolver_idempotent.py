@@ -13,7 +13,7 @@ Requirement details:
 
 import pytest
 
-from swarm.identity import AnchorResolver
+from ai.swarm.identity import AnchorResolver
 
 
 class TestAnchorResolverIdempotent:

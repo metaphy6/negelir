@@ -9,7 +9,7 @@ class TestUnownedBusTopicRefused:
 
     def test_unowned_topic_raises_error(self) -> None:
         """Publishing to an untracked topic raises an error."""
-        from common.bus.publisher import (
+        from ai.common.bus.publisher import (
             BusUnauthorizedPublishError,
             SimplePublisherAuthenticator,
         )
@@ -22,7 +22,7 @@ class TestUnownedBusTopicRefused:
 
     def test_multiple_topics_policies_enforced(self) -> None:
         """Policies are enforced for multiple topics independently."""
-        from common.bus.publisher import (
+        from ai.common.bus.publisher import (
             BusUnauthorizedPublishError,
             SimplePublisherAuthenticator,
             TopicPolicy,

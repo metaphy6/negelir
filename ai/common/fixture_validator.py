@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from common.logger import get_logger
-from common.league_catalog_loader import CATALOG
-from common.telemetry import FIXTURE_COMPETITION_MISSING_TOTAL
+from ai.common.logger import get_logger
+from ai.common.league_catalog_loader import CATALOG
+from ai.common.telemetry import FIXTURE_COMPETITION_MISSING_TOTAL
 
 log = get_logger(__name__)
 

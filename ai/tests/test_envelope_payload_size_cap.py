@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from common.config import Config
+from ai.common.config import Config
 
 
 class TestEnvelopePayloadSizeCap:

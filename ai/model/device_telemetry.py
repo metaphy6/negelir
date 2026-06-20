@@ -13,8 +13,8 @@ import time
 from typing import Any, Dict, Optional
 import logging
 
-from common.config import Config
-from common.logger import get_logger
+from ai.common.config import Config
+from ai.common.logger import get_logger
 
 log = get_logger("model.device_telemetry")
 

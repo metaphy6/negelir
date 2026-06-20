@@ -14,7 +14,7 @@ import pytest
 from pathlib import Path
 
 # Test that the loader can be imported and the singleton loads successfully
-from common.calibration_profile_loader import (
+from ai.common.calibration_profile_loader import (
     CALIBRATION_PROFILES,
     CalibrationProfile,
     load_calibration_profiles,

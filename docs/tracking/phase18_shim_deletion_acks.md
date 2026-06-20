@@ -6,6 +6,7 @@
 1. Zero `ai.*-shim` `DeprecationWarning`s in CI (≥ 50 pipelines)
 2. Zero hits in production runtime logs (`make shim.runtime.report`)
 3. **CODEOWNERS ACK from each component** (checked into this file)
+4. **Zero `ai/` references in patcher bundle storage** (Phase 19 §19.1; fourth signal from Phase 18 ledger #21)
 
 This file is CODEOWNERS-protected. Each component owner MUST explicitly ACK
 the removal of the shim before Phase 22 §22.4 deletion can proceed.
@@ -39,6 +40,13 @@ the removal of the shim before Phase 22 §22.4 deletion can proceed.
 - **Requirement:** All four component owners explicitly ACK the shim deletion
 - **Status:** ⏳ Pending owner PRs
 - **Tracking:** This file (CODEOWNERS-protected)
+
+### Signal 4: Patcher Bundle `ai/` References (Phase 19 §19.1)
+- **Requirement:** Zero `ai/` references in all patcher bundle artifacts (Phase 17 storage)
+- **Status:** ⏳ Pending Phase 19 execution
+- **Command:** `make patcher.bundle.scan-ai-refs`
+- **Verified by:** `test_19_1_ai_refs_zero_in_patcher_bundles.py`
+- **Note:** This signal added in Phase 19 §19.1 per ledger #21 deferred work
 
 ---
 

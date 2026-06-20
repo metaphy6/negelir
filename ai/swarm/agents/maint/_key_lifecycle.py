@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from common.config import Config
+from ai.common.config import Config
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 

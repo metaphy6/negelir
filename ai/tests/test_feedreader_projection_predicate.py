@@ -106,7 +106,7 @@ class TestFeedReaderProjectionPredicate:
     def test_snapshot_projects_columns(self, feeds_dir_with_parquet):
         """snapshot(columns=...) only reads requested columns."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -133,7 +133,7 @@ class TestFeedReaderProjectionPredicate:
     def test_snapshot_filters_by_predicate(self, feeds_dir_with_parquet):
         """snapshot(predicate=...) filters rows correctly."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -170,7 +170,7 @@ class TestFeedReaderProjectionPredicate:
     def test_snapshot_combines_projection_and_predicate(self, feeds_dir_with_parquet):
         """snapshot(columns=..., predicate=...) uses both."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -205,7 +205,7 @@ class TestFeedReaderProjectionPredicate:
     def test_iter_snapshot_batches_records(self, feeds_dir_with_parquet):
         """iter_snapshot() yields records in batches."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -234,7 +234,7 @@ class TestFeedReaderProjectionPredicate:
     def test_iter_snapshot_respects_batch_size(self, feeds_dir_with_parquet):
         """iter_snapshot(batch_size=...) uses the specified size."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -256,7 +256,7 @@ class TestFeedReaderProjectionPredicate:
     def test_iter_snapshot_handles_empty_results(self, feeds_dir_with_parquet):
         """iter_snapshot() handles case where predicate matches no records."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -279,7 +279,7 @@ class TestFeedReaderProjectionPredicate:
     def test_predicate_is_callable(self, feeds_dir_with_parquet):
         """Predicate parameter must be callable."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         
@@ -302,7 +302,7 @@ class TestFeedReaderProjectionPredicate:
     def test_iter_snapshot_with_projection_and_predicate(self, feeds_dir_with_parquet):
         """iter_snapshot() combines projection + predicate + batching."""
         try:
-            from common.feeds import FeedReader
+            from ai.common.feeds import FeedReader
         except ImportError:
             pytest.skip("FeedReader not available")
         

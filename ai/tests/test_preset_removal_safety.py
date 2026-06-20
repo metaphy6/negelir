@@ -71,7 +71,7 @@ def test_preset_lazy_loading_handles_missing_presets():
     2. Log the failure gracefully
     3. Continue loading other presets
     """
-    from common.leagues import load_league_configs
+    from ai.common.leagues import load_league_configs
     
     configs = load_league_configs()
     

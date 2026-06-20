@@ -6,7 +6,7 @@ Phase 2: Maps user questions to specific upcoming fixtures.
 import re
 from datetime import datetime, timedelta
 
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 log = get_logger("pipeline.resolver")
 

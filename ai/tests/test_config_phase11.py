@@ -1,4 +1,4 @@
-from common.config import Config
+from ai.common.config import Config
 
 
 def test_npu_max_acc_drop_pct_default() -> None:

@@ -48,7 +48,7 @@ class TestEveryTableDeclaresOwner:
 
     def test_owner_check_defines_policies(self) -> None:
         """owner_check.py defines TableOwnershipPolicy and related classes."""
-        from common.db.owner_check import (
+        from ai.common.db.owner_check import (
             SimpleOwnershipChecker,
             TableOwner,
             TableOwnershipError,

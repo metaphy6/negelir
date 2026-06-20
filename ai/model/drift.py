@@ -5,8 +5,8 @@ Phase 6: Rolling accuracy check triggers retrain when performance degrades.
 
 from dataclasses import dataclass
 
-from common.config import cfg
-from common.logger import get_logger
+from ai.common.config import cfg
+from ai.common.logger import get_logger
 
 log = get_logger("model.drift")
 

@@ -25,7 +25,7 @@ from unittest import mock
 
 import pytest
 
-from common.feeds import FeedReader, FeedCursor
+from ai.common.feeds import FeedReader, FeedCursor
 
 
 class TestFeedReaderTelemetry:
@@ -46,7 +46,7 @@ class TestFeedReaderTelemetry:
     def reader_with_tmp_path(self, tmp_feeds_dir):
         """Create a FeedReader pointing to temp path."""
         # Reset global telemetry state
-        from common.feeds import reader as reader_module
+        from ai.common.feeds import reader as reader_module
         reader_module._telemetry = {
             "feed_reader_lag_ms": None,
             "feed_reader_corrupt_line_total": 0,

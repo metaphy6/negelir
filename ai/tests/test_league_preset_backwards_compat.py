@@ -16,7 +16,7 @@ def test_all_existing_presets_load():
     Every new LeagueConfig field must have a default value,
     so existing presets continue to work even as the schema evolves.
     """
-    from common.leagues import LEAGUE_CONFIGS
+    from ai.common.leagues import LEAGUE_CONFIGS
     
     # All presets should load
     assert len(LEAGUE_CONFIGS) > 0, "At least one preset should load"
@@ -35,7 +35,7 @@ def test_league_config_fields_have_defaults():
     to LeagueConfig, it MUST have a default value. This test ensures
     the dataclass is structured correctly.
     """
-    from common.league_config import LeagueConfig
+    from ai.common.league_config import LeagueConfig
     
     # Instantiate with no arguments (all fields should have defaults)
     try:
@@ -53,8 +53,8 @@ def test_preset_field_coverage_against_latest_schema():
     Triangle test: load each preset and ensure it can be converted back
     to a dict without missing required fields.
     """
-    from common.leagues import LEAGUE_CONFIGS
-    from common.league_config import LeagueConfig
+    from ai.common.leagues import LEAGUE_CONFIGS
+    from ai.common.league_config import LeagueConfig
     from dataclasses import asdict
     
     for league_id, config in LEAGUE_CONFIGS.items():

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from swarm.agents.nlp import NlpDispatcherAgent
-from swarm.agents.topics import MAINT_EVENT, QA_INTENT_V1
-from swarm.sdk.types import Message
+from ai.swarm.agents.nlp import NlpDispatcherAgent
+from ai.swarm.agents.topics import MAINT_EVENT, QA_INTENT_V1
+from ai.swarm.sdk.types import Message
 
 
 class FakeRedis:

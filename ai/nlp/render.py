@@ -108,7 +108,7 @@ def _canonicalize_locale_tag(locale: str | None) -> str | None:
 
 
 def _resolve_locale_tag(locale: str | None) -> str:
-    from common.config import cfg
+    from ai.common.config import cfg
 
     canonical = _canonicalize_locale_tag(locale)
     if canonical is None:
@@ -347,7 +347,7 @@ def build_environment(
         When None, the guard is disabled (tests/non-production).
     """
     # Import lazily to avoid circular dependency at module load
-    from common.config import cfg
+    from ai.common.config import cfg
     
     tdir = pathlib.Path(template_dir) if template_dir is not None else _DEFAULT_TEMPLATE_DIR
     loader = jinja2.FileSystemLoader(str(tdir), encoding="utf-8")
@@ -475,7 +475,7 @@ def render(
         env = build_environment()
     if fallback_env is None:
         fallback_env = env
-    from common.config import cfg
+    from ai.common.config import cfg
 
     if answer_format not in _ALLOWED_ANSWER_FORMATS:
         raise ValueError(f"unsupported answer_format: {answer_format!r}")
@@ -506,7 +506,7 @@ def render(
         tmpl = env.get_template(template_name)
         rendered = tmpl.render(**render_context)
 
-        from common.config import cfg
+        from ai.common.config import cfg
 
         if answer_format == "screen_reader":
             rendered = _normalize_screen_reader_answer(rendered)

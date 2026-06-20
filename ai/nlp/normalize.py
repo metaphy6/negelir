@@ -16,7 +16,7 @@ Steps (order is BINDING; any reordering breaks downstream tests):
 Usage::
 
     from nlp.normalize import normalize_input, InputTooLongError
-    from common.config import cfg
+    from ai.common.config import cfg
 
     try:
         result = normalize_input("Galatasaray mac tahmini", cfg=cfg)
@@ -37,14 +37,14 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
-from common.config import cfg
-from common.locale_loader import build_team_names, load_locale
+from ai.common.config import cfg
+from ai.common.locale_loader import build_team_names, load_locale
 import json
 import yaml
 
-from common.text.normalize import canonical_normalize, confusables_fold
-from common.text._turkish_compose import compose_turkish_dotted_i
-from common.text.turkish import (
+from ai.common.text.normalize import canonical_normalize, confusables_fold
+from ai.common.text._turkish_compose import compose_turkish_dotted_i
+from ai.common.text.turkish import (
     MorphCandidate,
     collapse_repeated_chars,
     digit_letter_confusable_fold,
@@ -73,7 +73,7 @@ from nlp.postposition_stack import (
     PostpositionStackMatch,
     UnknownPostpositionStack,
 )
-from common.telemetry import get_sink
+from ai.common.telemetry import get_sink
 from nlp.runtime.budget import RequestBudget
 from nlp.phase10_30 import (
     apply_asr_punctuation_words,
@@ -225,7 +225,7 @@ def _collapse_unicode_spaces(text: str, enabled: bool) -> str:
 def detect_all_caps(text: str, cfg=None) -> bool:
     """Return True when uppercase letters dominate a valid Turkish query."""
     if cfg is None:
-        from common.config import cfg as _cfg
+        from ai.common.config import cfg as _cfg
         cfg = _cfg
     letters = [ch for ch in text if ch.isalpha()]
     if len(letters) < 4:
@@ -294,7 +294,7 @@ def assert_minimum_signal(text: str, cfg=None) -> tuple[str, str | None, list[st
     This helper is a minimal runtime gate for the NLP intent floor path.
     """
     if cfg is None:
-        from common.config import cfg as _cfg
+        from ai.common.config import cfg as _cfg
         cfg = _cfg
 
     normalized = str(text or "").strip()
@@ -333,7 +333,7 @@ def _looks_like_fragment(text: str, cfg=None) -> bool:
     query. It is intentionally conservative to avoid false positives.
     """
     if cfg is None:
-        from common.config import cfg as _cfg
+        from ai.common.config import cfg as _cfg
         cfg = _cfg
 
     if not getattr(cfg, "nlp_fragment_detection_enabled", True):
@@ -1340,7 +1340,7 @@ def _record_nlp_input_repair_metrics(
     confusables_folded: bool,
     ascii_restored: bool,
 ) -> None:
-    from common.telemetry import get_sink
+    from ai.common.telemetry import get_sink
 
     sink = get_sink()
     if confusables_folded:
@@ -1497,7 +1497,7 @@ def normalize_input(
         ``cfg.nlp_input_max_codepoints``.
     """
     if cfg is None:
-        from common.config import cfg as _cfg
+        from ai.common.config import cfg as _cfg
         cfg = _cfg
 
     raw_tokens: list[str] = []

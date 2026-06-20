@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from typing import List
 
-from common.config import Config
+from ai.common.config import Config
 from ai.nlp._intent_cache import IntentCache
 from nlp.eval._sample import _scrub_pii
 

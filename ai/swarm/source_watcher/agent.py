@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Optional, Sequence
 from uuid import uuid4
 
-from common.config import cfg
+from ai.common.config import cfg
 
 from ..agents.payloads import MaintEvent, SecAlert
 from ..agents.topics import MAINT_EVENT, PROOF_FLAG, SEC_ALERT, SOURCE_WATCH_REPORT_V1

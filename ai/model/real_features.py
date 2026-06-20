@@ -26,15 +26,15 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from common.config import cfg
+from ai.common.config import cfg
 
-from common.constants import (
+from ai.common.constants import (
     MACKOLIK_ID_MAP,
     TEAM_STRENGTH,
     UUID_TO_NAME,
     N_FEATURES,
 )
-from common.logger import get_logger
+from ai.common.logger import get_logger
 from model.features import FEATURE_COLUMNS
 
 log = get_logger("model.real_features")
@@ -463,7 +463,7 @@ def _parse_date(date_str: str) -> datetime:
 
 def _is_derby(home: str, away: str) -> bool:
     """Check if this matchup is a derby (delegates to LeagueConfig)."""
-    from common.league_config import turkish_super_lig
+    from ai.common.league_config import turkish_super_lig
     return turkish_super_lig().is_derby(home, away)
 
 

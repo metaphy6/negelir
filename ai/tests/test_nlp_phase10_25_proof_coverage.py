@@ -1,7 +1,7 @@
 """Phase 10 §10.25 proof coverage for NLP event/alert kind registration."""
 from __future__ import annotations
 
-import swarm.sdk.schemas as bus_schemas
+import ai.swarm.sdk.schemas as bus_schemas
 
 
 def test_phase10_25_nlp_event_kinds_are_registered() -> None:

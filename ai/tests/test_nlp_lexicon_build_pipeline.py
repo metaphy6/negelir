@@ -449,7 +449,7 @@ class TestVerifyNormalizeRoundTrip:
     """(c) Normalized alias must not collide with another canonical's normalized alias."""
 
     def test_no_normalize_round_trip_collision_in_live_lexicons(self) -> None:
-        from common.config import cfg
+        from ai.common.config import cfg
         from nlp.normalize import normalize_input
 
         canonical_files = [
@@ -806,7 +806,7 @@ class TestLexiconGovernanceExtras:
         ]
 
     def test_nlp_lexicon_max_aliases_per_canonical_default(self) -> None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         assert cfg.nlp_lexicon_max_aliases_per_canonical == 12
 
@@ -815,7 +815,7 @@ class TestLexiconGovernanceExtras:
         assert "NEGELIR_NLP_LEXICON_MAX_ALIASES_PER_CANONICAL=12" in env_example.read_text()
 
     def test_new_nlp_config_keys_have_defaults(self) -> None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         assert cfg.nlp_conversation_index_backend == "redis"
         assert cfg.nlp_intent_retrain_max_regression == 0.005

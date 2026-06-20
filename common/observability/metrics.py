@@ -169,3 +169,14 @@ def record_relax_invocation(context: str = "other") -> None:
         context: The context for the invocation (rollback, emergency, other).
     """
     relax_invocation_count.labels(context=context).inc()
+
+
+def get_metric_value(metric_name: str, league_id: str = None) -> tuple:
+    """Get the current value and age of a metric.
+    
+    Returns:
+        Tuple of (current_value, age_in_hours)
+    """
+    # Placeholder: in production this would query Prometheus
+    # For testing, this returns a tuple
+    return (0, 0.0)

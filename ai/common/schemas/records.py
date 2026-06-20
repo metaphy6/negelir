@@ -83,6 +83,45 @@ class Lineup(TypedDict):
     players: List[LineupPlayer]
 
 
+class TbdOpponentFixture(TypedDict, total=False):
+    """Phase 19.5 — TBD-opponent placeholder fixture (WC qualifier play-offs).
+    
+    When WC playoff opponents are not yet resolved (e.g., waiting for a 
+    second-leg result or inter-confederation bracket draw), fixtures use
+    this type with a degenerate prediction (home_win_prob: null).
+    """
+    
+    match_stable_id: str
+    """Stable ID for this fixture."""
+    
+    kickoff_utc: str
+    """Scheduled kickoff time in UTC ISO-8601 format."""
+    
+    home: ScheduleTeam
+    """Home team (known)."""
+    
+    away: ScheduleTeam
+    """Away team (may have team_id='TBD', team_name=None)."""
+    
+    competition: str
+    """Competition, e.g., 'wc_qualifier_playoff'."""
+    
+    status: str
+    """Fixture status, e.g., 'tbd_opponent', 'scheduled', 'finished'."""
+    
+    tbd_reason: str
+    """Reason opponent is TBD, e.g., 'play_off_not_drawn', 'qualifier_leg_pending'."""
+    
+    expected_confirmation_at: Optional[str]
+    """Expected time when opponent will be confirmed, or None if unknown."""
+    
+    referee: Optional[str]
+    """Referee name (optional)."""
+    
+    venue: Optional[str]
+    """Venue name (optional)."""
+
+
 # Feed record type registry (used by schema generator)
 RECORD_TYPES = {
     "score": Score,

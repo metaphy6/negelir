@@ -42,7 +42,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Callable
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from .types import Envelope, Message, Topic
 

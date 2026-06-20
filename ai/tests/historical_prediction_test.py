@@ -33,9 +33,9 @@ from scipy.stats import poisson
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.config import cfg
-from common.constants import N_FEATURES
-from common.league_config import get_league_config
+from ai.common.config import cfg
+from ai.common.constants import N_FEATURES
+from ai.common.league_config import get_league_config
 from model.features import FEATURE_COLUMNS
 
 _LEAGUE = get_league_config(cfg.default_league_id)

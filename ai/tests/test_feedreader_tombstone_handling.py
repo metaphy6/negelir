@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from common.feeds.reader import FeedCursor, FeedReader
+from ai.common.feeds.reader import FeedCursor, FeedReader
 
 
 @pytest.fixture
@@ -160,7 +160,7 @@ def test_tombstone_lru_eviction_and_resurface(temp_feeds_dir):
       - When evicted key resurfaces, increments counter
     """
     # Monkey-patch the config to use a small LRU size for testing
-    import common.feeds.reader as reader_module
+    import ai.common.feeds.reader as reader_module
     
     original_getenv = __import__('os').getenv
     def mock_getenv(key, default=None):

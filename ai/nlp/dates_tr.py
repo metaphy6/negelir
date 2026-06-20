@@ -32,7 +32,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from common.text.turkish import lowercase_tr, parse_number_word, int_to_number_word
+from ai.common.text.turkish import lowercase_tr, parse_number_word, int_to_number_word
 from nlp.dates.hijri import resolve_hijri_observed_date
 
 # ── Public types ──────────────────────────────────────────────────────────

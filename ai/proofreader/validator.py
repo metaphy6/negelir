@@ -24,8 +24,8 @@ from dataclasses import dataclass, field
 import json
 import os
 import sys
-from common.logger import get_logger
-from swarm.agents.proofreader.checks import (
+from ai.common.logger import get_logger
+from ai.swarm.agents.proofreader.checks import (
     RANGES,
     consistency_check,
     plausibility_check,
@@ -157,7 +157,7 @@ def main() -> int:
     """CLI entry point for validating scraped match datasets."""
     import argparse
 
-    from common.config import cfg
+    from ai.common.config import cfg
 
     parser = argparse.ArgumentParser(description="Validate real match dataset JSON")
     parser.add_argument("--input", required=True, help="Path to JSON dataset (expects `matches` array)")

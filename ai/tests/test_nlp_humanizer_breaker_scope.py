@@ -3,7 +3,7 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-from common.config import Config
+from ai.common.config import Config
 from nlp._humanizer_breaker import HumanizerCircuitBreaker
 
 

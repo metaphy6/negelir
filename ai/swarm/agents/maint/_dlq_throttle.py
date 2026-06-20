@@ -25,7 +25,7 @@ import time as _time
 from collections import deque
 from dataclasses import dataclass, field
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 # Growth is measured over a rolling 60-second window (1 minute).
 _GROWTH_WINDOW_S: float = 60.0

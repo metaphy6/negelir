@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 log = get_logger("scraper.schema_fingerprint")
 

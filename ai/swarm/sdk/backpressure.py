@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 
 class Tier(str, Enum):

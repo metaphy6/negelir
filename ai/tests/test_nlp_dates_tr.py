@@ -558,7 +558,7 @@ def test_clock_never_called_for_none() -> None:
 
 def test_cfg_nlp_clock_now_is_callable() -> None:
     """cfg.nlp_clock_now must be a callable returning a UTC-aware datetime."""
-    from common.config import Config
+    from ai.common.config import Config
     cfg = Config()
     result = cfg.nlp_clock_now()
     assert isinstance(result, datetime.datetime)
@@ -568,7 +568,7 @@ def test_cfg_nlp_clock_now_is_callable() -> None:
 
 def test_cfg_nlp_clock_now_replaceable() -> None:
     """cfg.nlp_clock_now can be replaced per-instance for tests."""
-    from common.config import Config
+    from ai.common.config import Config
     cfg = Config()
     fixed = datetime.datetime(2026, 4, 27, 12, 0, tzinfo=UTC)
     cfg.nlp_clock_now = lambda: fixed  # type: ignore[assignment]

@@ -1,9 +1,9 @@
 """Tests for nlp.intent.v1 alerts on redacted TR PII in sanitized text."""
 from __future__ import annotations
 
-from swarm.agents.nlp import NlpIntentAgent
-from swarm.agents.topics import NLP_ALERT_V1, NLP_EVENT_V1, QA_ANSWER_V1, QA_REQUEST_V1
-from swarm.sdk.types import Message
+from ai.swarm.agents.nlp import NlpIntentAgent
+from ai.swarm.agents.topics import NLP_ALERT_V1, NLP_EVENT_V1, QA_ANSWER_V1, QA_REQUEST_V1
+from ai.swarm.sdk.types import Message
 
 
 def _make_qa_request_v1_msg() -> Message:

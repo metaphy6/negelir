@@ -43,9 +43,9 @@ from typing import Any, Callable, NamedTuple, TYPE_CHECKING
 
 import yaml
 
-from common.config import Config
-from common.logger import get_logger
-from common.text.turkish import lowercase_tr
+from ai.common.config import Config
+from ai.common.logger import get_logger
+from ai.common.text.turkish import lowercase_tr
 
 if TYPE_CHECKING:
     from nlp.vendor.symspell import SymSpellIndex

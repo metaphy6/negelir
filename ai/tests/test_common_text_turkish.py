@@ -1,4 +1,4 @@
-from common.text.turkish import int_to_number_word, parse_number_word
+from ai.common.text.turkish import int_to_number_word, parse_number_word
 
 
 def test_parse_number_word_simple_terms() -> None:

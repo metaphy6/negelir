@@ -28,8 +28,8 @@ def derive_event_correlation_id(*, kind: str, target: str | None, produced_at: s
 
 def _known_kind_membership(kind: str) -> tuple[bool, bool]:
     """Return ``(is_known_maint_kind, is_known_sec_kind)`` for ``kind``."""
-    from swarm.agents.maint import KNOWN_MAINT_EVENT_KINDS
-    from swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS
+    from ai.swarm.agents.maint import KNOWN_MAINT_EVENT_KINDS
+    from ai.swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS
 
     return kind in KNOWN_MAINT_EVENT_KINDS, kind in KNOWN_SEC_ALERT_KINDS
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from swarm.sdk import AlertDebouncer, DebounceDecision
+from ai.swarm.sdk import AlertDebouncer, DebounceDecision
 
 
 class _FakeClock:

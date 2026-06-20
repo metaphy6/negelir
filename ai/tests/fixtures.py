@@ -6,7 +6,7 @@ Synthetic generators are intentionally kept under tests/.
 import numpy as np
 import pandas as pd
 
-from common.constants import FEATURE_COLUMNS, N_FEATURES
+from ai.common.constants import FEATURE_COLUMNS, N_FEATURES
 
 
 def generate_synthetic_dataset(n_matches: int = 500, seed: int = 42) -> tuple[pd.DataFrame, pd.Series]:

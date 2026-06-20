@@ -37,7 +37,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
-from common.config import Config
+from ai.common.config import Config
 
 from ai.swarm.agents.payloads import MaintAck
 

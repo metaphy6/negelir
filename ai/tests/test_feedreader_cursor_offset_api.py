@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from common.feeds.reader import FeedReader, FeedCursor
+from ai.common.feeds.reader import FeedReader, FeedCursor
 
 
 class TestCursorOffsetAPI:

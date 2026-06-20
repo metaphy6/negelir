@@ -27,8 +27,8 @@ import signal
 # Module-global flag set by signal handler when a runtime SIGHUP requests a compute panic.
 _panic_requested: bool = False
 
-from common.league_config import LeagueConfig, get_league_config
-from common.logger import get_logger
+from ai.common.league_config import LeagueConfig, get_league_config
+from ai.common.logger import get_logger
 
 log = get_logger("model.device")
 
@@ -976,7 +976,7 @@ def run_and_write_probe(cfg=None) -> None:
     """
     if cfg is None:
         try:
-            from common.config import Config
+            from ai.common.config import Config
 
             cfg = Config()
         except Exception:

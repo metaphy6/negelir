@@ -24,7 +24,7 @@ import base64
 import logging
 from typing import Iterable, Protocol
 
-from common.config import cfg
+from ai.common.config import cfg
 
 from ..sdk.types import Message
 from .payloads import (

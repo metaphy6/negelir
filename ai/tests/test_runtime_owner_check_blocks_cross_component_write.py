@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from common.db.owner_check import (
+from ai.common.db.owner_check import (
     SimpleOwnershipChecker,
     TableOwner,
     TableOwnershipError,

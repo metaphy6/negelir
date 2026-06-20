@@ -6,7 +6,7 @@ from typing import Any, NamedTuple, Optional
 
 import yaml
 
-from common.text.turkish import lowercase_tr
+from ai.common.text.turkish import lowercase_tr
 
 _DEFAULT_GEMINATE_RESTORATION_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "spelling" / "geminate_restoration.tr.yaml"

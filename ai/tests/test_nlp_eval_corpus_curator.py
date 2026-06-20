@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from common.security.tr_pii import detect_tr_pii_spans
+from ai.common.security.tr_pii import detect_tr_pii_spans
 
 from xops.nlp.eval_corpus_curator import curate_eval_corpus
 

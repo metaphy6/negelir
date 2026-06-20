@@ -138,3 +138,164 @@ class CompetitionPayload(TypedDict, total=False):
 
     successor_competition_id: str | None
     """If this competition was renamed/replaced, points to the new one (e.g., UEFA Cup → UEFA Europa League)."""
+
+
+# Phase 19 §19.5 — International tournament support types
+
+
+class ConfoederationGroup(TypedDict, total=False):
+    """A confederation group within a multi-round WC qualifier (e.g. UEFA Group A).
+    
+    Per ROADMAP §19.5 ledger #8, WC qualifiers use confederation-specific groups
+    with carry-forward rules and automatic qualifier slots.
+    """
+
+    size: int
+    """Team count in the group, e.g. 10 for CONMEBOL."""
+
+    carry_forward_rules: list[str]
+    """Rules for points/advancement carry-over between qualifying rounds."""
+
+    automatic_qualifier_slots: int
+    """Teams automatically qualified from this group to inter-confederation play-offs."""
+
+    playoff_slots: int
+    """Teams competing in inter-confederation play-offs."""
+
+
+class InterConfederationPath(TypedDict, total=False):
+    """Pathway from one confederation to another in multi-confederation qualifiers.
+    
+    Example: the inter-confederation play-offs between UEFA and CONMEBOL teams
+    in a hypothetical World Cup expansion format.
+    """
+
+    from_confederation: str
+    """Source confederation, e.g. 'UEFA'."""
+
+    to_confederation: str
+    """Target confederation, e.g. 'CONMEBOL'."""
+
+    slot_count: int
+    """How many slots are contested on this path."""
+
+    format: Literal["single_leg", "two_leg"]
+    """Single-elimination or aggregate-score format."""
+
+
+class QualificationRound(TypedDict, total=False):
+    """A round within a multi-round WC or continental qualifier.
+    
+    Example: UEFA group stage → UEFA two-leg play-offs → inter-confederation play-offs.
+    """
+
+    round_id: str
+    """Unique identifier within the tournament, e.g. 'group_stage', 'playoff_round_1'."""
+
+    format: Literal["group_stage", "two_leg_tie", "single_leg"]
+    """Format of this round."""
+
+    teams_in: int
+    """Teams entering this round."""
+
+    teams_advance: int
+    """Teams advancing to the next round."""
+
+
+class GroupStageConfig(TypedDict, total=False):
+    """Configuration for group stage in continental championships and tournaments."""
+
+    group_count: int
+    """Number of groups, e.g. 4 for Euro, 8 for AFCON."""
+
+    teams_per_group: int
+    """Teams in each group."""
+
+    teams_advance_per_group: int
+    """Teams advancing from each group."""
+
+    tiebreaker_rules: list[str]
+    """Confederation-specific tiebreaker order (e.g. ['points', 'goals_for', 'head_to_head'])."""
+
+
+class KnockoutPhaseConfig(TypedDict, total=False):
+    """Configuration for knockout phases in tournaments."""
+
+    teams_in: int
+    """Teams entering the knockout phase."""
+
+    format: Literal["round_of_16", "round_of_8", "semifinal"]
+    """Bracket size."""
+
+    away_goals_rule: bool
+    """Whether away-goals rule applies (Euro/Copa América etc.)."""
+
+
+class TournamentTiebreakerRules(TypedDict, total=False):
+    """Tournament-specific tiebreaker rules (separate from domestic league rules)."""
+
+    group_stage_rules: list[str]
+    """Order of application in group stage (e.g. points, goals for, head-to-head)."""
+
+    knockout_extra_time: bool
+    """Whether extra time is used in knockout rounds."""
+
+    knockout_penalties: bool
+    """Whether penalties are used if extra time inconclusive."""
+
+
+class WcQualifierFormat(TypedDict, total=False):
+    """WC qualifier format configuration (Phase 19 §19.5)."""
+
+    confederation_groups: list[ConfoederationGroup]
+    """Groups per confederation in the qualifier."""
+
+    inter_confederation_paths: list[InterConfederationPath]
+    """Pathways between confederations."""
+
+    rounds: list[QualificationRound]
+    """Multi-round structure (group stage, play-offs, inter-confederation, etc.)."""
+
+    participant_count_range: dict
+    """Min/max team count (e.g. {min: 190, max: 210})."""
+
+    qualification_matrix_schema_version: int
+    """Version flag for detecting mid-edition rule changes."""
+
+
+class ContinentalChampionshipFormat(TypedDict, total=False):
+    """Continental championship format (Euro, Copa América, AFCON, etc.)."""
+
+    group_stage: GroupStageConfig | None
+    """Group stage configuration, or None for direct knockout."""
+
+    knockout_phase: KnockoutPhaseConfig | None
+    """Knockout phase, or None if group-stage-only."""
+
+    tiebreaker_rules: TournamentTiebreakerRules
+    """Tournament-specific tiebreaker rules."""
+
+    host_nation_flag: bool
+    """True if this tournament has a designated host nation (affects home-advantage)."""
+
+
+class ParticipantCrystallisationGate(TypedDict, total=False):
+    """Gate for crystallising participant rosters in multi-stage tournaments.
+    
+    Phase 19 §19.5 ledger #14 — Participant rosters must be crystallised at
+    known points in the tournament (e.g., end of group stage) to enable
+    downstream systems to rely on stable team lists.
+    """
+
+    crystallisation_timestamp_utc: str
+    """ISO-8601 timestamp when the roster becomes final."""
+
+    teams_confirmed: int
+    """Number of teams confirmed to advance."""
+
+    locked: bool
+    """True if roster is now immutable for downstream systems."""
+
+    reason: str
+    """Reason for crystallisation (e.g., 'group_stage_complete', 'ko_draw_done')."""
+

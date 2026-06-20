@@ -7,7 +7,7 @@ parameters, following Phase 13.3 discipline:
 - Supports auditability via config checksum (Phase 13.21)
 """
 
-from common.league_config import LeagueConfig
+from ai.common.league_config import LeagueConfig
 
 # Turkish Süper Lig with empirically tuned parameters
 # Derbies defined per competition rules

@@ -9,7 +9,7 @@ from typing import Callable, NamedTuple, Optional
 
 import yaml
 
-from common.text.turkish import (
+from ai.common.text.turkish import (
     lowercase_tr,
     strip_proper_noun_suffix,
     is_harmony_tolerant_suffix_candidate,

@@ -16,9 +16,9 @@ import time
 
 import pytest
 
-from common.config import Config
+from ai.common.config import Config
 from nlp.lexicon_loader import LexiconStore, _set_safe_mode_active, is_safe_mode_active
-from swarm.agents.nlp import NlpAnswerAgent, _canonical_lexicon_snapshot_sha
+from ai.swarm.agents.nlp import NlpAnswerAgent, _canonical_lexicon_snapshot_sha
 
 
 @pytest.fixture

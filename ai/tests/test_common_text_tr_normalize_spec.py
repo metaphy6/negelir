@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from common.text.normalize import TR_NORMALIZE_SPEC_SHA, _load_tr_normalize_spec, _load_tr_normalize_spec_sha
+from ai.common.text.normalize import TR_NORMALIZE_SPEC_SHA, _load_tr_normalize_spec, _load_tr_normalize_spec_sha
 
 
 def test_tr_normalize_spec_loads_and_validates() -> None:

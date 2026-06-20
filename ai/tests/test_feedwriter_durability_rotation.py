@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from common.feeds.rotator import FileRotator, CompressionConfig
+from ai.common.feeds.rotator import FileRotator, CompressionConfig
 
 
 class TestCompressionConfig:

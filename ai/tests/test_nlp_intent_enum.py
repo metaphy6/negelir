@@ -192,7 +192,7 @@ class TestIntentTierMap:
 
     def test_config_loads_intent_tier_map_from_default_file_when_env_empty(self, monkeypatch):
         monkeypatch.setenv("NEGELIR_NLP_INTENT_TIER_MAP", "")
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         tier_map = cfg.nlp_intent_tier_map

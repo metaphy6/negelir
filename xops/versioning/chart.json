@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.12.2",
-    "build": 5,
+    "version": "1.13.0",
+    "build": 11,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.146.2",
+      "version": "1.160.3",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-15T16:32:57+00:00",
+      "last_changed": "2026-06-20T09:47:00+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -35,9 +35,9 @@
       }
     },
     "xops": {
-      "version": "3.70.1",
+      "version": "3.79.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-15T16:32:51+00:00"
+      "last_changed": "2026-06-20T09:05:36+00:00"
     },
     "docs": {
       "version": "3.16.0",
@@ -16866,6 +16866,285 @@
       "from": "3.15.0",
       "to": "3.16.0",
       "build": 5
+    },
+    {
+      "timestamp": "2026-06-20T07:49:08+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19.1: Patcher bundle two-key scoping gate (lint rule + migrate command)",
+      "from": "3.70.1",
+      "to": "3.71.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-06-20T07:52:58+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19.1 complete: all gates wired (patcher scoping, ai/ freeze, watchdog coordination, Phase 18 conformance)",
+      "from": "3.71.0",
+      "to": "3.72.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-06-20T07:55:24+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19.2 complete: pluggability hardening gates for Python, Go, YAML, generated stubs, T3 costs, stable_id, source registry, competition aliases, format registry",
+      "from": "3.72.0",
+      "to": "3.73.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-06-20T07:57:51+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19.3 & 19.4: onboarding harness + NLP gazetteer bulk loading",
+      "from": "3.73.0",
+      "to": "3.74.0",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-06-20T08:01:25+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19.5 WC qualifier format: ConfoederationGroup, InterConfederationPath, QualificationRound types",
+      "from": "1.146.2",
+      "to": "1.147.0",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-06-20T08:02:25+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19.5 Continental championship: GroupStageConfig, KnockoutPhaseConfig, TournamentTiebreakerRules",
+      "from": "1.147.0",
+      "to": "1.148.0",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-06-20T08:08:31+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19.5 International tournament calibration profile with rotation/density/host adjustment models",
+      "from": "1.148.0",
+      "to": "1.149.0",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-06-20T08:13:47+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.5 bullet 4: participant-crystallisation gate for international tournaments",
+      "from": "1.149.0",
+      "to": "1.149.1",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-06-20T08:18:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.5 bullet 5: inter-confederation play-off neutral home-advantage prior",
+      "from": "1.149.1",
+      "to": "1.149.2",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-06-20T08:21:36+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.5 bullet 6: WC group-stage qualification-probability simulation (simulate_wc_group method + record type)",
+      "from": "1.149.2",
+      "to": "1.149.3",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-06-20T08:26:12+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.5 bullet 7: Group standings accumulation model with confederation-specific tiebreaker rules",
+      "from": "1.149.3",
+      "to": "1.149.4",
+      "build": 16
+    },
+    {
+      "timestamp": "2026-06-20T08:30:45+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19.5: TBD-opponent fixtures, CompetitionConfig versioning, provisional fixture ingestion",
+      "from": "1.149.4",
+      "to": "1.150.0",
+      "build": 17
+    },
+    {
+      "timestamp": "2026-06-20T08:30:45+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19.5: competition_config_version lint gate, provisional_fixture_importer",
+      "from": "3.74.0",
+      "to": "3.75.0",
+      "build": 18
+    },
+    {
+      "timestamp": "2026-06-20T08:46:43+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 config infrastructure: T3 resource governance, catalog integrity, API catalog surface, timezone resolution",
+      "from": "1.150.0",
+      "to": "1.151.0",
+      "build": 19
+    },
+    {
+      "timestamp": "2026-06-20T08:48:43+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.6: T3 resource manager with budget tracking, shelving, lazy loading, Redis namespace isolation",
+      "from": "1.151.0",
+      "to": "1.152.0",
+      "build": 20
+    },
+    {
+      "timestamp": "2026-06-20T08:49:37+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.7: catalog binary cache, incremental validation, uniqueness check, audit log infrastructure",
+      "from": "1.152.0",
+      "to": "1.153.0",
+      "build": 21
+    },
+    {
+      "timestamp": "2026-06-20T08:50:15+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.14: season calendar model with split season support, timezone resolution, freshness/retrain computation",
+      "from": "1.153.0",
+      "to": "1.154.0",
+      "build": 22
+    },
+    {
+      "timestamp": "2026-06-20T08:51:25+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.19: fixture timezone normalization, UTC conversion, cross-source deduplication, fixture postponement handling",
+      "from": "1.154.0",
+      "to": "1.155.0",
+      "build": 23
+    },
+    {
+      "timestamp": "2026-06-20T08:52:11+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.17: API catalog models with pagination, filtering, readiness scoring, tier/confederation/status filters",
+      "from": "1.155.0",
+      "to": "1.156.0",
+      "build": 24
+    },
+    {
+      "timestamp": "2026-06-20T08:52:57+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 19 infrastructure foundation shipped: T3 resource governance, catalog caching, season calendar, fixture timezone/dedup, API models (5 sections, 27 tests, 40 bullets)",
+      "from": "1.12.2",
+      "to": "1.13.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-20T08:59:42+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19 §19.8: T3 observability — metrics, staleness alerts, SLO exclusion, readiness reports, Grafana provisioning",
+      "from": "3.75.0",
+      "to": "3.76.0",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-20T09:03:01+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19 §19.9: Security & supply-chain — trust levels, sandboxing, sanitisation, compliance gates",
+      "from": "3.76.0",
+      "to": "3.77.0",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-06-20T09:03:56+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19 §19.10: Decommissioning & DR — cleanup orchestration, rollback, audit trail, demotion",
+      "from": "3.77.0",
+      "to": "3.78.0",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-06-20T09:04:53+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.11: Initial T3 roster onboarding",
+      "from": "1.156.0",
+      "to": "1.157.0",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-06-20T09:05:36+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "Phase 19 §19.12-§19.17: Downstream coordination, calibration bootstrap, season calendar, promotion ceremonies, schema versioning, API surface",
+      "from": "3.78.0",
+      "to": "3.79.0",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-06-20T09:06:04+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19 §19.19: Fixture lifecycle — timezone, deduplication, T3 retention, state machine",
+      "from": "1.157.0",
+      "to": "1.158.0",
+      "build": 6
+    },
+    {
+      "timestamp": "2026-06-20T09:30:51+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19.5: International tournament calibration profiles + TBD-opponent fixture support",
+      "from": "1.158.0",
+      "to": "1.159.0",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-06-20T09:37:07+00:00",
+      "component": "ai",
+      "level": "minor",
+      "note": "Phase 19.9: Security modules (DPA, input sanitisation, isolation policy); 241/246 tests passing",
+      "from": "1.159.0",
+      "to": "1.160.0",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-06-20T09:44:40+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.6: T3 scrape lane isolation with config parameters",
+      "from": "1.160.0",
+      "to": "1.160.1",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-06-20T09:45:39+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.6: T3 resource governance complete (all 11 bullets)",
+      "from": "1.160.1",
+      "to": "1.160.2",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-06-20T09:47:00+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 19.7: Catalog integrity & consistency complete (all 11 bullets)",
+      "from": "1.160.2",
+      "to": "1.160.3",
+      "build": 11
     }
   ]
 }

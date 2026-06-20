@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from common.security.patterns import (
+from ai.common.security.patterns import (
     CompiledRule,
     RuleSet,
     current_ruleset,

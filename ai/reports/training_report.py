@@ -20,8 +20,8 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from common.config import cfg
-from common.logger import get_logger
+from ai.common.config import cfg
+from ai.common.logger import get_logger
 
 from pipeline.training_artifacts import (
     ReportArtifact,

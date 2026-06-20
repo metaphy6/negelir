@@ -38,7 +38,7 @@ from typing import Any, NamedTuple, Sequence
 
 import yaml
 
-from common.config import cfg
+from ai.common.config import cfg
 
 # CRF is optional (gracefully absent when pycrfsuite not installed or model missing)
 try:
@@ -50,8 +50,8 @@ except ImportError:
 from nlp.lexicon_loader import AliasHit, LexiconStore
 from nlp.pronouns_irregular import PronounIrregularEntry, load_pronouns_irregular_map
 from nlp.verbal_nouns import VerbalNounEntry, load_verbal_noun_map
-from common.text.turkish import lowercase_tr, strip_proper_noun_suffix
-from common.security.patterns import detect_pii
+from ai.common.text.turkish import lowercase_tr, strip_proper_noun_suffix
+from ai.common.security.patterns import detect_pii
 
 # ── Public constants ───────────────────────────────────────────────────────
 

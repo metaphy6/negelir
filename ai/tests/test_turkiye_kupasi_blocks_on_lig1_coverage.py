@@ -9,8 +9,8 @@ Phase 13.4 binding: TR Lig 1 prerequisite (§13.4).
 
 import pytest
 
-from common.config import Config
-from swarm.identity import AnchorResolver
+from ai.common.config import Config
+from ai.swarm.identity import AnchorResolver
 
 
 # TR Lig 1 clubs (19 teams in the 2024-2025 season)

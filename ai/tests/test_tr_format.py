@@ -7,7 +7,7 @@ import sys
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "ai"))
 
-from common.text.tr_format import (
+from ai.common.text.tr_format import (
     tr_format_clock,
     tr_format_date,
     tr_format_date_short,

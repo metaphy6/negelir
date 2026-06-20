@@ -20,13 +20,13 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from common.feeds.management import (
+from ai.common.feeds.management import (
     get_canonical_encoder_version,
     get_schema_files_sha256,
     get_schema_info,
     verify_remote_schemas,
 )
-from common.feeds.reader import FeedReader
+from ai.common.feeds.reader import FeedReader
 
 
 class TestSchemaDiscoveryEndpoint(unittest.TestCase):

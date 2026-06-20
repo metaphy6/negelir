@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from common.config import Config
+from ai.common.config import Config
 
 
 def test_new_phase10_nlp_feature_flags_are_documented_in_env_example() -> None:

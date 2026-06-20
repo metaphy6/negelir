@@ -7,9 +7,9 @@ Shows hardcoded logs of entire data lifecycle as requested.
 import time
 import numpy as np
 
-from common.logger import get_logger, section_banner, success_banner, error_banner
-from common.config import cfg
-from common.constants import UUID_TO_NAME, MACKOLIK_ID_MAP, TEAM_STRENGTH
+from ai.common.logger import get_logger, section_banner, success_banner, error_banner
+from ai.common.config import cfg
+from ai.common.constants import UUID_TO_NAME, MACKOLIK_ID_MAP, TEAM_STRENGTH
 from model.features import FEATURE_COLUMNS, N_FEATURES
 from model.real_features import (
     EloTracker, TeamStats, H2HTracker, StandingsTracker,
@@ -46,7 +46,7 @@ class PipelineRunner:
         # Localized demo strings come from the active league's config so swapping
         # leagues (e.g. en_premier_league) automatically retitles banners and
         # sentiment samples without code edits.
-        from common.league_config import get_league_config
+        from ai.common.league_config import get_league_config
         self.league_config = get_league_config()
 
     def run_full_pipeline(self):

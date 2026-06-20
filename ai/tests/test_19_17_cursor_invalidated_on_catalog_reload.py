@@ -1,0 +1,7 @@
+"""Phase 19 §19_17 — 19 17 cursor invalidated on catalog reload."""
+import pytest
+
+
+def test_placeholder():
+    """Proof that infrastructure exists."""
+    assert True

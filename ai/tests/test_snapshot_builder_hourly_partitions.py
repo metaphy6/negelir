@@ -19,7 +19,7 @@ from unittest import mock
 
 import pytest
 
-from common.feeds.snapshot import SnapshotBuilder, SnapshotMetadata, SnapshotWatermarkScheduler
+from ai.common.feeds.snapshot import SnapshotBuilder, SnapshotMetadata, SnapshotWatermarkScheduler
 
 
 @pytest.fixture
@@ -431,7 +431,7 @@ class TestIdempotentRebuild:
     
     def test_rebuild_requires_registry_sha(self, tmp_feeds_dir, mock_config):
         """Rebuild refuses to proceed without REGISTRY_SHA (bullet 5)."""
-        from common.feeds.snapshot import rebuild_snapshot_with_registry_pin
+        from ai.common.feeds.snapshot import rebuild_snapshot_with_registry_pin
         
         # Create minimal feed structure
         now = datetime.now(timezone.utc)
@@ -453,7 +453,7 @@ class TestIdempotentRebuild:
     
     def test_rebuild_snapshot_deterministic_with_pin(self, tmp_feeds_dir, mock_config):
         """Rebuilt snapshot matches original when using same registry pin (bullet 5)."""
-        from common.feeds.snapshot import (
+        from ai.common.feeds.snapshot import (
             rebuild_snapshot_with_registry_pin,
             validate_snapshot_determinism,
         )
@@ -499,7 +499,7 @@ class TestIdempotentRebuild:
     
     def test_rebuild_emits_correct_metadata(self, tmp_feeds_dir, mock_config):
         """Rebuilt snapshot has correct metadata with pinned registry (bullet 5)."""
-        from common.feeds.snapshot import rebuild_snapshot_with_registry_pin
+        from ai.common.feeds.snapshot import rebuild_snapshot_with_registry_pin
         
         builder = SnapshotBuilder(
             plane="score",
@@ -830,7 +830,7 @@ class TestBloomFilterSidecars:
         
         bloom_files = list(snapshot_dir.glob("part-*.bloom"))
         
-        from common.feeds.snapshot import BloomFilterWriter
+        from ai.common.feeds.snapshot import BloomFilterWriter
         bloom_writer = BloomFilterWriter(fpr_target=fpr_target)
         
         for bloom_path in bloom_files:
@@ -882,7 +882,7 @@ class TestDeltaSnapshotMode:
     
     def test_delta_snapshot_manager_determines_full_first(self):
         """First snapshot is full when no prior full exists."""
-        from common.feeds.snapshot import DeltaSnapshotManager
+        from ai.common.feeds.snapshot import DeltaSnapshotManager
         
         manager = DeltaSnapshotManager(mode="delta", compaction_hours=24)
         mode, prior_full = manager.determine_snapshot_type(
@@ -895,7 +895,7 @@ class TestDeltaSnapshotMode:
     
     def test_delta_snapshot_manager_uses_delta_within_window(self):
         """Within compaction window, snapshots use delta mode."""
-        from common.feeds.snapshot import DeltaSnapshotManager
+        from ai.common.feeds.snapshot import DeltaSnapshotManager
         
         manager = DeltaSnapshotManager(mode="delta", compaction_hours=24)
         
@@ -910,7 +910,7 @@ class TestDeltaSnapshotMode:
     
     def test_delta_snapshot_manager_compacts_after_interval(self):
         """After compaction hours, snapshots revert to full."""
-        from common.feeds.snapshot import DeltaSnapshotManager
+        from ai.common.feeds.snapshot import DeltaSnapshotManager
         
         manager = DeltaSnapshotManager(mode="delta", compaction_hours=24)
         
@@ -925,7 +925,7 @@ class TestDeltaSnapshotMode:
     
     def test_delta_snapshot_manager_full_mode_always_full(self):
         """In full mode, snapshots are always full (no delta)."""
-        from common.feeds.snapshot import DeltaSnapshotManager
+        from ai.common.feeds.snapshot import DeltaSnapshotManager
         
         manager = DeltaSnapshotManager(mode="full", compaction_hours=24)
         
@@ -946,7 +946,7 @@ class TestDeltaSnapshotMode:
     
     def test_delta_snapshot_chain_building(self):
         """Snapshot chain correctly tracks full and delta modes."""
-        from common.feeds.snapshot import DeltaSnapshotManager
+        from ai.common.feeds.snapshot import DeltaSnapshotManager
         
         manager = DeltaSnapshotManager(mode="delta", compaction_hours=24)
         

@@ -41,7 +41,7 @@ def _derive_default_season() -> str:
     Imported lazily to avoid a circular import with ``common.logger`` at
     module-load time.
     """
-    from common.season import current_season
+    from ai.common.season import current_season
     return current_season()
 
 
@@ -461,6 +461,87 @@ class Config:
         ))
     )
 
+    # Phase 19 §19.5 — International tournament support
+    # wc_playoff_home_advantage_prior: home advantage multiplier for inter-confederation
+    #   play-offs in WC qualifiers (default None = neutral 0.0). Set to a value
+    #   like 0.8 to enable home advantage even in inter-confederation matches.
+    wc_playoff_home_advantage_prior: float | None = field(
+        default_factory=lambda: (
+            float(os.getenv("NEGELIR_COMMON_WC_PLAYOFF_HOME_ADVANTAGE_PRIOR"))
+            if os.getenv("NEGELIR_COMMON_WC_PLAYOFF_HOME_ADVANTAGE_PRIOR") is not None
+            else None
+        )
+    )
+
+    # Phase 19 §19.8 — T3 observability  
+    # t3_staleness_alert_hours: threshold in hours before T3 pipeline staleness
+    #   alerts are triggered (default 72 hours = 3 days).
+    t3_staleness_alert_hours: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_STALENESS_ALERT_HOURS", "72"))
+    )
+
+    # Phase 19 §19.6 — T3 resource governance & scrape-lane isolation
+    # t3_scrape_concurrency: number of concurrent workers in T3 scrape lane
+    #   (default 2; separate from T1/T2 pool to isolate resource usage).
+    t3_scrape_concurrency: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_SCRAPE_CONCURRENCY", "2"))
+    )
+    # t3_scrape_rate_limit_rps: rate limit in requests per second for T3 scrape lane
+    #   (default 0.05 rps per source; independent of T1/T2 rate limit).
+    t3_scrape_rate_limit_rps: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_SCRAPE_RATE_LIMIT_RPS", "0.05"))
+    )
+    # t3_scrape_budget_per_league_s: wall-clock seconds of scrape time budgeted
+    #   per T3 league per day (default 10; enforced by semaphore per league).
+    t3_scrape_budget_per_league_s: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_SCRAPE_BUDGET_PER_LEAGUE_S", "10"))
+    )
+    # t3_predictor_max_cpu_cores: maximum CPU cores allocated per T3 league
+    #   in predictor fan-out (default 0.25; excess jobs queue in t3_low_priority).
+    t3_predictor_max_cpu_cores: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_PREDICTOR_MAX_CPU_CORES", "0.25"))
+    )
+    # t3_source_grace_period_hours: hours to wait before auto-shelving a T3 league
+    #   whose source gauge is zero (default 48 hours).
+    t3_source_grace_period_hours: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_SOURCE_GRACE_PERIOD_HOURS", "48"))
+    )
+    # t3_redis_memory_per_league_kb: estimated Redis memory per T3 league
+    #   in kilobytes; used for scaling smoke tests (default 512 KB).
+    t3_redis_memory_per_league_kb: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_REDIS_MEMORY_PER_LEAGUE_KB", "512"))
+    )
+    # t3_partial_coverage_ci_widen_factor: CI width multiplier when a T3 league
+    #   is missing one or more data planes (default 1.3×).
+    t3_partial_coverage_ci_widen_factor: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_PARTIAL_COVERAGE_CI_WIDEN_FACTOR", "1.3"))
+    )
+    # t3_bootstrap_confidence_floor: minimum confidence for bootstrapped T3 predictions
+    #   (default 0.45; below T1/T2 publication floor but above random).
+    t3_bootstrap_confidence_floor: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_BOOTSTRAP_CONFIDENCE_FLOOR", "0.45"))
+    )
+    # t3_onboarding_concurrent: maximum concurrent onboarding operations
+    #   (default 3; used by `make league.onboard.batch`).
+    t3_onboarding_concurrent: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_ONBOARDING_CONCURRENT", "3"))
+    )
+    # t3_historical_min_days: minimum calendar days of historical data required
+    #   before a source can be onboarded (default 548 = 2 seasons).
+    t3_historical_min_days: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_HISTORICAL_MIN_DAYS", "548"))
+    )
+    # catalog_reload_slo_ms: maximum milliseconds for a full catalog reload
+    #   (default 500 ms; SLO enforced by CI).
+    catalog_reload_slo_ms: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CATALOG_RELOAD_SLO_MS", "500"))
+    )
+    # catalog_max_leagues: maximum number of leagues supported in catalog
+    #   (default 500; used for scaling smoke tests).
+    catalog_max_leagues: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CATALOG_MAX_LEAGUES", "500"))
+    )
+
     # Phase 13 §13.7 — Tier promotion gate
     # league_readiness_report_max_age_h: maximum age in hours for a readiness
     #   report before a T2→T1 promotion is blocked (default 168 h = 7 days).
@@ -715,7 +796,7 @@ class Config:
 
         # Lazy import logger to avoid circular imports at module load time.
         try:
-            from common.logger import get_logger
+            from ai.common.logger import get_logger
 
             log = get_logger("config")
         except Exception:
@@ -3857,7 +3938,7 @@ class Config:
         # Local import: ai/common must not depend on ai/swarm at
         # module load time. The roster is a module-level constant so
         # the import is effectively free after the first call.
-        from swarm.agents.proofreader.replicas import (
+        from ai.swarm.agents.proofreader.replicas import (
             PROOFREADER_POLICY_CLASSES,
         )
 

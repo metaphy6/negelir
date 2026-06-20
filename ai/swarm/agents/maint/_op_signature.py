@@ -32,7 +32,7 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
-from common.config import Config
+from ai.common.config import Config
 from xops.maint.key_id import derive
 from ._key_lifecycle import (
     OperatorsCache,

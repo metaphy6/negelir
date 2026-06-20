@@ -35,8 +35,8 @@ from backtest.bet_types import (
     BetMarket,
     BetMarketResult,
 )
-from common.config import cfg
-from common.logger import get_logger
+from ai.common.config import cfg
+from ai.common.logger import get_logger
 from model.real_features import (
     EloTracker,
     H2HTracker,

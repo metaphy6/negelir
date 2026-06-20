@@ -69,7 +69,7 @@ class AgentRunner:
         self.flush_interval_sec = max(0.0, float(flush_interval_sec))
         if shutdown_grace_s is None:
             try:
-                from common.config import cfg as _cfg
+                from ai.common.config import cfg as _cfg
                 shutdown_grace_s = float(_cfg.nlp_shutdown_grace_s)
             except Exception:  # noqa: BLE001 - keep runner import-safe in minimal environments
                 shutdown_grace_s = 20.0

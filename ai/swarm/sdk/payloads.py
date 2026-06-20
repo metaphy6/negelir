@@ -35,8 +35,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from swarm.sdk import kind_schema_version as _ksv
-from swarm.sdk._dual_emit_helper import (
+from ai.swarm.sdk import kind_schema_version as _ksv
+from ai.swarm.sdk._dual_emit_helper import (
     MAINT_EVENT_TOPIC,
     SEC_ALERT_TOPIC,
     derive_event_correlation_id,
@@ -278,8 +278,8 @@ class MaintEvent:
 
         # §8.15.5 per-kind soft fence: cap the ``details`` kwarg.
         if "details" in fields and isinstance(fields["details"], dict):
-            from common.config import cfg as _cfg  # lazy import — avoids boot-time cycle
-            from swarm.sdk.maint_audit import truncate_oversize as _truncate
+            from ai.common.config import cfg as _cfg  # lazy import — avoids boot-time cycle
+            from ai.swarm.sdk.maint_audit import truncate_oversize as _truncate
             kind_budgets = _cfg.maint_audit_per_kind_details_max_bytes_parsed
             cap = kind_budgets.get(kind, kind_budgets.get("default", 2048))
             oversize_dir = Path(_cfg.data_dir) / "maint" / "audit_oversize"

@@ -179,7 +179,7 @@ class FeedReader:
         # Determine management URL
         if emitter_management_url is None:
             try:
-                from common.config import Config
+                from ai.common.config import Config
                 cfg = Config()
                 host = os.getenv("NEGELIR_EMITTER_HOST", "localhost")
                 emitter_management_url = f"http://{host}:{cfg.emitter_management_port}"
@@ -190,7 +190,7 @@ class FeedReader:
         
         # Verify remote schemas
         try:
-            from common.feeds.management import verify_remote_schemas
+            from ai.common.feeds.management import verify_remote_schemas
             
             logger.info(f"Verifying schema consistency with emitter at {emitter_management_url}")
             verify_remote_schemas(emitter_management_url)
@@ -404,7 +404,7 @@ class FeedReader:
         """
         # Phase 16.4 bullet 7: Initialize tombstone tracking if needed
         try:
-            from common.config import Config
+            from ai.common.config import Config
             cfg = Config()
             tombstone_lru_size = cfg.feed_reader_tombstone_lru_size
         except Exception:
@@ -932,7 +932,7 @@ class FeedReader:
         # use the documented default. See AGENTS.md §2 Rule 1 (single-source config).
         default_batch_size = 4096  # Documented default per Phase 16.4, bullet 8 (ledger #23)
         try:
-            from common.config import Config
+            from ai.common.config import Config
             cfg = Config()
             default_batch_size = cfg.feed_reader_batch_rows
         except ImportError:
@@ -1556,7 +1556,7 @@ class FeedReader:
                        or if manifest replay fails
         """
         # Import here to avoid circular imports
-        from common.feeds.changelog import replay_changelog_to_target
+        from ai.common.feeds.changelog import replay_changelog_to_target
         
         logger.info(f"Creating time-travel reader for as_of={as_of}")
         
@@ -1621,7 +1621,7 @@ class FeedReader:
             ValueError: If `as_of` is outside the manifest changelog retention window,
                         or if no changelog entries can be found
         """
-        from common.feeds.changelog import replay_changelog_to_target
+        from ai.common.feeds.changelog import replay_changelog_to_target
         
         # Reconstruct manifest state at target time
         try:

@@ -1,12 +1,12 @@
 """Phase 10 §10.27.6 — coordinated NLP abuse detector tests."""
 from __future__ import annotations
 
-from common.config import cfg
+from ai.common.config import cfg
 from pathlib import Path
 
-from swarm.agents.nlp.abuse import NlpAbuseAgent
-from swarm.agents.topics import NLP_ALERT_V1, NLP_SHADOW_V1
-from swarm.sdk.types import Message
+from ai.swarm.agents.nlp.abuse import NlpAbuseAgent
+from ai.swarm.agents.topics import NLP_ALERT_V1, NLP_SHADOW_V1
+from ai.swarm.sdk.types import Message
 
 
 def _shadow_message(payload: dict[str, object]) -> Message:

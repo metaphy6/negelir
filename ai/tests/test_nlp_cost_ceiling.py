@@ -30,7 +30,7 @@ def _fake_cfg(
     rss_budget_swap_grace_mb: int = 0,
 ):
     """Return a test config instance with the requested NLP budget overrides."""
-    from common.config import Config
+    from ai.common.config import Config
 
     cfg = Config()
     cfg.nlp_normalize_stage_timeout_ms = timeout_ms
@@ -344,7 +344,7 @@ class TestCostCeilingConfigValidator:
     """nlp_normalize_stage_timeout_ms is validated in Config.__post_init__."""
 
     def test_valid_default_passes(self) -> None:
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert cfg.nlp_normalize_stage_timeout_ms == 20
@@ -355,7 +355,7 @@ class TestCostCeilingConfigValidator:
 
         os.environ["NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS"] = "0"
         try:
-            from common.config import Config
+            from ai.common.config import Config
             issues = Config().validate()
             assert any("nlp_normalize_stage_timeout_ms" in i for i in issues), (
                 f"Expected nlp_normalize_stage_timeout_ms validation issue, got: {issues}"
@@ -367,14 +367,14 @@ class TestCostCeilingConfigValidator:
         import os
         os.environ["NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS"] = "50"
         try:
-            from common.config import Config
+            from ai.common.config import Config
             cfg = Config()
             assert cfg.nlp_normalize_stage_timeout_ms == 50
         finally:
             del os.environ["NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS"]
 
     def test_request_budget_cpu_below_min_rejected(self) -> None:
-        from common.config import Config
+        from ai.common.config import Config
 
         os.environ["NEGELIR_NLP_PER_REQUEST_CPU_BUDGET_MS"] = "10"
         os.environ["NEGELIR_NLP_PER_REQUEST_CPU_BUDGET_MIN_MS"] = "50"

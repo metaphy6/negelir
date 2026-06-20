@@ -83,7 +83,7 @@ class TestEntityExtractLatencyRegression:
 
     @pytest.mark.slow
     def test_p95_below_generous_bound(self) -> None:
-        from common.config import cfg
+        from ai.common.config import cfg
         from nlp.entity import EntityExtractor
         from nlp.lexicon_loader import LexiconStore
 

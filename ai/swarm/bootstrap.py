@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 from typing import Iterable
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from .agents.cache import CacheAgent
 from .agents.consensus import ConsensusAgent

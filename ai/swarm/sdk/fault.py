@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Generator, Optional
 
-from common.config import cfg  # type: ignore
-from common.logger import get_logger  # type: ignore
+from ai.common.config import cfg  # type: ignore
+from ai.common.logger import get_logger  # type: ignore
 
 
 log = get_logger(__name__)

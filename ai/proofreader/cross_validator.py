@@ -7,7 +7,7 @@ quarantines conflicts.
 from collections import Counter
 from dataclasses import dataclass, field
 
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 log = get_logger("proofreader.cross_validator")
 

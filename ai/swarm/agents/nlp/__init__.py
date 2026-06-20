@@ -75,11 +75,11 @@ from pathlib import Path
 import stat
 from uuid import uuid4
 
-from common.config import Config, cfg
-from common.fixture_state import FixtureState
-from common.security.patterns import PII_PATTERNS
-from common.security.tr_pii import parse_redacted_tr_pii, redact_tr_pii
-from common.telemetry import NLP_CLASSIFIER_EXTRACTOR_SKEW
+from ai.common.config import Config, cfg
+from ai.common.fixture_state import FixtureState
+from ai.common.security.patterns import PII_PATTERNS
+from ai.common.security.tr_pii import parse_redacted_tr_pii, redact_tr_pii
+from ai.common.telemetry import NLP_CLASSIFIER_EXTRACTOR_SKEW
 
 from ...sdk import AlertDebouncer
 from ...sdk.bus_health import BusHealthTracker
@@ -588,7 +588,7 @@ def _entity_state_stale(entity: dict[str, object]) -> bool:
     last_resolved_at = _parse_iso_datetime(entity.get("last_resolved_state_at"))
     if last_resolved_at is None:
         return True
-    from common.config import cfg as _cfg
+    from ai.common.config import cfg as _cfg
 
     threshold_s = int(getattr(_cfg, threshold_key, 0))
     if threshold_s <= 0:
@@ -756,7 +756,7 @@ def verify_qa_answer_envelope_signature(payload: dict[str, object]) -> bool:
 
 
 def _load_qa_answer_hmac_keys() -> dict[str, bytes]:
-    from common.config import cfg as _cfg
+    from ai.common.config import cfg as _cfg
 
     loaded: dict[str, bytes] = {}
     key_path = str(getattr(_cfg, "qa_answer_hmac_key_path", "") or "").strip()
@@ -885,7 +885,7 @@ def _normalize_subject_key(payload: dict[str, object]) -> str:
 
 def _record_empty_input_rate(subject: str, is_empty: bool) -> None:
     try:
-        from common.telemetry import get_sink
+        from ai.common.telemetry import get_sink
     except ImportError:
         return
     sink = get_sink()
@@ -963,7 +963,7 @@ def _make_nlp_shout_rate_anomaly_event(
 
 def _record_empty_input_rate(subject: str, rate: float) -> None:
     try:
-        from common.telemetry import get_sink
+        from ai.common.telemetry import get_sink
     except ImportError:
         return
     sink = get_sink()
@@ -977,7 +977,7 @@ def _record_shout_rate(subject: str, is_shout: bool) -> tuple[bool, dict[str, ob
     if not is_shout:
         return False, {}
     try:
-        from common.telemetry import get_sink
+        from ai.common.telemetry import get_sink
     except ImportError:
         return False, {}
     sink = get_sink()
@@ -1613,7 +1613,7 @@ def _write_bundle_templates(bundle_path: str) -> None:
 
 
 def _maybe_create_nlp_audit_bundle(envelope: dict[str, object]) -> None:
-    from common.config import cfg
+    from ai.common.config import cfg
 
     bundle_sha = _nlp_audit_bundle_sha(envelope)
     bundle_path = _nlp_audit_bundle_dir(bundle_sha)
@@ -1658,7 +1658,7 @@ def _maybe_create_nlp_audit_bundle(envelope: dict[str, object]) -> None:
 
 
 def _nlp_audit_bundle_sha(envelope: dict[str, object]) -> str:
-    from common.config import cfg
+    from ai.common.config import cfg
 
     lexicon_snapshot_sha = _canonical_lexicon_snapshot_sha(
         envelope.get("lexicon_versions", {})
@@ -1781,7 +1781,7 @@ def _enforce_nlp_spool_audit_dir_modes() -> None:
     if os.name != "posix":
         return
 
-    from common.config import cfg
+    from ai.common.config import cfg
 
     targets = [
         Path(str(cfg.nlp_agent_spool_dir)),
@@ -1812,7 +1812,7 @@ def _enforce_nlp_spool_audit_dir_modes() -> None:
 
 
 def _enforce_nlp_runtime_locale() -> None:
-    from common.config import cfg
+    from ai.common.config import cfg
 
     locale_required = str(cfg.nlp_runtime_locale or "").strip()
     if not locale_required:
@@ -1907,7 +1907,7 @@ class NlpBootProbeState:
         self._monotonic = monotonic or _time.monotonic
         self._boot_started_s = self._monotonic()
         if boot_budget_s is None or boot_liveness_grace_s is None:
-            from common.config import cfg
+            from ai.common.config import cfg
             if boot_budget_s is None:
                 boot_budget_s = float(cfg.nlp_boot_budget_s)
             if boot_liveness_grace_s is None:
@@ -1915,7 +1915,7 @@ class NlpBootProbeState:
         self._boot_budget_s = float(boot_budget_s)
         self._boot_liveness_grace_s = float(boot_liveness_grace_s)
         if stage_caps_s is None:
-            from common.config import cfg
+            from ai.common.config import cfg
 
             self._stage_caps_s = {
                 1: 10.0,
@@ -2087,8 +2087,8 @@ class NlpIntentAgent:
         if self._deduper is None:
             with self._deduper_lock:
                 if self._deduper is None:
-                    from common.config import cfg
-                    from swarm.sdk import RequestIdDeduper
+                    from ai.common.config import cfg
+                    from ai.swarm.sdk import RequestIdDeduper
                     self._deduper = RequestIdDeduper(
                         window_s=float(cfg.nlp_request_dedup_window_s),
                         max_keys=_NLP_DEDUP_MAX_KEYS,
@@ -2104,7 +2104,7 @@ class NlpIntentAgent:
         return digest.hexdigest()
 
     def _make_gossip(self) -> Message:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         lexicon_set_sha = str(_lexicon_snapshot_sha() or "")
         intent_sha = str(getattr(cfg, "nlp_intent_model_sha256", "") or "")
@@ -2137,7 +2137,7 @@ class NlpIntentAgent:
         )
 
     def on_heartbeat(self) -> list[Message]:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         now = self._monotonic()
         interval = float(cfg.nlp_lexicon_gossip_interval_s)
@@ -2726,8 +2726,8 @@ class NlpDispatcherAgent:
         if self._deduper is None:
             with self._deduper_lock:
                 if self._deduper is None:
-                    from common.config import cfg
-                    from swarm.sdk import RequestIdDeduper
+                    from ai.common.config import cfg
+                    from ai.swarm.sdk import RequestIdDeduper
                     self._deduper = RequestIdDeduper(
                         window_s=float(cfg.nlp_dispatch_dedup_window_s),
                         max_keys=_NLP_DEDUP_MAX_KEYS,
@@ -2910,7 +2910,7 @@ class NlpDispatcherAgent:
         payload: dict[str, object],
         conversation_id: str,
     ) -> Message | None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         if not conversation_id:
             return None
@@ -3148,7 +3148,7 @@ class NlpDispatcherAgent:
             if not self._should_refresh_entity_state(entity):
                 continue
             canonical_id = str(entity["canonical_id"])
-            from common.config import cfg
+            from ai.common.config import cfg
 
             state, _, source, lookup_req = FixtureStateLookup.get(
                 match_id=canonical_id,
@@ -3191,7 +3191,7 @@ class NlpDispatcherAgent:
             return str(entity["fixture_state"]), "cache", None
 
         canonical_id = str(entity.get("canonical_id"))
-        from common.config import cfg
+        from ai.common.config import cfg
 
         state, _, source, lookup_req = FixtureStateLookup.get(
             match_id=canonical_id,
@@ -3212,7 +3212,7 @@ class NlpDispatcherAgent:
         conversation_id: str | None = None,
         request_id: str = "",
     ) -> tuple[list[dict[str, object]], Message | None]:
-        from common.config import cfg as _cfg
+        from ai.common.config import cfg as _cfg
 
         now = self._clock_iso()
         pruned_mentions, evicted = self._prune_anaphora_mentions(
@@ -3521,7 +3521,7 @@ class NlpDispatcherAgent:
         key suppresses replayed qa.intent.v1 messages within the window.
         All other routing paths remain stubs (future bullets).
         """
-        from common.config import cfg  # local import avoids circular at module load
+        from ai.common.config import cfg  # local import avoids circular at module load
 
         payload = msg.payload
         if msg.topic == MAINT_EVENT:
@@ -5328,7 +5328,7 @@ class NlpDispatcherAgent:
         Full implementation lands in subsequent §10.19 bullets. This stub
         returns True when queue_depth exceeds the threshold, False otherwise.
         """
-        from common.config import cfg
+        from ai.common.config import cfg
 
         threshold = cfg.nlp_queue_pressure_threshold
         return queue_depth > threshold
@@ -5402,8 +5402,8 @@ class NlpAnswerAgent:
         if self._deduper is None:
             with self._deduper_lock:
                 if self._deduper is None:
-                    from common.config import cfg
-                    from swarm.sdk import RequestIdDeduper
+                    from ai.common.config import cfg
+                    from ai.swarm.sdk import RequestIdDeduper
                     self._deduper = RequestIdDeduper(
                         window_s=float(cfg.nlp_request_dedup_window_s),
                         max_keys=_NLP_DEDUP_MAX_KEYS,
@@ -5434,7 +5434,7 @@ class NlpAnswerAgent:
         import os
         import random
 
-        from common.config import cfg
+        from ai.common.config import cfg
 
         # Sample 1-in-N
         if random.randint(1, cfg.nlp_answer_sample_inverse) != 1:
@@ -5935,7 +5935,7 @@ class NlpAnswerAgent:
             return request_id in self._cancelled_requests
 
     def _load_predict_citation_hmac_keys(self) -> dict[str, bytes]:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         loaded: dict[str, bytes] = {}
         key_path = str(getattr(cfg, "predict_citation_hmac_key_path", "") or "").strip()
@@ -5974,7 +5974,7 @@ class NlpAnswerAgent:
         return _hmac.new(key, blob.encode("utf-8"), _hashlib.sha256).hexdigest()
 
     def _validate_citation_signature(self, payload: dict) -> dict | None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         schema_version = int(payload.get("schema_version") or 1)
         if schema_version < 3 and "citation_signature" not in payload:
@@ -6042,7 +6042,7 @@ class NlpAnswerAgent:
         )
 
     def _validate_prediction_id_determinism(self, payload: dict) -> dict | None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         mode = str(getattr(cfg, "nlp_predict_prediction_id_determinism_required", "warn") or "warn").lower()
         if mode == "off":
@@ -6457,7 +6457,7 @@ class NlpAnswerAgent:
     def _on_summary_prediction_arrived(
         self, payload: dict, summary_corr: str
     ) -> Iterable[Message]:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         with self._lock:
             agg = self._pending_summaries.get(summary_corr)
@@ -6492,7 +6492,7 @@ class NlpAnswerAgent:
     def _build_summary_answer(
         self, agg: _SummaryAgg, summary_corr: str, received: int
     ) -> Message:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         # §10.16 hard rule: preserve degraded flag from predict.approved.v1.
         # Check if ANY prediction in the aggregation has degraded=True in its
@@ -6751,7 +6751,7 @@ class NlpGossipAggregatorAgent:
         observed: str,
         modal: str,
     ) -> bool:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         recent = self._observations.get(pod_instance_id)
         if not recent:
@@ -6761,7 +6761,7 @@ class NlpGossipAggregatorAgent:
         return all(entry != modal for entry in recent)
 
     def handle(self, msg: Message) -> list[Message]:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         payload = msg.payload
         if not isinstance(payload, dict):
@@ -6851,7 +6851,7 @@ class NlpGossipQuarantineAgent:
     publishes: list = []
 
     def __init__(self) -> None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         self._pod_instance_id = str(cfg.nlp_pod_id)
         self._state = NlpDivergenceQuarantineState()
@@ -6916,8 +6916,8 @@ class NlpProofreaderAgent:
         if self._deduper is None:
             with self._deduper_lock:
                 if self._deduper is None:
-                    from common.config import cfg
-                    from swarm.sdk import RequestIdDeduper
+                    from ai.common.config import cfg
+                    from ai.swarm.sdk import RequestIdDeduper
                     self._deduper = RequestIdDeduper(
                         window_s=float(cfg.nlp_request_dedup_window_s),
                         max_keys=_NLP_DEDUP_MAX_KEYS,
@@ -7031,7 +7031,7 @@ class NlpProberAgent:
         self._expected_answers: dict[str, dict[str, object]] = {}
 
     def _record_prober_outcome(self, payload: dict[str, object], *, success: bool) -> None:
-        from common.telemetry import get_sink
+        from ai.common.telemetry import get_sink
 
         if not _is_synthetic_prober_payload(payload):
             return
@@ -7079,7 +7079,7 @@ class NlpProberAgent:
         return rows[:cfg.nlp_prober_corpus_size]
 
     def on_heartbeat(self) -> list[Message]:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         now = self._clock()
         interval = float(cfg.nlp_prober_interval_s)

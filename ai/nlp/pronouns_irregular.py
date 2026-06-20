@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from common.text.turkish import lowercase_tr
+from ai.common.text.turkish import lowercase_tr
 
 _DEFAULT_PRONOUN_IRREGULAR_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "morph" / "pronouns_irregular.tr.yaml"

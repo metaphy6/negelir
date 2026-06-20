@@ -58,7 +58,7 @@ class TestBusTopicOwnerEnforced:
 
     def test_publisher_authenticator_exists(self) -> None:
         """publisher.py has PublisherAuthenticator and related classes."""
-        from common.bus.publisher import (
+        from ai.common.bus.publisher import (
             BusUnauthorizedPublishError,
             PublisherAuthenticator,
             SimplePublisherAuthenticator,
@@ -72,7 +72,7 @@ class TestBusTopicOwnerEnforced:
 
     def test_publisher_can_check_ownership(self) -> None:
         """SimplePublisherAuthenticator can check topic ownership."""
-        from common.bus.publisher import SimplePublisherAuthenticator, TopicPolicy
+        from ai.common.bus.publisher import SimplePublisherAuthenticator, TopicPolicy
 
         policy = TopicPolicy(
             topic_name="scrape.matched.v1",
@@ -85,14 +85,14 @@ class TestBusTopicOwnerEnforced:
         auth.check_publish_allowed("scrape.matched.v1", "datasource")
 
         # Should reject swarm
-        from common.bus.publisher import BusUnauthorizedPublishError
+        from ai.common.bus.publisher import BusUnauthorizedPublishError
 
         with pytest.raises(BusUnauthorizedPublishError):
             auth.check_publish_allowed("scrape.matched.v1", "swarm")
 
     def test_unauthorized_publish_emits_alert_record(self) -> None:
         """Unauthorized publish attempts are recorded for alerting."""
-        from common.bus.publisher import (
+        from ai.common.bus.publisher import (
             BusUnauthorizedPublishError,
             SimplePublisherAuthenticator,
             TopicPolicy,

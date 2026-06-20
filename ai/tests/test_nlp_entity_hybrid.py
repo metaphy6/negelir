@@ -21,7 +21,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import yaml
-from common.config import cfg
+from ai.common.config import cfg
 
 import pytest
 

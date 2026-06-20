@@ -4,10 +4,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from common.config import cfg
-from swarm.agents.nlp import NlpIntentAgent
-from swarm.agents.topics import NLP_EVENT_V1, QA_ANSWER_V1, QA_REQUEST_V1
-from swarm.sdk.types import Message
+from ai.common.config import cfg
+from ai.swarm.agents.nlp import NlpIntentAgent
+from ai.swarm.agents.topics import NLP_EVENT_V1, QA_ANSWER_V1, QA_REQUEST_V1
+from ai.swarm.sdk.types import Message
 
 from nlp.normalize import _looks_like_fragment
 

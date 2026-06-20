@@ -103,26 +103,26 @@ class TestLyonForeignPronunciationOverride:
     written last character."""
 
     def test_lyon_dative_buffer_is_empty(self):
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         assert buffer_consonant("Lyon", "dative") == "", (
             "Lyon is consonant_final by override; buffer should be ''"
         )
 
     def test_lyon_accusative_buffer_is_empty(self):
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         assert buffer_consonant("Lyon", "accusative") == ""
 
     def test_lyon_possessive_buffer_is_empty(self):
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         assert buffer_consonant("Lyon", "possessive_3sg") == ""
 
     def test_psg_dative_buffer_is_y(self):
         """PSG has pronunciation_class=vowel_final; buffer for dative is 'y'."""
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         assert buffer_consonant("PSG", "dative") == "y"
 
     def test_psg_possessive_buffer_is_s(self):
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         assert buffer_consonant("PSG", "possessive_3sg") == "s"
 
 
@@ -189,14 +189,14 @@ if _HAS_HYPOTHESIS:
     )
     @settings(max_examples=400)
     def _prop_buffer_never_raises(stem: str, suffix_class: str) -> None:
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         result = buffer_consonant(stem, suffix_class)
         assert isinstance(result, str)
         assert len(result) <= 1, f"buffer must be 0 or 1 chars, got {result!r}"
 
     @given(suffix_class=st.sampled_from(_SUFFIX_CLASSES))
     def _prop_empty_stem_returns_empty(suffix_class: str) -> None:
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         assert buffer_consonant("", suffix_class) == ""
 else:
     def _prop_buffer_never_raises(*a, **kw) -> None:  # type: ignore[misc]
@@ -251,7 +251,7 @@ class TestBufferConsonantComposesWithFilters:
 
     def test_strip_then_dative_composes(self):
         """strip_proper_noun_suffix (§10.22.2) + dative (§10.7 + §10.22.3)."""
-        from common.text.turkish import strip_proper_noun_suffix
+        from ai.common.text.turkish import strip_proper_noun_suffix
         from nlp.jinja_filters_tr import dative
         stem, _ = strip_proper_noun_suffix("Bursa\'ya")
         # The stem stripped from "Bursa\'ya" should be "Bursa"; re-applying

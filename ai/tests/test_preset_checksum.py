@@ -18,8 +18,8 @@ def test_preset_checksum_matches_for_tr_super_lig():
     for the CONFIG object. If this test fails after editing CONFIG, the
     CONFIG_SHA256 constant must be updated to the newly computed value.
     """
-    from common.league_config import compute_config_sha256
-    from common.leagues.tr_super_lig import CONFIG, CONFIG_SHA256
+    from ai.common.league_config import compute_config_sha256
+    from ai.common.leagues.tr_super_lig import CONFIG, CONFIG_SHA256
 
     computed_sha = compute_config_sha256(CONFIG)
     if CONFIG_SHA256 != computed_sha:
@@ -35,7 +35,7 @@ def test_preset_checksum_matches_for_tr_super_lig():
 
 def test_all_presets_have_config_sha256():
     """Verify that all preset modules expose CONFIG_SHA256."""
-    from common.league_config import compute_config_sha256
+    from ai.common.league_config import compute_config_sha256
     
     leagues_dir = Path(__file__).parent.parent / "common" / "leagues"
     
@@ -82,8 +82,8 @@ def test_config_sha256_is_deterministic():
     must always produce the same result (no dict-ordering drift,
     float precision, etc.).
     """
-    from common.league_config import compute_config_sha256
-    from common.leagues.tr_super_lig import CONFIG
+    from ai.common.league_config import compute_config_sha256
+    from ai.common.leagues.tr_super_lig import CONFIG
     
     hashes = [compute_config_sha256(CONFIG) for _ in range(5)]
     assert len(set(hashes)) == 1, \
@@ -97,8 +97,8 @@ def test_config_sha256_changes_on_field_edit():
     a different hash (proving the checksum is not a fixed constant).
     """
     from dataclasses import replace
-    from common.league_config import compute_config_sha256
-    from common.leagues.tr_super_lig import CONFIG
+    from ai.common.league_config import compute_config_sha256
+    from ai.common.leagues.tr_super_lig import CONFIG
     
     original_sha = compute_config_sha256(CONFIG)
     

@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from swarm.agents.maint.scaler import (
+from ai.swarm.agents.maint.scaler import (
     DECISION_REASONS,
     THROTTLE_REASONS,
     MaintScaler,
@@ -33,8 +33,8 @@ from swarm.agents.maint.scaler import (
     _LabelHistogram,
     _parse_runtime_histogram_buckets,
 )
-from swarm.agents.topics import MAINT_EVENT
-from swarm.sdk.types import Envelope, Message
+from ai.swarm.agents.topics import MAINT_EVENT
+from ai.swarm.sdk.types import Envelope, Message
 
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ def test_metrics_registered_with_correct_label_sets() -> None:
 
 def test_buckets_pulled_from_cfg(monkeypatch) -> None:
     """Operator-set bucket CSV must propagate to the histogram."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(
         cfg,
         "maint_scaler_runtime_histogram_buckets",
@@ -113,7 +113,7 @@ def test_buckets_pulled_from_cfg(monkeypatch) -> None:
 def test_counter_increments_on_applied_decision(monkeypatch) -> None:
     """A successful scale_decision lands an increment under
     ``outcome=applied`` for the classified reason."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
     monkeypatch.setattr(
         cfg, "maint_scaler_signal_window_samples", 0, raising=False
@@ -147,7 +147,7 @@ def test_counter_increments_on_applied_decision(monkeypatch) -> None:
 def test_counter_increments_on_throttled_decision(monkeypatch) -> None:
     """A scale_throttled (e.g. min_replicas_floor on an idle queue)
     lands an increment under ``outcome=throttled``."""
-    from common.config import cfg
+    from ai.common.config import cfg
     # Push the agent into a clean down-scale path: zero queue depth +
     # min_replicas already at 1 → "min_replicas_floor" throttle once
     # the grace gate has been satisfied.
@@ -187,7 +187,7 @@ def test_counter_increments_on_throttled_decision(monkeypatch) -> None:
 def test_desired_replicas_gauge_reflects_latest_decision(monkeypatch) -> None:
     """``maint_scaler_desired_replicas{agent}`` must equal the last
     emitted ``next`` value for the agent."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
     monkeypatch.setattr(
         cfg, "maint_scaler_signal_window_samples", 0, raising=False
@@ -218,7 +218,7 @@ def test_vram_budget_gauge_set_on_device_probe(monkeypatch) -> None:
     """``maint_scaler_vram_budget_mb{host}`` is set the moment a probe
     arrives — operator dashboards must reflect the budget without
     waiting for the next decision tick."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 1024, raising=False)
     agent = MaintScaler()
     # Default host = target.
@@ -243,7 +243,7 @@ def test_vram_budget_gauge_set_on_device_probe(monkeypatch) -> None:
 def test_vram_budget_gauge_refreshed_by_check(monkeypatch) -> None:
     """``_check_vram_budget`` must refresh the gauge so a headroom
     cfg change between probes is visible immediately."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_vram_headroom_mb", 1024, raising=False)
     agent = MaintScaler()
     agent.update_device_probe(
@@ -267,7 +267,7 @@ def test_runtime_histogram_observes_per_apply(monkeypatch) -> None:
     """Every ``RuntimeController.apply`` call must land exactly one
     observation in the histogram, labelled by the controller name and
     the success/error outcome."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
     monkeypatch.setattr(
         cfg, "maint_scaler_signal_window_samples", 0, raising=False
@@ -299,7 +299,7 @@ def test_runtime_histogram_records_error_outcome(monkeypatch) -> None:
     """A controller that returns False must produce an ``outcome=error``
     histogram observation (so dashboards can split success from failure
     latency)."""
-    from common.config import cfg
+    from ai.common.config import cfg
     monkeypatch.setattr(cfg, "maint_scaler_scale_up_queue_depth", 1, raising=False)
     monkeypatch.setattr(
         cfg, "maint_scaler_signal_window_samples", 0, raising=False

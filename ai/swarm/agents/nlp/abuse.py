@@ -6,10 +6,10 @@ import datetime as _dt
 from collections import defaultdict, deque
 from typing import Any, Iterable
 
-from common.config import cfg
-from swarm.agents.topics import NLP_ALERT_V1, NLP_SHADOW_V1
-from swarm.sdk import AlertDebouncer
-from swarm.sdk.types import Message
+from ai.common.config import cfg
+from ai.swarm.agents.topics import NLP_ALERT_V1, NLP_SHADOW_V1
+from ai.swarm.sdk import AlertDebouncer
+from ai.swarm.sdk.types import Message
 
 
 class NlpAbuseAgent:

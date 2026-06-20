@@ -110,7 +110,7 @@ def test_build_environment_uses_configured_bands() -> None:
 def test_build_environment_default_bands_match_config_default() -> None:
     """build_environment() with no bands argument must match
     the config-default nlp_confidence_bands JSON string."""
-    from common.config import Config
+    from ai.common.config import Config
     cfg = Config()
     config_bands = json.loads(cfg.nlp_confidence_bands)
     env = build_environment(confidence_bands=config_bands)

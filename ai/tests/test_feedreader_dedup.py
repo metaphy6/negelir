@@ -24,7 +24,7 @@ from unittest import mock
 
 import pytest
 
-from common.feeds import FeedReader, FeedCursor, dedup
+from ai.common.feeds import FeedReader, FeedCursor, dedup
 
 
 class TestFeedReaderDedup:

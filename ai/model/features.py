@@ -9,7 +9,7 @@ import pandas as pd
 
 # FEATURE_COLUMNS lives in constants.py as the single source of truth;
 # N_FEATURES is derived from len(FEATURE_COLUMNS).
-from common.constants import FEATURE_COLUMNS, N_FEATURES
+from ai.common.constants import FEATURE_COLUMNS, N_FEATURES
 
 
 def inject_noise(features: pd.DataFrame, noise_pct: float = 0.005, seed: int | None = None) -> pd.DataFrame:

@@ -100,7 +100,7 @@ class TestFaultInjectorProductionSafety:
         is disabled, the FaultInjector must act as a perfect pass-through with
         zero side effects or performance impact.
         """
-        from common.config import cfg
+        from ai.common.config import cfg
         from xops.chaos.scenarios import FaultInjector, FaultSchedule, FaultEvent, FaultOp
 
         # Save original state

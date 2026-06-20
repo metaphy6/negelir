@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Iterable
 
-import common.config as _cm
+import ai.common.config as _cm
 
 
 def _current_cfg():

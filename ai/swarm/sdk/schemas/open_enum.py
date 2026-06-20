@@ -75,8 +75,8 @@ class OpenEnum:
 # ── Phase 7 registry ─────────────────────────────────────────────────
 # Append here when a new open enum lands. The contract tests will
 # pick it up automatically.
-from swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS as _SEC_ALERT_KINDS
-from swarm.agents.maint._ack_routing import KNOWN_MAINT_EVENT_KINDS as _MAINT_EVENT_KINDS
+from ai.swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS as _SEC_ALERT_KINDS
+from ai.swarm.agents.maint._ack_routing import KNOWN_MAINT_EVENT_KINDS as _MAINT_EVENT_KINDS
 
 OPEN_ENUM_REGISTRY: tuple[OpenEnum, ...] = (
     OpenEnum(

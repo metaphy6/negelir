@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from common.text.turkish import lowercase_tr
+from ai.common.text.turkish import lowercase_tr
 
 if TYPE_CHECKING:
     from nlp.lexicon_loader import _LoadedFile

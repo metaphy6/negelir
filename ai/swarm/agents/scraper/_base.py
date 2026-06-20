@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Protocol
 
-from common.config import cfg
+from ai.common.config import cfg
 
 from ...sdk.types import Message
 from ..payloads import ProofFlagKind, ScrapeRaw, ScrapeRequest

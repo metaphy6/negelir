@@ -34,7 +34,7 @@ subclass that preserves the Phase 7 API.
 """
 from __future__ import annotations
 
-from swarm.sdk._alert_debouncer import _BaseAlertDebouncer, DebounceDecision
+from ai.swarm.sdk._alert_debouncer import _BaseAlertDebouncer, DebounceDecision
 
 
 class SecAlertDebouncer(_BaseAlertDebouncer):

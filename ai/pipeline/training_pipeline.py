@@ -22,8 +22,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from common.config import cfg
-from common.logger import get_logger, section_banner
+from ai.common.config import cfg
+from ai.common.logger import get_logger, section_banner
 
 from pipeline.training_artifacts import (
     STAGE_ORDER,
@@ -222,7 +222,7 @@ class TrainingPipeline:
 
         model = train_model(matches=train_matches)
         # Recover model_path/size from the trainer's default save location
-        from common.constants import MODEL_VERSION
+        from ai.common.constants import MODEL_VERSION
         model_path = os.path.join(cfg.model_dir, f"negelir_gbdt_v{MODEL_VERSION}.pkl")
         size_mb = os.path.getsize(model_path) / (1024 * 1024) if os.path.isfile(model_path) else 0.0
 

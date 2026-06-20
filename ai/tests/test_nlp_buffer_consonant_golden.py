@@ -82,7 +82,7 @@ class TestGoldenTableCoverage:
         assert not missing, f"suffix_classes not covered: {missing}"
 
     def test_both_vowel_and_consonant_final_stems_present(self):
-        from common.text.turkish import buffer_consonant
+        from ai.common.text.turkish import buffer_consonant
         rows = _load_golden()
         stems_with_y_buffer = {
             r["stem"] for r in rows

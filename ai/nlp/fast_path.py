@@ -15,7 +15,7 @@ from __future__ import annotations
 import sys
 from typing import Optional
 
-from common.config import cfg as _default_cfg
+from ai.common.config import cfg as _default_cfg
 
 
 # Turkish character ranges (explicit codepoint sets).
@@ -194,7 +194,7 @@ def get_clean_input_fast_path(
     if is_clean_input(text, max_chars=max_chars):
         # Emit telemetry event.
         try:
-            from common.telemetry import get_sink
+            from ai.common.telemetry import get_sink
             sink = get_sink()
             if sink and sink.enabled:
                 # Log structured event (mirrors §10.14 pattern)

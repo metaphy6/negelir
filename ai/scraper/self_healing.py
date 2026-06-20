@@ -9,8 +9,8 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 
-from common.config import cfg
-from common.logger import get_logger
+from ai.common.config import cfg
+from ai.common.logger import get_logger
 
 log = get_logger("scraper.self_healing")
 

@@ -10,7 +10,7 @@ import sys
 import time
 from pipeline.runner import PipelineRunner
 from scheduler import NegelirScheduler, build_default_schedule
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 log = get_logger("main")
 

@@ -1,7 +1,7 @@
 """Phase 10 §10.21.4 — Humanizer breaker config validation tests."""
 import unittest
 
-from common.config import Config
+from ai.common.config import Config
 
 
 class TestHumanizerBreakerScopeValidation(unittest.TestCase):

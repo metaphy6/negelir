@@ -90,13 +90,13 @@ def _make_clf(
 
 class TestIntentVersioningConfigKey:
     def test_config_has_nlp_intent_model_version(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_model_version")
 
     def test_config_default_is_empty_string(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert cfg.nlp_intent_model_version == ""

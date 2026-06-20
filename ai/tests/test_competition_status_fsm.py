@@ -5,7 +5,7 @@ FSM correctly enforces legal transitions and audit requirements.
 """
 
 import pytest
-from common.competition_fsm import (
+from ai.common.competition_fsm import (
     CompetitionStatus,
     is_legal_transition,
     validate_transition,

@@ -6,7 +6,7 @@ Phase 7: Invariants that extracted data must satisfy before acceptance.
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 log = get_logger("scraper.data_contracts")
 

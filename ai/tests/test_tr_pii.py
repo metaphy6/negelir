@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from common.security.tr_pii import (
+from ai.common.security.tr_pii import (
     detect_tr_pii_spans,
     parse_redacted_tr_pii,
     redact_tr_pii,

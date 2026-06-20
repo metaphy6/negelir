@@ -49,7 +49,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from ...sdk.types import Message, Topic
 from ..payloads import (

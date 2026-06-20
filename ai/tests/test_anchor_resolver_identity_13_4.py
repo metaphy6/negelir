@@ -10,7 +10,7 @@ Proof tests for the AnchorResolver per 13.4 checklist:
 
 import pytest
 
-from swarm.identity import AnchorResolver
+from ai.swarm.identity import AnchorResolver
 
 
 class TestAnchorResolverBasics:

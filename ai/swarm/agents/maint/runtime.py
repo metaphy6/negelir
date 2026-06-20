@@ -29,7 +29,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 _log = logging.getLogger("swarm.agents.maint.runtime")
 

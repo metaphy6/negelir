@@ -47,7 +47,7 @@ from nlp.runtime.budget import RequestBudget
 from nlp.vendor.symspell import _edit_distance
 
 if TYPE_CHECKING:
-    from common.config import Config
+    from ai.common.config import Config
 
 
 HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON = "humanizer_tenant_budget_exceeded"
@@ -237,7 +237,7 @@ def humanize(
         *templated_answer* on latency breach / drift / error.
 
     Example:
-        >>> from common.config import Config
+        >>> from ai.common.config import Config
         >>> cfg = Config()
         >>> template = "Galatasaray'ın kazanma olasılığı yüksek (güven: orta)."
         >>> # With nlp_humanize=false (default), returns unchanged:

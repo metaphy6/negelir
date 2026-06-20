@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from ...sdk.types import Message
 from ._log_filter import add_log_filter

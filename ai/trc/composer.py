@@ -4,8 +4,8 @@ Combines verdict + explanation template + model output into a Turkish response.
 Per roadmap §5.1: deterministic template composition, no generative text.
 """
 
-from common.constants import UUID_TO_NAME, BANNED_WORDS
-from common.logger import get_logger
+from ai.common.constants import UUID_TO_NAME, BANNED_WORDS
+from ai.common.logger import get_logger
 from trc.templates import (
     VERDICTS, EXPLANATION_TEMPLATES, MOMENTUM_SENTENCES,
     DEFENSE_SENTENCES, H2H_SENTENCES, FORM_LABELS,

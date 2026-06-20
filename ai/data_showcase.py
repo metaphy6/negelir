@@ -9,8 +9,8 @@ import time
 import random
 import numpy as np
 
-from common.config import cfg
-from common.constants import (
+from ai.common.config import cfg
+from ai.common.constants import (
     TEAM_MAP, UUID_TO_NAME, LEAGUES, N_FEATURES,
     FOOTBALL_KEYWORDS, BANNED_WORDS, MODEL_VERSION,
 )

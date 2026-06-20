@@ -11,7 +11,7 @@ Tests for the FixtureSchemaGateError enforcement:
 import pytest
 from unittest.mock import MagicMock, patch
 
-from common.fixture_validator import (
+from ai.common.fixture_validator import (
     FixtureSchemaGateError,
     validate_fixture_competition_fields,
 )

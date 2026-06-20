@@ -10,7 +10,7 @@ import pytest
 
 
 def test_flame_capture_config_keys_exist():
-    from common.config import Config
+    from ai.common.config import Config
 
     cfg = Config()
     assert hasattr(cfg, "opsctl_flame_capture_ttl_h")
@@ -26,7 +26,7 @@ def test_flame_capture_env_override(monkeypatch):
     monkeypatch.setenv("NEGELIR_OPSCTL_FLAME_CAPTURE_MAX_ARMED_PER_H", "20")
     monkeypatch.setenv("NEGELIR_NLP_FLAME_CAPTURE_OVERHEAD_FLOOR_PCT", "7.5")
 
-    import common.config as _cm
+    import ai.common.config as _cm
     importlib.reload(_cm)
     try:
         cfg = _cm.Config()

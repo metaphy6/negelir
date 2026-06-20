@@ -32,7 +32,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-from common.config import cfg
+from ai.common.config import cfg
 
 
 # ---------------------------------------------------------------------------
@@ -76,13 +76,13 @@ def _make_clf(tmp_path: Path, calibration=None, cal_version=""):
 
 class TestCalibrationConfigKey:
     def test_config_has_calibration_path(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_calibration_path")
 
     def test_calibration_path_default_is_empty(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert cfg.nlp_intent_calibration_path == ""

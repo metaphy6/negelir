@@ -78,7 +78,7 @@ def test_predictive_overshoot_detected_or_raw_preserved(text: str) -> None:
     
     Per §10.34.1: original token preserved in entities[].morph.predictive_overshoot.
     """
-    from common.config import cfg
+    from ai.common.config import cfg
     
     # Text should be non-empty after strategy
     assert text is not None, "Strategy produced None"
@@ -136,7 +136,7 @@ def test_ocr_artefacts_normalized_or_preserved(text: str) -> None:
     
     Per §10.34.1: soft-hyphen + newline collapsed; ligatures expanded.
     """
-    from common.config import cfg
+    from ai.common.config import cfg
     
     assert text is not None, "Text should not be None"
     assert isinstance(text, str), "Text should be string"
@@ -293,7 +293,7 @@ def test_megainput_extracts_question_or_uses_tail(text: str) -> None:
     Per §10.34.1: detects multi-paragraph (≥3 separators OR length >1500);
     extracts last paragraph; preserves preceding text SHA256 in audit.
     """
-    from common.config import cfg
+    from ai.common.config import cfg
     
     assert text is not None, "Text should not be None"
     assert "\n" in text, "Should be multi-line"

@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from common.config import cfg
+from ai.common.config import cfg
 
 _DISCLOSURE_CACHE: dict[Path, tuple[int, list[dict[str, Any]]]] = {}
 

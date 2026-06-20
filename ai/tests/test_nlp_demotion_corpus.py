@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 
-from common.config import cfg
+from ai.common.config import cfg
 from nlp.entity import EntityExtractor
 from nlp.lexicon_loader import LexiconStore
 from nlp.normalize import normalize_input

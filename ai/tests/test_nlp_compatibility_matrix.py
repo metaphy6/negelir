@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from common.config import cfg
+from ai.common.config import cfg
 from nlp.compat import CompatibilityMatrixError
 
 
@@ -37,7 +37,7 @@ def test_nlp_compat_matrix_loaded_at_boot(monkeypatch, tmp_path):
     with patch("swarm.agents.nlp._enforce_nlp_spool_audit_dir_modes"), patch(
         "swarm.agents.nlp._enforce_nlp_runtime_locale"
     ):
-        from swarm.agents.nlp import NlpAnswerAgent
+        from ai.swarm.agents.nlp import NlpAnswerAgent
 
         agent = NlpAnswerAgent(deduper=MagicMock())
 
@@ -57,7 +57,7 @@ def test_nlp_compat_quartet_mismatch_refuses_boot(monkeypatch, tmp_path):
     with patch("swarm.agents.nlp._enforce_nlp_spool_audit_dir_modes"), patch(
         "swarm.agents.nlp._enforce_nlp_runtime_locale"
     ):
-        from swarm.agents.nlp import NlpAnswerAgent
+        from ai.swarm.agents.nlp import NlpAnswerAgent
 
         with pytest.raises(CompatibilityMatrixError, match="template git SHA mismatch"):
             NlpAnswerAgent(deduper=MagicMock())

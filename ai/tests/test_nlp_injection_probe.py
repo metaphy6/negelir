@@ -10,8 +10,8 @@ Validates the second-pass injection probe per §10.15:
 import pytest
 
 from nlp.injection_probe import InjectionProbeResult, probe_normalized_text
-from common.security.patterns import current_ruleset, reset_for_tests
-from common.config import cfg
+from ai.common.security.patterns import current_ruleset, reset_for_tests
+from ai.common.config import cfg
 
 
 @pytest.fixture(autouse=True)

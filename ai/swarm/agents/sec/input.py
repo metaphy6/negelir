@@ -51,15 +51,15 @@ from datetime import datetime, timezone
 from typing import Callable, Deque, Iterable
 from uuid import uuid4
 
-from common.config import cfg as _cfg
-from common.security import (
+from ai.common.config import cfg as _cfg
+from ai.common.security import (
     PatternFileError,
     RuleSet,
     load_ruleset,
     resolve_path as _resolve_pattern_path,
 )
-from common.security.tr_pii import redact_tr_pii
-from common.text.turkish import lowercase_tr
+from ai.common.security.tr_pii import redact_tr_pii
+from ai.common.text.turkish import lowercase_tr
 
 from ..payloads import (
     QaRequest,

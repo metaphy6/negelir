@@ -4,11 +4,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from common.security.patterns import PII_PATTERNS
-from common.security.tr_pii import redact_tr_pii
-from swarm.agents.nlp import NlpIntentAgent
-from swarm.agents.topics import QA_REQUEST_V1
-from swarm.sdk.types import Message
+from ai.common.security.patterns import PII_PATTERNS
+from ai.common.security.tr_pii import redact_tr_pii
+from ai.swarm.agents.nlp import NlpIntentAgent
+from ai.swarm.agents.topics import QA_REQUEST_V1
+from ai.swarm.sdk.types import Message
 
 
 def _assert_payload_contains_no_pii(payload: object) -> None:

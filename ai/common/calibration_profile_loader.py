@@ -28,7 +28,7 @@ try:
 except ImportError:
     yaml = None  # type: ignore
 
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 logger = get_logger(__name__)
 

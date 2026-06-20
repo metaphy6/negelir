@@ -68,7 +68,7 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable
 from uuid import uuid4
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from ..payloads import (
     MaintEvent,

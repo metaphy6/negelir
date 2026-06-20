@@ -73,7 +73,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Iterator, Mapping, Protocol
 from uuid import uuid4
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 # pylint: disable=relative-beyond-top-level
 from ...sdk.leader import Leader, SingleProcessLeader

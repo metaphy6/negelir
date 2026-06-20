@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from ...sdk.types import Message
 from ...sdk.spool_aging import prune_aged_spool_entries

@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Callable, Iterable
 
 from ..sdk.types import Message
-from common.config import cfg
+from ai.common.config import cfg
 from .topics import (
     API_REQUEST_V1,
     API_RESPONSE_V1,

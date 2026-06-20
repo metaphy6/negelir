@@ -3,7 +3,7 @@ import tempfile
 import datetime
 from pathlib import Path
 
-from common.feeds.changelog import ManifestChangelog, restore_manifest_tree
+from ai.common.feeds.changelog import ManifestChangelog, restore_manifest_tree
 
 
 def test_pitr_rebuild_is_side_by_side():

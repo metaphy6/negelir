@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Protocol
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 
 _log = logging.getLogger("swarm.agents.sec.allowlist")

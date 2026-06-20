@@ -14,7 +14,7 @@ def test_one_bad_preset_does_not_break_others():
     import in try/except and skips on failure, never cascading the
     error to other presets.
     """
-    from common.leagues import load_league_configs, get_league_config
+    from ai.common.leagues import load_league_configs, get_league_config
     
     # Force reload to pick up the broken preset we added
     import sys
@@ -42,7 +42,7 @@ def test_one_bad_preset_does_not_break_others():
 
 def test_all_loadable_presets_have_config_constant():
     """Verify that all successfully loaded presets expose CONFIG."""
-    from common.leagues import LEAGUE_CONFIGS
+    from ai.common.leagues import LEAGUE_CONFIGS
     
     # All loaded presets should have CONFIG_SHA256 eventually (Phase 13.21)
     # For now, just verify they are LeagueConfig instances
@@ -54,7 +54,7 @@ def test_all_loadable_presets_have_config_constant():
 
 def test_league_configs_module_constant():
     """Verify that LEAGUE_CONFIGS is accessible as a module constant."""
-    from common.leagues import LEAGUE_CONFIGS
+    from ai.common.leagues import LEAGUE_CONFIGS
     
     assert isinstance(LEAGUE_CONFIGS, dict), "LEAGUE_CONFIGS should be a dict"
     assert len(LEAGUE_CONFIGS) > 0, "LEAGUE_CONFIGS should not be empty"

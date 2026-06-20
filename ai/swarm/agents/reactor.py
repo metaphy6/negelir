@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable, Protocol
 
 from ..sdk.types import Message
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 from .cache import CacheBackend, make_record_key
 from .payloads import FreshnessEvent
 from .topics import FRESHNESS_EVENTS

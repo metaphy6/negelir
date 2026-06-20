@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from swarm.agents.topics import NLP_SHADOW_V1, QA_INTENT_V1
-from swarm.sdk.types import Message
+from ai.swarm.agents.topics import NLP_SHADOW_V1, QA_INTENT_V1
+from ai.swarm.sdk.types import Message
 
 
 class NlpShadowWriter:

@@ -13,7 +13,7 @@ from nlp.entity import EntityExtractor
 from nlp.lexicon_loader import LexiconStore
 from nlp.normalize import normalize_input
 from nlp.intent import IntentClassifier, INTENT_LABELS
-from common.config import cfg
+from ai.common.config import cfg
 
 TEST_ROOT = Path(__file__).resolve().parent
 BOOT_CORPUS_PATH = TEST_ROOT.parent / "swarm" / "agents" / "nlp" / "tests" / "data" / "boot_regression_corpus.jsonl"
@@ -64,7 +64,7 @@ def test_boot_corpus_expected_fields() -> None:
 
 
 def test_boot_corpus_not_used_as_intent_shadow_training() -> None:
-    from common.config import cfg
+    from ai.common.config import cfg
 
     shadow_path = Path(cfg.nlp_intent_train_shadow_path)
     assert shadow_path.resolve() != BOOT_CORPUS_PATH.resolve(), (

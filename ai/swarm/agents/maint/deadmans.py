@@ -40,7 +40,7 @@ import time as _time
 from dataclasses import dataclass, field
 from typing import Iterable, Mapping, Protocol
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 from ...sdk.types import Message
 from ..topics import SEC_ALERT
 

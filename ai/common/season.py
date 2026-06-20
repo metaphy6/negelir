@@ -13,7 +13,7 @@ in [`league_config.py`](league_config.py) follows.
 from datetime import date
 from enum import Enum
 
-from common.logger import get_logger
+from ai.common.logger import get_logger
 
 log = get_logger("common.season")
 

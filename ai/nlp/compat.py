@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from common.config import cfg
+from ai.common.config import cfg
 
 
 class CompatibilityMatrixError(ValueError):

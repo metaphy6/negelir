@@ -11,10 +11,10 @@ import numpy as np
 import xgboost as xgb
 from sklearn.metrics import accuracy_score, log_loss
 
-from common.config import cfg
-from common.constants import MODEL_VERSION
-from common.league_config import get_league_config
-from common.logger import get_logger, section_banner, success_banner
+from ai.common.config import cfg
+from ai.common.constants import MODEL_VERSION
+from ai.common.league_config import get_league_config
+from ai.common.logger import get_logger, section_banner, success_banner
 from model.device import detect_device, get_xgb_params
 from model.features import inject_noise, FEATURE_COLUMNS
 

@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable, Protocol
 from uuid import uuid4
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from ...sdk.leader import Leader, SingleProcessLeader
 from ...sdk.types import Envelope, Message, Topic

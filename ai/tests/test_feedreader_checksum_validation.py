@@ -23,7 +23,7 @@ from unittest import mock
 
 import pytest
 
-from common.feeds import FeedReader, FeedCursor
+from ai.common.feeds import FeedReader, FeedCursor
 
 
 class TestFeedReaderChecksumValidation:

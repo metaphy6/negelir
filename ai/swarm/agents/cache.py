@@ -48,7 +48,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
-from common.config import cfg
+from ai.common.config import cfg
 from nlp.compliance import disclosures_snapshot_sha, load_disclosures
 
 from ..sdk.types import Message

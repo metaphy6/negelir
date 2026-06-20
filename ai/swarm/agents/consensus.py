@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 from ..sdk.types import Message, Topic
 from .payloads import (

@@ -90,7 +90,7 @@ def tr_format_money(value: Any, currency: str = "TRY") -> str:
 
 
 def _load_zoneinfo(tz: str) -> ZoneInfo:
-    from common.config import cfg
+    from ai.common.config import cfg
 
     if cfg.nlp_zoneinfo_dir:
         zonefile = Path(cfg.nlp_zoneinfo_dir) / tz
@@ -105,7 +105,7 @@ def _load_zoneinfo(tz: str) -> ZoneInfo:
 
 def tr_format_clock(dt: "str | _dt.datetime | None", tz: str | None = None) -> str:
     if tz is None:
-        from common.config import cfg
+        from ai.common.config import cfg
 
         tz = cfg.nlp_render_timezone
     if dt is None:

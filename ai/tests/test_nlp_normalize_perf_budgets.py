@@ -172,7 +172,7 @@ class TestNormalizePerPassBudgets:
 
     def test_normalize_config_has_total_budget_setting(self) -> None:
         """Verify config has the nlp_normalize_total_budget_p99_ms setting."""
-        from common.config import cfg
+        from ai.common.config import cfg
 
         # Should have the config value
         budget = getattr(cfg, "nlp_normalize_total_budget_p99_ms", None)

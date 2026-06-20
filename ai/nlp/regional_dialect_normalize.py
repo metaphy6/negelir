@@ -13,7 +13,7 @@ from typing import Callable, Iterable, NamedTuple
 
 import yaml
 
-from common.text.turkish import lowercase_tr
+from ai.common.text.turkish import lowercase_tr
 
 _SCHEMA_VERSION = 1
 _DEFAULT_REGIONAL_DIALECT_PATH: Path = (

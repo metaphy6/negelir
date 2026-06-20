@@ -27,7 +27,7 @@ from typing import Any
 import pytest
 
 # ── Imports under test ──────────────────────────────────────────────────────
-from common.text.turkish import strip_proper_noun_suffix
+from ai.common.text.turkish import strip_proper_noun_suffix
 from nlp.jinja_filters_tr import (
     locative,
     dative,

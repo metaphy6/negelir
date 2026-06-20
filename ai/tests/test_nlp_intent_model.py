@@ -59,21 +59,21 @@ def _simulate_fasttext_missing(monkeypatch):
 
 class TestIntentModelConfig:
     def test_config_has_intent_model_path(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_model_path")
         assert cfg.nlp_intent_model_path == "data/models/nlp/intent.tr.bin"
 
     def test_config_has_intent_model_sha256(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_model_sha256")
         assert cfg.nlp_intent_model_sha256 == ""
 
     def test_config_has_intent_model_max_size_mb(self):
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_model_max_size_mb")

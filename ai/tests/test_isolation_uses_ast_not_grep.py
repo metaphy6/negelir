@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from common.isolation import (
+from ai.common.isolation import (
     IsolationViolation,
     check_component_isolation,
     uses_ast_analysis,
@@ -54,7 +54,7 @@ class TestIsolationUsesAST:
         code = """
 import psycopg2
 from redis import StrictRedis
-from common.feeds import FeedReader
+from ai.common.feeds import FeedReader
 
 def fetch_data():
     pass
@@ -177,7 +177,7 @@ class Predictor:
         sample_py = tmp_path / "sample.py"
         sample_py.write_text(
             """
-from common.isolation import check_component_isolation
+from ai.common.isolation import check_component_isolation
 import pytest
 from pathlib import Path
 
@@ -186,7 +186,7 @@ def test_something():
 """
         )
 
-        from common.isolation.check import extract_imports
+        from ai.common.isolation.check import extract_imports
 
         imports = extract_imports(sample_py)
         # Should find 3 imports
@@ -226,7 +226,7 @@ from f import g, h
 from i import j as k
 import l as m
 """
-        from common.isolation.check import extract_imports
+        from ai.common.isolation.check import extract_imports
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(code)

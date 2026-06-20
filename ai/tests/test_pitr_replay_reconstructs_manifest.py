@@ -4,7 +4,7 @@ import tempfile
 import datetime
 from pathlib import Path
 
-from common.feeds.changelog import ManifestChangelog, replay_changelog_to_target
+from ai.common.feeds.changelog import ManifestChangelog, replay_changelog_to_target
 
 
 def test_pitr_replay_reconstructs_manifest():

@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 from ...sdk.shed_state import ShedStateStore
 from ...sdk.types import Message
 from ..topics import MAINT_EVENT, SEC_ALERT

@@ -6,7 +6,7 @@ and enters shadow window. Lint detects silent edits.
 
 from datetime import datetime, timedelta
 import pytest
-from common.profile_drift_guard import (
+from ai.common.profile_drift_guard import (
     ProfilePromotionStatus,
     is_in_shadow_window,
     can_promote_from_shadow_to_live,

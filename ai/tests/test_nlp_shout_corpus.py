@@ -8,7 +8,7 @@ import pytest
 from nlp.normalize import detect_all_caps
 from tqu.classifier import classify
 
-import common.telemetry as telemetry
+import ai.common.telemetry as telemetry
 
 TEST_ROOT = Path(__file__).resolve().parent
 

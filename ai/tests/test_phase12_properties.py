@@ -15,7 +15,7 @@ from hypothesis import given, settings, HealthCheck, seed as hypothesis_seed
 from hypothesis import strategies as st
 import pytest
 
-from common.config import cfg
+from ai.common.config import cfg
 
 
 class TestRoundTrip:

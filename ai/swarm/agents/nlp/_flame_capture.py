@@ -7,9 +7,9 @@ import tracemalloc
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from common.config import Config
-from common.logger import get_logger
-from common.telemetry import NLP_FLAME_CAPTURE_ARMED_COUNT
+from ai.common.config import Config
+from ai.common.logger import get_logger
+from ai.common.telemetry import NLP_FLAME_CAPTURE_ARMED_COUNT
 from ...sdk.types import Message
 from ..topics import MAINT_EVENT
 

@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common.config import Config
+from ai.common.config import Config
 
 
 def test_nlp_pod_rss_budget_validated_at_boot_within_cap():

@@ -11,7 +11,7 @@ Proof test: (a) topic is defined and exported, (b) happy path emits valid event,
 """
 
 import pytest
-from swarm.agents.topics import IDENTITY_MERGE_V1
+from ai.swarm.agents.topics import IDENTITY_MERGE_V1
 
 
 class TestIdentityMergeAuditTopic:

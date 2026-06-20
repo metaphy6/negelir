@@ -5,7 +5,7 @@ from typing import Any, NamedTuple, Optional
 
 import yaml
 
-from common.text.turkish import lowercase_tr
+from ai.common.text.turkish import lowercase_tr
 
 _DEFAULT_LOANWORD_SINGULARISATION_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "loanwords" / "loan_singularisation.tr.yaml"

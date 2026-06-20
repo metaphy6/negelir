@@ -129,7 +129,7 @@ class IntentCache:
         self._collision_alert_callback = collision_alert_callback
 
     def _load_pod_id(self) -> str:
-        from common.config import Config
+        from ai.common.config import Config
 
         cfg = Config()
         return cfg.nlp_pod_id
@@ -155,7 +155,7 @@ class IntentCache:
     ) -> str:
         """Return 16-byte truncated sha256 hex digest of the request key."""
         if pipeline_version is None:
-            from common.config import Config
+            from ai.common.config import Config
 
             pipeline_version = Config().nlp_pipeline_version
         payload = (
@@ -176,7 +176,7 @@ class IntentCache:
         resolved_antecedent_ids: tuple[str, ...] | None = None,
     ) -> str:
         if pipeline_version is None:
-            from common.config import Config
+            from ai.common.config import Config
 
             pipeline_version = Config().nlp_pipeline_version
         payload = (

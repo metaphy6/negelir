@@ -10,7 +10,7 @@ Covers:
 """
 
 import pytest
-from common.feeds.intraday_compaction import (
+from ai.common.feeds.intraday_compaction import (
     PartitionMetadata,
     PartitionRegistry,
     CompactionStrategy,

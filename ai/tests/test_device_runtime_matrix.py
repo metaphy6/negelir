@@ -639,7 +639,7 @@ class TestGPUPersistenceAndClocks:
         """Test that persistence mode is probed from nvidia-smi."""
         from unittest.mock import MagicMock, patch
         from model.device import _probe_gpu_persistence_and_clocks
-        from common.config import Config
+        from ai.common.config import Config
         
         res = {
             "inventory": [

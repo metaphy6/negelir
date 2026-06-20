@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from common.security.patterns import (
+from ai.common.security.patterns import (
     PII_PHONE_RE,
     PII_EMAIL_RE,
     PII_CREDIT_CARD_RE,

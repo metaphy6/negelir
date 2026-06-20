@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from swarm.agents.nlp.training.eligibility import filter_shadow_rows_for_intent_training
+from ai.swarm.agents.nlp.training.eligibility import filter_shadow_rows_for_intent_training
 
 
 def test_nlp_intent_train_command_registered() -> None:
@@ -148,7 +148,7 @@ def test_nlp_intent_trainer_consults_eligibility_filter() -> None:
         and node.module == "swarm.agents.nlp.training.eligibility"
         and any(alias.name == "filter_shadow_rows_for_intent_training" for alias in node.names)
         for node in ast.walk(tree)
-    ), "trainer.py must import filter_shadow_rows_for_intent_training from swarm.agents.nlp.training.eligibility"
+    ), "trainer.py must import filter_shadow_rows_for_intent_training from ai.swarm.agents.nlp.training.eligibility"
 
     assert any(
         isinstance(node, ast.Call)

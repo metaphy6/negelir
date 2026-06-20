@@ -6,8 +6,8 @@ import tempfile
 import json
 from pathlib import Path
 
-from common.feeds.reader import FeedReader
-from common.feeds.changelog import ManifestChangelog
+from ai.common.feeds.reader import FeedReader
+from ai.common.feeds.changelog import ManifestChangelog
 
 
 class TestFeedReaderTimeTravel:

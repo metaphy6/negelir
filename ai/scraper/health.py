@@ -8,8 +8,8 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from common.config import cfg
-from common.logger import get_logger
+from ai.common.config import cfg
+from ai.common.logger import get_logger
 
 log = get_logger("scraper.health")
 

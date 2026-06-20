@@ -55,22 +55,22 @@ def _make_clf(tmp_path: Path, drift_guard=None):
 
 class TestDriftGuardConfig:
     def test_accuracy_floor_exists(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_accuracy_floor")
 
     def test_accuracy_floor_default(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         assert cfg.nlp_intent_accuracy_floor == pytest.approx(0.92)
 
     def test_drift_window_exists(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_drift_window")
 
     def test_drift_window_default(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         assert cfg.nlp_intent_drift_window == 1000
 
@@ -97,35 +97,35 @@ class TestDriftGuardConfig:
 
 class TestDriftGuardConfigValidation:
     def test_accuracy_floor_below_zero_invalid(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         object.__setattr__(cfg, "nlp_intent_accuracy_floor", -0.1)
         with pytest.raises(ValueError):
             cfg.validate(strict=True)
 
     def test_accuracy_floor_zero_invalid(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         object.__setattr__(cfg, "nlp_intent_accuracy_floor", 0.0)
         with pytest.raises(ValueError):
             cfg.validate(strict=True)
 
     def test_accuracy_floor_one_invalid(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         object.__setattr__(cfg, "nlp_intent_accuracy_floor", 1.0)
         with pytest.raises(ValueError):
             cfg.validate(strict=True)
 
     def test_drift_window_zero_invalid(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         object.__setattr__(cfg, "nlp_intent_drift_window", 0)
         with pytest.raises(ValueError):
             cfg.validate(strict=True)
 
     def test_drift_window_negative_invalid(self):
-        from common.config import Config
+        from ai.common.config import Config
         cfg = Config()
         object.__setattr__(cfg, "nlp_intent_drift_window", -5)
         with pytest.raises(ValueError):

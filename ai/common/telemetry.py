@@ -25,8 +25,8 @@ import time
 from contextlib import contextmanager
 from typing import Any, Callable
 
-from common.config import Config
-from common.logger import get_logger
+from ai.common.config import Config
+from ai.common.logger import get_logger
 
 try:
     from prometheus_client import Counter, Gauge, Histogram, Info, Summary

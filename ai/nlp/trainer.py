@@ -10,8 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
-import common.config as _cm
-from swarm.agents.nlp.training.eligibility import (
+import ai.common.config as _cm
+from ai.swarm.agents.nlp.training.eligibility import (
     filter_shadow_rows_for_intent_training,
     write_training_manifest,
 )

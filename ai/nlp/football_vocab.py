@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from common.config import cfg
+from ai.common.config import cfg
 
 _FOOTBALL_VOCAB_SCHEMA_VERSION = 1
 _FOOTBALL_VOCAB_PATH = Path(__file__).parent / "lang_tr" / "football" / "vocab.tr.yaml"

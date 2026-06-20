@@ -11,11 +11,11 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from common.config import Config
-from common.text.turkish import lowercase_tr, strip_proper_noun_suffix
+from ai.common.config import Config
+from ai.common.text.turkish import lowercase_tr, strip_proper_noun_suffix
 
 if TYPE_CHECKING:
-    from common.config import Config
+    from ai.common.config import Config
 
 _APOSTROPHE_SUFFIX_RE = re.compile(r"\b([A-Za-zÇĞİÖŞÜçğıöşü]+)'([a-zçğıöşü]+)\b")
 _VOICELSS_CONSONANTS = frozenset("çfhkpsşt")

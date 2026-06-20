@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from common.config import cfg
-from swarm.agents.nlp import NlpAnswerAgent
+from ai.common.config import cfg
+from ai.swarm.agents.nlp import NlpAnswerAgent
 
 
 def _make_payload(**kwargs) -> dict[str, object]:

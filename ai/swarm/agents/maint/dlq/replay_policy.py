@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from common.config import cfg as _cfg
+from ai.common.config import cfg as _cfg
 
 
 DENY_PREFIXES: tuple[str, ...] = (

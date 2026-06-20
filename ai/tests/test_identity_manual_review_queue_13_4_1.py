@@ -10,7 +10,7 @@ at least one adversarial branch.
 """
 
 import pytest
-from swarm.identity.anchor_resolver import AnchorResolver
+from ai.swarm.identity.anchor_resolver import AnchorResolver
 
 
 class TestManualReviewQueue:

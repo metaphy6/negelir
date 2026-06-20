@@ -11,13 +11,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from swarm.sdk._dual_emit_helper import (
+from ai.swarm.sdk._dual_emit_helper import (
     MAINT_EVENT_TOPIC,
     SEC_ALERT_TOPIC,
     derive_event_correlation_id,
     route_topics_for_kind,
 )
-from swarm.sdk.wire_contracts import (
+from ai.swarm.sdk.wire_contracts import (
     SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER,
     SEC_ALERT_V1_ALLOWED_PRODUCERS,
 )

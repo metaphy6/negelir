@@ -10,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover
     _YAML_AVAILABLE = False
 
-from common.text.turkish import lowercase_tr
+from ai.common.text.turkish import lowercase_tr
 
 _PRODUCTIVE_SUFFIXES_PATH: _pathlib.Path = (
     _pathlib.Path(__file__).parent  # ai/nlp/morph/

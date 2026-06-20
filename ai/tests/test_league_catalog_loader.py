@@ -19,7 +19,7 @@ import pytest
 import yaml
 
 # Import after PYTHONPATH setup
-from common.league_catalog_loader import (
+from ai.common.league_catalog_loader import (
     CATALOG,
     CATALOG_BY_TIER,
     BY_COMPETITION,
@@ -508,7 +508,7 @@ class TestCatalogLoadPerformance:
         (default 50 ms) on a cold container — tested on the smallest CI lane."
         """
         import time
-        from common.config import Config
+        from ai.common.config import Config
         
         cfg = Config()
         max_ms = cfg.league_catalog_load_max_ms
