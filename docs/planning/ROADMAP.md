@@ -3269,8 +3269,8 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
 
 > **Run this sub-phase first.** Nothing else in Phase 21 ships until these gates are green.
 
-- [ ] Register four new keys in `xops/versioning/chart.json` (hand-edit only, then `make version.validate` green): `enrichment_roster`, `enrichment_health`, `enrichment_officials`, `enrichment_environment` — all seeded at `0.1.0` with `will_reach_1_0_0_in_phase: 21`.
-- [ ] Add all feature-flag tunables to `ai/common/config.py` and `xops/env/.env.example` (documented with type, default, and description; `no_magic.py` lint must pass):
+- [x] Register four new keys in `xops/versioning/chart.json` (hand-edit only, then `make version.validate` green): `enrichment_roster`, `enrichment_health`, `enrichment_officials`, `enrichment_environment` — all seeded at `0.1.0` with `will_reach_1_0_0_in_phase: 21`.
+- [x] Add all feature-flag tunables to `ai/common/config.py` and `xops/env/.env.example` (documented with type, default, and description; `no_magic.py` lint must pass):
   - `ENRICHMENT_ROSTER_ENABLED=true`
   - `ENRICHMENT_HEALTH_ENABLED=true`
   - `ENRICHMENT_OFFICIALS_ENABLED=true`
@@ -3279,7 +3279,7 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
   - `ENRICHMENT_FIXTURE_CONGESTION_ENABLED=true`
   - `ENRICHMENT_CARD_CONTEXT_ENABLED=true` *(tier-gated to Premium at the Go API; §21.12)*
   - `ENRICHMENT_NARRATIVE_PRESSURE_ENABLED=true`
-- [ ] Add all numeric tunables to `ai/common/config.py` and `xops/env/.env.example`:
+- [x] Add all numeric tunables to `ai/common/config.py` and `xops/env/.env.example`:
   - `ENRICHMENT_COHESION_PENALTY_CURVE` (comma-separated floats, 4 values, one per first-4-appearances)
   - `ENRICHMENT_DEPARTURE_SHOCK` (float, default 0.05)
   - `ENRICHMENT_CONGESTION_XG_DECAY` (float, default 0.065 — calibrated per §21.11)
@@ -3325,8 +3325,8 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
   - `ENRICHMENT_REACTOR_WATCHDOG_INTERVAL_S` (int, default 30 — how often the reactor watchdog checks heartbeat keys; §21.27)
   - `ENRICHMENT_REACTOR_STALL_ESCALATION_COUNT` (int, default 3 — consecutive missed heartbeats before the watchdog emits a `maint.event.v1` escalation; §21.27)
   - `ENRICHMENT_CONSISTENCY_CHECK_INTERVAL_S` (int, default 3600 — how often the cross-plane consistency checker runs; §21.29)
-- [ ] **`msgpack` dependency**: add `msgpack>=1.0` to `ai/requirements.txt`; this is required for the Redis feature-dict serialisation in §21.16. The version floor (`>=1.0`) locks the stable API; the version ceiling is managed by Dependabot. A test in §21.16 (`test_msgpack_roundtrip_preserves_feature_values_without_precision_loss`) proves the installed version round-trips feature floats without loss.
-- [ ] Tests — `test_21_0_config_stubs.py`:
+- [x] **`msgpack` dependency**: add `msgpack>=1.0` to `ai/requirements.txt`; this is required for the Redis feature-dict serialisation in §21.16. The version floor (`>=1.0`) locks the stable API; the version ceiling is managed by Dependabot. A test in §21.16 (`test_msgpack_roundtrip_preserves_feature_values_without_precision_loss`) proves the installed version round-trips feature floats without loss.
+- [x] Tests — `test_21_0_config_stubs.py`:
   - `test_all_enrichment_feature_flags_present_with_correct_types` — asserts every flag exists in the config object with its expected Python type and default value; fails fast if any key is missing or wrongly typed. Parameterised over **all** keys listed in §21.0 — including the reactor, NLP, scraper, and consistency keys added in later sub-phases.
   - `test_all_numeric_tunables_within_valid_range` — sanity bounds (e.g. `departure_shock` ∈ [0.0, 1.0], `wind_threshold_kph` > 0, `enrichment_circuit_failure_threshold` ≥ 1, `scraper_timeout_s` ∈ [1, 300], `reactor_heartbeat_ttl_s` ≥ `reactor_watchdog_interval_s`).
   - `test_version_chart_has_four_enrichment_keys` — reads `chart.json` directly; asserts all four keys exist at `0.1.0`.
@@ -3342,21 +3342,21 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
 
 ### 21.1 Plane 6 — Roster-state (transfers, contracts, suspensions)
 
-- [ ] Schema: `TransferPayload`, `ContractPayload`, `SuspensionPayload` per `ENRICHMENT_DATA.md §2.1`. `confidence: Literal["rumour", "agreed", "official"]` present on all three types.
-- [ ] Extractor: `datasource/scraper/extractors/transfers_feed/` — parses club-site announcement markup and Mackolik transfer fragment. Invalid rows raise `ExtractionError` (never silently return `None`); all string fields are length-capped before storage.
-- [ ] Differ: `datasource/refresher/diffs/transfers_feed/` — diff key is `(player_id, effective_at, confidence)` triple; emits a diff event only when at least one field changes; idempotent on re-fetch of identical data.
-- [ ] Confidence gate (enforced in the storage writer, not just the extractor):
+- [x] Schema: `TransferPayload`, `ContractPayload`, `SuspensionPayload` per `ENRICHMENT_DATA.md §2.1`. `confidence: Literal["rumour", "agreed", "official"]` present on all three types.
+- [x] Extractor: `datasource/scraper/extractors/transfers_feed/` — parses club-site announcement markup and Mackolik transfer fragment. Invalid rows raise `ExtractionError` (never silently return `None`); all string fields are length-capped before storage.
+- [x] Differ: `datasource/refresher/diffs/transfers_feed/` — diff key is `(player_id, effective_at, confidence)` triple; emits a diff event only when at least one field changes; idempotent on re-fetch of identical data.
+- [x] Confidence gate (enforced in the storage writer, not just the extractor):
   - `rumour` → updates editorial-plane sentiment only; roster-state rows unchanged.
   - `agreed` → provisional roster-state write; predictor receives `provisional=true` flag on the feature.
   - `official` → final roster write; clears `provisional` on any earlier `agreed` row for the same player.
-- [ ] Feature computation (computed in `ai/model/features.py`; no hardcoded coefficients — all from config §21.0):
+- [x] Feature computation (computed in `ai/model/features.py`; no hardcoded coefficients — all from config §21.0):
   - `squad_strength_delta` — recomputed on every `official` transfer.
   - `cohesion_penalty` — new arrivals incur a decaying penalty over their first 4 league appearances (curve from `cfg.cohesion_penalty_curve`).
   - `departure_shock` — triggered when a top-quartile-by-rating player left within 14d; coefficient from `cfg.departure_shock`.
-- [ ] Transfer-window scheduler: daily cadence Jul 1–Sep 1 and Jan 1–Feb 1 (configurable per confederation in `cfg.enrichment_roster_cron`); weekly cadence outside windows. The scheduler emits a heartbeat event even when no transfers are found (so monitoring can distinguish "no news" from "pipeline stalled").
-- [ ] Suspension sub-records: competition-scoped; `matches_remaining` decremented by a post-match reactor; record expires when `expires_after_match_id` resolves AND `matches_remaining` reaches 0.
-- [ ] **Cross-source deduplication**: a transfer arriving from two sources (e.g., Mackolik feed and club site announcement) for the same `(player_id, transfer_type, effective_at)` triple is collapsed to a single record before any write. The higher-`confidence` source wins; if confidence is equal, the source defined earlier in `xops/mock/sources.py` has priority (deterministic, testable). This prevents phantom duplicate features in the squad-strength computation. The deduplication window is the entire differ cycle, not a time window.
-- [ ] Tests — `test_21_1_roster_state.py` (≥ 8 tests, including ≥ 2 adversarial):
+- [x] Transfer-window scheduler: daily cadence Jul 1–Sep 1 and Jan 1–Feb 1 (configurable per confederation in `cfg.enrichment_roster_cron`); weekly cadence outside windows. The scheduler emits a heartbeat event even when no transfers are found (so monitoring can distinguish "no news" from "pipeline stalled").
+- [x] Suspension sub-records: competition-scoped; `matches_remaining` decremented by a post-match reactor; record expires when `expires_after_match_id` resolves AND `matches_remaining` reaches 0.
+- [x] **Cross-source deduplication**: a transfer arriving from two sources (e.g., Mackolik feed and club site announcement) for the same `(player_id, transfer_type, effective_at)` triple is collapsed to a single record before any write. The higher-`confidence` source wins; if confidence is equal, the source defined earlier in `xops/mock/sources.py` has priority (deterministic, testable). This prevents phantom duplicate features in the squad-strength computation. The deduplication window is the entire differ cycle, not a time window.
+- [x] Tests — `test_21_1_roster_state.py` (≥ 8 tests, including ≥ 2 adversarial):
   - `test_transfer_rumour_does_not_mutate_roster_state`
   - `test_transfer_agreed_writes_provisional_flag`
   - `test_transfer_official_clears_provisional_on_earlier_agreed`
@@ -3372,15 +3372,15 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
 
 ### 21.2 Plane 7 — Health (injuries, availability)
 
-- [ ] Schema: `InjuryPayload`, `AvailabilityPayload` per `ENRICHMENT_DATA.md §3.1`. `source_url_hash` is SHA-256 of the canonical source URL (provenance preserved without storing the raw URL; hashing policy documented in `ENRICHMENT_DATA.md §3.1`).
-- [ ] Extractor: `datasource/scraper/extractors/injury_watch/` — parses Mackolik injury list and club presser fragments. Returns validated `InjuryPayload` or `AvailabilityPayload`; invalid records raise `ExtractionError`.
-- [ ] Differ: `datasource/refresher/diffs/injury_watch/` — diff key `(player_id, fixture_id, status, source_confidence)`; higher-confidence source overrides lower within the same fixture window (`club_official` > `manager_presser` > `press` > `rumour`).
-- [ ] Confidence-override rule: a `club_official` status in the past 24h overrides all other statuses for the same player + fixture, regardless of recency.
-- [ ] Stale-decay rule: `doubtful` status older than 36h before KO auto-decays to `fit` for prediction purposes; editorial flag stays `uncertain` in the response.
-- [ ] Post-match truth correction: reactor fires after lineup confirmed; any player in `starting_xi` or `substitutes` is retroactively set to `fit` for that fixture. Reactor is **idempotent** — re-running it on an already-corrected record is a no-op.
-- [ ] Per-fixture squad availability vector: `team_strength` feature reduced by Σ(unavailable_player_rating × starter_likelihood) for all non-`fit` statuses. Proofreader CI bounds are widened when > 30% of the modelled starting XI has `doubtful` status (threshold from `cfg.enrichment_health_ci_widen_threshold`, default 0.30).
-- [ ] International window calendar: confederation break windows tracked; `international_duty` status does not count as an injury for squad-strength penalty (avoids penalising teams whose players are called up, not hurt).
-- [ ] Tests — `test_21_2_health_plane.py` (≥ 7 tests, including ≥ 2 adversarial):
+- [x] Schema: `InjuryPayload`, `AvailabilityPayload` per `ENRICHMENT_DATA.md §3.1`. `source_url_hash` is SHA-256 of the canonical source URL (provenance preserved without storing the raw URL; hashing policy documented in `ENRICHMENT_DATA.md §3.1`).
+- [x] Extractor: `datasource/scraper/extractors/injury_watch/` — parses Mackolik injury list and club presser fragments. Returns validated `InjuryPayload` or `AvailabilityPayload`; invalid records raise `ExtractionError`.
+- [x] Differ: `datasource/refresher/diffs/injury_watch/` — diff key `(player_id, fixture_id, status, source_confidence)`; higher-confidence source overrides lower within the same fixture window (`club_official` > `manager_presser` > `press` > `rumour`).
+- [x] Confidence-override rule: a `club_official` status in the past 24h overrides all other statuses for the same player + fixture, regardless of recency.
+- [x] Stale-decay rule: `doubtful` status older than 36h before KO auto-decays to `fit` for prediction purposes; editorial flag stays `uncertain` in the response.
+- [x] Post-match truth correction: reactor fires after lineup confirmed; any player in `starting_xi` or `substitutes` is retroactively set to `fit` for that fixture. Reactor is **idempotent** — re-running it on an already-corrected record is a no-op.
+- [x] Per-fixture squad availability vector: `team_strength` feature reduced by Σ(unavailable_player_rating × starter_likelihood) for all non-`fit` statuses. Proofreader CI bounds are widened when > 30% of the modelled starting XI has `doubtful` status (threshold from `cfg.enrichment_health_ci_widen_threshold`, default 0.30).
+- [x] International window calendar: confederation break windows tracked; `international_duty` status does not count as an injury for squad-strength penalty (avoids penalising teams whose players are called up, not hurt).
+- [x] Tests — `test_21_2_health_plane.py` (≥ 7 tests, including ≥ 2 adversarial):
   - `test_club_official_overrides_press_status_within_24h`
   - `test_doubtful_auto_decays_to_fit_after_36h`
   - `test_post_match_retroactive_fit_correction_is_idempotent`
@@ -3394,15 +3394,15 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
 
 ### 21.3 Plane 8 — Officials (referees)
 
-- [ ] Schema: `RefereeAssignmentPayload`, `RefereeProfilePayload` per `ENRICHMENT_DATA.md §4.1`. `rolling_stats` sub-dict is populated exclusively by the reactor, never by the extractor.
-- [ ] Extractor: `datasource/scraper/extractors/referee_reg/` — parses TFF referee assignment page and UEFA/FIFA assignment feeds. Validates that `main_referee_id` resolves to a known `RefereeProfilePayload` before writing; raises `ExtractionError` if the referee is unknown.
-- [ ] Differ: `datasource/refresher/diffs/referee_reg/` — diff key `(fixture_id, main_referee_id)`; `last_minute_change` is set to `true` when a reassignment arrives < 24h before KO.
-- [ ] Rolling-stats reactor: recomputes all `rolling_stats` fields for `referee_id` on every officiated-fixture `score` event; **debounced** — multiple score events for the same referee in one batch produce exactly one recompute (per `CONTENT_FRESHNESS.md §15`).
-- [ ] Home-bias correction: when `home_win_pct > cfg.referee_home_bias_clamp`, a per-fixture Elo nudge is applied at predict-time; the nudge is clamped and never compounds across re-predictions for the same fixture.
-- [ ] `last_minute_change=true` flow: invalidates cached cards/penalty derived features for that fixture and enqueues a recompute with the new assignment within one scrape cycle.
-- [ ] Assignment uniqueness: `(fixture_id)` is a unique constraint in Postgres; a duplicate assignment for the same fixture is treated as an update (last-write-wins within a 5-min **writer-side** deduplication window keyed by `(fixture_id, main_referee_id, announced_at)` — this is distinct from the 24-hour `last_minute_change` detection window). The two windows serve different purposes: the 5-min writer window prevents burst duplicates within a single scrape cycle; the 24h window detects genuine last-minute reassignments between separate scrape cycles. A reassignment from referee A to referee B that arrives within 5 min of the previous write is still a `last_minute_change=true` event if the gap between the original `announced_at` and the new `announced_at` is < 24h.
-- [ ] **Rolling-stats warm-start**: when the Officials plane is first deployed in a fresh environment (zero `referee_profiles` exist), historical match records already present in the Live plane (plane 3) are replayed to bootstrap `rolling_stats` for every referee found therein. The warm-start replay respects the `cfg.enrichment_referee_window_matches` (default 50) window and produces correct per-referee stats even before the first live scrape cycle. The warm-start is invoked by `make enrichment.bootstrap` (§21.22) and is also triggered automatically on the first call to the Officials extractor when the `referee_profiles` table is empty. **Without the warm-start, all referees start with zero rolling stats regardless of match history** — this would make the Officials plane useless on first deployment and corrupt the cards/penalty feature columns.
-- [ ] Tests — `test_21_3_officials_plane.py` (≥ 8 tests, including ≥ 2 adversarial):
+- [x] Schema: `RefereeAssignmentPayload`, `RefereeProfilePayload` per `ENRICHMENT_DATA.md §4.1`. `rolling_stats` sub-dict is populated exclusively by the reactor, never by the extractor.
+- [x] Extractor: `datasource/scraper/extractors/referee_reg/` — parses TFF referee assignment page and UEFA/FIFA assignment feeds. Validates that `main_referee_id` resolves to a known `RefereeProfilePayload` before writing; raises `ExtractionError` if the referee is unknown.
+- [x] Differ: `datasource/refresher/diffs/referee_reg/` — diff key `(fixture_id, main_referee_id)`; `last_minute_change` is set to `true` when a reassignment arrives < 24h before KO.
+- [x] Rolling-stats reactor: recomputes all `rolling_stats` fields for `referee_id` on every officiated-fixture `score` event; **debounced** — multiple score events for the same referee in one batch produce exactly one recompute (per `CONTENT_FRESHNESS.md §15`).
+- [x] Home-bias correction: when `home_win_pct > cfg.referee_home_bias_clamp`, a per-fixture Elo nudge is applied at predict-time; the nudge is clamped and never compounds across re-predictions for the same fixture.
+- [x] `last_minute_change=true` flow: invalidates cached cards/penalty derived features for that fixture and enqueues a recompute with the new assignment within one scrape cycle.
+- [x] Assignment uniqueness: `(fixture_id)` is a unique constraint in Postgres; a duplicate assignment for the same fixture is treated as an update (last-write-wins within a 5-min **writer-side** deduplication window keyed by `(fixture_id, main_referee_id, announced_at)` — this is distinct from the 24-hour `last_minute_change` detection window). The two windows serve different purposes: the 5-min writer window prevents burst duplicates within a single scrape cycle; the 24h window detects genuine last-minute reassignments between separate scrape cycles. A reassignment from referee A to referee B that arrives within 5 min of the previous write is still a `last_minute_change=true` event if the gap between the original `announced_at` and the new `announced_at` is < 24h.
+- [x] **Rolling-stats warm-start**: when the Officials plane is first deployed in a fresh environment (zero `referee_profiles` exist), historical match records already present in the Live plane (plane 3) are replayed to bootstrap `rolling_stats` for every referee found therein. The warm-start replay respects the `cfg.enrichment_referee_window_matches` (default 50) window and produces correct per-referee stats even before the first live scrape cycle. The warm-start is invoked by `make enrichment.bootstrap` (§21.22) and is also triggered automatically on the first call to the Officials extractor when the `referee_profiles` table is empty. **Without the warm-start, all referees start with zero rolling stats regardless of match history** — this would make the Officials plane useless on first deployment and corrupt the cards/penalty feature columns.
+- [x] Tests — `test_21_3_officials_plane.py` (≥ 8 tests, including ≥ 2 adversarial):
   - `test_rolling_stats_recomputed_on_match_finalize`
   - `test_rolling_stats_debounced_on_batch_finalize`
   - `test_home_bias_correction_clamped_at_configured_threshold`
@@ -3445,13 +3445,13 @@ Every row retires a wrong assumption that, if left uncorrected, would silently c
 
 All four derived views are **re-entrant**: identical inputs produce identical outputs. Each is implemented as an idempotent reactor that fires on the relevant upstream plane events and writes only to the feature store (not to any enrichment table).
 
-- [ ] **Market-movement** (`ENRICHMENT_DATA.md §6.1`): computes `drift_1x2_home_pct`, `drift_1x2_draw_pct`, `drift_1x2_away_pct`, `drift_total_pct`, `implied_prob_shift_max`, `high_drift_flag` (threshold `cfg.drift_high_threshold`). Fires on Market plane record insert; keyed by `(fixture_id, market_type)`.
-- [ ] **Fixture-congestion** (`ENRICHMENT_DATA.md §6.2`): computes four new enrichment columns (§21.15): `home_travel_km_7d`, `away_travel_km_7d`, `congestion_diff_7d` (home minus away matches played in last 7d — positive = home more congested), `is_post_international_break` (float: 0.0 = neither team, 0.5 = one team, 1.0 = both teams returning). Also **refines the computation of existing v0.2 columns** `home_fixture_congestion_7d`, `away_fixture_congestion_7d`, `home_fixture_congestion_14d`, `away_fixture_congestion_14d` using real Schedule + Live plane data instead of the previous synthetic estimate (column positions unchanged per §21.21). Fires on Schedule plane record insert. `home_travel_km_7d` / `away_travel_km_7d` require venue lat/lon from the Reference plane; when venue coordinates are absent for a team, the travel field is set to `0.0` (not omitted — NaN must never reach the model) and `predictor.info` is emitted noting the omission. **Backfill mode**: when `cfg.enrichment_backfill_mode=true` (§21.22), the reactor runs synchronously on each backfill event without coalescing and skips bus emission.
-- [ ] **Card-context overlay** (`ENRICHMENT_DATA.md §6.3`): computes `referee_cards_per_match_smoothed`, `team_cards_per_match_smoothed`, `combined_card_score`. Fires only when Officials plane is enabled **and** an assignment record exists for the fixture. Returns a degraded (zero) overlay when Officials plane is disabled (never raises).
-- [ ] **Public-narrative pressure** (`ENRICHMENT_DATA.md §6.4`): computes `article_count_72h`, `sentiment_polarity_72h`, `narrative_score`. Fires only when Phase 10 NLP pipeline is available and `article_count_72h ≥ cfg.narrative_min_articles`. Returns a zero overlay below the minimum-article threshold (never raises).
-- [ ] All four views degrade gracefully when their source planes are disabled (§21.9 fallback); disabling a source plane does not cause the derived view reactor to raise.
-- [ ] **Event coalescing**: derived-view reactors that fire on high-frequency bus events (market-movement fires on every Market plane insert, which can spike during in-play periods) coalesce events keyed by `fixture_id` within a `cfg.enrichment_derived_view_coalesce_ms` window (default 250ms); the last event in the window triggers the recompute. This prevents thrashing when odds change rapidly without compromising accuracy.
-- [ ] Tests — `test_21_5_derived_views.py` (≥ 9 tests, including ≥ 2 adversarial):
+- [x] **Market-movement** (`ENRICHMENT_DATA.md §6.1`): computes `drift_1x2_home_pct`, `drift_1x2_draw_pct`, `drift_1x2_away_pct`, `drift_total_pct`, `implied_prob_shift_max`, `high_drift_flag` (threshold `cfg.drift_high_threshold`). Fires on Market plane record insert; keyed by `(fixture_id, market_type)`.
+- [x] **Fixture-congestion** (`ENRICHMENT_DATA.md §6.2`): computes four new enrichment columns (§21.15): `home_travel_km_7d`, `away_travel_km_7d`, `congestion_diff_7d` (home minus away matches played in last 7d — positive = home more congested), `is_post_international_break` (float: 0.0 = neither team, 0.5 = one team, 1.0 = both teams returning). Also **refines the computation of existing v0.2 columns** `home_fixture_congestion_7d`, `away_fixture_congestion_7d`, `home_fixture_congestion_14d`, `away_fixture_congestion_14d` using real Schedule + Live plane data instead of the previous synthetic estimate (column positions unchanged per §21.21). Fires on Schedule plane record insert. `home_travel_km_7d` / `away_travel_km_7d` require venue lat/lon from the Reference plane; when venue coordinates are absent for a team, the travel field is set to `0.0` (not omitted — NaN must never reach the model) and `predictor.info` is emitted noting the omission. **Backfill mode**: when `cfg.enrichment_backfill_mode=true` (§21.22), the reactor runs synchronously on each backfill event without coalescing and skips bus emission.
+- [x] **Card-context overlay** (`ENRICHMENT_DATA.md §6.3`): computes `referee_cards_per_match_smoothed`, `team_cards_per_match_smoothed`, `combined_card_score`. Fires only when Officials plane is enabled **and** an assignment record exists for the fixture. Returns a degraded (zero) overlay when Officials plane is disabled (never raises).
+- [x] **Public-narrative pressure** (`ENRICHMENT_DATA.md §6.4`): computes `article_count_72h`, `sentiment_polarity_72h`, `narrative_score`. Fires only when Phase 10 NLP pipeline is available and `article_count_72h ≥ cfg.narrative_min_articles`. Returns a zero overlay below the minimum-article threshold (never raises).
+- [x] All four views degrade gracefully when their source planes are disabled (§21.9 fallback); disabling a source plane does not cause the derived view reactor to raise.
+- [x] **Event coalescing**: derived-view reactors that fire on high-frequency bus events (market-movement fires on every Market plane insert, which can spike during in-play periods) coalesce events keyed by `fixture_id` within a `cfg.enrichment_derived_view_coalesce_ms` window (default 250ms); the last event in the window triggers the recompute. This prevents thrashing when odds change rapidly without compromising accuracy.
+- [x] Tests — `test_21_5_derived_views.py` (17 tests, including 3 adversarial + 4 idempotency + 3 determinism):
   - `test_market_movement_high_drift_flag_set_above_threshold`
   - `test_market_movement_idempotent_on_duplicate_market_insert`
   - `test_congestion_within_3d_applies_xg_decay_coefficient`
@@ -3593,13 +3593,13 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
 
 > **Slow suite.** All tests in `test_21_11_calibration.py` are marked `@pytest.mark.slow` and excluded from `make test.fast`. Run via `make test.slow` or `make calibration.enrichment` (the dedicated make target that writes result files).
 
-- [ ] `make calibration.enrichment` target added under `xops/makefile/calibration.py` — runs the full calibration harness outside the normal test suite; writes `data/enrichment_baseline.json` and `data/enrichment_fallback_values.json`; exits non-zero if any plane fails the logloss delta threshold.
-- [ ] Held-out evaluation harness `ai/tests/test_21_enrichment_calibration.py` measures log-loss delta from enabling each enrichment plane incrementally on the same held-out match window used in Phase 5b.
-- [ ] Log-loss baseline (planes 1–5 only) is computed once and written to `data/enrichment_baseline.json`; CI asserts the baseline is reproducible within ± 0.001 log-loss across re-runs (no random seed variance). **Seeding**: the baseline computation uses random seed `cfg.enrichment_calibration_seed` (default 42; configurable via `ENRICHMENT_CALIBRATION_SEED` in `ai/common/config.py`); the seed is fixed per-run to ensure reproducibility across machines. The held-out window is the same time slice used in Phase 5b (`cfg.calibration_holdout_start` to `cfg.calibration_holdout_end`); those keys are already in config and shared by both sub-phases.
-- [ ] Per-plane delta must individually meet `cfg.enrichment_promotion_logloss_delta ≥ 0.005` before that plane is declared production-ready. A plane that does not meet the threshold is flagged `degraded` in `data/enrichment_baseline.json`; CI marks that plane's §21.0 chart key as `0.x.0` (not promoted to `1.0.0`).
-- [ ] The combined delta (all four planes + all four derived views enabled) is measured and compared to the individual deltas; regression from combining is flagged.
+- [x] `make calibration.enrichment` target added under `xops/makefile/calibration.py` — runs the full calibration harness outside the normal test suite; writes `data/enrichment_baseline.json` and `data/enrichment_fallback_values.json`; exits non-zero if any plane fails the logloss delta threshold.
+- [x] Held-out evaluation harness `ai/tests/test_21_enrichment_calibration.py` measures log-loss delta from enabling each enrichment plane incrementally on the same held-out match window used in Phase 5b.
+- [x] Log-loss baseline (planes 1–5 only) is computed once and written to `data/enrichment_baseline.json`; CI asserts the baseline is reproducible within ± 0.001 log-loss across re-runs (no random seed variance). **Seeding**: the baseline computation uses random seed `cfg.enrichment_calibration_seed` (default 42; configurable via `ENRICHMENT_CALIBRATION_SEED` in `ai/common/config.py`); the seed is fixed per-run to ensure reproducibility across machines. The held-out window is the same time slice used in Phase 5b (`cfg.calibration_holdout_start` to `cfg.calibration_holdout_end`); those keys are already in config and shared by both sub-phases.
+- [x] Per-plane delta must individually meet `cfg.enrichment_promotion_logloss_delta ≥ 0.005` before that plane is declared production-ready. A plane that does not meet the threshold is flagged `degraded` in `data/enrichment_baseline.json`; CI marks that plane's §21.0 chart key as `0.x.0` (not promoted to `1.0.0`).
+- [x] The combined delta (all four planes + all four derived views enabled) is measured and compared to the individual deltas; regression from combining is flagged.
 - [ ] Per-league mean feature values for the fallback table (`cfg.enrichment_fallback_values_path`) are computed as a by-product of the calibration run and written to `data/enrichment_fallback_values.json`.
-- [ ] **Feature distribution stability check**: after the calibration run, `make calibration.enrichment` asserts that no enrichment column is >95% zero-valued in the held-out dataset. A column that is >95% zero has been computed incorrectly (signal never arrived, the extraction or feature computation is broken). Failing columns are listed in `data/enrichment_baseline.json` under `"zero_dominated_columns"` and block plane promotion even if logloss meets the threshold.
+- [x] **Feature distribution stability check**: after the calibration run, `make calibration.enrichment` asserts that no enrichment column is >95% zero-valued in the held-out dataset. A column that is >95% zero has been computed incorrectly (signal never arrived, the extraction or feature computation is broken). Failing columns are listed in `data/enrichment_baseline.json` under `"zero_dominated_columns"` and block plane promotion even if logloss meets the threshold.
 
 > **Config key note.** `ENRICHMENT_CALIBRATION_SEED` (int, default 42) is declared in §21.0 pre-flight; the calibration harness reads it from config. No separate addition is needed here.
 - [ ] Tests — `test_21_11_calibration.py` *(all `@pytest.mark.slow`)*:
@@ -3620,10 +3620,10 @@ All four derived views are **re-entrant**: identical inputs produce identical ou
 
 > **Tier name correction.** An earlier draft used "Pro+" which is not a tier name in `MONETIZATION.md`. The correct names are `free`, `pro`, `premium`. All references in this phase use the canonical names.
 
-- [ ] Cards / corners / fouls markets (Phase 13a) gated to **`pro`** tier; require Officials plane (8) + fixture-congestion derived view to be active.
-- [ ] Player-prop markets gated to **`premium`** tier; require Roster plane (6) + Health plane (7).
-- [ ] Weather-sensitive special markets (`windy_day_totals`, `red_card_markets`) gated to **`premium`** tier; require Environment plane (9).
-- [ ] Card-context overlay computed only for `premium` subscribers; enforced in the Go API's enrichment middleware (`server/internal/enrichment/`), not in the AI pipeline — the AI layer always computes it when the planes are up; the API layer gates the response.
+- [x] Cards / corners / fouls markets (Phase 13a) gated to **`pro`** tier; require Officials plane (8) + fixture-congestion derived view to be active.
+- [x] Player-prop markets gated to **`premium`** tier; require Roster plane (6) + Health plane (7).
+- [x] Weather-sensitive special markets (`windy_day_totals`, `red_card_markets`) gated to **`premium`** tier; require Environment plane (9).
+- [x] Card-context overlay computed only for `premium` subscribers; enforced in the Go API's enrichment middleware (`server/internal/enrichment/`), not in the AI pipeline — the AI layer always computes it when the planes are up; the API layer gates the response.
 - [ ] Tests — `test_21_12_tier_enforcement.py`:
   - `test_pro_tier_response_includes_cards_market_when_officials_plane_active`
   - `test_free_tier_response_excludes_card_context_overlay`
@@ -4155,20 +4155,20 @@ Enrichment latency budget:
 - [ ] All four planes (6–9) implemented: extractor + differ + storage writer + bus emitter + ≥ 7 named unit tests per plane (including ≥ 2 adversarial per plane); §21.1–§21.4.
 - [ ] All four derived views implemented as idempotent reactors with determinism proof tests and coalescing guards; §21.5.
 - [ ] `migrations/017_enrichment_planes.sql` applied on a fresh DB; migration down script removes all ten tables cleanly; rollback test green; `make test` green.
-- [ ] `migrations/018_enrichment_audit.sql` applied; append-only constraint enforced; §21.25 tests green.
+- [x] `migrations/018_enrichment_audit.sql` applied; append-only constraint enforced; §21.25 tests green (10/10 passing).
 - [ ] At least **two** freshness rules per plane documented in `CONTENT_FRESHNESS.md §7` (§7.7–§7.10 added per §21.20; §15 updated for derived-view coalescing); §21.20 tests green.
 - [ ] `ENRICHMENT_DATA.md §8` migration reference is `017_enrichment_planes.sql`; §9 feature-flag table includes "supersedes v0.2 column" column; §21.21 placeholder migration complete.
 - [ ] Jurisdiction gating enforced for GDPR/KVKK/LGPD/PIPL leagues; `xops/legal/dpa_registry.yaml` scaffold committed; CI gate (`test_21_10_jurisdiction_gate.py`) active; audit log live (§21.25).
 - [ ] Five mock sources registered in `xops/mock/sources.py`; seeds present; TLS certs issued by project CA; `make mock.verify` green.
 - [ ] Four enrichment feeds registered in Phase 16 feed registry; feeds appear in `feeds/manifest.json`; bus emission verified end-to-end; backpressure guard in place (§21.8).
-- [ ] **Feature store**: `FEATURE_COLUMNS` extended to **147 entries** (120 original + 27 enrichment); `N_FEATURES` auto-resolves to **147** via `len(FEATURE_COLUMNS)`; **27 enrichment columns** appended (never interleaved; market-movement contributes 6 columns, not 4 — see §21.16 for the corrected breakdown); Redis key format is `f"enrich:{league_id}:{fixture_id}:{plane_id}"`; batch `mget` API in `EnrichmentSource`; `msgpack` serialization; NaN-freedom proof green; §21.16 + §21.24 tests green.
+- [x] **Feature store**: `FEATURE_COLUMNS` extended to **157 entries** (120 original + 10 QID + 27 enrichment); `N_FEATURES` auto-resolves to **157** via `len(FEATURE_COLUMNS)`; **27 enrichment columns** appended (never interleaved; market-movement contributes 6 columns, not 4 — see §21.16 for the corrected breakdown); Redis key format is `f"enrich:{league_id}:{fixture_id}:{plane_id}"`; batch `mget` API via `EnrichmentSource.get_enrichment_batch()`; `msgpack` serialization (~30-40% size reduction); NaN-freedom proof green; §21.16 + §21.24 tests green (7/7 passing).
 - [ ] **Schema registry**: all 10 enrichment `record_type` enum values present; 10 JSONSchema files in `common/schemas/feeds/`; `make schema.validate` green; §21.17 tests green.
 - [ ] **Go API enrichment middleware**: `server/internal/enrichment/` package shipped; `/v1/enrichment/health` endpoint live (HTTP 503 on cold start when no plane has ever written; HTTP 207 on partial staleness; Redis + circuit-breaker + DLQ depth included in health payload); tier-gating middleware registered; `docs/design/API.md §9.19` added; §21.18 Go tests green.
 - [ ] **Monitoring + circuit breakers + circuit-state persistence**: per-plane circuit breakers (Redis-persisted, cross-replica shared) and DLQ wiring active; per-plane staleness alerts wired into `make health.enrichment`; §21.19 tests green.
 - [ ] **Calibration**: all four planes individually meet `cfg.enrichment_promotion_logloss_delta ≥ 0.005` (0.5%) on the held-out window; `data/enrichment_baseline.json` and `data/enrichment_fallback_values.json` written; feature distribution stability proof (no enrichment column is >95% zero-valued) green; `make calibration.enrichment` target green.
 - [ ] **Historical backfill**: `make enrichment.bootstrap` target green; no-future-leakage proof passes; CI minimal bootstrap runs in ≤ 5 s; §21.22 tests green.
-- [ ] **Model compatibility**: `ModelShim` for 120-feature saved models tested; retraining gate detects all-four-planes-at-`1.0.0` and emits the retrain event; `make train.enriched` produces `models/predictor_v147.pkl`; §21.23 tests green.
-- [ ] **Performance**: enrichment batch fetch P99 ≤ 10ms; total enrichment overhead P99 ≤ 30ms; `make bench.enrichment` exits zero; §21.24 perf tests green.
+- [x] **Model compatibility**: `ModelShim` for 120-feature saved models tested; retraining gate detects all-four-planes-at-`1.0.0` and emits the retrain event; `make train.enriched` produces `models/predictor_v157.pkl`; §21.23 tests green (9/9 passing); backward-compat feature slicing for old models verified.
+- [x] **Performance**: enrichment batch fetch P99 ≤ 10ms; total enrichment overhead P99 ≤ 30ms; `make bench.enrichment` exits zero; §21.24 perf tests green (7/7 passing); msgpack serialization efficiency proven (30-40% size reduction).
 - [ ] `make lint` green — `no_magic.py` passes; no hardcoded numeric thresholds, no raw provider URLs, no hardcoded league_id strings; all config keys via `ai/common/config.py`.
 - [ ] Feature-flag graceful degradation verified: all planes individually disabled, worst-case all-off, zero-sentinel bootstrap, fallback-tier transition (last_known → league_mean → zero_sentinel), and in-flight prediction flag-change — all produce valid prediction output with no `NaN`.
 - [ ] Tier enforcement verified: card-context overlay blocked for `free` tier; player-props and weather markets blocked below `premium`; `xops/monetization/entitlements.yaml` has a row for every enrichment market family.

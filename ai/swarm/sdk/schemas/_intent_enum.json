@@ -37,6 +37,7 @@
     "data.competition_lookup",
     "data.transfer_lookup",
     "data.injury_lookup",
+    "data.availability_lookup",
     "data.referee_lookup",
     "data.weather_lookup",
     "data.suspension_lookup",

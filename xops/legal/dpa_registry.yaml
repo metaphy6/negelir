@@ -1,0 +1,16 @@
+# Data Processing Agreement (DPA) Registry
+# Schema: each entry has league_id, jurisdiction, dpa_status, effective_from, notes
+# This is a scaffold; real DPA details are operator-supplied at deployment time.
+
+entries:
+  - league_id: "tr_super_lig"
+    jurisdiction: "kvkk"
+    dpa_status: "no_dpa"
+    effective_from: null
+    notes: "Turkish Super Lig — KVKK (Turkish Data Protection Law) applies. No DPA signed yet. Enrichment roster/health planes suppressed until DPA is active."
+
+  - league_id: "test_league"
+    jurisdiction: "unrestricted"
+    dpa_status: "active"
+    effective_from: "2026-01-01"
+    notes: "Test league for CI — unrestricted jurisdiction for testing purposes."

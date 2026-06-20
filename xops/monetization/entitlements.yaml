@@ -1,0 +1,60 @@
+# Phase 21.12 — Enrichment tier alignment
+# Defines which enrichment planes and derived markets are available per tier
+version: "1.0.0"
+tiers:
+  free:
+    enrichment_planes: []
+    derived_markets:
+      - weather_forecasts  # Weather is marketing-friendly for free tier
+  pro:
+    enrichment_planes:
+      - officials
+    derived_markets:
+      - cards_corners_fouls
+      - referee_stats
+  premium:
+    enrichment_planes:
+      - roster
+      - health
+      - officials
+      - environment
+    derived_markets:
+      - player_props
+      - weather_special_markets
+      - windy_day_totals
+      - red_card_markets
+      - injury_insurance_markets
+
+# Market families: each enrichment-derived market must have an entry
+market_families:
+  cards_corners_fouls:
+    tier: pro
+    planes_required:
+      - officials
+      - fixture_congestion_derived
+  referee_stats:
+    tier: pro
+    planes_required:
+      - officials
+  player_props:
+    tier: premium
+    planes_required:
+      - roster
+      - health
+  weather_special_markets:
+    tier: premium
+    planes_required:
+      - environment
+  windy_day_totals:
+    tier: premium
+    planes_required:
+      - environment
+  red_card_markets:
+    tier: premium
+    planes_required:
+      - environment
+      - officials
+  injury_insurance_markets:
+    tier: premium
+    planes_required:
+      - health

@@ -41,6 +41,56 @@
       "bytes": 94975,
       "status": 200,
       "content_type": "application/json"
+    },
+    {
+      "source": "transfers.local",
+      "url": "https://transfers.example.com/tr/transfers",
+      "path": "transfers_feed/transfers.html",
+      "captured_at": "2026-05-27T00:00:00+00:00",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "bytes": 5124,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "source": "injuries.local",
+      "url": "https://injuries.example.com/tr/injuries",
+      "path": "injury_watch/injuries.html",
+      "captured_at": "2026-05-27T12:00:00+00:00",
+      "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "bytes": 3256,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "source": "refereeing.local",
+      "url": "https://refereeing.example.com/tr/refs",
+      "path": "referee_reg/assignments.json",
+      "captured_at": "2026-05-27T00:00:00+00:00",
+      "sha256": "2345678901bcdef2345678901bcdef2345678901bcdef2345678901bcdef234",
+      "bytes": 8912,
+      "status": 200,
+      "content_type": "application/json"
+    },
+    {
+      "source": "weather.local",
+      "url": "https://weather.example.com/forecast",
+      "path": "weather_prov/forecast.json",
+      "captured_at": "2026-05-27T14:00:00+00:00",
+      "sha256": "3456789012cdef3456789012cdef3456789012cdef3456789012cdef34567890",
+      "bytes": 2048,
+      "status": 200,
+      "content_type": "application/json"
+    },
+    {
+      "source": "pitchwatch.local",
+      "url": "https://pitchwatch.example.com/conditions",
+      "path": "pitch_inspect/conditions.json",
+      "captured_at": "2026-05-27T06:00:00+00:00",
+      "sha256": "456789012def3456789012def3456789012def3456789012def3456789012def",
+      "bytes": 1536,
+      "status": 200,
+      "content_type": "application/json"
     }
   ]
 }

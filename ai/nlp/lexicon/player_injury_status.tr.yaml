@@ -1,0 +1,63 @@
+# Phase 21.13 — Player injury and availability status entity class
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-06-20T00:00:00Z"
+  generator: nlp.lexicon-build
+  entity_class: player_injury_status
+
+entries:
+  - canonical_id: fit
+    names:
+      - sağlıklı
+      - fit
+      - tamam
+      - mücadeleden hazır
+    aliases:
+      - uygun
+      - hazır
+      - maçta
+
+  - canonical_id: doubtful
+    names:
+      - şüpheli
+      - belirsiz
+      - sorgulanır
+      - endişe
+    aliases:
+      - maçta şüpheli
+      - katılabilir
+      - bakılacak
+
+  - canonical_id: out
+    names:
+      - dışarıda
+      - sakatlanmış
+      - yaralı
+      - cezalı
+    aliases:
+      - oynayamaz
+      - maçta yok
+      - sakatlık
+
+  - canonical_id: suspended
+    names:
+      - cezalı
+      - disiplin cezası
+      - kırmızı kart
+      - ceza süresi
+    aliases:
+      - maç cezası
+      - ceza bitti
+      - disiplin
+
+  - canonical_id: international_duty
+    names:
+      - uluslararası görev
+      - milli takım
+      - milli maç
+      - olimpiyat
+    aliases:
+      - turnuva
+      - milli
+      - ülke görev

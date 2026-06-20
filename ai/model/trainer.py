@@ -147,16 +147,26 @@ def train_model(save_path: str | None = None,
     log.info(f"📈 Test accuracy: {acc:.4f}")
     log.info(f"📉 Test log-loss: {loss:.4f}")
 
-    # Save model
+    # Save model with feature schema versioning
     if save_path is None:
         model_dir = cfg.model_dir
         save_path = os.path.join(model_dir, f"negelir_gbdt_v{MODEL_VERSION}.pkl")
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
+    # Feature schema versioning: 1=120 cols (baseline), 2=147 cols (enrichment)
+    feature_schema_version = 2 if len(FEATURE_COLUMNS) >= 147 else 1
+    model_metadata = {
+        "model": model,
+        "feature_schema_version": feature_schema_version,
+        "n_features": len(FEATURE_COLUMNS),
+        "feature_columns": FEATURE_COLUMNS,
+    }
+
     with open(save_path, "wb") as f:
-        pickle.dump(model, f)
+        pickle.dump(model_metadata, f)
     log.info(f"💾 Model saved: {save_path}")
+    log.info(f"🏷️  Feature schema version: {feature_schema_version}")
 
     # Model size (roadmap: must be < 8 MB)
     size_mb = os.path.getsize(save_path) / (1024 * 1024)

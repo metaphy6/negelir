@@ -1,0 +1,43 @@
+# Phase 21.13 — Transfer type entity class (permanent, loan, rumour)
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-06-20T00:00:00Z"
+  generator: nlp.lexicon-build
+  entity_class: transfer_type
+
+entries:
+  - canonical_id: permanent
+    names:
+      - kalıcı
+      - satışı
+      - transfer
+      - alımı
+    aliases:
+      - satıldı
+      - aldı
+      - imza
+      - anlaşma
+
+  - canonical_id: loan
+    names:
+      - kiralık
+      - ödünç
+      - gidiş
+      - gelişi
+    aliases:
+      - kiralama
+      - geri dönüş
+      - sezon sonu
+
+  - canonical_id: rumour
+    names:
+      - söylenti
+      - iddia
+      - haber
+      - dedikodu
+    aliases:
+      - söylentiler
+      - rivayet
+      - haberi
+      - geliyor mu

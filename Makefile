@@ -1205,6 +1205,18 @@ codegraph.upgrade: ## Bump pin across all wirings [VERSION=x.y.z, default=latest
 	@$(XOPS)/codegraph.py upgrade
 
 # ══════════════════════════════════════════════════════════════
+#              ENRICHMENT CALIBRATION (Phase 21.11)
+# ══════════════════════════════════════════════════════════════
+
+.PHONY: calibration.enrichment
+calibration.enrichment: env ## Phase 21.11 — Enrichment plane calibration harness
+	@$(XOPS)/calibration.py enrichment
+
+.PHONY: calibration.enrichment-retrain-gate
+calibration.enrichment-retrain-gate: env ## Phase 21.23 — Gate: all enrichment planes at v1.0.0?
+	@$(XOPS)/calibration.py enrichment_retrain_gate
+
+# ══════════════════════════════════════════════════════════════
 #               ROADMAP PHASE ORCHESTRATION
 # ══════════════════════════════════════════════════════════════
 #  Parallel-safe coordinator for delegating ROADMAP phases to

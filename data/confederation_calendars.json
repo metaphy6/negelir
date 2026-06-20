@@ -1,0 +1,52 @@
+{
+  "confederations": [
+    {
+      "confederation_id": "uefa",
+      "name": "Union of European Football Associations",
+      "international_breaks": [
+        {
+          "start_date": "2026-03-20",
+          "end_date": "2026-03-30",
+          "description": "Qualifiers"
+        },
+        {
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-10",
+          "description": "Qualifiers"
+        }
+      ]
+    },
+    {
+      "confederation_id": "conmebol",
+      "name": "Confederaci\u00f3n Sudamericana de F\u00fatbol",
+      "international_breaks": [
+        {
+          "start_date": "2026-03-20",
+          "end_date": "2026-03-30",
+          "description": "Qualifiers"
+        },
+        {
+          "start_date": "2026-08-28",
+          "end_date": "2026-09-08",
+          "description": "Qualifiers"
+        }
+      ]
+    },
+    {
+      "confederation_id": "afc",
+      "name": "Asian Football Confederation",
+      "international_breaks": [
+        {
+          "start_date": "2026-03-20",
+          "end_date": "2026-03-30",
+          "description": "Qualifiers"
+        },
+        {
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-10",
+          "description": "Qualifiers"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WeatherForecast Payload (v1) — Environment plane",
+  "description": "Phase 21.4 — Hourly weather forecast with 24-48h horizon.",
+  "type": "object",
+  "required": ["forecast_id", "venue_id", "valid_at", "issued_at", "horizon_hours", "temp_c", "wind_kph", "wind_direction_deg", "precip_mm_per_hr", "humidity_pct", "conditions"],
+  "additionalProperties": false,
+  "properties": {
+    "forecast_id": {"type": "string", "minLength": 1},
+    "venue_id": {"type": "string", "minLength": 1},
+    "valid_at": {"type": "string", "format": "date-time"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "horizon_hours": {"type": "integer", "minimum": 0},
+    "temp_c": {"type": "number"},
+    "wind_kph": {"type": "number", "minimum": 0},
+    "wind_direction_deg": {"type": "integer", "minimum": 0, "maximum": 359},
+    "precip_mm_per_hr": {"type": "number", "minimum": 0},
+    "humidity_pct": {"type": "integer", "minimum": 0, "maximum": 100},
+    "visibility_km": {"type": ["number", "null"], "minimum": 0},
+    "conditions": {"type": "string", "enum": ["clear", "rain", "snow", "fog", "thunderstorm"]}
+  }
+}

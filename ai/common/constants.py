@@ -39,7 +39,9 @@ FEATURE_COLUMNS: list[str] = [
     "home_goal_concentration", "away_goal_concentration",
     "home_avg_age", "away_avg_age",
     # Contextual
+    # DEPRECATED: superseded by enrichment derived view fixture-congestion (Schedule + Live planes)
     "home_fixture_congestion_7d", "away_fixture_congestion_7d",
+    # DEPRECATED: superseded by enrichment derived view fixture-congestion (Schedule + Live planes)
     "home_fixture_congestion_14d", "away_fixture_congestion_14d",
     "home_manager_tenure", "away_manager_tenure",
     "home_manager_change", "away_manager_change",
@@ -58,7 +60,9 @@ FEATURE_COLUMNS: list[str] = [
     "home_scoring_consistency", "away_scoring_consistency",
     "surprise_index_home", "surprise_index_away",
     # Weather / venue
+    # DEPRECATED: superseded by enrichment plane 9 (Environment) — values now computed by weather reactor
     "temperature_bucket", "precipitation_flag", "wind_category",
+    # DEPRECATED: superseded by enrichment plane 9 (Environment) — surface penalty computed by environment reactor
     "venue_type",
     # ── Card & discipline (v0.2) ──
     "home_avg_yellows_5", "away_avg_yellows_5",
@@ -87,9 +91,52 @@ FEATURE_COLUMNS: list[str] = [
     "qid_match_winner", "qid_draw", "qid_over_under", "qid_goal_range",
     "qid_both_teams_score", "qid_clean_sheet", "qid_half_time",
     "qid_form_query", "qid_head_to_head", "qid_score_predict",
+    
+    # ── Enrichment Plane 6: Roster-state (transfers, contracts, suspensions) ──
+    "squad_strength_delta",          # Phase 21.1: recomputed on official transfer
+    "cohesion_penalty",              # Phase 21.1: decaying penalty for new arrivals (first 4 league appearances)
+    "departure_shock",               # Phase 21.1: top-quartile player left within 14d
+    
+    # ── Enrichment Plane 7: Health (injuries, availability) ──
+    "squad_availability_score",      # Phase 21.2: scaled reduction from unavailable players
+    "doubtful_ratio",                # Phase 21.2: fraction of starting XI with doubtful status
+    "key_player_out_flag",           # Phase 21.2: binary flag: key player (top 3 rated) is out
+    
+    # ── Enrichment Plane 8: Officials (referees, VAR) ──
+    "referee_yellows_per_match",     # Phase 21.3: rolling stat from referee profile
+    "referee_reds_per_match",        # Phase 21.3: rolling stat from referee profile
+    "referee_penalties_per_match",   # Phase 21.3: rolling stat from referee profile
+    "referee_home_win_pct_adj",      # Phase 21.3: home-win % clamped by cfg.referee_home_bias_clamp
+    
+    # ── Enrichment Plane 9: Environment (weather, pitch) ──
+    "wind_xg_factor",                # Phase 21.4: multiplicative xG reduction for wind > threshold
+    "rain_xg_factor",                # Phase 21.4: multiplicative xG reduction for rain > threshold
+    "surface_style_penalty",         # Phase 21.4: additional xG reduction for style-mismatch on worn pitch
+    "pitch_condition_score",         # Phase 21.4: numeric score from pitch condition (pristine=1.0, frozen=0.0)
+    
+    # ── Enrichment Derived View: Market-movement ──
+    "drift_1x2_home_pct",            # Phase 21.5: opening home odds % change to closing
+    "drift_1x2_draw_pct",            # Phase 21.5: opening draw odds % change to closing
+    "drift_1x2_away_pct",            # Phase 21.5: opening away odds % change to closing
+    "drift_total_pct",               # Phase 21.5: max absolute % change across all legs
+    "implied_prob_shift_max",        # Phase 21.5: maximum implied probability shift
+    "high_drift_flag",               # Phase 21.5: binary flag: drift exceeds cfg.drift_high_threshold
+    
+    # ── Enrichment Derived View: Fixture-congestion (refined from v0.2) ──
+    "home_travel_km_7d",             # Phase 21.5: cumulative travel distance for home team in last 7d
+    "away_travel_km_7d",             # Phase 21.5: cumulative travel distance for away team in last 7d
+    "congestion_diff_7d",            # Phase 21.5: home matches in 7d minus away matches in 7d (positive = home more congested)
+    "is_post_international_break",   # Phase 21.5: float 0.0/0.5/1.0 indicating how many teams return from intl break
+    
+    # ── Enrichment Derived View: Card-context ──
+    "combined_card_score",           # Phase 21.5: referee card rate × team card rate interaction
+    "referee_cards_per_match_smoothed",  # Phase 21.5: smoothed rolling stat for the assigned referee
+    
+    # ── Enrichment Derived View: Narrative-pressure ──
+    "narrative_score",               # Phase 21.5: sentiment polarity aggregated from editorial plane (Phase 10)
 ]
 
-N_FEATURES: int = len(FEATURE_COLUMNS)
+N_FEATURES: int = len(FEATURE_COLUMNS)  # Auto-resolves to 147 after Phase 21.16 lands
 
 # ── Locale-driven data (loaded from YAML) ───────────────
 # Strict loading: missing/malformed locale is a hard error. Silent empty

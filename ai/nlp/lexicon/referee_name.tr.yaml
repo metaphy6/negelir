@@ -1,0 +1,48 @@
+# Phase 21.13 — Referee name entity class (proper-noun, Turkish football referees)
+_meta:
+  schema_version: 1
+  lexicon_version: 1.0.0
+  generated_at_utc: "2026-06-20T00:00:00Z"
+  generator: nlp.lexicon-build
+  entity_class: referee_name
+  note: "Populated from referee_profiles data at lexicon build time; sample entries below"
+
+entries:
+  - canonical_id: ref_halil_umut_meler
+    names:
+      - Halil Umut Meler
+      - Halil Meler
+    aliases:
+      - HUM
+      - Meler
+      - Halil Umut
+
+  - canonical_id: ref_cuneyt_cakir
+    names:
+      - Cüneyt Çakır
+      - Cuneyt Cakir
+    aliases:
+      - Çakır
+      - Cakir
+      - Cüneyt
+
+  - canonical_id: ref_serdar_ok
+    names:
+      - Serdar Ok
+    aliases:
+      - Ok
+      - Serdar
+
+  - canonical_id: ref_abdulkadir_bitigen
+    names:
+      - Abdulkadir Bitigen
+    aliases:
+      - Bitigen
+      - Abdulkadir
+
+  - canonical_id: ref_ali_palabiyik
+    names:
+      - Ali Palabiyik
+    aliases:
+      - Palabiyik
+      - Ali

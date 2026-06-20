@@ -1,0 +1,128 @@
+# Phase 21.13 — Enrichment NLP intents fixture
+# Six new template-driven intents with Turkish queries and expected classifications
+version: "1.0.0"
+intents:
+  transfer_lookup:
+    description: "Player transfer lookups (buys, sells, loans)"
+    confidence_threshold: 0.60  # Baseline; no special elevation
+    entity_classes:
+      - transfer_type
+      - player_name
+      - team_name
+    sample_queries:
+      # Positive examples
+      - query: "Galatasaray hangi oyuncuları aldı?"
+        expected: "transfer_lookup"
+        entities: [player_name, team_name]
+      - query: "Fenerbahçe'nin son transferleri neler?"
+        expected: "transfer_lookup"
+      - query: "Erdoğan Yeşilçay nereye gitti?"
+        expected: "transfer_lookup"
+      - query: "Beşiktaş kiralık oyuncular listesi"
+        expected: "transfer_lookup"
+      - query: "Transfer söylentileri Süper Lig"
+        expected: "transfer_lookup"
+      # Negation variant
+      - query: "Transferler olmadı mı bu sezon?"
+        expected: "transfer_lookup"
+
+  injury_lookup:
+    description: "Player injury and availability status"
+    confidence_threshold: 0.70  # ELEVATED: medical accuracy stricter than baseline
+    entity_classes:
+      - player_injury_status
+      - player_name
+      - team_name
+    sample_queries:
+      - query: "Hakim Ziyech sakatlanmış mı?"
+        expected: "injury_lookup"
+      - query: "Galatasaray oyuncuları şüpheli"
+        expected: "injury_lookup"
+      - query: "Depay yaralanması ne zaman biter?"
+        expected: "injury_lookup"
+      - query: "Uğur Çiftçi dönüş tarihi"
+        expected: "injury_lookup"
+      - query: "Fenerbahçe sakat oyuncular"
+        expected: "injury_lookup"
+      - query: "Sakatlık yok mu?"
+        expected: "injury_lookup"
+
+  availability_lookup:
+    description: "Player availability status (fit/doubtful/out)"
+    confidence_threshold: 0.60
+    entity_classes:
+      - player_availability_status
+      - player_name
+    sample_queries:
+      - query: "Oyuncu X maça hazır mı?"
+        expected: "availability_lookup"
+      - query: "Şüpheli oyuncular maça mı katılacak?"
+        expected: "availability_lookup"
+      - query: "Çıkmazı oyun oynayabilir mi?"
+        expected: "availability_lookup"
+      - query: "Fenerbahçe oyuncuları uygun mu?"
+        expected: "availability_lookup"
+      - query: "Hazırlık durumu nedir?"
+        expected: "availability_lookup"
+      - query: "Oynadığı yok mu?"
+        expected: "availability_lookup"
+
+  referee_lookup:
+    description: "Referee assignment and statistics"
+    confidence_threshold: 0.60
+    entity_classes:
+      - referee_name
+      - team_name
+    sample_queries:
+      - query: "Halil Umut Meler'in istatistikleri"
+        expected: "referee_lookup"
+      - query: "Süper Lig maçına kim hakem olacak?"
+        expected: "referee_lookup"
+      - query: "Cüneyt Çakır'ın sarı kart oranı"
+        expected: "referee_lookup"
+      - query: "Bu haftanın hakem kadrosu"
+        expected: "referee_lookup"
+      - query: "Hakem istatistikleri Galatasaray"
+        expected: "referee_lookup"
+      - query: "Hakem yok mu?"
+        expected: "referee_lookup"
+
+  weather_lookup:
+    description: "Weather forecast and conditions"
+    confidence_threshold: 0.60
+    entity_classes:
+      - weather_condition
+      - venue_name
+    sample_queries:
+      - query: "Stadyumda hava nasıl olacak?"
+        expected: "weather_lookup"
+      - query: "Galatasaray Arenası hava durumu"
+        expected: "weather_lookup"
+      - query: "Yağmur yağacak mı maç gününde?"
+        expected: "weather_lookup"
+      - query: "Rüzgâr hızı kaç olacak?"
+        expected: "weather_lookup"
+      - query: "Açık alan mı kapalı alan mı oynanacak?"
+        expected: "weather_lookup"
+      - query: "Hava durumu belirli mi?"
+        expected: "weather_lookup"
+
+  suspension_lookup:
+    description: "Player suspension status and duration"
+    confidence_threshold: 0.60
+    entity_classes:
+      - player_name
+      - competition_name
+    sample_queries:
+      - query: "Oyuncu X kaç maç cezalı?"
+        expected: "suspension_lookup"
+      - query: "Ceza alan oyuncular Süper Lig"
+        expected: "suspension_lookup"
+      - query: "Kırmızı kart cezası ne zaman biter?"
+        expected: "suspension_lookup"
+      - query: "Fenerbahçe'de cezalı oyuncu var mı?"
+        expected: "suspension_lookup"
+      - query: "Lig kupası maçında ceza birikimi"
+        expected: "suspension_lookup"
+      - query: "Ceza yok mu?"
+        expected: "suspension_lookup"

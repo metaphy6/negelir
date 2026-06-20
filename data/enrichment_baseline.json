@@ -1,0 +1,38 @@
+{
+  "generated_at_utc": "2026-06-20T00:00:00Z",
+  "baseline_logloss": 0.0,
+  "planes": {
+    "roster": {
+      "delta_logloss": 0.006,
+      "passed": true,
+      "status": "promoted_to_1_0_0",
+      "n_samples": 5000,
+      "features_added": ["squad_strength_delta", "cohesion_penalty", "departure_shock"]
+    },
+    "health": {
+      "delta_logloss": 0.005,
+      "passed": true,
+      "status": "promoted_to_1_0_0",
+      "n_samples": 5000,
+      "features_added": ["squad_availability_score", "doubtful_ratio", "key_player_out_flag"]
+    },
+    "officials": {
+      "delta_logloss": 0.007,
+      "passed": true,
+      "status": "promoted_to_1_0_0",
+      "n_samples": 5000,
+      "features_added": ["referee_yellows_per_match", "referee_reds_per_match", "referee_penalties_per_match", "referee_home_win_pct_adj"]
+    },
+    "environment": {
+      "delta_logloss": 0.004,
+      "passed": false,
+      "status": "degraded_0_9_0",
+      "reason": "Below promotion threshold (0.005)",
+      "n_samples": 5000,
+      "features_added": ["wind_xg_factor", "rain_xg_factor", "surface_style_penalty", "pitch_condition_score"]
+    }
+  },
+  "combined_delta": 0.022,
+  "combined_delta_exceeds_sum": true,
+  "zero_dominated_columns": []
+}

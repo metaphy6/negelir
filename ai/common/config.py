@@ -769,6 +769,226 @@ class Config:
         "NEGELIR_FEEDS_MANIFEST_SNAPSHOT_INTERVAL_MIN", "60"
     )))
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Phase 21 — Enrichment Data Planes (Planes 6–9 + derived views)
+    # ─────────────────────────────────────────────────────────────────────────────
+    
+    # Feature-flag gates for each enrichment plane and derived view
+    enrichment_roster_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_ROSTER_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_health_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_HEALTH_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_officials_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_OFFICIALS_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_environment_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_ENVIRONMENT_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_market_movement_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_MARKET_MOVEMENT_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_fixture_congestion_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_FIXTURE_CONGESTION_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_card_context_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_CARD_CONTEXT_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_narrative_pressure_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_NARRATIVE_PRESSURE_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    # Numeric tunables for enrichment calculations and gates
+    enrichment_cohesion_penalty_curve: list[float] = field(default_factory=lambda: [
+        float(x.strip()) for x in os.getenv(
+            "ENRICHMENT_COHESION_PENALTY_CURVE", "0.15,0.10,0.05,0.02"
+        ).split(",")
+    ])
+    
+    enrichment_departure_shock: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_DEPARTURE_SHOCK", "0.05"
+    )))
+    
+    enrichment_congestion_xg_decay: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_CONGESTION_XG_DECAY", "0.065"
+    )))
+    
+    enrichment_referee_home_bias_clamp: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_REFEREE_HOME_BIAS_CLAMP", "0.15"
+    )))
+    
+    enrichment_drift_high_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_DRIFT_HIGH_THRESHOLD", "0.10"
+    )))
+    
+    enrichment_narrative_min_articles: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_NARRATIVE_MIN_ARTICLES", "3"
+    )))
+    
+    enrichment_weather_forecast_max_age_h: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_WEATHER_FORECAST_MAX_AGE_H", "6"
+    )))
+    
+    enrichment_promotion_logloss_delta: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_PROMOTION_LOGLOSS_DELTA", "0.005"
+    )))
+    
+    enrichment_roster_cron: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_ROSTER_CRON", "0 4 * * 1-5"  # Daily 04:00 UTC Mon-Fri outside windows; weekly on weekends
+    ))
+    
+    enrichment_surface_style_penalty: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_SURFACE_STYLE_PENALTY", "0.04"
+    )))
+    
+    enrichment_wind_threshold_kph: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_WIND_THRESHOLD_KPH", "40.0"
+    )))
+    
+    enrichment_rain_threshold_mm: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_RAIN_THRESHOLD_MM", "5.0"
+    )))
+    
+    enrichment_referee_window_matches: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REFEREE_WINDOW_MATCHES", "50"
+    )))
+    
+    enrichment_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CACHE_TTL_S", "300"
+    )))
+    
+    enrichment_env_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_ENV_CACHE_TTL_S", "60"
+    )))
+    
+    enrichment_health_ci_widen_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_HEALTH_CI_WIDEN_THRESHOLD", "0.30"
+    )))
+    
+    enrichment_circuit_failure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CIRCUIT_FAILURE_THRESHOLD", "5"
+    )))
+    
+    enrichment_circuit_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CIRCUIT_WINDOW_S", "60"
+    )))
+    
+    enrichment_circuit_cooldown_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CIRCUIT_COOLDOWN_S", "300"
+    )))
+    
+    enrichment_derived_view_coalesce_ms: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_DERIVED_VIEW_COALESCE_MS", "250"
+    )))
+    
+    enrichment_weather_dedup_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_WEATHER_DEDUP_WINDOW_S", "3600"
+    )))
+    
+    enrichment_referee_batch_max: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REFEREE_BATCH_MAX", "50"
+    )))
+    
+    enrichment_fallback_values_path: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_FALLBACK_VALUES_PATH", "data/enrichment_fallback_values.json"
+    ))
+    
+    enrichment_roster_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_ROSTER_STALE_S", "86400"
+    )))
+    
+    enrichment_health_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_HEALTH_STALE_S", "43200"
+    )))
+    
+    enrichment_officials_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_OFFICIALS_STALE_S", "7200"
+    )))
+    
+    enrichment_environment_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_ENVIRONMENT_STALE_S", "21600"
+    )))
+    
+    enrichment_health_stale_threshold_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_HEALTH_STALE_THRESHOLD_S", "3600"
+    )))
+    
+    enrichment_backfill_mode: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_BACKFILL_MODE", "false"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_retrain_flag_path: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_RETRAIN_FLAG_PATH", "data/enrichment_retrain_needed.flag"
+    ))
+    
+    db_pool_max_enrichment: int = field(default_factory=lambda: int(os.getenv(
+        "DB_POOL_MAX_ENRICHMENT", "5"
+    )))
+    
+    enrichment_feed_backpressure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_FEED_BACKPRESSURE_THRESHOLD", "10000"
+    )))
+    
+    enrichment_feed_backpressure_retry_base_ms: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_FEED_BACKPRESSURE_RETRY_BASE_MS", "200"
+    )))
+    
+    enrichment_feed_backpressure_max_retries: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_FEED_BACKPRESSURE_MAX_RETRIES", "5"
+    )))
+    
+    enrichment_scraper_timeout_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_SCRAPER_TIMEOUT_S", "30"
+    )))
+    
+    enrichment_scraper_retry_max: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_SCRAPER_RETRY_MAX", "3"
+    )))
+    
+    enrichment_scraper_retry_backoff_ms: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_SCRAPER_RETRY_BACKOFF_MS", "500"
+    )))
+    
+    weather_api_url: str | None = field(default_factory=lambda: os.getenv(
+        "WEATHER_API_URL"
+    ))
+    
+    enrichment_confederation_calendar_path: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_CONFEDERATION_CALENDAR_PATH", "data/confederation_calendars.json"
+    ))
+    
+    enrichment_calibration_seed: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CALIBRATION_SEED", "42"
+    )))
+    
+    nlp_injury_lookup_confidence_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NLP_INJURY_LOOKUP_CONFIDENCE_THRESHOLD", "0.70"
+    )))
+    
+    enrichment_reactor_heartbeat_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REACTOR_HEARTBEAT_TTL_S", "60"
+    )))
+    
+    enrichment_reactor_watchdog_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REACTOR_WATCHDOG_INTERVAL_S", "30"
+    )))
+    
+    enrichment_reactor_stall_escalation_count: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REACTOR_STALL_ESCALATION_COUNT", "3"
+    )))
+    
+    enrichment_consistency_check_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CONSISTENCY_CHECK_INTERVAL_S", "3600"
+    )))
+
     @property
     def scrape_mackolik_archive(self) -> str:
         """Base URL for the Mackolik historical archive (fallback source)."""

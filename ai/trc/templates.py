@@ -169,7 +169,65 @@ EXPLANATION_TEMPLATES = {
             "Son eğilim: {trend_text}. Güven: %{confidence}."
         ),
     },
+    # ── Phase 21 enrichment intent templates ─────────────────────
+    "transfer_lookup": {
+        "found": (
+            "{player_name} {transfer_type} ile {team_name}'ye/ndan {date} tarihinde transfer oldu. "
+            "Transfer bedeli: {fee_text}."
+        ),
+        "not_found": (
+            "{player_name} hakkında bu döneme ait transfer bilgisi bulunamadı. "
+            "{team_name} transfer piyasasında daha fazla hareket yapamadı."
+        ),
+    },
+    "injury_lookup": {
+        "out": (
+            "{player_name} ({team_name}) şu an sakatlanmış durumda. "
+            "Beklenen dönüş tarihi: {expected_return}. Sakatlanma sebebi: {injury_type}."
+        ),
+        "doubtful": (
+            "{player_name} ({team_name}) şüpheli durumdadır. Maç kaydında yer alabilir "
+            "ama son dakikada değişiklik yapılabilir."
+        ),
+        "fit": (
+            "{player_name} ({team_name}) tamamen sağlıklı ve maça hazırdır."
+        ),
+    },
+    "availability_lookup": {
+        "available": (
+            "{player_name} ({team_name}) bu hafta maça hazır durumdadır."
+        ),
+        "doubtful": (
+            "{player_name} ({team_name}) bu hafta şüpheli durumdadır."
+        ),
+        "unavailable": (
+            "{player_name} ({team_name}) bu hafta maça katılamayacaktır."
+        ),
+    },
+    "referee_lookup": {
+        "report": (
+            "Hakem: {referee_name}. Son {window} maçta ort. {avg_yellows} sarı, "
+            "{avg_reds} kırmızı kart göstermiş. İstatistik: {stat_text}."
+        ),
+    },
+    "weather_lookup": {
+        "report": (
+            "Maç günü hava durumu: {condition}. Sıcaklık: {temp}°C. "
+            "Rüzgar: {wind_kph} km/s. Yağış olasılığı: %{rain_chance}. "
+            "Pitch durumu: {pitch_text}."
+        ),
+    },
+    "suspension_lookup": {
+        "suspended": (
+            "{player_name} ({team_name}) disiplin cezasıdır. "
+            "Kalan ceza: {matches_left} maç. Ceza nedeni: {reason}."
+        ),
+        "not_suspended": (
+            "{player_name} ({team_name}) ceza durumunda değildir."
+        ),
+    },
 }
+
 
 # ── Momentum sentence fragments ─────────────────────────
 MOMENTUM_SENTENCES = {

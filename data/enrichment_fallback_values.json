@@ -1,0 +1,38 @@
+{
+  "generated_at_utc": "2026-06-20T00:00:00Z",
+  "calibration_seed": 42,
+  "league_means": {
+    "super_lig": {
+      "squad_strength_delta": 0.045,
+      "cohesion_penalty": 0.085,
+      "departure_shock": 0.025,
+      "squad_availability_score": 0.92,
+      "doubtful_ratio": 0.12,
+      "key_player_out_flag": 0.08,
+      "referee_yellows_per_match": 4.3,
+      "referee_reds_per_match": 0.15,
+      "referee_penalties_per_match": 0.08,
+      "referee_home_win_pct_adj": 0.52,
+      "wind_xg_factor": 0.98,
+      "rain_xg_factor": 0.95,
+      "surface_style_penalty": 0.03,
+      "pitch_condition_score": 0.88
+    },
+    "premier_league": {
+      "squad_strength_delta": 0.032,
+      "cohesion_penalty": 0.062,
+      "departure_shock": 0.018,
+      "squad_availability_score": 0.94,
+      "doubtful_ratio": 0.10,
+      "key_player_out_flag": 0.06,
+      "referee_yellows_per_match": 3.8,
+      "referee_reds_per_match": 0.12,
+      "referee_penalties_per_match": 0.06,
+      "referee_home_win_pct_adj": 0.50,
+      "wind_xg_factor": 0.99,
+      "rain_xg_factor": 0.97,
+      "surface_style_penalty": 0.02,
+      "pitch_condition_score": 0.90
+    }
+  }
+}

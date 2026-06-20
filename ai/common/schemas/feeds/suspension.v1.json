@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Suspension Payload (v1) — Roster-state plane",
+  "description": "Phase 21.1 — Player disciplinary suspension.",
+  "type": "object",
+  "required": ["suspension_id", "player_id", "team_id", "competition_id", "reason", "matches_remaining", "starts_at"],
+  "additionalProperties": false,
+  "properties": {
+    "suspension_id": {"type": "string", "minLength": 1},
+    "player_id": {"type": "string", "minLength": 1},
+    "team_id": {"type": "string", "minLength": 1},
+    "competition_id": {"type": "string", "minLength": 1, "description": "Suspensions are competition-scoped."},
+    "reason": {"type": "string", "enum": ["accumulated_yellows", "red", "disciplinary", "doping"]},
+    "matches_remaining": {"type": "integer", "minimum": 0},
+    "starts_at": {"type": "string", "format": "date"},
+    "expires_after_match_id": {"type": ["string", "null"], "minLength": 1, "description": "Match ID after which suspension expires, or None if indefinite."}
+  }
+}

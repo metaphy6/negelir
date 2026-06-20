@@ -20,3 +20,5 @@ jsonschema>=4.0.0
 fasttext>=0.9.2
 # Phase 10 §10.5 — CRF entity extraction (BIO tagger for date/time/score/etc.)
 python-crfsuite>=0.9.10
+# Phase 21 §21.0 — Redis feature-dict serialisation (stable API, version floor)
+msgpack>=1.0

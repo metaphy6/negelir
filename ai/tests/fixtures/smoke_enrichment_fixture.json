@@ -1,0 +1,38 @@
+{
+  "fixture_id": "smoke_test_fixture_001",
+  "league_id": "tr_super_lig",
+  "home_team_id": "team_1",
+  "away_team_id": "team_2",
+  "kickoff_at": "2026-06-20T19:00:00Z",
+  "enrichment_data": {
+    "transfers": [
+      {
+        "player_id": "player_1",
+        "team_id": "team_1",
+        "confidence": "official",
+        "effective_at": "2026-06-15T00:00:00Z"
+      }
+    ],
+    "injuries": [
+      {
+        "player_id": "player_2",
+        "status": "doubtful",
+        "confidence": "club_official",
+        "asserted_at": "2026-06-20T10:00:00Z"
+      }
+    ],
+    "officials": [
+      {
+        "main_referee_id": "ref_1",
+        "home_win_pct": 0.55,
+        "assigned_at": "2026-06-19T00:00:00Z"
+      }
+    ],
+    "weather": {
+      "conditions": "rainy",
+      "wind_kph": 25.0,
+      "precip_mm_per_hr": 8.0,
+      "forecast_at": "2026-06-20T15:00:00Z"
+    }
+  }
+}

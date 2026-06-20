@@ -73,6 +73,31 @@ def _score_matrix(home_xg: float, away_xg: float, home_cap: int,
     return m
 
 
+class ModelShim:
+    """Backward-compatibility shim for 120-feature models in a 147-feature environment."""
+    
+    def __init__(self, model: xgb.XGBClassifier, feature_schema_version: int = 1):
+        self.model = model
+        self.feature_schema_version = feature_schema_version
+    
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Predict with feature slicing if needed."""
+        if self.feature_schema_version == 1:
+            # Old 120-col model: slice features to first 120 columns
+            X_sliced = X[:, :120]
+            return self.model.predict(X_sliced)
+        else:
+            return self.model.predict(X)
+    
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Predict probabilities with feature slicing if needed."""
+        if self.feature_schema_version == 1:
+            X_sliced = X[:, :120]
+            return self.model.predict_proba(X_sliced)
+        else:
+            return self.model.predict_proba(X)
+
+
 class GBDTInference:
     def __init__(self, model_path: str | None = None, league_config: LeagueConfig | None = None):
         self.league_config = league_config or get_league_config()
@@ -80,20 +105,39 @@ class GBDTInference:
         if model_path is None:
             model_path = os.path.join(cfg.model_dir, f"negelir_gbdt_v{MODEL_VERSION}.pkl")
 
-        self.model: xgb.XGBClassifier | None = None
+        self.model: ModelShim | None = None
         self.model_path = model_path
+        self.feature_schema_version = 1
+        self.model_feature_count = 120
         self._load_model()
 
     def _load_model(self):
         if os.path.exists(self.model_path):
             with open(self.model_path, "rb") as f:
-                self.model = pickle.load(f)
-            log.info(f"📦 Model loaded: {self.model_path}")
+                loaded = pickle.load(f)
+            
+            # Handle both old (direct model) and new (metadata dict) formats
+            if isinstance(loaded, dict) and "model" in loaded:
+                inner_model = loaded["model"]
+                self.feature_schema_version = loaded.get("feature_schema_version", 1)
+                self.model_feature_count = loaded.get("n_features", 120)
+                self.model = ModelShim(inner_model, feature_schema_version=self.feature_schema_version)
+                log.info(f"📦 Model loaded: {self.model_path}")
+                log.info(f"🏷️  Feature schema version: {self.feature_schema_version}")
+            else:
+                # Backward-compat: old model format (direct XGBClassifier)
+                self.model = ModelShim(loaded, feature_schema_version=1)
+                self.feature_schema_version = 1
+                self.model_feature_count = 120
+                log.info(f"📦 Model loaded: {self.model_path} (legacy format, schema v1)")
         else:
             log.warning(f"⚠️  Model not found: {self.model_path}")
             log.info("🔄 Training new model from real data...")
             from model.trainer import train_model
-            self.model = train_model(self.model_path)
+            trained_model = train_model(self.model_path)
+            self.model = ModelShim(trained_model, feature_schema_version=2)
+            self.feature_schema_version = 2
+            self.model_feature_count = 147
 
     def validate_features(self, features: np.ndarray) -> tuple[bool, str]:
         """
