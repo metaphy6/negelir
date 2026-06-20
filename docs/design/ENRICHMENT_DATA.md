@@ -455,9 +455,10 @@ Each follows the standard pattern:
 | 9 weather_actuals | `weather_actuals` | indefinite | `(venue_id, observed_at)` |
 | 9 pitch_conditions | `pitch_conditions` | indefinite | `(venue_id, inspection_at desc)` |
 
-A migration `migrations/004_enrichment_planes.sql` lands these
-schemas in Phase 13a (early; the Phase 4 storage agent
-([`COMPONENT_LAYOUT.md`](COMPONENT_LAYOUT.md)) does the writes).
+A migration `migrations/017_enrichment_planes.sql` lands these
+schemas in Phase 21 (migrations `001–016` are already applied in
+this repo; `004_pipeline.sql` occupies `004`, so the enrichment
+schemas land at `017`).
 
 ---
 

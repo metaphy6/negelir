@@ -1875,3 +1875,4 @@ timestamp,phase,subphase,status,action,notes,divergence
 2026-06-20T09:46:54+00:00,19,,in-progress,note,19.7 bullet 9: proof tests created and passing,
 2026-06-20T09:46:54+00:00,19,,in-progress,note,19.7 bullet 10: proof tests created and passing,
 2026-06-20T09:46:54+00:00,19,,in-progress,note,19.7 bullet 11: proof tests created and passing,
+2026-06-20T10:12:59+00:00,21,,in-progress,note,"Phase 21 plan revised: fixed migration 004→017, completed dependency list (added Phases 10/16/19/20), added §21.0 pre-flight, §21.6 mock-stack, §21.8 bus emission, §21.10 jurisdiction gating, §21.11 calibration pipeline, §21.14 adversarial tests, §21.15 DoD; fixed Pro+→pro tier name; expanded all 4 plane sub-phases with ≥7 named tests each; corrected ENRICHMENT_DATA.md §8 migration ref",
