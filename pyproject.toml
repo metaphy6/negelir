@@ -20,7 +20,7 @@ extend-exclude = '(xops|docs|data|migrations|build|dist)'
 profile = "black"
 line_length = 120
 skip_gitignore = true
-known_first_party = ["ai", "common", "datasource", "model", "scraper", "swarm", "server", "xops"]
+known_first_party = ["ai", "common", "datasource", "model", "nlp", "qid", "scraper", "swarm", "server", "xops"]
 known_third_party = ["pytest", "redis", "psycopg", "numpy", "pandas"]
 
 [tool.mypy]
@@ -43,14 +43,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 pythonpath = ["."]
-markers = [
-    "perf: performance tests (deselect with '-m \"not perf\"')",
-    "slow: slow tests (deselect with '-m \"not slow\"')",
-    "integration: integration tests",
-]
+# Markers are registered dynamically in conftest.py files to avoid duplication.
+# See tests/conftest.py for the canonical marker definitions (Phase 22.3b).
 
 [tool.coverage.run]
-source = ["ai", "common", "datasource", "swarm", "server"]
+source = ["ai", "common", "datasource", "model", "nlp", "qid", "scraper", "swarm", "server"]
 omit = ["*/tests/*", "*/__pycache__/*", "*/site-packages/*"]
 
 [tool.coverage.report]
