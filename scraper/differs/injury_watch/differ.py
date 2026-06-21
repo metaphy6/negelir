@@ -15,9 +15,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Any, Dict, List, Tuple
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
-from ai.common.schemas.records import AvailabilityPayload
+from common.config import cfg
+from common.logger import get_logger
+from common.schemas.records import AvailabilityPayload
 
 log = get_logger("scraper.differs.injury_watch")
 

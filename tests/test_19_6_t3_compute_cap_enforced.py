@@ -1,7 +1,7 @@
 """Phase 19 §19.6 — T3 compute cap."""
 from __future__ import annotations
 
-from ai.common.config import cfg
+from common.config import cfg
 
 
 def test_t3_compute_cap_enforced() -> None:

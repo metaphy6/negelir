@@ -41,13 +41,13 @@ def _derive_default_season() -> str:
     Imported lazily to avoid a circular import with ``common.logger`` at
     module-load time.
     """
-    from ai.common.season import current_season
+    from common.season import current_season
     return current_season()
 
 
-# Path to intent tier map, located in ai/common/nlp/ for now (Phase 22.3 transitional).
+# Path to intent tier map, located in common/nlp/ for now (Phase 22.3 transitional).
 _INTENT_TIER_MAP_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "ai" / "common" / "nlp" / "intent_tier_map.json"
+    Path(__file__).resolve().parent.parent / "nlp" / "intent_tier_map.json"
 )
 
 
@@ -1019,7 +1019,7 @@ class Config:
 
         # Lazy import logger to avoid circular imports at module load time.
         try:
-            from ai.common.logger import get_logger
+            from common.logger import get_logger
 
             log = get_logger("config")
         except Exception:
@@ -4161,7 +4161,7 @@ class Config:
         # Local import: ai/common must not depend on ai/swarm at
         # module load time. The roster is a module-level constant so
         # the import is effectively free after the first call.
-        from ai.swarm.agents.proofreader.replicas import (
+        from swarm.agents.proofreader.replicas import (
             PROOFREADER_POLICY_CLASSES,
         )
 

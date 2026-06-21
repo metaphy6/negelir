@@ -7,7 +7,7 @@ zero_home_advantage_when_venue_in field for neutral venue policies.
 """
 
 import pytest
-from ai.common.calibration_profile_loader import CALIBRATION_PROFILES
+from common.calibration_profile_loader import CALIBRATION_PROFILES
 
 
 class TestNeutralVenueZeroesHomeAdvantage:

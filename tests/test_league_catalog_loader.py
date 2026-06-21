@@ -19,7 +19,7 @@ import pytest
 import yaml
 
 # Import after PYTHONPATH setup
-from ai.common.league_catalog_loader import (
+from common.league_catalog_loader import (
     CATALOG,
     CATALOG_BY_TIER,
     BY_COMPETITION,
@@ -508,7 +508,7 @@ class TestCatalogLoadPerformance:
         (default 50 ms) on a cold container — tested on the smallest CI lane."
         """
         import time
-        from ai.common.config import Config
+        from common.config import Config
         
         cfg = Config()
         max_ms = cfg.league_catalog_load_max_ms
@@ -978,7 +978,7 @@ class TestCatalogChartConsistency:
         from pathlib import Path
         import json
         
-        chart_path = Path(__file__).parent.parent.parent / "xops" / "versioning" / "chart.json"
+        chart_path = Path(__file__).parent.parent / "xops" / "versioning" / "chart.json"
         assert chart_path.exists(), f"chart.json not found at {chart_path}"
         
         with open(chart_path) as f:
@@ -997,7 +997,7 @@ class TestCatalogChartConsistency:
         from pathlib import Path
         import json
         
-        chart_path = Path(__file__).parent.parent.parent / "xops" / "versioning" / "chart.json"
+        chart_path = Path(__file__).parent.parent / "xops" / "versioning" / "chart.json"
         with open(chart_path) as f:
             chart = json.load(f)
         
@@ -1030,7 +1030,7 @@ class TestCatalogChartConsistency:
         from pathlib import Path
         import json
         
-        chart_path = Path(__file__).parent.parent.parent / "xops" / "versioning" / "chart.json"
+        chart_path = Path(__file__).parent.parent / "xops" / "versioning" / "chart.json"
         with open(chart_path) as f:
             chart = json.load(f)
         
@@ -1060,7 +1060,7 @@ class TestCatalogChartConsistency:
         from pathlib import Path
         import json
         
-        chart_path = Path(__file__).parent.parent.parent / "xops" / "versioning" / "chart.json"
+        chart_path = Path(__file__).parent.parent / "xops" / "versioning" / "chart.json"
         with open(chart_path) as f:
             chart = json.load(f)
         
@@ -1088,7 +1088,7 @@ class TestCatalogChartConsistency:
         from pathlib import Path
         import json
         
-        chart_path = Path(__file__).parent.parent.parent / "xops" / "versioning" / "chart.json"
+        chart_path = Path(__file__).parent.parent / "xops" / "versioning" / "chart.json"
         with open(chart_path) as f:
             chart = json.load(f)
         

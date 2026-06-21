@@ -46,14 +46,14 @@ class _Cfg:
 
 class TestCompatibilityVersionConfig:
     def test_config_has_numpy_pin(self):
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_numpy_pin")
         assert cfg.nlp_numpy_pin == ""
 
     def test_config_has_fasttext_pin(self):
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_fasttext_pin")

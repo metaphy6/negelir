@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ai.common.feeds.reader import FeedReader
+from common.feeds.reader import FeedReader
 
 
 class TestVisibilityHorizonMs:

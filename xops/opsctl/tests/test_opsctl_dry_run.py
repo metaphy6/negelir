@@ -15,7 +15,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ai.common.config import Config
+from common.config import Config
 
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl.subcommands import (

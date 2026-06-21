@@ -74,7 +74,8 @@ toward four components but the move (R-track / R2) has **not run yet**
   - `ai/swarm/source_watcher/` — Phase 2.8 source-drift detector
     (deterministic core; LLM summarizer behind a default-off flag).
   - `ai/model/`, `ai/scraper/`, `ai/nlp/`, `ai/proofreader/`,
-    `ai/qid/`, `ai/reports/`, `ai/backtest/`, `ai/tqu/`.
+    `ai/qid/`, `ai/backtest/`, `ai/tqu/`.
+  - `docs/reports/ai_pipeline/` — training reports (Phase 22.4 move from `ai/reports/`).
   - `ai/tests/` — pytest suite (config-sync triangle, fuzz, fixtures).
 - `server/` — Go. Two run modes: `MODE=api` (Phase 9 REST surface,
   `server/cmd/api/`) and `MODE=mocksrv` (`server/cmd/mocksrv/`).

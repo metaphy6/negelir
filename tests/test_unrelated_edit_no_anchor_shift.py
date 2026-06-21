@@ -13,7 +13,7 @@ Requirement details:
 
 import pytest
 
-from ai.swarm.identity import AnchorResolver
+from swarm.identity import AnchorResolver
 
 
 class TestUnrelatedEditNoAnchorShift:

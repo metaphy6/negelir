@@ -106,7 +106,7 @@ class TestBindingStepOrder:
         assert "amp" not in " ".join(result.tokens)
 
     def test_html_entity_unescape_can_be_disabled(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         cfg = Config()
@@ -117,7 +117,7 @@ class TestBindingStepOrder:
         assert "fenerbahce" in result.tokens
 
     def test_emoji_hint_extraction_can_be_disabled(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         cfg = Config()
@@ -145,7 +145,7 @@ class TestBindingStepOrder:
         assert all(event.get("kind") != "preamble_stripped" for event in result.normalization_events)
 
     def test_preamble_strip_capped_emits_event(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         cfg = Config()
@@ -156,7 +156,7 @@ class TestBindingStepOrder:
         assert "abi" in result.tokens
 
     def test_hashtag_handling_can_be_disabled(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         cfg = Config()
@@ -215,7 +215,7 @@ class TestBindingStepOrder:
         )
 
     def test_emoji_strip_removes_symbol_characters(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         cfg = Config()
@@ -342,7 +342,7 @@ class TestBindingStepOrder:
     def test_voice_input_uses_voice_diacritic_ratio(self) -> None:
         from unittest.mock import patch
 
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.diacritics import DiacriticsTable
         from nlp.normalize import normalize_input
 
@@ -439,7 +439,7 @@ class TestFocusParticleDisambiguation:
         assert result.pragmatic_class is None
 
     def test_question_tag_classifier_preserved_on_timeout_raw_tokens(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         cfg = Config()
@@ -525,7 +525,7 @@ class TestStep1LengthCap:
     def test_accepts_exactly_at_cap(self) -> None:
         from nlp.normalize import normalize_input
 
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         text = "a" * cfg.nlp_input_max_codepoints
@@ -556,7 +556,7 @@ class TestStep1LengthCap:
             normalize_input("toolonginput", cfg=fake_cfg)
 
     def test_megainput_extracts_last_paragraph(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         self._patch_incomplete_normalize_helpers(monkeypatch)
@@ -578,7 +578,7 @@ class TestStep1LengthCap:
         assert not any(event.get("kind") == "megainput_tail_extracted" for event in result.normalization_events)
 
     def test_megainput_never_persists_raw_dump(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         self._patch_incomplete_normalize_helpers(monkeypatch)
@@ -603,7 +603,7 @@ class TestRepeatCollapseNormalization:
     """Phase 10 §10.24.2 repeat-collapse behavior and downstream integration."""
 
     def test_repeat_collapse_runs_before_typo_correction(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         observed: list[list[str]] = []
@@ -631,7 +631,7 @@ class TestRepeatCollapseNormalization:
         assert observed == [["saat", "maç"]]
 
     def test_repeat_collapse_drops_overlong_tokens_as_garbage(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.normalize import normalize_input
 
         calls: list[list[str]] = []
@@ -906,7 +906,7 @@ class TestPhase1030Normalization:
 
     def test_canonical_normalize_idempotent(self) -> None:
         """canonical_normalize(canonical_normalize(x)) == canonical_normalize(x)."""
-        from ai.common.text.normalize import canonical_normalize
+        from common.text.normalize import canonical_normalize
 
         samples = [
             "galatasaray",
@@ -921,7 +921,7 @@ class TestPhase1030Normalization:
             assert once == twice, f"Not idempotent for {s!r}: {once!r} vs {twice!r}"
 
     def test_canonical_normalize_strips_disallowed_format_and_private_use_chars(self) -> None:
-        from ai.common.text.normalize import canonical_normalize
+        from common.text.normalize import canonical_normalize
 
         raw = "gala\u2060tasaray\uFE0F\uE000\u0378"
         clean = canonical_normalize(raw)
@@ -1067,7 +1067,7 @@ class TestPhase1030Normalization:
     def test_normalize_input_caps_voice_subqueries_to_cfg_max_subqueries(
         self, monkeypatch
     ) -> None:
-        from ai.common.config import cfg
+        from common.config import cfg
         from nlp.normalize import normalize_input
 
         monkeypatch.setattr(cfg, "nlp_max_subqueries", 1)
@@ -1139,14 +1139,14 @@ class TestStep4TurkishLowercase:
 
     def test_lowercase_tr_i_not_clobbered_by_str_lower(self) -> None:
         """str.lower() on 'I' -> 'i' (wrong for Turkish); our impl gives 'ı'."""
-        from ai.common.text.turkish import lowercase_tr
+        from common.text.turkish import lowercase_tr
 
         result = lowercase_tr("I")
         assert result == "\u0131", f"Expected dotless-i, got {result!r}"
         assert result != "i", "str.lower() result -- Turkish mapping was not applied"
 
     def test_lowercase_tr_on_all_turkish_uppercase(self) -> None:
-        from ai.common.text.turkish import lowercase_tr
+        from common.text.turkish import lowercase_tr
 
         mapping = {
             "I": "\u0131",       # dotless i
@@ -1472,7 +1472,7 @@ def test_normalize_idempotent_property(text_input: str) -> None:
     Seed-pinned at 20241215 for deterministic CI results.
     """
     from nlp.normalize import normalize_input, InputTooLongError
-    from ai.common.config import Config
+    from common.config import Config
 
     cfg = Config()
     try:
@@ -1498,26 +1498,26 @@ class TestNlpInputMaxCodepointsConfig:
     """Config default for nlp_input_max_codepoints is 512."""
 
     def test_default_is_512(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert cfg.nlp_input_max_codepoints == 512
 
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_INPUT_MAX_CODEPOINTS", "256")
         cfg = Config()
         assert cfg.nlp_input_max_codepoints == 256
 
     def test_nlp_collapse_unicode_spaces_default_true(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert cfg.nlp_collapse_unicode_spaces is True
 
     def test_bounds_check_positive(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         issues = cfg.validate()

@@ -878,7 +878,7 @@ def test_parse_verify_output_skips_blanks_and_non_int() -> None:
 
 
 def test_cfg_refuses_latest_verify_image(monkeypatch: pytest.MonkeyPatch) -> None:
-    from ai.common.config import Config
+    from common.config import Config
     monkeypatch.setenv("NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE", "postgres:latest")
     cfg = Config()
     issues = cfg.validate()

@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.logger import get_logger
 
 logger = get_logger(__name__)
 

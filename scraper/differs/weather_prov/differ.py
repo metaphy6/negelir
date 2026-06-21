@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, TypedDict
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.logger import get_logger
 
 log = get_logger("scraper.differs.weather_prov")
 

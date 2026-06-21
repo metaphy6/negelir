@@ -5,12 +5,12 @@ import os
 import pytest
 from dataclasses import dataclass
 from typing import Optional, Any
-from ai.common.international_tournament_profiles import (
+from common.international_tournament_profiles import (
     InternationalTournamentCalibrationProfile,
     TournamentRotationModel,
     DensityPenaltyBin,
 )
-from ai.common.config import Config
+from common.config import Config
 
 
 @dataclass(frozen=True)

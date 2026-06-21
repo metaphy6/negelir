@@ -29,7 +29,7 @@ import time
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from ai.common.config import Config
+    from common.config import Config
 
 
 class HumanizerCircuitBreaker:
@@ -47,7 +47,7 @@ class HumanizerCircuitBreaker:
         replica deployments (stampede-protection: one pod opens breaker → all pods refuse).
 
     **Usage:**
-        >>> from ai.common.config import Config
+        >>> from common.config import Config
         >>> cfg = Config()
         >>> breaker = HumanizerCircuitBreaker(cfg=cfg)
         >>> if breaker.is_open():
@@ -75,7 +75,7 @@ class HumanizerCircuitBreaker:
     """
 
     def __init__(self, *, cfg: Config):
-        from ai.common.config import cfg as _default_cfg
+        from common.config import cfg as _default_cfg
 
         self._cfg = cfg if cfg is not None else _default_cfg
         self._scope: Literal["pod", "cluster"] = self._cfg.nlp_humanizer_breaker_scope  # type: ignore[assignment]
@@ -227,7 +227,7 @@ class HumanizerCircuitBreaker:
     def _emit_telemetry_state(self, state: Literal["closed", "open"]) -> None:
         """Set nlp_humanizer_breaker_state{state} gauge."""
         try:
-            from ai.common.telemetry import set_humanizer_breaker_state
+            from common.telemetry import set_humanizer_breaker_state
 
             set_humanizer_breaker_state(state)
         except Exception:

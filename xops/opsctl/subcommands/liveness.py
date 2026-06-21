@@ -32,12 +32,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from ai.common.config import Config
-from ai.swarm.agents.maint._ack_routing import (
+from common.config import Config
+from swarm.agents.maint._ack_routing import (
     KINDS_PENDING_CONSUMER_LANDING,
     KNOWN_MAINT_EVENT_KINDS,
 )
-from ai.swarm.sdk.registry import DEAD_BEAT_MULTIPLIER, poll_heartbeats_from_host
+from swarm.sdk.registry import DEAD_BEAT_MULTIPLIER, poll_heartbeats_from_host
 
 from .._audit import append_audit_row, make_row
 from .._exit_codes import ExitCode

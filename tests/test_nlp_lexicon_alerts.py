@@ -19,7 +19,7 @@ else:
 
     redis.Redis = _FakeRedis
 
-from ai.common.telemetry import TelemetrySink
+from common.telemetry import TelemetrySink
 from nlp.lexicon_loader import LexiconStore
 
 _VALID_META = (

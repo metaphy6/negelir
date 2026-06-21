@@ -87,7 +87,7 @@ class TestPerComponentDbRolesExist:
 
     def test_config_provides_per_role_dsn_methods(self) -> None:
         """Config class provides DSN methods for each role."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         # Each role should have its own DSN method
         assert hasattr(cfg, "pg_dsn_datasource_writer")
@@ -97,7 +97,7 @@ class TestPerComponentDbRolesExist:
 
     def test_config_per_role_dsn_contains_role_name(self) -> None:
         """Per-role DSN methods include the correct role name."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert "datasource_writer" in cfg.pg_dsn_datasource_writer
         assert "swarm_reader" in cfg.pg_dsn_swarm_reader

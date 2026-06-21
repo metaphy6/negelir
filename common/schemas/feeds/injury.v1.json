@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Injury Payload (v1) — Health plane",
+  "description": "Phase 21.2 — Player injury or recovery status.",
+  "type": "object",
+  "required": ["injury_id", "player_id", "team_id", "body_part", "severity", "diagnosed_at", "confidence", "source_url_hash"],
+  "additionalProperties": false,
+  "properties": {
+    "injury_id": {"type": "string", "minLength": 1},
+    "player_id": {"type": "string", "minLength": 1},
+    "team_id": {"type": "string", "minLength": 1},
+    "body_part": {"type": "string", "minLength": 1, "description": "Taxonomy in lexicon/injury_body_parts.yaml."},
+    "severity": {"type": "string", "enum": ["minor", "moderate", "major", "season_ending", "career_threat"]},
+    "diagnosed_at": {"type": "string", "format": "date-time"},
+    "expected_return": {"type": ["string", "null"], "format": "date"},
+    "confidence": {"type": "string", "enum": ["club_statement", "press", "rumour"]},
+    "source_url_hash": {"type": "string", "minLength": 1, "description": "SHA-256 hash of canonical URL."}
+  }
+}

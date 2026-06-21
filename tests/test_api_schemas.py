@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from ai.swarm.sdk import schemas as bus_schemas
+from swarm.sdk import schemas as bus_schemas
 
 SCHEMA_DIR = Path(__file__).parent.parent / "swarm" / "sdk" / "schemas"
 

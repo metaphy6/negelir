@@ -111,7 +111,7 @@ class TestBusDuplicate:
         the NLP dedup window is wide enough to catch them even if the 
         QA dedup window expires first.
         """
-        from ai.common.config import cfg
+        from common.config import cfg
         
         # Verify the config constraint is enforced at boot time
         qa_window = cfg.qa_request_v1_dedup_window_s

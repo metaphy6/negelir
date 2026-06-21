@@ -57,7 +57,7 @@ else:
     modules_to_remove = [k for k in sys.modules.keys() if k.startswith('common')]
     for k in modules_to_remove:
         sys.modules.pop(k, None)
-    import ai.common.config as _config
+    import common.config as _config
     _cfg = _config.cfg
 
 cfg = _cfg

@@ -16,16 +16,16 @@ def test_rollback_drill_runs_quarterly() -> None:
         ["make", "help"],
         capture_output=True,
         text=True,
-        cwd=Path(__file__).parent.parent.parent
+        cwd=Path(__file__).parent.parent
     )
     assert "phase18.rollback.drill" in result.stdout, "phase18.rollback.drill not in make help"
     
     # Verify xops/makefile/drills.py exists
-    drills_py = Path(__file__).parent.parent.parent / "xops" / "makefile" / "drills.py"
+    drills_py = Path(__file__).parent.parent / "xops" / "makefile" / "drills.py"
     assert drills_py.exists(), f"{drills_py} not found"
     
     # Verify drills.csv exists and has header
-    drills_csv = Path(__file__).parent.parent.parent / "docs" / "tracking" / "drills.csv"
+    drills_csv = Path(__file__).parent.parent / "docs" / "tracking" / "drills.csv"
     assert drills_csv.exists(), f"{drills_csv} not found"
     
     csv_content = drills_csv.read_text(encoding="utf-8")

@@ -22,9 +22,9 @@ from typing import Optional
 
 import pytest
 
-from ai.common.config import Config
-from ai.common.logger import get_logger
-from ai.swarm.identity import AnchorResolver
+from common.config import Config
+from common.logger import get_logger
+from swarm.identity import AnchorResolver
 
 _log = get_logger(__name__)
 

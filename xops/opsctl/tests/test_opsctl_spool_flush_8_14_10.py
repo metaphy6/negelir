@@ -10,17 +10,16 @@ import argparse
 import io
 import json
 import os
-import time
 import threading
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ai.common.config import Config
-from ai.swarm.sdk.bus import InMemoryBus
-from ai.swarm.sdk.types import Envelope, Message, Topic
-
+from common.config import Config
+from swarm.sdk.bus import InMemoryBus
+from swarm.sdk.types import Envelope, Message, Topic
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl._publish import MAINT_ACK_TOPIC, MAINT_EVENT_TOPIC, build_envelope, publish_event
 from xops.opsctl.subcommands import spool_flush

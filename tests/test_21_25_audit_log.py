@@ -1,7 +1,7 @@
 """Phase 21.25 — Enrichment Compliance Audit Log."""
 import os
 
-from ai.common.config import Config
+from common.config import Config
 
 
 def test_enrichment_audit_log_migration_exists() -> None:

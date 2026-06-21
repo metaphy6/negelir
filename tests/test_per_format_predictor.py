@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent / "fixtures"))
 
 from competitions import get_synthetic_fixture, FIXTURES_BY_FORMAT
-from ai.swarm.predictor._calibration import resolve_profile, CompetitionRef
+from swarm.predictor._calibration import resolve_profile, CompetitionRef
 
 
 class TestPerFormatPredictor:

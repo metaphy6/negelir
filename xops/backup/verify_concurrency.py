@@ -39,7 +39,7 @@ import time
 from typing import Any, Callable, Optional, Protocol
 
 from xops.maint.advisory_lock_keys import LOCK_MAINT_BACKUP_RESTORE_VERIFY
-from ai.common.config import cfg  # type: ignore[import]  # xops runs with ai/ on PYTHONPATH
+from common.config import cfg  # type: ignore[import]  # xops runs with ai/ on PYTHONPATH
 
 _log = logging.getLogger("xops.backup.verify_concurrency")
 

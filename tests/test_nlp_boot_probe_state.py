@@ -9,8 +9,8 @@ from typing import Iterable
 
 import pytest
 
-from ai.swarm.agents.nlp import NlpBootProbeState
-from ai.swarm.sdk import AgentRegistry, AgentRunner, InMemoryBus, Message
+from swarm.agents.nlp import NlpBootProbeState
+from swarm.sdk import AgentRegistry, AgentRunner, InMemoryBus, Message
 from nlp.render import build_environment, warm_closed_intent_templates
 
 
@@ -58,7 +58,7 @@ def test_nlp_mark_consensus_smoke_observed_flips_readiness() -> None:
 
 def test_nlp_boot_consensus_sentinel_match_id_default() -> None:
     """Default NLP boot consensus sentinel ID matches the Phase 10 design contract."""
-    from ai.common.config import Config
+    from common.config import Config
 
     cfg = Config()
 
@@ -67,7 +67,7 @@ def test_nlp_boot_consensus_sentinel_match_id_default() -> None:
 
 def test_nlp_boot_consensus_sentinel_match_id_must_be_non_empty() -> None:
     """The sentinel match id config must be non-empty."""
-    from ai.common.config import Config
+    from common.config import Config
 
     cfg = Config(nlp_boot_consensus_sentinel_match_id="")
     issues = cfg.validate()
@@ -189,7 +189,7 @@ def test_nlp_cold_start_alert_carries_last_stage() -> None:
 
 def test_nlp_jinja_warm_renders_every_intent_template() -> None:
     """Warm stage must render every closed-enum template without undefined slots."""
-    from ai.common.config import cfg
+    from common.config import cfg
 
     enum_path = pathlib.Path("ai/swarm/sdk/schemas/_intent_enum.json")
     intents = json.loads(enum_path.read_text(encoding="utf-8"))["enum"]

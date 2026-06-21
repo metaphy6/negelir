@@ -30,7 +30,7 @@ from xops.backup.role_probe import BackupRoleError, verify_backup_role
 from xops.backup.verifier import LocalSubprocessVerifier
 
 if TYPE_CHECKING:  # pragma: no cover
-    from ai.common.config import Config
+    from common.config import Config
 
 
 _log = logging.getLogger("xops.backup.wiring")

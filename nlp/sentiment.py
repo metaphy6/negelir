@@ -6,7 +6,7 @@ Rule-based for PoC; can be upgraded to distilled BERT-tiny later.
 
 import re
 
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 log = get_logger("nlp.sentiment")
 

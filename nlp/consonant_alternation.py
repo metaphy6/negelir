@@ -10,7 +10,7 @@ from typing import Any, NamedTuple, Optional
 
 import yaml
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 
 _DEFAULT_CONSONANT_ALTERNATION_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "spelling" / "consonant_alternations.tr.yaml"

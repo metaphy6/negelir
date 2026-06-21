@@ -12,12 +12,12 @@ import sys
 import uuid
 from typing import Any, Optional
 
-from ai.swarm.agents.payloads import SecAlert
-from ai.swarm.agents.topics import SEC_ALERT
-from ai.swarm.sdk.types import Message
+from swarm.agents.payloads import SecAlert
+from swarm.agents.topics import SEC_ALERT
+from swarm.sdk.types import Message
+from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl._publish import OPS_CONSOLE_PRODUCER
 from xops.opsctl._runner import SubcommandSpec, add_common_publish_args, run_publish
-from xops.opsctl._exit_codes import ExitCode
 
 NAME = "nlp-kill-pattern"
 KIND = "nlp_kill_pattern_armed"

@@ -1,7 +1,7 @@
 """Tests for Phase 10 §10.32.8 productive suffix peeling."""
 from __future__ import annotations
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 from nlp.apostrophe_proper_noun import repair_apostrophe_proper_noun
 from nlp.morph.productive_suffixes import (
     load_productive_peel_no_fire_allowlist,

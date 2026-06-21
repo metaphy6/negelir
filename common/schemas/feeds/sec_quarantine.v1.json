@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Security Quarantine Payload (v1) — Security-quarantine-plane entity",
+  "description": "Phase 16 / §7 — Quarantined records (flagged as suspicious or invalid). Per SCRAPER_PATCHER.md, the patcher's diagnostic bundle includes quarantine samples. Quarantine records are tombstoned at sink-time and not served to the swarm.",
+  "type": "object",
+  "required": [
+    "original_stable_id",
+    "reason",
+    "metadata"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "original_stable_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "stable_id of the original record that was quarantined."
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["invariant_violation", "schema_mismatch", "injection_detected", "anomaly_detected", "manual_review"],
+      "description": "Reason for quarantine."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional context (error message, field that failed, etc.)."
+    },
+    "quarantined_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC when the record was quarantined."
+    }
+  }
+}

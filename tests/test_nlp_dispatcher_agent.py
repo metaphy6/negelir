@@ -24,11 +24,11 @@ from pathlib import Path
 
 import pytest
 
-from ai.common.config import cfg as _cfg
-from ai.common.fixture_state import FixtureState
+from common.config import cfg as _cfg
+from common.fixture_state import FixtureState
 from nlp.conversation import ConversationStore
-import ai.swarm.agents.nlp as nlp_agent
-from ai.swarm.agents.nlp import (
+import swarm.agents.nlp as nlp_agent
+from swarm.agents.nlp import (
     FixtureStateLookup,
     NlpAnswerAgent,
     NlpDispatcherAgent,
@@ -38,7 +38,7 @@ from ai.swarm.agents.nlp import (
     _load_fixture_state_routing,
     downgrade_qa_answer_v1,
 )
-from ai.swarm.agents.topics import (
+from swarm.agents.topics import (
     DATA_REQUEST_V1,
     NLP_ALERT_V1,
     NLP_EVENT_V1,
@@ -53,8 +53,8 @@ from ai.swarm.agents.topics import (
     QA_REQUEST_V1,
     SEC_ALERT,
 )
-from ai.swarm.sdk.types import Message
-from ai.swarm.sdk.wire_contracts import (
+from swarm.sdk.types import Message
+from swarm.sdk.wire_contracts import (
     NLP_ALERT_V1_ALLOWED_PRODUCERS,
     NLP_EVENT_V1_ALLOWED_PRODUCERS,
 )
@@ -839,7 +839,7 @@ class TestNlpDispatcherBoundaryDiscipline:
     def test_subscribes_set_does_not_include_predict_final(
         self, agent: NlpDispatcherAgent
     ) -> None:
-        from ai.swarm.agents.topics import PREDICT_FINAL
+        from swarm.agents.topics import PREDICT_FINAL
         assert PREDICT_FINAL not in agent.subscribes
 
 
@@ -869,7 +869,7 @@ class TestNlpDispatcherDeterministicBackoff:
         self, agent: NlpDispatcherAgent
     ) -> None:
         """Disambiguation answer text references the fixture window from config."""
-        from ai.common.config import cfg
+        from common.config import cfg
         msg = _make_intent_msg({"entities": []})
         results = list(agent.handle(msg))
         answer_text = results[0].payload["answer_text"]
@@ -2205,7 +2205,7 @@ class TestNlpDispatcherDeterministicBackoff:
         }
         agent._bus_health_tracker = FakeBusHealthTracker({"data.request.v1": "yellow"})
         from datetime import datetime, timezone
-        from ai.swarm.agents.nlp import _make_repeated_query_signature
+        from swarm.agents.nlp import _make_repeated_query_signature
 
         signature = _make_repeated_query_signature("data.standings", [], None)
         now_ts = datetime.now(timezone.utc).timestamp()
@@ -2999,7 +2999,7 @@ class TestNlpDispatcherMultiFixtureFanOut:
         self, agent: NlpDispatcherAgent
     ) -> None:
         """Fan-out is capped at cfg.nlp_summary_max_fixtures (default=10)."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         entities = _make_team_entities(cfg.nlp_summary_max_fixtures + 5)
         msg = _make_summary_intent_msg(entities=entities)
@@ -4646,7 +4646,7 @@ def _make_dedup_agent(window_s: float = 600.0) -> NlpDispatcherAgent:
     """Return a NlpDispatcherAgent with an injected deduper for controlled tests."""
     import time as _time
 
-    from ai.swarm.sdk import RequestIdDeduper
+    from swarm.sdk import RequestIdDeduper
 
     deduper = RequestIdDeduper(window_s=window_s, max_keys=1_000)
     return NlpDispatcherAgent(
@@ -4733,7 +4733,7 @@ class TestNlpDispatcherIdempotency:
         """After the dedup window expires, the same key may be dispatched again."""
         import time as _time
 
-        from ai.swarm.sdk import RequestIdDeduper
+        from swarm.sdk import RequestIdDeduper
 
         fake_now = [0.0]
         deduper = RequestIdDeduper(

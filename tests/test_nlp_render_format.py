@@ -29,7 +29,7 @@ def test_render_format_dispatches_to_format_specific_template_dir() -> None:
 
 
 def test_format_unsupported_returns_meta_template(monkeypatch) -> None:
-    import ai.common.config as config
+    import common.config as config
 
     monkeypatch.setattr(
         config.cfg,

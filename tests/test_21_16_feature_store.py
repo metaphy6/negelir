@@ -1,7 +1,7 @@
 """Phase 21.16 — Feature store contract tests (msgpack, N_FEATURES, column structure)."""
 
 import pytest
-from ai.common.constants import FEATURE_COLUMNS, N_FEATURES
+from common.constants import FEATURE_COLUMNS, N_FEATURES
 from model.enrichment_source import MsgpackEnrichmentCodec, NullEnrichmentSource
 import msgpack
 

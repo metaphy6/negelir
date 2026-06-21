@@ -32,7 +32,7 @@ def test_shared_test_fixtures_in_common_only():
     conftest = Path("ai/swarm/tests/conftest.py")
     if conftest.exists():
         content = conftest.read_text()
-        # If fixtures are imported cross-component, should be from ai.common.test_fixtures
+        # If fixtures are imported cross-component, should be from common.test_fixtures
         if "from ai.datasource" in content or "from datasource" in content:
             pytest.fail("Cross-component fixtures must use common.test_fixtures")
 

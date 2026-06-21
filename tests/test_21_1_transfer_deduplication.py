@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import pytest
 
-from ai.scraper.transfer_deduplication import (
+from datasource.scraper.transfer_deduplication import (
     get_dedup_key,
     should_replace,
     deduplicate_transfers,
     CONFIDENCE_RANK,
 )
-from ai.common.schemas.records import TransferPayload
+from common.schemas.records import TransferPayload
 
 
 @pytest.fixture

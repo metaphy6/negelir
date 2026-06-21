@@ -14,7 +14,7 @@ Requirement details:
 
 import pytest
 
-from ai.swarm.identity import AnchorResolver
+from swarm.identity import AnchorResolver
 
 
 # Adversarial test corpus: (club1_name, club2_name, should_merge_at_094)

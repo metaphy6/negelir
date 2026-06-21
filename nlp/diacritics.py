@@ -15,7 +15,7 @@ from typing import Callable, NamedTuple, Optional
 
 import yaml
 
-from ai.common.config import Config
+from common.config import Config
 
 #: Schema version this loader understands (must match ``_diacritics.tr.yaml``
 #: ``_meta.schema_version``).

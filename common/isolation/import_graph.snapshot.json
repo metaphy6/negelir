@@ -1,988 +1,12 @@
 {
   "version": "18.1",
-  "generated_at": "2026-06-21T15:43:15.860784Z",
+  "generated_at": "2026-06-21T16:24:22.054812Z",
   "components": [
     "ai",
     "common"
   ],
   "imports": {
     "ai": [
-      {
-        "file": "ai/data_showcase.py",
-        "line": 7,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 8,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 9,
-        "type": "import",
-        "module": "random"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 10,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "TEAM_MAP"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "UUID_TO_NAME"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "LEAGUES"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "N_FEATURES"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "FOOTBALL_KEYWORDS"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "BANNED_WORDS"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "MODEL_VERSION"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 17,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 17,
-        "type": "from",
-        "module": "model.features",
-        "name": "inject_noise"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 17,
-        "type": "from",
-        "module": "model.features",
-        "name": "extract_features_for_match"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 21,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "extract_real_dataset"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 22,
-        "type": "from",
-        "module": "model.inference",
-        "name": "GBDTInference"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 23,
-        "type": "from",
-        "module": "proofreader.validator",
-        "name": "DataProofreader"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 23,
-        "type": "from",
-        "module": "proofreader.validator",
-        "name": "RANGES"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 24,
-        "type": "from",
-        "module": "tqu.classifier",
-        "name": "classify"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 25,
-        "type": "from",
-        "module": "tqu.entities",
-        "name": "ExtractedEntities"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 26,
-        "type": "from",
-        "module": "tqu.normalizer",
-        "name": "normalize"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 27,
-        "type": "from",
-        "module": "trc.composer",
-        "name": "compose_response"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 28,
-        "type": "from",
-        "module": "trc.templates",
-        "name": "VERDICTS"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 28,
-        "type": "from",
-        "module": "trc.templates",
-        "name": "REJECTIONS"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 29,
-        "type": "from",
-        "module": "scraper.parsers",
-        "name": "ParsedMatch"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 30,
-        "type": "from",
-        "module": "nlp.sentiment",
-        "name": "analyze_sentiment"
-      },
-      {
-        "file": "ai/data_showcase.py",
-        "line": 580,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 7,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 8,
-        "type": "import",
-        "module": "signal"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 9,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 10,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 11,
-        "type": "from",
-        "module": "pipeline.runner",
-        "name": "PipelineRunner"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 12,
-        "type": "from",
-        "module": "scheduler",
-        "name": "NegelirScheduler"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 12,
-        "type": "from",
-        "module": "scheduler",
-        "name": "build_default_schedule"
-      },
-      {
-        "file": "ai/main.py",
-        "line": 13,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/scheduler.py",
-        "line": 7,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/scheduler.py",
-        "line": 7,
-        "type": "from",
-        "module": "datetime",
-        "name": "timezone"
-      },
-      {
-        "file": "ai/scheduler.py",
-        "line": 9,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/scheduler.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/scheduler.py",
-        "line": 28,
-        "type": "from",
-        "module": "apscheduler.schedulers.background",
-        "name": "BackgroundScheduler"
-      },
-      {
-        "file": "ai/scheduler.py",
-        "line": 64,
-        "type": "from",
-        "module": "apscheduler.schedulers.base",
-        "name": "SchedulerNotRunningError"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 7,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 8,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "section_banner"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "success_banner"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "error_banner"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 11,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "UUID_TO_NAME"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "MACKOLIK_ID_MAP"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "TEAM_STRENGTH"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 13,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 13,
-        "type": "from",
-        "module": "model.features",
-        "name": "N_FEATURES"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "EloTracker"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "TeamStats"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "H2HTracker"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "StandingsTracker"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "load_real_matches"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "_parse_date"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 14,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "_is_derby"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 18,
-        "type": "from",
-        "module": "model.inference",
-        "name": "GBDTInference"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 19,
-        "type": "from",
-        "module": "model.trainer",
-        "name": "train_model"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 20,
-        "type": "from",
-        "module": "tqu.classifier",
-        "name": "classify"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 21,
-        "type": "from",
-        "module": "trc.composer",
-        "name": "compose_response"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 22,
-        "type": "from",
-        "module": "scraper.engine",
-        "name": "ScrapingEngine"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 23,
-        "type": "from",
-        "module": "proofreader.validator",
-        "name": "DataProofreader"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 24,
-        "type": "from",
-        "module": "orchestrator.state_machine",
-        "name": "TaskOrchestrator"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 24,
-        "type": "from",
-        "module": "orchestrator.state_machine",
-        "name": "TaskResult"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 24,
-        "type": "from",
-        "module": "orchestrator.state_machine",
-        "name": "OrchestratorContext"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 25,
-        "type": "from",
-        "module": "nlp.sentiment",
-        "name": "analyze_sentiment"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 26,
-        "type": "from",
-        "module": "tqu.questions",
-        "name": "DEMO_QUESTIONS"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 26,
-        "type": "from",
-        "module": "tqu.questions",
-        "name": "QUESTION_COUNT"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 27,
-        "type": "from",
-        "module": "qid.collector",
-        "name": "QueryIntentCollector"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 638,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 49,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "get_league_config"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 396,
-        "type": "import",
-        "module": "math"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 397,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 535,
-        "type": "from",
-        "module": "collections",
-        "name": "defaultdict"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 602,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 603,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/pipeline/runner.py",
-        "line": 129,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "load_real_matches"
-      },
-      {
-        "file": "ai/pipeline/resolver.py",
-        "line": 6,
-        "type": "import",
-        "module": "re"
-      },
-      {
-        "file": "ai/pipeline/resolver.py",
-        "line": 7,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/pipeline/resolver.py",
-        "line": 7,
-        "type": "from",
-        "module": "datetime",
-        "name": "timedelta"
-      },
-      {
-        "file": "ai/pipeline/resolver.py",
-        "line": 9,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 15,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 17,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 18,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 19,
-        "type": "import",
-        "module": "pickle"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 20,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 21,
-        "type": "import",
-        "module": "uuid"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 22,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 22,
-        "type": "from",
-        "module": "datetime",
-        "name": "timezone"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 23,
-        "type": "from",
-        "module": "typing",
-        "name": "Any"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 23,
-        "type": "from",
-        "module": "typing",
-        "name": "Callable"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 25,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 26,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 26,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "section_banner"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "STAGE_ORDER"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "ReportArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "ScrapeArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "SplitArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "StageArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "TrainingArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "ValidationArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 28,
-        "type": "from",
-        "module": "pipeline.training_artifacts",
-        "name": "VerifyArtifact"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 125,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "load_real_matches"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 149,
-        "type": "from",
-        "module": "proofreader.validator",
-        "name": "DataProofreader"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 149,
-        "type": "from",
-        "module": "proofreader.validator",
-        "name": "_normalise_input_match"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 216,
-        "type": "from",
-        "module": "model.trainer",
-        "name": "train_model"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 217,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 225,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "MODEL_VERSION"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 236,
-        "type": "from",
-        "module": "sklearn.model_selection",
-        "name": "train_test_split"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 237,
-        "type": "from",
-        "module": "sklearn.metrics",
-        "name": "accuracy_score"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 237,
-        "type": "from",
-        "module": "sklearn.metrics",
-        "name": "log_loss"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 238,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "extract_real_dataset"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 263,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "extract_real_dataset"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 319,
-        "type": "from",
-        "module": "reports.training_report",
-        "name": "StageBundle"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 319,
-        "type": "from",
-        "module": "reports.training_report",
-        "name": "write_report"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 285,
-        "type": "from",
-        "module": "sklearn.metrics",
-        "name": "accuracy_score"
-      },
-      {
-        "file": "ai/pipeline/training_pipeline.py",
-        "line": 285,
-        "type": "from",
-        "module": "sklearn.metrics",
-        "name": "brier_score_loss"
-      },
-      {
-        "file": "ai/pipeline/training_artifacts.py",
-        "line": 11,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/pipeline/training_artifacts.py",
-        "line": 13,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "asdict"
-      },
-      {
-        "file": "ai/pipeline/training_artifacts.py",
-        "line": 13,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/pipeline/training_artifacts.py",
-        "line": 13,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/pipeline/training_artifacts.py",
-        "line": 14,
-        "type": "from",
-        "module": "typing",
-        "name": "Any"
-      },
-      {
-        "file": "ai/proofreader/cross_validator.py",
-        "line": 7,
-        "type": "from",
-        "module": "collections",
-        "name": "Counter"
-      },
-      {
-        "file": "ai/proofreader/cross_validator.py",
-        "line": 8,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/proofreader/cross_validator.py",
-        "line": 8,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/proofreader/cross_validator.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 23,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 23,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 24,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 25,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 26,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 27,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 28,
-        "type": "from",
-        "module": "ai.swarm.agents.proofreader.checks",
-        "name": "RANGES"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 28,
-        "type": "from",
-        "module": "ai.swarm.agents.proofreader.checks",
-        "name": "consistency_check"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 28,
-        "type": "from",
-        "module": "ai.swarm.agents.proofreader.checks",
-        "name": "plausibility_check"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 28,
-        "type": "from",
-        "module": "ai.swarm.agents.proofreader.checks",
-        "name": "range_check"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 158,
-        "type": "import",
-        "module": "argparse"
-      },
-      {
-        "file": "ai/proofreader/validator.py",
-        "line": 160,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
       {
         "file": "ai/common/league_catalog_loader.py",
         "line": 12,
@@ -1958,33 +982,6 @@
         "name": "Enum"
       },
       {
-        "file": "ai/datasource/t3_resource_manager.py",
-        "line": 11,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/datasource/t3_resource_manager.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/datasource/t3_resource_manager.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "Dict"
-      },
-      {
-        "file": "ai/datasource/t3_resource_manager.py",
-        "line": 13,
-        "type": "import",
-        "module": "time"
-      },
-      {
         "file": "ai/reports/training_report.py",
         "line": 15,
         "type": "from",
@@ -2085,293 +1082,6 @@
         "type": "from",
         "module": "pipeline.training_artifacts",
         "name": "VerifyArtifact"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 6,
-        "type": "from",
-        "module": "enum",
-        "name": "Enum"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 7,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 7,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 8,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "section_banner"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 186,
-        "type": "import",
-        "module": "argparse"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 216,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/orchestrator/state_machine.py",
-        "line": 153,
-        "type": "from",
-        "module": "pipeline.training_pipeline",
-        "name": "TrainingPipeline"
-      },
-      {
-        "file": "ai/backtest/bet_types.py",
-        "line": 14,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/backtest/bet_types.py",
-        "line": 16,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/backtest/bet_types.py",
-        "line": 16,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/backtest/bet_types.py",
-        "line": 17,
-        "type": "from",
-        "module": "typing",
-        "name": "Callable"
-      },
-      {
-        "file": "ai/backtest/bet_types.py",
-        "line": 449,
-        "type": "import",
-        "module": "math"
-      },
-      {
-        "file": "ai/backtest/bet_types.py",
-        "line": 466,
-        "type": "import",
-        "module": "math"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 19,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 21,
-        "type": "import",
-        "module": "argparse"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 22,
-        "type": "import",
-        "module": "textwrap"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 23,
-        "type": "from",
-        "module": "collections",
-        "name": "defaultdict"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 24,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 24,
-        "type": "from",
-        "module": "datetime",
-        "name": "timedelta"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 26,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "ALL_MARKETS"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "EVALUABLE_MARKETS"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "PREDICTION_ONLY_MARKETS"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "CATEGORIES"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "MARKET_BY_ID"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "MARKET_QUESTIONS_TR"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "BetMarket"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 28,
-        "type": "from",
-        "module": "backtest.bet_types",
-        "name": "BetMarketResult"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 38,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 39,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "EloTracker"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "H2HTracker"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "StandingsTracker"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "TeamStats"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "_build_feature_vector"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "_is_derby"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "_parse_date"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 40,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "load_real_matches"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 50,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/backtest/evaluator.py",
-        "line": 167,
-        "type": "from",
-        "module": "model.inference",
-        "name": "GBDTInference"
       },
       {
         "file": "ai/swarm/bootstrap.py",
@@ -3921,47 +2631,6 @@
         "name": "Any"
       },
       {
-        "file": "ai/datasource/enrichment/reactor_watchdog.py",
-        "line": 6,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/datasource/enrichment/reactor_watchdog.py",
-        "line": 7,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/datasource/enrichment/reactor_watchdog.py",
-        "line": 9,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "Config"
-      },
-      {
-        "file": "ai/datasource/enrichment/reactor_watchdog.py",
-        "line": 10,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/datasource/enrichment/consistency.py",
-        "line": 6,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/datasource/enrichment/consistency.py",
-        "line": 8,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
         "file": "ai/swarm/sdk/_alert_debouncer.py",
         "line": 20,
         "type": "from",
@@ -4929,14 +3598,14 @@
         "file": "ai/swarm/sdk/_dual_emit_helper.py",
         "line": 31,
         "type": "from",
-        "module": "ai.swarm.agents.maint",
+        "module": "swarm.agents.maint",
         "name": "KNOWN_MAINT_EVENT_KINDS"
       },
       {
         "file": "ai/swarm/sdk/_dual_emit_helper.py",
         "line": 32,
         "type": "from",
-        "module": "ai.swarm.agents.payloads",
+        "module": "swarm.agents.payloads",
         "name": "KNOWN_SEC_ALERT_KINDS"
       },
       {
@@ -5217,9 +3886,9 @@
       },
       {
         "file": "ai/swarm/sdk/maint_ack.py",
-        "line": 42,
+        "line": 41,
         "type": "from",
-        "module": "ai.swarm.agents.payloads",
+        "module": "swarm.agents.payloads",
         "name": "MaintAck"
       },
       {
@@ -5294,35 +3963,35 @@
         "file": "ai/swarm/sdk/payloads.py",
         "line": 38,
         "type": "from",
-        "module": "ai.swarm.sdk",
+        "module": "swarm.sdk",
         "name": "kind_schema_version"
       },
       {
         "file": "ai/swarm/sdk/payloads.py",
         "line": 39,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "MAINT_EVENT_TOPIC"
       },
       {
         "file": "ai/swarm/sdk/payloads.py",
         "line": 39,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "SEC_ALERT_TOPIC"
       },
       {
         "file": "ai/swarm/sdk/payloads.py",
         "line": 39,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "derive_event_correlation_id"
       },
       {
         "file": "ai/swarm/sdk/payloads.py",
         "line": 39,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "route_topics_for_kind"
       },
       {
@@ -5336,7 +4005,7 @@
         "file": "ai/swarm/sdk/payloads.py",
         "line": 282,
         "type": "from",
-        "module": "ai.swarm.sdk.maint_audit",
+        "module": "swarm.sdk.maint_audit",
         "name": "truncate_oversize"
       },
       {
@@ -6607,65 +5276,65 @@
         "file": "ai/swarm/agents/payloads.py",
         "line": 14,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "MAINT_EVENT_TOPIC"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
         "line": 14,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "SEC_ALERT_TOPIC"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
         "line": 14,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "derive_event_correlation_id"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
         "line": 14,
         "type": "from",
-        "module": "ai.swarm.sdk._dual_emit_helper",
+        "module": "swarm.sdk._dual_emit_helper",
         "name": "route_topics_for_kind"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
         "line": 20,
         "type": "from",
-        "module": "ai.swarm.sdk.wire_contracts",
+        "module": "swarm.sdk.wire_contracts",
         "name": "SEC_ALERT_V1_ALLOWED_KINDS_BY_PRODUCER"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
         "line": 20,
         "type": "from",
-        "module": "ai.swarm.sdk.wire_contracts",
+        "module": "swarm.sdk.wire_contracts",
         "name": "SEC_ALERT_V1_ALLOWED_PRODUCERS"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
-        "line": 1604,
+        "line": 1603,
         "type": "import",
         "module": "re"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
-        "line": 553,
+        "line": 552,
+        "type": "import",
+        "module": "hashlib"
+      },
+      {
+        "file": "ai/swarm/agents/payloads.py",
+        "line": 276,
         "type": "import",
         "module": "hashlib"
       },
       {
         "file": "ai/swarm/agents/payloads.py",
         "line": 277,
-        "type": "import",
-        "module": "hashlib"
-      },
-      {
-        "file": "ai/swarm/agents/payloads.py",
-        "line": 278,
         "type": "import",
         "module": "json"
       },
@@ -7804,17 +6473,17 @@
       },
       {
         "file": "ai/swarm/sdk/schemas/open_enum.py",
-        "line": 78,
+        "line": 75,
         "type": "from",
-        "module": "ai.swarm.agents.payloads",
-        "name": "KNOWN_SEC_ALERT_KINDS"
+        "module": "swarm.agents.maint._ack_routing",
+        "name": "KNOWN_MAINT_EVENT_KINDS"
       },
       {
         "file": "ai/swarm/sdk/schemas/open_enum.py",
-        "line": 79,
+        "line": 80,
         "type": "from",
-        "module": "ai.swarm.agents.maint._ack_routing",
-        "name": "KNOWN_MAINT_EVENT_KINDS"
+        "module": "swarm.agents.payloads",
+        "name": "KNOWN_SEC_ALERT_KINDS"
       },
       {
         "file": "ai/swarm/sdk/schemas/__init__.py",
@@ -8825,15 +7494,15 @@
         "file": "ai/swarm/agents/sec/_alert.py",
         "line": 37,
         "type": "from",
-        "module": "ai.swarm.sdk._alert_debouncer",
-        "name": "_BaseAlertDebouncer"
+        "module": "swarm.sdk._alert_debouncer",
+        "name": "DebounceDecision"
       },
       {
         "file": "ai/swarm/agents/sec/_alert.py",
         "line": 37,
         "type": "from",
-        "module": "ai.swarm.sdk._alert_debouncer",
-        "name": "DebounceDecision"
+        "module": "swarm.sdk._alert_debouncer",
+        "name": "_BaseAlertDebouncer"
       },
       {
         "file": "ai/swarm/agents/sec/input.py",
@@ -9482,21 +8151,21 @@
         "file": "ai/swarm/agents/nlp/shadow_writer.py",
         "line": 3,
         "type": "from",
-        "module": "ai.swarm.agents.topics",
+        "module": "swarm.agents.topics",
         "name": "NLP_SHADOW_V1"
       },
       {
         "file": "ai/swarm/agents/nlp/shadow_writer.py",
         "line": 3,
         "type": "from",
-        "module": "ai.swarm.agents.topics",
+        "module": "swarm.agents.topics",
         "name": "QA_INTENT_V1"
       },
       {
         "file": "ai/swarm/agents/nlp/shadow_writer.py",
         "line": 4,
         "type": "from",
-        "module": "ai.swarm.sdk.types",
+        "module": "swarm.sdk.types",
         "name": "Message"
       },
       {
@@ -9510,19 +8179,19 @@
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 3,
         "type": "import",
-        "module": "math"
+        "module": "datetime"
       },
       {
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 4,
         "type": "import",
-        "module": "statistics"
+        "module": "math"
       },
       {
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 5,
         "type": "import",
-        "module": "datetime"
+        "module": "statistics"
       },
       {
         "file": "ai/swarm/agents/nlp/abuse.py",
@@ -9563,28 +8232,28 @@
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 10,
         "type": "from",
-        "module": "ai.swarm.agents.topics",
+        "module": "swarm.agents.topics",
         "name": "NLP_ALERT_V1"
       },
       {
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 10,
         "type": "from",
-        "module": "ai.swarm.agents.topics",
+        "module": "swarm.agents.topics",
         "name": "NLP_SHADOW_V1"
       },
       {
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 11,
         "type": "from",
-        "module": "ai.swarm.sdk",
+        "module": "swarm.sdk",
         "name": "AlertDebouncer"
       },
       {
         "file": "ai/swarm/agents/nlp/abuse.py",
         "line": 12,
         "type": "from",
-        "module": "ai.swarm.sdk.types",
+        "module": "swarm.sdk.types",
         "name": "Message"
       },
       {
@@ -9686,73 +8355,51 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 67,
         "type": "import",
-        "module": "re"
+        "module": "os"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 68,
         "type": "import",
-        "module": "threading"
+        "module": "re"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 69,
         "type": "import",
-        "module": "time"
+        "module": "stat"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 70,
         "type": "import",
-        "module": "unicodedata"
+        "module": "threading"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 71,
+        "type": "import",
+        "module": "time"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 72,
+        "type": "import",
+        "module": "unicodedata"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 73,
         "type": "from",
         "module": "collections",
         "name": "Counter"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 71,
+        "line": 73,
         "type": "from",
         "module": "collections",
         "name": "deque"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 72,
-        "type": "from",
-        "module": "typing",
-        "name": "Any"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 72,
-        "type": "from",
-        "module": "typing",
-        "name": "Callable"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 72,
-        "type": "from",
-        "module": "typing",
-        "name": "Iterable"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 72,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 73,
-        "type": "import",
-        "module": "os"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
@@ -9764,8 +8411,30 @@
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 75,
-        "type": "import",
-        "module": "stat"
+        "type": "from",
+        "module": "typing",
+        "name": "Any"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 75,
+        "type": "from",
+        "module": "typing",
+        "name": "Callable"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 75,
+        "type": "from",
+        "module": "typing",
+        "name": "Iterable"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 75,
+        "type": "from",
+        "module": "typing",
+        "name": "Optional"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
@@ -9799,358 +8468,358 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 80,
         "type": "from",
+        "module": "ai.common.telemetry",
+        "name": "NLP_CLASSIFIER_EXTRACTOR_SKEW"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 81,
+        "type": "from",
         "module": "common.security.patterns",
         "name": "PII_PATTERNS"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 81,
+        "line": 82,
         "type": "from",
         "module": "common.security.tr_pii",
         "name": "parse_redacted_tr_pii"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 81,
+        "line": 82,
         "type": "from",
         "module": "common.security.tr_pii",
         "name": "redact_tr_pii"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 82,
-        "type": "from",
-        "module": "ai.common.telemetry",
-        "name": "NLP_CLASSIFIER_EXTRACTOR_SKEW"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 84,
-        "type": "from",
-        "module": "sdk",
-        "name": "AlertDebouncer"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 85,
-        "type": "from",
-        "module": "sdk.bus_health",
-        "name": "BusHealthTracker"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 86,
-        "type": "from",
-        "module": "sdk.types",
-        "name": "Message"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 87,
-        "type": "from",
-        "module": "nlp.compliance",
-        "name": "disclosures_snapshot_sha"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 87,
-        "type": "from",
-        "module": "nlp.compliance",
-        "name": "load_disclosures"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 88,
-        "type": "from",
-        "module": "nlp.lexicon_loader",
-        "name": "is_safe_mode_active"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 89,
-        "type": "from",
-        "module": "nlp.normalize",
-        "name": "assert_minimum_signal"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 89,
-        "type": "from",
-        "module": "nlp.normalize",
-        "name": "detect_all_caps"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 90,
-        "type": "from",
-        "module": "nlp.proofreader",
-        "name": "_prepend_confirmation_seeking_intro"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "DATA_REQUEST_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "MAINT_EVENT"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "NLP_ALERT_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "NLP_EVENT_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "NLP_GOSSIP_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "NLP_PROBER_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "NLP_SHADOW_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "PREDICT_APPROVED"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "PREDICT_CANCEL_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "PREDICT_REQUEST_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "QA_ANSWER_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "QA_CONTEXT_EXTENSION_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "QA_CONTEXT_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "QA_FEEDBACK_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "QA_INTENT_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 91,
-        "type": "from",
-        "module": "topics",
-        "name": "QA_REQUEST_V1"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 109,
-        "type": "from",
-        "module": "_bus_circuit_breaker",
-        "name": "NlpBusCircuitBreaker"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 110,
-        "type": "from",
-        "module": "abuse",
-        "name": "NlpAbuseAgent"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 111,
-        "type": "from",
-        "module": "shadow_writer",
-        "name": "NlpShadowWriter"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 112,
-        "type": "from",
-        "module": "payloads",
-        "name": "derive_prediction_id"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 113,
-        "type": "from",
-        "module": "nlp.compat",
-        "name": "_lexicon_snapshot_sha"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 113,
-        "type": "from",
-        "module": "nlp.compat",
-        "name": "validate_compatibility_matrix"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 114,
-        "type": "from",
-        "module": "nlp.conversation",
-        "name": "ConversationStore"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 115,
-        "type": "from",
-        "module": "_flame_capture",
-        "name": "NlpFlameCapture"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 116,
-        "type": "from",
-        "module": "_log_filter",
-        "name": "PIIScrubFilter"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 116,
-        "type": "from",
-        "module": "_log_filter",
-        "name": "add_log_filter"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 117,
+        "line": 83,
         "type": "from",
         "module": "nlp.aspectual_stack",
         "name": "detect_aspectual_stack"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
+        "line": 84,
+        "type": "from",
+        "module": "nlp.compat",
+        "name": "_lexicon_snapshot_sha"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 84,
+        "type": "from",
+        "module": "nlp.compat",
+        "name": "validate_compatibility_matrix"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 85,
+        "type": "from",
+        "module": "nlp.compliance",
+        "name": "disclosures_snapshot_sha"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 85,
+        "type": "from",
+        "module": "nlp.compliance",
+        "name": "load_disclosures"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 86,
+        "type": "from",
+        "module": "nlp.conversation",
+        "name": "ConversationStore"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 87,
+        "type": "from",
+        "module": "nlp.lexicon_loader",
+        "name": "is_safe_mode_active"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 88,
+        "type": "from",
+        "module": "nlp.normalize",
+        "name": "assert_minimum_signal"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 88,
+        "type": "from",
+        "module": "nlp.normalize",
+        "name": "detect_all_caps"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 89,
         "type": "from",
         "module": "nlp.phase10_30",
         "name": "classify_conversational_meta"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
+        "line": 89,
         "type": "from",
         "module": "nlp.phase10_30",
         "name": "detect_anaphora_pronouns"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
-        "type": "from",
-        "module": "nlp.phase10_30",
-        "name": "detect_coordinating_particles"
-      },
-      {
-        "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
+        "line": 89,
         "type": "from",
         "module": "nlp.phase10_30",
         "name": "detect_conditional_modifier"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
+        "line": 89,
+        "type": "from",
+        "module": "nlp.phase10_30",
+        "name": "detect_coordinating_particles"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 89,
         "type": "from",
         "module": "nlp.phase10_30",
         "name": "is_legal_anaphora_composition"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
+        "line": 89,
         "type": "from",
         "module": "nlp.phase10_30",
         "name": "load_pro_drop_intent_classes"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 118,
+        "line": 89,
         "type": "from",
         "module": "nlp.phase10_30",
         "name": "resolve_anaphora_pronoun"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 127,
+        "line": 98,
+        "type": "from",
+        "module": "nlp.proofreader",
+        "name": "_prepend_confirmation_seeking_intro"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 99,
         "type": "from",
         "module": "nlp.quotative",
         "name": "detect_quotative_frame"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 128,
+        "line": 100,
         "type": "from",
         "module": "nlp.render",
         "name": "_resolve_locale_tag"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 128,
+        "line": 100,
         "type": "from",
         "module": "nlp.render",
         "name": "build_environment"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
-        "line": 128,
+        "line": 100,
         "type": "from",
         "module": "nlp.render",
         "name": "render"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 102,
+        "type": "from",
+        "module": "sdk",
+        "name": "AlertDebouncer"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 103,
+        "type": "from",
+        "module": "sdk.bus_health",
+        "name": "BusHealthTracker"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 104,
+        "type": "from",
+        "module": "sdk.types",
+        "name": "Message"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 105,
+        "type": "from",
+        "module": "payloads",
+        "name": "derive_prediction_id"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "DATA_REQUEST_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "MAINT_EVENT"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "NLP_ALERT_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "NLP_EVENT_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "NLP_GOSSIP_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "NLP_PROBER_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "NLP_SHADOW_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "PREDICT_APPROVED"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "PREDICT_CANCEL_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "PREDICT_REQUEST_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "QA_ANSWER_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "QA_CONTEXT_EXTENSION_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "QA_CONTEXT_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "QA_FEEDBACK_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "QA_INTENT_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 106,
+        "type": "from",
+        "module": "topics",
+        "name": "QA_REQUEST_V1"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 124,
+        "type": "from",
+        "module": "_bus_circuit_breaker",
+        "name": "NlpBusCircuitBreaker"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 125,
+        "type": "from",
+        "module": "_flame_capture",
+        "name": "NlpFlameCapture"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 126,
+        "type": "from",
+        "module": "_log_filter",
+        "name": "PIIScrubFilter"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 126,
+        "type": "from",
+        "module": "_log_filter",
+        "name": "add_log_filter"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 127,
+        "type": "from",
+        "module": "abuse",
+        "name": "NlpAbuseAgent"
+      },
+      {
+        "file": "ai/swarm/agents/nlp/__init__.py",
+        "line": 128,
+        "type": "from",
+        "module": "shadow_writer",
+        "name": "NlpShadowWriter"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
@@ -10458,7 +9127,7 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 2091,
         "type": "from",
-        "module": "ai.swarm.sdk",
+        "module": "swarm.sdk",
         "name": "RequestIdDeduper"
       },
       {
@@ -10472,7 +9141,7 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 2730,
         "type": "from",
-        "module": "ai.swarm.sdk",
+        "module": "swarm.sdk",
         "name": "RequestIdDeduper"
       },
       {
@@ -10486,7 +9155,7 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 5406,
         "type": "from",
-        "module": "ai.swarm.sdk",
+        "module": "swarm.sdk",
         "name": "RequestIdDeduper"
       },
       {
@@ -10500,7 +9169,7 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 6920,
         "type": "from",
-        "module": "ai.swarm.sdk",
+        "module": "swarm.sdk",
         "name": "RequestIdDeduper"
       },
       {

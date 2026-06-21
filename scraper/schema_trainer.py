@@ -7,7 +7,7 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 log = get_logger("scraper.schema_trainer")
 

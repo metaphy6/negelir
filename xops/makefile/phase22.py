@@ -681,9 +681,64 @@ def cmd_swarm_collision_check(argv: List[str]) -> int:
     Enumerates module names in ai/swarm/agents/ vs swarm/agents/ and asserts
     zero collisions (ledger #34).
     """
-    # TODO: Implement in Phase 22.2
-    print("phase22.swarm-collision-check: not yet implemented")
-    return 0
+    ai_agents_dir = REPO_ROOT / "ai" / "swarm" / "agents"
+    root_agents_dir = REPO_ROOT / "swarm" / "agents"
+    
+    # Collect module names from ai/swarm/agents/
+    ai_modules: Set[str] = set()
+    if ai_agents_dir.exists():
+        for item in ai_agents_dir.iterdir():
+            # Skip __pycache__, __init__.py, test files
+            if item.name.startswith("__"):
+                continue
+            if item.name.startswith("test_"):
+                continue
+            if item.suffix == ".py":
+                # It's a module file: categorizer.py -> categorizer
+                module_name = item.stem
+                ai_modules.add(module_name)
+            elif item.is_dir() and not item.name.startswith("."):
+                # It's a package: agents/maint -> maint
+                ai_modules.add(item.name)
+    
+    # Collect module names from swarm/agents/
+    root_modules: Set[str] = set()
+    if root_agents_dir.exists():
+        for item in root_agents_dir.iterdir():
+            # Skip __pycache__, __init__.py, test files
+            if item.name.startswith("__"):
+                continue
+            if item.name.startswith("test_"):
+                continue
+            if item.suffix == ".py":
+                # It's a module file
+                module_name = item.stem
+                root_modules.add(module_name)
+            elif item.is_dir() and not item.name.startswith("."):
+                # It's a package
+                root_modules.add(item.name)
+    
+    # Check for collisions
+    collisions = ai_modules & root_modules
+    
+    print("Phase 22.3c — Swarm Agent Collision Check (ledger #34)")
+    print("=" * 70)
+    print(f"\nai/swarm/agents/ modules:  {len(ai_modules)} total")
+    print(f"  {sorted(ai_modules)}")
+    print(f"\nswarm/agents/ modules:     {len(root_modules)} total")
+    print(f"  {sorted(root_modules)}")
+    
+    if collisions:
+        print(f"\n🛑 COLLISION DETECTED: {len(collisions)} module name(s) exist in both:")
+        for name in sorted(collisions):
+            print(f"  - {name}")
+        print("\nRequire explicit rename decision per ROADMAP §22.3c:")
+        print("  Documentation: docs/decisions/phase22/swarm_agent_collision_<name>.md")
+        print("  Alias period: 90 days\n")
+        return 1
+    else:
+        print(f"\n✓ No collisions detected — merge can proceed\n")
+        return 0
 
 
 def cmd_conftest_inventory(argv: List[str]) -> int:

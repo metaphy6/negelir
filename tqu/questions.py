@@ -9,7 +9,7 @@ Used by:
   - ai/tests/historical_prediction_test.py (regression suite)
 """
 
-from ai.common.constants import ALL_TEAM_NAMES, DERBY_PAIRS
+from common.constants import ALL_TEAM_NAMES, DERBY_PAIRS
 
 # ── Teams (loaded from locale_tr.yaml) ───────────────────
 _TEAMS = ALL_TEAM_NAMES

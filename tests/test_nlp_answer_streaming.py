@@ -4,12 +4,12 @@ from pathlib import Path
 import json
 import pytest
 
-from ai.common.config import cfg
+from common.config import cfg
 from common.security.patterns import detect_pii
 from nlp.streaming import build_guarded_streaming_plan
-from ai.swarm.agents.nlp import NlpAnswerAgent
-from ai.swarm.agents.topics import PREDICT_CANCEL_V1
-from ai.swarm.sdk.types import Message
+from swarm.agents.nlp import NlpAnswerAgent
+from swarm.agents.topics import PREDICT_CANCEL_V1
+from swarm.sdk.types import Message
 
 
 def test_guarded_streaming_plan_skeleton_then_polish_includes_citation_only_at_end(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,7 +7,7 @@ from typing import Any, NamedTuple, Optional
 
 import yaml
 
-from ai.common.text.turkish import _load_suffix_families, lowercase_tr
+from common.text.turkish import _load_suffix_families, lowercase_tr
 
 _DEFAULT_VOWEL_DROP_BEFORE_SUFFIX_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "spelling" / "vowel_drop_before_suffix.tr.yaml"

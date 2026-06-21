@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Transfer Payload (v1) — Roster-state plane",
+  "description": "Phase 21.1 — Player transfer records. Represents movement between clubs.",
+  "type": "object",
+  "required": ["transfer_id", "player_id", "from_team_id", "to_team_id", "transfer_window", "transfer_type", "announced_at", "effective_at", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "transfer_id": {"type": "string", "minLength": 1, "description": "Source-native ID; canonicalized."},
+    "player_id": {"type": "string", "minLength": 1, "description": "FK to Reference plane."},
+    "from_team_id": {"type": ["string", "null"], "minLength": 1, "description": "Null = first pro contract."},
+    "to_team_id": {"type": ["string", "null"], "minLength": 1, "description": "Null = retirement / released."},
+    "transfer_window": {"type": "string", "enum": ["summer", "winter", "emergency"], "description": "Transfer window classification."},
+    "transfer_type": {"type": "string", "enum": ["permanent", "loan", "loan_with_option", "free", "end_of_loan"], "description": "Type of transfer."},
+    "fee_eur": {"type": ["integer", "null"], "minimum": 0, "description": "Null when undisclosed."},
+    "contract_until": {"type": ["string", "null"], "format": "date", "description": "ISO date."},
+    "announced_at": {"type": "string", "format": "date-time", "description": "ISO-8601 UTC."},
+    "effective_at": {"type": "string", "format": "date-time", "description": "ISO-8601 UTC; can equal announced_at."},
+    "confidence": {"type": "string", "enum": ["rumour", "agreed", "official"], "description": "Editorial provenance."}
+  }
+}

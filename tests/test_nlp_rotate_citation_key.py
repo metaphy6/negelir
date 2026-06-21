@@ -4,7 +4,7 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
-from ai.common.config import cfg as _cfg
+from common.config import cfg as _cfg
 from xops.makefile.nlp import cmd_nlp_rotate_citation_key
 
 

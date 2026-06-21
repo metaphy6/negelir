@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from ai.common.config import cfg
+from common.config import cfg
 from nlp.lexicon_loader import LexiconStore
 
 TEST_ROOT = Path(__file__).resolve().parent

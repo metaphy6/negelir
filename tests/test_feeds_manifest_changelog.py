@@ -6,7 +6,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from ai.common.feeds.changelog import ManifestChangelog, replay_changelog_to_target
+from common.feeds.changelog import ManifestChangelog, replay_changelog_to_target
 
 
 class TestManifestChangelog:
@@ -22,7 +22,7 @@ class TestManifestChangelog:
                 "planes": {"score": {"version": 1, "status": "active"}},
             }
             
-            from ai.common.feeds.changelog import ManifestMutation
+            from common.feeds.changelog import ManifestMutation
             mutation = ManifestMutation(
                 kind="add_plane",
                 plane="score",

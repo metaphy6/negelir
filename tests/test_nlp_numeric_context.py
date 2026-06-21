@@ -44,7 +44,7 @@ def test_nlp_decimal_with_gol_prefers_thousands_context() -> None:
 
 def test_nlp_score_and_market_parser_never_called_on_same_span() -> None:
     import inspect
-    import ai.nlp.normalize as nlp_norm
+    import nlp.normalize as nlp_norm
 
     source = inspect.getsource(nlp_norm)
     assert "score_parser(" not in source

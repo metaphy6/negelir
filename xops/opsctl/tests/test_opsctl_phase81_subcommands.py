@@ -36,7 +36,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ai.swarm.sdk import InMemoryBus
+from swarm.sdk import InMemoryBus
 from xops.opsctl._classify import ALWAYS_DESTRUCTIVE, ALWAYS_SAFE
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl.subcommands import (

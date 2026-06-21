@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from ai.common.international_tournament_profiles import (
+from common.international_tournament_profiles import (
     DensityPenaltyBin,
     TournamentRotationModel,
     InternationalTournamentCalibrationProfile,

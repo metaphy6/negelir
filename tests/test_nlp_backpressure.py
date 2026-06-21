@@ -9,8 +9,8 @@ This test verifies the config keys exist and the stub backpressure check logic.
 Full backpressure implementation (humanizer disable, cache widening, alert
 emission) lands in subsequent §10.19 bullets.
 """
-from ai.common.config import cfg
-from ai.swarm.agents.nlp import NlpDispatcherAgent
+from common.config import cfg
+from swarm.agents.nlp import NlpDispatcherAgent
 
 
 def test_backpressure_config_keys_exist():

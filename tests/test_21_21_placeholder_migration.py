@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai.common.constants import FEATURE_COLUMNS, N_FEATURES
+from common.constants import FEATURE_COLUMNS, N_FEATURES
 
 
 class TestPlaceholderMigration:
@@ -28,7 +28,7 @@ class TestPlaceholderMigration:
             assert col in FEATURE_COLUMNS, f"{col} was removed; must stay for backward compat"
         
         # Read the constants file to verify DEPRECATED annotation
-        import ai.common.constants as constants_module
+        import common.constants as constants_module
         constants_path = constants_module.__file__
         with open(constants_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -43,7 +43,7 @@ class TestPlaceholderMigration:
         # This is a logical test: when enrichment_environment_enabled=true,
         # the reactor computes wind_xg_factor, rain_xg_factor, etc.
         # and the feature store returns them; the v0.2 precipitation_flag becomes stale.
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
         
         # precipitation_flag is position 72 (approx); verify it exists
@@ -58,7 +58,7 @@ class TestPlaceholderMigration:
 
     def test_congestion_plane_value_overrides_v0_2_fixture_congestion_when_active(self) -> None:
         """Test that enrichment derived view overrides v0.2 fixture congestion columns."""
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
         
         # v0.2 congestion columns must still exist

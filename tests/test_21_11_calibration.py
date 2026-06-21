@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from common.config import Config
-from ai.tests.enrichment_calibration import (
+from tests.enrichment_calibration import (
     evaluate_enrichment_lift,
     check_feature_distribution_stability,
 )

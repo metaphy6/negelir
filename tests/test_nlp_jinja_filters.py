@@ -31,7 +31,7 @@ sys.path.insert(0, str(_REPO_ROOT / "ai"))
 
 import jinja2  # noqa: E402
 
-from ai.common.config import cfg  # noqa: E402
+from common.config import cfg  # noqa: E402
 from nlp.jinja_filters_tr import (  # noqa: E402
     dative,
     accusative,

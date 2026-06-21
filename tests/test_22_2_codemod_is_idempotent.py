@@ -19,8 +19,8 @@ class TestCodemodIdempotency:
     def test_second_run_produces_no_op(self) -> None:
         """Verify that running the codemod twice produces a no-op on the second run."""
         source_with_ai_imports = '''"""Test module with ai.* imports."""
-from ai.common.config import cfg
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.logger import get_logger
 import model as model
 
 logger = get_logger(__name__)
@@ -56,7 +56,7 @@ logger = get_logger(__name__)
         """Verify that a file with mixed ai.* and regular imports is detected as needing rewrite."""
         source_mixed = '''"""Test module with mixed imports."""
 from common.config import base_cfg
-from ai.common.config import cfg
+from common.config import cfg
 import common
 import ai.nlp
 
@@ -71,8 +71,8 @@ cfg_instance = cfg
     def test_idempotency_over_five_runs(self) -> None:
         """Verify stability over multiple consecutive runs."""
         source = '''"""Test module."""
-from ai.nlp.lexicon_loader import LexiconStore
-from ai.nlp.normalizer import normalize_text
+from nlp.lexicon_loader import LexiconStore
+from nlp.normalizer import normalize_text
 import ai.nlp
 '''
         
@@ -157,10 +157,10 @@ class TestCodemodAlreadyRewrittenDetection:
         
         patterns = [
             "from ai.common import cfg",
-            "from ai.common.config import Config",
-            "from ai.nlp.lexicon_loader import LexiconStore",
+            "from common.config import Config",
+            "from nlp.lexicon_loader import LexiconStore",
             "from model import FeatureExtractor",
-            "from ai.scraper.extractors import Extractor",
+            "from datasource.scraper.extractors import Extractor",
         ]
         
         for pattern in patterns:
@@ -209,7 +209,7 @@ from common.utils import helper
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ai.common.config import Config
+    from common.config import Config
 '''
         
         # TYPE_CHECKING imports have the same patterns

@@ -14,8 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-from ai.common.config import Config
-from ai.common.logger import get_logger
+from common.config import Config
+from common.logger import get_logger
 
 log = get_logger(__name__)
 

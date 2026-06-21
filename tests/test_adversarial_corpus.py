@@ -82,7 +82,7 @@ class TestCorpusGrowthBound:
     
     def test_growth_cap_configured(self) -> None:
         """Config has adversarial_corpus_max_added_rows_per_quarter > 0."""
-        from ai.common.config import cfg
+        from common.config import cfg
         
         assert hasattr(cfg, "adversarial_corpus_max_added_rows_per_quarter")
         assert cfg.adversarial_corpus_max_added_rows_per_quarter > 0

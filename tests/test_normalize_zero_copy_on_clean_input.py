@@ -17,7 +17,7 @@ from nlp.normalize import (
     _collapse_unicode_spaces,
     _PUNCT_TABLE,
 )
-from ai.common.config import cfg as default_cfg
+from common.config import cfg as default_cfg
 
 
 @pytest.mark.parametrize(

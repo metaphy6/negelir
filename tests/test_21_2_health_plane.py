@@ -23,9 +23,9 @@ from pathlib import Path
 
 import pytest
 
-from ai.common.schemas.records import InjuryPayload, AvailabilityPayload
-from ai.scraper.extractors.injury_watch import InjuryExtractor, ExtractionError
-from ai.scraper.differs.injury_watch import InjuryDiffer, CONFIDENCE_RANK
+from common.schemas.records import InjuryPayload, AvailabilityPayload
+from datasource.scraper.extractors.injury_watch import InjuryExtractor, ExtractionError
+from datasource.scraper.differs.injury_watch import InjuryDiffer, CONFIDENCE_RANK
 from model.health_plane_features import (
     InternationalWindowFilter,
     SquadAvailabilityVector,

@@ -7,8 +7,8 @@ import pathlib
 
 import pytest
 
-from ai.common.config import Config, cfg
-from ai.common.text.turkish import (
+from common.config import Config, cfg
+from common.text.turkish import (
     MorphCandidate,
     load_morph_pos_preferences,
     normalize_morph_candidates,

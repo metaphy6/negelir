@@ -603,14 +603,14 @@ class TestAmbiguityPolicy:
 
     def test_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_diacritic_tie_break_ratio must default to 1.5."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_diacritic_tie_break_ratio")
         assert cfg.nlp_diacritic_tie_break_ratio == 1.5
 
     def test_config_voice_key_present_with_correct_default(self) -> None:
         """cfg.nlp_diacritic_tie_break_ratio_voice must default to 2.5."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_diacritic_tie_break_ratio_voice")
         assert cfg.nlp_diacritic_tie_break_ratio_voice == 2.5
@@ -627,7 +627,7 @@ class TestAmbiguityPolicy:
 
     def test_hard_call_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_diacritic_hard_call_min_freq must default to 10000."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_diacritic_hard_call_min_freq")
         assert cfg.nlp_diacritic_hard_call_min_freq == 10000
@@ -639,7 +639,7 @@ class TestAmbiguityPolicy:
 
     def test_max_risk_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_diacritic_max_risk_per_token must default to 2.5."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_diacritic_max_risk_per_token")
         assert cfg.nlp_diacritic_max_risk_per_token == 2.5
@@ -652,7 +652,7 @@ class TestAmbiguityPolicy:
     def test_config_boot_validator_rejects_below_one(self) -> None:
         """Boot validator must reject nlp_diacritic_tie_break_ratio < 1.0."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
 
         orig = os.environ.get("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO")
         try:
@@ -669,7 +669,7 @@ class TestAmbiguityPolicy:
     def test_config_voice_boot_validator_rejects_below_one(self) -> None:
         """Boot validator must reject nlp_diacritic_tie_break_ratio_voice < 1.0."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
 
         orig = os.environ.get("NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE")
         try:
@@ -686,7 +686,7 @@ class TestAmbiguityPolicy:
     def test_hard_call_boot_validator_rejects_below_one(self) -> None:
         """Boot validator must reject nlp_diacritic_hard_call_min_freq < 1."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
 
         orig = os.environ.get("NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ")
         try:
@@ -703,7 +703,7 @@ class TestAmbiguityPolicy:
     def test_max_risk_boot_validator_rejects_negative(self) -> None:
         """Boot validator must reject nlp_diacritic_max_risk_per_token < 0."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
 
         orig = os.environ.get("NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN")
         try:
@@ -719,7 +719,7 @@ class TestAmbiguityPolicy:
 
     def test_repair_density_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_repair_density_p95_max must default to 0.5."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_repair_density_p95_max")
         assert cfg.nlp_repair_density_p95_max == 0.5
@@ -732,7 +732,7 @@ class TestAmbiguityPolicy:
     def test_repair_density_boot_validator_rejects_negative(self) -> None:
         """Boot validator must reject nlp_repair_density_p95_max < 0."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
 
         orig = os.environ.get("NEGELIR_NLP_REPAIR_DENSITY_P95_MAX")
         try:
@@ -748,14 +748,14 @@ class TestAmbiguityPolicy:
 
     def test_lang_tr_dir_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_lang_tr_dir must default to ai/nlp/lang_tr."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_lang_tr_dir")
         assert cfg.nlp_lang_tr_dir == "ai/nlp/lang_tr"
 
     def test_lang_tr_reload_config_key_present_with_correct_default(self) -> None:
         """cfg.nlp_lang_tr_reload_s must default to 30."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         assert hasattr(cfg, "nlp_lang_tr_reload_s")
         assert cfg.nlp_lang_tr_reload_s == 30

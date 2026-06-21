@@ -39,7 +39,7 @@ CORPUS: list[CorpusEntry] = [
     {
         "name": "pattern_1_basic_from_import",
         "input_code": (
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
             "x = Config()\n"
         ),
         "expected_output": (
@@ -50,7 +50,7 @@ CORPUS: list[CorpusEntry] = [
     {
         "name": "pattern_1_from_import_multiple_names",
         "input_code": (
-            "from ai.common.config import Config, cfg, load_config\n"
+            "from common.config import Config, cfg, load_config\n"
         ),
         "expected_output": (
             "from common.config import Config, cfg, load_config\n"
@@ -59,7 +59,7 @@ CORPUS: list[CorpusEntry] = [
     {
         "name": "pattern_1_nested_module_import",
         "input_code": (
-            "from ai.common.text.turkish import suffix_harmony_ok, normalize\n"
+            "from common.text.turkish import suffix_harmony_ok, normalize\n"
         ),
         "expected_output": (
             "from common.text.turkish import suffix_harmony_ok, normalize\n"
@@ -81,7 +81,7 @@ CORPUS: list[CorpusEntry] = [
     {
         "name": "pattern_2_import_nested_module",
         "input_code": (
-            "import ai.nlp.dispatcher\n"
+            "import nlp.dispatcher\n"
             "result = ai.nlp.dispatcher.dispatch(text)\n"
         ),
         "expected_output": (
@@ -133,8 +133,8 @@ CORPUS: list[CorpusEntry] = [
         "input_code": (
             "from typing import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
-            "    from ai.nlp.dispatcher import Dispatcher\n"
+            "    from common.config import Config\n"
+            "    from nlp.dispatcher import Dispatcher\n"
         ),
         "expected_output": (
             "from typing import TYPE_CHECKING\n"
@@ -224,7 +224,7 @@ CORPUS: list[CorpusEntry] = [
         "input_code": (
             "from typing import TypedDict, TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
             "class ConfigDict(TypedDict):\n"
             "    settings: 'ai.common.Config'\n"
             "    description: str\n"
@@ -256,9 +256,9 @@ CORPUS: list[CorpusEntry] = [
     {
         "name": "multi_import_statement_variety",
         "input_code": (
-            "from ai.common.config import Config\n"
-            "import ai.nlp.dispatcher\n"
-            "from ai.scraper.extractors import Extractor\n"
+            "from common.config import Config\n"
+            "import nlp.dispatcher\n"
+            "from datasource.scraper.extractors import Extractor\n"
             "__all__ = ['ai.common.Config', 'Extractor']\n"
         ),
         "expected_output": (

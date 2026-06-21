@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 from collections import defaultdict
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.logger import get_logger
 
 log = get_logger(__name__)
 

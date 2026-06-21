@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from ai.common.config import cfg
+from common.config import cfg
 
 
 def test_t3_lane_does_not_block_t1_t2() -> None:

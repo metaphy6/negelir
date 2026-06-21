@@ -14,7 +14,7 @@ def test_preset_import_total_time_under_budget():
     
     Default budget: 300 ms (NEGELIR_LEAGUE_PRESET_TOTAL_IMPORT_MAX_MS)
     """
-    from ai.common.config import cfg
+    from common.config import cfg
     
     leagues_dir = Path(__file__).parent.parent / "common" / "leagues"
     

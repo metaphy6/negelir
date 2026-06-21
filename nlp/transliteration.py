@@ -145,7 +145,7 @@ def transliterate_team_name(foreign_name: str) -> str | None:
     >>> transliterate_team_name("unknown team")
     None
     """
-    from ai.common.text.turkish import lowercase_tr
+    from common.text.turkish import lowercase_tr
     
     normalized = lowercase_tr(foreign_name.strip())
     return FOREIGN_TEAM_TRANSLITERATIONS.get(normalized)

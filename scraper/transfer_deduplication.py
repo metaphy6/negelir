@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Optional
 from collections import defaultdict
 
-from ai.common.schemas.records import TransferPayload
+from common.schemas.records import TransferPayload
 
 
 # Confidence level ranking (higher = more authoritative)

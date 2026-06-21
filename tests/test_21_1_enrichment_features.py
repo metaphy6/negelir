@@ -21,7 +21,7 @@ from model.enrichment_features import (
     compute_cohesion_penalty,
     compute_departure_shock,
 )
-from ai.common.config import Config
+from common.config import Config
 
 
 @pytest.fixture

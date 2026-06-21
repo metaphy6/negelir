@@ -60,7 +60,7 @@ class TestIsolationFailureShortCircuits:
         ensures the job fails within 60 seconds, preventing the build from
         hanging indefinitely and blocking all downstream jobs.
         """
-        from ai.common.config import cfg
+        from common.config import cfg
 
         # Verify timeout is configured and reasonable
         assert hasattr(cfg, "ci_isolation_max_seconds")

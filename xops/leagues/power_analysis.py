@@ -88,7 +88,7 @@ def compute_minimum_corpus_size(
 
 if __name__ == "__main__":
     import sys
-    from ai.common.config import cfg
+    from common.config import cfg
     
     result = compute_minimum_corpus_size(cfg.league_calibration_max_deviation)
     print(f"Power Analysis (α=0.05, power=0.8, effect={result['effect_size']})")

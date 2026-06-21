@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 import pytest
 
-from ai.scraper.enrichment_scheduler import (
+from datasource.scraper.enrichment_scheduler import (
     is_transfer_window,
     get_cadence,
     should_refresh,

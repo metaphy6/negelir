@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "xops" / "makefile"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "xops" / "makefile"))
 from patcher import cmd_bundle_scan_ai_refs
 
 
@@ -74,7 +74,7 @@ class TestPatcherBundleAiRefSignal:
         diagnostic = {
             "kind": "import_violation",
             "diff": (
-                "- import ai.scraper.extractors.mackolik\n"
+                "- import datasource.scraper.extractors.mackolik\n"
                 "+ import datasource.scraper.extractors.mackolik"
             ),
             "excerpt": "Fixed import to use new path"

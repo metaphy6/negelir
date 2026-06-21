@@ -22,7 +22,7 @@ class TestPerformanceGate:
         lines = []
         # Add many import lines
         for i in range(1000):
-            lines.append(f"from ai.common.module{i} import func{i}")
+            lines.append(f"from common.module{i} import func{i}")
         # Add content
         lines.append("\ndef main():")
         for i in range(100):
@@ -59,9 +59,9 @@ class TestPerformanceGate:
         """Deeply nested imports are handled efficiently."""
         # Generate nested imports
         lines = [
-            "from ai.common.a.b.c.d.e.f import x",
-            "from ai.common.x.y.z.deep.nested import y",
-            "import ai.common.deeply.nested.module",
+            "from common.a.b.c.d.e.f import x",
+            "from common.x.y.z.deep.nested import y",
+            "import common.deeply.nested.module",
         ] * 100
         source = "\n".join(lines)
 

@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.logger import get_logger
 
 log = get_logger("model.health_plane_features")
 

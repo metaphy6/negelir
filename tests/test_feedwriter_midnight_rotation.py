@@ -19,7 +19,7 @@ from unittest import mock
 
 import pytest
 
-from ai.common.feeds.writer import FeedWriter
+from common.feeds.writer import FeedWriter
 
 
 class TestMidnightRotation:

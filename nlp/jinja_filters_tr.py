@@ -43,7 +43,7 @@ import pathlib as _pathlib
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from ai.common.config import cfg
+from common.config import cfg
 
 try:
     import yaml as _yaml  # type: ignore[import]
@@ -57,8 +57,8 @@ _FOREIGN_OVERRIDES_PATH: _pathlib.Path = (
 )
 
 # §10.22.3 — buffer-consonant helper (loaded here, avoids circular imports).
-from ai.common.text.turkish import buffer_consonant as _buffer_consonant  # noqa: E402
-from ai.common.text.tr_format import (
+from common.text.turkish import buffer_consonant as _buffer_consonant  # noqa: E402
+from common.text.tr_format import (
     tr_format_number,
     tr_format_money,
     tr_format_clock,

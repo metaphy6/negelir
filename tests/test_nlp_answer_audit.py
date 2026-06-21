@@ -17,9 +17,9 @@ from unittest import mock
 
 import pytest
 
-from ai.common.config import Config, cfg
+from common.config import Config, cfg
 from common.security.tr_pii import detect_tr_pii_spans
-from ai.swarm.agents.nlp import AUDIT_REDACTION_WHITELIST, NlpAnswerAgent, NlpIntentAgent
+from swarm.agents.nlp import AUDIT_REDACTION_WHITELIST, NlpAnswerAgent, NlpIntentAgent
 
 
 # ── Triangle test ──────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ def test_nlp_audit_rerender_with_conversation_context_byte_identical() -> None:
 
 
 def test_nlp_audit_erasure_drops_account_id_h_from_graph_file() -> None:
-    from ai.swarm.agents.nlp import _erase_account_id_h_from_conversation_entity_graph
+    from swarm.agents.nlp import _erase_account_id_h_from_conversation_entity_graph
 
     with tempfile.TemporaryDirectory() as tmpdir:
         bundle_root = Path(tmpdir) / "bundle"

@@ -60,7 +60,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Optional, Protocol
 
-from ai.common.config import cfg  # type: ignore[import]  # xops runs with ai/ on PYTHONPATH
+from common.config import cfg  # type: ignore[import]  # xops runs with ai/ on PYTHONPATH
 
 _log = logging.getLogger("xops.backup.credential_provider")
 

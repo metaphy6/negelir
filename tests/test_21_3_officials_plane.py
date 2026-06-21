@@ -21,15 +21,15 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
-from ai.common.config import cfg
-from ai.common.schemas.records import (
+from common.config import cfg
+from common.schemas.records import (
     RefereeAssignmentPayload,
     RefereeProfilePayload,
     RefereeRollingStats,
 )
-from ai.scraper.extractors.referee_watch import RefereeExtractor, ExtractionError
-from ai.scraper.differs.referee_watch import RefereeDiffer
-from ai.scraper.enrichment_reactor import RefereeSeason, RefereeEnrichmentReactor
+from datasource.scraper.extractors.referee_watch import RefereeExtractor, ExtractionError
+from datasource.scraper.differs.referee_watch import RefereeDiffer
+from datasource.scraper.enrichment_reactor import RefereeSeason, RefereeEnrichmentReactor
 
 
 class TestRollingStatsRecomputation:

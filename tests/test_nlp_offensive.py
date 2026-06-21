@@ -4,7 +4,7 @@ from __future__ import annotations
 import yaml
 
 from common import telemetry
-from ai.common.config import Config
+from common.config import Config
 
 
 def test_nlp_offensive_table_loaded_with_three_classes() -> None:

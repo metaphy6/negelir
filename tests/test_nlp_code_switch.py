@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from ai.common.text.turkish import buffer_consonant, strip_proper_noun_suffix
+from common.text.turkish import buffer_consonant, strip_proper_noun_suffix
 from nlp.entity import EntityExtractor
 from nlp.lexicon_loader import LexiconStore
 from nlp.normalize import normalize_input

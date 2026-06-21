@@ -16,8 +16,8 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 # Add the xops directory to the path so we can import the lint rule
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "xops" / "lint"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "xops" / "makefile"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "xops" / "lint"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "xops" / "makefile"))
 
 from patcher_bundle_scope import check_patcher_bundle_scoping
 from patcher import cmd_bundle_migrate, cmd_bundle_scan_ai_refs
@@ -111,7 +111,7 @@ class TestPatcherBundleTwoKeyPath:
         
         diagnostic = {
             "kind": "import_violation",
-            "diff": '- import ai.swarm.agents\n+ import datasource.patcher.agents'
+            "diff": '- import swarm.agents\n+ import datasource.patcher.agents'
         }
         (violation_path / "diagnostic.json").write_text(json.dumps(diagnostic))
         

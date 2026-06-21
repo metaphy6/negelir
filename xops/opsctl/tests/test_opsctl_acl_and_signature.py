@@ -16,18 +16,17 @@ from pathlib import Path
 
 import pytest
 
-from ai.common.config import Config
-from ai.swarm.agents.maint._op_signature import (
+from common.config import Config
+from swarm.agents.maint._op_signature import (
     check_authz,
     key_id_from_bytes,
     load_authz,
     verify_envelope_signature,
 )
-from ai.swarm.sdk.bus import InMemoryBus
+from swarm.sdk.bus import InMemoryBus
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl._op_signature import inject_signature
 from xops.opsctl._redis_acl import assert_opsctl_redis_user
-
 
 # --------------------------------------------------------------------------
 # (a) Wrong Redis ACL user → FAIL_SAFE_WRONG_REDIS_USER

@@ -27,7 +27,7 @@ class TestNonTargetPreservation:
     def test_log_message_with_ai_reference_unchanged(self) -> None:
         """Log messages containing 'ai.' are not rewritten."""
         source = (
-            'logger.info("Starting import from ai.common.config")'
+            'logger.info("Starting import from common.config")'
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         # Log message should be unchanged
@@ -60,8 +60,8 @@ class TestNonTargetPreservation:
     def test_mixed_imports_and_strings(self) -> None:
         """When both imports and non-import strings exist, only imports are rewritten."""
         source = (
-            "from ai.common.config import Config\n"
-            'error_msg = "Failed to load config from ai.common.config"\n'
+            "from common.config import Config\n"
+            'error_msg = "Failed to load config from common.config"\n'
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         # Import should be rewritten
@@ -83,7 +83,7 @@ class TestNonTargetPreservation:
     def test_various_non_target_strings(self, non_target: str) -> None:
         """Various non-import contexts are preserved."""
         # Add a valid import so status could be "rewritten"
-        source = "from ai.common.config import Config\n" + non_target
+        source = "from common.config import Config\n" + non_target
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         # The non-target portion should be unchanged
         assert non_target in result

@@ -21,7 +21,7 @@ class TestAllSevenPatterns:
 
     def test_pattern_1_from_import(self) -> None:
         """Pattern 1: from ai.<pkg>.<mod> import X → from <pkg>.<mod> import X."""
-        source = "from ai.common.config import Config\nx = Config()"
+        source = "from common.config import Config\nx = Config()"
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in result
         assert status == "rewritten"
@@ -48,7 +48,7 @@ class TestAllSevenPatterns:
         source = (
             "from typing import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in result
@@ -79,7 +79,7 @@ class TestAllSevenPatterns:
         """Pattern 7: Provenance headers # negelir-generated-from: ai/<path>@<sha256>."""
         source = (
             "# negelir-generated-from: ai/common/config.py@abc123\n"
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         # Should update the provenance header

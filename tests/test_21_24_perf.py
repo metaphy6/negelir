@@ -5,7 +5,7 @@ import msgpack
 
 import pytest
 
-from ai.common.config import Config
+from common.config import Config
 from model.enrichment_source import (
     MsgpackEnrichmentCodec,
     RedisEnrichmentSource,

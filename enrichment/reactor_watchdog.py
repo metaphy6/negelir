@@ -6,8 +6,8 @@ Monitors the heartbeat keys of derived-view reactors and alerts when they stall.
 import time
 from typing import Optional
 
-from ai.common.config import Config
-from ai.common.logger import get_logger
+from common.config import Config
+from common.logger import get_logger
 
 log = get_logger("reactor_watchdog")
 

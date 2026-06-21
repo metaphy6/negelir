@@ -11,7 +11,7 @@ import pytest
 
 from nlp.injection_probe import InjectionProbeResult, probe_normalized_text
 from common.security.patterns import current_ruleset, reset_for_tests
-from ai.common.config import cfg
+from common.config import cfg
 
 
 @pytest.fixture(autouse=True)

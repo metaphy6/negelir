@@ -1,7 +1,7 @@
 """Phase 19 §19.6 — Budget exhaustion metric."""
 from __future__ import annotations
 
-from ai.common.config import cfg
+from common.config import cfg
 
 
 def test_budget_exhaustion_metric_emitted() -> None:

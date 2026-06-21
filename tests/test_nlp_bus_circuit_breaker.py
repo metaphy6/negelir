@@ -5,11 +5,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ai.swarm.agents.nlp._bus_circuit_breaker import (
+from swarm.agents.nlp._bus_circuit_breaker import (
     NlpBusCircuitBreaker,
     _restore_spool_payload,
 )
-from ai.swarm.sdk.types import Message
+from swarm.sdk.types import Message
 
 
 class TestNlpBusCircuitBreaker(unittest.TestCase):

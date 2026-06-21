@@ -18,13 +18,13 @@ from datetime import datetime
 
 import pytest
 
-from ai.scraper.differs.transfers_feed import (
+from datasource.scraper.differs.transfers_feed import (
     TransferDiffer,
     ContractDiffer,
     SuspensionDiffer,
     DiffEvent,
 )
-from ai.common.schemas.records import (
+from common.schemas.records import (
     TransferPayload,
     ContractPayload,
     SuspensionPayload,

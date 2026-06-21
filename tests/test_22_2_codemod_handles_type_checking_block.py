@@ -17,7 +17,7 @@ class TestTypeCheckingBlock:
         source = (
             "from typing import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in result
@@ -28,8 +28,8 @@ class TestTypeCheckingBlock:
         source = (
             "from typing import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
-            "    from ai.common.logger import Logger\n"
+            "    from common.config import Config\n"
+            "    from common.logger import Logger\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in result
@@ -40,9 +40,9 @@ class TestTypeCheckingBlock:
         """TYPE_CHECKING block mixed with runtime imports."""
         source = (
             "from typing import TYPE_CHECKING\n"
-            "from ai.common.config import cfg\n"
+            "from common.config import cfg\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import cfg" in result
@@ -54,7 +54,7 @@ class TestTypeCheckingBlock:
         source = (
             "from typing_extensions import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         # May or may not handle typing_extensions variant; test for no error

@@ -13,15 +13,15 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ai.common.config import Config
-from ai.common.config import cfg
+from common.config import Config
+from common.config import cfg
 
 
 # ── Phase 10 §10.14 — NLP Structured Logs (PII-clean) ────────────────────────
 
 def test_nlp_structured_log_carries_required_fields(caplog):
     """log_nlp_request emits all required fields without PII."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()  # No Redis required for structured logs
     
@@ -53,7 +53,7 @@ def test_nlp_structured_log_carries_required_fields(caplog):
 
 
 def test_nlp_prober_outcome_structured_log(caplog) -> None:
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
 
     sink = TelemetrySink()
 
@@ -70,7 +70,7 @@ def test_nlp_prober_outcome_structured_log(caplog) -> None:
 
 def test_nlp_structured_log_never_logs_text(caplog):
     """log_nlp_request rejects suspiciously long ID fields (PII guard)."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -97,7 +97,7 @@ def test_nlp_structured_log_never_logs_text(caplog):
 
 def test_nlp_structured_log_all_proofreader_statuses():
     """log_nlp_request accepts all expected proofreader_status values."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -130,7 +130,7 @@ def test_telemetry_sink_lazy_redis_connect_is_deferred(monkeypatch):
     dummy_redis.Redis = redis_factory
     monkeypatch.setitem(sys.modules, "redis", dummy_redis)
 
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
 
     sink = TelemetrySink()
     assert sink._redis is None
@@ -140,9 +140,9 @@ def test_telemetry_sink_lazy_redis_connect_is_deferred(monkeypatch):
 # ── Phase 10 §10.12 — L1 Answer Cache ────────────────────────────────────────
 
 from nlp.compliance import disclosures_snapshot_sha, load_disclosures
-from ai.swarm.agents.cache import CacheAgent, InMemoryCacheBackend, make_answer_key
-from ai.swarm.agents.nlp import _make_qa_answer_payload
-from ai.swarm.sdk.types import Envelope, Message, Topic
+from swarm.agents.cache import CacheAgent, InMemoryCacheBackend, make_answer_key
+from swarm.agents.nlp import _make_qa_answer_payload
+from swarm.sdk.types import Envelope, Message, Topic
 
 
 def test_make_answer_key_stable_hash():
@@ -440,7 +440,7 @@ def test_nlp_cache_key_includes_all_5_version_fields() -> None:
 
 
 def test_nlp_version_snapshot_held_for_request_lifetime() -> None:
-    from ai.swarm.agents.cache import VersionSnapshot, _capture_version_snapshot
+    from swarm.agents.cache import VersionSnapshot, _capture_version_snapshot
 
     payload = {
         "normalized_text": "gs maçı tahmin",
@@ -608,7 +608,7 @@ def test_cache_agent_writes_qa_answer_v1_with_envelope_signature(monkeypatch):
     cached = backend.get(key)
     assert cached is not None
 
-    from ai.swarm.agents.cache import _verify_cache_entry
+    from swarm.agents.cache import _verify_cache_entry
 
     cache_value = _verify_cache_entry(cached)
     assert cache_value["payload"]["envelope_signature"] == payload["envelope_signature"]
@@ -658,7 +658,7 @@ def test_cache_agent_caches_streamed_qa_answer_as_one_shot_payload():
     assert result == []
     assert len(backend) == 1
 
-    from ai.swarm.agents.cache import _verify_cache_entry
+    from swarm.agents.cache import _verify_cache_entry
 
     disclosure_sha = disclosures_snapshot_sha(load_disclosures("tr-TR")[0])
     key = make_answer_key(
@@ -690,7 +690,7 @@ def test_cache_agent_caches_streamed_qa_answer_as_one_shot_payload():
 
 
 def test_verify_cache_entry_rejects_invalid_signature() -> None:
-    from ai.swarm.agents.cache import _wrap_cache_payload, _verify_cache_entry
+    from swarm.agents.cache import _wrap_cache_payload, _verify_cache_entry
 
     good = {"a": 1, "b": "ok"}
     wrapped = _wrap_cache_payload(good)
@@ -877,7 +877,7 @@ class TestPoissonHelpers:
 
 # ── Feature Vector ────────────────────────────────────────────────────────────
 
-from ai.common.constants import N_FEATURES
+from common.constants import N_FEATURES
 from model.features import FEATURE_COLUMNS
 
 
@@ -1448,7 +1448,7 @@ class TestEntityExtraction:
 
 # ── Config / Constants Integrity ─────────────────────────────────────────────
 
-from ai.common.constants import TEAM_MAP, UUID_TO_NAME, BANNED_WORDS, LEAGUES
+from common.constants import TEAM_MAP, UUID_TO_NAME, BANNED_WORDS, LEAGUES
 
 
 class TestConstantsIntegrity:
@@ -1479,7 +1479,7 @@ class TestConstantsIntegrity:
 
 # ── LeagueConfig ─────────────────────────────────────────────────────────────
 
-from ai.common.league_config import (
+from common.league_config import (
     LeagueConfig, get_league_config, turkish_super_lig,
     english_premier_league, german_bundesliga, spanish_la_liga,
     LEAGUE_REGISTRY,
@@ -2262,7 +2262,7 @@ class TestMackolikIdMap:
     """Verify mackolik_id mapping from locale YAML."""
 
     def test_mackolik_id_map_populated(self):
-        from ai.common.constants import MACKOLIK_ID_MAP
+        from common.constants import MACKOLIK_ID_MAP
         assert len(MACKOLIK_ID_MAP) >= 19  # at least 19 teams have mackolik_id
         assert MACKOLIK_ID_MAP[1] == "Galatasaray"
         assert MACKOLIK_ID_MAP[2] == "Fenerbahçe"
@@ -2270,7 +2270,7 @@ class TestMackolikIdMap:
         assert MACKOLIK_ID_MAP[4] == "Trabzonspor"
 
     def test_mackolik_id_map_mid_tier(self):
-        from ai.common.constants import MACKOLIK_ID_MAP
+        from common.constants import MACKOLIK_ID_MAP
         assert MACKOLIK_ID_MAP[451] == "Başakşehir"
         assert MACKOLIK_ID_MAP[656] == "Kasımpaşa"
         assert MACKOLIK_ID_MAP[619] == "Alanyaspor"
@@ -2282,7 +2282,7 @@ class TestSeasonDetection:
     """Tests for season state machine."""
 
     def test_in_season_detected(self):
-        from ai.common.season import detect_season, SeasonState
+        from common.season import detect_season, SeasonState
         from scraper.mackolik import SeasonData, Fixture, Result
 
         def fake_fetch(sid):
@@ -2298,7 +2298,7 @@ class TestSeasonDetection:
         assert sid == 70381
 
     def test_post_season_detected(self):
-        from ai.common.season import detect_season, SeasonState
+        from common.season import detect_season, SeasonState
         from scraper.mackolik import SeasonData, Result
 
         def fake_fetch(sid):
@@ -2312,7 +2312,7 @@ class TestSeasonDetection:
         assert label == "2024/2025"
 
     def test_pre_season_detected(self):
-        from ai.common.season import detect_season, SeasonState
+        from common.season import detect_season, SeasonState
         from scraper.mackolik import SeasonData, Fixture
 
         def fake_fetch(sid):
@@ -2325,7 +2325,7 @@ class TestSeasonDetection:
         assert state == SeasonState.PRE_SEASON
 
     def test_off_season_empty(self):
-        from ai.common.season import detect_season, SeasonState
+        from common.season import detect_season, SeasonState
         label, state, sid = detect_season({}, lambda x: None)
         assert state == SeasonState.OFF_SEASON
         assert label is None
@@ -2333,7 +2333,7 @@ class TestSeasonDetection:
 
     def test_season_transition(self):
         """Most recent completed + older completed → picks most recent."""
-        from ai.common.season import detect_season, SeasonState
+        from common.season import detect_season, SeasonState
         from scraper.mackolik import SeasonData, Result
 
         def fake_fetch(sid):
@@ -2440,7 +2440,7 @@ class TestCurrentSeasonRemoved:
     """Verify CURRENT_SEASON is no longer exported from constants."""
 
     def test_no_current_season_constant(self):
-        import ai.common.constants as c
+        import common.constants as c
         assert not hasattr(c, "CURRENT_SEASON"), "CURRENT_SEASON should be removed"
 
 
@@ -2451,50 +2451,50 @@ class TestSeasonRollover:
 
     def test_winter_returns_current_season(self):
         from datetime import date
-        from ai.common.season import current_season
+        from common.season import current_season
         assert current_season(date(2026, 4, 24)) == "2025-2026"
 
     def test_summer_rollover_to_new_season(self):
         from datetime import date
-        from ai.common.season import current_season
+        from common.season import current_season
         # July 1 is the rollover boundary by default
         assert current_season(date(2026, 6, 30)) == "2025-2026"
         assert current_season(date(2026, 7, 1)) == "2026-2027"
 
     def test_following_spring_stays_in_same_season(self):
         from datetime import date
-        from ai.common.season import current_season
+        from common.season import current_season
         assert current_season(date(2027, 4, 24)) == "2026-2027"
 
     def test_custom_rollover_month(self):
         from datetime import date
-        from ai.common.season import current_season
+        from common.season import current_season
         # August rollover (some leagues): June stays in old season
         assert current_season(date(2026, 7, 31), rollover_month=8) == "2025-2026"
         assert current_season(date(2026, 8, 1), rollover_month=8) == "2026-2027"
 
     def test_invalid_rollover_month_raises(self):
         import pytest
-        from ai.common.season import current_season
+        from common.season import current_season
         with pytest.raises(ValueError):
             current_season(rollover_month=0)
         with pytest.raises(ValueError):
             current_season(rollover_month=13)
 
     def test_config_default_season_is_date_derived_when_env_unset(self, monkeypatch):
-        from ai.common.config import Config
-        from ai.common.season import current_season
+        from common.config import Config
+        from common.season import current_season
         monkeypatch.delenv("NEGELIR_DEFAULT_SEASON", raising=False)
         assert Config().default_season == current_season()
 
     def test_config_default_season_empty_env_falls_back_to_derived(self, monkeypatch):
-        from ai.common.config import Config
-        from ai.common.season import current_season
+        from common.config import Config
+        from common.season import current_season
         monkeypatch.setenv("NEGELIR_DEFAULT_SEASON", "")
         assert Config().default_season == current_season()
 
     def test_config_default_season_env_override_wins(self, monkeypatch):
-        from ai.common.config import Config
+        from common.config import Config
         monkeypatch.setenv("NEGELIR_DEFAULT_SEASON", "2099-2100")
         assert Config().default_season == "2099-2100"
 
@@ -3126,7 +3126,7 @@ class TestMackolikLive:
         (full 128-year scan is too slow for CI).
         """
         from scraper.mackolik import MackolikClient
-        from ai.common.config import cfg
+        from common.config import cfg
         import re, json
         group_id = cfg.mackolik_group_id
         # Step 1: verify year listing works
@@ -3215,7 +3215,7 @@ class TestMackolikLive:
 
     def test_live_team_ids_match_locale(self):
         """AC: Team IDs match mackolik_id values in locale_tr.yaml."""
-        from ai.common.constants import MACKOLIK_ID_MAP
+        from common.constants import MACKOLIK_ID_MAP
         data = self.client.fetch_season(67287)
         matched = 0
         for team in data.standings:
@@ -3807,7 +3807,7 @@ class TestPhase9Migrations:
 
 def test_prometheus_metrics_available():
     """Prometheus metrics are initialized when prometheus_client is available."""
-    from ai.common.telemetry import (
+    from common.telemetry import (
         NLP_PIPELINE_LATENCY,
         NLP_INTENT_CONFIDENCE,
         NLP_HUMANIZER_BREAKER_STATE,
@@ -3836,7 +3836,7 @@ def test_prometheus_metrics_available():
 
 def test_record_pipeline_stage_latency():
     """TelemetrySink.record_pipeline_stage_latency records histogram metric."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
 
     sink = TelemetrySink()
 
@@ -3855,7 +3855,7 @@ def test_record_pipeline_stage_latency():
 
 def test_record_proofreader_block():
     """TelemetrySink.record_proofreader_block increments counter metric."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -3867,7 +3867,7 @@ def test_record_proofreader_block():
 
 def test_record_humanizer_tokens_emitted():
     """TelemetrySink.record_nlp_humanizer_tokens_emitted increments the humanizer token counter."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     sink.record_nlp_humanizer_tokens_emitted(
@@ -3879,7 +3879,7 @@ def test_record_humanizer_tokens_emitted():
 
 def test_nlp_coverage_histogram_per_intent_class():
     """TelemetrySink.record_nlp_lexicon_coverage records the lexicon coverage histogram."""
-    from ai.common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_LEXICON_COVERAGE
+    from common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_LEXICON_COVERAGE
 
     sink = TelemetrySink()
     sink.record_nlp_lexicon_coverage(intent_class="predict.match_outcome", coverage_ratio=0.75)
@@ -3892,7 +3892,7 @@ def test_nlp_coverage_histogram_per_intent_class():
 
 def test_nlp_sarcasm_cue_fire_rate_histogram_label():
     """TelemetrySink.record_nlp_sarcasm_cue exports a sarcasm cue histogram label."""
-    from ai.common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_SARCASM_CUE_FIRE_RATE
+    from common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_SARCASM_CUE_FIRE_RATE
 
     sink = TelemetrySink()
     sink.record_nlp_sarcasm_cue("harika oynadılar")
@@ -3904,7 +3904,7 @@ def test_nlp_sarcasm_cue_fire_rate_histogram_label():
 
 def test_record_nlp_sarcasm_cue_rate_drift_alert():
     """TelemetrySink.record_nlp_sarcasm_cue emits an alert on week-over-week cue drift."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
 
     times = [0.0]
     alerts: list[dict[str, object]] = []
@@ -3929,7 +3929,7 @@ def test_record_nlp_sarcasm_cue_rate_drift_alert():
 def test_nlp_unresolved_top_k_pii_scrubbed_and_capped():
     """TelemetrySink.record_nlp_unresolved_token honors PII redaction and rolling top-k capping."""
     import hashlib
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
 
     sink = TelemetrySink()
     secret_token = "A" * 100
@@ -3945,7 +3945,7 @@ def test_nlp_unresolved_top_k_pii_scrubbed_and_capped():
 
 def test_record_politeness_class_distribution():
     """TelemetrySink.record_nlp_politeness_class records politeness class telemetry."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     sink.record_nlp_politeness_class(politeness_class="polite")
@@ -3954,7 +3954,7 @@ def test_record_politeness_class_distribution():
 
 def test_set_humanizer_breaker_state():
     """TelemetrySink.set_humanizer_breaker_state sets gauge metric."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -3966,7 +3966,7 @@ def test_set_humanizer_breaker_state():
 
 def test_set_lexicon_version():
     """TelemetrySink.set_lexicon_version records info gauge metric."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -3985,7 +3985,7 @@ def test_set_lexicon_version():
 
 def test_log_nlp_request_records_intent_confidence_metric():
     """log_nlp_request also records the intent_confidence summary metric."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -4003,7 +4003,7 @@ def test_log_nlp_request_records_intent_confidence_metric():
 
 def test_prometheus_metrics_cardinality_bounded():
     """Prometheus metrics have bounded cardinality (no per-team labels)."""
-    from ai.common.telemetry import (
+    from common.telemetry import (
         NLP_PIPELINE_LATENCY,
         NLP_INTENT_CONFIDENCE,
         NLP_HUMANIZER_BREAKER_STATE,
@@ -4042,7 +4042,7 @@ def test_prometheus_metrics_cardinality_bounded():
 
 def test_nlp_span_records_latency_metric():
     """nlp_span context manager records stage latency to Prometheus histogram."""
-    from ai.common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_PIPELINE_LATENCY
+    from common.telemetry import TelemetrySink, _PROMETHEUS_AVAILABLE, NLP_PIPELINE_LATENCY
     
     if not _PROMETHEUS_AVAILABLE:
         pytest.skip("prometheus_client not available")
@@ -4067,7 +4067,7 @@ def test_nlp_span_records_latency_metric():
 
 def test_nlp_span_logs_structured_output(caplog):
     """nlp_span emits structured debug log with trace_id, stage, intent, latency."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     trace_id = "00-test123-b7ad6b7169203331-01"
@@ -4093,7 +4093,7 @@ def test_nlp_span_logs_structured_output(caplog):
 
 def test_nlp_span_all_stages_accepted():
     """nlp_span accepts all 8 NLP pipeline stages per §10.14."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     trace_id = "00-test-abc-01"
@@ -4118,7 +4118,7 @@ def test_nlp_span_all_stages_accepted():
 
 def test_nlp_span_with_unknown_intent():
     """nlp_span defaults to 'unknown' intent when not provided."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     trace_id = "00-test-unknown-01"
@@ -4130,7 +4130,7 @@ def test_nlp_span_with_unknown_intent():
 
 def test_nlp_span_exception_still_records_latency(caplog):
     """nlp_span records latency even when the block raises an exception."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     trace_id = "00-test-exception-01"
@@ -4153,7 +4153,7 @@ def test_nlp_span_exception_still_records_latency(caplog):
 def test_nlp_span_measures_wall_clock_time():
     """nlp_span measures elapsed time correctly."""
     import time
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     trace_id = "00-test-timing-01"
@@ -4170,7 +4170,7 @@ def test_nlp_span_measures_wall_clock_time():
 
 def test_nlp_span_w3c_traceparent_format():
     """nlp_span accepts W3C traceparent format trace_id per Phase 9 §9.5."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     
@@ -4188,7 +4188,7 @@ def test_nlp_span_w3c_traceparent_format():
 
 def test_nlp_span_non_blocking_on_prometheus_failure():
     """nlp_span does not raise if Prometheus recording fails."""
-    from ai.common.telemetry import TelemetrySink
+    from common.telemetry import TelemetrySink
     
     sink = TelemetrySink()
     trace_id = "00-test-prom-fail-01"

@@ -45,8 +45,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ai.common.config import Config
-from ai.common.logger import get_logger
+from common.config import Config
+from common.logger import get_logger
 
 # Optional imports for resource monitoring
 try:

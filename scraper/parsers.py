@@ -6,7 +6,7 @@ Per roadmap §4.2: parse HTML in RAM, extract stats, destroy raw data.
 import re
 from dataclasses import dataclass, field
 from bs4 import BeautifulSoup
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 log = get_logger("scraper.parsers")
 

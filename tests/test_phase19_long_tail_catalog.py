@@ -5,7 +5,7 @@ This file validates the Phase 19 infrastructure across all 14 sections
 """
 
 import pytest
-from ai.common.config import Config
+from common.config import Config
 
 
 class TestPhase19ConfigKeys:

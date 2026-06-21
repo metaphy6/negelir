@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 from typing import Any, Optional
 
-from ai.common.config import Config
+from common.config import Config
 
 from .._runner import SubcommandSpec, run_publish
 

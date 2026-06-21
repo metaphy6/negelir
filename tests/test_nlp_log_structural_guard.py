@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 import sys
 
-from ai.swarm.agents.nlp._log_filter import PIIScrubFilter, add_log_filter
+from swarm.agents.nlp._log_filter import PIIScrubFilter, add_log_filter
 
 
 def test_pii_scrub_filter_redacts_phone_from_log_args() -> None:

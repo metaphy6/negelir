@@ -23,7 +23,7 @@ class TestReactorWatchdog:
     @pytest.fixture
     def watchdog_setup(self):
         """Setup watchdog with mocked Redis and bus."""
-        from ai.datasource.enrichment.reactor_watchdog import ReactorWatchdog
+        from enrichment.reactor_watchdog import ReactorWatchdog
         cfg = MagicMock()
         cfg.redis_client = MagicMock()
         cfg.enrichment_reactor_heartbeat_ttl_s = 60

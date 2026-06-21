@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Literal
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
-from ai.common.schemas.records import (
+from common.config import cfg
+from common.logger import get_logger
+from common.schemas.records import (
     WeatherForecastPayload,
     WeatherActualPayload,
     PitchConditionPayload,

@@ -54,7 +54,7 @@ class _StubConn:
 def test_kind_is_registered() -> None:
     """Boundary: the new kind must be in ``KNOWN_SEC_ALERT_KINDS``
     so the SecAlertDebouncer + boundary tests recognise it."""
-    from ai.swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS
+    from swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS
 
     assert "maint_advisory_lock_held_long" in KNOWN_SEC_ALERT_KINDS
 

@@ -6,7 +6,7 @@ from typing import Any, Callable, NamedTuple, Optional
 
 import yaml
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 
 _DEFAULT_REDUPLICATION_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "morph" / "reduplication_pairs.tr.yaml"

@@ -8,7 +8,7 @@ Tests that:
 from __future__ import annotations
 
 import pytest
-from ai.common.standings_accumulator import (
+from common.standings_accumulator import (
     GroupTeam,
     simulate_group_stage_standings,
 )

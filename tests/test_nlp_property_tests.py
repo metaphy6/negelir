@@ -31,7 +31,7 @@ def test_nlp_hypothesis_profile_loaded_with_no_database() -> None:
     
     This test verifies the profile was loaded in conftest.py.
     """
-    from ai.common.config import cfg
+    from common.config import cfg
     
     # Get the current settings (should be "nlp_ci" profile from conftest)
     current = settings()
@@ -73,7 +73,7 @@ def test_gazetteer_round_trip_property(alias: str) -> None:
     3. The original alias appears in the canonical entry's names or aliases
     """
     from nlp.lexicon_loader import LexiconStore
-    from ai.common.config import Config
+    from common.config import Config
     
     cfg = Config()
     lexicon_dir = REPO_ROOT / "ai" / "nlp" / "lexicon"
@@ -182,7 +182,7 @@ def test_template_render_no_strict_undefined_property(intent: str) -> None:
     3. Output is non-empty
     """
     from nlp.render import build_environment
-    from ai.common.config import Config
+    from common.config import Config
     import jinja2
     
     cfg = Config()

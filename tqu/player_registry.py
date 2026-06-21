@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from ai.common.logger import get_logger
+from common.logger import get_logger
 from tqu.normalizer import asciify
 
 log = get_logger("tqu.player_registry")

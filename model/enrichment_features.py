@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from ai.common.config import Config
+from common.config import Config
 
 
 def compute_squad_strength_delta(

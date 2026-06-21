@@ -150,7 +150,7 @@ class TestIsolationJobRunsFirst:
         
         Default: cfg.ci_isolation_max_seconds = 60 seconds
         """
-        from ai.common.config import cfg
+        from common.config import cfg
 
         # Check that the config has the isolation timeout setting
         assert hasattr(cfg, "ci_isolation_max_seconds")
@@ -191,7 +191,7 @@ class TestIsolationFailureShortCircuits:
 
     def test_ci_isolation_max_seconds_honored(self) -> None:
         """Verify that isolation check respects the timeout budget."""
-        from ai.common.config import cfg
+        from common.config import cfg
 
         max_seconds = cfg.ci_isolation_max_seconds
         assert max_seconds == 60, f"Expected 60s default, got {max_seconds}s"

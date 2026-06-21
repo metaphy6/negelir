@@ -20,7 +20,7 @@ import pathlib
 import tempfile
 from typing import Set
 
-from ai.common.config import cfg
+from common.config import cfg
 from nlp.render import build_environment
 
 

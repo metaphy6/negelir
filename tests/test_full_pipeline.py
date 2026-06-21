@@ -55,7 +55,7 @@ def test_full_training_pipeline_end_to_end(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "reports").mkdir(parents=True, exist_ok=True)
 
     # Mutate the live cfg so already-imported modules see the override.
-    from ai.common.config import cfg
+    from common.config import cfg
     monkeypatch.setattr(cfg, "model_dir", str(tmp_path / "models"))
     monkeypatch.setattr(cfg, "data_dir", str(repo_data))
     monkeypatch.setattr(cfg, "report_dir", str(tmp_path / "reports"))

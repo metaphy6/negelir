@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ai.common.config import Config
+from common.config import Config
 
 from xops.opsctl._audit import AUDIT_HEADER, append_audit_row, make_row
 from xops.opsctl._exit_codes import ExitCode

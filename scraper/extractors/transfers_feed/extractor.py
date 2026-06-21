@@ -14,9 +14,9 @@ from datetime import datetime, date
 from typing import Optional, Literal, Any, Dict, List
 from urllib.parse import urlparse
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
-from ai.common.schemas.records import (
+from common.config import cfg
+from common.logger import get_logger
+from common.schemas.records import (
     TransferPayload,
     ContractPayload,
     SuspensionPayload,

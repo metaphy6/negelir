@@ -87,8 +87,8 @@ def _read_status(payload_path: Path) -> int:
 
 def cmd_run(argv: List[str]) -> int:
     """One-shot: snapshot every source, classify drift, print per-source plans."""
-    from ai.swarm.source_watcher import snapshot_store
-    from ai.swarm.source_watcher.scheduler import run_once
+    from swarm.source_watcher import snapshot_store
+    from swarm.source_watcher.scheduler import run_once
     from xops.mock.sources import all_keys, by_key
 
     keys = argv if argv else all_keys()
@@ -116,10 +116,10 @@ def cmd_run(argv: List[str]) -> int:
 
 def cmd_history(argv: List[str]) -> int:
     """Show snapshot history for one source. Source key passed as SOURCE=<key>."""
-    from ai.swarm.source_watcher import snapshot_store
-
     # Support both `watch.py history mackolik.local` and SOURCE=mackolik.local
     import os
+
+    from swarm.source_watcher import snapshot_store
 
     source = (argv[0] if argv else os.environ.get("SOURCE", "")).strip()
     if not source:

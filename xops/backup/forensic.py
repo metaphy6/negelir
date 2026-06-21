@@ -59,7 +59,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional
 
-from ai.common.config import cfg  # type: ignore[import]  # xops runs with ai/ on PYTHONPATH
+from common.config import cfg  # type: ignore[import]  # xops runs with ai/ on PYTHONPATH
 
 _log = logging.getLogger("xops.backup.forensic")
 

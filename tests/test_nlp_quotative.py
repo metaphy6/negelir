@@ -9,9 +9,9 @@ import pytest
 import yaml
 
 from nlp.quotative import detect_quotative_frame
-from ai.swarm.agents.nlp import NlpDispatcherAgent
-from ai.swarm.agents.topics import DATA_REQUEST_V1, NLP_EVENT_V1, PREDICT_REQUEST_V1, QA_INTENT_V1
-from ai.swarm.sdk.types import Message
+from swarm.agents.nlp import NlpDispatcherAgent
+from swarm.agents.topics import DATA_REQUEST_V1, NLP_EVENT_V1, PREDICT_REQUEST_V1, QA_INTENT_V1
+from swarm.sdk.types import Message
 
 
 def test_detects_direct_quote_marker_frame() -> None:

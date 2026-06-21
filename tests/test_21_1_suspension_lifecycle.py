@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai.scraper.suspension_lifecycle import (
+from datasource.scraper.suspension_lifecycle import (
     should_expire,
     decrement_matches_remaining,
     is_active,

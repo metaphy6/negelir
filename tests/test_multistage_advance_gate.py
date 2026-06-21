@@ -5,7 +5,7 @@ multiple stages enforce proper progression rules.
 """
 
 import pytest
-from ai.common.competition_multistage import (
+from common.competition_multistage import (
     StageStatus,
     can_advance_to_knockout,
     can_complete_group_stage,

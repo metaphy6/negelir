@@ -16,7 +16,7 @@ class TestProvenanceHeaders:
         """Basic provenance header is rewritten."""
         source = (
             "# negelir-generated-from: ai/common/config.py@abc123\n"
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         # Provenance should be rewritten
@@ -27,7 +27,7 @@ class TestProvenanceHeaders:
         """Provenance header with nested module path."""
         source = (
             "# negelir-generated-from: ai/common/text/turkish.py@def456\n"
-            "from ai.common.text.turkish import suffix_harmony_ok\n"
+            "from common.text.turkish import suffix_harmony_ok\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "# negelir-generated-from: common/text/turkish.py@def456" in result
@@ -37,7 +37,7 @@ class TestProvenanceHeaders:
         """Provenance header with full SHA256 hash."""
         source = (
             "# negelir-generated-from: ai/common/config.py@abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\n"
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "# negelir-generated-from: common/config.py@abcdef" in result
@@ -49,7 +49,7 @@ class TestProvenanceHeaders:
             "# negelir-generated-from: ai/common/config.py@abc123\n"
             "# Another comment\n"
             "# negelir-generated-from: ai/common/logger.py@def456\n"
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
         )
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common", scan_head_lines=5)
         # At least the first header should be rewritten
@@ -73,7 +73,7 @@ class TestProvenanceHeaders:
         """Provenance header for different package is unchanged."""
         source = (
             "# negelir-generated-from: ai/datasource/scraper.py@abc123\n"
-            "from ai.datasource.scraper import Scraper\n"
+            "from datasource.scraper import Scraper\n"
         )
         # Rewrite for 'common' package
         result, status = Phase22ImportRewriter.rewrite_source(source, package="common")

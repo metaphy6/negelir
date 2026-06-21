@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Literal, TypedDict, Optional
 from datetime import datetime
 
-from ai.common.schemas.records import TransferPayload
+from common.schemas.records import TransferPayload
 
 
 class RosterStateWriteInstruction(TypedDict):

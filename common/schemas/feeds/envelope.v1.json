@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Record Envelope (v1) — Universal wrapper for all Record instances",
+  "description": "Phase 16 — The Record envelope wraps plane-specific payloads. Envelope keys (canonical_version, captured_at, occurred_at, extractor_version, plane, record_type, source_key, stable_id, upstream_id, raw_ref, payload, data_class, idempotency_key, trace_context, field_provenance, tombstone, retracted_at, signature, signature_alg, signing_key_id, region, league_id, league_bucket) are major-bumped together. Plane payloads version independently. Reserved fields ship with sane defaults so adding them later is not a schema bump. JSONSchema ensures envelope conforms before emitter writes.",
+  "type": "object",
+  "required": [
+    "canonical_version",
+    "captured_at",
+    "data_class",
+    "extractor_version",
+    "idempotency_key",
+    "plane",
+    "raw_ref",
+    "record_type",
+    "source_key",
+    "stable_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "canonical_version": {
+      "type": "string",
+      "pattern": "^v\\d+$",
+      "description": "Bumped when alias / timezone rule changes occur."
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC envelope clock when the record was processed by the extractor."
+    },
+    "data_class": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "restricted",
+        "pii"
+      ],
+      "description": "Data classification: public (default), internal (team-only), restricted (compliance), pii (privacy-sensitive). Per Phase 11, emitter refuses to mix restricted/pii records into a partition not declared at that class."
+    },
+    "extractor_version": {
+      "type": "string",
+      "description": "Semantic version identifier of the extractor that produced this record, e.g. 'mackolik.score@3'."
+    },
+    "field_provenance": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null,
+      "description": "Per-field source attribution: {field_name → {source_id, observed_at}}. Optional; per Phase 13.36, required for schedule, score, lineup, market planes for proofreader conflict resolution and patcher diagnostics."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Unique identifier for deduplication at the consumer. Format: (record_type, stable_id, captured_at) tuple in canonical form."
+    },
+    "league_bucket": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Optional league sub-partition for multi-tenant isolation (Phase 13). Null for non-league records."
+    },
+    "league_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "ISO-3166 league identifier when applicable, e.g. 'tr_super_lig'. Null for non-league records."
+    },
+    "occurred_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "ISO-8601 UTC event-time when the source dates the event. Null if the source does not provide an event timestamp."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Plane-specific record content, validated against common/schemas/feeds/<plane>.v*.json."
+    },
+    "plane": {
+      "type": "string",
+      "enum": [
+        "reference",
+        "schedule",
+        "live",
+        "editorial",
+        "market",
+        "feature_vectors",
+        "sec_quarantine",
+        "match_outcomes",
+        "calibration",
+        "competition",
+        "predict_invalidated"
+      ],
+      "description": "Logical plane this record belongs to (determines payload schema, retention, and consumer)."
+    },
+    "raw_ref": {
+      "type": "string",
+      "description": "Path into the snapshot store (e.g. S3 or filesystem) for byte-exact replay of the original source document."
+    },
+    "record_type": {
+      "type": "string",
+      "enum": [
+        "team",
+        "player",
+        "venue",
+        "competition",
+        "season",
+        "fixture",
+        "score",
+        "lineup",
+        "article",
+        "commentary",
+        "odds"
+      ],
+      "description": "Entity type within the plane."
+    },
+    "region": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "enum": [
+        "eu",
+        "tr",
+        "americas",
+        "apac",
+        "mea",
+        null
+      ],
+      "description": "Data residency region per Phase 13.24. Determines shard prefix (feeds/region=<r>/...). Null for non-regional records."
+    },
+    "retracted_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "default": null,
+      "description": "ISO-8601 UTC when this record was retracted by a freshness.events.v1 event. Null if not retracted."
+    },
+    "signature": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Optional HMAC-SHA256 signature proving the emitter wrote this record. Reserved for Phase 17 scraper-patcher PR-auto-merge story; not yet implemented."
+    },
+    "signature_alg": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "enum": [
+        "hmac-sha256-v1",
+        null
+      ],
+      "description": "Signature algorithm identifier when signature is present. Null if signature is null. Reserved for Phase 17."
+    },
+    "signing_key_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Key identifier used to sign this record. Null if signature is null. Key material is managed out-of-band (Phase 17). Reserved for Phase 17."
+    },
+    "source_key": {
+      "type": "string",
+      "enum": [
+        "mackolik",
+        "nesine",
+        "tff",
+        "openfootball"
+      ],
+      "description": "The data source that produced this record."
+    },
+    "stable_id": {
+      "type": "string",
+      "description": "Canonical identity key for joins and deduplication. Computed per CONTENT_FRESHNESS §2; immutable once minted."
+    },
+    "tombstone": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": false,
+      "description": "True if this record is a tombstone (deletion marker) from freshness.events.v1. Snapshot builder honors tombstones at watermark-close time."
+    },
+    "trace_context": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null,
+      "description": "Optional W3C Trace Context (Phase 16 ledger #31) for distributed tracing. When present, contains traceparent and optional tracestate per W3C Trace Context standard (https://www.w3.org/TR/trace-context/). Null if not provided. Preserved end-to-end (extractor → writer → reader → consumer).",
+      "additionalProperties": false,
+      "properties": {
+        "traceparent": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+          "description": "W3C Trace Context traceparent: version-trace_id-parent_id-trace_flags (https://www.w3.org/TR/trace-context/#traceparent-header-field-values). Never reconstructed; always passed through from extractor."
+        },
+        "tracestate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional W3C Trace Context tracestate: vendor-specific trace state. Preserved as-is when present."
+        }
+      }
+    },
+    "truncated_at_bytes": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "Byte offset where the payload was truncated due to exceeding cfg.emitter_max_payload_bytes. Null if not truncated. When set, a proof.flag{kind=record_oversize} is raised on the bus."
+    },
+    "upstream_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The source-native ID when available, e.g. fixture ID from mackolik.com. Null if the source does not provide an ID."
+    }
+  }
+}

@@ -6,7 +6,7 @@ Per COMPETITIONS.md §4.1, the resolution priority is:
 """
 
 import pytest
-from ai.swarm.predictor._calibration import (
+from swarm.predictor._calibration import (
     resolve_profile,
     FixtureRef,
     CompetitionRef,

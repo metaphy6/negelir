@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 import pytest
 
-from ai.common.config import Config
+from common.config import Config
 from xops.maint.key_id import derive_operator_key_id
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl.subcommands import verify_key_id

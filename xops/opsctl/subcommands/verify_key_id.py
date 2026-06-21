@@ -54,7 +54,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
 
 def run(args: argparse.Namespace, *, bus: Optional[object] = None) -> int:
     """Recompute key_id and assert it matches the registry."""
-    from ai.common.config import Config  # noqa: PLC0415
+    from common.config import Config  # noqa: PLC0415
     from xops.opsctl._op_signature import key_id_from_bytes, load_operator_key  # noqa: PLC0415
 
     operator_email = str(args.operator_email).strip().lower()

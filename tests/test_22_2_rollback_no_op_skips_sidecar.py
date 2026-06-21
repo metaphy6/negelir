@@ -91,8 +91,8 @@ import common.model
         """Verify that second rewrite after first is a no-op."""
         from xops.codemod.phase22_rewriter import Phase22ImportRewriter
         
-        original_source = """from ai.common.config import cfg
-from ai.common.logger import get_logger
+        original_source = """from common.config import cfg
+from common.logger import get_logger
 """
         
         target_file = tmp_path / "test_module.py"
@@ -120,8 +120,8 @@ from ai.common.logger import get_logger
         from xops.codemod.phase22_rewriter import Phase22ImportRewriter
         
         # Source with imports from multiple packages
-        source = """from ai.common.config import cfg
-from ai.nlp.lexicon_loader import LexiconStore
+        source = """from common.config import cfg
+from nlp.lexicon_loader import LexiconStore
 import model as model
 """
         
@@ -134,7 +134,7 @@ import model as model
         
         # After rewriting common imports
         partial_rewritten = """from common.config import cfg
-from ai.nlp.lexicon_loader import LexiconStore
+from nlp.lexicon_loader import LexiconStore
 import model as model
 """
         

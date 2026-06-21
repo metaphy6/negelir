@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-from ai.common.feeds.writer import FeedWriter
+from common.feeds.writer import FeedWriter
 
 
 class TestPerPlaneCompression:

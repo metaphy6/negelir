@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 
 _DEFAULT_VERBAL_NOUNS_PATH: Path = (
     Path(__file__).parent / "lang_tr" / "morph" / "verbal_nouns.tr.yaml"

@@ -60,13 +60,13 @@ def _patch_distribution(clf, scores):
 
 class TestMinIntentConfConfig:
     def test_config_has_min_intent_conf(self):
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_min_intent_conf")
 
     def test_default_is_0_55(self):
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert cfg.nlp_min_intent_conf == pytest.approx(0.55)

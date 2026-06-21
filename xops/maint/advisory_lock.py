@@ -55,7 +55,7 @@ def _resolve_max_hold_ms() -> int:
     the documented default (5000ms) on any import / attr error.
     """
     try:
-        from ai.common.config import cfg  # type: ignore
+        from common.config import cfg  # type: ignore
         val = int(getattr(cfg, "maint_advisory_lock_max_hold_ms", 5000))
         return val if val >= 0 else 5000
     except Exception:  # noqa: BLE001 — never block release on cfg lookup

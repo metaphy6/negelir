@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from ai.common.feeds import FeedReader, FeedCursor
+from common.feeds import FeedReader, FeedCursor
 
 
 def test_registry_pinned_per_stream_captures_sha():

@@ -13,7 +13,7 @@ Each test documents expected behavior per §11.2 bullets.
 """
 
 import pytest
-from ai.swarm.sdk.gpu_arbiter import GPUArbiter, GPULeaseRequest, LeasePriority
+from swarm.sdk.gpu_arbiter import GPUArbiter, GPULeaseRequest, LeasePriority
 
 
 class TestGPUArbiterMutualExclusion:

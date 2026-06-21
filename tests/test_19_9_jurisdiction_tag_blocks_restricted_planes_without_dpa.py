@@ -4,7 +4,7 @@ import pytest
 
 def test_jurisdiction_tag_blocks_restricted_planes_without_dpa():
     """GDPR/KVKK/LGPD/PIPL tag requires DPA entry before enrichment."""
-    from ai.common.config import cfg
+    from common.config import cfg
     from common.isolation.dpa_validator import validate_dpa_for_jurisdiction
     
     # Mock: validates presence of DPA entry

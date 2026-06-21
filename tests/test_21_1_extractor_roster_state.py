@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from datetime import datetime
 
-from ai.scraper.extractors.transfers_feed import (
+from datasource.scraper.extractors.transfers_feed import (
     TransferExtractor,
     ContractExtractor,
     SuspensionExtractor,

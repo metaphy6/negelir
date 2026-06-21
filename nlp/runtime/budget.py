@@ -3,7 +3,7 @@ from __future__ import annotations
 import signal
 import threading
 
-from ai.common.config import cfg as default_cfg
+from common.config import cfg as default_cfg
 
 try:
     import resource

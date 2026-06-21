@@ -28,10 +28,9 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT))
 
-from ai.swarm.source_watcher.classifier import classify  # noqa: E402
-from ai.swarm.source_watcher.differ import diff_json  # noqa: E402
-from ai.swarm.source_watcher.planner import plan  # noqa: E402
-
+from swarm.source_watcher.classifier import classify  # noqa: E402
+from swarm.source_watcher.differ import diff_json  # noqa: E402
+from swarm.source_watcher.planner import plan  # noqa: E402
 
 # ── 1. Build a realistic v1 fixture page ─────────────────────────────
 

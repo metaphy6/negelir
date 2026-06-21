@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from ai.common.config import Config
+from common.config import Config
 from xops.maint.key_id import derive
 
 _KEY_LEN = 32  # bytes

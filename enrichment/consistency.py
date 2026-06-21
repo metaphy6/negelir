@@ -5,7 +5,7 @@ Validates data integrity across enrichment planes.
 
 from typing import Optional
 
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 log = get_logger("enrichment_consistency")
 

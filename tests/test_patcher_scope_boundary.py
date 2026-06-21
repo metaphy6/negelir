@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai.swarm.source_watcher.classifier import SCHEMA_BREAKING
-from ai.swarm.source_watcher.planner import ACTION_PAGE_HUMAN, _actions_for
-from ai.swarm.source_watcher.agent import SourceWatcherAgent
-from ai.swarm.agents.topics import PROOF_FLAG
+from swarm.source_watcher.classifier import SCHEMA_BREAKING
+from swarm.source_watcher.planner import ACTION_PAGE_HUMAN, _actions_for
+from swarm.source_watcher.agent import SourceWatcherAgent
+from swarm.agents.topics import PROOF_FLAG
 
 
 def _patcher_scope_registry() -> dict[str, str]:

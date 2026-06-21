@@ -3,8 +3,8 @@
 import json
 import pytest
 from pathlib import Path
-from ai.common.schemas.records import Score, Schedule, Market, Lineup, RECORD_TYPES
-from ai.common.feeds.schema_generator import (
+from common.schemas.records import Score, Schedule, Market, Lineup, RECORD_TYPES
+from common.feeds.schema_generator import (
     typeddict_to_pyarrow_schema,
     validate_schema_consistency,
     compute_schema_hash,

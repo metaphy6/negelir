@@ -8,8 +8,8 @@ import tempfile
 import numpy as np
 import pytest
 
-from ai.common.config import Config
-from ai.common.constants import FEATURE_COLUMNS, N_FEATURES
+from common.config import Config
+from common.constants import FEATURE_COLUMNS, N_FEATURES
 from model.inference import GBDTInference, ModelShim
 
 

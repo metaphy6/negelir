@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import hashlib
 
-from ai.common.config import cfg
-from ai.swarm.sdk import schemas as bus_schemas
-from ai.swarm.agents.nlp import (
+from common.config import cfg
+from swarm.sdk import schemas as bus_schemas
+from swarm.agents.nlp import (
     _canonical_answer_body,
     _compute_qa_answer_envelope_signature,
     _detect_conversation_correction,
@@ -16,7 +16,7 @@ from ai.swarm.agents.nlp import (
     _make_qa_answer_payload,
     downgrade_qa_answer_v1,
 )
-from ai.swarm.sdk.types import Topic
+from swarm.sdk.types import Topic
 
 
 def _minimal_citation() -> dict[str, object]:

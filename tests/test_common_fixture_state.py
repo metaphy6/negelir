@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ai.common.fixture_state import FixtureState, SCHEMA_VERSION
+from common.fixture_state import FixtureState, SCHEMA_VERSION
 
 
 def test_fixture_state_enum_values_are_exact_and_ordered() -> None:

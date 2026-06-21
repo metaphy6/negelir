@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from ai.swarm.sdk import Singleflight
-from ai.swarm.sdk.singleflight import _Flight
+from swarm.sdk import Singleflight
+from swarm.sdk.singleflight import _Flight
 
 
 def test_singleflight_collapses_concurrent_identical_queries():

@@ -1327,8 +1327,8 @@ phase22.preflight: ## Phase 22.1 bullet 3 — Verify Phase 18 pre-flight checks 
 	@$(XOPS)/phase22.py preflight
 
 .PHONY: phase22.codemod
-phase22.codemod: ## Phase 22.2 bullet 1 — Apply or preview import rewrites for one package (PACKAGE=<pkg>, optional DRY_RUN=1)
-	@PACKAGE=$(PACKAGE) DRY_RUN=$(DRY_RUN) $(XOPS)/phase22.py codemod
+phase22.codemod: ## Phase 22.2 bullet 1 — Apply or preview import rewrites for one package (PACKAGE=<pkg>, optional DRY_RUN=1, optional CODEMOD_FLAGS=--include-non-ai-callers)
+	@PACKAGE=$(PACKAGE) DRY_RUN=$(DRY_RUN) $(XOPS)/phase22.py codemod $(CODEMOD_FLAGS)
 
 .PHONY: phase22.codemod.all
 phase22.codemod.all: ## Phase 22.2 bullet 1 — Apply or preview import rewrites for all packages (optional DRY_RUN=1)

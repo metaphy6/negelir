@@ -5,8 +5,8 @@ normalize Turkish chars; enforce 200-char limit.
 """
 
 import re
-from ai.common.constants import MAX_INPUT_LENGTH
-from ai.common.logger import get_logger
+from common.constants import MAX_INPUT_LENGTH
+from common.logger import get_logger
 
 log = get_logger("tqu.sanitizer")
 

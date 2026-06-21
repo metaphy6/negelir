@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ai.common.config import Config
+from common.config import Config
 from xops.maint.key_id import DOMAIN_SEPARATOR, derive
 from xops.opsctl._op_signature import bootstrap_key, key_id_from_bytes
 

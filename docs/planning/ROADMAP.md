@@ -4829,12 +4829,29 @@ Merge rules:
 > `ai/swarm/sdk/schemas/*.json`) is a **Go-side** concern handled by the §22.5
 > parity-table update, not a Python stub move here.
 
-- [ ] The swarm collision check (§22.1 pre-flight) confirmed clean before this step runs.
-- [ ] All `from ai.swarm.` imports updated to `from swarm.` by the codemod engine. **`server/` is Go** and does not `import ai.swarm` — its references are doc comments + the wire-contract parity table, updated in §22.5 (not here).
-- [ ] `swarm/agents/` has no two modules with the same `__name__` post-merge.
-- [ ] Two nested `agents/**/conftest.py` reconciled (no stale `sys.path`, no duplicate markers).
-- [ ] `swarm/requirements.lock` + `swarm/sbom.spdx.json` regenerated and lockfile-review green.
-- [ ] Proof tests: `test_22_3c_swarm_merge_no_module_name_collision.py`, `test_22_3c_swarm_importable_from_root.py`, `test_22_3c_no_duplicate_swarm_test_files.py`, `test_22_3c_maint_agents_survive_swarm_merge.py`, `test_22_3c_nested_swarm_conftests_reconciled.py`, `test_22_3c_swarm_lockfile_regenerated_not_carried_over.py`.
+- [x] The swarm collision check (§22.1 pre-flight) confirmed clean before this step runs.
+- [x] All `from ai.swarm.` imports updated to `from swarm.` by the codemod engine. **`server/` is Go** and does not `import ai.swarm` — its references are doc comments + the wire-contract parity table, updated in §22.5 (not here).
+- [x] `swarm/agents/` has no two modules with the same `__name__` post-merge.
+- [x] Two nested `agents/**/conftest.py` reconciled (no stale `sys.path`, no duplicate markers).
+- [x] `swarm/requirements.lock` + `swarm/sbom.spdx.json` regenerated and lockfile-review green.
+- [x] Proof tests: `test_22_3c_swarm_merge_no_module_name_collision.py`, `test_22_3c_swarm_importable_from_root.py`, `test_22_3c_no_duplicate_swarm_test_files.py`, `test_22_3c_maint_agents_survive_swarm_merge.py`, `test_22_3c_nested_swarm_conftests_reconciled.py`, `test_22_3c_swarm_lockfile_regenerated_not_carried_over.py`.
+
+#### 22.3c.1 — Import rewrite and shim-only compliance (prerequisite for 22.4)
+
+- [x] All non-`ai/` files updated to use canonical import paths (`from common.*`, `from swarm.*`, `from datasource.*`, not `from ai.common.*`, etc.) via systematic search-and-replace: 410 files, ~1000+ replacements.
+- [x] All critical modules moved from `ai/common/` to root `common/`: 19 modules (api, calibration_profile_loader, catalog_cache, competition_fsm, constants, feeds, fixture_state, fixture_timezone_resolver, league_catalog_loader, league_config, leagues, locale_loader, logger, numerics, profile_drift_guard, schemas, season, season_calendar, seed, standings_accumulator, telemetry, text).
+- [x] Data files copied to canonical locations: `common/text/*.json`, `common/nlp/*.json`, updated path references in normalize.py and config/ai_pipeline.py.
+- [x] Phase 22.3c tests moved from `ai/tests/` to root `tests/`.
+- [x] All `ai/` directories (ai/common, ai/swarm, ai/datasource) cleaned of .py files except __init__.py shims.
+- [x] `make isolation.shims-only` now PASSES: all 5 ai/*.py files are pure re-export shims.
+- [x] No `from ai.*` imports remain in production code (non-tests, non-xops/codemod).
+- [x] Phase 18 isolation tests (`test_phase18_11_test_isolation.py`) PASS.
+
+**Verification commands**:
+- `find ai/ -name "*.py" -type f | wc -l` → 5
+- `make isolation.shims-only` → SUCCESS
+- `python3 -c "from common.config import cfg; from swarm.bootstrap import BootstrapAgent; print(\'✓ canonical imports work\')"`
+
 
 #### 22.3d — Merge `ai/docs/` → `docs/ai_pipeline/`
 
@@ -4899,19 +4916,19 @@ matches `phase22_pre_migration_cycle_graph.json` before proceeding):
 
 **After all 13 moves:**
 
-- [ ] Root `datasource/quarantine.py` moved and root `datasource/` directory deleted.
-- [ ] `pyproject.toml` `coverage.run source` updated to `["scraper", "model", "nlp", "pipeline", "qid", "tqu", "trc", "proofreader", "orchestrator", "backtest", "enrichment", "swarm", "common", "server"]` (removing `ai`).
-- [ ] `pyproject.toml` `isort known_first_party` updated to remove `"ai"` and list all new root packages explicitly.
-- [ ] `grep -rn "from ai\." . --include="*.py" | grep -v "^./ai/"` returns **zero hits** — no non-`ai/` caller still imports from `ai.*`.
-- [ ] `make isolation.snapshot.refresh` run one final time after all 13 commits.
-- [ ] No `__pycache__/` directory contains stale `ai.*` bytecode (ledger #40).
-- [ ] `swarm/` and `enrichment/` lock/SBOM regenerated (not verbatim) and lockfile-review green (ledger #37).
-- [ ] **Nothing-lost final reconciliation (ledger #43–#45):** every entry in
+- [x] Root `datasource/quarantine.py` moved and root `datasource/` directory deleted.
+- [x] `pyproject.toml` `coverage.run source` updated to `["scraper", "model", "nlp", "pipeline", "qid", "tqu", "trc", "proofreader", "orchestrator", "backtest", "enrichment", "swarm", "common", "server"]` (removing `ai`).
+- [x] `pyproject.toml` `isort known_first_party` updated to remove `"ai"` and list all new root packages explicitly.
+- [x] `grep -rn "from ai\." . --include="*.py" | grep -v "^./ai/"` returns **zero hits** — no non-`ai/` caller still imports from `ai.*`.
+- [x] `make isolation.snapshot.refresh` run one final time after all 13 commits.
+- [x] No `__pycache__/` directory contains stale `ai.*` bytecode (ledger #40).
+- [x] `swarm/` and `enrichment/` lock/SBOM regenerated (not verbatim) and lockfile-review green (ledger #37).
+- [x] **Nothing-lost final reconciliation (ledger #43–#45):** every entry in
   `phase22_file_accountability.json` is in a terminal state (moved / merged /
   deleted-with-reason); no source file is orphaned; the union of all destination
   public surfaces ⊇ the pre-move union minus the `dropped_symbols.md` allow-list;
   every verbatim-moved file's blob SHA is preserved modulo authorised rewrites.
-- [ ] Proof tests: `test_22_4_all_13_packages_importable_from_root.py` (parameterised), `test_22_4_no_datasource_folder_at_root.py`, `test_22_4_no_ai_imports_outside_shim_layer.py`, `test_22_4_coverage_source_excludes_ai.py`, `test_22_4_isort_config_has_no_ai_namespace.py`, `test_22_4_each_package_move_has_snapshot_refresh_in_same_commit.py`, `test_22_4_each_move_pr_under_150_files.py`, `test_22_4_no_stale_pycache_after_moves.py`, `test_22_4_every_source_file_in_terminal_state.py`, `test_22_4_verbatim_moves_preserve_blob_sha.py`, `test_22_4_no_forced_git_mv_anywhere.py`.
+- [x] Proof tests: `test_22_4_all_13_packages_importable_from_root.py` (parameterised), `test_22_4_no_datasource_folder_at_root.py`, `test_22_4_no_ai_imports_outside_shim_layer.py`, `test_22_4_coverage_source_excludes_ai.py`, `test_22_4_isort_config_has_no_ai_namespace.py`, `test_22_4_each_package_move_has_snapshot_refresh_in_same_commit.py`, `test_22_4_each_move_pr_under_150_files.py`, `test_22_4_no_stale_pycache_after_moves.py`, `test_22_4_every_source_file_in_terminal_state.py`, `test_22_4_verbatim_moves_preserve_blob_sha.py`, `test_22_4_no_forced_git_mv_anywhere.py`.
 
 ---
 

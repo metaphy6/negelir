@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
-from ai.common.config import Config
+from common.config import Config
 
 EXIT_OK = 0
 EXIT_INCOMPLETE = 9

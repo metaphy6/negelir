@@ -46,7 +46,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from common.security.patterns import PII_PATTERNS
-from ai.common.text.turkish import suffix_harmony_ok
+from common.text.turkish import suffix_harmony_ok
 
 from nlp.offensive import contains_offensive_phrase
 from nlp.tr_output_grammar_validator import (
@@ -55,7 +55,7 @@ from nlp.tr_output_grammar_validator import (
 )
 
 if TYPE_CHECKING:
-    from ai.common.config import Config
+    from common.config import Config
 
 
 # English word blocklist (gate 2) — mid-sentence English detection.
@@ -221,7 +221,7 @@ def proofread_answer(
         block_reason (if any), alert_severity, and redacted_pii flag.
 
     Example:
-        >>> from ai.common.config import Config
+        >>> from common.config import Config
         >>> cfg = Config()
         >>> # Non-predict intent (no citation check):
         >>> result = proofread_answer(
@@ -509,7 +509,7 @@ def proofread_answer_safe(
         nlp.alert.v1{kind=nlp_proofreader_failed, severity=error} when True.
 
     Example:
-        >>> from ai.common.config import Config
+        >>> from common.config import Config
         >>> cfg = Config()
         >>> result = proofread_answer_safe(
         ...     "Galatasaray bugün maç oynuyor.",

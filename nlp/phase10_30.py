@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from ai.common.config import cfg
-from ai.common.text.turkish import parse_number_word
+from common.config import cfg
+from common.text.turkish import parse_number_word
 
 _LANG_TR_DIR = Path(__file__).parent / "lang_tr"
 _META_QUESTIONS_PATH = _LANG_TR_DIR / "meta_questions.tr.yaml"

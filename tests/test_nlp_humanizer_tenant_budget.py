@@ -1,7 +1,7 @@
 """Phase 10 §10.23.1 — humanizer per-tenant budget tests."""
 from __future__ import annotations
 
-from ai.common.config import Config
+from common.config import Config
 from nlp.humanizer import (
     HUMANIZER_POD_BUDGET_EXCEEDED_REASON,
     HUMANIZER_TENANT_BUDGET_EXCEEDED_REASON,

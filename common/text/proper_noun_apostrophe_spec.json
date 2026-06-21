@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "schema_version": 1,
+    "source": "phase10-10.32.5",
+    "notes": "Shared canonical apostrophe insertion spec for Phase 10 §10.32.5."
+  },
+  "suffix_families": [
+    {
+      "name": "genitive",
+      "forms": ["nın", "nin", "nun", "nün", "ın", "in", "un", "ün"]
+    },
+    {
+      "name": "dative",
+      "forms": ["ya", "ye", "a", "e"]
+    },
+    {
+      "name": "accusative",
+      "forms": ["yı", "yi", "yu", "yü", "ı", "i", "u", "ü"]
+    },
+    {
+      "name": "locative",
+      "forms": ["da", "de", "ta", "te"]
+    },
+    {
+      "name": "ablative",
+      "forms": ["dan", "den", "tan", "ten"]
+    },
+    {
+      "name": "plural",
+      "forms": ["lar", "ler"]
+    },
+    {
+      "name": "person_marker_1sg",
+      "forms": ["ım", "im", "um", "üm"]
+    }
+  ],
+  "internal_apostrophe_allowlist": [
+    "akhisar'spor",
+    "d'or",
+    "fenerbahçe'spor"
+  ]
+}

@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Literal
 
-from ai.common.league_catalog_loader import load_league_catalog
+from common.league_catalog_loader import load_league_catalog
 from xops.mock.sources import all_keys as get_all_source_keys
 
 

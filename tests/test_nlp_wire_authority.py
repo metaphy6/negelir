@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-import ai.swarm.sdk.schemas as bus_schemas
-from ai.swarm.sdk.wire_contracts import (
+import swarm.sdk.schemas as bus_schemas
+from swarm.sdk.wire_contracts import (
     NLP_ALERT_V1_ALLOWED_PRODUCERS,
     NLP_EVENT_V1_ALLOWED_PRODUCERS,
     NLP_GOSSIP_V1_ALLOWED_PRODUCERS,
@@ -701,7 +701,7 @@ class TestPredictSchemaQaCorrelationIdParity:
 
     def test_predict_approved_v1_dataclass_roundtrip_with_qa_correlation_id(self):
         """PredictApproved dataclass roundtrip with qa_correlation_id."""
-        from ai.swarm.agents.payloads import PredictApproved
+        from swarm.agents.payloads import PredictApproved
 
         data = {
             "request_id": "req-001",
@@ -728,7 +728,7 @@ class TestPredictSchemaQaCorrelationIdParity:
 
     def test_predict_approved_v1_dataclass_roundtrip_with_calibration_state_horizon(self):
         """PredictApproved dataclass roundtrip with calibration_state_horizon."""
-        from ai.swarm.agents.payloads import PredictApproved
+        from swarm.agents.payloads import PredictApproved
 
         data = {
             "request_id": "req-001",
@@ -752,7 +752,7 @@ class TestPredictSchemaQaCorrelationIdParity:
 
     def test_predict_approved_v1_dataclass_roundtrip_with_both_calibration_state_horizon(self):
         """PredictApproved dataclass accepts the live/prematch/both horizon marker."""
-        from ai.swarm.agents.payloads import PredictApproved
+        from swarm.agents.payloads import PredictApproved
 
         data = {
             "request_id": "req-001",
@@ -776,7 +776,7 @@ class TestPredictSchemaQaCorrelationIdParity:
 
     def test_predict_approved_v1_dataclass_defaults_schema_version_1(self):
         """PredictApproved dataclass defaults to schema_version=1 for backward compat."""
-        from ai.swarm.agents.payloads import PredictApproved
+        from swarm.agents.payloads import PredictApproved
 
         # Legacy payload without schema_version / qa_correlation_id
         data = {

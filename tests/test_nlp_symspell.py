@@ -285,7 +285,7 @@ class TestRealisticAliases:
 
 class TestConfigIntegration:
     def test_nlp_typo_max_edit_distance_default(self):
-        from ai.common.config import cfg
+        from common.config import cfg
         assert cfg.nlp_typo_max_edit_distance == 2
 
     def test_nlp_typo_max_edit_distance_in_env_example(self):
@@ -296,7 +296,7 @@ class TestConfigIntegration:
     def test_config_rejects_invalid_edit_distance(self):
         """Boot validator rejects nlp_typo_max_edit_distance outside {1, 2}."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
         orig = os.environ.get("NEGELIR_NLP_TYPO_MAX_EDIT_DISTANCE")
         os.environ["NEGELIR_NLP_TYPO_MAX_EDIT_DISTANCE"] = "3"
         try:
@@ -310,7 +310,7 @@ class TestConfigIntegration:
                 os.environ["NEGELIR_NLP_TYPO_MAX_EDIT_DISTANCE"] = orig
 
     def test_nlp_typo_max_lookups_per_query_default(self):
-        from ai.common.config import cfg
+        from common.config import cfg
         assert cfg.nlp_typo_max_lookups_per_query == 8
 
     def test_nlp_typo_max_lookups_per_query_in_env_example(self):
@@ -321,7 +321,7 @@ class TestConfigIntegration:
     def test_config_rejects_invalid_max_lookups(self):
         """Boot validator rejects nlp_typo_max_lookups_per_query < 1."""
         import os
-        from ai.common.config import Config
+        from common.config import Config
         orig = os.environ.get("NEGELIR_NLP_TYPO_MAX_LOOKUPS_PER_QUERY")
         os.environ["NEGELIR_NLP_TYPO_MAX_LOOKUPS_PER_QUERY"] = "0"
         try:

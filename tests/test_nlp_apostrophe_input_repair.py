@@ -1,7 +1,7 @@
 """Tests for Phase 10 §10.32.5 input-side apostrophe repair."""
 from __future__ import annotations
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 from nlp.apostrophe_proper_noun import (
     ApostropheRepair,
     load_proper_noun_apostrophe_spec,

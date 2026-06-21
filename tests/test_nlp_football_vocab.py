@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from ai.common.config import cfg
+from common.config import cfg
 
 # Make sure ai/ and repo root are importable when tests run from REPO_ROOT.
 _AI_DIR = Path(__file__).parent.parent

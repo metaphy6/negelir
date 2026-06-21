@@ -10,8 +10,8 @@ import time
 
 import requests
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger, section_banner
+from common.config import cfg
+from common.logger import get_logger, section_banner
 from scraper.parsers import parse_match_page, ParsedMatch
 
 log = get_logger("scraper.engine")

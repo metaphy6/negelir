@@ -85,7 +85,7 @@ class TestIntentAccuracyGate:
 
     def test_config_key_exists(self):
         """Verify cfg.nlp_intent_accuracy_floor exists."""
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
         assert hasattr(cfg, "nlp_intent_accuracy_floor")
         assert cfg.nlp_intent_accuracy_floor == pytest.approx(0.92)
@@ -96,7 +96,7 @@ class TestIntentAccuracyGate:
         corpus_by_tag: Dict[str, List[Dict[str, Any]]],
     ):
         """Intent accuracy ≥ 0.92 on clean ∪ no_diacritics ∪ typos."""
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
 
         # Collect the core slice: clean ∪ no_diacritics ∪ typo
@@ -173,7 +173,7 @@ class TestIntentAccuracyGate:
 
     def test_voice_eval_threshold_defaults(self) -> None:
         """The voice evaluation slice thresholds must be present and default to the Phase 10 policy."""
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert hasattr(cfg, "nlp_voice_eval_intent_accuracy_floor")
@@ -187,7 +187,7 @@ class TestIntentAccuracyGate:
         corpus_by_tag: Dict[str, List[Dict[str, Any]]],
     ):
         """Intent accuracy ≥ cfg.nlp_intent_accuracy_floor on code-switch slice."""
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         code_switch_entries = corpus_by_tag.get("code_switch", [])
@@ -222,7 +222,7 @@ class TestEntityF1Gate:
 
     def test_config_key_exists(self):
         """Verify cfg.nlp_entity_f1_floor exists."""
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
         assert hasattr(cfg, "nlp_entity_f1_floor")
         assert cfg.nlp_entity_f1_floor == pytest.approx(0.90)
@@ -233,7 +233,7 @@ class TestEntityF1Gate:
         corpus_by_tag: Dict[str, List[Dict[str, Any]]],
     ):
         """Entity F1 ≥ 0.90 on clean ∪ no_diacritics ∪ typos."""
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
 
         core_tags = {"clean", "no_diacritics", "typo"}
@@ -284,7 +284,7 @@ class TestDidYouMeanGate:
         golden_corpus: List[Dict[str, Any]],
     ):
         """When intent confidence < abstention_floor, must return IntentAbstention."""
-        from ai.common.config import Config
+        from common.config import Config
         cfg = Config()
 
         # In a real run, we'd find entries where the classifier is uncertain.

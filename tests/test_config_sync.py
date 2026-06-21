@@ -197,7 +197,7 @@ def test_every_documented_env_var_is_consumed() -> None:
 def test_ai_config_validate_passes_with_defaults() -> None:
     """`Config.validate()` must accept the shipped defaults with zero issues."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     issues = Config().validate()
@@ -207,7 +207,7 @@ def test_ai_config_validate_passes_with_defaults() -> None:
 def test_ai_config_strict_validate_raises_on_bad_value(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strict validation must raise on out-of-range values."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     monkeypatch.setenv("NEGELIR_TRAINING_TEST_SPLIT", "1.5")
@@ -218,7 +218,7 @@ def test_ai_config_strict_validate_raises_on_bad_value(monkeypatch: pytest.Monke
 def test_league_config_pickle_roundtrip() -> None:
     """LeagueConfig must survive pickle (model bundles ride with config)."""
     _ensure_ai_path_priority()
-    import ai.common.league_config
+    import common.league_config
     get_league_config = ai.common.league_config.get_league_config
 
     cfg = get_league_config("tr_super_lig")
@@ -266,7 +266,7 @@ def _shared_marked_keys() -> set[str]:
 def test_strict_mode_rejects_unknown_negelir_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Phase 1.1: NEGELIR_STRICT must surface unknown reserved-prefix keys."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     monkeypatch.setenv("NEGELIR_COMMON_STRICT", "1")
@@ -279,7 +279,7 @@ def test_strict_mode_rejects_unknown_negelir_key(monkeypatch: pytest.MonkeyPatch
 def test_strict_mode_accepts_known_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strict mode must NOT trip on a legitimate, declared env key."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     monkeypatch.setenv("NEGELIR_COMMON_STRICT", "1")
@@ -293,7 +293,7 @@ def test_strict_mode_accepts_known_keys(monkeypatch: pytest.MonkeyPatch) -> None
 def test_validate_rejects_bad_url_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
     """Phase 1.1: server_url must use http/https."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     monkeypatch.setenv("SERVER_URL", "ftp://nope")
@@ -304,7 +304,7 @@ def test_validate_rejects_bad_url_scheme(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_validate_rejects_latest_source_watcher_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """Phase 8.4: summarizer model ids must be pinned, never *-latest."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_ENABLED", "true")
@@ -319,7 +319,7 @@ def test_validate_rejects_summarizer_daily_cap_below_per_call(
 ) -> None:
     """Phase 8.4: daily token cap must be >= per-call cap."""
     _ensure_ai_path_priority()
-    import ai.common.config
+    import common.config
     Config = ai.common.config.Config
 
     monkeypatch.setenv("NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_CALL", "4096")

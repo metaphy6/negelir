@@ -22,9 +22,9 @@ import json
 import sys
 from typing import Any, Iterable, Optional
 
-from ai.common.config import Config
-from ai.swarm.sdk.bus import InMemoryBus, RedisStreamsBus
-from ai.swarm.sdk.types import Message, Topic
+from common.config import Config
+from swarm.sdk.bus import InMemoryBus, RedisStreamsBus
+from swarm.sdk.types import Message, Topic
 
 from .._exit_codes import ExitCode
 

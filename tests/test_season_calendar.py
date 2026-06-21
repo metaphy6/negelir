@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import date
-from ai.common.season_calendar import SeasonCalendar, SeasonCalendarRegistry
+from common.season_calendar import SeasonCalendar, SeasonCalendarRegistry
 
 
 class TestSeasonCalendar:

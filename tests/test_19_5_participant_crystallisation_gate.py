@@ -19,7 +19,7 @@ class TestParticipantCrystallisationGateBlocking:
 
     def test_gate_type_schema(self) -> None:
         """Verify ParticipantCrystallisationGate TypedDict exists and has correct fields."""
-        from ai.common.schemas.competition import ParticipantCrystallisationGate
+        from common.schemas.competition import ParticipantCrystallisationGate
         
         # Valid gate structure
         gate: ParticipantCrystallisationGate = {
@@ -31,7 +31,7 @@ class TestParticipantCrystallisationGateBlocking:
 
     def test_gate_in_competition_payload(self) -> None:
         """Verify that CompetitionPayload includes participant_crystallisation_gate field."""
-        from ai.common.schemas.competition import CompetitionPayload
+        from common.schemas.competition import CompetitionPayload
         
         # Create a minimal competition payload with wc_qualifier format
         payload: CompetitionPayload = {
@@ -64,7 +64,7 @@ class TestGateFieldStructure:
 
     def test_gate_type_values_valid(self) -> None:
         """Gate.type must be either 'qualifier_legs_resolved' or 'draw_held'."""
-        from ai.common.schemas.competition import ParticipantCrystallisationGate
+        from common.schemas.competition import ParticipantCrystallisationGate
         
         # Valid types
         gate_qlr: ParticipantCrystallisationGate = {
@@ -81,7 +81,7 @@ class TestGateFieldStructure:
 
     def test_continental_championship_with_gate(self) -> None:
         """Test a continental_championship payload with crystallisation gate."""
-        from ai.common.schemas.competition import CompetitionPayload
+        from common.schemas.competition import CompetitionPayload
         
         payload: CompetitionPayload = {
             "competition_id": "euro_2028",

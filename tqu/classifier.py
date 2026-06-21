@@ -5,9 +5,9 @@ Per roadmap §5.1: regex + keyword scoring, zero neural network.
 
 from dataclasses import dataclass
 
-from ai.common.constants import FOOTBALL_KEYWORDS, TEAM_MAP
-from ai.common.logger import get_logger, section_banner
-from ai.common.telemetry import get_sink
+from common.constants import FOOTBALL_KEYWORDS, TEAM_MAP
+from common.logger import get_logger, section_banner
+from common.telemetry import get_sink
 from tqu.sanitizer import sanitize
 from tqu.patterns import INTENT_PATTERNS, IntentPattern
 from tqu.entities import extract_entities, ExtractedEntities

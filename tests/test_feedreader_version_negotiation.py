@@ -24,7 +24,7 @@ import json
 import pytest
 from pathlib import Path
 
-from ai.common.feeds.reader import FeedReader, FeedCursor
+from common.feeds.reader import FeedReader, FeedCursor
 
 
 class TestFeedReaderVersionNegotiation:

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 # Add xops to path for linter import
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "xops"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "xops"))
 
 from lint.calibration_coverage import (
     lint_calibration_coverage,

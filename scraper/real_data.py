@@ -23,16 +23,16 @@ from datetime import datetime
 
 import requests
 
-from ai.common.config import cfg
-from ai.common.league_config import get_league_config
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.league_config import get_league_config
+from common.logger import get_logger
 
 log = get_logger("scraper.real_data")
 
 # ── Team name normalisation ─────────────────────────────
 # Built from locale_tr.yaml source_aliases + historical_source_aliases
 # (single source of truth in locale config).
-from ai.common.constants import SOURCE_ALIAS_MAP
+from common.constants import SOURCE_ALIAS_MAP
 
 TEAM_NAME_MAP = dict(SOURCE_ALIAS_MAP)
 

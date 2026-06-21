@@ -15,9 +15,9 @@ from datetime import datetime
 from typing import Optional, Any, Dict, List
 from urllib.parse import urlparse
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
-from ai.common.schemas.records import InjuryPayload, AvailabilityPayload
+from common.config import cfg
+from common.logger import get_logger
+from common.schemas.records import InjuryPayload, AvailabilityPayload
 
 log = get_logger("scraper.extractors.injury_watch")
 

@@ -20,9 +20,9 @@ from typing import Any
 
 import pytest
 
-from ai.common.config import cfg
-from ai.scraper.extractors.weather_prov import WeatherExtractor, ExtractionError
-from ai.common.schemas.records import (
+from common.config import cfg
+from datasource.scraper.extractors.weather_prov import WeatherExtractor, ExtractionError
+from common.schemas.records import (
     WeatherForecastPayload,
     WeatherActualPayload,
     PitchConditionPayload,

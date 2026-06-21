@@ -16,19 +16,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import pytest
 
-from ai.scraper.differs.transfers_feed.confidence_gate import apply_gate
+from datasource.scraper.differs.transfers_feed.confidence_gate import apply_gate
 from model.enrichment_features import (
     compute_squad_strength_delta,
     compute_cohesion_penalty,
     compute_departure_shock,
 )
-from ai.scraper.transfer_deduplication import deduplicate_transfers
-from ai.scraper.suspension_lifecycle import (
+from datasource.scraper.transfer_deduplication import deduplicate_transfers
+from datasource.scraper.suspension_lifecycle import (
     should_expire,
     decrement_matches_remaining,
 )
-from ai.common.config import Config
-from ai.common.schemas.records import TransferPayload
+from common.config import Config
+from common.schemas.records import TransferPayload
 
 
 @pytest.fixture

@@ -12,7 +12,7 @@ from time import monotonic
 from threading import Lock
 from typing import Callable, Deque, Dict, Generic, Mapping, TypeVar
 
-from ai.common.config import cfg
+from common.config import cfg
 
 _ALLOWED_FAIRNESS_KEYS = ("tenant_id", "account_id", "ip_bucket")
 _TENANT_CLASS_ENUM = tuple(cfg.nlp_tenant_class_enum)

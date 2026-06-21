@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from ai.common.schemas.competition import (
+from common.schemas.competition import (
     ConfoederationGroup,
     InterConfederationPath,
     QualificationRound,

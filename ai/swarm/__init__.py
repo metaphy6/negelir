@@ -1,6 +1,4 @@
-"""ai/swarm — Phase 3 agent platform (placeholder).
+"""Shim re-export layer for swarm module.
 
-This package is the home for the swarm SDK and individual agents. Today
-it only exposes the ``source_watcher`` skeleton; the bus interface,
-registry, supervisor, and base agent contract land in Phase 3.
+Phase 22.4: ai/swarm is a backwards-compat shim. Import from swarm directly.
 """

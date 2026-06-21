@@ -3,7 +3,7 @@
 import pytest
 import time
 from dataclasses import dataclass
-from ai.datasource.t3_resource_manager import T3BudgetState, T3ResourceManager, T3LazyLoader
+from enrichment.t3_resource_manager import T3BudgetState, T3ResourceManager, T3LazyLoader
 
 
 class MockConfig:

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 log = get_logger("model.outcomes")
 

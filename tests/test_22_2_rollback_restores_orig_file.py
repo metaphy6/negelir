@@ -25,8 +25,8 @@ class TestRollbackRestoresOrigFile:
         """Verify that rewriting a file creates a .phase22.orig sidecar."""
         from xops.codemod.phase22_rewriter import Phase22ImportRewriter
         
-        source_with_ai = """from ai.common.config import cfg
-from ai.common.logger import get_logger
+        source_with_ai = """from common.config import cfg
+from common.logger import get_logger
 """
         
         target_file = tmp_path / "test_module.py"
@@ -50,7 +50,7 @@ from ai.common.logger import get_logger
         """Verify that rollback restores the file from sidecar."""
         from xops.codemod.phase22_rewriter import Phase22ImportRewriter
         
-        source_with_ai = """from ai.common.config import cfg
+        source_with_ai = """from common.config import cfg
 """
         source_rewritten = """from common.config import cfg
 """

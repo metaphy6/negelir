@@ -4,7 +4,7 @@ import yaml
 from pathlib import Path
 from typing import NamedTuple
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 
 _SCHEMA_VERSION = 1
 _DEFAULT_POSTPOSITION_STACK_PATH: Path = (

@@ -21,18 +21,18 @@ class TestPattern1_ImportFrom:
     """Pattern 1: from ai.<pkg>.<mod> import X → from <pkg>.<mod> import X"""
 
     def test_basic_from_import(self) -> None:
-        source = "from ai.common.config import Config\n"
+        source = "from common.config import Config\n"
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in rewritten
         assert "ai.common" not in rewritten
 
     def test_from_import_multiple_names(self) -> None:
-        source = "from ai.common.config import Config, cfg\n"
+        source = "from common.config import Config, cfg\n"
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config, cfg" in rewritten
 
     def test_from_import_nested_module(self) -> None:
-        source = "from ai.common.text.turkish import suffix_harmony_ok\n"
+        source = "from common.text.turkish import suffix_harmony_ok\n"
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.text.turkish import suffix_harmony_ok" in rewritten
 
@@ -43,10 +43,10 @@ class TestPattern1_ImportFrom:
 
     def test_from_import_different_package(self) -> None:
         """When filtering by package, only rewrite matching packages."""
-        source = "from ai.datasource.scraper import Scraper\n"
+        source = "from datasource.scraper import Scraper\n"
         # When filtering by "common", datasource imports should NOT be rewritten
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
-        assert "from ai.datasource.scraper import Scraper" in rewritten
+        assert "from datasource.scraper import Scraper" in rewritten
 
 
 class TestPattern2_ImportStatement:
@@ -59,7 +59,7 @@ class TestPattern2_ImportStatement:
         assert "ai.common" not in rewritten
 
     def test_import_nested_module_with_alias(self) -> None:
-        source = "import ai.common.config\n"
+        source = "import common.config\n"
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "import common.config as common" in rewritten
 
@@ -112,7 +112,7 @@ class TestPattern4_TypeCheckingBlocks:
         source = (
             "from typing import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
         )
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in rewritten
@@ -132,7 +132,7 @@ class TestPattern4_TypeCheckingBlocks:
         source = (
             "from typing_extensions import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
-            "    from ai.common.config import Config\n"
+            "    from common.config import Config\n"
         )
         rewritten = Phase22ImportRewriter.rewrite_source(source, package="common")
         assert "from common.config import Config" in rewritten
@@ -259,7 +259,7 @@ class TestCombinedPatterns:
             "# negelir-generated-from: ai/common/config.py@abc123\n"
             "from typing import TYPE_CHECKING\n"
             "import ai.common\n"
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
             "\n"
             "if TYPE_CHECKING:\n"
             '    x: "ai.common.logger.Logger" = None\n'

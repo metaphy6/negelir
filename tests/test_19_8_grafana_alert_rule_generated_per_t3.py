@@ -19,7 +19,7 @@ def test_grafana_alert_rule_generated_per_t3():
 def test_alert_rule_references_staleness_threshold():
     """Alert rule uses configured staleness threshold."""
     from xops.provisioning.grafana_provisioner import GrafanaProvisioner
-    from ai.common.config import cfg
+    from common.config import cfg
     
     provisioner = GrafanaProvisioner()
     rule = provisioner.generate_single_t3_alert_rule("br_serie_a")

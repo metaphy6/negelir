@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ai.common.schemas.records import RECORD_TYPES
+from common.schemas.records import RECORD_TYPES
 
 
 class TestEnrichmentRecordTypesRegistration:
@@ -131,7 +131,7 @@ class TestRecordTypesTypeAnnotations:
     
     def test_transfer_type_has_expected_fields(self):
         """Verify TransferPayload has the expected TypedDict fields."""
-        from ai.common.schemas.records import TransferPayload
+        from common.schemas.records import TransferPayload
         # TypedDict fields are accessible via __annotations__
         assert hasattr(TransferPayload, '__annotations__')
         annotations = TransferPayload.__annotations__

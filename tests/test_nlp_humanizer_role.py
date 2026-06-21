@@ -59,7 +59,7 @@ class TestHumanizerRole:
 
     def test_humanize_disabled_by_default_returns_unchanged(self) -> None:
         """When nlp_humanize=false (default), humanize() returns input unchanged."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         
         cfg = Config()
@@ -74,7 +74,7 @@ class TestHumanizerRole:
 
     def test_humanize_stub_always_returns_unchanged(self) -> None:
         """Phase 10 stub: humanize() returns unchanged even with nlp_humanize=true."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         
         import os
@@ -100,7 +100,7 @@ class TestHumanizerRole:
 
     def test_humanize_accepts_required_args(self) -> None:
         """humanize() must accept templated_answer and cfg."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         import inspect
         
@@ -116,7 +116,7 @@ class TestHumanizerRole:
 
     def test_humanize_returns_string(self) -> None:
         """humanize() must return a string."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         
         cfg = Config()
@@ -206,7 +206,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_accepts_identical_strings(self) -> None:
         """Identical strings pass drift guard (edit distance = 0)."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         cfg = Config()
@@ -219,7 +219,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_accepts_minor_rephrasing(self) -> None:
         """Minor rephrasing within max_edit_ratio passes drift guard."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         cfg = Config()
@@ -234,7 +234,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_rejects_major_rewrite(self) -> None:
         """Major rewrite beyond max_edit_ratio fails drift guard."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         cfg = Config()
@@ -249,7 +249,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_respects_config_threshold(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Drift guard threshold must respect cfg.nlp_humanizer_max_edit_ratio."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         # Set a very strict threshold
@@ -267,7 +267,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_accepts_empty_template(self) -> None:
         """Empty template always passes drift guard."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         cfg = Config()
@@ -281,7 +281,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_boundary_at_max_ratio(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Drift guard must accept exactly max_edit_ratio (boundary test)."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_MAX_EDIT_RATIO", "0.5")
@@ -299,7 +299,7 @@ class TestHumanizerDriftGuard:
 
     def test_drift_guard_rejects_just_over_threshold(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Drift guard must reject ratio just over threshold."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _check_drift_guard
         
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_MAX_EDIT_RATIO", "0.5")
@@ -315,7 +315,7 @@ class TestHumanizerDriftGuard:
 
     def test_config_has_max_edit_ratio_field(self) -> None:
         """Config must have nlp_humanizer_max_edit_ratio field."""
-        from ai.common.config import Config
+        from common.config import Config
         
         cfg = Config()
         assert hasattr(cfg, "nlp_humanizer_max_edit_ratio"), (
@@ -327,7 +327,7 @@ class TestHumanizerDriftGuard:
 
     def test_default_max_edit_ratio_is_0_6(self) -> None:
         """Default nlp_humanizer_max_edit_ratio must be 0.6."""
-        from ai.common.config import Config
+        from common.config import Config
         
         cfg = Config()
         assert cfg.nlp_humanizer_max_edit_ratio == 0.6, (
@@ -336,7 +336,7 @@ class TestHumanizerDriftGuard:
 
     def test_max_edit_ratio_bounded_zero_to_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """nlp_humanizer_max_edit_ratio must be bounded [0.0, 1.0]."""
-        from ai.common.config import Config
+        from common.config import Config
         
         # Test lower bound
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZER_MAX_EDIT_RATIO", "-0.1")
@@ -381,7 +381,7 @@ class TestHumanizerGPUSharing:
 
     def test_acquire_gpu_lease_stub_raises_not_implemented(self) -> None:
         """Phase 10 stub: _acquire_gpu_lease() raises NotImplementedError."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _acquire_gpu_lease
         
         cfg = Config()
@@ -442,7 +442,7 @@ class TestHumanizerGPUSharing:
 
     def test_humanizer_subprocess_death_releases_gpu_lease_callback(self) -> None:
         """Process death must trigger the humanizer lease-release callback."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _run_humanizer_subprocess
 
         cfg = Config()
@@ -534,7 +534,7 @@ class TestHumanizerCPUParity:
     )
     def test_greedy_decode_produces_deterministic_output_cuda(self) -> None:
         """[Phase 11] Greedy decode with seed=1337 produces deterministic output on CUDA."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         import os
         
@@ -559,7 +559,7 @@ class TestHumanizerCPUParity:
     )
     def test_greedy_decode_produces_deterministic_output_cpu(self) -> None:
         """[Phase 11] Greedy decode with seed=1337 produces deterministic output on CPU."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         import os
         
@@ -591,7 +591,7 @@ class TestHumanizerCPUParity:
         
         This is the binding CPU parity gate referenced at §10.8 bullet 4.
         """
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         import os
         
@@ -625,7 +625,7 @@ class TestHumanizerCPUParity:
 
     def test_phase_10_stub_passes_cpu_parity_trivially(self) -> None:
         """Phase 10 stub: humanize() returns input unchanged → CPU parity trivially satisfied."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         
         cfg = Config()
@@ -669,7 +669,7 @@ class TestHumanizerGreedyDecodeParity:
 
     def test_phase_10_stub_greedy_parity_trivially_satisfied(self) -> None:
         """Phase 10 stub: returns input unchanged → greedy parity trivially satisfied."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import humanize
         
         cfg = Config()
@@ -693,7 +693,7 @@ class TestHumanizerGreedyDecodeParity:
         §10.21.1 Greedy-decode parity: same input + greedy parameters must produce
         byte-identical token IDs. Run twice on same device (CUDA) to verify determinism.
         """
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _generate_with_token_ids
         import os
         
@@ -727,7 +727,7 @@ class TestHumanizerGreedyDecodeParity:
     )
     def test_greedy_decode_produces_identical_token_ids_cpu(self) -> None:
         """[Phase 11] Greedy decode produces identical token IDs on CPU."""
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _generate_with_token_ids
         import os
         
@@ -764,7 +764,7 @@ class TestHumanizerGreedyDecodeParity:
         
         This is the binding greedy-decode parity gate referenced at §10.21.1.
         """
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _generate_with_token_ids
         import os
         
@@ -806,7 +806,7 @@ class TestHumanizerGreedyDecodeParity:
         §10.21.1 requires CUDA / CPU / Metal coverage. In CI (no physical Metal),
         mock-Metal = CPU path with Metal codepath verification (no actual GPU).
         """
-        from ai.common.config import Config
+        from common.config import Config
         from nlp.humanizer import _generate_with_token_ids
         import os
         

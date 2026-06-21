@@ -6,7 +6,7 @@ from pathlib import Path
 import msgpack
 import pytest
 
-from ai.common.config import Config, cfg
+from common.config import Config, cfg
 
 
 class TestEnrichmentConfigPresence:

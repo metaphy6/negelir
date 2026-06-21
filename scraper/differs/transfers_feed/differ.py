@@ -19,12 +19,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, TypedDict, Literal
 
-from ai.common.schemas.records import (
+from common.schemas.records import (
     TransferPayload,
     ContractPayload,
     SuspensionPayload,
 )
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 log = get_logger("scraper.differs.transfers_feed")
 

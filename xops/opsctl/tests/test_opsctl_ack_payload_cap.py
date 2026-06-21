@@ -24,15 +24,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from ai.common.config import Config
-from ai.swarm.sdk.bus import InMemoryBus
-from ai.swarm.sdk.maint_ack import build_capped_maint_ack
-from ai.swarm.sdk.types import Envelope, Message, Topic
-from ai.swarm.agents.topics import MAINT_ACK, SEC_ALERT
-
+from common.config import Config
+from swarm.agents.topics import MAINT_ACK, SEC_ALERT
+from swarm.sdk.bus import InMemoryBus
+from swarm.sdk.maint_ack import build_capped_maint_ack
+from swarm.sdk.types import Envelope, Message, Topic
 from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl._publish import MAINT_ACK_TOPIC, build_envelope, publish_event
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -245,7 +243,7 @@ class TestOversizeAlertFired(unittest.TestCase):
     def test_maint_ack_oversize_in_known_sec_alert_kinds(self) -> None:
         """``maint_ack_oversize`` must be a registered kind so the
         producer-set boundary test doesn't flag it as unknown."""
-        from ai.swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS
+        from swarm.agents.payloads import KNOWN_SEC_ALERT_KINDS
         self.assertIn("maint_ack_oversize", KNOWN_SEC_ALERT_KINDS)
 
     def test_alert_payload_carries_size_diagnostics(self) -> None:

@@ -31,7 +31,7 @@ class TestIncludeNonAiCallersFlag:
         """Verify that external (non-ai/) files can be rewritten."""
         # Simulate a non-ai/ caller file that imports from ai.common
         external_caller_source = (
-            "from ai.common.config import Config\n"
+            "from common.config import Config\n"
             "def load_config() -> Config:\n"
             "    return Config()\n"
         )
@@ -48,8 +48,8 @@ class TestIncludeNonAiCallersFlag:
     def test_swarm_caller_source_rewriteable(self) -> None:
         """Non-ai/ swarm caller using ai.common source rewrite."""
         swarm_caller = (
-            "from ai.common.bus import Publisher\n"
-            "from ai.common.config import Config\n"
+            "from common.bus import Publisher\n"
+            "from common.config import Config\n"
             "class PredictorAgent:\n"
             "    def __init__(self, cfg: Config, pub: Publisher):\n"
             "        self.cfg = cfg\n"

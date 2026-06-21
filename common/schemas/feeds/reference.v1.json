@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reference Payload (v1) — Reference-plane entity",
+  "description": "Phase 16 — Reference plane entities (teams, players, venues). Per EMITTER.md §3.3, slow-changing records are never deleted, only retired_at is set. JSONSchema ensures payload conforms before emitter writes.",
+  "type": "object",
+  "required": [
+    "kind",
+    "name",
+    "aliases",
+    "country",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["team", "player", "venue", "referee", "coach"],
+      "description": "Entity type."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical name."
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Alternative names, transliterations, abbreviations."
+    },
+    "country": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO-3166 alpha-2 country code, null if not applicable."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC when the reference source last confirmed this record."
+    },
+    "retired_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO-8601 UTC when the entity was retired (e.g., team folded, player retired). Null if active."
+    }
+  }
+}

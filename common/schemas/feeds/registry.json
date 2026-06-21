@@ -1,0 +1,98 @@
+{
+  "reference": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "schedule": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "score": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "lineup": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "editorial": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "market": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "feature_vectors": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "sec_quarantine": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "match_outcomes": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "calibration": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "competition": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ],
+  "predict_invalidated": [
+    {
+      "version": 1,
+      "status": "active",
+      "from": "2026-04-20T00:00:00Z",
+      "to": null
+    }
+  ]
+}

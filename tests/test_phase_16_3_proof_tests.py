@@ -19,13 +19,13 @@ import pytest
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-from ai.common.feeds.snapshot import (
+from common.feeds.snapshot import (
     SnapshotBuilder,
     DeltaSnapshotManager,
     BloomFilterWriter,
 )
-from ai.common.schemas.records import RECORD_TYPES
-from ai.common.feeds.schema_generator import typeddict_to_pyarrow_schema
+from common.schemas.records import RECORD_TYPES
+from common.feeds.schema_generator import typeddict_to_pyarrow_schema
 
 
 class TestPhase163ProofSuite:
@@ -223,7 +223,7 @@ class TestPhase163ProofSuite:
         
         Validates TypedDict ↔ JSONSchema ↔ pyarrow for all feed types.
         """
-        from ai.common.feeds.schema_generator import (
+        from common.feeds.schema_generator import (
             typeddict_to_pyarrow_schema,
             validate_schema_consistency,
             compute_schema_hash,

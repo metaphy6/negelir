@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, timedelta
 import pytz
-from ai.common.fixture_timezone_resolver import (
+from common.fixture_timezone_resolver import (
     FixtureRecord, FixtureDeduplicator, FixtureTimezoneNormalizer, FixtureTimezone
 )
 

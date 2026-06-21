@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "xops" / "lint"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "xops" / "lint"))
 
 from ai_layout_freeze import check_ai_layout_freeze, ALLOWED_AI_MODULES
 

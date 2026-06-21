@@ -6,8 +6,8 @@ import ast
 import re
 from pathlib import Path
 
-from ai.common.config import cfg
-import ai.swarm.sdk.schemas as bus_schemas
+from common.config import cfg
+import swarm.sdk.schemas as bus_schemas
 
 
 def test_phase10_27_nlp_event_kinds_are_registered() -> None:

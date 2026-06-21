@@ -54,7 +54,7 @@ class TestIsolationUsesAST:
         code = """
 import psycopg2
 from redis import StrictRedis
-from ai.common.feeds import FeedReader
+from common.feeds import FeedReader
 
 def fetch_data():
     pass

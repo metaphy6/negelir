@@ -30,7 +30,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
 
 
 def run(args: argparse.Namespace, *, bus: Optional[object] = None) -> int:
-    from ai.common.config import Config  # noqa: PLC0415
+    from common.config import Config  # noqa: PLC0415
 
     cfg = Config()
     key_path = Path(str(cfg.sec_input_allowlist_hmac_key_path)).expanduser()

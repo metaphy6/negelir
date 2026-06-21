@@ -1,7 +1,7 @@
 """Tests for Phase 19 §19.17 — API catalog surface."""
 
 import pytest
-from ai.common.catalog_api_models import (
+from common.catalog_api_models import (
     LeagueTier, LeagueStatus, LeagueCatalogEntry, CatalogListResponse, CatalogListRequest, LeagueReadinessScore
 )
 

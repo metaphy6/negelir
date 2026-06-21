@@ -23,8 +23,8 @@ from typing import Any, Dict
 
 import pytest
 
-from ai.common.feeds.writer import FeedWriter
-from ai.common.feeds.canonical import encode, idempotency_key
+from common.feeds.writer import FeedWriter
+from common.feeds.canonical import encode, idempotency_key
 
 
 class TestIdempotencyKeys:

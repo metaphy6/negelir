@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Generator, Optional
 import yaml
 
-from ai.common.telemetry import get_sink
+from common.telemetry import get_sink
 
 
 @dataclass

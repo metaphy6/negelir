@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import time
 from pathlib import Path
-from ai.common.catalog_cache import CatalogCache, CatalogAuditEntry
+from common.catalog_cache import CatalogCache, CatalogAuditEntry
 
 
 class MockConfig:

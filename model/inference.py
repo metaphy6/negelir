@@ -13,10 +13,10 @@ import numpy as np
 import xgboost as xgb
 from scipy.stats import poisson
 
-from ai.common.config import cfg
-from ai.common.constants import MODEL_VERSION, N_FEATURES
-from ai.common.league_config import LeagueConfig, get_league_config
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.constants import MODEL_VERSION, N_FEATURES
+from common.league_config import LeagueConfig, get_league_config
+from common.logger import get_logger
 from model.features import FEATURE_COLUMNS
 
 log = get_logger("model.inference")

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai.common.schemas.feeds import invariants
+from common.schemas.feeds import invariants
 
 
 class TestScoreInvariants:

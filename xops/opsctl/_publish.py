@@ -36,17 +36,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from ai.common.config import Config
-from ai.swarm.agents.maint._ack_routing import (
+from common.config import Config
+from swarm.agents.maint._ack_routing import (
     KINDS_PENDING_CONSUMER_LANDING,
     KNOWN_MAINT_EVENT_KINDS,
     expected_ack_set,
 )
-from ai.swarm.agents.payloads import SecAlert
-from ai.swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
-from ai.swarm.sdk.bus import Bus
-from ai.swarm.sdk.schemas import validate_kind
-from ai.swarm.sdk.types import Envelope, Message
+from swarm.agents.payloads import SecAlert
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT, SEC_ALERT
+from swarm.sdk.bus import Bus
+from swarm.sdk.schemas import validate_kind
+from swarm.sdk.types import Envelope, Message
 
 from ._exit_codes import ExitCode
 

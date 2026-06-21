@@ -40,9 +40,9 @@ import time
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-from ai.common.config import Config
-from ai.swarm.sdk.types import Envelope, Message, Topic
-from ai.swarm.sdk.spool_aging import prune_aged_spool_entries, quarantine_retired_spool_entries
+from common.config import Config
+from swarm.sdk.spool_aging import prune_aged_spool_entries, quarantine_retired_spool_entries
+from swarm.sdk.types import Envelope, Message, Topic
 
 from .._audit import append_audit_row, make_row
 from .._exit_codes import ExitCode
@@ -339,7 +339,7 @@ def run(args: argparse.Namespace, *, bus: Optional[Any] = None) -> int:
         entries = _spool_entries(spool_dir)
 
         # §8.13.3 — quarantine retired-kind / schema-outdated entries.
-        from ai.swarm.agents.maint import KNOWN_MAINT_EVENT_KINDS
+        from swarm.agents.maint import KNOWN_MAINT_EVENT_KINDS
         _retire_result = quarantine_retired_spool_entries(
             spool_dir=spool_dir,
             known_kinds=KNOWN_MAINT_EVENT_KINDS,

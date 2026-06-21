@@ -9,7 +9,7 @@ import yaml
 
 
 def test_config_has_nlp_zoneinfo_dir() -> None:
-    from ai.common.config import Config
+    from common.config import Config
 
     cfg = Config()
 
@@ -36,7 +36,7 @@ def test_chart_json_has_zoneinfo_file_pin() -> None:
 
 
 def test_zoneinfo_dir_validation_matches_chart_sha(tmp_path: Path) -> None:
-    from ai.common.config import Config
+    from common.config import Config
 
     candidate = None
     for path in zoneinfo.TZPATH:
@@ -58,7 +58,7 @@ def test_zoneinfo_dir_validation_matches_chart_sha(tmp_path: Path) -> None:
 
 
 def test_nlp_zoneinfo_sha_pinned_at_boot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from ai.common.config import Config
+    from common.config import Config
 
     candidate = None
     for path in zoneinfo.TZPATH:
@@ -80,8 +80,8 @@ def test_nlp_zoneinfo_sha_pinned_at_boot(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_tr_format_clock_uses_custom_zoneinfo_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from ai.common.config import cfg
-    from ai.common.text.tr_format import tr_format_clock
+    from common.config import cfg
+    from common.text.tr_format import tr_format_clock
 
     candidate = None
     for path in zoneinfo.TZPATH:

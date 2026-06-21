@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "xops" / "lint"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "xops" / "lint"))
 from phase18_conformance import check_phase18_conformance
 
 

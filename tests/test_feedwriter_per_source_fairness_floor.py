@@ -13,8 +13,8 @@ import pytest
 import time
 from unittest.mock import MagicMock
 
-from ai.common.feeds.fairness import TokenBucket, PerSourceFairnessFloor
-from ai.common.feeds.writer_pool import WriterPool
+from common.feeds.fairness import TokenBucket, PerSourceFairnessFloor
+from common.feeds.writer_pool import WriterPool
 
 
 class TestTokenBucket:

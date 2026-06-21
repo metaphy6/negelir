@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai.swarm.agents.nlp.training.eligibility import filter_shadow_rows_for_intent_training
+from swarm.agents.nlp.training.eligibility import filter_shadow_rows_for_intent_training
 
 
 def test_nlp_intent_train_command_registered() -> None:
@@ -110,7 +110,7 @@ def test_nlp_intent_train_refuses_when_eval_harness_fails(tmp_path) -> None:
 
 
 def test_nlp_intent_train_rejects_non_shadow_corpus(tmp_path, monkeypatch) -> None:
-    from ai.nlp.trainer import IntentTrainError, train_intent_candidate
+    from nlp.trainer import IntentTrainError, train_intent_candidate
 
     monkeypatch.setenv("NEGELIR_NLP_INTENT_TRAIN_SHADOW_PATH", str(tmp_path / "default_shadow.jsonl"))
     (tmp_path / "default_shadow.jsonl").write_text(
@@ -148,7 +148,7 @@ def test_nlp_intent_trainer_consults_eligibility_filter() -> None:
         and node.module == "swarm.agents.nlp.training.eligibility"
         and any(alias.name == "filter_shadow_rows_for_intent_training" for alias in node.names)
         for node in ast.walk(tree)
-    ), "trainer.py must import filter_shadow_rows_for_intent_training from ai.swarm.agents.nlp.training.eligibility"
+    ), "trainer.py must import filter_shadow_rows_for_intent_training from swarm.agents.nlp.training.eligibility"
 
     assert any(
         isinstance(node, ast.Call)

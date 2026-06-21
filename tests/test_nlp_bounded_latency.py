@@ -163,7 +163,7 @@ class TestNormalizeInputLatencyRegression:
 
     @pytest.mark.slow
     def test_p95_below_generous_bound(self) -> None:
-        from ai.common.config import cfg
+        from common.config import cfg
         from nlp.normalize import normalize_input
 
         payload = _build_payload(cfg.nlp_input_max_codepoints)

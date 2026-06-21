@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import pytest
 
-from ai.scraper.differs.transfers_feed.confidence_gate import (
+from datasource.scraper.differs.transfers_feed.confidence_gate import (
     should_write,
     get_write_mode,
     apply_gate,
     RosterStateWriteInstruction,
 )
-from ai.common.schemas.records import TransferPayload
+from common.schemas.records import TransferPayload
 
 
 @pytest.fixture

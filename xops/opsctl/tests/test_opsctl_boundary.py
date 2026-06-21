@@ -27,7 +27,7 @@ FORBIDDEN_IMPORT_PREFIXES = (
 ALLOWED_OVERRIDES = {
     # ai.swarm.sdk.bus *uses* redis internally, but opsctl talks to
     # it through the Bus protocol. We allow the indirection.
-    "ai.swarm.sdk.bus",
+    "swarm.sdk.bus",
 }
 
 FORBIDDEN_SUBPROCESS_TARGETS = ("psql", "redis-cli")

@@ -84,7 +84,7 @@ def test_concurrent_preset_imports_are_safe():
 
 def test_preset_imports_are_idempotent():
     """Verify that importing the same preset multiple times produces identical configs."""
-    from ai.common.league_config import compute_config_sha256
+    from common.league_config import compute_config_sha256
     
     leagues_dir = Path(__file__).parent.parent / "common" / "leagues"
     

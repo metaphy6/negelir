@@ -21,7 +21,7 @@ class TestDryRunWritesNothing:
         """Dry-run produces diff but does not write to file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.py"
-            original_source = "from ai.common.config import Config\n"
+            original_source = "from common.config import Config\n"
             test_file.write_text(original_source)
 
             # Record mtime before
@@ -46,7 +46,7 @@ class TestDryRunWritesNothing:
 
     def test_rewrite_source_is_pure_function(self) -> None:
         """rewrite_source() is a pure function with no file I/O."""
-        source = "from ai.common.config import Config\n"
+        source = "from common.config import Config\n"
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text(source)
@@ -64,7 +64,7 @@ class TestDryRunWritesNothing:
 
     def test_rewrite_idempotence_verified(self) -> None:
         """Running rewrite twice on same source produces stable result."""
-        source = "from ai.common.config import Config\nfrom ai.swarm.agent import Agent\n"
+        source = "from common.config import Config\nfrom swarm.agent import Agent\n"
         # First rewrite (common package)
         result1, status1 = Phase22ImportRewriter.rewrite_source(source, package="common")
         # Second rewrite (swarm package)  

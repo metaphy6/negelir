@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pathlib
 
-from ai.common.config import cfg
+from common.config import cfg
 from nlp.eval._sample import (
     WEEKLY_EVAL_STRATA_KEYS,
     WeeklyEvalStratumKey,

@@ -94,8 +94,8 @@ class TestNonAICallerRewrite:
     def test_codemod_rewrites_non_ai_caller_with_ai_imports(self) -> None:
         """Verify that non-ai/ caller files are rewritten correctly."""
         # A non-ai/ file that imports from ai.common
-        source = """from ai.common.config import Config
-import ai.common.logger
+        source = """from common.config import Config
+import common.logger
 
 def setup():
     return Config()
@@ -162,7 +162,7 @@ Config = "ai.common.models.MyModel"
 
     def test_rewrite_idempotent_on_already_rewritten_file(self) -> None:
         """Verify running rewriter twice on same file produces no further changes."""
-        source = """from ai.common.config import Config
+        source = """from common.config import Config
 """
 
         # First rewrite

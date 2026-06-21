@@ -24,10 +24,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ai.swarm.sdk.bus import InMemoryBus
-from ai.swarm.sdk.types import Message
-from xops.opsctl._exit_codes import ExitCode
+from swarm.sdk.bus import InMemoryBus
+from swarm.sdk.types import Message
 from xops.opsctl import spool_reconciler
+from xops.opsctl._exit_codes import ExitCode
 from xops.opsctl.subcommands import dlq_replay, dlq_show, scale_pin, scale_unpin, spool_show
 
 

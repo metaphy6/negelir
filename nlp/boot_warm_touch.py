@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
+from common.config import cfg
+from common.logger import get_logger
 from nlp.model_warm_loader import warm_touch_models
 
 logger = get_logger(__name__)

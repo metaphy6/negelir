@@ -25,7 +25,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
-from ai.common.config import Config
+from common.config import Config
 
 from ._audit import append_audit_row, make_row
 from ._classify import Action, ClassifyRequest, classify
@@ -177,8 +177,9 @@ def run_publish(spec: SubcommandSpec, *, bus: Optional[Any] = None) -> int:
     #    path so operators can inspect the envelope before paying the
     #    destructive-token tax. ─────────────────────────────────────
     if spec.dry_run:
-        from ai.swarm.agents.maint._ack_routing import (
-            KNOWN_MAINT_EVENT_KINDS, expected_ack_set,
+        from swarm.agents.maint._ack_routing import (
+            KNOWN_MAINT_EVENT_KINDS,
+            expected_ack_set,
         )
         if spec.kind in KNOWN_MAINT_EVENT_KINDS:
             expected = sorted(expected_ack_set(spec.kind))

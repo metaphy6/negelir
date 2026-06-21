@@ -23,10 +23,10 @@ from unittest import mock
 
 import pytest
 
-from ai.common.config import Config
+from common.config import Config
 from nlp.proofreader import ProofreadResult, proofread_answer, proofread_answer_safe
-from ai.swarm.agents.nlp import NlpProofreaderAgent
-from ai.swarm.sdk.types import Message
+from swarm.agents.nlp import NlpProofreaderAgent
+from swarm.sdk.types import Message
 
 
 def test_gate1_citation_block_missing_blocks():

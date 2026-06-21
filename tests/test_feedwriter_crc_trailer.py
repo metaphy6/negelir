@@ -9,7 +9,7 @@ Covers:
 """
 
 import pytest
-from ai.common.feeds.crc import (
+from common.feeds.crc import (
     crc32c,
     append_crc_trailer,
     verify_crc_trailer,

@@ -1,10 +1,10 @@
 """Phase 10 §10.27.5 — operator preview metadata and shadow-row filtering."""
 from __future__ import annotations
 
-from ai.swarm.agents.nlp import _make_qa_answer_payload
-from ai.swarm.agents.nlp.shadow_writer import NlpShadowWriter
-from ai.swarm.agents.topics import QA_INTENT_V1
-from ai.swarm.sdk.types import Message
+from swarm.agents.nlp import _make_qa_answer_payload
+from swarm.agents.nlp.shadow_writer import NlpShadowWriter
+from swarm.agents.topics import QA_INTENT_V1
+from swarm.sdk.types import Message
 
 
 def test_nlp_shadow_writer_drops_preview_rows() -> None:

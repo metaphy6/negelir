@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ai.common.text.turkish import lowercase_tr
+from common.text.turkish import lowercase_tr
 
 _DEFAULT_SPEC_PATH: Path = (
     Path(__file__).resolve().parents[3] / "ai" / "common" / "text" / "numeric_apostrophe_spec.json"

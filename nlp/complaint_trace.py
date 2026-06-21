@@ -240,7 +240,7 @@ def complaint_trace(
 
 
 def main(argv: list[str] | None = None) -> int:
-    from ai.common.config import cfg
+    from common.config import cfg
 
     parser = argparse.ArgumentParser(prog="python -m nlp.complaint_trace")
     parser.add_argument("--request-id", required=False)

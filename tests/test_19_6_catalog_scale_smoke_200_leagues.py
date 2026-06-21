@@ -1,7 +1,7 @@
 """Phase 19 §19.6 — Catalog scale smoke test."""
 from __future__ import annotations
 
-from ai.common.config import cfg
+from common.config import cfg
 
 
 def test_catalog_scale_smoke_200_leagues() -> None:

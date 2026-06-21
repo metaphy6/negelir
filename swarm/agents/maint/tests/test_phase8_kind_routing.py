@@ -1,0 +1,964 @@
+"""Phase 8 §8.0 — wire-contract tests for `maint.event.v1{kind=...}` and
+`maint.ack.v1`.
+
+What this asserts (boundary discipline):
+
+1. Every kind in ``swarm.agents.maint._ack_routing.KNOWN_MAINT_EVENT_KINDS``
+   has a matching ``ai/swarm/sdk/schemas/maint.event.v1/<kind>.json``
+   sub-schema, and every sub-schema file has a matching routing entry
+   (orphans on either side fail loudly — no silent drift).
+2. Every kind whose consumer set is empty is listed in
+   ``KINDS_PENDING_CONSUMER_LANDING`` with a citation. This forces a
+   conscious decision rather than "oops I forgot the consumer".
+3. ``schemas.validate_kind("maint.event.v1", payload)`` accepts a
+   well-formed payload for each kind and rejects (a) missing
+   discriminator, (b) unknown kind, (c) wrong ``kind`` const, (d)
+   missing required fields, (e) unknown extra fields.
+4. ``MaintAck`` round-trips through ``schemas.validate("maint.ack.v1",
+   ack.as_dict())`` cleanly and rejects malformed inputs at the
+   dataclass layer.
+5. The ``MAINT_ACK`` topic constant exists and is exported.
+"""
+from __future__ import annotations
+
+import pytest
+
+from swarm.agents.maint import (
+    KINDS_NOTIFICATION_ONLY,
+    KINDS_PENDING_CONSUMER_LANDING,
+    KNOWN_MAINT_EVENT_KINDS,
+    expected_ack_set,
+    is_notification_only,
+    is_pending_consumer_landing,
+)
+from swarm.agents.payloads import MaintAck
+from swarm.agents.topics import MAINT_ACK, MAINT_EVENT
+from swarm.sdk import schemas
+
+# ── Routing ↔ sub-schema symmetry ───────────────────────────────────────
+
+
+def test_routing_table_matches_sub_schema_directory() -> None:
+    """Every kind in the routing table has a sub-schema file, and vice
+    versa. Orphans on either side fail CI."""
+    schema_kinds = set(schemas.known_kinds(MAINT_EVENT))
+    routing_kinds = set(KNOWN_MAINT_EVENT_KINDS)
+    missing_in_schema = routing_kinds - schema_kinds
+    missing_in_routing = schema_kinds - routing_kinds
+    assert not missing_in_schema, (
+        f"kinds in _ack_routing without a sub-schema: {sorted(missing_in_schema)}"
+    )
+    assert not missing_in_routing, (
+        f"sub-schema files without a routing entry: {sorted(missing_in_routing)}"
+    )
+
+
+def test_maint_event_is_kind_discriminated() -> None:
+    assert MAINT_EVENT in schemas.kind_discriminated_topics()
+
+
+def test_empty_consumer_sets_are_listed_pending() -> None:
+    """Empty consumer-set kinds MUST be listed in either
+    KINDS_PENDING_CONSUMER_LANDING (with a Phase citation) or
+    KINDS_NOTIFICATION_ONLY (notification-only — no consumer ever
+    expected). The two sets are disjoint by construction."""
+    overlap = set(KINDS_PENDING_CONSUMER_LANDING) & set(KINDS_NOTIFICATION_ONLY)
+    assert not overlap, (
+        f"kinds in BOTH pending-consumer-landing and notification-only: "
+        f"{sorted(overlap)} — pick one"
+    )
+    for kind in KNOWN_MAINT_EVENT_KINDS:
+        if not expected_ack_set(kind):
+            assert is_pending_consumer_landing(kind) or is_notification_only(kind), (
+                f"kind={kind!r} routes to empty consumer set but is NOT "
+                "listed in KINDS_PENDING_CONSUMER_LANDING or "
+                "KINDS_NOTIFICATION_ONLY — either wire a consumer, "
+                "add a pending citation, or declare notification-only"
+            )
+            if is_pending_consumer_landing(kind):
+                citation = KINDS_PENDING_CONSUMER_LANDING[kind]
+                assert "Phase" in citation, (
+                    f"kind={kind!r} pending citation must reference a Phase "
+                    f"(got {citation!r})"
+                )
+
+
+def test_pending_kinds_are_known() -> None:
+    """KINDS_PENDING_CONSUMER_LANDING entries must reference real kinds."""
+    for kind in KINDS_PENDING_CONSUMER_LANDING:
+        assert kind in KNOWN_MAINT_EVENT_KINDS, (
+            f"KINDS_PENDING_CONSUMER_LANDING references unknown kind={kind!r}"
+        )
+
+
+def test_consumer_set_values_are_frozenset() -> None:
+    """Routing values must be immutable to prevent accidental mutation
+    by consumer-side code that gets a reference."""
+    for kind in KNOWN_MAINT_EVENT_KINDS:
+        consumers = expected_ack_set(kind)
+        assert isinstance(consumers, frozenset), (
+            f"kind={kind!r} consumer set is {type(consumers).__name__}, "
+            "expected frozenset"
+        )
+
+
+def test_expected_ack_set_raises_on_unknown_kind() -> None:
+    with pytest.raises(KeyError):
+        expected_ack_set("does_not_exist")
+
+
+# ── Per-kind sub-schema validation ──────────────────────────────────────
+
+
+_GOOD_PAYLOADS: dict[str, dict[str, object]] = {
+    "retrain_request": {
+        "kind": "retrain_request",
+        "kind_schema_version": 1,
+        "target": "pred.elo.v1",
+        "reason": "brier_floor",
+        "request_id": "req-001",
+    },
+    "retrain_approve": {
+        "kind": "retrain_approve",
+        "kind_schema_version": 1,
+        "target": "pred.elo.v1",
+        "request_id": "req-002",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "denylist_clear": {
+        "kind": "denylist_clear",
+        "kind_schema_version": 1,
+        "target": "ip:9.9.9.9",
+        "request_id": "req-003",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "baseline_reset": {
+        "kind": "baseline_reset",
+        "kind_schema_version": 1,
+        "target": "mackolik",
+        "request_id": "req-004",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "quarantine_erase": {
+        "kind": "quarantine_erase",
+        "kind_schema_version": 1,
+        "target": "user-42",
+        "request_id": "req-005",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "quarantine_clear": {
+        "kind": "quarantine_clear",
+        "kind_schema_version": 1,
+        "target": "qid-7",
+        "request_id": "req-006",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "manual_scale_pin": {
+        "kind": "manual_scale_pin",
+        "kind_schema_version": 1,
+        "target": "pred.elo.v1",
+        "replicas": 3,
+        "request_id": "req-007",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "dlq_replay": {
+        "kind": "dlq_replay",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "request_id": "req-008",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "dlq_replay_policy_loaded": {
+        "kind": "dlq_replay_policy_loaded",
+        "kind_schema_version": 1,
+        "target": "maint.dlq.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "deny_prefixes": ["maint.", "sec.", "auth.", "payment.", "patcher."],
+        "deny_suffixes": [".dlq.dlq"],
+        "allow_overrides": [],
+    },
+    "dlq_drop_request": {
+        "kind": "dlq_drop_request",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "request_id": "req-008c",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "dlq_entry_id": "entry-abc123",
+        "original_request_id": "orig-req-001",
+        "drop_reason": "poison entry — will never succeed",
+        "dropped_by": "sha256:deadbeef",
+    },
+    "dlq_unfreeze": {
+        "kind": "dlq_unfreeze",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "request_id": "req-008b",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "denylist_decimate_now": {
+        "kind": "denylist_decimate_now",
+        "kind_schema_version": 1,
+        "target": "all",
+        "request_id": "req-009",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "maint_pause": {
+        "kind": "maint_pause",
+        "kind_schema_version": 1,
+        "target": "all",
+        "ttl_s": 300,
+        "request_id": "req-010",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "maint_resume": {
+        "kind": "maint_resume",
+        "kind_schema_version": 1,
+        "target": "all",
+        "request_id": "req-011",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    # Notification-only kinds (Phase 8.2 + 8.5).
+    "scale_decision": {
+        "kind": "scale_decision",
+        "kind_schema_version": 1,
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "replicas": 3,
+        "source": "auto",
+        "controller": "noop",
+        "controller_accepted": True,
+        "decision_window_id": "ab12cd34:1735689600000",
+    },
+    "scale_throttled": {
+        "kind": "scale_throttled",
+        "kind_schema_version": 1,
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "would_be": 4,
+        "reason": "max_changes_per_window",
+        "decision_window_id": "ab12cd34:1735689600000",
+    },
+    "trainer_warmup_hint": {
+        "kind": "trainer_warmup_hint",
+        "kind_schema_version": 1,
+        "target": "trainer.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "retrain_request_id": "req-drift-001",
+        "projected_window_s": 30.0,
+    },
+    "manual_scale_pin_expired": {
+        "kind": "manual_scale_pin_expired",
+        "kind_schema_version": 1,
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "reason": "ttl",
+    },
+    "maint_scaler_default_applied": {
+        "kind": "maint_scaler_default_applied",
+        "kind_schema_version": 1,
+        "target": "predictor.elo.v1",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "applied": 2,
+        "default_max_replicas": 2,
+    },
+    "dlq_replayed": {
+        "kind": "dlq_replayed",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "replayed_count": 0,
+        "max_msgs": 100,
+        "request_id": "req-100",
+    },
+    "dlq_escalated": {
+        "kind": "dlq_escalated",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "request_id": "req-100",
+        "visit_count": 3,
+        "reason": "visit_max_exceeded",
+    },
+    "dlq_topic_disabled_drained": {
+        "kind": "dlq_topic_disabled_drained",
+        "kind_schema_version": 1,
+        "target": "maint.event.v1.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "deny_reason": "recursion_deny",
+    },
+    "dlq_dropped": {
+        "kind": "dlq_dropped",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "reason": "rate_limited",
+    },
+    "dlq_consumer_broken": {
+        "kind": "dlq_consumer_broken",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "reason": "poison_pattern",
+        "distinct_request_ids": 5,
+        "window_s": 600,
+    },
+    "dlq_topic_unfrozen": {
+        "kind": "dlq_topic_unfrozen",
+        "kind_schema_version": 1,
+        "target": "predict.vote.dlq",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "request_id": "req-008b",
+        "was_frozen": True,
+    },
+    # Phase 8.3 backup agent — notification-only kinds.
+    "backup_started": {
+        "kind": "backup_started",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "wall_clock_utc": "2025-01-01T03:00:00Z",
+        "monotonic_ns_at_fire": 1234567890,
+    },
+    "backup_completed": {
+        "kind": "backup_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:05:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "outcome": "ok",
+        "duration_ms": 300000,
+    },
+    "backup_verify_orphan_swept": {
+        "kind": "backup_verify_orphan_swept",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:01Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "swept_dbs": ["verify_2024_12_31_03_00"],
+    },
+    "prune_started": {
+        "kind": "prune_started",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "prune_order": [
+            "opsctl_audit", "schema_snapshots", "pattern_allowlist",
+            "dlq_entries", "quarantine_samples", "maint_audit_log",
+        ],
+    },
+    "prune_completed": {
+        "kind": "prune_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:05:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "deleted_per_table": {"opsctl_audit": 12, "maint_audit_log": 0},
+    },
+    "prune_skipped": {
+        "kind": "prune_skipped",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:00Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "reason": "verify_failed",
+    },
+    "quarantine_pruned": {
+        "kind": "quarantine_pruned",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:30Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "row_count": 7,
+        "ttl_days": 30,
+    },
+    "pattern_allowlist_expired": {
+        "kind": "pattern_allowlist_expired",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:45Z",
+        "fire_window_id": "ab12cd34:2025-01-01T03:00:00Z",
+        "count": 4,
+        "reason": "ttl",
+    },
+    "pattern_allowlist_legacy_hit": {
+        "kind": "pattern_allowlist_legacy_hit",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:04:50Z",
+        "target": "qa:prompt_injection",
+        "source": "qa",
+        "rule_id": "prompt_injection",
+        "row_id": "deadbeefcafebabe",
+    },
+    "pii_erased": {
+        "kind": "pii_erased",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T12:00:00Z",
+        "request_id": "req-005",
+        "client_id": "user-42",
+        "table": "quarantine_samples",
+        "row_count": 3,
+        "erased_at": "2025-01-01T12:00:00Z",
+    },
+    # Phase 8 §8.3 weekly cold-verify (silent storage rot detector).
+    "backup_cold_verify_completed": {
+        "kind": "backup_cold_verify_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-05T05:00:30Z",
+        "fire_window_id": "cold:ab12cd34:2024-12-29",
+        "dump_date": "2024-12-29",
+        "duration_ms": 4200,
+        "verified": True,
+    },
+    "backup_cold_verify_failed": {
+        "kind": "backup_cold_verify_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-05T05:00:30Z",
+        "fire_window_id": "cold:ab12cd34:2024-12-29",
+        "dump_date": "2024-12-29",
+        "error": "restore-verify returned empty row-count map",
+        "duration_ms": 4200,
+    },
+    # Phase 8 §8.1 — operator-driven backup lifecycle (consumer
+    # maint.backup.v1 lands in §8.3).
+    "backup_now": {
+        "kind": "backup_now",
+        "kind_schema_version": 1,
+        "target": "pg",
+        "request_id": "req-bk1",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "backup_rotate_key": {
+        "kind": "backup_rotate_key",
+        "kind_schema_version": 1,
+        "target": "verify-2026-Q3",
+        "scope": "verify",
+        "request_id": "req-bk2",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "restore": {
+        "kind": "restore",
+        "kind_schema_version": 1,
+        "target": "2025-01-01",
+        "request_id": "req-bk3",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    # Phase 8 §8.3 — operator-driven restore runbook notifications.
+    "backup_restore_started": {
+        "kind": "backup_restore_started",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T00:00:00Z",
+        "request_id": "req-bk3",
+        "target": "negelir_restore_2025-01-01",
+        "dump_date": "2025-01-01",
+        "requested_by": "ops@host",
+        "destination_conn": "",
+        "ephemeral": True,
+    },
+    "backup_restore_completed": {
+        "kind": "backup_restore_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T00:00:01Z",
+        "request_id": "req-bk3",
+        "target": "negelir_restore_2025-01-01",
+        "dump_date": "2025-01-01",
+        "duration_ms": 1234,
+        "exit_code": 0,
+        "outcome": "ok",
+        "ephemeral": True,
+    },
+    # Phase 8 §8.1 — operator-driven pattern_allowlist lifecycle
+    # (consumer maint.sec.v1 lands in §8.7).
+    "allowlist_extend": {
+        "kind": "allowlist_extend",
+        "kind_schema_version": 1,
+        "target": "mackolik:rule_42",
+        "ttl_s": 86400,
+        "request_id": "req-al1",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "allowlist_approve": {
+        "kind": "allowlist_approve",
+        "kind_schema_version": 1,
+        "target": "mackolik:rule_42",
+        "request_id": "req-al2",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "allowlist_show": {
+        "kind": "allowlist_show",
+        "kind_schema_version": 1,
+        "target": "all",
+        "request_id": "req-al3",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+    },
+    "allowlist_rehash": {
+        "kind": "allowlist_rehash",
+        "kind_schema_version": 1,
+        "target": "all",
+        "request_id": "req-al4",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "batch_size": 200,
+        "reason": "phase-8-16-10 migration",
+    },
+    "allowlist_rotate_key": {
+        "kind": "allowlist_rotate_key",
+        "kind_schema_version": 1,
+        "target": "allowlist_hmac",
+        "request_id": "req-al5",
+        "client_id": "ops@host",
+        "produced_at": "2025-01-01T00:00:00Z",
+        "rehash": True,
+        "reason": "scheduled rotation",
+    },
+    # ── §8.9 second-pass notification-only kinds ─────────────────────────────
+    "audit_chain_verify": {
+        "kind": "audit_chain_verify",
+        "kind_schema_version": 1,
+        "produced_at": "2026-01-01T00:00:00Z",
+        "ok": True,
+        "rows_checked": 10,
+        "first_break_row": None,
+        "break_reason": None,
+        "audit_file_path": "/var/lib/negelir/maint/opsctl_audit.csv",
+    },
+    # Phase 8 §8.15.10 Fix C — restore-verify forensic sidecar captured.
+    "verify_forensic_captured": {
+        "kind": "verify_forensic_captured",
+        "kind_schema_version": 1,
+        "produced_at": "2026-05-22T05:00:00Z",
+        "target": "2026-05-22",
+        "size_bytes": 8192,
+        "verifier_kind": "local",
+        "pg_restore_exit_code": 1,
+        "duration_ms": 2300,
+    },
+    "backup_age_alert": {
+        "kind": "backup_age_alert",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "age_hours": 26.5,
+        "threshold_hours": 25.0,
+    },
+    "backup_key_rotated": {
+        "kind": "backup_key_rotated",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "new_key_version": 2,
+    },
+    "backup_offsite_uploaded": {
+        "kind": "backup_offsite_uploaded",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "fire_window_id": "fw-2025-01-01",
+        "uploaded_bytes": 1048576,
+        "manifest_checksum": "sha256-abc123",
+        "resumed_from_state": False,
+    },
+    "backup_offsite_failed": {
+        "kind": "backup_offsite_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "backup_id": "backup-2025-01-01",
+    },
+    "backup_offsite_upload_id_expired": {
+        "kind": "backup_offsite_upload_id_expired",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T04:00:00Z",
+        "dump_date": "2025-01-01",
+        "original_upload_id": "upload-abc123",
+        "age_h": 26.5,
+        "bucket": "negelir-backups",
+        "key": "2025/01/01/dump.tar.gz",
+    },
+    "backup_verify_failed": {
+        "kind": "backup_verify_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-05T05:00:30Z",
+        "job_id": "verify-job-01",
+    },
+    "backup_verify_key_rotated": {
+        "kind": "backup_verify_key_rotated",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-05T05:00:30Z",
+        "job_id": "verify-job-02",
+        "new_key_version": 3,
+    },
+    "denylist_decimate": {
+        "kind": "denylist_decimate",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "target": "all",
+    },
+    "denylist_cap_cleared": {
+        "kind": "denylist_cap_cleared",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "target": "all",
+    },
+    "maint_paused": {
+        "kind": "maint_paused",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "agent_id": "maint.backup.v1",
+    },
+    "maint_resumed": {
+        "kind": "maint_resumed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "agent_id": "maint.backup.v1",
+    },
+    "maint_plane_throttled": {
+        "kind": "maint_plane_throttled",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "lag_s": 45.2,
+        "tier": 2,
+    },
+    # Phase 8 §8.15.1 — clock-source boot validation event.
+    "maint_clock_source_changed": {
+        "kind": "maint_clock_source_changed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "target": "maint.scaler.v1",
+        "action": None,
+        "prev": None,
+        "current": "boottime",
+        "suspend_resilient": True,
+        "gap_s": None,
+        "recovered_at_utc": None,
+    },
+    "maint_plane_recovered": {
+        "kind": "maint_plane_recovered",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "lag_s": 1.3,
+    },
+    "maint_silence_alert": {
+        "kind": "maint_silence_alert",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "silence_s": 7200.0,
+    },
+    "maint_unknown_kind": {
+        "kind": "maint_unknown_kind",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "unknown_kind": "some_future_kind_xyz",
+    },
+    "pattern_allowlist_pending": {
+        "kind": "pattern_allowlist_pending",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "subject": "mackolik:rule_99",
+        "rule_id": "rule_99",
+    },
+    "pattern_allowlist_added": {
+        "kind": "pattern_allowlist_added",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "subject": "mackolik:rule_99",
+        "rule_id": "rule_99",
+    },
+    "pattern_allowlist_promoted": {
+        "kind": "pattern_allowlist_promoted",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "subject": "mackolik:rule_99",
+        "rule_id": "rule_99",
+    },
+    "schema_drift_detected": {
+        "kind": "schema_drift_detected",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-01T03:00:00Z",
+        "target": "match_records",
+        "detector": "A",
+    },
+    # Phase 8 §8.13.1 model-artifact backup discipline.
+    "backup_model_uploaded": {
+        "kind": "backup_model_uploaded",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T03:00:00Z",
+        "tarball_date": "2025-01-15",
+        "uploaded_bytes": 4096000,
+    },
+    "backup_model_offsite_failed": {
+        "kind": "backup_model_offsite_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T03:05:00Z",
+        "tarball_date": "2025-01-15",
+        "error_summary": "connection reset by peer",
+    },
+    "backup_model_cold_verify_completed": {
+        "kind": "backup_model_cold_verify_completed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:00:00Z",
+        "tarball_date": "2025-01-15",
+        "total_artifacts": 4,
+        "loaded_ok": 4,
+    },
+    "backup_model_cold_verify_failed": {
+        "kind": "backup_model_cold_verify_failed",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:10:00Z",
+        "tarball_date": "2025-01-15",
+        "total_artifacts": 4,
+        "loaded_ok": 3,
+        "load_error_count": 1,
+    },
+    "backup_model_lineage_legacy": {
+        "kind": "backup_model_lineage_legacy",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:12:00Z",
+        "target": "super_lig_v1/1.0.0/model.joblib",
+        "predictor_id": "super_lig_v1",
+        "version": "1.0.0",
+    },
+    "backup_model_lineage_drift": {
+        "kind": "backup_model_lineage_drift",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T04:15:00Z",
+        "artifact_path": "super_lig_v1/1.0.0/model.joblib",
+        "predictor_id": "super_lig_v1",
+        "version": "1.0.0",
+        "drift_reason": "sidecar_missing",
+    },
+    # Phase 8 §8.13.3 — spool entry aging
+    "spool_entry_aged_out": {
+        "kind": "spool_entry_aged_out",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T06:00:00Z",
+        "target": "maint.scaler.v1",
+        "request_id": "deadbeef-0001",
+        "age_h": 200.0,
+        "entry_kind": "scale_decision",
+        "spool": "agent",
+    },
+    # Phase 8 §8.13.3 — spool entry retired (unknown_kind / schema_outdated).
+    "spool_entry_retired_kind": {
+        "kind": "spool_entry_retired_kind",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-15T06:01:00Z",
+        "target": "maint.scaler.v1",
+        "request_id": "deadbeef-0002",
+        "entry_kind": "legacy_op",
+        "reason": "unknown_kind",
+    },
+    # Phase 8 §8.14.2 — dump lacks per-file SHA-256 manifest (pre-8.14.2).
+    "backup_legacy_no_file_manifest": {
+        "kind": "backup_legacy_no_file_manifest",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T01:55:00Z",
+        "dump_date": "2025-01-15",
+        "fallback_action": "outer_checksum_only",
+    },
+    # Phase 8 §8.13.7 — legacy manifest fall-back.
+    "backup_legacy_manifest": {
+        "kind": "backup_legacy_manifest",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T02:00:00Z",
+        "dump_date": "2025-01-15",
+        "fallback_action": "verify_only",
+    },
+    # Phase 8 §8.13.7 — backup-role PG password age hard cap exceeded.
+    "backup_pg_secret_expired": {
+        "kind": "backup_pg_secret_expired",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T02:01:00Z",
+        "secret_age_days": 95,
+        "hard_cap_days": 90,
+    },
+    # Phase 8 §8.13.7 — DR-key compromise acknowledged (audit trail).
+    "backup_key_compromise_acknowledged": {
+        "kind": "backup_key_compromise_acknowledged",
+        "kind_schema_version": 1,
+        "produced_at": "2025-01-20T02:02:00Z",
+        "scope": "dr",
+        "recipient_fingerprint": "ABCD1234EFGH5678",
+        "action": "revoke",
+    },
+    # Phase 8 §8.14.10 — spool-flush partial drain (drain budget exhausted).
+    "spool_flush_partial": {
+        "kind": "spool_flush_partial",
+        "kind_schema_version": 1,
+        "target": "opsctl",
+        "produced_at": "2025-01-20T02:10:00Z",
+        "flush_run_id": "550e8400-e29b-41d4-a716-446655440000",
+        "drained": 100,
+        "remaining": 47,
+    },
+    # Phase 8 §8.15.4 — HMAC key lifecycle audit events.
+    "opsctl_key_revoked": {
+        "kind": "opsctl_key_revoked",
+        "kind_schema_version": 1,
+        "target": "operator-departure",
+        "produced_at": "2025-06-01T10:00:00Z",
+        "key_id": "abcd1234ef567890",
+        "revoked_by": "admin@example.com",
+        "reason": "employee departure",
+    },
+    "opsctl_key_rotated": {
+        "kind": "opsctl_key_rotated",
+        "kind_schema_version": 1,
+        "target": "scheduled-rotation-Q2",
+        "produced_at": "2025-06-01T10:00:00Z",
+        "prev_key_id": "abcd1234ef567890",
+        "new_key_id": "1234abcd56ef7890",
+        "operator_email": "ops@example.com",
+    },
+    # Phase 8 §8.16.2 — spool-flush ack reconciliation summary.
+    "spool_flush_acks_reconciled": {
+        "kind": "spool_flush_acks_reconciled",
+        "kind_schema_version": 1,
+        "target": "opsctl",
+        "produced_at": "2025-06-01T12:00:00Z",
+        "flush_invocation_id": "550e8400-e29b-41d4-a716-446655440001",
+        "request_id": "req-abc123",
+        "expected_ack_count": 3,
+        "received_ack_count": 3,
+        "complete": True,
+    },
+}
+
+
+@pytest.mark.parametrize("kind", sorted(KNOWN_MAINT_EVENT_KINDS))
+def test_each_kind_has_a_validating_payload(kind: str) -> None:
+    """Each routed kind must be exercisable by a well-formed payload —
+    catches sub-schema fields that drift from `_GOOD_PAYLOADS` here."""
+    assert kind in _GOOD_PAYLOADS, (
+        f"add a representative payload for kind={kind!r} to _GOOD_PAYLOADS"
+    )
+    errors = schemas.validate_kind(MAINT_EVENT, _GOOD_PAYLOADS[kind])
+    assert errors == [], f"kind={kind!r} payload rejected: {errors}"
+
+
+def test_validate_kind_rejects_missing_discriminator() -> None:
+    errors = schemas.validate_kind(MAINT_EVENT, {"target": "x"})
+    assert errors and "kind" in errors[0]
+
+
+def test_validate_kind_rejects_unknown_kind() -> None:
+    errors = schemas.validate_kind(
+        MAINT_EVENT, {"kind": "does_not_exist", "target": "x"}
+    )
+    assert errors and "no per-kind sub-schema" in errors[0]
+
+
+def test_validate_kind_rejects_wrong_const_kind() -> None:
+    """A payload that loads the retrain_request sub-schema but carries a
+    different `kind` value must fail the const check."""
+    bad = dict(_GOOD_PAYLOADS["retrain_request"])
+    bad["kind"] = "denylist_clear"  # routes to denylist_clear sub-schema
+    errors = schemas.validate_kind(MAINT_EVENT, bad)
+    # Goes to denylist_clear sub-schema, which requires client_id +
+    # produced_at — those will be flagged. The point is: it does NOT
+    # validate against retrain_request just because the other fields
+    # match retrain_request's shape.
+    assert errors
+
+
+def test_validate_kind_rejects_missing_required_field() -> None:
+    bad = dict(_GOOD_PAYLOADS["denylist_clear"])
+    del bad["client_id"]
+    errors = schemas.validate_kind(MAINT_EVENT, bad)
+    assert any("client_id" in e for e in errors), errors
+
+
+def test_validate_kind_rejects_unknown_extra_field() -> None:
+    bad = dict(_GOOD_PAYLOADS["baseline_reset"])
+    bad["secret_backdoor"] = "nope"
+    errors = schemas.validate_kind(MAINT_EVENT, bad)
+    assert any("secret_backdoor" in e for e in errors), errors
+
+
+def test_retrain_request_reason_enum_enforced() -> None:
+    bad = dict(_GOOD_PAYLOADS["retrain_request"])
+    bad["reason"] = "vibes"
+    errors = schemas.validate_kind(MAINT_EVENT, bad)
+    assert any("enum" in e for e in errors), errors
+
+
+# ── MaintAck dataclass + schema parity ──────────────────────────────────
+
+
+def test_maint_ack_topic_exported() -> None:
+    assert MAINT_ACK == "maint.ack.v1"
+    assert MAINT_ACK in schemas.known_topics()
+
+
+def test_maint_ack_round_trip_validates() -> None:
+    ack = MaintAck(
+        request_id="req-001",
+        accepted=True,
+        accepted_by="sec.rate.v1",
+        processed_at="2025-01-01T00:00:00Z",
+        attempt=1,
+    )
+    payload = ack.as_dict()
+    errors = schemas.validate(MAINT_ACK, payload)
+    assert errors == [], errors
+    restored = MaintAck.from_dict(payload)
+    assert restored == ack
+
+
+def test_maint_ack_with_optionals_round_trips() -> None:
+    ack = MaintAck(
+        request_id="req-002",
+        accepted=False,
+        accepted_by="storage.v1",
+        processed_at="2025-01-01T00:00:00Z",
+        attempt=2,
+        reason="schema_mismatch",
+        details={"missing_key": "client_id"},
+    )
+    payload = ack.as_dict()
+    assert payload["reason"] == "schema_mismatch"
+    assert payload["details"] == {"missing_key": "client_id"}
+    assert schemas.validate(MAINT_ACK, payload) == []
+    assert MaintAck.from_dict(payload) == ack
+
+
+def test_maint_ack_rejects_blank_request_id() -> None:
+    with pytest.raises(ValueError, match="request_id"):
+        MaintAck(
+            request_id="",
+            accepted=True,
+            accepted_by="sec.rate.v1",
+            processed_at="2025-01-01T00:00:00Z",
+        )
+
+
+def test_maint_ack_rejects_zero_attempt() -> None:
+    with pytest.raises(ValueError, match="attempt"):
+        MaintAck(
+            request_id="req-x",
+            accepted=True,
+            accepted_by="sec.rate.v1",
+            processed_at="2025-01-01T00:00:00Z",
+            attempt=0,
+        )
+
+
+def test_maint_ack_omits_unset_optionals_from_wire() -> None:
+    """Empty `reason` and None `details` must NOT appear on the wire —
+    keeps payloads tight against the cfg.maint_ack_payload_max_bytes
+    cap that lands in §8.1."""
+    ack = MaintAck(
+        request_id="req-001",
+        accepted=True,
+        accepted_by="sec.rate.v1",
+        processed_at="2025-01-01T00:00:00Z",
+    )
+    payload = ack.as_dict()
+    assert "reason" not in payload
+    assert "details" not in payload

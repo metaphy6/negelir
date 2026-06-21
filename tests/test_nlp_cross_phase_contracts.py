@@ -19,7 +19,7 @@ class TestNlpDedupWindowInequality:
 
     def test_defaults_satisfy_constraint(self) -> None:
         """Default config must pass the dedup-window inequality."""
-        from ai.common.config import Config
+        from common.config import Config
 
         issues = Config().validate()
         ineq = [i for i in issues if "nlp_request_dedup_window_s" in i and ">=" in i]
@@ -29,7 +29,7 @@ class TestNlpDedupWindowInequality:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Set nlp_request_dedup_window_s well below minimum (299 < 300 + 30)."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S", "299")
         with pytest.raises(ValueError, match="nlp_request_dedup_window_s"):
@@ -39,7 +39,7 @@ class TestNlpDedupWindowInequality:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """qa_request default=300 → minimum nlp=330; value 329 must be rejected."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S", "329")
         with pytest.raises(ValueError, match="nlp_request_dedup_window_s"):
@@ -49,7 +49,7 @@ class TestNlpDedupWindowInequality:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Exactly qa(300) + 30 = 330 must be accepted."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S", "330")
         issues = Config().validate()
@@ -62,7 +62,7 @@ class TestNlpApiTimeoutChain:
 
     def test_defaults_satisfy_constraint(self) -> None:
         """Default config must satisfy the API timeout chain."""
-        from ai.common.config import Config
+        from common.config import Config
 
         issues = Config().validate()
         ineq = [
@@ -75,7 +75,7 @@ class TestNlpApiTimeoutChain:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """pipeline(1800) + dispatch(200) = 2000; api=1999 must be rejected."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_API_REQUEST_TIMEOUT_MS", "1999")
         monkeypatch.setenv("NEGELIR_NLP_PIPELINE_TIMEOUT_MS", "1800")
@@ -87,7 +87,7 @@ class TestNlpApiTimeoutChain:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """pipeline(1800) + dispatch(200) = 2000; api=2000 must be accepted."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_API_REQUEST_TIMEOUT_MS", "2000")
         monkeypatch.setenv("NEGELIR_NLP_PIPELINE_TIMEOUT_MS", "1800")
@@ -105,7 +105,7 @@ class TestNlpPipelineTimeoutChain:
 
     def test_defaults_without_humanize_satisfy_constraint(self) -> None:
         """Default config (nlp_humanize=false) must satisfy the pipeline chain."""
-        from ai.common.config import Config
+        from common.config import Config
 
         issues = Config().validate()
         ineq = [
@@ -118,7 +118,7 @@ class TestNlpPipelineTimeoutChain:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """consensus(750) + overhead(100) = 850; pipeline=849 must be rejected."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_PIPELINE_TIMEOUT_MS", "849")
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZE", "false")
@@ -130,7 +130,7 @@ class TestNlpPipelineTimeoutChain:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """With humanize: consensus(750)+overhead(100)+humanizer(500)=1350; 1349 rejected."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZE", "true")
         monkeypatch.setenv("NEGELIR_NLP_PIPELINE_TIMEOUT_MS", "1349")
@@ -142,7 +142,7 @@ class TestNlpPipelineTimeoutChain:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """With humanize: consensus(750)+overhead(100)+humanizer(500)=1350; 1350 accepted."""
-        from ai.common.config import Config
+        from common.config import Config
 
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZE", "true")
         monkeypatch.setenv("NEGELIR_NLP_PIPELINE_TIMEOUT_MS", "1350")
@@ -161,7 +161,7 @@ class TestNlpPipelineTimeoutChain:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """With humanize=false a pipeline of exactly consensus+overhead is accepted."""
-        from ai.common.config import Config
+        from common.config import Config
 
         # sum without humanizer = 750 + 100 = 850
         monkeypatch.setenv("NEGELIR_NLP_HUMANIZE", "false")

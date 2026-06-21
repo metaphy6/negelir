@@ -1,0 +1,29 @@
+{
+  "description": "Single-source spec for Turkish apostrophe-suffixed numeric tokens.",
+  "shape_regex": "^(?P<num>\\d+|\\d+[-–]\\d+|\\d+\\.)'(?P<suffix>[a-zçğıöşü]+)$",
+  "case_map": {
+    "a": "dative",
+    "e": "dative",
+    "da": "locative",
+    "de": "locative",
+    "ta": "locative",
+    "te": "locative",
+    "dan": "ablative",
+    "den": "ablative",
+    "tan": "ablative",
+    "ten": "ablative",
+    "ı": "accusative",
+    "i": "accusative",
+    "u": "accusative",
+    "ü": "accusative",
+    "ın": "genitive",
+    "in": "genitive",
+    "un": "genitive",
+    "ün": "genitive",
+    "sü": "genitive",
+    "lık": "derivative_lik",
+    "lik": "derivative_lik",
+    "luk": "derivative_lik",
+    "lük": "derivative_lik"
+  }
+}

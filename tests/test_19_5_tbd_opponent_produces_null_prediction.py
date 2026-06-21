@@ -9,7 +9,7 @@ fixtures rather than a fabricated prior.
 from __future__ import annotations
 
 import pytest
-from ai.common.schemas.records import TbdOpponentFixture, ScheduleTeam
+from common.schemas.records import TbdOpponentFixture, ScheduleTeam
 
 
 class TestTbdOpponentFixture:

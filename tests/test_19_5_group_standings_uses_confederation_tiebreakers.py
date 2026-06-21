@@ -8,7 +8,7 @@ Tests that standings accumulation respects confederation-specific tiebreaker ord
 from __future__ import annotations
 
 import pytest
-from ai.common.standings_accumulator import (
+from common.standings_accumulator import (
     GroupTeam,
     ConfederationTiebreakerRules,
     StandingsAccumulator,

@@ -34,7 +34,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
 
 def run(args: argparse.Namespace, *, bus: Optional[object] = None) -> int:
     """Generate the operator key or print the existing key_id."""
-    from ai.common.config import Config  # noqa: PLC0415
+    from common.config import Config  # noqa: PLC0415
 
     cfg = Config()
     try:

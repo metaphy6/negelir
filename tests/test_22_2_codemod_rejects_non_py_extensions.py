@@ -21,7 +21,7 @@ class TestRejectsNonPyExtensions:
         """The codemod must accept .py files."""
         with tempfile.TemporaryDirectory() as tmpdir:
             py_file = Path(tmpdir) / "module.py"
-            py_file.write_text("from ai.common.config import Config\n")
+            py_file.write_text("from common.config import Config\n")
             
             try:
                 FileFilterValidator.validate_file(py_file)

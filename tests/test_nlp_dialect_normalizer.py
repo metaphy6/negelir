@@ -79,7 +79,7 @@ class TestNormalizePipelineRegionalDialect:
         ]
 
     def test_nlp_dialect_class_min_recall_default(self) -> None:
-        from ai.common.config import Config
+        from common.config import Config
 
         cfg = Config()
         assert cfg.nlp_dialect_class_min_recall == 0.8

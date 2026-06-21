@@ -12,9 +12,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
 import logging
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
-from ai.common.schemas.records import RefereeAssignmentPayload
+from common.config import cfg
+from common.logger import get_logger
+from common.schemas.records import RefereeAssignmentPayload
 
 log = get_logger("scraper.differs.referee_watch")
 

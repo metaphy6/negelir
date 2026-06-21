@@ -23,7 +23,7 @@ def test_two_missed_drills_remove_relax_hatch() -> None:
     assert "status" in csv_content, "drills.csv missing status column"
     
     # Verify infrastructure: xops/makefile/drills.py check_missed_drills
-    drills_py = Path(__file__).parent.parent.parent / "xops" / "makefile" / "drills.py"
+    drills_py = Path(__file__).parent.parent.parent.parent / "xops" / "makefile" / "drills.py"
     assert drills_py.exists(), f"{drills_py} not found"
     assert "check_missed_drills" in drills_py.read_text(), \
         "check_missed_drills function not found in drills.py"

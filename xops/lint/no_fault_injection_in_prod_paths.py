@@ -15,9 +15,8 @@ import ast
 import sys
 from pathlib import Path
 
-
 ALLOWED_PATHS = ("ai/tests/", "xops/chaos/", "xops/lint/")
-FAULT_MODULES = ("ai.swarm.sdk.fault", "ai.swarm.sdk")
+FAULT_MODULES = ("swarm.sdk.fault", "swarm.sdk")
 
 
 def check_file(fpath: Path) -> list[str]:
@@ -41,7 +40,7 @@ def check_file(fpath: Path) -> list[str]:
     issues = []
 
     for node in ast.walk(tree):
-        # Check for: from ai.swarm.sdk.fault import ...
+        # Check for: from swarm.sdk.fault import ...
         if isinstance(node, ast.ImportFrom):
             if node.module and any(node.module.startswith(m) for m in FAULT_MODULES):
                 issues.append(
@@ -50,7 +49,7 @@ def check_file(fpath: Path) -> list[str]:
                     f"FAIL_SAFE_FAULT_INJECTION_PROD_PATH"
                 )
 
-        # Check for: import ai.swarm.sdk
+        # Check for: import swarm.sdk as swarm
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if any(alias.name.startswith(m) for m in FAULT_MODULES):

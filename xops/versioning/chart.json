@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.16.0",
-    "build": 6,
+    "build": 16,
     "released": null
   },
   "components": {
@@ -35,14 +35,14 @@
       }
     },
     "xops": {
-      "version": "3.89.13",
+      "version": "3.89.22",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-21T15:40:12+00:00"
+      "last_changed": "2026-06-21T16:52:04+00:00"
     },
     "docs": {
-      "version": "3.25.0",
+      "version": "3.25.1",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-21T11:24:01+00:00"
+      "last_changed": "2026-06-21T16:28:22+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -17995,6 +17995,96 @@
       "from": "3.89.12",
       "to": "3.89.13",
       "build": 6
+    },
+    {
+      "timestamp": "2026-06-21T15:45:09+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 6: trc/ moved to root",
+      "from": "3.89.13",
+      "to": "3.89.14",
+      "build": 7
+    },
+    {
+      "timestamp": "2026-06-21T15:50:06+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 7: proofreader/ package moved to root with codemod and pyproject updates",
+      "from": "3.89.14",
+      "to": "3.89.15",
+      "build": 8
+    },
+    {
+      "timestamp": "2026-06-21T16:00:23+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.3c: Implement swarm_collision_check, merge ai/swarm/ to root swarm/, rewrite 76 import files, all proof tests passing",
+      "from": "3.89.15",
+      "to": "3.89.16",
+      "build": 9
+    },
+    {
+      "timestamp": "2026-06-21T16:05:28+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 8: pipeline/ package moved from ai/pipeline/ to root. Codemod (already rewritten), pyproject.toml config updated, cycle-check verified.",
+      "from": "3.89.16",
+      "to": "3.89.17",
+      "build": 10
+    },
+    {
+      "timestamp": "2026-06-21T16:10:20+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 9: orchestrator/ package moved to root. Codemod no-op (already rewritten by pipeline/), pyproject.toml updated, isolation snapshot refreshed, cycle-check green",
+      "from": "3.89.17",
+      "to": "3.89.18",
+      "build": 11
+    },
+    {
+      "timestamp": "2026-06-21T16:14:30+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 10: moved backtest/ from ai/ to root, updated pyproject.toml isort and coverage config",
+      "from": "3.89.18",
+      "to": "3.89.19",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-06-21T16:23:58+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 12: Root entry-point files moved, codemod applied",
+      "from": "3.89.19",
+      "to": "3.89.20",
+      "build": 13
+    },
+    {
+      "timestamp": "2026-06-21T16:28:22+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 13: consolidated training reports under docs/reports/ai_pipeline/",
+      "from": "3.25.0",
+      "to": "3.25.1",
+      "build": 14
+    },
+    {
+      "timestamp": "2026-06-21T16:43:08+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4: Unified canonical import paths across 410 files; ai/ converted to shim-only; isolation gates enforced",
+      "from": "3.89.20",
+      "to": "3.89.21",
+      "build": 15
+    },
+    {
+      "timestamp": "2026-06-21T16:52:04+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4: All 13 packages moved, ai shim-only, imports rewritten, configuration updated, isolation gate passing",
+      "from": "3.89.21",
+      "to": "3.89.22",
+      "build": 16
     }
   ]
 }

@@ -278,7 +278,7 @@ def strip_offensive_slurs(tokens: list[str], path: Path | None = None) -> tuple[
 
     if any(counts.values()):
         try:
-            from ai.common.telemetry import get_sink
+            from common.telemetry import get_sink
 
             sink = get_sink()
             for offense_class, count in counts.items():

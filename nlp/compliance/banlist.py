@@ -10,7 +10,7 @@ from typing import Any
 import jinja2
 import yaml
 
-from ai.common.logger import get_logger
+from common.logger import get_logger
 
 _ALLOWED_ACTIONS = frozenset({"redact", "refuse", "replace_with"})
 _CITATION_DELIMITER = "\n---\n"

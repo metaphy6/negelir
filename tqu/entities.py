@@ -8,8 +8,8 @@ Per roadmap §5.1 TQU Step 4.
 import re
 from dataclasses import dataclass, field
 
-from ai.common.constants import TEAM_MAP
-from ai.common.logger import get_logger
+from common.constants import TEAM_MAP
+from common.logger import get_logger
 
 log = get_logger("tqu.entities")
 

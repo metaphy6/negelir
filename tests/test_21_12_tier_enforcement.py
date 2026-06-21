@@ -17,7 +17,7 @@ class TestTierEnforcement:
     @staticmethod
     def _load_entitlements() -> dict:
         """Load xops/monetization/entitlements.yaml as dict (YAML parsing via json for now)."""
-        entitlements_path = Path(__file__).parent.parent.parent / "xops" / "monetization" / "entitlements.yaml"
+        entitlements_path = Path(__file__).parent.parent / "xops" / "monetization" / "entitlements.yaml"
         # For this test, we assume a parsed YAML structure (in reality, yaml.safe_load)
         # We verify it exists and is well-formed
         assert entitlements_path.exists(), f"entitlements.yaml not found at {entitlements_path}"
@@ -31,7 +31,7 @@ class TestTierEnforcement:
         """Pro tier can access cards/corners/fouls markets when Officials plane is enabled."""
         entitlements = self._load_entitlements()
         # Pro tier must include officials plane and cards_corners_fouls market
-        content = (Path(__file__).parent.parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
+        content = (Path(__file__).parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
         assert "pro:" in content
         assert "cards_corners_fouls" in content or "officials" in content
         # Assertion: pro tier includes at least one enrichment-dependent market
@@ -39,7 +39,7 @@ class TestTierEnforcement:
 
     def test_free_tier_response_excludes_card_context_overlay(self) -> None:
         """Free tier subscribers never see card-context overlay, even if computed."""
-        content = (Path(__file__).parent.parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
+        content = (Path(__file__).parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
         # Free tier must NOT include card_context or premium markets
         lines = content.split("\n")
         in_free_tier = False
@@ -62,7 +62,7 @@ class TestTierEnforcement:
 
     def test_premium_tier_response_includes_player_props_with_health_plane(self) -> None:
         """Premium tier gets player-prop markets when Health plane is active."""
-        content = (Path(__file__).parent.parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
+        content = (Path(__file__).parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
         # Premium tier must include health plane and player_props market
         assert "premium:" in content
         assert "player_props" in content or "health" in content
@@ -71,7 +71,7 @@ class TestTierEnforcement:
 
     def test_pro_tier_cannot_access_weather_special_markets(self) -> None:
         """Weather-special markets (windy_day_totals, red_card_markets) require premium tier."""
-        content = (Path(__file__).parent.parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
+        content = (Path(__file__).parent.parent / "xops" / "monetization" / "entitlements.yaml").read_text()
         # Extract pro tier markets
         lines = content.split("\n")
         in_pro_tier = False
@@ -104,7 +104,7 @@ class TestTierEnforcement:
 
     def test_entitlements_yaml_has_row_for_each_enrichment_derived_market(self) -> None:
         """Single-source policy: xops/monetization/entitlements.yaml has all enrichment markets."""
-        entitlements_path = Path(__file__).parent.parent.parent / "xops" / "monetization" / "entitlements.yaml"
+        entitlements_path = Path(__file__).parent.parent / "xops" / "monetization" / "entitlements.yaml"
         content = entitlements_path.read_text(encoding="utf-8")
         
         # Required enrichment-derived markets per ROADMAP §21.12

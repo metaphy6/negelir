@@ -5,7 +5,7 @@ from typing import Callable
 
 import pytest
 
-from ai.common.config import cfg
+from common.config import cfg
 from nlp.normalize import normalize_input
 from nlp.reduplication import (
     ReduplicationRule,

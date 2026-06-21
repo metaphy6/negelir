@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai.common.config import Config
+from common.config import Config
 
 
 class TestBackfillBootstrap:
@@ -41,7 +41,7 @@ class TestBackfillBootstrap:
 
     def test_backfill_mode_disables_event_coalescing_for_derived_views(self) -> None:
         """When ENRICHMENT_BACKFILL_MODE=true, derived-view reactors run synchronously."""
-        from ai.common.config import Config
+        from common.config import Config
         
         cfg = Config()
         assert hasattr(cfg, "enrichment_backfill_mode"), "backfill_mode config exists"

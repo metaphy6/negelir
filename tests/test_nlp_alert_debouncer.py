@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai.swarm.sdk import AlertDebouncer, DebounceDecision
+from swarm.sdk import AlertDebouncer, DebounceDecision
 
 
 class _FakeClock:
@@ -173,7 +173,7 @@ def test_alert_debouncer_constructor_validates_ttl_s():
 
 def test_sec_alert_debouncer_still_works():
     """Backward compatibility: SecAlertDebouncer inherits from _BaseAlertDebouncer."""
-    from ai.swarm.agents.sec._alert import SecAlertDebouncer
+    from swarm.agents.sec._alert import SecAlertDebouncer
 
     clock = _FakeClock()
     d = SecAlertDebouncer(ttl_s=60, clock=clock)

@@ -17,9 +17,9 @@ from typing import Optional, Dict, Any, List, Set, Tuple
 from collections import defaultdict
 import logging
 
-from ai.common.config import cfg
-from ai.common.logger import get_logger
-from ai.common.schemas.records import RefereeAssignmentPayload, RefereeProfilePayload, RefereeRollingStats
+from common.config import cfg
+from common.logger import get_logger
+from common.schemas.records import RefereeAssignmentPayload, RefereeProfilePayload, RefereeRollingStats
 
 log = get_logger("scraper.enrichment_reactor")
 

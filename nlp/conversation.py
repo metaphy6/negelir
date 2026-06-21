@@ -5,7 +5,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ai.common.config import cfg
+from common.config import cfg
 
 
 def _utc_now_iso() -> str:

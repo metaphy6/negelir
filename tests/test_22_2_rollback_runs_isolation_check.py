@@ -102,7 +102,7 @@ class TestRollbackRunsIsolationCheck:
         test_file.write_text("from common.config import cfg\n")
         
         sidecar = ai_common / "config.py.phase22.orig"
-        sidecar.write_text("from ai.common.config import cfg\n")
+        sidecar.write_text("from common.config import cfg\n")
         
         # Create empty inventory
         tracking_dir = tmp_path / "docs" / "tracking"
@@ -117,7 +117,7 @@ class TestRollbackRunsIsolationCheck:
                 result = cmd_rollback_codemod([])
                 
                 # File should be restored
-                assert test_file.read_text() == "from ai.common.config import cfg\n"
+                assert test_file.read_text() == "from common.config import cfg\n"
                 
                 # Sidecar should be deleted
                 assert not sidecar.exists()
@@ -162,7 +162,7 @@ class TestRollbackRunsIsolationCheck:
             fpath.write_text(f"from nlp.{fname.replace('.py', '')} import X\n")
             
             sidecar = ai_nlp / (fname + ".phase22.orig")
-            sidecar.write_text(f"from ai.nlp.{fname.replace('.py', '')} import X\n")
+            sidecar.write_text(f"from nlp.{fname.replace('.py', '')} import X\n")
         
         # Create empty inventory
         tracking_dir = tmp_path / "docs" / "tracking"
@@ -184,7 +184,7 @@ class TestRollbackRunsIsolationCheck:
                 # All files should be restored
                 for fname in files:
                     fpath = ai_nlp / fname
-                    assert fpath.read_text() == f"from ai.nlp.{fname.replace('.py', '')} import X\n"
+                    assert fpath.read_text() == f"from nlp.{fname.replace('.py', '')} import X\n"
                     sidecar = ai_nlp / (fname + ".phase22.orig")
                     assert not sidecar.exists()
                 
