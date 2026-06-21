@@ -11,7 +11,7 @@ import logging
 from typing import Iterable
 
 from ai.common.config import cfg
-from ai.common.security.patterns import PII_PATTERNS
+from common.security.patterns import PII_PATTERNS
 
 
 def _redact_text(text: str) -> str:

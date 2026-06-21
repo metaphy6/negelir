@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from ai.common.isolation.check import (
+from common.isolation.check import (
     check_component_isolation,
     load_policy,
 )

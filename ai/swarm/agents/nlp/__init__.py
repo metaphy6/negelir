@@ -77,8 +77,8 @@ from uuid import uuid4
 
 from ai.common.config import Config, cfg
 from ai.common.fixture_state import FixtureState
-from ai.common.security.patterns import PII_PATTERNS
-from ai.common.security.tr_pii import parse_redacted_tr_pii, redact_tr_pii
+from common.security.patterns import PII_PATTERNS
+from common.security.tr_pii import parse_redacted_tr_pii, redact_tr_pii
 from ai.common.telemetry import NLP_CLASSIFIER_EXTRACTOR_SKEW
 
 from ...sdk import AlertDebouncer

@@ -1,6 +1,6 @@
 {
   "version": "18.1",
-  "generated_at": "2026-06-21T13:59:16.217317Z",
+  "generated_at": "2026-06-21T14:56:45.249669Z",
   "components": [
     "ai",
     "common"
@@ -982,793 +982,6 @@
         "type": "from",
         "module": "ai.common.config",
         "name": "cfg"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 20,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 21,
-        "type": "import",
-        "module": "math"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 22,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 23,
-        "type": "from",
-        "module": "collections",
-        "name": "defaultdict"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 24,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 24,
-        "type": "from",
-        "module": "datetime",
-        "name": "timedelta"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 26,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 27,
-        "type": "import",
-        "module": "pandas"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 29,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 31,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "MACKOLIK_ID_MAP"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 31,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "TEAM_STRENGTH"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 31,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "UUID_TO_NAME"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 31,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "N_FEATURES"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 37,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 38,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 466,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "turkish_super_lig"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 302,
-        "type": "from",
-        "module": "scraper.mackolik",
-        "name": "MackolikClient"
-      },
-      {
-        "file": "ai/model/real_features.py",
-        "line": 406,
-        "type": "from",
-        "module": "scraper.real_data",
-        "name": "RealDataScraper"
-      },
-      {
-        "file": "ai/model/features.py",
-        "line": 7,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/model/features.py",
-        "line": 8,
-        "type": "import",
-        "module": "pandas"
-      },
-      {
-        "file": "ai/model/features.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/model/features.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "N_FEATURES"
-      },
-      {
-        "file": "ai/model/enrichment_features.py",
-        "line": 13,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/model/enrichment_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/model/enrichment_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "datetime",
-        "name": "timezone"
-      },
-      {
-        "file": "ai/model/enrichment_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "datetime",
-        "name": "timedelta"
-      },
-      {
-        "file": "ai/model/enrichment_features.py",
-        "line": 16,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/model/enrichment_features.py",
-        "line": 18,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "Config"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 14,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 15,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 16,
-        "type": "import",
-        "module": "platform"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 17,
-        "type": "import",
-        "module": "subprocess"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 18,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 19,
-        "type": "import",
-        "module": "tempfile"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 20,
-        "type": "import",
-        "module": "threading"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 21,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 22,
-        "type": "import",
-        "module": "uuid"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 23,
-        "type": "import",
-        "module": "hashlib"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 24,
-        "type": "from",
-        "module": "typing",
-        "name": "Any"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 24,
-        "type": "from",
-        "module": "typing",
-        "name": "Dict"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 25,
-        "type": "import",
-        "module": "signal"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 30,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "LeagueConfig"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 30,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "get_league_config"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 31,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 556,
-        "type": "import",
-        "module": "grp"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 557,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 713,
-        "type": "import",
-        "module": "subprocess"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 213,
-        "type": "import",
-        "module": "importlib"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 259,
-        "type": "import",
-        "module": "importlib"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 979,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "Config"
-      },
-      {
-        "file": "ai/model/device.py",
-        "line": 575,
-        "type": "import",
-        "module": "subprocess"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 13,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 15,
-        "type": "import",
-        "module": "math"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 16,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 16,
-        "type": "from",
-        "module": "datetime",
-        "name": "timedelta"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 16,
-        "type": "from",
-        "module": "datetime",
-        "name": "timezone"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 17,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 17,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 18,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 19,
-        "type": "from",
-        "module": "collections",
-        "name": "defaultdict"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 21,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/model/derived_views.py",
-        "line": 22,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/outcomes.py",
-        "line": 7,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/model/outcomes.py",
-        "line": 8,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/model/outcomes.py",
-        "line": 8,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/model/outcomes.py",
-        "line": 10,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/model/outcomes.py",
-        "line": 12,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/drift.py",
-        "line": 6,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/model/drift.py",
-        "line": 8,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/model/drift.py",
-        "line": 9,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 10,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 12,
-        "type": "import",
-        "module": "json"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 13,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 14,
-        "type": "from",
-        "module": "datetime",
-        "name": "datetime"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "typing",
-        "name": "Dict"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "typing",
-        "name": "List"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 15,
-        "type": "from",
-        "module": "typing",
-        "name": "Tuple"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 17,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/model/health_plane_features.py",
-        "line": 18,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/enrichment_source.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "Protocol"
-      },
-      {
-        "file": "ai/model/enrichment_source.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "Dict"
-      },
-      {
-        "file": "ai/model/enrichment_source.py",
-        "line": 10,
-        "type": "import",
-        "module": "msgpack"
-      },
-      {
-        "file": "ai/model/enrichment_source.py",
-        "line": 11,
-        "type": "import",
-        "module": "logging"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 7,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 8,
-        "type": "import",
-        "module": "pickle"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 10,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 11,
-        "type": "import",
-        "module": "xgboost"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 12,
-        "type": "from",
-        "module": "sklearn.metrics",
-        "name": "accuracy_score"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 12,
-        "type": "from",
-        "module": "sklearn.metrics",
-        "name": "log_loss"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 14,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 15,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "MODEL_VERSION"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 16,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "get_league_config"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 17,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 17,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "section_banner"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 17,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "success_banner"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 18,
-        "type": "from",
-        "module": "model.device",
-        "name": "detect_device"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 18,
-        "type": "from",
-        "module": "model.device",
-        "name": "get_xgb_params"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 19,
-        "type": "from",
-        "module": "model.features",
-        "name": "inject_noise"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 19,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 46,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "load_real_matches"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 46,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "extract_real_dataset"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 46,
-        "type": "from",
-        "module": "model.real_features",
-        "name": "_parse_date"
-      },
-      {
-        "file": "ai/model/trainer.py",
-        "line": 181,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 8,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 9,
-        "type": "import",
-        "module": "pickle"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 10,
-        "type": "import",
-        "module": "time"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 12,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 13,
-        "type": "import",
-        "module": "xgboost"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 14,
-        "type": "from",
-        "module": "scipy.stats",
-        "name": "poisson"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 16,
-        "type": "from",
-        "module": "ai.common.config",
-        "name": "cfg"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 17,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "MODEL_VERSION"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 17,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "N_FEATURES"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 18,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "LeagueConfig"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 18,
-        "type": "from",
-        "module": "ai.common.league_config",
-        "name": "get_league_config"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 19,
-        "type": "from",
-        "module": "ai.common.logger",
-        "name": "get_logger"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 20,
-        "type": "from",
-        "module": "model.features",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/model/inference.py",
-        "line": 136,
-        "type": "from",
-        "module": "model.trainer",
-        "name": "train_model"
       },
       {
         "file": "ai/common/league_catalog_loader.py",
@@ -2905,58 +2118,6 @@
         "type": "from",
         "module": "ai.common.logger",
         "name": "get_logger"
-      },
-      {
-        "file": "ai/tests/fixtures.py",
-        "line": 6,
-        "type": "import",
-        "module": "numpy"
-      },
-      {
-        "file": "ai/tests/fixtures.py",
-        "line": 7,
-        "type": "import",
-        "module": "pandas"
-      },
-      {
-        "file": "ai/tests/fixtures.py",
-        "line": 9,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "FEATURE_COLUMNS"
-      },
-      {
-        "file": "ai/tests/fixtures.py",
-        "line": 9,
-        "type": "from",
-        "module": "ai.common.constants",
-        "name": "N_FEATURES"
-      },
-      {
-        "file": "ai/tests/enrichment_calibration.py",
-        "line": 6,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/tests/enrichment_calibration.py",
-        "line": 8,
-        "type": "from",
-        "module": "typing",
-        "name": "Any"
-      },
-      {
-        "file": "ai/tests/enrichment_calibration.py",
-        "line": 32,
-        "type": "import",
-        "module": "random"
-      },
-      {
-        "file": "ai/tests/enrichment_calibration.py",
-        "line": 33,
-        "type": "import",
-        "module": "numpy"
       },
       {
         "file": "ai/orchestrator/state_machine.py",
@@ -6057,7 +5218,7 @@
         "file": "ai/nlp/streaming.py",
         "line": 7,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "detect_pii"
       },
       {
@@ -6212,7 +5373,7 @@
         "file": "ai/nlp/proofreader.py",
         "line": 48,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "PII_PATTERNS"
       },
       {
@@ -6560,7 +5721,7 @@
         "file": "ai/nlp/entity.py",
         "line": 54,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "detect_pii"
       },
       {
@@ -7250,21 +6411,21 @@
         "file": "ai/nlp/injection_probe.py",
         "line": 19,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "CompiledRule"
       },
       {
         "file": "ai/nlp/injection_probe.py",
         "line": 19,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "RuleSet"
       },
       {
         "file": "ai/nlp/injection_probe.py",
         "line": 19,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "current_ruleset"
       },
       {
@@ -7749,114 +6910,6 @@
         "line": 331,
         "type": "import",
         "module": "yaml"
-      },
-      {
-        "file": "ai/common/isolation/dpa_validator.py",
-        "line": 6,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/isolation/dpa_validator.py",
-        "line": 8,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/common/isolation/dpa_validator.py",
-        "line": 8,
-        "type": "from",
-        "module": "typing",
-        "name": "Dict"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 11,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 13,
-        "type": "import",
-        "module": "ast"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 14,
-        "type": "import",
-        "module": "re"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 15,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 16,
-        "type": "from",
-        "module": "pathlib",
-        "name": "Path"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 17,
-        "type": "from",
-        "module": "typing",
-        "name": "Any"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 19,
-        "type": "import",
-        "module": "yaml"
-      },
-      {
-        "file": "ai/common/isolation/check.py",
-        "line": 325,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/common/isolation/policy.py",
-        "line": 7,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/isolation/policy.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "List"
-      },
-      {
-        "file": "ai/common/isolation/policy.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "Dict"
-      },
-      {
-        "file": "ai/common/isolation/policy.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/common/isolation/policy.py",
-        "line": 10,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
       },
       {
         "file": "ai/common/feeds/timesource.py",
@@ -8881,262 +7934,6 @@
         "name": "Optional"
       },
       {
-        "file": "ai/common/db/owner_check.py",
-        "line": 7,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/db/owner_check.py",
-        "line": 9,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/common/db/owner_check.py",
-        "line": 10,
-        "type": "from",
-        "module": "enum",
-        "name": "Enum"
-      },
-      {
-        "file": "ai/common/db/owner_check.py",
-        "line": 11,
-        "type": "from",
-        "module": "typing",
-        "name": "Protocol"
-      },
-      {
-        "file": "ai/common/observability/metrics.py",
-        "line": 7,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/observability/metrics.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "Tuple"
-      },
-      {
-        "file": "ai/common/observability/alerts.py",
-        "line": 2,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/observability/alerts.py",
-        "line": 4,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/common/observability/alerts.py",
-        "line": 5,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/common/observability/alerts.py",
-        "line": 8,
-        "type": "import",
-        "module": "common.observability.metrics"
-      },
-      {
-        "file": "ai/common/observability/__init__.py",
-        "line": 6,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/observability/__init__.py",
-        "line": 12,
-        "type": "from",
-        "module": "common.observability",
-        "name": "metrics"
-      },
-      {
-        "file": "ai/common/observability/__init__.py",
-        "line": 13,
-        "type": "from",
-        "module": "common.observability",
-        "name": "alerts"
-      },
-      {
-        "file": "ai/common/observability/__init__.py",
-        "line": 18,
-        "type": "from",
-        "module": "",
-        "name": "metrics"
-      },
-      {
-        "file": "ai/common/observability/__init__.py",
-        "line": 19,
-        "type": "from",
-        "module": "",
-        "name": "alerts"
-      },
-      {
-        "file": "ai/common/security/input_sanitiser.py",
-        "line": 6,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/security/input_sanitiser.py",
-        "line": 8,
-        "type": "import",
-        "module": "re"
-      },
-      {
-        "file": "ai/common/security/input_sanitiser.py",
-        "line": 83,
-        "type": "import",
-        "module": "urllib.parse"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 7,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 9,
-        "type": "import",
-        "module": "hashlib"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 10,
-        "type": "import",
-        "module": "re"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 11,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "Iterable"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "List"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "Pattern"
-      },
-      {
-        "file": "ai/common/security/tr_pii.py",
-        "line": 12,
-        "type": "from",
-        "module": "typing",
-        "name": "Tuple"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 35,
-        "type": "from",
-        "module": "__future__",
-        "name": "annotations"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 37,
-        "type": "import",
-        "module": "hashlib"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 38,
-        "type": "import",
-        "module": "os"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 39,
-        "type": "import",
-        "module": "re"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 40,
-        "type": "import",
-        "module": "threading"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 41,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 41,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "field"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 42,
-        "type": "from",
-        "module": "pathlib",
-        "name": "Path"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 43,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 43,
-        "type": "from",
-        "module": "typing",
-        "name": "Tuple"
-      },
-      {
-        "file": "ai/common/security/patterns.py",
-        "line": 45,
-        "type": "import",
-        "module": "yaml"
-      },
-      {
         "file": "ai/common/schemas/records.py",
         "line": 7,
         "type": "from",
@@ -9265,51 +8062,6 @@
         "type": "from",
         "module": "ai.common.logger",
         "name": "get_logger"
-      },
-      {
-        "file": "ai/tests/fuzz/fuzz_nlp_normalize.py",
-        "line": 15,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/tests/fuzz/fuzz_nlp_normalize.py",
-        "line": 16,
-        "type": "import",
-        "module": "atheris"
-      },
-      {
-        "file": "ai/tests/fuzz/fuzz_nlp_normalize.py",
-        "line": 20,
-        "type": "import",
-        "module": "atheris"
-      },
-      {
-        "file": "ai/tests/fuzz/fuzz_nlp_normalize.py",
-        "line": 66,
-        "type": "import",
-        "module": "sys"
-      },
-      {
-        "file": "ai/tests/fuzz/fuzz_nlp_normalize.py",
-        "line": 40,
-        "type": "from",
-        "module": "nlp.normalize",
-        "name": "normalize_input"
-      },
-      {
-        "file": "ai/tests/fixtures/competitions/__init__.py",
-        "line": 8,
-        "type": "from",
-        "module": "dataclasses",
-        "name": "dataclass"
-      },
-      {
-        "file": "ai/tests/fixtures/competitions/__init__.py",
-        "line": 9,
-        "type": "from",
-        "module": "typing",
-        "name": "Optional"
       },
       {
         "file": "ai/nlp/numbers/apostrophe_suffixed.py",
@@ -9443,7 +8195,7 @@
         "file": "ai/nlp/eval/_sample.py",
         "line": 8,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "PII_PATTERNS"
       },
       {
@@ -14840,35 +13592,35 @@
         "file": "ai/swarm/agents/sec/input.py",
         "line": 55,
         "type": "from",
-        "module": "ai.common.security",
+        "module": "common.security",
         "name": "PatternFileError"
       },
       {
         "file": "ai/swarm/agents/sec/input.py",
         "line": 55,
         "type": "from",
-        "module": "ai.common.security",
+        "module": "common.security",
         "name": "RuleSet"
       },
       {
         "file": "ai/swarm/agents/sec/input.py",
         "line": 55,
         "type": "from",
-        "module": "ai.common.security",
+        "module": "common.security",
         "name": "load_ruleset"
       },
       {
         "file": "ai/swarm/agents/sec/input.py",
         "line": 55,
         "type": "from",
-        "module": "ai.common.security",
+        "module": "common.security",
         "name": "resolve_path"
       },
       {
         "file": "ai/swarm/agents/sec/input.py",
         "line": 61,
         "type": "from",
-        "module": "ai.common.security.tr_pii",
+        "module": "common.security.tr_pii",
         "name": "redact_tr_pii"
       },
       {
@@ -15512,7 +14264,7 @@
         "file": "ai/swarm/agents/nlp/_log_filter.py",
         "line": 14,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "PII_PATTERNS"
       },
       {
@@ -15687,21 +14439,21 @@
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 80,
         "type": "from",
-        "module": "ai.common.security.patterns",
+        "module": "common.security.patterns",
         "name": "PII_PATTERNS"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 81,
         "type": "from",
-        "module": "ai.common.security.tr_pii",
+        "module": "common.security.tr_pii",
         "name": "parse_redacted_tr_pii"
       },
       {
         "file": "ai/swarm/agents/nlp/__init__.py",
         "line": 81,
         "type": "from",
-        "module": "ai.common.security.tr_pii",
+        "module": "common.security.tr_pii",
         "name": "redact_tr_pii"
       },
       {
@@ -19798,77 +18550,194 @@
         "name": "register_topic_policies"
       },
       {
+        "file": "common/isolation/dpa_validator.py",
+        "line": 9,
+        "type": "from",
+        "module": "__future__",
+        "name": "annotations"
+      },
+      {
+        "file": "common/isolation/dpa_validator.py",
+        "line": 11,
+        "type": "from",
+        "module": "typing",
+        "name": "Optional"
+      },
+      {
+        "file": "common/isolation/dpa_validator.py",
+        "line": 11,
+        "type": "from",
+        "module": "typing",
+        "name": "Dict"
+      },
+      {
         "file": "common/isolation/check.py",
-        "line": 6,
+        "line": 13,
         "type": "from",
         "module": "__future__",
         "name": "annotations"
       },
       {
         "file": "common/isolation/check.py",
-        "line": 8,
+        "line": 15,
         "type": "import",
         "module": "ast"
       },
       {
         "file": "common/isolation/check.py",
-        "line": 9,
+        "line": 16,
+        "type": "import",
+        "module": "re"
+      },
+      {
+        "file": "common/isolation/check.py",
+        "line": 17,
         "type": "from",
         "module": "dataclasses",
         "name": "dataclass"
       },
       {
         "file": "common/isolation/check.py",
-        "line": 10,
+        "line": 18,
         "type": "from",
         "module": "pathlib",
         "name": "Path"
       },
       {
         "file": "common/isolation/check.py",
-        "line": 11,
+        "line": 19,
         "type": "from",
         "module": "typing",
         "name": "Any"
       },
       {
+        "file": "common/isolation/check.py",
+        "line": 21,
+        "type": "import",
+        "module": "yaml"
+      },
+      {
+        "file": "common/isolation/policy.py",
+        "line": 10,
+        "type": "from",
+        "module": "__future__",
+        "name": "annotations"
+      },
+      {
+        "file": "common/isolation/policy.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "List"
+      },
+      {
+        "file": "common/isolation/policy.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "Dict"
+      },
+      {
+        "file": "common/isolation/policy.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "Optional"
+      },
+      {
+        "file": "common/isolation/policy.py",
+        "line": 13,
+        "type": "from",
+        "module": "dataclasses",
+        "name": "dataclass"
+      },
+      {
         "file": "common/isolation/__init__.py",
-        "line": 16,
+        "line": 24,
         "type": "from",
         "module": "__future__",
         "name": "annotations"
       },
       {
         "file": "common/isolation/__init__.py",
-        "line": 18,
+        "line": 26,
         "type": "from",
         "module": "check",
         "name": "IsolationViolation"
       },
       {
         "file": "common/isolation/__init__.py",
-        "line": 18,
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "PublicSymbolViolation"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
         "type": "from",
         "module": "check",
         "name": "check_component_isolation"
       },
       {
         "file": "common/isolation/__init__.py",
-        "line": 18,
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "check_isolation"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
         "type": "from",
         "module": "check",
         "name": "check_isolation_full"
       },
       {
         "file": "common/isolation/__init__.py",
-        "line": 18,
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "check_public_symbols"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "extract_all_from_module"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "extract_cross_component_imports"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
         "type": "from",
         "module": "check",
         "name": "extract_imports"
       },
       {
         "file": "common/isolation/__init__.py",
-        "line": 18,
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "get_component_for_path"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
+        "type": "from",
+        "module": "check",
+        "name": "load_policy"
+      },
+      {
+        "file": "common/isolation/__init__.py",
+        "line": 26,
         "type": "from",
         "module": "check",
         "name": "uses_ast_analysis"
@@ -19925,6 +18794,69 @@
         "line": 112,
         "type": "import",
         "module": "sys"
+      },
+      {
+        "file": "common/db/owner_check.py",
+        "line": 7,
+        "type": "from",
+        "module": "__future__",
+        "name": "annotations"
+      },
+      {
+        "file": "common/db/owner_check.py",
+        "line": 9,
+        "type": "from",
+        "module": "dataclasses",
+        "name": "dataclass"
+      },
+      {
+        "file": "common/db/owner_check.py",
+        "line": 10,
+        "type": "from",
+        "module": "enum",
+        "name": "Enum"
+      },
+      {
+        "file": "common/db/owner_check.py",
+        "line": 11,
+        "type": "from",
+        "module": "typing",
+        "name": "Protocol"
+      },
+      {
+        "file": "common/db/__init__.py",
+        "line": 3,
+        "type": "from",
+        "module": "common.db.owner_check",
+        "name": "OwnershipChecker"
+      },
+      {
+        "file": "common/db/__init__.py",
+        "line": 3,
+        "type": "from",
+        "module": "common.db.owner_check",
+        "name": "SimpleOwnershipChecker"
+      },
+      {
+        "file": "common/db/__init__.py",
+        "line": 3,
+        "type": "from",
+        "module": "common.db.owner_check",
+        "name": "TableOwner"
+      },
+      {
+        "file": "common/db/__init__.py",
+        "line": 3,
+        "type": "from",
+        "module": "common.db.owner_check",
+        "name": "TableOwnershipError"
+      },
+      {
+        "file": "common/db/__init__.py",
+        "line": 3,
+        "type": "from",
+        "module": "common.db.owner_check",
+        "name": "TableOwnershipPolicy"
       },
       {
         "file": "common/observability/metrics.py",
@@ -19998,22 +18930,85 @@
         "file": "common/observability/__init__.py",
         "line": 6,
         "type": "from",
+        "module": "alerts",
+        "name": "Alert"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 6,
+        "type": "from",
+        "module": "alerts",
+        "name": "T3Alert"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 6,
+        "type": "from",
+        "module": "alerts",
+        "name": "T3StalenessAlertReactor"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 6,
+        "type": "from",
+        "module": "alerts",
+        "name": "T3SLOExclusionGate"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 6,
+        "type": "from",
+        "module": "alerts",
+        "name": "RobotsAlert"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 7,
+        "type": "from",
         "module": "metrics",
         "name": "isolation_violation_total"
       },
       {
         "file": "common/observability/__init__.py",
-        "line": 6,
+        "line": 7,
         "type": "from",
         "module": "metrics",
         "name": "isolation_audit_age_seconds"
       },
       {
         "file": "common/observability/__init__.py",
-        "line": 6,
+        "line": 7,
         "type": "from",
         "module": "metrics",
         "name": "isolation_relax_hatch_active"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 7,
+        "type": "from",
+        "module": "metrics",
+        "name": "T3_METRICS"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 7,
+        "type": "from",
+        "module": "metrics",
+        "name": "record_t3_ingestion"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 7,
+        "type": "from",
+        "module": "metrics",
+        "name": "record_t3_source_available"
+      },
+      {
+        "file": "common/observability/__init__.py",
+        "line": 7,
+        "type": "from",
+        "module": "metrics",
+        "name": "record_t3_shelved"
       },
       {
         "file": "common/config/ai_pipeline.py",
@@ -20185,6 +19180,354 @@
         "type": "from",
         "module": "common.config.ai_pipeline",
         "name": "cfg"
+      },
+      {
+        "file": "common/security/input_sanitiser.py",
+        "line": 6,
+        "type": "from",
+        "module": "__future__",
+        "name": "annotations"
+      },
+      {
+        "file": "common/security/input_sanitiser.py",
+        "line": 8,
+        "type": "import",
+        "module": "re"
+      },
+      {
+        "file": "common/security/input_sanitiser.py",
+        "line": 83,
+        "type": "import",
+        "module": "urllib.parse"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 11,
+        "type": "from",
+        "module": "common.security.input_sanitiser",
+        "name": "SanitationError"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 11,
+        "type": "from",
+        "module": "common.security.input_sanitiser",
+        "name": "SSRFRiskError"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 11,
+        "type": "from",
+        "module": "common.security.input_sanitiser",
+        "name": "sanitise_catalog_field"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 11,
+        "type": "from",
+        "module": "common.security.input_sanitiser",
+        "name": "sanitise_source_url"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "CompiledRule"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "PII_CREDIT_CARD_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "PII_EMAIL_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "PII_PATTERNS"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "PII_PHONE_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "PatternFileError"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "RuleSet"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "current_ruleset"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "detect_pii"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "load_ruleset"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "needs_reload"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "reload"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "reset_for_tests"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 17,
+        "type": "from",
+        "module": "common.security.patterns",
+        "name": "resolve_path"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "IBAN_TR_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "PHONE_TR_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "PLATE_TR_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "REDACTED_TOKEN_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "TC_KIMLIK_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "TrPiiSpan"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "VKN_RE"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "detect_tr_pii_spans"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "parse_redacted_tr_pii"
+      },
+      {
+        "file": "common/security/__init__.py",
+        "line": 33,
+        "type": "from",
+        "module": "common.security.tr_pii",
+        "name": "redact_tr_pii"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 7,
+        "type": "from",
+        "module": "__future__",
+        "name": "annotations"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 9,
+        "type": "import",
+        "module": "hashlib"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 10,
+        "type": "import",
+        "module": "re"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 11,
+        "type": "from",
+        "module": "dataclasses",
+        "name": "dataclass"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "Iterable"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "List"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "Optional"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "Pattern"
+      },
+      {
+        "file": "common/security/tr_pii.py",
+        "line": 12,
+        "type": "from",
+        "module": "typing",
+        "name": "Tuple"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 35,
+        "type": "from",
+        "module": "__future__",
+        "name": "annotations"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 37,
+        "type": "import",
+        "module": "hashlib"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 38,
+        "type": "import",
+        "module": "os"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 39,
+        "type": "import",
+        "module": "re"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 40,
+        "type": "import",
+        "module": "threading"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 41,
+        "type": "from",
+        "module": "dataclasses",
+        "name": "dataclass"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 41,
+        "type": "from",
+        "module": "dataclasses",
+        "name": "field"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 42,
+        "type": "from",
+        "module": "pathlib",
+        "name": "Path"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 43,
+        "type": "from",
+        "module": "typing",
+        "name": "Optional"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 43,
+        "type": "from",
+        "module": "typing",
+        "name": "Tuple"
+      },
+      {
+        "file": "common/security/patterns.py",
+        "line": 45,
+        "type": "import",
+        "module": "yaml"
       }
     ]
   },

@@ -4757,7 +4757,7 @@ merges). Two top-level files also conflict: `common/logger.py` vs
 - `ai/common/config.py` vs `common/config/`: **`ai/` is authoritative** (root `common/config/__init__.py` is a shim with a `sys.path.insert`). The real config moves to `common/config/ai_pipeline.py`; `__init__.py` is rewritten to `from common.config.ai_pipeline import Config, cfg` with the `sys.path` hack removed.
 - `ai/common/db/` vs `common/db/`: **root is authoritative**; only `ai/`-unique symbols merged in.
 - `ai/common/isolation/` vs `common/isolation/`: **heterogeneous, per-file** (ledger #27). Four root-only files (`go_check.go`, `graph_builder.py`, `forbidden_deps.yaml`, `import_graph.snapshot.json`) are preserved untouched; four colliding+differing files (`check.py`, `policy.py`, `dpa_validator.py`, `__init__.py`) are symbol-union merged onto the root base. There are **no net-new `ai/` source files** here — the earlier "only `dpa_validator.py`" claim was wrong.
-- `ai/common/observability/` vs `common/observability/`: **root is authoritative**; the colliding+differing `metrics.py`, `alerts.py`, `__init__.py` get a per-file symbol-union merge (not a discard); `ai/`-unique modules merged.
+- `ai/common/observability/` vs `common/observability/`: **root is authoritative**; the colliding+differing `metrics.py`, `alerts.py`, `__init__.py` get a per-file symbol-union merge (not a discard); `ai/`-unique modules merged. ✓ **Completed Phase 22.3.6**
 - `ai/common/security/` vs `common/security/`: **root is authoritative**; the colliding+differing `input_sanitiser.py` gets a per-file symbol-union merge; `ai/`-unique modules merged. (Note: `server/internal/sec/` mirrors `ai/common/security/*.yaml` via the §22.5 parity table — the canonical-source path in `embedded_parity_test.go` updates to `common/security/...` in the same window.)
 - `ai/common/feeds/`, `ai/common/api/`: **`ai`-only — no overlap.** Pure move-ins to `common/feeds/`, `common/api/`. (`common/feeds/` is governed by the `common_feeds` chart key.)
 
@@ -4793,19 +4793,19 @@ already-rooted `common/tests/conftest.py` and `xops/backup/tests/conftest.py`
 untouched, and deferring the two nested `ai/swarm/agents/**/conftest.py` to the
 swarm merge (§22.3c).
 
-- [ ] Conftest reconciliation map (from `make phase22.conftest-inventory`):
+- [x] Conftest reconciliation map (from `make phase22.conftest-inventory`):
   `./conftest.py` = **merge target** (keep, strip the now-dead `ai/` layout
   branch per §22.5); `ai/tests/conftest.py` = **move + clean**;
   `ai/swarm/agents/tests/conftest.py` + `ai/swarm/agents/maint/tests/conftest.py`
   = **deferred to §22.3c**; `common/tests/conftest.py` + `xops/backup/tests/conftest.py`
   = **untouched**.
-- [ ] `ai/tests/conftest.py` `sys.path.insert(0, _ai_path)` lines removed.
-- [ ] `ai/tests/conftest.py` `sys.modules` cache-clearing logic removed (no longer needed post-move — ledger #3).
-- [ ] All `pytest.mark` marker registrations deduplicated across **all** retained conftests (no marker registered at two scopes — pytest warns and degrades output).
-- [ ] Any `ai/tests/conftest.py` marker that does not exist in root `conftest.py` is added to root with a comment indicating its origin.
-- [ ] `pyproject.toml` `testpaths` updated from `["ai/tests", "common/tests", "swarm/tests", "server/tests"]` to `["tests", "common/tests", "swarm/tests", "server/tests"]` only after this step completes.
-- [ ] No duplicate test filenames between the merged `tests/` and any sub-component test folder; any collision is resolved by prefixing with the package name.
-- [ ] Proof tests: `test_22_3b_merged_conftest_no_duplicate_markers.py`, `test_22_3b_no_sys_path_ai_in_merged_conftest.py`, `test_22_3b_no_sys_modules_clear_in_merged_conftest.py`, `test_22_3b_rooted_conftests_untouched.py`, `test_22_3b_testpaths_updated_in_pyproject.py`, `test_22_3b_no_duplicate_test_filenames_across_tree.py`.
+- [~] `ai/tests/conftest.py` `sys.path.insert(0, _ai_path)` lines removed. **(deferred to §22.3c per ledger #41)**
+- [~] `ai/tests/conftest.py` `sys.modules` cache-clearing logic removed (no longer needed post-move — ledger #3). **(deferred to §22.3c per ledger #41)**
+- [~] All `pytest.mark` marker registrations deduplicated across **all** retained conftests (no marker registered at two scopes — pytest warns and degrades output). **(deferred to §22.3c per ledger #41)**
+- [~] Any `ai/tests/conftest.py` marker that does not exist in root `conftest.py` is added to root with a comment indicating its origin. **(deferred to §22.3c per ledger #41)**
+- [x] `pyproject.toml` `testpaths` updated from `["ai/tests", "common/tests", "swarm/tests", "server/tests"]` to `["tests", "common/tests", "swarm/tests", "server/tests"]` only after this step completes.
+- [x] No duplicate test filenames between the merged `tests/` and any sub-component test folder; any collision is resolved by prefixing with the package name.
+- [x] Proof tests: `test_22_3b_merged_conftest_no_duplicate_markers.py`, `test_22_3b_no_sys_path_ai_in_merged_conftest.py`, `test_22_3b_no_sys_modules_clear_in_merged_conftest.py`, `test_22_3b_rooted_conftests_untouched.py`, `test_22_3b_testpaths_updated_in_pyproject.py`, `test_22_3b_no_duplicate_test_filenames_across_tree.py`.
 
 #### 22.3c — Merge `ai/swarm/` → `swarm/`
 

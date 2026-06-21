@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from ai.common.security.patterns import PII_PATTERNS
+from common.security.patterns import PII_PATTERNS
 from ai.common.text.turkish import suffix_harmony_ok
 
 from nlp.offensive import contains_offensive_phrase

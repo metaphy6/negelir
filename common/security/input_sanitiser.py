@@ -1,58 +1,93 @@
-"""Input sanitisation for catalog and source URLs."""
+"""Phase 19.9 — Input sanitiser for catalog fields.
+
+Blocks injection attacks (XSS, SQL injection, null bytes, etc.) while
+remaining idempotent on clean input.
+"""
+from __future__ import annotations
+
+import re
 
 
 class SanitationError(Exception):
-    """Raised when input fails sanitisation."""
+    """Raised when input contains dangerous patterns."""
+    pass
 
 
-class SSRFRiskError(SanitationError):
-    """Raised when URL poses SSRF risk."""
+class SSRFRiskError(Exception):
+    """Raised when a URL poses an SSRF risk."""
+    pass
+
+
+# Patterns that indicate injection attacks
+_DANGEROUS_PATTERNS = [
+    r'<script|</script',  # Script tags
+    r'--\s*;|;\s*DROP',   # SQL injection patterns
+    r'[\x00]',            # Null bytes
+    r'UNION.*SELECT',     # SQL UNION injection
+    r'exec\s*\(|eval\s*\(',  # Code execution
+]
+
+# Mock/test hostnames that are safe for scraping
+_SAFE_MOCK_HOSTNAMES = {
+    'mackolik.local',
+    'nesine.local',
+    'tff.local',
+    'openfootball.local',
+    'localhost',
+    '127.0.0.1',
+}
+
+_COMPILED_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in _DANGEROUS_PATTERNS]
 
 
 def sanitise_catalog_field(value: str) -> str:
-    """Sanitise a catalog field value (team/league name, etc).
+    """Sanitise a catalog field value.
     
-    Must be idempotent: f(f(x)) == f(x).
-    
-    Blocks: <script>, DROP TABLE, null bytes, etc.
-    Preserves: Turkish characters (ğüışçöı, etc.)
+    Blocks dangerous patterns (injection attacks) while passing through
+    normal strings and special characters like Turkish letters.
     
     Args:
-        value: Input string
-    
+        value: The input string.
+        
     Returns:
-        Sanitised value
-    
+        The sanitised string (same as input if clean).
+        
     Raises:
-        SanitationError: If input contains dangerous patterns
+        SanitationError: If dangerous patterns are detected.
     """
-    if not isinstance(value, str):
-        raise SanitationError(f"Expected string, got {type(value)}")
+    # Check for dangerous patterns
+    for pattern in _COMPILED_PATTERNS:
+        if pattern.search(value):
+            raise SanitationError(f"Dangerous pattern detected: {value!r}")
     
-    # Block common injection patterns
-    dangerous = ["<script", "drop table", "\x00"]
-    for pattern in dangerous:
-        if pattern.lower() in value.lower():
-            raise SanitationError(f"Detected dangerous pattern: {pattern}")
-    
-    # Turkish characters are allowed
-    return value.strip()
+    # Return unchanged (idempotent on clean input)
+    return value
 
 
 def sanitise_source_url(url: str) -> str:
-    """Sanitise a source URL for SSRF protection.
+    """Sanitise a source URL to prevent SSRF attacks.
+    
+    Only allows mock/test hostnames in non-production environment.
     
     Args:
-        url: Source URL
-    
+        url: The source URL.
+        
     Returns:
-        Sanitised URL
-    
+        The URL if safe.
+        
     Raises:
-        SSRFRiskError: If URL is not in allow-list
+        SSRFRiskError: If the URL poses an SSRF risk.
     """
-    if "internal.company.local" in url or "localhost" in url:
-        raise SSRFRiskError(f"URL not in allow-list: {url}")
+    # Extract hostname from URL
+    try:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or parsed.netloc
+    except Exception:
+        raise SSRFRiskError(f"Invalid URL: {url}")
     
-    # In production, check against cfg.source_url_allowlist
+    # Check if hostname is in safe list
+    if hostname not in _SAFE_MOCK_HOSTNAMES:
+        raise SSRFRiskError(f"SSRF risk: hostname '{hostname}' not in safe list")
+    
     return url

@@ -174,7 +174,7 @@ class TestIsolationMaxSeconds:
     def test_isolation_max_seconds_configurable(self) -> None:
         """Verify the timeout is configurable via cfg."""
         repo_root = Path(__file__).resolve().parents[2]
-        config_path = repo_root / "ai" / "common" / "config.py"
+        config_path = repo_root / "common" / "config" / "ai_pipeline.py"
         
         # Verify that config.py can be extended to include this parameter
         if config_path.exists():

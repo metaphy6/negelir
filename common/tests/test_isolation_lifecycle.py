@@ -42,7 +42,6 @@ class TestLocalIsolationCheckMatchesCI:
         
         policy_path = (
             Path(__file__).resolve().parents[2]
-            / "ai"
             / "common"
             / "isolation"
             / "policy.yaml"
@@ -51,7 +50,7 @@ class TestLocalIsolationCheckMatchesCI:
 
     def test_isolation_check_produces_deterministic_output(self) -> None:
         """Isolation check output must be deterministic."""
-        from ai.common.isolation.check import uses_ast_analysis
+        from common.isolation.check import uses_ast_analysis
         
         # Same code always produces same analysis
         result1 = uses_ast_analysis()
@@ -61,7 +60,7 @@ class TestLocalIsolationCheckMatchesCI:
     def test_check_imports_same_policy_twice(self) -> None:
         """Loading policy twice must produce same result."""
         from pathlib import Path
-        from ai.common.isolation.check import load_policy
+        from common.isolation.check import load_policy
         
         policy_path = (
             Path(__file__).resolve().parents[2]

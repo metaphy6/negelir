@@ -20,7 +20,7 @@ extend-exclude = '(xops|docs|data|migrations|build|dist)'
 profile = "black"
 line_length = 120
 skip_gitignore = true
-known_first_party = ["ai", "common", "datasource", "scraper", "swarm", "server", "xops"]
+known_first_party = ["ai", "common", "datasource", "model", "scraper", "swarm", "server", "xops"]
 known_third_party = ["pytest", "redis", "psycopg", "numpy", "pandas"]
 
 [tool.mypy]
@@ -38,7 +38,7 @@ strict = false
 
 [tool.pytest.ini_options]
 addopts = "-v --tb=short"
-testpaths = ["ai/tests", "common/tests", "swarm/tests", "server/tests"]
+testpaths = ["tests", "common/tests", "swarm/tests", "server/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

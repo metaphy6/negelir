@@ -51,7 +51,7 @@ class RefereeExtractor:
         Returns empty set if table doesn't exist or db unavailable (allows bootstrap).
         """
         try:
-            from ai.common.db import get_connection
+            from common.db import get_connection
             conn = get_connection()
             cursor = conn.cursor()
             cursor.execute(

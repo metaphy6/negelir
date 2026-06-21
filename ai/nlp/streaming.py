@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ai.common.config import Config
-from ai.common.security.patterns import detect_pii
+from common.security.patterns import detect_pii
 from nlp.render import CITATION_DELIMITER, extract_citation_block
 
 

@@ -51,7 +51,7 @@ from nlp.lexicon_loader import AliasHit, LexiconStore
 from nlp.pronouns_irregular import PronounIrregularEntry, load_pronouns_irregular_map
 from nlp.verbal_nouns import VerbalNounEntry, load_verbal_noun_map
 from ai.common.text.turkish import lowercase_tr, strip_proper_noun_suffix
-from ai.common.security.patterns import detect_pii
+from common.security.patterns import detect_pii
 
 # ── Public constants ───────────────────────────────────────────────────────
 

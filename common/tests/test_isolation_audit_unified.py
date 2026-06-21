@@ -20,7 +20,7 @@ class TestIsolationCheckUnified:
     def test_check_deterministic_with_same_code(self) -> None:
         """Isolation check must be deterministic."""
         # This verifies that given the same code, check.py always produces same result
-        from ai.common.isolation.check import uses_ast_analysis
+        from common.isolation.check import uses_ast_analysis
         
         # Run twice
         result1 = uses_ast_analysis()
@@ -31,7 +31,7 @@ class TestIsolationCheckUnified:
 
     def test_check_uses_ast_not_grep_proof(self) -> None:
         """Isolation check must use AST, not grep."""
-        from ai.common.isolation.check import uses_ast_analysis
+        from common.isolation.check import uses_ast_analysis
         
         # This is the actual proof that check.py uses AST
         assert uses_ast_analysis() is True
@@ -40,7 +40,7 @@ class TestIsolationCheckUnified:
         """Isolation check results must be independent of environment."""
         # The check uses AST which is platform-independent
         # This test verifies no environment-specific logic
-        from ai.common.isolation.check import extract_imports
+        from common.isolation.check import extract_imports
         
         # Create a simple test file
         test_code = """

@@ -49,14 +49,14 @@ def cmd_enrichment(argv: list[str]) -> int:
     
     # Compute baseline (planes 1-5 only) with seed for reproducibility
     try:
-        from ai.tests.enrichment_calibration import (
+        from tests.enrichment_calibration import (
             evaluate_enrichment_lift,
             check_feature_distribution_stability,
         )
     except ImportError:
         logger.error(
             "Could not import enrichment calibration harness. "
-            "Ensure ai/tests/enrichment_calibration.py exists."
+            "Ensure tests/enrichment_calibration.py exists."
         )
         return 1
     

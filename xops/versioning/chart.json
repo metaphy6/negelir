@@ -3,15 +3,15 @@
   "schema": 1,
   "project": {
     "name": "negelir",
-    "version": "1.14.0",
-    "build": 41,
+    "version": "1.16.0",
+    "build": 0,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.171.0",
+      "version": "1.171.1",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-21T11:27:18+00:00",
+      "last_changed": "2026-06-21T14:07:32+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -35,9 +35,9 @@
       }
     },
     "xops": {
-      "version": "3.89.4",
+      "version": "3.89.7",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-21T13:39:29+00:00"
+      "last_changed": "2026-06-21T14:35:05+00:00"
     },
     "docs": {
       "version": "3.25.0",
@@ -17878,6 +17878,69 @@
       "from": "0.8.0",
       "to": "0.9.0",
       "build": 41
+    },
+    {
+      "timestamp": "2026-06-21T14:02:33+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 1: Fixed _run_isort_on_file to use -p flag for isort 8.x compatibility",
+      "from": "3.89.4",
+      "to": "3.89.5",
+      "build": 42
+    },
+    {
+      "timestamp": "2026-06-21T14:07:32+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Phase 22.3 Bullet 4: Merged common/db/ symbol-union (root-authoritative), import paths updated, ai/common/db/ deleted",
+      "from": "1.171.0",
+      "to": "1.171.1",
+      "build": 43
+    },
+    {
+      "timestamp": "2026-06-21T14:18:34+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.3 Bullet 5: common/isolation/ merge - symbol-union of 4 colliding files (check.py, policy.py, dpa_validator.py, __init__.py) onto root base; preserved Phase 18 gate infrastructure (go_check.go, graph_builder.py, forbidden_deps.yaml, snapshot)",
+      "from": "3.89.5",
+      "to": "3.89.6",
+      "build": 44
+    },
+    {
+      "timestamp": "2026-06-21T14:23:35+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 22.3.6: Symbol-union merge of common/observability (root) + AI-unique symbols (Alert, T3 registry, T3 recording funcs)",
+      "from": "1.14.0",
+      "to": "1.15.0",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-21T14:28:49+00:00",
+      "component": "project",
+      "level": "patch",
+      "note": "Phase 22.3a final: common/ merge complete (config, bus, db, isolation, observability, security); all five sub-packages merged with root-authoritative policy; transitioning to 22.3b (tests/ merge)",
+      "from": "1.15.0",
+      "to": "1.15.1",
+      "build": 0
+    },
+    {
+      "timestamp": "2026-06-21T14:35:05+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.3b bullet 1: pytest infrastructure kickoff - consolidated conftest design and root tests/ directory scaffolding with Phase 18/22 layout awareness",
+      "from": "3.89.6",
+      "to": "3.89.7",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-21T14:44:59+00:00",
+      "component": "project",
+      "level": "minor",
+      "note": "Phase 22.3b: consolidate root-level test files and sys.path reconciliation",
+      "from": "1.15.1",
+      "to": "1.16.0",
+      "build": 0
     }
   ]
 }

@@ -9,6 +9,7 @@ import pytest
 
 # Phase 18 → Phase 22 transitional layout detection
 _repo_root = Path(__file__).resolve().parent.parent.parent
+_repo_root_str = str(_repo_root)
 _ai_path = str(_repo_root / "ai")
 
 # Detect Phase 22 layout: root/common/config/__init__.py exists
@@ -22,28 +23,29 @@ def pytest_configure(config):
     """Ensure cfg is imported correctly for current layout.
     
     Phase 18: ai/common/config is authoritative; put ai/ first in sys.path
-    Phase 22+: common/config is authoritative; keep root first, but still add ai/ for nlp/* imports
+    Phase 22+: common/config is authoritative; ensure root is first, then ai/
+    for nlp/* imports to resolve correctly
     """
     global cfg
     
     if _phase22_layout:
-        # Phase 22+ layout: common/config is canonical.
-        # Ensure root is first (root conftest handles this)
-        # But we also need ai/ in sys.path so that ai/nlp imports work as 'from nlp import ...'
-        repo_root_str = str(_repo_root)
-        if repo_root_str not in sys.path:
-            sys.path.insert(0, repo_root_str)
-        
-        # Add ai/ path after root (if not already present)
-        if _ai_path not in sys.path:
-            sys.path.insert(1, _ai_path)
+        # Phase 22+ layout: common/config is canonical at root.
+        # Ensure root is first in sys.path for common/ imports
+        if _ai_path in sys.path:
+            sys.path.remove(_ai_path)
+        if _repo_root_str in sys.path:
+            sys.path.remove(_repo_root_str)
+        sys.path.insert(0, _repo_root_str)
+        # Add ai/ AFTER root (at position 1) so nlp/* imports still work
+        # (tests still use 'from nlp...' which comes from ai/nlp/)
+        sys.path.insert(1, _ai_path)
         
         # Import from common.config (which re-exports from common.config.ai_pipeline)
         from common.config import cfg as _cfg
         cfg = _cfg
     else:
         # Phase 18 layout: ai/common/config is canonical.
-        # Ensure ai/ is in sys.path before common imports
+        # Ensure ai/ is in sys.path first
         if _ai_path in sys.path:
             sys.path.remove(_ai_path)
         sys.path.insert(0, _ai_path)

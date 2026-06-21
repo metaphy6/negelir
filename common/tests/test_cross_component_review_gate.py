@@ -22,7 +22,7 @@ class TestCrossComponentReviewRequired:
     def _get_policy_path() -> Path:
         """Get policy file path."""
         repo_root = Path(__file__).resolve().parents[2]
-        return repo_root / "ai" / "common" / "isolation" / "policy.yaml"
+        return repo_root / "common" / "isolation" / "policy.yaml"
 
     def test_policy_file_exists(self) -> None:
         """Verify policy file exists."""
@@ -116,7 +116,7 @@ class TestCommonSchemasReviewRequirement:
 
     def test_common_schemas_imports_documented(self) -> None:
         """Verify that common.schemas imports are documented."""
-        policy_path = Path(__file__).resolve().parents[2] / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = Path(__file__).resolve().parents[2] / "common" / "isolation" / "policy.yaml"
         with open(policy_path) as f:
             policy = yaml.safe_load(f)
         
@@ -135,7 +135,7 @@ class TestCommonSchemasReviewRequirement:
         """Verify adding a field to common.schemas would affect multiple components."""
         # This is a conceptual test showing that common.schemas changes
         # would require approval from all dependent components
-        policy_path = Path(__file__).resolve().parents[2] / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = Path(__file__).resolve().parents[2] / "common" / "isolation" / "policy.yaml"
         with open(policy_path) as f:
             policy = yaml.safe_load(f)
         
@@ -159,7 +159,7 @@ class TestCommonBusTopicReviewRequirement:
 
     def test_common_bus_imports_documented(self) -> None:
         """Verify that common.bus imports are documented."""
-        policy_path = Path(__file__).resolve().parents[2] / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = Path(__file__).resolve().parents[2] / "common" / "isolation" / "policy.yaml"
         with open(policy_path) as f:
             policy = yaml.safe_load(f)
         
@@ -207,7 +207,7 @@ class TestCrossComponentReviewGateConcept:
         # The gate ensures that changes to shared modules require review
         # from all components that depend on them.
         
-        policy_path = Path(__file__).resolve().parents[2] / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = Path(__file__).resolve().parents[2] / "common" / "isolation" / "policy.yaml"
         with open(policy_path) as f:
             policy = yaml.safe_load(f)
         
@@ -217,7 +217,7 @@ class TestCrossComponentReviewGateConcept:
 
     def test_multiple_components_needed_for_common_schemas_change(self) -> None:
         """Verify that common.schemas requires multiple component reviews."""
-        policy_path = Path(__file__).resolve().parents[2] / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = Path(__file__).resolve().parents[2] / "common" / "isolation" / "policy.yaml"
         with open(policy_path) as f:
             policy = yaml.safe_load(f)
         

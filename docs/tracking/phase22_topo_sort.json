@@ -1,5 +1,5 @@
 {
-  "generated_at": 1782050493.2577968,
+  "generated_at": 1782053823.3250475,
   "packages": [
     "ai.__init__.py",
     "ai.backtest",
@@ -7,7 +7,6 @@
     "ai.data_showcase.py",
     "ai.datasource",
     "ai.main.py",
-    "ai.model",
     "ai.nlp",
     "ai.orchestrator",
     "ai.pipeline",
@@ -27,7 +26,6 @@
     "ai.data_showcase.py",
     "ai.datasource",
     "ai.main.py",
-    "ai.model",
     "ai.orchestrator",
     "ai.pipeline",
     "ai.qid",

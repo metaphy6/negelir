@@ -180,3 +180,49 @@ def get_metric_value(metric_name: str, league_id: str = None) -> tuple:
     # Placeholder: in production this would query Prometheus
     # For testing, this returns a tuple
     return (0, 0.0)
+
+
+# Phase 19.8 — T3-specific metric registry
+# T3-tier leagues have a dedicated metric set with t3_ prefix
+# for resource governance, staleness detection, and suppression tracking
+T3_METRICS = {
+    "datasource_t3_records_ingested_total",
+    "datasource_t3_source_available",
+    "datasource_t3_shelved",
+    "datasource_t3_scrape_budget_used_s",
+    "datasource_t3_budget_exhausted_total",
+    "datasource_t3_staleness_alert_total",
+    "datasource_t3_suppressed_predictions_total",
+}
+
+
+def record_t3_ingestion(league_id: str, count: int) -> None:
+    """Record T3 record ingestion event.
+    
+    Args:
+        league_id: The T3-tier league that ingested records.
+        count: Number of records ingested.
+    """
+    # Placeholder for metric recording
+    pass
+
+
+def record_t3_source_available(league_id: str, available: bool) -> None:
+    """Record T3 source availability event.
+    
+    Args:
+        league_id: The T3-tier league being evaluated.
+        available: Whether the source is currently available.
+    """
+    pass
+
+
+def record_t3_shelved(league_id: str, shelved: bool) -> None:
+    """Record T3 shelving event (resource suspension).
+    
+    Args:
+        league_id: The T3-tier league being shelved or unshelved.
+        shelved: True if the league is being shelved, False if unshelved.
+    """
+    pass
+

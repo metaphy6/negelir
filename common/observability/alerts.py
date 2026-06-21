@@ -9,6 +9,15 @@ from common.observability import metrics
 
 
 @dataclass
+class Alert:
+    """Generic alert object for observability events."""
+    kind: str
+    league_id: str
+    message: str = ""
+    severity: str = "warning"
+
+
+@dataclass
 class T3Alert:
     """T3 alert payload."""
     kind: str

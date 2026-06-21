@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from ai.common.isolation.check import (
+from common.isolation.check import (
     extract_all_from_module,
     extract_cross_component_imports,
     load_policy,
@@ -32,7 +32,7 @@ class TestComponentsDeclarPublicApiViaAll:
     def _get_policy_path() -> Path:
         """Dynamically locate policy.yaml."""
         repo_root = Path(__file__).resolve().parents[2]
-        policy_path = repo_root / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = repo_root / "common" / "isolation" / "policy.yaml"
         assert policy_path.exists(), f"Policy must exist at {policy_path}"
         return policy_path
 
@@ -103,7 +103,7 @@ class TestCrossComponentImportMustBePublicSymbol:
     def _get_policy_path() -> Path:
         """Dynamically locate policy.yaml."""
         repo_root = Path(__file__).resolve().parents[2]
-        policy_path = repo_root / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = repo_root / "common" / "isolation" / "policy.yaml"
         assert policy_path.exists(), f"Policy must exist at {policy_path}"
         return policy_path
 
@@ -224,7 +224,7 @@ class TestPublicApiDocGenerated:
     def _get_policy_path() -> Path:
         """Dynamically locate policy.yaml."""
         repo_root = Path(__file__).resolve().parents[2]
-        policy_path = repo_root / "ai" / "common" / "isolation" / "policy.yaml"
+        policy_path = repo_root / "common" / "isolation" / "policy.yaml"
         assert policy_path.exists(), f"Policy must exist at {policy_path}"
         return policy_path
 

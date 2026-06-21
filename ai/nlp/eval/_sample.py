@@ -5,7 +5,7 @@ from collections import defaultdict
 from enum import Enum
 from typing import Any
 
-from ai.common.security.patterns import PII_PATTERNS
+from common.security.patterns import PII_PATTERNS
 
 WEEKLY_EVAL_STRATA_KEYS = (
     "intent_class",

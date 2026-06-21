@@ -88,7 +88,7 @@ class TestIsolationCheckWithRelaxHatch:
     def test_check_py_imports_without_error(self) -> None:
         """common.isolation.check module must be importable."""
         try:
-            from ai.common.isolation import check
+            from common.isolation import check
             assert hasattr(check, "check_component_isolation")
             assert hasattr(check, "extract_imports")
             assert hasattr(check, "load_policy")
@@ -98,7 +98,7 @@ class TestIsolationCheckWithRelaxHatch:
     def test_check_has_isolation_violation_dataclass(self) -> None:
         """check module must define IsolationViolation dataclass."""
         try:
-            from ai.common.isolation.check import IsolationViolation
+            from common.isolation.check import IsolationViolation
             # Dataclass fields are accessible via __dataclass_fields__
             fields = getattr(IsolationViolation, "__dataclass_fields__", {})
             assert "file" in fields

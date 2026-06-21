@@ -52,13 +52,13 @@ from typing import Callable, Deque, Iterable
 from uuid import uuid4
 
 from ai.common.config import cfg as _cfg
-from ai.common.security import (
+from common.security import (
     PatternFileError,
     RuleSet,
     load_ruleset,
     resolve_path as _resolve_pattern_path,
 )
-from ai.common.security.tr_pii import redact_tr_pii
+from common.security.tr_pii import redact_tr_pii
 from ai.common.text.turkish import lowercase_tr
 
 from ..payloads import (
