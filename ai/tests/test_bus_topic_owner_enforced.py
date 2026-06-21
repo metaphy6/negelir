@@ -13,6 +13,7 @@ class TestBusTopicOwnerEnforced:
         topics_path = os.path.join(
             os.path.dirname(__file__),
             "..",
+            "..",
             "common",
             "bus",
             "topics.yaml",
@@ -25,6 +26,7 @@ class TestBusTopicOwnerEnforced:
 
         topics_path = os.path.join(
             os.path.dirname(__file__),
+            "..",
             "..",
             "common",
             "bus",
@@ -43,6 +45,7 @@ class TestBusTopicOwnerEnforced:
         topics_path = os.path.join(
             os.path.dirname(__file__),
             "..",
+            "..",
             "common",
             "bus",
             "topics.yaml",
@@ -58,7 +61,7 @@ class TestBusTopicOwnerEnforced:
 
     def test_publisher_authenticator_exists(self) -> None:
         """publisher.py has PublisherAuthenticator and related classes."""
-        from ai.common.bus.publisher import (
+        from common.bus.publisher import (
             BusUnauthorizedPublishError,
             PublisherAuthenticator,
             SimplePublisherAuthenticator,
@@ -72,7 +75,7 @@ class TestBusTopicOwnerEnforced:
 
     def test_publisher_can_check_ownership(self) -> None:
         """SimplePublisherAuthenticator can check topic ownership."""
-        from ai.common.bus.publisher import SimplePublisherAuthenticator, TopicPolicy
+        from common.bus.publisher import SimplePublisherAuthenticator, TopicPolicy
 
         policy = TopicPolicy(
             topic_name="scrape.matched.v1",
@@ -85,14 +88,14 @@ class TestBusTopicOwnerEnforced:
         auth.check_publish_allowed("scrape.matched.v1", "datasource")
 
         # Should reject swarm
-        from ai.common.bus.publisher import BusUnauthorizedPublishError
+        from common.bus.publisher import BusUnauthorizedPublishError
 
         with pytest.raises(BusUnauthorizedPublishError):
             auth.check_publish_allowed("scrape.matched.v1", "swarm")
 
     def test_unauthorized_publish_emits_alert_record(self) -> None:
         """Unauthorized publish attempts are recorded for alerting."""
-        from ai.common.bus.publisher import (
+        from common.bus.publisher import (
             BusUnauthorizedPublishError,
             SimplePublisherAuthenticator,
             TopicPolicy,

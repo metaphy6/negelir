@@ -7,32 +7,55 @@ from pathlib import Path
 
 import pytest
 
-# Phase 18: ai/ layout is transitional; we'll adjust sys.path in pytest_configure before importing cfg
+# Phase 18 → Phase 22 transitional layout detection
 _repo_root = Path(__file__).resolve().parent.parent.parent
 _ai_path = str(_repo_root / "ai")
+
+# Detect Phase 22 layout: root/common/config/__init__.py exists
+_phase22_layout = (_repo_root / "common" / "config" / "__init__.py").exists()
 
 # Will be set in pytest_configure
 cfg = None
 
 
 def pytest_configure(config):
-    """Ensure ai/ is in sys.path for Phase 18 transitional layout and import cfg."""
+    """Ensure cfg is imported correctly for current layout.
+    
+    Phase 18: ai/common/config is authoritative; put ai/ first in sys.path
+    Phase 22+: common/config is authoritative; keep root first, but still add ai/ for nlp/* imports
+    """
     global cfg
     
-    # Move ai to front if it's not already (root conftest may have put root first)
-    if _ai_path in sys.path:
-        sys.path.remove(_ai_path)
-    sys.path.insert(0, _ai_path)
-    
-    # Clear any cached 'common' module from sys.modules that may have been cached as root/common
-    # This forces re-import to use ai/common instead
-    modules_to_remove = [k for k in sys.modules.keys() if k.startswith('common')]
-    for k in modules_to_remove:
-        sys.modules.pop(k, None)
-    
-    # Now import cfg with correct sys.path
-    import ai.common.config as _config
-    cfg = _config.cfg
+    if _phase22_layout:
+        # Phase 22+ layout: common/config is canonical.
+        # Ensure root is first (root conftest handles this)
+        # But we also need ai/ in sys.path so that ai/nlp imports work as 'from nlp import ...'
+        repo_root_str = str(_repo_root)
+        if repo_root_str not in sys.path:
+            sys.path.insert(0, repo_root_str)
+        
+        # Add ai/ path after root (if not already present)
+        if _ai_path not in sys.path:
+            sys.path.insert(1, _ai_path)
+        
+        # Import from common.config (which re-exports from common.config.ai_pipeline)
+        from common.config import cfg as _cfg
+        cfg = _cfg
+    else:
+        # Phase 18 layout: ai/common/config is canonical.
+        # Ensure ai/ is in sys.path before common imports
+        if _ai_path in sys.path:
+            sys.path.remove(_ai_path)
+        sys.path.insert(0, _ai_path)
+        
+        # Clear any cached 'common' module to force use of ai/common
+        modules_to_remove = [k for k in sys.modules.keys() if k.startswith('common')]
+        for k in modules_to_remove:
+            sys.modules.pop(k, None)
+        
+        # Import cfg from ai/common/config
+        import ai.common.config as _config
+        cfg = _config.cfg
     
     # Phase 10 §10.21.1 — Pin hypothesis settings globally for NLP suite.
     # Without database=None, CI cache divergence makes shrink-to-different-counterexample

@@ -1,0 +1,100 @@
+{
+  "generated_at_utc": "1782044123.9068153",
+  "total_non_ai_importers": 69,
+  "by_package": {
+    "X": {
+      "count": 1,
+      "files": [
+        "xops/makefile/phase22.py"
+      ]
+    },
+    "common": {
+      "count": 45,
+      "files": [
+        "common/bus/__init__.py",
+        "common/bus/publisher.py",
+        "common/config/__init__.py",
+        "common/tests/test_cross_component_import_must_be_public_symbol.py",
+        "common/tests/test_datasource_isolation.py",
+        "common/tests/test_isolation_audit_unified.py",
+        "common/tests/test_isolation_lifecycle.py",
+        "common/tests/test_relax_hatch.py",
+        "common/tests/test_server_isolation.py",
+        "common/tests/test_swarm_isolation.py",
+        "xops/backup/credential_provider.py",
+        "xops/backup/forensic.py",
+        "xops/backup/tests/test_executors_verifier.py",
+        "xops/backup/verify_concurrency.py",
+        "xops/backup/wiring.py",
+        "xops/chaos/scenarios.py",
+        "xops/chaos/soak.py",
+        "xops/leagues/power_analysis.py",
+        "xops/leagues/readiness.py",
+        "xops/maint/advisory_lock.py",
+        "xops/opsctl/_op_signature.py",
+        "xops/opsctl/_publish.py",
+        "xops/opsctl/_redis_acl.py",
+        "xops/opsctl/_runner.py",
+        "xops/opsctl/spool_reconciler.py",
+        "xops/opsctl/subcommands/bootstrap_allowlist_key.py",
+        "xops/opsctl/subcommands/bootstrap_key.py",
+        "xops/opsctl/subcommands/dlq_show.py",
+        "xops/opsctl/subcommands/liveness.py",
+        "xops/opsctl/subcommands/maint_pause.py",
+        "xops/opsctl/subcommands/scale.py",
+        "xops/opsctl/subcommands/spool_flush.py",
+        "xops/opsctl/subcommands/spool_show.py",
+        "xops/opsctl/subcommands/verify_key_id.py",
+        "xops/opsctl/tests/test_opsctl_ack_payload_cap.py",
+        "xops/opsctl/tests/test_opsctl_acl_and_signature.py",
+        "xops/opsctl/tests/test_opsctl_audit_and_liveness.py",
+        "xops/opsctl/tests/test_opsctl_dry_run.py",
+        "xops/opsctl/tests/test_opsctl_key_id_derivation.py",
+        "xops/opsctl/tests/test_opsctl_maint_pause.py",
+        "xops/opsctl/tests/test_opsctl_publish.py",
+        "xops/opsctl/tests/test_opsctl_spool_flush.py",
+        "xops/opsctl/tests/test_opsctl_spool_flush_8_14_10.py",
+        "xops/opsctl/tests/test_opsctl_token_gate.py",
+        "xops/opsctl/tests/test_opsctl_verify_key_id.py"
+      ]
+    },
+    "nlp": {
+      "count": 1,
+      "files": [
+        "xops/makefile/nlp.py"
+      ]
+    },
+    "swarm": {
+      "count": 21,
+      "files": [
+        "docs/testing/_demos/source_watcher_60pct.py",
+        "xops/lint/no_fault_injection_in_prod_paths.py",
+        "xops/maint/tests/test_advisory_lock_hold_time.py",
+        "xops/makefile/watch.py",
+        "xops/opsctl/_publish.py",
+        "xops/opsctl/_runner.py",
+        "xops/opsctl/subcommands/dlq_show.py",
+        "xops/opsctl/subcommands/liveness.py",
+        "xops/opsctl/subcommands/nlp_flame_capture.py",
+        "xops/opsctl/subcommands/nlp_kill_pattern.py",
+        "xops/opsctl/subcommands/spool_flush.py",
+        "xops/opsctl/tests/test_opsctl_ack_payload_cap.py",
+        "xops/opsctl/tests/test_opsctl_acl_and_signature.py",
+        "xops/opsctl/tests/test_opsctl_boundary.py",
+        "xops/opsctl/tests/test_opsctl_maint_pause.py",
+        "xops/opsctl/tests/test_opsctl_phase81_subcommands.py",
+        "xops/opsctl/tests/test_opsctl_phase8_batch_a2.py",
+        "xops/opsctl/tests/test_opsctl_publish.py",
+        "xops/opsctl/tests/test_opsctl_spool_flush.py",
+        "xops/opsctl/tests/test_opsctl_spool_flush_8_14_10.py",
+        "xops/opsctl/tests/test_opsctl_token_gate.py"
+      ]
+    },
+    "tests": {
+      "count": 1,
+      "files": [
+        "xops/makefile/calibration.py"
+      ]
+    }
+  }
+}

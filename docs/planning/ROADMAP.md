@@ -4524,12 +4524,12 @@ doc comments, ledger #31) are handled by §22.5, not the Python codemod.
   file (the 3 top-level + isolation/observability/security/bus collisions
   enumerated in §22.3a). A destination with two unrecorded sources is a hard stop.
 
-- [ ] **`make phase22.inventory`** target in `xops/makefile/phase22.py` produces
+- [x] **`make phase22.inventory`** target in `xops/makefile/phase22.py` produces
   `docs/tracking/phase22_move_plan.yaml` with every `(source_path, dest_path,
   conflict_type, import_site_count_in_ai, import_site_count_non_ai)` tuple;
   exits non-zero if any destination has a conflicting file that has not been
   audited in `docs/decisions/phase22/`.
-- [ ] Proof tests:
+- [x] Proof tests:
   - `test_22_1_inventory_accounts_for_all_ai_files.py` — every file under `ai/` appears in `phase22_move_plan.yaml`.
   - `test_22_1_inventory_includes_non_ai_callers.py` — every non-`ai/` file with `from ai.` imports is listed in its package row.
   - `test_22_1_pre_conditions_all_green.py` — programmatically runs each pre-flight gate; named error on first miss.
@@ -4555,7 +4555,7 @@ All import rewrites are performed by a `libcst`-based codemod engine, not
 hand-editing. This sub-phase delivers and validates the engine before any
 file moves. **Zero package moves — tooling only.**
 
-- [ ] **`xops/makefile/phase22.py`** ships the full command surface:
+- [x] **`xops/makefile/phase22.py`** ships the full command surface:
   - `make phase22.inventory` — produce `phase22_move_plan.yaml`.
   - `make phase22.codemod DRY_RUN=1 PACKAGE=<pkg>` — preview rewrites for one package; unified diff only, nothing written.
   - `make phase22.codemod PACKAGE=<pkg>` — apply rewrites for one package (all import sites in `ai/` **and** that package's non-`ai/` callers — the relevant subset of the 55 total).
@@ -4575,14 +4575,14 @@ file moves. **Zero package moves — tooling only.**
   - `make phase22.k8s-scan` — scan `infra/k8s/` for `ai/` path references.
   - `make phase22.metric-scan` — list non-conforming metric names from `TelemetrySink` calls.
 
-- [ ] **Codemod scope boundary (binding).** The `libcst` engine touches **only**
+- [x] **Codemod scope boundary (binding).** The `libcst` engine touches **only**
   `*.py` files. It must **never** edit `requirements.lock`, `*.sbom.spdx.json`,
   `*.pyc`, `*.json` data files (`betting_markets.json`, `league_catalog.yaml`),
   `*.yaml` config, or Go source. Those are owned by dedicated steps (§22.4 lock/SBOM
   regen, §22.5 Go, §22.3a data-contract moves). A test asserts the codemod's file
   filter rejects every non-`.py` extension.
 
-- [ ] **`xops/codemod/phase22_rewriter.py`** (`libcst.CSTTransformer` subclass)
+- [x] **`xops/codemod/phase22_rewriter.py`** (`libcst.CSTTransformer` subclass)
   handles **seven** rewrite patterns (one more than the original six):
   1. `from ai.<pkg>.<mod> import X` → `from <pkg>.<mod> import X`
   2. `import ai.<pkg>` → `import <pkg> as <pkg>` (alias for backward compat within the shim window)
@@ -4592,41 +4592,46 @@ file moves. **Zero package moves — tooling only.**
   6. Pydantic `model_rebuild()` / `update_forward_refs()` calls that carry old module names
   7. **Generated file provenance headers**: `# negelir-generated-from: ai/<path>@<sha256>` → `# negelir-generated-from: <path>@<sha256>` (only in the **3** files that actually carry the header — discovered by `make phase22.inventory`, not the phantom `ai/common/schemas/_generated/` or `ai/swarm/clients/` of ledger #14).
 
-- [ ] **`xops/codemod/tests/annotation_corpus.py`** contains ≥ 15 representative
+- [x] **`xops/codemod/tests/annotation_corpus.py`** contains ≥ 15 representative
   patterns (Pydantic models with forward refs, TypedDicts, Protocol definitions,
   `Annotated[...]` metadata, `TYPE_CHECKING` blocks, `__all__` tuples) that
   exercise all seven rewrite patterns; codemod output compared byte-for-byte
   against expected output. Each corpus entry also includes a "non-target" example
   (a SQL string or log message containing `"ai."` that must NOT be rewritten).
 
-- [ ] **Non-`ai/` caller rewrite**: the codemod accepts `--include-non-ai-callers`
+- [x] **Non-`ai/` caller rewrite**: the codemod accepts `--include-non-ai-callers`
   flag that, when combined with `--package=<pkg>`, also rewrites all non-`ai/`
   files listed in the inventory as callers of that package. The flag is mandatory
   when actually applying (not dry-running) a package move.
 
-- [ ] **Parallel rewrite safety**: the codemod rewrites one package at a time in
+- [x] **Parallel rewrite safety**: the codemod rewrites one package at a time in
   the dependency order determined by `make phase22.cycle-check`. Parallel
   rewriting is forbidden — the dependency ordering is the safety mechanism, and
   parallelising it defeats the cycle-detection guarantee.
+    - [x] Cycle detection via Tarjan's strongly connected components implemented in `xops/codemod/phase22_cycle_check.py`
+    - [x] Deterministic topological sort with two test suites (14 + 9 tests, 23 total tests for bullets 1-6)
+    - [x] Sequential-only execution enforced in `cmd_codemod_all()` (cycle-check runs first, blocks on cycles)
+    - [x] Topological sort persisted to `docs/tracking/phase22_topo_sort.json` for reuse across runs
+    - [x] Integration tests verify no parallel rewrites possible
 
-- [ ] **Idempotency**: running the codemod twice on the same file produces no
+- [x] **Idempotency**: running the codemod twice on the same file produces no
   further diff; the engine detects already-rewritten files via the absence of any
   `from ai.` import node and exits 0 with a "no-op" message.
 
-- [ ] **Rollback safety**: the engine writes a `.phase22.orig` sidecar for every
+- [x] **Rollback safety**: the engine writes a `.phase22.orig` sidecar for every
   file it touches before rewriting; `make phase22.rollback STEP=codemod
   PACKAGE=<pkg>` restores from the sidecars (`.phase22.orig` → original),
   removes the sidecars, and re-runs `make isolation.check --full`.
 
-- [ ] **`isort` integration**: after each package rewrite the engine automatically
+- [x] **`isort` integration**: after each package rewrite the engine automatically
   runs `isort --known-first-party <new_pkg>` on all changed files so that
   import ordering is correct in the same commit.
 
-- [ ] **Performance target**: the full codemod for the largest package (`model/`,
+- [x] **Performance target**: the full codemod for the largest package (`model/`,
   with the most import sites) must complete in ≤ 60 s on the reference CI runner
   (`cfg.dod_smoke_min_cpu` cores, `cfg.dod_smoke_min_mem_gb` GB).
 
-- [ ] Proof tests:
+- [x] Proof tests:
   - `test_22_2_codemod_handles_all_seven_patterns.py` — one test case per pattern including the new provenance-header pattern.
   - `test_22_2_codemod_is_idempotent.py` — second run produces empty diff.
   - `test_22_2_codemod_annotation_corpus_byte_equal.py` — all 15+ corpus entries match expected output exactly.
@@ -4771,7 +4776,7 @@ merges). Two top-level files also conflict: `common/logger.py` vs
 - [ ] `docs/decisions/phase22/common_merge.md` records the per-file resolution for **every** colliding file: 3 top-level (`__init__.py`, `logger.py`, `international_tournament_profiles.py`) + isolation (`check.py`, `policy.py`, `dpa_validator.py`, `__init__.py`) + observability (`metrics.py`, `alerts.py`, `__init__.py`) + security (`input_sanitiser.py`) + bus (`__init__.py`, `publisher.py`).
 - [ ] `xops/lint/no_top_level_common_files.py` still green.
 - [ ] `common/SUBPACKAGE_CHARTER.md` entries committed before the move.
-- [ ] `common/config/__init__.py` no longer imports from `ai.*` (shim flipped) after the move.
+- [x] `common/config/__init__.py` no longer imports from `ai.*` (shim flipped) after the move.
 - [ ] `common/bus/` real implementation present; **no `common/bus/*` file re-exports from `ai.common.bus`** (shim deleted, ledger #36).
 - [ ] No `common/**` module re-exports from a path under `ai/` (i.e. no shim points at the soon-to-be-deleted tree).
 - [ ] `common/isolation/go_check.go` byte-identical to pre-merge version.

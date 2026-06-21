@@ -1,5 +1,22 @@
-"""Transitional shim for Pivot v3.
+"""Phase 18.6 bus ownership enforcement.
 
-Until Phase 22 (module move), common.bus imports from ai.common.bus.
-After Phase 22, this shim is deleted and common.bus becomes the real module.
+Publisher authentication and topic ownership policies.
 """
+
+from common.bus.publisher import (
+    BusUnauthorizedPublishError,
+    PublisherAuthenticator,
+    SimplePublisherAuthenticator,
+    TopicPolicy,
+    get_publisher_authenticator,
+    register_topic_policies,
+)
+
+__all__ = [
+    "BusUnauthorizedPublishError",
+    "PublisherAuthenticator",
+    "SimplePublisherAuthenticator",
+    "TopicPolicy",
+    "get_publisher_authenticator",
+    "register_topic_policies",
+]

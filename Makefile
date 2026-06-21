@@ -1310,6 +1310,86 @@ roadmap.split: ## Extract a long ROADMAP phase into docs/design/phase<N>/ — PH
 	@PHASE=$(PHASE) FORCE=$(FORCE) DRY=$(DRY) python3 $(XOPS)/roadmap_split.py extract \
 	    --phase $(PHASE) $(if $(filter 1 true yes,$(FORCE)),--force,) $(if $(filter 1 true yes,$(DRY)),--dry-run,)
 
+# ──────────────────────────────────────────────────────────────
+#  Phase 22 — Repo-Root Flat-Layout Migration
+# ──────────────────────────────────────────────────────────────
+
+.PHONY: phase22.inventory
+phase22.inventory: ## Generate Phase 22.1 pre-flight inventory (three JSON manifests)
+	@$(XOPS)/phase22.py inventory
+
+.PHONY: phase22.import-report
+phase22.import-report: ## Print human-readable summary of non-ai/ callers from manifest
+	@$(XOPS)/phase22.py import-report
+
+.PHONY: phase22.preflight
+phase22.preflight: ## Phase 22.1 bullet 3 — Verify Phase 18 pre-flight checks (blocks if any fail)
+	@$(XOPS)/phase22.py preflight
+
+.PHONY: phase22.codemod
+phase22.codemod: ## Phase 22.2 bullet 1 — Apply or preview import rewrites for one package (PACKAGE=<pkg>, optional DRY_RUN=1)
+	@PACKAGE=$(PACKAGE) DRY_RUN=$(DRY_RUN) $(XOPS)/phase22.py codemod
+
+.PHONY: phase22.codemod.all
+phase22.codemod.all: ## Phase 22.2 bullet 1 — Apply or preview import rewrites for all packages (optional DRY_RUN=1)
+	@DRY_RUN=$(DRY_RUN) $(XOPS)/phase22.py codemod-all
+
+.PHONY: phase22.cycle-check
+phase22.cycle-check: ## Phase 22.2 bullet 6 — Detect circular imports pre/post migration via pydeps
+	@$(XOPS)/phase22.py cycle-check
+
+.PHONY: phase22.dead-code
+phase22.dead-code: ## Phase 22.2 — Scan ai/ for dead code via vulture (80% confidence)
+	@$(XOPS)/phase22.py dead-code
+
+.PHONY: phase22.go-path-check
+phase22.go-path-check: ## Phase 22.2 — Scan Go source for ai/ path references (ledger #31)
+	@$(XOPS)/phase22.py go-path-check
+
+.PHONY: phase22.swarm-collision-check
+phase22.swarm-collision-check: ## Phase 22.2 — Check swarm agents for module name collisions (ledger #34)
+	@$(XOPS)/phase22.py swarm-collision-check
+
+.PHONY: phase22.conftest-inventory
+phase22.conftest-inventory: ## Phase 22.2 — List and classify all six conftest.py files (ledger #41)
+	@$(XOPS)/phase22.py conftest-inventory
+
+.PHONY: phase22.patcher-artifact-probe
+phase22.patcher-artifact-probe: ## Phase 22.2 — Record presence/absence of Phase 17 cassettes and bundles (ledger #38)
+	@$(XOPS)/phase22.py patcher-artifact-probe
+
+.PHONY: phase22.lockfile-baseline
+phase22.lockfile-baseline: ## Phase 22.2 — Capture pre-move lockfile and SBOM digests (ledger #37)
+	@$(XOPS)/phase22.py lockfile-baseline
+
+.PHONY: phase22.lockfile-migrate
+phase22.lockfile-migrate: ## Phase 22.2 — Regenerate lockfile and SBOM for new root paths (PACKAGE=<pkg>)
+	@PACKAGE=$(PACKAGE) $(XOPS)/phase22.py lockfile-migrate
+
+.PHONY: phase22.collision-map
+phase22.collision-map: ## Phase 22.2 — Cross-check destinations for two-source collisions (ledger #27,#43,#44)
+	@$(XOPS)/phase22.py collision-map
+
+.PHONY: phase22.verify-no-loss
+phase22.verify-no-loss: ## Phase 22.2 — Verify file-accountability and blob-SHA preservation (PACKAGE=<pkg>)
+	@PACKAGE=$(PACKAGE) $(XOPS)/phase22.py verify-no-loss
+
+.PHONY: phase22.rollback
+phase22.rollback: ## Phase 22.2 — Rollback one migration step and re-run tests (STEP=<N>)
+	@STEP=$(STEP) $(XOPS)/phase22.py rollback
+
+.PHONY: phase22.burn-in.status
+phase22.burn-in.status: ## Phase 22.2 — Report five burn-in counter values from Redis (ledger #35)
+	@$(XOPS)/phase22.py burn-in.status
+
+.PHONY: phase22.k8s-scan
+phase22.k8s-scan: ## Phase 22.2 — Scan infra/k8s/ for ai/ path references (ledger #13)
+	@$(XOPS)/phase22.py k8s-scan
+
+.PHONY: phase22.metric-scan
+phase22.metric-scan: ## Phase 22.2 — List non-conforming metric names from Phase 22.9 pattern
+	@$(XOPS)/phase22.py metric-scan
+
 # ══════════════════════════════════════════════════════════════
 #                  GIT (HUMAN-ONLY)
 # ══════════════════════════════════════════════════════════════

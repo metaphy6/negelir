@@ -1,0 +1,5378 @@
+"""
+Negelir — Configuration loaded from environment variables.
+All settings respect Docker Compose injection.
+"""
+
+import datetime as _dt
+import hashlib
+import json
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+from urllib.parse import urlparse
+
+
+# Env-var prefixes considered "owned" by the Python config layer.
+# Strict mode (`NEGELIR_COMMON_STRICT=1`) refuses unknown keys with these prefixes.
+# `SWARM_` was added in Phase 3 (§3.3 DoD: triangle test stays green for
+# the 9 SDK knobs); a typo like `SWARM_HEARTBEET_SEC` must surface, not
+# silently fall through to the dataclass default.
+_OWNED_ENV_PREFIXES: tuple[str, ...] = ("NEGELIR_", "SCRAPE_", "SWARM_")
+
+# Pattern that captures every env-var name read via os.getenv in this module.
+_GETENV_RE = re.compile(r"""os\.getenv\(\s*["']([A-Z][A-Z0-9_]*)["']""")
+
+
+def _declared_env_keys() -> frozenset[str]:
+    """Set of every env-var name referenced via os.getenv(...) in this file."""
+    here = os.path.abspath(__file__)
+    try:
+        with open(here, "r", encoding="utf-8") as fh:
+            return frozenset(_GETENV_RE.findall(fh.read()))
+    except OSError:
+        return frozenset()
+
+
+def _derive_default_season() -> str:
+    """Date-derived ``"YYYY-YYYY+1"`` fallback for :attr:`Config.default_season`.
+
+    Imported lazily to avoid a circular import with ``common.logger`` at
+    module-load time.
+    """
+    from ai.common.season import current_season
+    return current_season()
+
+
+# Path to intent tier map, located in ai/common/nlp/ for now (Phase 22.3 transitional).
+_INTENT_TIER_MAP_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "ai" / "common" / "nlp" / "intent_tier_map.json"
+)
+
+
+@dataclass
+class Config:
+    # PostgreSQL
+    pg_host: str = field(default_factory=lambda: os.getenv("POSTGRES_HOST", "localhost"))
+    pg_port: int = field(default_factory=lambda: int(os.getenv("POSTGRES_PORT", "5432")))
+    pg_db: str = field(default_factory=lambda: os.getenv("POSTGRES_DB", "negelir"))
+    pg_user: str = field(default_factory=lambda: os.getenv("POSTGRES_USER", "negelir"))
+    pg_password: str = field(default_factory=lambda: os.getenv("POSTGRES_PASSWORD", ""))
+
+    # Redis
+    redis_host: str = field(default_factory=lambda: os.getenv("REDIS_HOST", "localhost"))
+    redis_port: int = field(default_factory=lambda: int(os.getenv("REDIS_PORT", "6379")))
+
+    # Go server
+    server_url: str = field(default_factory=lambda: os.getenv("SERVER_URL", "http://localhost:8080"))
+
+    # AI
+    device: str = field(default_factory=lambda: os.getenv("AI_DEVICE", "auto"))
+    log_level: str = field(default_factory=lambda: os.getenv("AI_LOG_LEVEL", "DEBUG"))
+
+    # Runtime defaults
+    default_league_id: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_DEFAULT_LEAGUE_ID", "super_lig"))
+    default_season: str = field(default_factory=lambda: (
+        os.getenv("NEGELIR_COMMON_DEFAULT_SEASON")
+        or _derive_default_season()
+    ))
+    league_catalog_active_season: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_COMMON_LEAGUE_CATALOG_ACTIVE_SEASON", ""
+    ).strip())
+    league_catalog_load_max_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COMMON_LEAGUE_CATALOG_LOAD_MAX_MS", "50"
+    )))
+    league_preset_total_import_max_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COMMON_LEAGUE_PRESET_TOTAL_IMPORT_MAX_MS", "300"
+    )))
+    mackolik_group_id: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_MACKOLIK_GROUP_ID", "1")))
+    mackolik_league_name_filter: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_MACKOLIK_LEAGUE_FILTER", "Süper Lig"))
+
+    # Scraper and server timeouts
+    server_fetch_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_SERVER_FETCH_TIMEOUT", "10")))
+    scrape_trigger_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_SCRAPE_TRIGGER_TIMEOUT", "30")))
+    health_check_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_HEALTH_CHECK_TIMEOUT", "5")))
+    mackolik_http_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_MACKOLIK_HTTP_TIMEOUT", "15")))
+    scrape_http_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_SCRAPE_HTTP_TIMEOUT", "15")))
+    footballdata_http_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_FOOTBALLDATA_HTTP_TIMEOUT", "10")))
+
+    # Scheduler defaults
+    schedule_daily_scrape_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SCHEDULE_DAILY_SCRAPE_HOUR", "6")))
+    schedule_daily_scrape_minute: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SCHEDULE_DAILY_SCRAPE_MINUTE", "0")))
+    schedule_outcome_check_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SCHEDULE_OUTCOME_CHECK_HOUR", "22")))
+    schedule_outcome_check_minute: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SCHEDULE_OUTCOME_CHECK_MINUTE", "0")))
+    schedule_retrain_day: str = field(default_factory=lambda: os.getenv("NEGELIR_DATASOURCE_SCHEDULE_RETRAIN_DAY", "sun"))
+    schedule_retrain_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SCHEDULE_RETRAIN_HOUR", "3")))
+    schedule_heartbeat_minutes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SCHEDULE_HEARTBEAT_MINUTES", "5")))
+
+    # Self-healing defaults
+    _source_priority_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_SOURCE_PRIORITY", "source_a,source_b,source_c,source_d"
+    ))
+    stale_threshold_seconds: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_STALE_THRESHOLD_SECONDS", "604800"
+    )))
+    stale_confidence_penalty: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_STALE_CONFIDENCE_PENALTY", "0.5"
+    )))
+    source_failure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_SOURCE_FAILURE_THRESHOLD", "3"
+    )))
+
+    # Scraping
+    scrape_rate_limit: int = field(default_factory=lambda: int(os.getenv("SCRAPE_RATE_LIMIT_SECONDS", "2")))
+    real_data_rate_limit: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_REAL_DATA_RATE_LIMIT", "1.0"
+    )))
+    scrape_user_agent: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_USER_AGENT", "Xops/0.1 (Football Analysis Research)"
+    ))
+    scrape_respect_robots: bool = field(default_factory=lambda: os.getenv(
+        "SCRAPE_RESPECT_ROBOTS_TXT", "true"
+    ).lower() in ("true", "1", "yes"))
+
+    # NLP — Phase 10
+    nlp_min_answer_chars: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_MIN_ANSWER_CHARS", "20"
+    )))
+    nlp_max_answer_chars: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_MAX_ANSWER_CHARS", "600"
+    )))
+    # §10.19 backpressure thresholds
+    nlp_queue_pressure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_QUEUE_PRESSURE_THRESHOLD", "100"
+    )))
+    nlp_all_caps_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_ALL_CAPS_THRESHOLD", "0.85"
+    )))
+    nlp_shout_rate_alert_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_SHOUT_RATE_ALERT_THRESHOLD", "0.5"
+    )))
+    nlp_shout_rate_alert_min_requests: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SHOUT_RATE_ALERT_MIN_REQUESTS", "20"
+    )))
+    nlp_shout_rate_alert_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SHOUT_RATE_ALERT_WINDOW_S", "300"
+    )))
+    nlp_shout_rate_alert_cooldown_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SHOUT_RATE_ALERT_COOLDOWN_S", "600"
+    )))
+    nlp_pressure_humanize_off_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_PRESSURE_HUMANIZE_OFF_S", "60"
+    )))
+    # §10.32.13 synthetic continuous prober cadence, corpus sizing,
+    # and template-only cost discipline for probe traffic.
+    nlp_prober_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_PROBER_INTERVAL_S", "60"
+    )))
+    nlp_prober_corpus_size: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_PROBER_CORPUS_SIZE", "50"
+    )))
+    nlp_prober_humanizer_disabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_PROBER_HUMANIZER_DISABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    nlp_eval_corpus_pr_max_added_rows_per_quarter: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_EVAL_CORPUS_PR_MAX_ADDED_ROWS_PER_QUARTER", "500"
+    )))
+    nlp_eval_corpus_review_required: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_EVAL_CORPUS_REVIEW_REQUIRED", "true"
+    ).lower() in ("true", "1", "yes"))
+    api_prober_bucket_rps: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SERVER_API_PROBER_BUCKET_RPS", "2"
+    )))
+    # §10.19 sampled answer audit
+    nlp_answer_sample_inverse: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ANSWER_SAMPLE_INVERSE", "1000"
+    )))
+    nlp_answer_sample_daily_cap: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ANSWER_SAMPLE_DAILY_CAP", "5000"
+    )))
+    # §10.25.3 audit bundle retention days for artifact metadata bundles.
+    nlp_audit_bundle_retention_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_AUDIT_BUNDLE_RETENTION_DAYS", "2555"
+    )))
+    # §10.25.3 template git SHA used to canonicalize the audit bundle quintet.
+    nlp_template_git_sha: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_TEMPLATE_GIT_SHA", "")
+    )
+    # §10.25.4 compatibility matrix version used by boot-time validator.
+    nlp_pipeline_version: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_PIPELINE_VERSION", "10.0.0").strip()
+    )
+    # §10.23.6 render timezone for Turkish NLP answers.
+    nlp_render_timezone: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_RENDER_TIMEZONE", "Europe/Istanbul").strip()
+    )
+    # nlp_format_number_rounding: number-rounding strategy for Turkish output.
+    #   Default bankers per §10.23 render formatting contract.
+    nlp_format_number_rounding: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_FORMAT_NUMBER_ROUNDING", "bankers").strip()
+    )
+    # §10.23.6 optional pod-shipped zoneinfo directory. Empty => system zoneinfo.
+    nlp_zoneinfo_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_ZONEINFO_DIR", "").strip()
+    )
+    # §10.25.4 compatibility matrix path for boot validation and CI gate.
+    nlp_compatibility_matrix_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_COMPATIBILITY_MATRIX_PATH", "ai/nlp/_compat/compatibility_matrix.json").strip()
+    )
+    # §10.21.9 cold-start total boot budget (seconds).
+    nlp_boot_budget_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_BOOT_BUDGET_S", "30"
+    )))
+    # §10.21.9 liveness grace after budget breach before restart handoff.
+    nlp_boot_liveness_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_BOOT_LIVENESS_GRACE_S", "60"
+    )))
+    # §10.21.11 consensus smoke probe timeout (seconds).
+    nlp_boot_consensus_smoke_timeout_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_BOOT_CONSENSUS_SMOKE_TIMEOUT_S", "10"
+    )))
+    # §10.21.11 consensus smoke probe critical threshold (seconds).
+    nlp_boot_consensus_smoke_critical_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_BOOT_CONSENSUS_SMOKE_CRITICAL_S", "60"
+    )))
+    # §10.21.11 consensus smoke sentinel match id for Phase 5 fast-path probing.
+    nlp_boot_consensus_sentinel_match_id: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_BOOT_CONSENSUS_SENTINEL_MATCH_ID", "nlp:boot:canary").strip()
+    )
+    # §10.21 drain budget for graceful SIGTERM shutdown.
+    nlp_shutdown_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SHUTDOWN_GRACE_S", "20"
+    )))
+    nlp_log_max_unredacted_str_len: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_LOG_MAX_UNREDACTED_STR_LEN", "64"
+    )))
+
+    # Scraping data sources (in priority order)
+    scrape_source_1: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_1", "https://www.mackolik.com"
+    ))
+    scrape_source_2: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_2", "https://www.nesine.com"
+    ))
+    scrape_source_3: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_3", "https://www.tff.org"
+    ))
+    scrape_source_4: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_4", "https://raw.githubusercontent.com/openfootball/football.json/master"
+    ))
+    scrape_source_5: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_5", "https://www.football-data.co.uk/mmz4281"
+    ))
+    # Fallback: historical archive (slower, throttled)
+    scrape_source_fallback: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_FALLBACK", "https://arsiv.mackolik.com"
+    ))
+    scrape_source_extra: str = field(default_factory=lambda: os.getenv(
+        "SCRAPE_SOURCE_EXTRA", ""
+    ))
+
+    # Mackolik archive season IDs (read from individual env vars)
+    _mackolik_season_2025_2026: str = field(default_factory=lambda: os.getenv(
+        "MACKOLIK_SEASON_2025_2026", "70381"
+    ))
+    _mackolik_season_2024_2025: str = field(default_factory=lambda: os.getenv(
+        "MACKOLIK_SEASON_2024_2025", "67287"
+    ))
+    _mackolik_season_2023_2024: str = field(default_factory=lambda: os.getenv(
+        "MACKOLIK_SEASON_2023_2024", "62682"
+    ))
+    _mackolik_season_2022_2023: str = field(default_factory=lambda: os.getenv(
+        "MACKOLIK_SEASON_2022_2023", "59539"
+    ))
+    _mackolik_season_2021_2022: str = field(default_factory=lambda: os.getenv(
+        "MACKOLIK_SEASON_2021_2022", "55775"
+    ))
+
+    # openfootball season dirs (comma-separated "dir:label" pairs)
+    _openfootball_seasons_raw: str = field(default_factory=lambda: os.getenv(
+        "OPENFOOTBALL_SEASONS",
+        "2018-19:2018-19,2019-20:2019-20,2020-21:2020-21,2024-25:2024-25,2025-26:2025-26",
+    ))
+
+    # football-data.co.uk season codes (comma-separated "code:label" pairs)
+    _footballdata_uk_seasons_raw: str = field(default_factory=lambda: os.getenv(
+        "FOOTBALLDATA_UK_SEASONS",
+        "2526:2025-26,2425:2024-25,2324:2023-24,2223:2022-23,2122:2021-22,2021:2020-21,1920:2019-20,1819:2018-19",
+    ))
+
+    # Phase 12 §12.4 — Fault injection (test-only seam, production-safe)
+    fault_injection_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_FAULT_INJECTION_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    # Chaos profile affinity: which compose profile allows chaos targets
+    chaos_compose_profile: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_CHAOS_COMPOSE_PROFILE", "chaos"
+    ).strip())
+
+    # Phase 12 §12.6 — Bus & network chaos parameters
+    chaos_redis_flap_s: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_CHAOS_REDIS_FLAP_S", "5"
+    )))
+    chaos_net_added_latency_ms: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_CHAOS_NET_ADDED_LATENCY_MS", "500"
+    )))
+    chaos_bus_corrupt_fraction: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_CHAOS_BUS_CORRUPT_FRACTION", "0.01"
+    )))
+
+    # Phase 12 §12.7 — Resource exhaustion parameters
+    chaos_cpu_adversarial_timeout_s: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_CHAOS_CPU_ADVERSARIAL_TIMEOUT_S", "60"
+    )))
+    load_regression_tolerance: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_LOAD_REGRESSION_TOLERANCE", "1.10"
+    )))
+    load_baseline_stdev_multiplier: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_LOAD_BASELINE_STDEV_MULTIPLIER", "2.0"
+    )))
+    load_baseline_hard_floor_ms: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_LOAD_BASELINE_HARD_FLOOR_MS", "500.0"
+    )))
+    load_baseline_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_LOAD_BASELINE_DIR", "docs/reports/load-baselines"
+    ))
+
+    # Phase 12 §12.8 — Soak & endurance parameters
+    soak_resource_drift_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_SOAK_RESOURCE_DRIFT_PCT", "2.0"
+    )))
+    soak_report_max_age_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_SOAK_REPORT_MAX_AGE_DAYS", "30"
+    )))
+    soak_nightly_duration_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_SOAK_NIGHTLY_DURATION_S", "3600"
+    )))
+
+    # Phase 12 §12.11 — Disaster recovery & restoration
+    dr_restore_max_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_DR_RESTORE_MAX_MIN", "30"
+    )))
+
+    # Phase 12 §12.12 — Coverage & mutation testing
+    coverage_mutation_min_score: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_COVERAGE_MUTATION_MIN_SCORE", "0.80"
+    )))
+    coverage_mutation_budget_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_COVERAGE_MUTATION_BUDGET_S", "1800"
+    )))
+    coverage_pragma_max_per_module: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_COVERAGE_PRAGMA_MAX_PER_MODULE", "5"
+    )))
+
+    # Phase 12 §12.13 — CI lanes & flake policy
+    ci_flake_quarantine_max_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_CI_FLAKE_QUARANTINE_MAX_DAYS", "14"
+    )))
+    ci_flake_rate_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_CI_FLAKE_RATE_THRESHOLD", "0.01"
+    )))
+
+    # Phase 18 §18.2 — Isolation job timeout (seconds)
+    ci_isolation_max_seconds: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_CI_ISOLATION_MAX_SECONDS", "60"
+    )))
+
+    # Phase 12 §12.14 — Chaos observability & resilience
+    chaos_mttd_budget_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_CHAOS_MTTD_BUDGET_MS", "2000"
+    )))
+    chaos_mttr_budget_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_CHAOS_MTTR_BUDGET_MS", "5000"
+    )))
+    chaos_trend_regression_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_INFRA_CHAOS_TREND_REGRESSION_PCT", "10.0"
+    )))
+
+    # Phase 13 §13.4 — Cross-competition identity resolution (anchor resolver)
+    # Cosine similarity threshold for merging club anchor sets across sources.
+    # When multiple name forms for the same club are observed (e.g., Galatasaray,
+    # Gala, Galata), merge decisions are made when similarity ≥ this threshold.
+    # Uses a small ≤ 50 MB embedding model (fastText or similar).
+    identity_merge_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_COMMON_IDENTITY_MERGE_THRESHOLD", "0.94"
+    )))
+    # Minimum anchor coverage (proportion of league teams observed) required
+    # before cup competitions (e.g., Türkiye Kupası) are ingested. Prevents
+    # low-confidence cross-competition joins that would lack identity backfill.
+    cup_identity_coverage_min: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_COMMON_CUP_IDENTITY_COVERAGE_MIN", "0.95"
+    )))
+    # Maximum false-split errors (identity split when should have merged)
+    # permitted per week before alerting. Used by the 4-week soak test.
+    identity_false_split_max_per_week: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COMMON_IDENTITY_FALSE_SPLIT_MAX_PER_WEEK", "1"
+    )))
+
+    # Phase 13 §13.11 — NLP + competition gazetteer + Q&A intents
+    # nlp_promotion_recall_min: minimum entity-extraction recall on the per-league
+    #   test corpus required for T2 → T1 promotion (LEAGUE_CATALOG.md §2.2).
+    #   Recall is computed as (true_positives / (true_positives + false_negatives)).
+    #   Default 0.92 (92%).
+    nlp_promotion_recall_min: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_PROMOTION_RECALL_MIN", "0.92"
+    )))
+    # gazetteer_compile_max_ms: maximum time (milliseconds) to compile a single
+    #   league's gazetteer (one row in the lexicon). Per §13.11.8, must be ≤ 50 ms
+    #   to ensure full 50-league recompile completes in ≤ 1.5 seconds on cold start.
+    gazetteer_compile_max_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COMMON_GAZETTEER_COMPILE_MAX_MS", "50"
+    )))
+
+    # Phase 13 §13.4.5 — Cross-competition joins (identity + fatigue)
+    # fatigue_window_h: hours within which a player's recent international fixture
+    #   flags them for home-team fatigue in the predictor (default 72 h).
+    fatigue_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_COMMON_FATIGUE_WINDOW_H", "72"
+    )))
+
+    # Phase 13 §13.5 — Calibration tolerance per competition format
+    # competition_calibration_tolerance_<format>: multiplier on expected logloss
+    #   per format. Example: round_robin=1.10 means allow 10% worse logloss for
+    #   round-robin competitions. Formats: round_robin, single_knockout,
+    #   two_leg_knockout, group_round_robin, final_only, multi_stage_qualifier.
+    competition_calibration_tolerance_round_robin: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMMON_COMPETITION_CALIBRATION_TOLERANCE_ROUND_ROBIN", "1.10"
+        ))
+    )
+    competition_calibration_tolerance_single_knockout: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMMON_COMPETITION_CALIBRATION_TOLERANCE_SINGLE_KNOCKOUT", "1.20"
+        ))
+    )
+    competition_calibration_tolerance_two_leg_knockout: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMMON_COMPETITION_CALIBRATION_TOLERANCE_TWO_LEG_KNOCKOUT", "1.20"
+        ))
+    )
+    competition_calibration_tolerance_group_round_robin: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMMON_COMPETITION_CALIBRATION_TOLERANCE_GROUP_ROUND_ROBIN", "1.15"
+        ))
+    )
+    competition_calibration_tolerance_final_only: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMMON_COMPETITION_CALIBRATION_TOLERANCE_FINAL_ONLY", "1.30"
+        ))
+    )
+    competition_calibration_tolerance_multi_stage_qualifier: float = field(
+        default_factory=lambda: float(os.getenv(
+            "NEGELIR_COMMON_COMPETITION_CALIBRATION_TOLERANCE_MULTI_STAGE_QUALIFIER", "1.25"
+        ))
+    )
+
+    # Phase 19 §19.5 — International tournament support
+    # wc_playoff_home_advantage_prior: home advantage multiplier for inter-confederation
+    #   play-offs in WC qualifiers (default None = neutral 0.0). Set to a value
+    #   like 0.8 to enable home advantage even in inter-confederation matches.
+    wc_playoff_home_advantage_prior: float | None = field(
+        default_factory=lambda: (
+            float(os.getenv("NEGELIR_COMMON_WC_PLAYOFF_HOME_ADVANTAGE_PRIOR"))
+            if os.getenv("NEGELIR_COMMON_WC_PLAYOFF_HOME_ADVANTAGE_PRIOR") is not None
+            else None
+        )
+    )
+
+    # Phase 19 §19.8 — T3 observability  
+    # t3_staleness_alert_hours: threshold in hours before T3 pipeline staleness
+    #   alerts are triggered (default 72 hours = 3 days).
+    t3_staleness_alert_hours: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_STALENESS_ALERT_HOURS", "72"))
+    )
+
+    # Phase 19 §19.6 — T3 resource governance & scrape-lane isolation
+    # t3_scrape_concurrency: number of concurrent workers in T3 scrape lane
+    #   (default 2; separate from T1/T2 pool to isolate resource usage).
+    t3_scrape_concurrency: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_SCRAPE_CONCURRENCY", "2"))
+    )
+    # t3_scrape_rate_limit_rps: rate limit in requests per second for T3 scrape lane
+    #   (default 0.05 rps per source; independent of T1/T2 rate limit).
+    t3_scrape_rate_limit_rps: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_SCRAPE_RATE_LIMIT_RPS", "0.05"))
+    )
+    # t3_scrape_budget_per_league_s: wall-clock seconds of scrape time budgeted
+    #   per T3 league per day (default 10; enforced by semaphore per league).
+    t3_scrape_budget_per_league_s: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_SCRAPE_BUDGET_PER_LEAGUE_S", "10"))
+    )
+    # t3_predictor_max_cpu_cores: maximum CPU cores allocated per T3 league
+    #   in predictor fan-out (default 0.25; excess jobs queue in t3_low_priority).
+    t3_predictor_max_cpu_cores: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_PREDICTOR_MAX_CPU_CORES", "0.25"))
+    )
+    # t3_source_grace_period_hours: hours to wait before auto-shelving a T3 league
+    #   whose source gauge is zero (default 48 hours).
+    t3_source_grace_period_hours: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_SOURCE_GRACE_PERIOD_HOURS", "48"))
+    )
+    # t3_redis_memory_per_league_kb: estimated Redis memory per T3 league
+    #   in kilobytes; used for scaling smoke tests (default 512 KB).
+    t3_redis_memory_per_league_kb: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_REDIS_MEMORY_PER_LEAGUE_KB", "512"))
+    )
+    # t3_partial_coverage_ci_widen_factor: CI width multiplier when a T3 league
+    #   is missing one or more data planes (default 1.3×).
+    t3_partial_coverage_ci_widen_factor: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_PARTIAL_COVERAGE_CI_WIDEN_FACTOR", "1.3"))
+    )
+    # t3_bootstrap_confidence_floor: minimum confidence for bootstrapped T3 predictions
+    #   (default 0.45; below T1/T2 publication floor but above random).
+    t3_bootstrap_confidence_floor: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_COMMON_T3_BOOTSTRAP_CONFIDENCE_FLOOR", "0.45"))
+    )
+    # t3_onboarding_concurrent: maximum concurrent onboarding operations
+    #   (default 3; used by `make league.onboard.batch`).
+    t3_onboarding_concurrent: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_ONBOARDING_CONCURRENT", "3"))
+    )
+    # t3_historical_min_days: minimum calendar days of historical data required
+    #   before a source can be onboarded (default 548 = 2 seasons).
+    t3_historical_min_days: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_T3_HISTORICAL_MIN_DAYS", "548"))
+    )
+    # catalog_reload_slo_ms: maximum milliseconds for a full catalog reload
+    #   (default 500 ms; SLO enforced by CI).
+    catalog_reload_slo_ms: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CATALOG_RELOAD_SLO_MS", "500"))
+    )
+    # catalog_max_leagues: maximum number of leagues supported in catalog
+    #   (default 500; used for scaling smoke tests).
+    catalog_max_leagues: int = field(
+        default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CATALOG_MAX_LEAGUES", "500"))
+    )
+
+    # Phase 13 §13.7 — Tier promotion gate
+    # league_readiness_report_max_age_h: maximum age in hours for a readiness
+    #   report before a T2→T1 promotion is blocked (default 168 h = 7 days).
+    league_readiness_report_max_age_h: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_COMMON_LEAGUE_READINESS_REPORT_MAX_AGE_H", "168")
+    ))
+    # league_beta_min_days: minimum calendar days a league must remain in T2
+    #   (beta window) before it can promote to T1 (default 28 days).
+    league_beta_min_days: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_COMMON_LEAGUE_BETA_MIN_DAYS", "28")
+    ))
+
+    # Phase 13 §13.9 — Performance & footprint
+    # league_catalog_max_rss_mb: maximum resident memory for a fully-loaded
+    #   50-league catalog (default 8 MB; includes all 200+ competitions).
+    league_catalog_max_rss_mb: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_COMMON_LEAGUE_CATALOG_MAX_RSS_MB", "8")
+    ))
+
+    # Phase 13 §13.10 — Per-league observability
+    # league_t2_max_dwell_days: maximum wall-clock days a league can stay in T2
+    #   before auto-demotion to T3 (default 180 days). Prevents permanent-beta drift.
+    league_t2_max_dwell_days: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_COMMON_LEAGUE_T2_MAX_DWELL_DAYS", "180")
+    ))
+    # league_demotion_evidence_window_h: required sustained breach window for
+    #   auto-demotion (default 6 hours). Single-spike SLO breaches don't flip tier.
+    league_demotion_evidence_window_h: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_COMMON_LEAGUE_DEMOTION_EVIDENCE_WINDOW_H", "6")
+    ))
+    # league_demotion_min_days: minimum calendar days between demotion events
+    #   (default 14 days). Prevents thrashing tier.
+    league_demotion_min_days: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_COMMON_LEAGUE_DEMOTION_MIN_DAYS", "14")
+    ))
+
+    # Phase 13 §13.5 — Calibration backfill & per-format backtest harness
+    # backtest_concurrency_max: maximum number of competitions to backtest in
+    #   parallel when running `make backtest --all` (default = vCPU count).
+    backtest_concurrency_max: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_SWARM_BACKTEST_CONCURRENCY_MAX", "0")  # 0 = auto (vCPU count)
+    ))
+    # backtest_seed: deterministic seed for reproducible backtest runs.
+    backtest_seed: int = field(default_factory=lambda: int(
+        os.getenv("NEGELIR_SWARM_BACKTEST_SEED", "42")
+    ))
+    # cup_early_round_calibration_max_deviation: maximum absolute calibration
+    #   deviation allowed for domestic-cup early rounds (Süper Lig vs Lig 1),
+    #   where tier mismatch is expected (default 0.12).
+    cup_early_round_calibration_max_deviation: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_COMMON_CUP_EARLY_ROUND_CALIBRATION_MAX_DEVIATION", "0.12")
+    ))
+    # league_calibration_max_deviation: maximum allowed absolute calibration
+    #   deviation for league competitions before re-training is mandated
+    #   (default 0.08, or 8 percentage points in accuracy).
+    league_calibration_max_deviation: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_COMMON_LEAGUE_CALIBRATION_MAX_DEVIATION", "0.08")
+    ))
+    # era_drift_tolerance: maximum calibration plot drift allowed when
+    #   backtesting across era boundaries (away-goals rule, VAR intro, etc.)
+    #   (default 0.10, or 10 percentage points).
+    era_drift_tolerance: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_COMMON_ERA_DRIFT_TOLERANCE", "0.10")
+    ))
+    # backtest_swarm_floor_pct: minimum accuracy floor as a percentage for swarm
+    #   backtests (CI gate). Below this, the backtest fails (default 0.01, or 1%).
+    backtest_swarm_floor_pct: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_SWARM_BACKTEST_SWARM_FLOOR_PCT", "0.01")
+    ))
+
+    # Phase 16 — Emitter & Feed Contract
+    # Payload size cap per Record (bytes). Records exceeding this are truncated
+    # with truncated_at_bytes envelope field set and proof.flag{kind=record_oversize} raised.
+    emitter_max_payload_bytes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_MAX_PAYLOAD_BYTES", str(64 * 1024)
+    )))
+    # Management port for the emitter's read-only HTTP endpoints (e.g., GET /schemas).
+    # FeedReader uses this to verify schema consistency on startup.
+    emitter_management_port: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_MANAGEMENT_PORT", "9101"
+    )))
+    # Per-source fairness floor (%) — bursty sources throttled to at least this % of
+    # write capacity when quieter sources have pending writes (default 5%).
+    emitter_per_source_floor_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_PER_SOURCE_FLOOR_PCT", "5.0"
+    )))
+    # Token bucket burst factor for per-source fairness (multiplicative over floor).
+    # Allows a source to accumulate up to burst_factor * floor_pct capacity (default 4x).
+    emitter_source_burst_factor: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SOURCE_BURST_FACTOR", "4.0"
+    )))
+    # Token bucket window (seconds) over which to measure source fairness (default 1s).
+    emitter_source_burst_window_s: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SOURCE_BURST_WINDOW_S", "1.0"
+    )))
+    # Clock skew alert threshold (milliseconds). If deviation between requested
+    # and actual clock exceeds this, emit sec.alert.v1{kind=emitter_clock_skew} (default 500ms).
+    emitter_clock_skew_alert_ms: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_CLOCK_SKEW_ALERT_MS", "500.0"
+    )))
+    # Whether to use CLOCK_TAI (International Atomic Time) for captured_at if available
+    # (default True). Falls back to CLOCK_REALTIME if TAI unavailable (default True).
+    emitter_use_clock_tai: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_USE_CLOCK_TAI", "true"
+    ).lower() in ("true", "1", "yes"))
+    # Fsync mode for durability: "always" (every write), "batch" (every N ms), "off" (test only).
+    # Default "always" for production (ledger #14).
+    emitter_fsync_mode: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_FSYNC_MODE", "always"
+    ))
+    # Batch fsync interval (milliseconds) when fsync_mode=batch (default 100ms).
+    emitter_fsync_batch_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_FSYNC_BATCH_MS", "100"
+    )))
+    # Compression codec for NDJSON (zstd|gzip|off; default zstd).
+    emitter_compression_codec: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_COMPRESSION_CODEC", "zstd"
+    ))
+    # Compression level (1-22 for zstd; default 9 for balance).
+    emitter_compression_level: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_COMPRESSION_LEVEL", "9"
+    )))
+    # Per-record CRC32C checksum trailer for torn-write detection (ledger #10).
+    # Format: `{json} deadbeef` (CRC last 8 hex chars). Default on.
+    emitter_record_crc: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_RECORD_CRC", "on"
+    ))
+    # Disk usage warning threshold (%, default 80). >= warn → sec.alert.v1{kind=feeds_disk_warn}
+    emitter_disk_usage_warn_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_DISK_USAGE_WARN_PCT", "80"
+    )))
+    # Disk usage block threshold (%, default 95). >= block → writer pauses, proof.flag{kind=feeds_disk_blocked}
+    emitter_disk_usage_block_pct: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_DISK_USAGE_BLOCK_PCT", "95"
+    )))
+    # Intra-day compaction threshold (bytes, default 256 MiB). When hot file exceeds this, rotate to part-NN.
+    emitter_intraday_compact_bytes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_INTRADAY_COMPACT_BYTES", str(256 * 1024 * 1024)
+    )))
+    
+    # Manifest update frequency (seconds, default 30). How often to persist manifest metrics.
+    emitter_manifest_update_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_MANIFEST_UPDATE_INTERVAL_S", "30"
+    )))
+    
+    # Manifest max age before alarm (ms, default 30000). Alert if manifest > this old.
+    emitter_manifest_max_age_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_MANIFEST_MAX_AGE_MS", "30000"
+    )))
+    
+    # Phase 16.3 — Parquet training snapshots
+    # Maximum size per parquet part file (bytes, default 128 MiB).
+    # Snapshot builder splits into multiple parts when a part exceeds this size.
+    emitter_parquet_max_part_bytes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_PARQUET_MAX_PART_BYTES", str(128 * 1024 * 1024)
+    )))
+    
+    # Grace period (minutes, default 10) after hour boundary before snapshot closes.
+    # Snapshot for hour H closes at H+1 + cfg.emitter_snapshot_grace_minutes,
+    # capturing all records with captured_at in [H, H+1).
+    emitter_snapshot_grace_minutes: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SNAPSHOT_GRACE_MINUTES", "10"
+    )))
+    
+    # Snapshot writer thread pool size (default CPU count // 2, max 8).
+    # Applies when building multiple snapshots in parallel across planes/sources.
+    emitter_snapshot_writer_threads: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SNAPSHOT_WRITER_THREADS",
+        str(max(1, min(8, __import__('os').cpu_count() // 2)))
+    )))
+    
+    # Bloom filter false-positive rate target (Phase 16.3, bullet 9).
+    # Filter sized to achieve this FPR on point lookups (ledger #28).
+    emitter_snapshot_bloom_fpr_max: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SNAPSHOT_BLOOM_FPR_MAX", "0.01"
+    )))
+    
+    # Snapshot mode: full or delta (Phase 16.3, bullet 10, ledger #39).
+    # delta: Each hour writes only deltas vs prior sealed snapshot
+    # full: Each hour is a complete snapshot (default: delta for storage savings)
+    emitter_snapshot_mode: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SNAPSHOT_MODE", "delta"
+    ))
+    
+    # Delta compaction interval in hours (Phase 16.3, bullet 10).
+    # After N hours of deltas, merge back into a full snapshot (default 24h).
+    emitter_snapshot_compaction_hours: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_EMITTER_SNAPSHOT_COMPACTION_HOURS", "24"
+    )))
+
+    # Phase 16.4 — FeedReader configuration
+    # Tombstone LRU size for stream() when apply_tombstones=True.
+    # Tracks (stable_id) → tombstoned state with bounded memory. Default 50k.
+    feed_reader_tombstone_lru_size: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_FEED_READER_TOMBSTONE_LRU_SIZE", "50000"
+    )))
+    
+    # Dedup LRU size for stream() when using FeedReader.dedup().
+    # Bounded LRU keyed by sha256(stable_id || captured_at). Default 100k.
+    feed_reader_dedup_lru_size: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_FEED_READER_DEDUP_LRU_SIZE", "100000"
+    )))
+
+    # Phase 16.4 bullet 8 — Bounded-memory streaming + projection/predicate pushdown (ledger #23)
+    # Per-call resident memory hard cap for snapshot() (default 512 MiB).
+    feed_reader_per_call_max_resident_mb: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_FEED_READER_PER_CALL_MAX_RESIDENT_MB", "512"
+    )))
+    
+    # Batch size for iter_snapshot() streaming yields (default 4096 rows).
+    feed_reader_batch_rows: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_FEED_READER_BATCH_ROWS", "4096"
+    )))
+
+    # Phase 16.29 — Point-in-time recovery (PITR) & manifest changelog
+    # Manifest changelog retention (days, default 90).
+    # Changelog entries older than this are rotated to cold storage.
+    feeds_manifest_changelog_retention_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEEDS_MANIFEST_CHANGELOG_RETENTION_DAYS", "90"
+    )))
+    
+    # Manifest snapshot interval (minutes, default 60).
+    # Full snapshot created every N minutes; restore replays changelog forward.
+    feeds_manifest_snapshot_interval_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_FEEDS_MANIFEST_SNAPSHOT_INTERVAL_MIN", "60"
+    )))
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Phase 21 — Enrichment Data Planes (Planes 6–9 + derived views)
+    # ─────────────────────────────────────────────────────────────────────────────
+    
+    # Feature-flag gates for each enrichment plane and derived view
+    enrichment_roster_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_ROSTER_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_health_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_HEALTH_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_officials_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_OFFICIALS_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_environment_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_ENVIRONMENT_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_market_movement_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_MARKET_MOVEMENT_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_fixture_congestion_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_FIXTURE_CONGESTION_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_card_context_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_CARD_CONTEXT_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_narrative_pressure_enabled: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_NARRATIVE_PRESSURE_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+    
+    # Numeric tunables for enrichment calculations and gates
+    enrichment_cohesion_penalty_curve: list[float] = field(default_factory=lambda: [
+        float(x.strip()) for x in os.getenv(
+            "ENRICHMENT_COHESION_PENALTY_CURVE", "0.15,0.10,0.05,0.02"
+        ).split(",")
+    ])
+    
+    enrichment_departure_shock: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_DEPARTURE_SHOCK", "0.05"
+    )))
+    
+    enrichment_congestion_xg_decay: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_CONGESTION_XG_DECAY", "0.065"
+    )))
+    
+    enrichment_referee_home_bias_clamp: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_REFEREE_HOME_BIAS_CLAMP", "0.15"
+    )))
+    
+    enrichment_drift_high_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_DRIFT_HIGH_THRESHOLD", "0.10"
+    )))
+    
+    enrichment_narrative_min_articles: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_NARRATIVE_MIN_ARTICLES", "3"
+    )))
+    
+    enrichment_weather_forecast_max_age_h: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_WEATHER_FORECAST_MAX_AGE_H", "6"
+    )))
+    
+    enrichment_promotion_logloss_delta: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_PROMOTION_LOGLOSS_DELTA", "0.005"
+    )))
+    
+    enrichment_roster_cron: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_ROSTER_CRON", "0 4 * * 1-5"  # Daily 04:00 UTC Mon-Fri outside windows; weekly on weekends
+    ))
+    
+    enrichment_surface_style_penalty: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_SURFACE_STYLE_PENALTY", "0.04"
+    )))
+    
+    enrichment_wind_threshold_kph: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_WIND_THRESHOLD_KPH", "40.0"
+    )))
+    
+    enrichment_rain_threshold_mm: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_RAIN_THRESHOLD_MM", "5.0"
+    )))
+    
+    enrichment_referee_window_matches: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REFEREE_WINDOW_MATCHES", "50"
+    )))
+    
+    enrichment_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CACHE_TTL_S", "300"
+    )))
+    
+    enrichment_env_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_ENV_CACHE_TTL_S", "60"
+    )))
+    
+    enrichment_health_ci_widen_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "ENRICHMENT_HEALTH_CI_WIDEN_THRESHOLD", "0.30"
+    )))
+    
+    enrichment_circuit_failure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CIRCUIT_FAILURE_THRESHOLD", "5"
+    )))
+    
+    enrichment_circuit_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CIRCUIT_WINDOW_S", "60"
+    )))
+    
+    enrichment_circuit_cooldown_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CIRCUIT_COOLDOWN_S", "300"
+    )))
+    
+    enrichment_derived_view_coalesce_ms: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_DERIVED_VIEW_COALESCE_MS", "250"
+    )))
+    
+    enrichment_weather_dedup_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_WEATHER_DEDUP_WINDOW_S", "3600"
+    )))
+    
+    enrichment_referee_batch_max: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REFEREE_BATCH_MAX", "50"
+    )))
+    
+    enrichment_fallback_values_path: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_FALLBACK_VALUES_PATH", "data/enrichment_fallback_values.json"
+    ))
+    
+    enrichment_roster_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_ROSTER_STALE_S", "86400"
+    )))
+    
+    enrichment_health_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_HEALTH_STALE_S", "43200"
+    )))
+    
+    enrichment_officials_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_OFFICIALS_STALE_S", "7200"
+    )))
+    
+    enrichment_environment_stale_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_ENVIRONMENT_STALE_S", "21600"
+    )))
+    
+    enrichment_health_stale_threshold_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_HEALTH_STALE_THRESHOLD_S", "3600"
+    )))
+    
+    enrichment_backfill_mode: bool = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_BACKFILL_MODE", "false"
+    ).lower() in ("true", "1", "yes"))
+    
+    enrichment_retrain_flag_path: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_RETRAIN_FLAG_PATH", "data/enrichment_retrain_needed.flag"
+    ))
+    
+    db_pool_max_enrichment: int = field(default_factory=lambda: int(os.getenv(
+        "DB_POOL_MAX_ENRICHMENT", "5"
+    )))
+    
+    enrichment_feed_backpressure_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_FEED_BACKPRESSURE_THRESHOLD", "10000"
+    )))
+    
+    enrichment_feed_backpressure_retry_base_ms: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_FEED_BACKPRESSURE_RETRY_BASE_MS", "200"
+    )))
+    
+    enrichment_feed_backpressure_max_retries: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_FEED_BACKPRESSURE_MAX_RETRIES", "5"
+    )))
+    
+    enrichment_scraper_timeout_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_SCRAPER_TIMEOUT_S", "30"
+    )))
+    
+    enrichment_scraper_retry_max: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_SCRAPER_RETRY_MAX", "3"
+    )))
+    
+    enrichment_scraper_retry_backoff_ms: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_SCRAPER_RETRY_BACKOFF_MS", "500"
+    )))
+    
+    weather_api_url: str | None = field(default_factory=lambda: os.getenv(
+        "WEATHER_API_URL"
+    ))
+    
+    enrichment_confederation_calendar_path: str = field(default_factory=lambda: os.getenv(
+        "ENRICHMENT_CONFEDERATION_CALENDAR_PATH", "data/confederation_calendars.json"
+    ))
+    
+    enrichment_calibration_seed: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CALIBRATION_SEED", "42"
+    )))
+    
+    nlp_injury_lookup_confidence_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NLP_INJURY_LOOKUP_CONFIDENCE_THRESHOLD", "0.70"
+    )))
+    
+    enrichment_reactor_heartbeat_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REACTOR_HEARTBEAT_TTL_S", "60"
+    )))
+    
+    enrichment_reactor_watchdog_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REACTOR_WATCHDOG_INTERVAL_S", "30"
+    )))
+    
+    enrichment_reactor_stall_escalation_count: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_REACTOR_STALL_ESCALATION_COUNT", "3"
+    )))
+    
+    enrichment_consistency_check_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "ENRICHMENT_CONSISTENCY_CHECK_INTERVAL_S", "3600"
+    )))
+
+    @property
+    def scrape_mackolik_archive(self) -> str:
+        """Base URL for the Mackolik historical archive (fallback source)."""
+        return self.scrape_source_fallback
+
+    def __post_init__(self) -> None:
+        """Post-init validation for `device` selection policy.
+
+        Behaviour:
+        - Prefer `NEGELIR_DEVICE` env var if present, else fall back to the
+          existing `AI_DEVICE` value that was used to initialise `device`.
+        - Accept single-token values: `auto|cuda|rocm|npu|cpu` or a routing
+          table inline like `predictor=cpu,sec_input=npu` (simple validation).
+        - On malformed input emit a warning and fall back to `auto`.
+        """
+        # Prefer the new NEGELIR_DEVICE env var but stay compatible with AI_DEVICE.
+        env_val = os.getenv("NEGELIR_DEVICE")
+        raw = env_val.strip() if env_val and env_val.strip() else (self.device or "").strip()
+
+        if not raw:
+            self.device = "auto"
+            return
+
+        allowed = {"auto", "cuda", "rocm", "npu", "cpu"}
+
+        # Lazy import logger to avoid circular imports at module load time.
+        try:
+            from ai.common.logger import get_logger
+
+            log = get_logger("config")
+        except Exception:
+            log = None
+
+        v = raw.lower()
+
+        # Routing-table form: key=val[,key2=val2]
+        if "=" in v:
+            ok = True
+            for part in [p.strip() for p in v.split(",") if p.strip()]:
+                if "=" not in part:
+                    ok = False
+                    break
+                k, val = (s.strip() for s in part.split("=", 1))
+                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+                    ok = False
+                    break
+                if val.lower() not in allowed:
+                    ok = False
+                    break
+            if not ok:
+                msg = f"Invalid NEGELIR_DEVICE routing-table: {raw!r}; falling back to 'auto'"
+                if log:
+                    log.warning(msg)
+                else:
+                    import warnings as _warnings
+
+                    _warnings.warn(msg)
+                self.device = "auto"
+            else:
+                self.device = v
+            return
+
+        # Single-token form
+        if v not in allowed:
+            msg = (
+                f"Invalid NEGELIR_DEVICE value: {raw!r}; expected one of "
+                f"{sorted(allowed)}; falling back to 'auto'"
+            )
+            if log:
+                log.warning(msg)
+            else:
+                import warnings as _warnings
+
+                _warnings.warn(msg)
+            self.device = "auto"
+            return
+
+        self.device = v
+
+    @property
+    def scrape_openfootball_base(self) -> str:
+        """Base URL for openfootball GitHub JSON files (source 4)."""
+        return self.scrape_source_4
+
+    @property
+    def scrape_footballdata_base(self) -> str:
+        """Base URL for football-data.co.uk CSV archive (source 5)."""
+        return self.scrape_source_5
+
+    @property
+    def mackolik_known_seasons(self) -> dict[str, int]:
+        """Trendyol Süper Lig season label → Mackolik season ID."""
+        return {
+            "2025/2026": int(self._mackolik_season_2025_2026),
+            "2024/2025": int(self._mackolik_season_2024_2025),
+            "2023/2024": int(self._mackolik_season_2023_2024),
+            "2022/2023": int(self._mackolik_season_2022_2023),
+            "2021/2022": int(self._mackolik_season_2021_2022),
+        }
+
+    @property
+    def openfootball_seasons(self) -> list[tuple[str, str]]:
+        """List of (season_dir, label) pairs for openfootball.
+
+        The repository covers many leagues; the per-league file is selected
+        by `LeagueConfig.openfootball_path` (e.g. `tr.1.json` for the seeded
+        Turkish Süper Lig default).
+        """
+        result = []
+        for entry in self._openfootball_seasons_raw.split(","):
+            entry = entry.strip()
+            if ":" in entry:
+                dir_, label = entry.split(":", 1)
+                result.append((dir_.strip(), label.strip()))
+        return result
+
+    @property
+    def footballdata_uk_seasons(self) -> dict[str, str]:
+        """Dict of season_code → label for football-data.co.uk."""
+        result = {}
+        for entry in self._footballdata_uk_seasons_raw.split(","):
+            entry = entry.strip()
+            if ":" in entry:
+                code, label = entry.split(":", 1)
+                result[code.strip()] = label.strip()
+        return result
+
+    @property
+    def scrape_sources(self) -> list[dict[str, str]]:
+        """All active scraping sources as a list of {name, url} dicts (priority order)."""
+        _LABELS = {
+            "source_1": "Live Scores & Odds",
+            "source_2": "Betting Aggregator",
+            "source_3": "Official Turkish FA",
+            "source_4": "OpenFootball JSON",
+            "source_5": "Football-Data.co.uk CSV",
+            "source_fallback": "Historical Archive (Fallback)",
+        }
+        defined = [
+            ("source_1", self.scrape_source_1),
+            ("source_2", self.scrape_source_2),
+            ("source_3", self.scrape_source_3),
+            ("source_4", self.scrape_source_4),
+            ("source_5", self.scrape_source_5),
+            ("source_fallback", self.scrape_source_fallback),
+        ]
+        sources = [
+            {"name": name, "label": _LABELS[name], "url": url}
+            for name, url in defined
+            if url
+        ]
+        for extra in self.scrape_source_extra.split(","):
+            extra = extra.strip()
+            if extra:
+                sources.append({"name": "source_extra", "label": "Extra Source", "url": extra})
+        return sources
+
+    @property
+    def source_priority(self) -> list[str]:
+        """Ordered source preference for self-healing failover logic."""
+        values = [item.strip() for item in self._source_priority_raw.split(",") if item.strip()]
+        if values:
+            return values
+        return ["source_a", "source_b", "source_c", "source_d"]
+
+    # Model / Training
+    drift_accuracy_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_DRIFT_WINDOW", "30")))
+    drift_accuracy_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_DRIFT_FLOOR", "0.35")))
+    training_noise_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_TRAINING_NOISE_PCT", "0.005")))
+    training_test_split: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_TRAINING_TEST_SPLIT", "0.2")))
+    training_random_seed: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_TRAINING_SEED", "42")))
+    # Pre-Phase-6 audit (gpt5-Codex #6): approximated cross-source
+    # agreement when the scrape has more than one upstream feed. The
+    # real per-(date, teams)-key scorer lands with Phase 6.3 drift wiring;
+    # this knob lets ops tune the placeholder until then.
+    training_cross_source_agreement_multi: float = field(default_factory=lambda: float(
+        os.getenv("NEGELIR_DATASOURCE_TRAINING_CROSS_SOURCE_AGREEMENT_MULTI", "0.95")
+    ))
+    model_max_size_mb: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_MODEL_MAX_SIZE_MB", "8.0")))
+    training_min_matches: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_TRAINING_MIN_MATCHES", "100")))
+
+    # Sample weights per class (0=Home, 1=Draw, 2=Away) — comma-separated
+    _training_sample_weights_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_TRAINING_SAMPLE_WEIGHTS", "1.0,2.0,1.0"
+    ))
+
+    @property
+    def training_sample_weights(self) -> dict[int, float]:
+        parts = self._training_sample_weights_raw.split(",")
+        return {i: float(v.strip()) for i, v in enumerate(parts)}
+
+    # Telemetry
+    telemetry_max_stream_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_TELEMETRY_MAX_STREAM", "50000")))
+    redis_socket_timeout: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_REDIS_SOCKET_TIMEOUT", "2")))
+
+    # Swarm SDK (Phase 3) — bus, registry, agent runner
+    swarm_bus_kind: str = field(default_factory=lambda: os.getenv("SWARM_BUS_KIND", "redis"))
+    swarm_consumer_group_prefix: str = field(default_factory=lambda: os.getenv("SWARM_CONSUMER_GROUP_PREFIX", "swarm"))
+    swarm_heartbeat_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_HEARTBEAT_SEC", "5")))
+    swarm_registry_ttl_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_REGISTRY_TTL_SEC", "30")))
+    swarm_max_in_flight: int = field(default_factory=lambda: int(os.getenv("SWARM_MAX_IN_FLIGHT", "32")))
+    swarm_retry_budget: int = field(default_factory=lambda: int(os.getenv("SWARM_RETRY_BUDGET", "3")))
+    swarm_dlq_max_len: int = field(default_factory=lambda: int(os.getenv("SWARM_DLQ_MAX_LEN", "10000")))
+    swarm_pending_claim_sec: int = field(default_factory=lambda: int(os.getenv("SWARM_PENDING_CLAIM_SEC", "60")))
+    swarm_metrics_port: int = field(default_factory=lambda: int(os.getenv("SWARM_METRICS_PORT", "9100")))
+
+    # Phase 4 worker agents — scrape → categorize → process → store loop
+    scrape_profile: str = field(default_factory=lambda: os.getenv("SCRAPE_PROFILE", "mock"))
+    # Deployment profile (cross-cutting). ``mock`` is the local-dev /
+    # CI default; ``prod`` flips fail-safe gates that refuse insecure
+    # configurations outright (e.g. unencrypted nightly backups —
+    # ROADMAP §8.3 ``fail_safe_no_encryption_in_prod``). Validated
+    # below; only the closed enum {mock, prod} is admitted.
+    profile: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_PROFILE", "mock"))
+    scrape_http_max_retries: int = field(default_factory=lambda: int(os.getenv("SCRAPE_HTTP_MAX_RETRIES", "3")))
+    categorizer_min_conf: float = field(default_factory=lambda: float(os.getenv("NEGELIR_COMMON_CATEGORIZER_MIN_CONF", "0.55")))
+    categorizer_model_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_COMMON_CATEGORIZER_MODEL_PATH", "data/models/categorizer_v1.joblib"
+    ))
+    cache_record_ttl_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CACHE_RECORD_TTL_SEC", "600")))
+    cache_prediction_ttl_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CACHE_PREDICTION_TTL_SEC", "300")))
+    telemetry_metrics_port: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_TELEMETRY_METRICS_PORT", "9101")))
+    telemetry_metrics_bind: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_COMMON_TELEMETRY_METRICS_BIND", "127.0.0.1"
+    ))
+    # Phase 8.16.4 — cardinality-safe ack metrics debug gate.
+    # When False (default, prod), only the low-cardinality metric family
+    # maint_ack_total{accepted_by, accepted} is emitted.  When True (dev /
+    # incident triage), the per-kind debug family
+    # maint_ack_total_debug{kind, accepted_by, accepted} is also enabled via
+    # the /metrics-debug endpoint (Phase 9).
+    telemetry_debug_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_TELEMETRY_DEBUG_ENABLED", "false").lower() == "true")
+    # Hard ceiling for debug-mode series count projected at boot.  Raising
+    # telemetry_debug_enabled=true is refused if
+    # len(kinds) × len(consumers) × 2 > telemetry_debug_max_series.
+    telemetry_debug_max_series: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_TELEMETRY_DEBUG_MAX_SERIES", "5000")))
+    reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
+    # Cap on the per-reactor in-memory idempotency ledger. The ledger
+    # keys events by `(reactor_name, event_id)`; with no bound a long-
+    # running swarm or backtest replay accumulates one tuple per
+    # event forever (Pre-Phase-6 audit A1). The LRU evicts oldest
+    # entries when the cap is hit; collisions on evicted ids are
+    # impossible in practice because event_id is content-derived
+    # (CONTENT_FRESHNESS §15.2).
+    reactor_ledger_max_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_REACTOR_LEDGER_MAX_SIZE", "100000")))
+
+    # Phase 5 — Predictor swarm + consensus
+    consensus_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_CONSENSUS_WINDOW_MS", "750")))
+    consensus_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_CONSENSUS_MIN_CONFIDENCE", "0.0")))
+    consensus_min_voters: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_CONSENSUS_MIN_VOTERS", "3")))
+    consensus_brier_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_CONSENSUS_BRIER_WINDOW", "200")))
+    consensus_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_CONSENSUS_MAX_PENDING", "4096")))
+    # Pre-Phase-6 audit A3: suppression window for repeat
+    # `consensus.overflow` proof.flag emissions. When the pending set
+    # is saturated, every new vote evicts an older one and would
+    # otherwise emit a fresh flag — flooding proof.flag with the same
+    # signal. We rate-limit the flag to one emission per N seconds.
+    consensus_overflow_flag_min_interval_sec: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_CONSENSUS_OVERFLOW_FLAG_MIN_INTERVAL_SEC", "10")))
+    predictor_market_features_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_PREDICTOR_MARKET_FEATURES_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    predictor_max_vram_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_PREDICTOR_MAX_VRAM_MB", "1024")))
+    trainer_debounce_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_TRAINER_DEBOUNCE_SEC", "300")))
+    backtest_window_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_BACKTEST_WINDOW_WEEKS", "12")))
+    backtest_min_n: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_BACKTEST_MIN_N", "20")))
+    api_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_CONSENSUS_OVERHEAD_MS", "200")))
+
+    # Phase 11 — Device probe defaults
+    # Path where the probe writes the atomic JSON inventory. Default is the tmpfs runtime dir.
+    device_probe_path: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_DEVICE_PROBE_PATH", "/var/run/negelir/device.json"))
+    # Probe subprocess hard timeout (seconds). A wedged driver must not stall startup.
+    device_probe_timeout_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_DEVICE_PROBE_TIMEOUT_S", "5")))
+    # Hotplug debounce window (seconds) for udev-triggered re-probes.
+    device_probe_hotplug_debounce_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_DEVICE_PROBE_HOTPLUG_DEBOUNCE_S", "10")))
+
+    # Host / GPU reserve and PSU settings
+    gpu_system_reserve_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_SYSTEM_RESERVE_MB", "128")))
+    host_psu_capacity_w: int = field(default_factory=lambda: int(os.getenv("NEGELIR_HOST_PSU_CAPACITY_W", "0")))
+    host_psu_safety_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_HOST_PSU_SAFETY_FACTOR", "0.85")))
+    
+    # GPU persistence + clocks + power cap settings
+    # Enable GPU persistence mode (nvidia-smi -pm 1) for reduced cold-start latency
+    gpu_enable_persistence_mode: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_GPU_ENABLE_PERSISTENCE_MODE", "false").lower() in ("true", "1", "yes"))
+    # Lock SM and memory clocks during benchmark runs for reproducibility (never in prod)
+    gpu_lock_clocks: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_GPU_LOCK_CLOCKS", "false").lower() in ("true", "1", "yes"))
+    # Request specific power limit cap (watts) if operator wants to negotiate higher than current
+    gpu_request_power_limit_w: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_REQUEST_POWER_LIMIT_W", "0")))
+
+
+    # Phase 11 — compute artifact cache (engines, compiled blobs, inductor artifacts)
+    # Directory where compiled engine/artifact cache lives. Shared across agents on a host.
+    compute_artifact_cache_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_COMMON_COMPUTE_ARTIFACT_CACHE_DIR", "data/compute_artifacts"
+    ))
+    # Max size in MB for the compute artifact cache (LRU eviction).
+    compute_artifact_cache_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_COMPUTE_ARTIFACT_CACHE_MAX_MB", "10240")))
+    # Secret/HMAC key used to tag compiled artifacts (HMAC input + host fingerprint).
+    compute_artifact_cache_secret: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_COMPUTE_ARTIFACT_CACHE_SECRET", ""))
+
+    # NPU quantization acceptance threshold: max allowed accuracy drop (%) after INT8 calibration
+    npu_max_acc_drop_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_COMMON_NPU_MAX_ACC_DROP_PCT", "1.0")))
+
+    # Global seed propagated to Python, NumPy, and vendor RNGs for determinism
+    global_seed: int = field(default_factory=lambda: int(os.getenv("NEGELIR_GLOBAL_SEED", "42")))
+
+    # TF32 / deterministic kernels and allocator policy knobs
+    allow_tf32: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_ALLOW_TF32", "false").lower() in ("true", "1", "yes"))
+    compute_deterministic_kernels: bool = field(default_factory=lambda: os.getenv("NEGELIR_DETERMINISTIC_KERNELS", "false").lower() in ("true", "1", "yes"))
+    # String form for PYTORCH_CUDA_ALLOC_CONF override (documented default used in tests)
+    cuda_alloc_conf: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb=256,garbage_collection_threshold:0.85"))
+
+    # Phase 11.2 — GPU arbiter (mutual exclusion, preemption, placement)
+    # Lease TTL (seconds) for GPU arbiter Redis-backed locks. Auto-renewed every TTL/3.
+    gpu_arbiter_lease_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_ARBITER_LEASE_TTL_S", "60")))
+    # Preemption grace period (milliseconds) for LLM-class loads to finish micro-batch.
+    gpu_arbiter_preempt_grace_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_ARBITER_PREEMPT_GRACE_MS", "250")))
+    # Fragmentation headroom multiplier: refuse placement if largest_free_block < vram_required * (1 + this).
+    gpu_alloc_fragmentation_headroom: float = field(default_factory=lambda: float(os.getenv("NEGELIR_COMMON_GPU_ALLOC_FRAGMENTATION_HEADROOM", "0.1")))
+    # Fragmentation threshold (0.0-1.0): trigger defrag when occupied_vram/total_vram exceeds this.
+    gpu_alloc_defrag_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_COMMON_GPU_ALLOC_DEFRAG_THRESHOLD", "0.85")))
+    # Enable NVIDIA Multi-Process Service for light-weight inference co-tenancy (false by default).
+    cuda_mps_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_CUDA_MPS_ENABLED", "false").lower() in ("true", "1", "yes"))
+    # Max concurrent MPS clients per GPU when cuda_mps_enabled=true.
+    cuda_mps_max_clients: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_CUDA_MPS_MAX_CLIENTS", "16")))
+    # Enable cold-start hedging: spawn GPU evaluation when CPU latency exceeds p95 (false by default).
+    gpu_arbiter_hedge_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_GPU_ARBITER_HEDGE_ENABLED", "false").lower() in ("true", "1", "yes"))
+    # Max concurrent hedge evaluations across all agents (when gpu_arbiter_hedge_enabled=true).
+    gpu_arbiter_hedge_max_concurrent: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_ARBITER_HEDGE_MAX_CONCURRENT", "10")))
+    # Preemption cooldown (seconds): min wait before a preempted agent may re-claim the same GPU.
+    gpu_arbiter_winback_cooldown_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_ARBITER_WINBACK_COOLDOWN_S", "30")))
+    # Minimum lease hold time (milliseconds) to prevent brief realtime spikes from thrashing batch.
+    gpu_arbiter_min_hold_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_GPU_ARBITER_MIN_HOLD_MS", "500")))
+    # Emergency panic CPU mode: set to true to force all agents onto CPU (via SIGHUP or NEGELIR_DISABLE_GPU=1).
+    compute_panic_cpu: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_COMPUTE_PANIC_CPU", "false").lower() in ("true", "1", "yes"))
+    # Panic drain budget (seconds): time allowed for agents to drop GPU residency and restart on CPU.
+    compute_panic_drain_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_COMPUTE_PANIC_DRAIN_S", "30")))
+    # Weighted fair-share weights for GPU arbiter (§11.2 bullet 3): per-agent WFQ weights (phase 12+ implementation).
+    # Format (Phase 12+): JSON dict like {"sec_input_classifier": 1.0, "coder_llm": 2.0, "humanizer": 1.5}
+    # Tenant-aware weighting is a Phase 20 hook (currently no-op while cfg.tenant_quota_enabled=false).
+    gpu_arbiter_weights_json: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_GPU_ARBITER_WEIGHTS_JSON", "{}"))
+
+    # Phase 11.3 — CPU compute governor (peer of the GPU arbiter)
+    # Single thread-budget owner per host (ai/swarm/sdk/cpu_governor.py).
+    # Default: each agent gets max(1, floor(cores_physical / active_agents)).
+    cpu_governor_use_smt: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_CPU_GOVERNOR_USE_SMT", "false").lower() in ("true", "1", "yes"))
+    # CPU frequency scaling mode check: warn if cpufreq is in 'powersave' instead of 'performance' or 'schedutil+boost'.
+    cpu_governor_warn_powersave: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_CPU_GOVERNOR_WARN_POWERSAVE", "true").lower() in ("true", "1", "yes"))
+    # LLM backend for CPU-only inference (llama.cpp by default; never raw transformers on CPU).
+    cpu_llm_backend: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_CPU_LLM_BACKEND", "llama.cpp"))
+
+    # Phase 11.5 — NPU support (Intel OpenVINO, AMD XDNA, Apple MPS)
+    # OpenVINO IR compiled-blob cache directory (tmpfs in dev, persistent volume in prod).
+    openvino_blob_cache_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_OPENVINO_BLOB_CACHE_DIR", "/tmp/negelir_openvino_blobs"))
+    # NPU vendor selection: "intel" (default), "amd" (XDNA, stretch goal), "apple" (MPS dev-only).
+    npu_vendor: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_NPU_VENDOR", "intel"))
+    # Allow Apple MPS backend on dev hosts (default false; never selected by auto in CI/prod).
+    allow_mps: bool = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_ALLOW_MPS", "false").lower() in ("true", "1", "yes"))
+    # OpenVINO AsyncInferQueue depth per device (default 4); exported as metric for saturation detection.
+    openvino_async_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_OPENVINO_ASYNC_QUEUE_DEPTH", "4")))
+
+    # ── Phase 6 — Proofreader & drift swarm ─────────────────
+    # The proofreader replica roster is *not* a config knob — it lives
+    # in `swarm.agents.proofreader.replicas.PROOFREADER_POLICY_CLASSES`
+    # (one entry per distinct check policy: sanity, plausibility,
+    # consistency). The aggregator quorum (`cfg.proofreader_quorum`)
+    # derives from that roster so the two cannot drift. Phase-6 audit
+    # F3-1 retired the standalone `NEGELIR_SWARM_PROOFREADER_REPLICAS` env
+    # knob because it was disconnected from the roster — setting it
+    # to anything other than 3 silently broke quorum without changing
+    # the actual voter count. Horizontal fan-out moves to consumer-
+    # group sharding (Phase 14).
+    # How long the aggregator waits, after seeing the first verdict
+    # for a (request_id, prediction_id), before declaring "no quorum"
+    # and dropping the candidate. Late verdicts (arriving after the
+    # window) are recorded as `proofreader_late_verdict_dropped`
+    # proof.flag events but do not retroactively approve a prediction.
+    # 200 ms balances "give all 3 replicas a fair shot" against the
+    # API SLA budget (api_consensus_overhead_ms accounts for it).
+    proofreader_quorum_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_PROOFREADER_QUORUM_WINDOW_MS", "200")))
+    # Phase 6.1 (Phase-6 audit F-9): bound for the aggregator's
+    # `_pending` map. Without this the aggregator leaks memory when
+    # verdicts trickle in but never reach quorum (the window flush
+    # cleans them, but only if `flush_expired` actually ticks). Default
+    # mirrors `consensus_max_pending` since the per-prediction shape is
+    # comparable; LRU-eviction behaviour mirrors the consensus agent.
+    proofreader_aggregator_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_PROOFREADER_AGGREGATOR_MAX_PENDING", "4096")))
+    # Phase 6 (Phase-6 audit F-2): how often the AgentRunner ticks
+    # `flush_expired` on aggregator-style agents (consensus,
+    # proofreader_aggregator) when no new message arrived to drive
+    # `handle()`. Without this, windows never expire and `no_quorum`
+    # candidates leak. 100 ms is short enough to keep window-jitter
+    # below `proofreader_quorum_window_ms / 2` and long enough that the
+    # tick is amortised across normal traffic.
+    swarm_flush_interval_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_FLUSH_INTERVAL_MS", "100")))
+
+    # ── Phase 6.2 — per-replica check thresholds ───────────────
+    #
+    # `sanity` rejects a prediction whose market_outcomes do not sum
+    # to 1.0 within ±eps. 0.01 (1%) absorbs float-rounding from
+    # consensus + calibration without masking real bugs (the legacy
+    # tolerance was 0.01 too — kept for parity).
+    proofreader_sanity_eps: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_PROOFREADER_SANITY_EPS", "0.01")))
+    # `plausibility` warns (does NOT reject — operator-visible yes-vote
+    # toward quorum) when any single market outcome exceeds this cap.
+    # 0.85 picks up "lopsided derby pick" without flagging legit blowout
+    # leaders against bottom-table opponents (those land ≤ 0.80 in our
+    # historical Brier traces).
+    proofreader_plausibility_max_prob: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_PROOFREADER_PLAUSIBILITY_MAX_PROB", "0.85")))
+    # `consistency` rejects when score_grid marginals disagree with
+    # market_outcomes by more than this per-outcome tolerance. 0.05
+    # (5 percentage points) catches contract violations without
+    # tripping on grid truncation rounding (we cap the grid at 9-9 so
+    # the tail cuts off ~0.5%).
+    proofreader_grid_consistency_tol: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_PROOFREADER_GRID_CONSISTENCY_TOL", "0.05")))
+
+    # ── Phase 6.3 — drift agent ────────────────────────────────
+    #
+    # Rolling Brier / log-loss windows are kept per
+    # (predictor, league, market). When a window's mean metric
+    # crosses the floor we emit `maint.event.v1{kind=retrain_request}`.
+    # 50 samples is the legacy `drift.py` default; balances "react
+    # fast to a regression" with "don't fire on a 5-game variance
+    # blip". Floor 0.30 is the project's documented Brier ceiling
+    # (`docs/design/TESTING_STRATEGY.md` — anything worse than 0.30
+    # is "dart-throwing chimp" territory).
+    drift_window_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_DRIFT_WINDOW_SIZE", "50")))
+    # Phase 6.3 (Phase-6 audit F-3/F-5): the swarm `drift.v1` agent
+    # trips when the rolling **mean Brier** for a (league, market)
+    # bucket *exceeds* this value (lower Brier = better prediction,
+    # so this is semantically a *ceiling*, not a floor). Earlier
+    # drafts called this `drift_accuracy_floor`, which collided
+    # with the Phase-5 accuracy-floor field of the same name and
+    # silently shadowed it; the Phase-5 field (`drift_accuracy_floor`,
+    # default 0.35, env `NEGELIR_DATASOURCE_DRIFT_FLOOR`) governs the legacy
+    # accuracy-based detector in `ai/model/drift.py` and the
+    # `TrainerReactor` debounce gate, both of which compare
+    # *accuracy < floor*. Keep the two knobs distinct.
+    drift_brier_ceiling: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_DRIFT_BRIER_CEILING", "0.30")))
+    # Phase 6.3 — bound for the drift agent's per-(match, market)
+    # `_pending` and `_settled` maps. Without this, predictions for
+    # unsupported markets (anything other than 1X2 in v1) accumulate
+    # forever because they never get scored, and the settled-set never
+    # forgets a match. Default 100k allows ~5 seasons of weekly fixtures
+    # for a typical league before LRU eviction kicks in; eviction is
+    # silent (no proof.flag) because it is a memory bound, not a
+    # correctness signal.
+    drift_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_DRIFT_MAX_PENDING", "100000")))
+    drift_max_settled: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_DRIFT_MAX_SETTLED", "100000")))
+    # KS-test p-value below which the input feature distribution is
+    # declared non-stationary. 0.01 is conservative (only ~1% false
+    # positives at steady state); raise to 0.05 to react faster.
+    drift_pvalue: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_DRIFT_PVALUE", "0.01")))
+
+    # ── Phase 7 — Defense agents (sec.input.v1 / sec.scrape.v1 / sec.rate.v1) ──
+    #
+    # Foundation knobs landed here in lockstep with the topic catalog +
+    # JSON schemas; agent logic follows in Phase 7.1 / 7.2 / 7.3.
+    # The §7.7 test_config_sync gate is the contract: every knob below
+    # also appears in `xops/env/.env.example` and `ai/common/defaults.yaml`.
+    #
+    # Doctrine: `sec_input_max_len` is **bytes after UTF-8 encoding**
+    # (NOT codepoints) — the byte count stresses Redis + the
+    # classifier tokenizer (§7.1 length-cap binding). `sec_burst_window_ms`
+    # uses `time.monotonic()`-based math in-process; only the on-the-wire
+    # `produced_at` and Redis denylist TTL stamps stay wall-clock
+    # (§7 monotonic-clock convention from the M2/M4 audit fix).
+    #
+    # The retired knob `sec_scrape_baseline_max_per_source` is INTENTIONALLY
+    # ABSENT — the streaming-statistic baseline (Welford / P² / count-min
+    # sketches) replaces the capped-LRU; `test_no_retired_phase7_knobs`
+    # below asserts the name cannot creep back.
+
+    # sec.input.v1 (§7.1)
+    sec_input_max_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_MAX_LEN", "8192")))
+    sec_input_gateway_max_latency_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_GATEWAY_MAX_LATENCY_MS", "10")))
+    sec_input_classifier_max_latency_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_MAX_LATENCY_MS", "100")))
+    sec_input_classifier_device: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_DEVICE", "auto"))
+    sec_input_classifier_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_PATH", ""))
+    sec_input_classifier_batch_enabled: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_BATCH_ENABLED", "auto"))
+    sec_input_classifier_batch_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_BATCH_SIZE", "8")))
+    sec_input_classifier_batch_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_BATCH_WINDOW_MS", "20")))
+    sec_input_classifier_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_CLASSIFIER_MAX_PENDING", "256")))
+    sec_input_breaker_open_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_BREAKER_OPEN_S", "30")))
+    sec_input_pattern_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_PATTERN_RELOAD_S", "30")))
+    # Phase 8 §8.7 — pattern_allowlist read-side cache poll interval.
+    # Mirrors the §7.4 sec.config fan-out cadence (mtime-style polling
+    # against `pattern_allowlist_meta.version` under REPEATABLE READ).
+    sec_input_allowlist_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_ALLOWLIST_RELOAD_S", "60")))
+    # Phase 8 §8.16.10 — dedicated key file for allowlist fingerprint
+    # HMAC (separate from the audit-log chain key). In mock profile,
+    # the allowlist codec uses an in-memory fallback key when this path
+    # is missing; prod requires a readable key file.
+    sec_input_allowlist_hmac_key_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_SEC_INPUT_ALLOWLIST_HMAC_KEY_PATH", "/var/lib/negelir/secrets/allowlist_hmac.key"))
+    # Max key age (days) used by rotation-policy checks in the sec
+    # maintenance surface.
+    sec_input_allowlist_hmac_key_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_INPUT_ALLOWLIST_HMAC_KEY_MAX_AGE_DAYS", "365")))
+
+    # sec.quarantine.v1 envelope + storage backpressure (§7.1 + §7.5)
+    sec_quarantine_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_QUARANTINE_TTL_DAYS", "30")))
+    sec_quarantine_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_QUARANTINE_PAYLOAD_MAX_BYTES", "65536")))
+    sec_quarantine_producer_queue_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_QUARANTINE_PRODUCER_QUEUE_MAX", "1000")))
+    sec_quarantine_storage_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_QUARANTINE_STORAGE_LAG_ALERT_MS", "5000")))
+
+    # sec.scrape.v1 (§7.2). Streaming-statistic baseline → no per-source
+    # raw-sample cap. SimHash distance threshold is bits-out-of-64.
+    sec_scrape_size_delta_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_SIZE_DELTA_PCT", "200.0")))
+    sec_scrape_inflate_ratio_max: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_INFLATE_RATIO_MAX", "50.0")))
+    sec_scrape_warmup_samples: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_WARMUP_SAMPLES", "50")))
+    sec_scrape_baseline_flush_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_BASELINE_FLUSH_S", "300")))
+    sec_scrape_max_pending: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_MAX_PENDING", "4096")))
+    # F7.3: dedicated cap for the per-source content-addressed dedup map
+    # ((source, bytes_sha256) → None LRU). Distinct from _max_pending
+    # which (today reserved, future async-scoring) controls memory under
+    # classifier backpressure. Default matches _max_pending so behaviour
+    # is unchanged at default settings; operators can now scale them
+    # independently.
+    sec_scrape_dedup_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_DEDUP_WINDOW", "4096")))
+    sec_scrape_simhash_max_distance: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_SIMHASH_MAX_DISTANCE", "12")))
+    sec_scrape_dom_fingerprint_max_nodes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_DOM_FINGERPRINT_MAX_NODES", "5000")))
+    # F7.4: bounded ring of recent SimHash fingerprints per source.
+    # Drift trips when the MIN Hamming distance to any ring member
+    # exceeds sec_scrape_simhash_max_distance — not the adjacent-pair
+    # distance. Tolerates legitimate A/B-test layout oscillation
+    # (post-warmup) at the cost of one transient false trip when a
+    # genuinely-new layout first lands.
+    sec_scrape_simhash_ring_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_SCRAPE_SIMHASH_RING_SIZE", "8")))
+
+    # sec.rate.v1 (§7.3). Pre-auth caps protect /v1/auth/* against
+    # credential stuffing; post-auth caps are looser. IPv6 prefix
+    # default is `/64` (typical end-site allocation boundary) so a
+    # single IPv6 allocation cannot spray 2^64 unique buckets.
+    sec_rate_pre_auth_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_PRE_AUTH_CAPACITY", "30")))
+    sec_rate_pre_auth_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_RATE_PRE_AUTH_REFILL_PER_S", "0.5")))
+    sec_rate_post_auth_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_POST_AUTH_CAPACITY", "600")))
+    sec_rate_post_auth_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_RATE_POST_AUTH_REFILL_PER_S", "5.0")))
+    sec_rate_bucket_idle_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_BUCKET_IDLE_TTL_S", "3600")))
+    sec_rate_max_subjects: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_MAX_SUBJECTS", "100000")))
+    sec_rate_ipv4_prefix: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_IPV4_PREFIX", "32")))
+    sec_rate_ipv6_prefix: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_IPV6_PREFIX", "64")))
+    sec_rate_trusted_proxies: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_SEC_RATE_TRUSTED_PROXIES", ""))
+    sec_rate_redis_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_REDIS_TIMEOUT_MS", "50")))
+    sec_rate_secondary_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_SECONDARY_CAPACITY", "300")))
+    sec_rate_secondary_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_RATE_SECONDARY_REFILL_PER_S", "5.0")))
+    sec_rate_default_cost: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_DEFAULT_COST", "1")))
+    sec_rate_eviction_rate_alert_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_RATE_EVICTION_RATE_ALERT_PER_S", "50.0")))
+    sec_rate_eviction_rate_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_RATE_EVICTION_RATE_WINDOW_S", "60")))
+
+    # Sliding-window burst detector (§7.3) — `sec.rate.v1`'s anomaly
+    # path. `sec_burst_window_ms` is monotonic-clock-based.
+    sec_burst_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_BURST_THRESHOLD", "100")))
+    sec_burst_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_BURST_WINDOW_MS", "60000")))
+    sec_burst_dedup_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_BURST_DEDUP_WINDOW", "10000")))
+
+    # Denylist (Redis hash, sole writer = sec.rate.v1) — §7.3.
+    sec_denylist_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_DENYLIST_TTL_S", "3600")))
+    sec_denylist_escalation_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_SEC_DENYLIST_ESCALATION_FACTOR", "2.0")))
+    sec_denylist_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_DENYLIST_MAX_ENTRIES", "250000")))
+
+    # sec.alert.v1 envelope (§7.4) — generalized debounce.
+    sec_alert_debounce_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_ALERT_DEBOUNCE_TTL_S", "60")))
+    sec_alert_critical_debounce_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SERVER_SEC_ALERT_CRITICAL_DEBOUNCE_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    # F7.2: dedicated LRU cap for SecAlertDebouncer per-agent buckets.
+    # Distinct from sec_rate_max_subjects (which sizes the rate agent's
+    # per-subject burst-window LRU). Default 4096 — kinds × subjects in
+    # the debouncer is much smaller than the rate-agent's subject space.
+    sec_alert_debouncer_max_buckets: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_ALERT_DEBOUNCER_MAX_BUCKETS", "4096")))
+
+    # qa.request.v1 — NLP-side dedup window (§7.5 binding).
+    qa_request_v1_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_QA_REQUEST_V1_DEDUP_WINDOW_S", "300")))
+
+    # ── Phase 9 §9.7 — Burst budget (shared with Go API gateway) ───────────
+    # Per-subject token-bucket capacity: maximum tokens a subject can
+    # accumulate while idle. Default 60. The in-process SecondaryBucket
+    # (GCRA fallback tier) is constructed with these values at boot.
+    api_burst_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_BURST_CAPACITY", "60")))
+    # Tokens added to the bucket per second of idle time. Default 2.0.
+    api_burst_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_BURST_REFILL_PER_S", "2.0")))
+
+    # ── Phase 9 §9.12 — Full API knob inventory (shared with Go API gateway) ──
+    # Every key below is also in server/internal/config/config.go, ai/common/defaults.yaml,
+    # and xops/env/.env.example with `# shared`. test_config_sync covers all three sides.
+    api_request_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REQUEST_TIMEOUT_MS", "2500")))
+    api_transit_jitter_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_TRANSIT_JITTER_MS", "100")))
+    api_request_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REQUEST_MAX_BYTES", "65536")))
+    qa_input_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_QA_INPUT_MAX_BYTES", "4096")))
+    api_fixture_window_max_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_FIXTURE_WINDOW_MAX_DAYS", "14")))
+    api_allowed_markets: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_ALLOWED_MARKETS", "ms,au_2.5,btts,ah_home,modal_score"))
+    api_cursor_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_CURSOR_TTL_S", "1800")))
+    api_idempotency_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_IDEMPOTENCY_TTL_S", "86400")))
+    api_idempotency_inflight_wait_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_IDEMPOTENCY_INFLIGHT_WAIT_MS", "1500")))
+    api_swr_inflight_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_SWR_INFLIGHT_MAX", "64")))
+    api_cache_stale_after_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_CACHE_STALE_AFTER_S", "30")))
+    api_cache_max_age_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_CACHE_MAX_AGE_S", "300")))
+    api_reply_reaper_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REPLY_REAPER_S", "60")))
+    api_predict_request_backlog_high: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_PREDICT_REQUEST_BACKLOG_HIGH", "5000")))
+    api_max_concurrent_requests: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_MAX_CONCURRENT_REQUESTS", "5000")))
+    api_response_write_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_RESPONSE_WRITE_TIMEOUT_MS", "5000")))
+    api_bcrypt_cost: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_BCRYPT_COST", "12")))
+    api_access_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_ACCESS_TTL_S", "900")))
+    api_refresh_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REFRESH_TTL_S", "2592000")))
+    api_refresh_replay_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REFRESH_REPLAY_GRACE_S", "30")))
+    api_revocation_set_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REVOCATION_SET_MAX", "10000")))
+    api_jwt_key_poll_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_JWT_KEY_POLL_S", "10")))
+    api_jwt_retired_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_JWT_RETIRED_GRACE_S", "960")))
+    api_jwt_clock_skew_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_JWT_CLOCK_SKEW_S", "30")))
+    api_self_registration_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_SELF_REGISTRATION_ENABLED", "false").lower() in ("true", "1", "yes"))
+    api_register_cap_per_subnet_per_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REGISTER_CAP_PER_SUBNET_PER_H", "20")))
+    api_trusted_proxies: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_TRUSTED_PROXIES", ""))
+    api_log_sample_pct: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_LOG_SAMPLE_PCT", "10")))
+    api_tier_enforcement_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_TIER_ENFORCEMENT_ENABLED", "false").lower() in ("true", "1", "yes"))
+    api_deprecation_window_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_DEPRECATION_WINDOW_DAYS", "90")))
+    api_schema_version: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_SCHEMA_VERSION", "1")))
+    api_slo_burn_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_SLO_BURN_WINDOW_S", "3600")))
+    api_slo_burn_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_SLO_BURN_THRESHOLD", "2.0")))
+    api_time_format: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_TIME_FORMAT", "iso8601_utc"))
+
+    # ── Phase 9 §9.17.1 — Go runtime tuning knobs (documented mirrors) ──
+    # These env vars drive the Go API server's runtime tuning (GOMEMLIMIT,
+    # GOGC, HTTP timeouts, H2C listener). The Python AI layer does not use
+    # them at runtime; they are mirrored here so the single-source config
+    # doctrine is intact and the triangle test (test_config_sync) covers them.
+    api_go_mem_limit_mib: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_GO_MEM_LIMIT_MIB", "0")))
+    api_go_gc_percent: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_GO_GC_PERCENT", "50")))
+    api_read_header_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_READ_HEADER_TIMEOUT_MS", "5000")))
+    api_read_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_READ_TIMEOUT_MS", "10000")))
+    api_write_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_WRITE_TIMEOUT_MS", "15000")))
+    api_idle_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_IDLE_TIMEOUT_MS", "60000")))
+    api_shutdown_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_SHUTDOWN_GRACE_S", "30")))
+    api_in_mesh_port: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_IN_MESH_PORT", "8082"))
+
+    # ── Phase 9 §9.17.3 — Connection pool sizing (documented mirrors) ──
+    # These mirror the Go-server pgxpool and go-redis/v9 knobs.  The Python
+    # pipeline does not use these pools directly; the fields exist so that
+    # the single-source-config doctrine (AGENTS.md Rule 1) is satisfied and
+    # ``sync_test.go`` can verify every env key has a Python counterpart.
+    api_pg_pool_max_conns: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_PG_POOL_MAX_CONNS", "25")))
+    api_pg_replica_url: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_PG_REPLICA_URL", ""))
+    api_pg_replica_lag_check_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_PG_REPLICA_LAG_CHECK_S", "10")))
+    api_pg_replica_lag_max_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_PG_REPLICA_LAG_MAX_MS", "500")))
+    api_redis_cache_pool_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REDIS_CACHE_POOL_SIZE", "50")))
+    api_redis_bus_pool_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REDIS_BUS_POOL_SIZE", "20")))
+
+    # ── Phase 9 §9.17.4 — Resilience: circuit breakers, bulkheads, hedging, retry budgets ──
+    # Documented mirrors of the Go-side knobs; code paths are Go-only.
+    api_breaker_fail_ratio: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_BREAKER_FAIL_RATIO", "0.5")))
+    api_breaker_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_BREAKER_WINDOW_S", "10")))
+    api_breaker_min_requests: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_BREAKER_MIN_REQUESTS", "20")))
+    api_breaker_open_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_BREAKER_OPEN_S", "15")))
+    api_hedge_after_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_HEDGE_AFTER_MS", "200")))
+    api_hedging_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_HEDGING_ENABLED", "true").lower() in ("1", "true", "yes"))
+    api_hedge_budget_pct: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_HEDGE_BUDGET_PCT", "10")))
+    api_retry_budget_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_RETRY_BUDGET_PER_S", "10")))
+    api_retry_budget_capacity: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_RETRY_BUDGET_CAPACITY", "50")))
+
+    # ── Phase 9 §9.17.5 — k6 bench target (documented mirror) ──
+    # The k6 script reads this env var directly. The Python field mirrors
+    # it here so the triangle test (test_config_sync) covers it.
+    api_bench_target_rps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_BENCH_TARGET_RPS", "200")))
+
+    # ── Phase 9 §9.17.6 — In-process L0 LRU cache (documented mirrors;
+    #    implementation is Go-only; Python mirrors exist so test_config_sync
+    #    and the .env.example parity check cover these env vars end-to-end).
+    api_l0_cache_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_L0_CACHE_MAX_ENTRIES", "10000")))
+    api_l0_cache_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_L0_CACHE_MAX_BYTES", "67108864")))
+    api_l0_max_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_L0_MAX_TTL_S", "5")))
+    api_negative_cache_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_NEGATIVE_CACHE_S", "10")))
+    api_l0_refresh_max_wait_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_L0_REFRESH_MAX_WAIT_MS", "200")))
+    api_l0_invalidation_lag_max_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_L0_INVALIDATION_LAG_MAX_MS", "500")))
+
+    # ── Phase 9 §9.17.7/§9.17.8/§9.17.9 — Audit, TCP, Adaptive shedding
+    #    (documented mirrors; implementation is Go-only; Python mirrors exist
+    #    so test_config_sync covers these env vars end-to-end).
+    api_audit_batch_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_AUDIT_BATCH_MAX", "64")))
+    api_audit_batch_max_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_AUDIT_BATCH_MAX_MS", "10")))
+    api_audit_chan_cap: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_AUDIT_CHAN_CAP", "4096")))
+    api_audit_sample_pct_under_pressure: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_AUDIT_SAMPLE_PCT_UNDER_PRESSURE", "10")))
+    api_tcp_user_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_TCP_USER_TIMEOUT_MS", "20000")))
+    api_adaptive_error_rate_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_ADAPTIVE_ERROR_RATE_THRESHOLD", "0.02")))
+    api_adaptive_shed_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_ADAPTIVE_SHED_FACTOR", "0.5")))
+    api_adaptive_shed_duration_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_ADAPTIVE_SHED_DURATION_S", "60")))
+    api_priority_tier_floor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_PRIORITY_TIER_FLOOR", "0")))
+    # §9.17.10 — Observability for performance (documented mirrors; code path is Go-only).
+    api_pprof_enabled_dev: bool = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_PPROF_ENABLED_DEV", "true").lower() in ("1", "true", "yes"))
+    api_pprof_enabled_prod: bool = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_PPROF_ENABLED_PROD", "false").lower() in ("1", "true", "yes"))
+    api_alloc_sample_rate: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_ALLOC_SAMPLE_RATE", "0.001")))
+    api_pprof_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_PPROF_DIR", "data/api/profiles"))
+
+    # ── Phase 10 §10.0 — Turkish NLP pipeline (cross-phase contracts) ───────
+    # nlp_input_max_codepoints: hard cap on raw user-input length (§10.1 step 1).
+    #   Defense-in-depth against inputs that escaped sec.input.v1 due to schema
+    #   drift.  Codepoint-based (not byte-based) so Turkish multi-byte chars are
+    #   counted correctly.  sec_input_max_len (bytes) is the floor.
+    nlp_input_max_codepoints: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INPUT_MAX_CODEPOINTS", "512")))
+    # nlp_html_unescape_enabled: whether HTML entity unescape runs in the
+    #   input normalization pipeline (§10.24.10). Default true for the Phase 10
+    #   Turkish-input tolerance path.
+    nlp_html_unescape_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_HTML_UNESCAPE_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_digit_letter_fold_enabled: whether the digit-letter confusable fold
+    #   stage runs (§10.24.3).
+    nlp_digit_letter_fold_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_DIGIT_LETTER_FOLD_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_ocr_repair_force: when true, run OCR/photo-source repair even on inputs
+    #   that do not contain ligatures or soft-hyphens. Default false for clean
+    #   keyboard input.
+    nlp_ocr_repair_force: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_OCR_REPAIR_FORCE", "false").lower() in ("true", "1", "yes"))
+    # nlp_paste_max_newlines: paste-layout input with more than this many newlines
+    #   is left to the run-on-multi-q splitter instead of being treated as a single
+    #   recognition query. Default 4 for compact PDF/paste input sensitivity.
+    nlp_paste_max_newlines: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PASTE_MAX_NEWLINES", "4")))
+    # nlp_repeat_collapse_max_len: per-token cap for repeated-char collapse (§10.24.2).
+    #   Tokens longer than this are treated as garbage and dropped before typo
+    #   correction. Prevents DoS from huge repeated-input tokens.
+    nlp_repeat_collapse_max_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REPEAT_COLLAPSE_MAX_LEN", "64")))
+    # nlp_repeat_collapse_min_freq: frequency threshold for collapsed tokens to
+    #   be accepted by the repeated-character repair path (§10.24.2).
+    nlp_repeat_collapse_min_freq: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REPEAT_COLLAPSE_MIN_FREQ", "100")))
+    # nlp_dialect_class_min_recall: recall floor for per-dialect coverage telemetry
+    #   in the Phase 10 §10.32.4 evaluation harness.
+    nlp_dialect_class_min_recall: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_DIALECT_CLASS_MIN_RECALL", "0.80")))
+    # nlp_request_dedup_window_s: NLP dedup window lower-bounded by
+    #   qa_request_v1_dedup_window_s + 30 s (boot validator §10.0).
+    nlp_request_dedup_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REQUEST_DEDUP_WINDOW_S", "330")))
+    # nlp_intake_workers: worker parallelism for NLP intake stages (§10.23.10).
+    #   Must be >= 2 and <= 2 × os.cpu_count() to avoid oversubscription and
+    #   singleflight deadlock on a small pod.
+    nlp_intake_workers: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INTAKE_WORKERS", "8")))
+    # predict_citation_hmac_key_path: key file used by the Phase 10 §10.21.8
+    #   predict.approved.v1 citation-signature contract (HMAC-SHA256).
+    #   Mode should be 0400 in production.
+    predict_citation_hmac_key_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_PREDICT_CITATION_HMAC_KEY_PATH", "/var/lib/negelir/secrets/predict_citation_hmac.key"
+    ))
+    # predict_citation_hmac_key_grace_s: dual-acceptance window (seconds)
+    #   for previous citation-HMAC key after rotation (§10.21.8).
+    predict_citation_hmac_key_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_PREDICT_CITATION_HMAC_KEY_GRACE_S", "86400"
+    )))
+    # nlp_predict_citation_hmac_required: verification policy for consuming
+    #   predict.approved.v1 citation signatures (§10.21.8).
+    #   Values: off | warn | enforce. Default warn.
+    nlp_predict_citation_hmac_required: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_PREDICT_CITATION_HMAC_REQUIRED", "warn"
+    ))
+    # nlp_predict_prediction_id_determinism_required: verification policy for
+    #   consuming predict.approved.v1 prediction_id determinism (§10.29.12).
+    #   Values: off | warn | enforce. Default warn.
+    nlp_predict_prediction_id_determinism_required: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_PREDICT_PREDICTION_ID_DETERMINISM_REQUIRED", "warn"
+    ))
+    # nlp_fairness_key: per-tenant virtual queue key for NLP intake (§10.23.1).
+    #   Values: tenant_id | account_id | ip_bucket. Default account_id.
+    nlp_fairness_key: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_FAIRNESS_KEY", "account_id"))
+    # nlp_per_tenant_inflight_max: concurrent intake-slot cap per fairness key
+    #   (§10.23.1 noisy-tenant isolation). Default 8.
+    nlp_per_tenant_inflight_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PER_TENANT_INFLIGHT_MAX", "8")))
+    # nlp_fairness_max_tracked_keys: cardinality cap for tracked fairness keys
+    #   (§10.23.1 observability guard). LRU eviction applies over this limit.
+    nlp_fairness_max_tracked_keys: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_FAIRNESS_MAX_TRACKED_KEYS", "10000")))
+    # nlp_tenant_abuse_qps_threshold: per-fairness-key intake QPS threshold
+    #   for observability-only abuse alerts (§10.23.1). Sustained exceedance
+    #   over nlp_tenant_abuse_window_s emits nlp.alert.v1{kind=nlp_tenant_intake_abuse}.
+    nlp_tenant_abuse_qps_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_TENANT_ABUSE_QPS_THRESHOLD", "10")))
+    # nlp_tenant_abuse_window_s: rolling window for abuse-rate detection
+    #   (§10.23.1). Default 60s.
+    nlp_tenant_abuse_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_TENANT_ABUSE_WINDOW_S", "60")))
+    # nlp_tenant_class_enum: closed-set tenant classes allowed on observable
+    #   surfaces (metrics/log/event labels) for §10.23.1.
+    nlp_tenant_class_enum: tuple[str, ...] = (
+        "account_paid",
+        "account_free",
+        "ip_anonymous",
+        "ip_known_proxy",
+    )
+    # nlp_pipeline_timeout_ms: total NLP pipeline budget (intent + dispatch +
+    #   consensus + optional humanizer).  Extends Phase 9 §9.17.4 chain:
+    #   api_request_timeout_ms ≥ nlp_pipeline_timeout_ms + nlp_dispatch_overhead_ms.
+    nlp_pipeline_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PIPELINE_TIMEOUT_MS", "1800")))
+    # nlp_dispatch_overhead_ms: bus round-trip from NLP → dispatcher.
+    nlp_dispatch_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_DISPATCH_OVERHEAD_MS", "200")))
+    # nlp_flame_capture_overhead_floor_pct: minimum operator-side overhead for
+    #   NLP flame capture processing, expressed as a percentage of the budget.
+    nlp_flame_capture_overhead_floor_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_FLAME_CAPTURE_OVERHEAD_FLOOR_PCT", "5.0")))
+    # nlp_consensus_overhead_ms: overhead for consuming predict.approved.v1
+    #   inside the NLP pipeline (Phase 5 consensus consumer).
+    nlp_consensus_overhead_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_CONSENSUS_OVERHEAD_MS", "100")))
+    # nlp_per_request_cpu_budget_ms: per-request CPU budget for non-humanizer NLP.
+    #   Phase 10 §10.28 default: 200 ms.
+    nlp_per_request_cpu_budget_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PER_REQUEST_CPU_BUDGET_MS", "200")))
+    # nlp_per_request_cpu_budget_with_humanizer_ms: per-request CPU budget when
+    #   the optional humanizer is active. Phase 10 §10.28 default: 800 ms.
+    nlp_per_request_cpu_budget_with_humanizer_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PER_REQUEST_CPU_BUDGET_WITH_HUMANIZER_MS", "800")))
+    # nlp_per_request_cpu_budget_min_ms: boot-time minimum per-request CPU budget.
+    nlp_per_request_cpu_budget_min_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PER_REQUEST_CPU_BUDGET_MIN_MS", "50")))
+    # nlp_per_request_rss_budget_mb: per-request RSS budget for the NLP pipeline.
+    nlp_per_request_rss_budget_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PER_REQUEST_RSS_BUDGET_MB", "128")))
+    # nlp_humanizer_max_latency_ms: budget for the optional ≤1B humanizer LLM.
+    #   Only added to the pipeline inequality when nlp_humanize=true.
+    nlp_humanizer_max_latency_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_MAX_LATENCY_MS", "600")))
+    # nlp_humanizer_breaker_open_s: circuit breaker open window after latency breach.
+    #   When humanizer breaches max_latency, the breaker opens for this duration,
+    #   refusing all humanize calls and emitting nlp.event.v1{kind=humanizer_breaker_open}.
+    nlp_humanizer_breaker_open_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_BREAKER_OPEN_S", "60")))
+    # nlp_humanizer_breaker_scope: circuit breaker scope (§10.21.4).
+    #   Values: "pod" (default, per-pod in-memory) or "cluster" (Redis-backed,
+    #   cross-pod coordination).  Per-pod is the default; cluster-scope adds a
+    #   Redis round-trip on every humanize call → only flip after measuring
+    #   per-pod breaker open-rate above 5% (stampede-protection in dense deploys).
+    nlp_humanizer_breaker_scope: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_BREAKER_SCOPE", "pod"))
+    # nlp_per_tenant_humanizer_burst: max immediate humanizer admissions per
+    #   fairness key before degrade-to-template (§10.23.1). Default 4.
+    nlp_per_tenant_humanizer_burst: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PER_TENANT_HUMANIZER_BURST", "4")))
+    # nlp_output_grammar_validator_p99_ms: output grammar validator latency
+    #   budget (milliseconds). If validation exceeds this budget and the
+    #   killswitch is enabled, the validator is bypassed to preserve
+    #   availability.
+    nlp_output_grammar_validator_p99_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_OUTPUT_GRAMMAR_VALIDATOR_P99_MS", "15")))
+    # nlp_output_grammar_validator_killswitch_enabled: when true, a validator
+    #   latency breach bypasses grammar validation instead of delaying
+    #   pipeline completion.
+    nlp_output_grammar_validator_killswitch_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_OUTPUT_GRAMMAR_VALIDATOR_KILLSWITCH_ENABLED", "false").lower() in ("true", "1", "yes"))
+    # nlp_decorative_set: closed allowed decorative emoji in plain answer
+    #   output. Proofreader blocks any emoji outside this set (§10.23.7).
+    nlp_decorative_set: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            item.strip()
+            for item in os.getenv(
+                "NEGELIR_SWARM_NLP_DECORATIVE_SET", "⚽,🏆,🟢,🔴,🟡"
+            ).split(",")
+            if item.strip()
+        )
+    )
+    # nlp_answer_decorative_emoji_enabled: when false, answers render with all
+    #   emoji stripped by default across plain and markdown_safe formats.
+    #   `screen_reader` always strips emoji regardless of this flag.
+    nlp_answer_decorative_emoji_enabled: bool = field(
+        default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_ANSWER_DECORATIVE_EMOJI_ENABLED", "false").lower() in ("true", "1", "yes")
+    )
+    # nlp_per_tenant_humanizer_refill_per_s: token refill rate per second for
+    #   humanizer tenant budget (§10.23.1). Default 2.0.
+    nlp_per_tenant_humanizer_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_PER_TENANT_HUMANIZER_REFILL_PER_S", "2")))
+    # nlp_humanizer_request_rate: traffic shaping budget ratio for humanizer requests.
+    #   Default 0.6 for Phase 10 fairness and budget gating.
+    nlp_humanizer_request_rate: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_REQUEST_RATE", "0.6")))
+    # nlp_humanizer_budget_redis_key_prefix: Redis key prefix used by tenant humanizer
+    #   budget bookkeeping and throttling state.
+    nlp_humanizer_budget_redis_key_prefix: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_HUMANIZER_BUDGET_REDIS_KEY_PREFIX", "nlp:humanizer:budget:").strip()
+    )
+    # nlp_humanize: enable the ≤1B humanizer LLM for optional answer polish
+    #   (Phase 11 device-probed; never a decision-maker per AGENTS.md Rule 4).
+    nlp_humanize: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_HUMANIZE", "false").lower() in ("true", "1", "yes"))
+    # nlp_humanizer_max_new_tokens: cap on token output from the humanizer LLM
+    #   (Phase 10 §10.8 decoding constraints). Must be ≥ 1. Default 120.
+    nlp_humanizer_max_new_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_MAX_NEW_TOKENS", "120")))
+    # nlp_max_humanizer_tokens_per_request: upper bound on humanizer tokens
+    #   emitted per request (Phase 10 §10.23.8 budget). The effective decode
+    #   cap is min(nlp_humanizer_max_new_tokens, this value).
+    nlp_max_humanizer_tokens_per_request: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST", "120")))
+    # nlp_max_humanizer_tokens_per_tenant_per_min: upper bound on humanizer tokens
+    #   emitted per fairness key in a rolling 60s window (Phase 10 §10.23.8).
+    nlp_max_humanizer_tokens_per_tenant_per_min: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MAX_HUMANIZER_TOKENS_PER_TENANT_PER_MIN", "2400")))
+    # nlp_max_humanizer_tokens_per_pod_per_hour: upper bound on humanizer tokens
+    #   emitted by the pod in a 3600s window (Phase 10 §10.23.8).
+    nlp_max_humanizer_tokens_per_pod_per_hour: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MAX_HUMANIZER_TOKENS_PER_POD_PER_HOUR", "720000")))
+    # nlp_humanizer_pod_cooldown_s: cooldown duration after per-pod budget
+    #   exhaustion (Phase 10 §10.23.8). Default 300 seconds.
+    nlp_humanizer_pod_cooldown_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_POD_COOLDOWN_S", "300")))
+    # nlp_humanizer_respawn_cooldown_s: cooldown after a humanizer subprocess crash
+    #   before the pod attempts another humanizer restart. Default 30 seconds.
+    nlp_humanizer_respawn_cooldown_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_RESPAWN_COOLDOWN_S", "30")))
+    # nlp_humanizer_temperature: sampling temperature for humanizer LLM
+    #   (Phase 10 §10.8). Range [0.0, 2.0]. Default 0.3 (low variance).
+    nlp_humanizer_temperature: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_TEMPERATURE", "0.3")))
+    # nlp_humanizer_top_p: nucleus sampling threshold for humanizer LLM
+    #   (Phase 10 §10.8). Range [0.0, 1.0]. Default 0.9.
+    nlp_humanizer_top_p: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_TOP_P", "0.9")))
+    # nlp_humanizer_repetition_penalty: penalizes token repetition in humanizer
+    #   output (Phase 10 §10.8). Range [1.0, 2.0]. Default 1.05.
+    nlp_humanizer_repetition_penalty: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_REPETITION_PENALTY", "1.05")))
+    # nlp_answer_streaming: answer-streaming mode for chat UX.
+    #   disabled = feature available but inactive.
+    #   guarded  = skeleton-first + parallel polish with per-chunk proofreader gate.
+    #   off      = no streaming at all.
+    nlp_answer_streaming: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_ANSWER_STREAMING", "disabled").strip().lower())
+    # nlp_streaming_proofread_chunk_chars: proofreader chunk size for streaming.
+    nlp_streaming_proofread_chunk_chars: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_STREAMING_PROOFREAD_CHUNK_CHARS", "80")))
+    # nlp_streaming_write_timeout_ms: slow-client write timeout for streaming.
+    nlp_streaming_write_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_STREAMING_WRITE_TIMEOUT_MS", "2000")))
+    # nlp_humanizer_max_edit_ratio: drift guard for humanizer output
+    #   (Phase 10 §10.8). Character-level edit distance divided by template length
+    #   must be ≤ this value (LLM is rephrasing, not authoring). Over-cap → discard,
+    #   fall back to template, emit nlp.alert.v1{kind=nlp_humanizer_drift}.
+    #   Range [0.0, 1.0]. Default 0.6.
+    nlp_humanizer_max_edit_ratio: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_MAX_EDIT_RATIO", "0.6")))
+    # nlp_bench_latency_p95_threshold_ms: CI gate for `make nlp.bench`.
+    #   normalize_input p95 on nlp_input_max_codepoints-length input must
+    #   not exceed this value (milliseconds).  Phase 10 §10.1 DoD = 5 ms.
+    nlp_bench_latency_p95_threshold_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_BENCH_LATENCY_P95_THRESHOLD_MS", "5")))
+    # nlp_lexicon_reload_s: mtime-poll interval for hot-reloading lexicon YAML
+    #   files (§10.2 Atomic swap).  LexiconStore checks file mtimes at most
+    #   once every this many seconds; any changed file triggers a shadow-load +
+    #   validate + atomic swap under threading.Lock.
+    nlp_lexicon_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_RELOAD_S", "30")))
+    # nlp_compliance_reload_s: mtime-poll interval for hot-reloading the
+    #   tenant compliance banlist YAML file (§10.25.10).  Atomic file swap under
+    #   threading.Lock keeps the live banlist consistent across in-flight requests.
+    nlp_compliance_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_COMPLIANCE_RELOAD_S", "60")))
+    # nlp_unresolved_token_top_k: number of unresolved tokens to keep in the
+    #   rolling hourly top-k list for operator telemetry (§10.25.8).
+    nlp_unresolved_token_top_k: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_UNRESOLVED_TOKEN_TOP_K", "50")))
+    # nlp_unresolved_token_rolling_window_s: duration of the unresolved token
+    #   rolling window (seconds). Default 3600s for the hourly top-k calculation.
+    nlp_unresolved_token_rolling_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_UNRESOLVED_TOKEN_ROLLING_WINDOW_S", "3600")))
+    # nlp_lexicon_coverage_p50_floor: threshold for lexicon coverage drift alerts.
+    nlp_lexicon_coverage_p50_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_LEXICON_COVERAGE_P50_FLOOR", "0.6")))
+    # nlp_lexicon_max_age_days: maximum age of loaded lexicon files before a
+    #   stale-coverage alert is expected (§10.25.8).
+    nlp_lexicon_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MAX_AGE_DAYS", "14")))
+    # nlp_lexicon_max_entries_per_file: cardinality cap (§10.2 Cardinality cap).
+    #   Over-cap → nlp.alert.v1{kind=dictionary_overflow, severity=warn} + refuse
+    #   load.  Defends against Phase 19 long-tail explosion silently bloating
+    #   memory.
+    nlp_lexicon_max_entries_per_file: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MAX_ENTRIES_PER_FILE", "50000")))
+    # nlp_lexicon_max_aliases_per_canonical: quota on aliases per canonical entity
+    #   in the alias delta build path (§10.25.6). Enforces consistent lexicon
+    #   density and guards against PR bloat / Symspell precision loss.
+    nlp_lexicon_max_aliases_per_canonical: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MAX_ALIASES_PER_CANONICAL", "12")))
+    # nlp_lexicon_pr_max_added_rows_per_file: hard cap for lexicon PR diff size
+    #   in CI. `make verify.nlp-lexicon-diff` fails if any lexicon file adds
+    #   more rows than this threshold.
+    nlp_lexicon_pr_max_added_rows_per_file: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_PR_MAX_ADDED_ROWS_PER_FILE", "200")))
+    # nlp_lexicon_pr_soft_warn_added_rows_per_file: advisory threshold for
+    #   lexicon PR diff size. Workloads above this value are warned but not
+    #   rejected.
+    nlp_lexicon_pr_soft_warn_added_rows_per_file: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_PR_SOFT_WARN_ADDED_ROWS_PER_FILE", "50")))
+    # nlp_lexicon_min_alias_appearances: minimum corpus appearances required
+    #   for a delta alias to ship without explicit reviewer override.
+    nlp_lexicon_min_alias_appearances: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MIN_ALIAS_APPEARANCES", "3")))
+    # nlp_lexicon_max_collision_load: maximum allowed alias hash bucket load
+    #   during lexicon shadow load (§10.34). Over-cap → lexicon_collision_load_high
+    #   error alert and swap refusal.
+    nlp_lexicon_max_collision_load: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MAX_COLLISION_LOAD", "8")))
+    # nlp_lexicon_max_rss_mb: total RSS budget for all loaded lexicons (§10.2
+    #   Bounded memory).  After the shadow alias indices are built, the process
+    #   RSS is measured; if it exceeds this limit the swap is refused and a
+    #   dictionary_overflow error alert is emitted.  Set to 0 to disable.
+    nlp_lexicon_max_rss_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MAX_RSS_MB", "128")))
+    # nlp_lexicon_max_old_generations: max retired snapshots retained for in-
+    #   flight requests (§10.21.2 Old-generation eviction contract).  When a
+    #   lexicon swap occurs, the old dict is added to a deque; oldest generations
+    #   beyond this cap are dropped.  Default 2 (allows ~2 reload cycles worth
+    #   of in-flight requests to complete before refcount → 0).
+    nlp_lexicon_max_old_generations: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_MAX_OLD_GENERATIONS", "2")))
+    # nlp_lexicon_gossip_interval_s: gossip publish interval in seconds.
+    #   Each NLP pod emits its current lexicon+model tuple every interval.
+    nlp_lexicon_gossip_interval_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_GOSSIP_INTERVAL_S", "300")))
+    # nlp_lexicon_divergence_min_rounds: number of consecutive gossip rounds a
+    #   pod may diverge from the cluster modal tuple before a critical alert
+    #   is emitted.
+    nlp_lexicon_divergence_min_rounds: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_DIVERGENCE_MIN_ROUNDS", "2")))
+    # nlp_lexicon_divergence_auto_quarantine: if true, a persistent lexicon
+    #   divergence alert is treated as an auto-quarantine candidate for the
+    #   divergent pod.
+    nlp_lexicon_divergence_auto_quarantine: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LEXICON_DIVERGENCE_AUTO_QUARANTINE", "true").strip().lower() in ("1", "true", "yes"))
+    # nlp_gossip_max_pods: maximum distinct gossip pod identities allowed in
+    #   the rolling gossip window. Exceeding this suggests a runaway cluster
+    #   and should trigger operator attention.
+    nlp_gossip_max_pods: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_GOSSIP_MAX_PODS", "50")))
+    # nlp_intent_retrain_max_regression: maximum allowed regression when retraining
+    #   an intent model before the candidate is rejected. Default 0.005.
+    nlp_intent_retrain_max_regression: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_INTENT_RETRAIN_MAX_REGRESSION", "0.005")))
+    # nlp_erase_scan_batch: batch size for erasure scan jobs (§10.25.9). Default 500.
+    nlp_erase_scan_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ERASE_SCAN_BATCH", "500")))
+    # nlp_lexicon_swap_atomicity: swap policy for multi-file lexicon reloads
+    #   (§10.21.3 Atomic swap policy).  Values: "all_or_nothing" (default) or
+    #   "per_file".  Under "all_or_nothing", when any file changes, ALL files
+    #   are loaded into shadow and validated via cross-file referential
+    #   validator; if validation passes, the whole snapshot swaps atomically;
+    #   else REVERT shadow + emit nlp.alert.v1{kind=nlp_lexicon_atomic_swap_failed}.
+    nlp_lexicon_swap_atomicity: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LEXICON_SWAP_ATOMICITY", "all_or_nothing"))
+    # nlp_lexicon_feed_max_supported_schema_version: highest lexicon feed
+    #   schema version this NLP build can consume. A higher feed schema is
+    #   refused during reload and prior generation stays live.
+    nlp_lexicon_feed_max_supported_schema_version: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_FEED_MAX_SUPPORTED_SCHEMA_VERSION", "1")))
+    # nlp_lexicon_source: source mode for lexicon artifacts. "file" runs
+    #   in-repo lexicons with SHA-only integrity; "feed" enables HMAC-signed
+    #   bundle verification before load.
+    nlp_lexicon_source: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LEXICON_SOURCE", "file"))
+    # nlp_safe_mode_fallback_enabled: boot fallback to the baked-in safe-mode
+    #   lexicon directory when the primary lexicon load fails at startup.
+    #   Default true for Phase 10 §10.23.11 disaster recovery boot safety.
+    nlp_safe_mode_fallback_enabled: bool = field(
+        default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_SAFE_MODE_FALLBACK_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+    )
+    # nlp_lexicon_dir: filesystem directory containing lexicon YAML files.
+    #   Used by LexiconStore and compatibility validation. Defaults to the
+    #   in-repo lexicon directory for Phase 10.
+    nlp_lexicon_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LEXICON_DIR", "ai/nlp/lexicon"))
+    # nlp_lexicon_feed_hmac_key_path: HMAC-SHA256 key file used to verify
+    #   signed lexicon bundle artifacts in feed mode.
+    nlp_lexicon_feed_hmac_key_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_LEXICON_FEED_HMAC_KEY_PATH", "infra/nlp/lexicon_feed_hmac.key"
+    ))
+    # nlp_lexicon_feed_hmac_key_grace_s: dual-acceptance window (seconds)
+    #   for the prior lexicon feed HMAC key after rotation.
+    nlp_lexicon_feed_hmac_key_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LEXICON_FEED_HMAC_KEY_GRACE_S", "86400")))
+    # nlp_lexicon_feed_signature_required: verification policy for lexicon
+    #   feed signatures. Values: off | warn | enforce. Default warn.
+    nlp_lexicon_feed_signature_required: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LEXICON_FEED_SIGNATURE_REQUIRED", "warn"))
+    # nlp_lang_tr_dir: directory containing Phase 10 Turkish language rule
+    #   tables consumed by the input normalizer and the lexicon build
+    #   pipeline (§10.22 table-driven robustness floor).
+    nlp_lang_tr_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LANG_TR_DIR", "ai/nlp/lang_tr"))
+    # nlp_lang_tr_reload_s: file-mtime poll interval for reloading the
+    #   language-rule tables in nlp_lang_tr_dir. Mirrored to lexicon reload
+    #   cadence (same atomic-swap discipline, distinct lock).
+    nlp_lang_tr_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_LANG_TR_RELOAD_S", "30")))
+    # nlp_crf_max_rss_mb: RSS budget for CRF model (§10.21.2 RSS ceiling).
+    #   Estimated memory footprint for the python-crfsuite entity tagger model
+    #   at runtime.  Default 5 MB.
+    nlp_crf_max_rss_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_CRF_MAX_RSS_MB", "5")))
+    # nlp_symspell_max_rss_mb: RSS budget for SymSpell dictionary (§10.21.2
+    #   RSS ceiling).  Estimated memory footprint for the SymSpell edit-distance
+    #   index used in typo correction (§10.3).  Default 100 MB.
+    nlp_symspell_max_rss_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_SYMSPELL_MAX_RSS_MB", "100")))
+    # nlp_jinja_cache_max_rss_mb: RSS budget for Jinja2 bytecode cache
+    #   (§10.21.2 RSS ceiling).  Estimated memory footprint for precompiled
+    #   template bytecode loaded at runtime.  Default 50 MB.
+    nlp_jinja_cache_max_rss_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_JINJA_CACHE_MAX_RSS_MB", "50")))
+    # nlp_python_overhead_mb: RSS budget for Python interpreter overhead
+    #   (§10.21.2 RSS ceiling).  Baseline memory for Python runtime, standard
+    #   library, and dependencies (numpy, fasttext, jinja2, etc.) before NLP
+    #   components are loaded.  Default 200 MB.
+    nlp_python_overhead_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PYTHON_OVERHEAD_MB", "200")))
+    # nlp_humanizer_max_rss_mb: RSS budget for humanizer model (§10.21.2
+    #   RSS ceiling).  Estimated memory footprint for the ONNX transformer
+    #   model (§10.8) including weights, KV cache, and inference buffers.
+    #   Default 1024 MB (1 GiB).
+    nlp_humanizer_max_rss_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_HUMANIZER_MAX_RSS_MB", "1024")))
+    # nlp_pod_rss_max_mb: total RSS ceiling per NLP pod (§10.21.2 RSS ceiling).
+    #   Boot validator computes the sum of sub-knobs (lexicons, intent model,
+    #   crf, symspell, jinja cache, python overhead, humanizer) and refuses
+    #   start if it exceeds this cap.  Catches operator over-tuning a sub-knob.
+    #   Default 2048 MB (2 GiB).
+    nlp_pod_rss_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_POD_RSS_MAX_MB", "2048")))
+    # nlp_jinja_bcc_dir: directory path for Jinja2 bytecode cache
+    #   (§10.21.2 precompiled templates).  FileSystemBytecodeCache stores
+    #   precompiled template bytecode with pattern __nlp_%s.cache to avoid
+    #   repeated AST compilation in hot path.  Must be a writable directory.
+    #   Default: data/cache/jinja_bcc (created at boot if missing).
+    nlp_jinja_bcc_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_JINJA_BCC_DIR", "data/cache/jinja_bcc"))
+    # nlp_system_capability_template_path: path to a deterministic system
+    #   capability answer template or text file. Refreshed at deploy, not at
+    #   runtime. Default empty (uses built-in capability text).
+    nlp_system_capability_template_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_SYSTEM_CAPABILITY_TEMPLATE_PATH", ""))
+    # nlp_template_finalize_min_user_text_len: minimum substring length for the
+    #   §10.21.6 runtime guard (defense-in-depth) that blocks template rendering
+    #   if any rendered string contains a substring from the original user input.
+    #   Checked via custom Jinja2 Environment.finalize callable. Must be ≥ 1.
+    #   Default 6 (per §10.21.6 spec).
+    nlp_template_finalize_min_user_text_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_TEMPLATE_FINALIZE_MIN_USER_TEXT_LEN", "6")))
+    # nlp_typo_max_edit_distance: global Levenshtein cap for tokens of length ≥ 5
+    #   in the SymSpell-style typo-correction step (§10.3).  Must be 1 or 2.
+    #   Shorter tokens use a smaller per-token budget (len 3-4 → 1, len ≤ 2 → 0).
+    nlp_typo_max_edit_distance: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_TYPO_MAX_EDIT_DISTANCE", "2")))
+    # nlp_typo_max_lookups_per_query: total fuzzy-lookup budget per query (§10.3
+    #   Per-query budget).  When more than this many tokens in a single query
+    #   require a fuzzy (edit_distance > 0) correction, the pipeline short-circuits
+    #   the remaining tokens and emits nlp.event.v1{kind=did_you_mean_offered}.
+    #   Must be ≥ 1.  Default 8 (covers typical sentence length; rare queries with
+    #   many misspellings get the "Did you mean?" path rather than silent guessing).
+    nlp_typo_max_lookups_per_query: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_TYPO_MAX_LOOKUPS_PER_QUERY", "8")))
+    # nlp_ime_layout_cache_s: TTL in seconds for inferred keyboard layout hints.
+    #   Cache keys are hashed from client_id so logs never expose client identifiers.
+    #   Default 3600 seconds (one hour). Must be ≥ 1 and ≤ 86400.
+    nlp_ime_layout_cache_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_IME_LAYOUT_CACHE_S", "3600")))
+    # nlp_asr_filler_strip_max: per-query cap on voice ASR filler stripping.
+    #   When a voice query would strip more than this many fillers, the voice
+    #   path preserves the raw token stream to avoid abuse-sensitive over-strip.
+    #   Must be ≥ 1. Default 6.
+    nlp_asr_filler_strip_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ASR_FILLER_STRIP_MAX", "6")))
+    # nlp_preamble_max_strip_tokens: maximum prefix token count for a
+    #   detachable preamble strip before the classifier. When a leading
+    #   preamble exceeds this limit, the strip attempt is capped and the
+    #   input is left intact to avoid overstrip attacks.
+    nlp_preamble_max_strip_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PREAMBLE_MAX_STRIP_TOKENS", "8")))
+    # nlp_meta_question_table_max: maximum number of entries accepted in the
+    #   closed meta question table. Prevents runaway table growth in Phase 10.
+    nlp_meta_question_table_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_META_QUESTION_TABLE_MAX", "500")))
+    # nlp_meta_question_routing_enabled: enable routing of closed meta questions
+    #   before intent classification. Default true.
+    nlp_meta_question_routing_enabled: bool = field(default_factory=lambda: str(os.getenv("NEGELIR_SWARM_NLP_META_QUESTION_ROUTING_ENABLED", "true")).strip().lower() in {"1", "true", "yes"})
+    # nlp_preamble_strip_enabled: enable leading preamble stripping before
+    #   morphology. Default true.
+    nlp_preamble_strip_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_PREAMBLE_STRIP_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_predictive_overshoot_enabled: enable closed-table predictive overshoot
+    #   correction for known mobile keyboard auto-complete substitutions.
+    #   Default true.
+    nlp_predictive_overshoot_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_PREDICTIVE_OVERSHOOT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_predictive_overshoot_max_per_query: maximum number of predictive
+    #   overshoot repairs allowed per query. Default 2.
+    nlp_predictive_overshoot_max_per_query: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PREDICTIVE_OVERSHOOT_MAX_PER_QUERY", "2")))
+    # nlp_consonant_alternation_enabled: enable consonant-alternation tolerance
+    #   before typo correction. Default true.
+    nlp_consonant_alternation_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_CONSONANT_ALTERNATION_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_assimilation_fold_enabled: enable suffix assimilation folding in the
+    #   particle normalization step. Default true.
+    nlp_assimilation_fold_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_ASSIMILATION_FOLD_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_telegraphic_max_tokens: maximum token count eligible for telegraphic
+    #   intent inference. Default 4.
+    nlp_telegraphic_max_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_TELEGRAPHIC_MAX_TOKENS", "4")))
+    # nlp_telegraphic_min_entity_confidence: minimum gazetteer entity confidence
+    #   for telegraphic intent inference. Default 0.85.
+    nlp_telegraphic_min_entity_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_TELEGRAPHIC_MIN_ENTITY_CONFIDENCE", "0.85")))
+    # nlp_telegraphic_inference_enabled: enable deterministic telegraphic intent
+    #   inference before classifier. Default true.
+    nlp_telegraphic_inference_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TELEGRAPHIC_INFERENCE_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_ki_context_disambiguation: enable context-aware ki particle disambiguation.
+    #   Default true.
+    nlp_ki_context_disambiguation: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_KI_CONTEXT_DISAMBIGUATION", "true").lower() in ("true", "1", "yes"))
+    # nlp_tr_normalize_spec_path: path to the cross-language TR normalize spec.
+    #   Default ai/common/text/tr_normalize_spec.json.
+    nlp_tr_normalize_spec_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TR_NORMALIZE_SPEC_PATH", "ai/common/text/tr_normalize_spec.json").strip())
+    # nlp_tr_normalize_spec_required: spec validation mode. Default enforce.
+    nlp_tr_normalize_spec_required: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TR_NORMALIZE_SPEC_REQUIRED", "enforce").strip().lower())
+    # nlp_reduplication_collapse_enabled: enable whole-word reduplication collapse
+    #   for emphatic Turkish adjective repeats (§10.29.7). Default true.
+    nlp_reduplication_collapse_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_REDUPLICATION_COLLAPSE_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_inline_self_correction_enabled: enable inline self-correction and
+    #   stutter handling before typo correction. Default true.
+    nlp_inline_self_correction_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INLINE_SELF_CORRECTION_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_compound_split_enabled: enable no-space compound splitting on the
+    #   normalize path. Default true.
+    nlp_compound_split_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_COMPOUND_SPLIT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_vowel_drop_before_suffix_enabled: enable the vowel-drop-before-suffix
+    #   repair pass for dropped high vowels before vowel-initial suffixes.
+    #   Default true.
+    nlp_vowel_drop_before_suffix_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_VOWEL_DROP_BEFORE_SUFFIX_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_tr_pii_redact_enabled: enable TR-specific PII redaction before the
+    #   length cap and classifier. Default true.
+    nlp_tr_pii_redact_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TR_PII_REDACT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_league_catalog_consonant_stems_path: optional path to a newline-
+    #   delimited file listing LeagueCatalog stems ending in p/ç/t/k that the
+    #   consonant alternation table must cover. Empty disables this optional
+    #   build gate.
+    nlp_league_catalog_consonant_stems_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LEAGUE_CATALOG_CONSONANT_STEMS_PATH", "").strip())
+    # nlp_loanword_variants_enabled: enable loanword transliteration variant
+    #   resolution in the lexicon build and routing path. Default true.
+    nlp_loanword_variants_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LOANWORD_VARIANTS_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_loanword_singularisation_enabled: enable loanword plural-as-singular repair
+    #   before the generic plural-stripper / lexicon lookup stage. Default true.
+    nlp_loanword_singularisation_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_LOANWORD_SINGULARISATION_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_diacritic_softg_min_freq: minimum frequency for soft-g restoration in
+    #   the voice diacritic path (§10.28 language-floor soft-g preference).
+    nlp_diacritic_softg_min_freq: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_DIACRITIC_SOFTG_MIN_FREQ", "500")))
+    # nlp_morph_topk: number of Zemberek-style candidate parses to retain per
+    #   token in the morphology stage (§10.26.1 top-K parse acceptance). Must be
+    #   ≥ 1. Default 3.
+    nlp_morph_topk: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MORPH_TOPK", "3")))
+    # nlp_morph_min_confidence: confidence floor for morphology parse candidates.
+    #   Parses below this threshold are flagged as high ambiguity (§10.26.1).
+    #   Must be in [0.0, 1.0]. Default 0.55.
+    nlp_morph_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_MORPH_MIN_CONFIDENCE", "0.55")))
+    # nlp_morph_context_radius: token radius for co-token morphology context
+    #   arbitration (§10.26.1). Must be ≥ 0. Default 4.
+    nlp_morph_context_radius: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MORPH_CONTEXT_RADIUS", "4")))
+    # nlp_morph_ambiguous_max_per_query: per-query cap on high-ambiguity tokens
+    #   before fallback to did_you_mean (§10.26.1). Must be ≥ 1. Default 4.
+    nlp_morph_ambiguous_max_per_query: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MORPH_AMBIGUOUS_MAX_PER_QUERY", "4")))
+    # nlp_compound_split_max_splits: maximum number of segments to create when a
+    #   no-space token is split into Turkish words.  Must be ≥ 1.  Default 4.
+    nlp_compound_split_max_splits: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_COMPOUND_SPLIT_MAX_SPLITS", "4")))
+    # nlp_compound_split_max_lookups_per_query: total lexicon lookup budget for
+    #   compound splitting within a single query (§10.28.3).  Must be ≥ 1.
+    #   Default 24 to keep this pass cheap and bounded.
+    nlp_compound_split_max_lookups_per_query: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_COMPOUND_SPLIT_MAX_LOOKUPS_PER_QUERY", "24")))
+    # nlp_diacritic_tie_break_ratio: frequency ratio threshold for the §10.3
+    #   diacritic ambiguity policy.  When the top-2 candidates for an ASCII form
+    #   have frequencies within this ratio (top / second ≤ ratio), the token is
+    #   ambiguous and preserved unchanged so the entity resolver can disambiguate
+    #   via context (e.g., co-occurring league name).  Must be ≥ 1.0.
+    #   Default 1.5 (from the §10.3 spec).  Set to a very large value to always
+    #   pick the highest-frequency candidate.
+    nlp_diacritic_tie_break_ratio: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_DIACRITIC_TIE_BREAK_RATIO", "1.5")))
+    # nlp_diacritic_tie_break_ratio_voice: boosted ambiguity threshold for
+    #   voice input (§10.3). ASR output is noisier on diacritics, so the voice
+    #   path may restore more aggressively than keyboard input.
+    #   Must be ≥ 1.0. Default 2.5.
+    nlp_diacritic_tie_break_ratio_voice: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_DIACRITIC_TIE_BREAK_RATIO_VOICE", "2.5")))
+    # nlp_diacritic_hard_call_min_freq: frequency floor for the §10.22.1
+    #   hard-call restoration override.  Ambiguous entries whose top candidate
+    #   frequency is >= this value restore to the top candidate even when the
+    #   tie-break ratio would otherwise preserve the ASCII form.
+    #   Must be >= 1. Default 10000.
+    nlp_diacritic_hard_call_min_freq: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_DIACRITIC_HARD_CALL_MIN_FREQ", "10000")))
+    # nlp_diacritic_max_risk_per_token: cumulative per-character restoration
+    #   risk cap for §10.22.1. If the sum of risk weights for applied letter
+    #   swaps exceeds this value, the token stays in ASCII form even when
+    #   restoration is otherwise unambiguous. Must be >= 0.0. Default 2.5.
+    nlp_diacritic_max_risk_per_token: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_DIACRITIC_MAX_RISK_PER_TOKEN", "2.5")))
+    # nlp_ascii_vs_restored_margin: minimum confidence gap required for a
+    #   restored-form gazetteer hit to override an ASCII-pass hit when both
+    #   target the same span but map to different canonicals (§10.22.1).
+    #   Must be >= 0.0. Default 0.2.
+    nlp_ascii_vs_restored_margin: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_ASCII_VS_RESTORED_MARGIN", "0.2")))
+    # nlp_repair_density_p95_max: p95 repair-density cap for clean-input
+    #   quality monitoring (§10.22.13). Must be >= 0.0. Default 0.5.
+    nlp_repair_density_p95_max: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_REPAIR_DENSITY_P95_MAX", "0.5")))
+    # nlp_normalize_stage_timeout_ms: wall-clock deadline for the combined
+    #   normalize+diacritic+typo stage (steps 6-8 in §10.1, §10.3 Cost ceiling).
+    #   Deadline propagation per Phase 9 §9.17.4.  On timeout the pipeline falls
+    #   through to the raw token sequence (NormalizedInput.stage_timed_out=True)
+    #   and the caller emits nlp.event.v1{kind=normalize_timeout}.  Better a
+    #   degraded answer than no answer.  Must be ≥ 1 ms.
+    nlp_normalize_stage_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_NORMALIZE_STAGE_TIMEOUT_MS", "20")))
+    # nlp_normalize_total_budget_p99_ms: total per-request p99 budget for the
+    #   entire normalize chain (all passes, all gates, end-to-end; §10.34.2).
+    #   Used for CI regression gates; no hard enforcement at runtime but violated
+    #   budgets are telemetry events. Must be >= 5 ms.
+    nlp_normalize_total_budget_p99_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_NORMALIZE_TOTAL_BUDGET_P99_MS", "12")))
+    # nlp_collapse_unicode_spaces: collapse every Unicode Zs category to U+0020
+    #   before tokenization. Prevents invisible paste whitespace from joining
+    #   Turkish tokens silently.
+    nlp_collapse_unicode_spaces: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_COLLAPSE_UNICODE_SPACES", "true").lower() in ("true", "1", "yes"))
+    # nlp_strip_emoji: when true, strip remaining symbol-other / symbol-modifier
+    #   characters after emoji hint extraction. This removes emoji-ZWJ sequences
+    #   and stray decorative symbols from tokenization.
+    nlp_strip_emoji: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_STRIP_EMOJI", "true").lower() in ("true", "1", "yes"))
+    # nlp_structured_input_refusal_enabled: when true, valid JSON/YAML/XML or
+    #   code-fence input is short-circuited to a structured-input refusal floor.
+    nlp_structured_input_refusal_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_STRUCTURED_INPUT_REFUSAL_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_emoji_hint_enabled: when false, the emoji hint extraction stage is
+    #   skipped (§10.24.9).
+    nlp_emoji_hint_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_EMOJI_HINT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_hashtag_handling_enabled: when false, hashtag expansion is disabled
+    #   in the normalization pipeline (§10.24.9).
+    nlp_hashtag_handling_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_HASHTAG_HANDLING_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_at_mention_handling_enabled: when false, @mention resolution is disabled
+    #   in the normalization pipeline (§10.24.9).
+    nlp_at_mention_handling_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_AT_MENTION_HANDLING_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_harmony_tolerant_strip_enabled: when false, harmony-tolerant suffix
+    #   repair is disabled (§10.24.1).
+    nlp_harmony_tolerant_strip_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_HARMONY_TOLERANT_STRIP_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_productive_peel_max_depth: maximum iterative productive suffix peel depth.
+    #   This limits the number of suffix layers peeled from tokens like
+    #   "GSlilik" (§10.32.8).
+    nlp_productive_peel_max_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PRODUCTIVE_PEEL_MAX_DEPTH", "3")))
+    # nlp_productive_peel_min_residue_resolution: when true, a productive peel is
+    #   accepted only if the peeled residue resolves to a canonical entity.
+    nlp_productive_peel_min_residue_resolution: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_PRODUCTIVE_PEEL_MIN_RESIDUE_RESOLUTION", "true").lower() in ("true", "1", "yes"))
+    # nlp_match_separator_pattern: regex pattern that a token between two resolved
+    #   team entities must match for the dispatcher (§10.6) to promote the pair to
+    #   Default covers ASCII hyphen, en-dash, em-dash, "vs"/"vs.", "x", "×", "/".
+    #   Calibrated on fan-message corpus: these separators cover > 99% of
+    #   "Team A vs Team B" phrasing in Turkish football fan messages.
+    nlp_match_separator_pattern: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_MATCH_SEPARATOR_PATTERN", r"^(-|\u2013|\u2014|vs\.?|x|\u00d7|/)$"))
+    # nlp_match_word_bridges: comma-separated tokens that bridge two resolved
+    #   team entities (§10.22.7 word-bridge parsing). When the token between two
+    #   team entities is one of these bridges, the dispatcher promotes the pair
+    #   to a match_lookup slot.
+    _nlp_match_word_bridges_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_MATCH_WORD_BRIDGES", "ile,karşı,vs,vs.,ve"
+    ))
+    # nlp_match_co_tokens: comma-separated co-occurring tokens that indicate a
+    #   match fixture when two team entities appear in the same sentence
+    #   (§10.22.7 adjacency rule).
+    _nlp_match_co_tokens_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_MATCH_CO_TOKENS", "maç,maçı,derbi,karşılaşma,fikstür,oyun"
+    ))
+    # nlp_club_co_tokens: comma-separated co-occurring tokens that disambiguate
+    #   a bare club-city alias such as "Rize" into the club form when present.
+    _nlp_club_co_tokens_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_CLUB_CO_TOKENS", "maç,skor,kadro,fikstür,puan,forma,hocası,teknik"
+    ))
+
+    @property
+    def nlp_match_word_bridges(self) -> list[str]:
+        return [tok.strip() for tok in self._nlp_match_word_bridges_raw.split(",") if tok.strip()]
+
+    @property
+    def nlp_match_co_tokens(self) -> list[str]:
+        return [tok.strip() for tok in self._nlp_match_co_tokens_raw.split(",") if tok.strip()]
+
+    @property
+    def nlp_club_co_tokens(self) -> list[str]:
+        return [tok.strip() for tok in self._nlp_club_co_tokens_raw.split(",") if tok.strip()]
+
+    # nlp_match_adjacency_radius: maximum number of tokens between a team-pair
+    #   entity and a co-token when using the §10.22.7 adjacency rule.
+    nlp_match_adjacency_radius: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MATCH_ADJACENCY_RADIUS", "4")))
+    # nlp_club_disambiguation_radius: maximum token distance for club-city
+    #   disambiguation co-tokens such as "Rize".
+    nlp_club_disambiguation_radius: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_CLUB_DISAMBIGUATION_RADIUS", "4")))
+    # nlp_backtrack_max_attempts: maximum number of team-nickname backtrack
+    #   retries permitted for a single query. Phase 10 §10.24.12 bounds this
+    #   to 1.
+    nlp_backtrack_max_attempts: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_BACKTRACK_MAX_ATTEMPTS", "1")))
+    # nlp_fixture_date_adjacency_radius: maximum token distance between a
+    #   resolved date/time entity and the paired teams for fixture binding.
+    nlp_fixture_date_adjacency_radius: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_FIXTURE_DATE_ADJACENCY_RADIUS", "8")))
+
+    # nlp_canary_pod: when true, this pod is a canary pod and loads the
+    #   canary intent model file path (`nlp_intent_model_path + ".canary"`).
+    #   Controlled by pod startup env var `NEGELIR_SWARM_NLP_CANARY_POD=1`.
+    #   Default false.
+    nlp_canary_pod: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_CANARY_POD", "0").lower() in ("true", "1", "yes"))
+    # nlp_intent_model_canary_pct: target canary rollout percentage for intent
+    #   model deploys (§10.23.2). This is an operator-side config for environment
+    #   generation; on-pod load decisions still use nlp_canary_pod.
+    #   Default 10.
+    nlp_intent_model_canary_pct: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INTENT_MODEL_CANARY_PCT", "10")))
+    # nlp_canary_account_bucket_size: sticky bucket size for per-account
+    #   canary assignment in gateway routing (§10.23.2).
+    #   Default 1000.
+    nlp_canary_account_bucket_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_CANARY_ACCOUNT_BUCKET_SIZE", "1000")))
+    # nlp_intent_shadow_mode: off/on for shadow-mode comparison of the baseline
+    #   vs canary intent model evaluation (§10.23.2). Default off.
+    nlp_intent_shadow_mode: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_SHADOW_MODE", "off").lower())
+    # nlp_shadow_sample_rate: sample rate for shadow-mode comparisons
+    #   (§10.23.2). Must be in [0.0, 1.0]. Default 0.01.
+    nlp_shadow_sample_rate: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_SHADOW_SAMPLE_RATE", "0.01")))
+    # nlp_canary_min_shadow_hours: minimum hours of shadow-mode observations
+    #   before a canary promotion is allowed (§10.23.2).
+    nlp_canary_min_shadow_hours: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_CANARY_MIN_SHADOW_HOURS", "72")))
+    # nlp_canary_max_disagreement_rate: maximum tolerated total disagreement
+    #   rate for an intent-model canary promotion (§10.23.2).
+    nlp_canary_max_disagreement_rate: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_CANARY_MAX_DISAGREEMENT_RATE", "0.03")))
+    # nlp_canary_max_confidence_drift: maximum tolerated Δp95 confidence drift
+    #   for an intent-model canary promotion (§10.23.2).
+    nlp_canary_max_confidence_drift: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_CANARY_MAX_CONFIDENCE_DRIFT", "0.05")))
+    # nlp_lexicon_canary_max_disagreement_pct: maximum tolerated total field
+    #   disagreement rate for a lexicon canary promotion (§10.31.15).
+    nlp_lexicon_canary_max_disagreement_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_LEXICON_CANARY_MAX_DISAGREEMENT_PCT", "0.02")))
+    # nlp_lexicon_canary_max_per_field_disagreement_pct: maximum tolerated per-field
+    #   disagreement rate for a lexicon canary promotion (§10.31.15).
+    nlp_lexicon_canary_max_per_field_disagreement_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_LEXICON_CANARY_MAX_PER_FIELD_DISAGREEMENT_PCT", "0.05")))
+
+    # nlp_weekly_eval_sample_size: number of sampled queries for weekly eval
+    #   re-run evaluation (§10.23.3). Default 2000.
+    nlp_weekly_eval_sample_size: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_WEEKLY_EVAL_SAMPLE_SIZE", "2000")))
+    # nlp_weekly_eval_sample_max_chars: truncate sanitized weekly eval queries
+    #   to this many characters before labelling (§10.23.3). Default 200.
+    nlp_weekly_eval_sample_max_chars: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_WEEKLY_EVAL_SAMPLE_MAX_CHARS", "200")))
+    # nlp_weekly_eval_max_accuracy_drop: maximum tolerated delta in accuracy
+    #   for weekly re-evaluation (§10.23.3).
+    nlp_weekly_eval_max_accuracy_drop: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_WEEKLY_EVAL_MAX_ACCURACY_DROP", "0.03")))
+    # nlp_weekly_eval_consecutive_drop_threshold: cumulative consecutive drop
+    #   above which the next canary promotion is refused until operator ack.
+    nlp_weekly_eval_consecutive_drop_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_WEEKLY_EVAL_CONSECUTIVE_DROP_THRESHOLD", "0.05")))
+
+    # nlp_intent_model_path: path to the fastText supervised intent classifier
+    #   model file (§10.4 Model).  Relative paths are resolved from the repo
+    #   root (same CWD convention as other data/ paths).  Set by the build
+    #   pipeline; overridden per-deployment via env var.
+    nlp_intent_model_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_MODEL_PATH", "data/models/nlp/intent.tr.bin"))
+    # nlp_intent_train_shadow_path: path to the PII-scrubbed shadow training
+    #   corpus used by operator-driven intent retrains (§10.25.5). Defaults to
+    #   the repo-local weekly shadow sample location.
+    nlp_intent_train_shadow_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_TRAIN_SHADOW_PATH", "data/nlp/shadow_train.jsonl"))
+    # nlp_intent_train_eval_manifest_path: optional eval-set manifest path for
+    #   request_id_h exclusion during intent training (§10.27.10).
+    nlp_intent_train_eval_manifest_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_TRAIN_EVAL_MANIFEST_PATH", ""))
+    # nlp_intent_training_manifest_dir: directory for training manifest outputs
+    #   from shadow eligibility filtering (§10.27.10).
+    nlp_intent_training_manifest_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_TRAINING_MANIFEST_DIR", "data/nlp/training_manifests"))
+    # nlp_intent_model_sha256: expected SHA256 hex digest of the model file
+    #   (§10.4 SHA-pinned).  Set by `make nlp.intent-pin` and stored in
+    #   xops/versioning/chart.json compatibility.data_files.intent_model.sha256.
+    #   Empty string disables SHA verification (dev/pre-train only — never in
+    #   production).
+    nlp_intent_model_sha256: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_MODEL_SHA256", ""))
+    # nlp_intent_enum_v4_enabled: hard cutover guard for the additive intent enum
+    #   bump (§10.30.1). When false, the system may continue to honor v3-only
+    #   clients and omit v4-only behavior.
+    nlp_intent_enum_v4_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_ENUM_V4_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_min_tokens: minimum normalized token count before the empty-input
+    #   floor gate hands back a canned meta.help response (§10.24.13).
+    nlp_min_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MIN_TOKENS", "1")))
+    # nlp_partial_input_min_token_len: minimum single-token prefix length to
+    #   consider as a half-typed Turkish query prefix.
+    nlp_partial_input_min_token_len: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PARTIAL_INPUT_MIN_TOKEN_LEN", "3")))
+    # nlp_partial_input_max_completions: maximum number of completion candidates
+    #   to offer for a partially typed input.
+    nlp_partial_input_max_completions: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PARTIAL_INPUT_MAX_COMPLETIONS", "3")))
+    # nlp_megainput_min_chars: minimum raw-character length before mega-input
+    #   last-paragraph extraction is considered for long multi-paragraph paste.
+    nlp_megainput_min_chars: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_MEGAINPUT_MIN_CHARS", "1500")))
+    # nlp_random_case_threshold: per-token mixed-case flip ratio that triggers
+    #   automatic casefolding before gazetteer match.
+    nlp_random_case_threshold: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_RANDOM_CASE_THRESHOLD", "0.30")))
+    # nlp_emoji_to_concept_enabled: whether emoji+suffix inputs promote to
+    #   typed concept entities instead of strip-only emoji.
+    nlp_emoji_to_concept_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_EMOJI_TO_CONCEPT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_numeric_redundant_restatement_enabled: collapse digit + number-word
+    #   restatement pairs into digit-only tokens.
+    nlp_numeric_redundant_restatement_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_NUMERIC_REDUNDANT_RESTATEMENT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_single_emoji_intent_enabled: whether single-emoji-only input is
+    #   routed to a closed Turkish clarification offer.
+    nlp_single_emoji_intent_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_SINGLE_EMOJI_INTENT_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_time_of_day_shorthand_enabled: enable expansion of abbreviated time
+    #   of day forms like aks, sbh, gec.
+    nlp_time_of_day_shorthand_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TIME_OF_DAY_SHORTHAND_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_fragment_detection_enabled: enable the Phase 10 §10.28.6 fragment
+    #   / incomplete-sentence detector before the classifier.
+    nlp_fragment_detection_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_FRAGMENT_DETECTION_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_wh_prior_log_odds_max: cap on the deterministic WH-word prior nudge
+    #   applied after classifier logit but before calibration (§10.30.2).
+    nlp_wh_prior_log_odds_max: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_WH_PRIOR_LOG_ODDS_MAX", "1.5")))
+    # nlp_wh_prior_drift_alert_pp: week-over-week drift alert threshold
+    #   for WH prior mean shift (§10.30.2).
+    nlp_wh_prior_drift_alert_pp: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_WH_PRIOR_DRIFT_ALERT_PP", "2.0")))
+    # nlp_idiom_max_phrase_len_tokens: longest-match window for idiom expansion
+    #   in the normalize pipeline (§10.30.3).
+    nlp_idiom_max_phrase_len_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_IDIOM_MAX_PHRASE_LEN_TOKENS", "5")))
+    # nlp_idiom_ambiguous_event_ratelimit_s: rate limit for idiom ambiguity events.
+    nlp_idiom_ambiguous_event_ratelimit_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_IDIOM_AMBIGUOUS_EVENT_RATELIMIT_S", "300")))
+    # nlp_conditional_marker_lookahead_tokens: token window to detect conditional
+    #   + verb-tense composition (§10.30.4).
+    nlp_conditional_marker_lookahead_tokens: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_CONDITIONAL_MARKER_LOOKAHEAD_TOKENS", "8")))
+    # nlp_politeness_marker_strip_enabled: enable pre-classifier politeness strip
+    #   and recording (§10.30.5).
+    nlp_politeness_marker_strip_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_POLITENESS_MARKER_STRIP_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_politeness_distribution_drift_pp: weekly drift trigger for politeness
+    #   class distribution (§10.30.5).
+    nlp_politeness_distribution_drift_pp: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_POLITENESS_DISTRIBUTION_DRIFT_PP", "10.0")))
+    # nlp_search_operator_detection_enabled: enable early search-operator syntax
+    #   detection before classifier (§10.30.6).
+    nlp_search_operator_detection_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_SEARCH_OPERATOR_DETECTION_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_football_vocab_hints_enabled: whether football-specific surface-form
+    #   hints should be prefixed to the classifier input (§10.26.10).
+    nlp_football_vocab_hints_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_FOOTBALL_VOCAB_HINTS_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_anaphora_lookback_turns: cross-turn antecedent search depth (§10.30.7).
+    nlp_anaphora_lookback_turns: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ANAPHORA_LOOKBACK_TURNS", "5")))
+    # nlp_anaphora_lookback_seconds: time-bound on antecedent search (§10.30.7).
+    nlp_anaphora_lookback_seconds: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ANAPHORA_LOOKBACK_SECONDS", "900")))
+    # nlp_anaphora_min_antecedent_confidence: minimum confidence floor for
+    #   cross-turn anaphora resolution (§10.30.7).
+    nlp_anaphora_min_antecedent_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_ANAPHORA_MIN_ANTECEDENT_CONFIDENCE", "0.70")))
+    # nlp_pro_drop_lookback_turns: pro-drop implicit-subject reuse depth (§10.31.3).
+    nlp_pro_drop_lookback_turns: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_PRO_DROP_LOOKBACK_TURNS", "3")))
+    # nlp_pro_drop_min_implicit_subject_confidence: minimum confidence floor for
+    #   implicit subject reuse from conversation context (§10.31.3).
+    nlp_pro_drop_min_implicit_subject_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_PRO_DROP_MIN_IMPLICIT_SUBJECT_CONFIDENCE", "0.65")))
+    # nlp_pro_drop_default_team_confidence_cap: cap for favorite-team fallback
+    #   subject confidence from request user_preferences (§10.31.3).
+    nlp_pro_drop_default_team_confidence_cap: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_PRO_DROP_DEFAULT_TEAM_CONFIDENCE_CAP", "0.55")))
+    # nlp_anaphora_eviction_event_ratelimit_s: per-conversation event ratelimit
+    #   for anaphora antecedent eviction (§10.30.7).
+    nlp_anaphora_eviction_event_ratelimit_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ANAPHORA_EVICTION_EVENT_RATELIMIT_S", "60")))
+    # nlp_repeated_query_window_s: repeated-query detection window (§10.30.9).
+    nlp_repeated_query_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REPEATED_QUERY_WINDOW_S", "300")))
+    # nlp_repeated_query_threshold: repeat count threshold to prepend acknowlegement.
+    nlp_repeated_query_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REPEATED_QUERY_THRESHOLD", "3")))
+    # nlp_repeated_query_summary_threshold: repeat count threshold to offer summary mode.
+    nlp_repeated_query_summary_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REPEATED_QUERY_SUMMARY_THRESHOLD", "5")))
+    # nlp_repeated_query_cache_max_age_s: max age for serving cached repeated query
+    #   answers (§10.30.9).
+    nlp_repeated_query_cache_max_age_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_REPEATED_QUERY_CACHE_MAX_AGE_S", "60")))
+    # nlp_venue_inferred_team_confidence_cap: cap on inferred venue-only team
+    #   confidence (§10.30.11).
+    nlp_venue_inferred_team_confidence_cap: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_VENUE_INFERRED_TEAM_CONFIDENCE_CAP", "0.70")))
+    # nlp_entity_pre_match_max_stale_s: TTL for pre-match entity state before
+    #   re-resolution (§10.30.13).
+    nlp_entity_pre_match_max_stale_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ENTITY_PRE_MATCH_MAX_STALE_S", "300")))
+    # nlp_entity_live_max_stale_s: TTL for live entity state before re-resolution.
+    nlp_entity_live_max_stale_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ENTITY_LIVE_MAX_STALE_S", "30")))
+    # nlp_entity_post_match_max_stale_s: TTL for post-match entity state before re-resolution.
+    nlp_entity_post_match_max_stale_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ENTITY_POST_MATCH_MAX_STALE_S", "3600")))
+    # nlp_boot_corpus_top1_entity_drift_max_rows: top-1 entity drift tolerance for
+    #   Phase 10.30 boot corpus (§10.30.14).
+    nlp_boot_corpus_top1_entity_drift_max_rows: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_BOOT_CORPUS_TOP1_ENTITY_DRIFT_MAX_ROWS", "2")))
+    # nlp_intent_model_max_size_mb: hard cap on the model file size (§10.4 DoD:
+    #   ≤ 20 MB on disk).  Enforce at load time; reject oversized models so a
+    #   mis-deploy cannot silently load a 500 MB model that violates the latency
+    #   budget.  Must be ≥ 1.
+    nlp_intent_model_max_size_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INTENT_MODEL_MAX_SIZE_MB", "20")))
+    # nlp_intent_calibration_path: path to the Platt calibration JSON file
+    #   (§10.4 Calibration).  Stored alongside the model as
+    #   intent.tr.calibration.json.  Empty string → resolved automatically as
+    #   <model_dir>/intent.tr.calibration.json.  Set after calibration script
+    #   runs on the held-out validation slice.
+    nlp_intent_calibration_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_CALIBRATION_PATH", ""))
+    # nlp_min_intent_conf: minimum calibrated probability for a definite intent
+    #   classification (§10.4 Abstention threshold).  Below this floor the
+    #   classifier returns an IntentAbstention carrying the top-3 intent
+    #   suggestions for a "Did you mean?" response.  Pinned by the §10.18
+    #   evaluation harness.  Must be in (0, 1).
+    nlp_min_intent_conf: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_MIN_INTENT_CONF", "0.55")))
+
+    # nlp_quotative_min_confidence: confidence threshold for the quotative
+    #   frame firewall (§10.32.1).  When a quotative frame is detected with
+    #   confidence at or above this floor, the dispatcher overrides predict.*
+    #   routing to a safe data/meta path.
+    nlp_quotative_min_confidence: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_QUOTATIVE_MIN_CONFIDENCE", "0.70")))
+
+    # nlp_aspectual_stack_max_depth: right-recursive parse depth cap for
+    #   closed Turkish aspectual stacks (§10.32.2). Prevents pathological
+    #   inputs from consuming excessive parser resources.
+    nlp_aspectual_stack_max_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ASPECTUAL_STACK_MAX_DEPTH", "3")))
+
+    # nlp_intent_accuracy_floor: rolling-accuracy floor below which
+    #   IntentDriftGuard marks the classifier degraded and callers must
+    #   fall back to template-only mode (§10.4 Drift guard).  Must be
+    #   in (0, 1).  Default 0.92 (pinned by §10.18 evaluation harness).
+    nlp_intent_accuracy_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_INTENT_ACCURACY_FLOOR", "0.92")))
+
+    # nlp_intent_drift_window: number of most-recent predictions used to
+    #   compute the rolling accuracy for the §10.4 Drift guard.  Must be
+    #   a positive integer.  Default 1000.
+    nlp_intent_drift_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INTENT_DRIFT_WINDOW", "1000")))
+
+    # nlp_entity_f1_floor: Entity extraction F1-score floor for §10.18
+    #   CI gate.  EntityExtractor performance on the golden corpus
+    #   (clean ∪ no_diacritics ∪ typos slice) must be ≥ this floor for
+    #   a release to pass.  Must be in (0, 1).  Default 0.90 (pinned by
+    #   §10.18 evaluation harness).
+    nlp_entity_f1_floor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_ENTITY_F1_FLOOR", "0.90")))
+
+    # nlp_voice_eval_intent_accuracy_floor: Voice slice intent accuracy floor
+    #   for §10.18 evaluation harness. Must be in (0, 1). Default 0.85.
+    nlp_voice_eval_intent_accuracy_floor: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_VOICE_EVAL_INTENT_ACCURACY_FLOOR", "0.85"))
+    )
+    # nlp_voice_eval_entity_f1_floor: Voice slice entity F1 floor for §10.18
+    #   evaluation harness. Must be in (0, 1). Default 0.80.
+    nlp_voice_eval_entity_f1_floor: float = field(
+        default_factory=lambda: float(os.getenv("NEGELIR_SWARM_NLP_VOICE_EVAL_ENTITY_F1_FLOOR", "0.80"))
+    )
+
+    # nlp_intent_model_version: human-readable semver for the deployed intent
+    #   model file (§10.4 Versioning).  Set by `make nlp.intent-pin` (written
+    #   alongside the SHA into chart.json compatibility block) and surfaced on
+    #   every qa.intent.v1 envelope as `intent_model_version`.  Empty string
+    #   is valid during pre-train / dev.  Consumers use this field for
+    #   post-hoc audit of "why did the system choose intent X on date Z".
+    nlp_intent_model_version: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_INTENT_MODEL_VERSION", ""))
+
+    # nlp_numpy_pin: exact numpy version expected at runtime (§10.21.1 Numpy +
+    #   fastText version pin).  Recorded in xops/versioning/chart.json
+    #   py_exact_versions block.  Boot probe asserts numpy.__version__ matches
+    #   this value; refuse start on drift (defends against ABI shifts that
+    #   could re-serialize binaries differently across upgrades).  Empty string
+    #   disables verification (dev/pre-install only — never in production).
+    nlp_numpy_pin: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_NUMPY_PIN", ""))
+
+    # nlp_fasttext_pin: exact fasttext version expected at runtime (§10.21.1).
+    #   Mirrors the numpy_pin pattern — boot probe asserts fasttext.__version__
+    #   matches; refuse start on drift.  Empty string disables verification.
+    nlp_fasttext_pin: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_FASTTEXT_PIN", ""))
+
+    # ── Phase 10 §10.12 — L0 intent cache (in-process) ───────────────────
+    #
+    # nlp_intent_cache_max_entries: maximum number of entries held in the
+    #   L0 in-process intent cache (§10.12).  Key = sha256(pod_id||subject_key||
+    #   schema_version||calibration_version)[:16]; value = (intent,
+    #   intent_confidence, entity_hash).  LRU eviction. Must be ≥ 1. Default
+    #   10000 (mirrors §9.17.6 L0 cache doctrine).
+    nlp_intent_cache_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INTENT_CACHE_MAX_ENTRIES", "10000")))
+    # nlp_intent_cache_ttl_s: time-to-live in seconds for each cache entry
+    #   (§10.12).  After this duration the entry is eligible for eviction.
+    #   Only `meta.unsupported` intent is negative-cached (never cache
+    #   `predict.*` outputs — those depend on time-varying state).  Must be ≥ 1.
+    #   Default 300 (5 minutes).
+    nlp_intent_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_INTENT_CACHE_TTL_S", "300")))
+    # nlp_pod_id: unique per NLP pod identity used as a salt for the L0 intent
+    #   cache key.  In container orchestration, each pod should set a distinct
+    #   value to prevent cross-pod hash-collision exposure.
+    nlp_pod_id: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_POD_ID", "local"))
+
+    # ── Phase 10 §10.12 — L1 answer cache (Phase 4 `cache.v1` plane reuse) ───
+    #
+    # nlp_answer_cache_ttl_data_s: TTL (seconds) for L1 answer cache entries
+    #   for `data.*` intents (§10.12 L1 answer cache).  Data-driven queries
+    #   (fixture lookups, standings, etc.) change less frequently than
+    #   predictions.  Must be ≥ 1.  Default 120 (2 minutes).
+    nlp_answer_cache_ttl_data_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ANSWER_CACHE_TTL_DATA_S", "120")))
+    # nlp_answer_cache_ttl_predict_s: TTL (seconds) for L1 answer cache entries
+    #   for `predict.*` intents (§10.12 L1 answer cache).  Predictions evolve
+    #   rapidly (calibration changes, consensus shifts) so shorter TTL.  Must
+    #   be ≥ 1.  Default 60 (1 minute).
+    nlp_answer_cache_ttl_predict_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_ANSWER_CACHE_TTL_PREDICT_S", "60")))
+    # nlp_l0_cache_ttl_s: TTL for the L0 NLP cache layer in seconds.
+    #   Default 300 seconds per Phase 10 rollout inventory.
+    nlp_l0_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_L0_CACHE_TTL_S", "300")))
+    # nlp_l1_answer_cache_ttl_s: TTL for the L1 NLP answer cache layer in seconds.
+    #   Default 600 seconds per Phase 10 rollout inventory.
+    nlp_l1_answer_cache_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_NLP_L1_ANSWER_CACHE_TTL_S", "600")))
+    # nlp_l1_cache_hmac_key_path: HMAC-SHA256 key file used to sign L1 NLP answer
+    #   cache entries stored in `cache.v1` (Phase 10 §10.23.9). Mode should be
+    #   0400 for production keys. Default path mirrors other NLP secret files.
+    nlp_l1_cache_hmac_key_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_L1_CACHE_HMAC_KEY_PATH", "infra/nlp/nlp_l1_cache_hmac.key"
+    ))
+    # qa_answer_hmac_key_path: HMAC-SHA256 key file used by nlp.answer.v1 to
+    #   sign the answer envelope for schema_version 3 (Phase 10 §10.26.8).
+    #   Mode should be 0400 for production keys. Optional for mock/dev.
+    qa_answer_hmac_key_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_QA_ANSWER_HMAC_KEY_PATH", "infra/nlp/qa_answer_hmac.key"
+    ))
+    # qa_answer_hmac_grace_s: dual-acceptance window (seconds) for the previous
+    #   q a answer envelope HMAC key during rotation.
+    qa_answer_hmac_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_QA_ANSWER_HMAC_GRACE_S", "86400")
+    ))
+    # nlp_answer_envelope_hmac_required: HMAC verification policy for answer
+    #   envelope signatures. "warn" by default in Phase 10 rollout.
+    nlp_answer_envelope_hmac_required: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_ANSWER_ENVELOPE_HMAC_REQUIRED", "warn"
+    ))
+    # nlp_empty_input_anomaly_threshold: empty-input rate threshold for per-
+    #   subject anomaly alerts ({empty_requests}/total_requests). Default 0.3.
+    nlp_empty_input_anomaly_threshold: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_EMPTY_INPUT_ANOMALY_THRESHOLD", "0.3")
+    ))
+    # nlp_empty_input_anomaly_window_s: rolling window seconds for empty-input
+    #   anomaly detection. Default 300.
+    nlp_empty_input_anomaly_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_EMPTY_INPUT_ANOMALY_WINDOW_S", "300")
+    ))
+
+    # ── Phase 10 §10.5 — Entity extraction (gazetteer + CRF) ──────────────
+    #
+    # nlp_entity_kind_priority: comma-separated ordered list of entity kinds
+    #   used for tie-breaking in the gazetteer conflict-resolution step (§10.5
+    #   conflict resolution rule c).  Kinds not in the list sort last.
+    #   Default: teams first, then players, leagues, competitions, markets,
+    #   then CRF-produced temporal/numeric kinds.
+    nlp_entity_kind_priority: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_ENTITY_KIND_PRIORITY",
+        "team,player,league,competition,market,date,time,weekday,ordinal,money_amount,score",
+    ))
+    # nlp_entity_crf_model_path: path to the trained python-crfsuite model file
+    #   (§10.5 CRF pass).  Empty string = CRF pass disabled (gazetteer-only
+    #   mode).  Set by `make nlp.entity-pin` alongside the SHA.
+    nlp_entity_crf_model_path: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_ENTITY_CRF_MODEL_PATH", ""
+    ))
+    # nlp_entity_crf_model_sha256: expected SHA256 hex digest of the CRF model
+    #   file (§10.5 SHA-pinned).  Empty string = integrity check skipped
+    #   (dev/pre-train mode).
+    nlp_entity_crf_model_sha256: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_ENTITY_CRF_MODEL_SHA256", ""
+    ))
+    # nlp_entity_crf_model_max_size_mb: hard cap on the CRF model file size
+    #   (§10.5 "model ≤ 5 MB").  CrfExtractor refuses to load a larger file.
+    nlp_entity_crf_model_max_size_mb: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ENTITY_CRF_MODEL_MAX_SIZE_MB", "5"
+    )))
+    # nlp_entity_bench_latency_p95_threshold_ms: CI gate for `make nlp.entity-bench`.
+    #   EntityExtractor.extract p95 on a token list derived from a
+    #   nlp_input_max_codepoints-length payload must not exceed this value (ms).
+    #   Phase 10 §10.5 DoD = 8 ms.
+    nlp_entity_bench_latency_p95_threshold_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ENTITY_BENCH_LATENCY_P95_THRESHOLD_MS", "8"
+    )))
+    # nlp_model_warm_touch_enabled: enable warm-touch mmap for CRF/Symspell/intent
+    #   models at boot (§10.34.2). When enabled, models are pre-faulted into
+    #   RAM via os.posix_madvise(MADV_WILLNEED) to eliminate page faults on
+    #   first request. Default true.
+    nlp_model_warm_touch_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_MODEL_WARM_TOUCH_ENABLED", "true"
+    ).lower() in ("true", "1", "yes"))
+
+    # ── Phase 10 §10.5 — Date / time resolver injection point ─────────────
+    #
+    # nlp_clock_now: zero-argument callable that returns the current UTC
+    #   datetime (timezone-aware).  NOT backed by an env var — it is a
+    #   callable injection point following §8.16.1 clock discipline.
+    #   Replace per-instance in tests to pin the clock:
+    #       cfg = Config()
+    #       cfg.nlp_clock_now = lambda: datetime(2026, 4, 27, 18, 0, tzinfo=utc)
+    nlp_clock_now: Callable[[], _dt.datetime] = field(
+        default_factory=lambda: (
+            lambda: _dt.datetime.now(_dt.timezone.utc)
+        )
+    )
+    # nlp_date_default_window_days: window, in days, used by date parsers when
+    # a day/month expression omits the year (§10.22.6).  The parser may choose
+    # the next occurrence within this window when the current-year date has
+    # already passed.  Default 180.
+    nlp_date_default_window_days: int = field(
+        default_factory=lambda: int(os.getenv(
+            "NEGELIR_SWARM_NLP_DATE_DEFAULT_WINDOW_DAYS", "180"
+        ))
+    )
+    # nlp_holiday_lookup_horizon_days: lookup horizon for holiday resolution
+    # in `ai/nlp/dates_tr.py`.  Queries beyond this horizon are treated as
+    # unsupported and fall through to prompt-level handling.  Default 540.
+    nlp_holiday_lookup_horizon_days: int = field(
+        default_factory=lambda: int(os.getenv(
+            "NEGELIR_SWARM_NLP_HOLIDAY_LOOKUP_HORIZON_DAYS", "540"
+        ))
+    )
+    # nlp_time_default_period: default time-of-day for ambiguous hours 1-11
+    # when no explicit period keyword is present (§10.22.6).  Allowed values:
+    # am, pm.  Default am to preserve existing bare-hour semantics.
+    nlp_time_default_period: str = field(
+        default_factory=lambda: os.getenv(
+            "NEGELIR_SWARM_NLP_TIME_DEFAULT_PERIOD", "am"
+        )
+    )
+    # nlp_runtime_locale: runtime LC_CTYPE locale required by the NLP plane.
+    # This boot-time lock defends against locale-dependent casefold regressions
+    # on Turkish text. Default = tr_TR.UTF-8.
+    nlp_runtime_locale: str = field(
+        default_factory=lambda: os.getenv(
+            "NEGELIR_SWARM_NLP_RUNTIME_LOCALE", "tr_TR.UTF-8"
+        ).strip()
+    )
+
+    # ── Phase 10 §10.6 — Dispatcher slot-resolver config ──────────────────
+    #
+    # nlp_default_fixture_window_h: look-ahead window (hours) used by the
+    #   deterministic backoff in nlp.dispatcher.v1.  When a predict.* intent
+    #   cannot be resolved to a single fixture (no team / competition entity),
+    #   the dispatcher emits qa.answer.v1{kind=disambiguation} referencing
+    #   this window so the answer layer can list upcoming fixtures.
+    #   Bounded: 1..720 h.  Default = 48 h (two match-days).
+    nlp_default_fixture_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_DEFAULT_FIXTURE_WINDOW_H", "48"
+    )))
+    # nlp_fixture_state_lookup_timeout_ms: deadline for the fixture-state lookup
+    #   request emitted by nlp.dispatcher.v1. On timeout, dispatcher degrades to
+    #   UNKNOWN rather than assuming scheduled.
+    nlp_fixture_state_lookup_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_FIXTURE_STATE_LOOKUP_TIMEOUT_MS", "250"
+    )))
+    # nlp_summary_max_fixtures: maximum number of fixtures to fan-out in a
+    #   summary.next_week / summary.matchday request.  The dispatcher emits
+    #   at most this many predict.request.v1 messages per summary intent.
+    #   Bounded: 1..100.  Default = 10.
+    nlp_summary_max_fixtures: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SUMMARY_MAX_FIXTURES", "10"
+    )))
+    # nlp_summary_max_fixtures_hard: cap on summary fixture fan-out size.
+    #   When exceeded, the dispatcher degrades to a list-only meta answer
+    #   instead of producing top-N summary output.  Default = 20.
+    nlp_summary_max_fixtures_hard: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SUMMARY_MAX_FIXTURES_HARD", "20"
+    )))
+    # nlp_skew_window_s: rolling window for classifier-extractor skew detection.
+    #   When the p95 skew exceeds nlp_skew_alert_p95 over this window and at least
+    #   nlp_skew_alert_min_requests requests are seen, the dispatcher emits an
+    #   nlp.alert.v1{kind=nlp_classifier_extractor_skew_high} for the intent.
+    nlp_skew_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SKEW_WINDOW_S", "600"
+    )))
+    # nlp_skew_alert_p95: p95 threshold for classifier-extractor skew alerts.
+    #   Default = 0.4.
+    nlp_skew_alert_p95: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_SKEW_ALERT_P95", "0.4"
+    )))
+    # nlp_skew_alert_min_requests: minimum requests in the rolling window
+    #   before the skew alert can fire. Default = 100.
+    nlp_skew_alert_min_requests: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SKEW_ALERT_MIN_REQUESTS", "100"
+    )))
+    # nlp_skew_alert_debounce_s: per-intent debounce window for skew alerts.
+    #   Default = 600 s.
+    nlp_skew_alert_debounce_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SKEW_ALERT_DEBOUNCE_S", "600"
+    )))
+    # nlp_max_subqueries: maximum number of run-on / multi-question subqueries
+    #   preserved from a single Turkish voice input before the anti-
+    #   amplification cap degrades to the first subquery only.  Default = 3.
+    nlp_max_subqueries: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_MAX_SUBQUERIES", "3"
+    )))
+    # nlp_compound_query_enabled: enable the Turkish multi-question split stage
+    #   (§10.24.5). When false, the input is treated as a single query.
+    nlp_compound_query_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_COMPOUND_QUERY_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_negation_enabled: whether negation-sensitive heuristics are enabled in
+    #   the normalize pipeline (§10.24.6).
+    nlp_negation_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_NEGATION_ENABLED", "true").lower() in ("true", "1", "yes"))
+    # nlp_summary_aggregation_timeout_ms: how long nlp.answer.v1 waits for
+    #   all predict.approved.v1 in a summary fan-out before emitting a
+    #   degraded answer.  Deadline-propagated from nlp_pipeline_timeout_ms
+    #   (must be <= nlp_pipeline_timeout_ms).  Default = 1500 ms.
+    nlp_summary_aggregation_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SUMMARY_AGGREGATION_TIMEOUT_MS", "1500"
+    )))
+    # nlp_summary_min_fixture_quorum: minimum fraction of fixtures that must
+    #   return before a summary can still be rendered.  Default = 0.6.
+    nlp_summary_min_fixture_quorum: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_SUMMARY_MIN_FIXTURE_QUORUM", "0.6"
+    )))
+    # nlp_summary_fanout_timeout_ms: per-fixture fan-out timeout in the
+    #   summary dispatcher.  Default = 2500 ms.
+    nlp_summary_fanout_timeout_ms: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SUMMARY_FANOUT_TIMEOUT_MS", "2500"
+    )))
+    # nlp_summary_calibration_mismatch_policy: behavior when summary fan-out
+    #   collects predictions with multiple calibration versions.
+    #   - "note": render summary with explicit disclosure and per-version
+    #     citation notes (default).
+    #   - "refuse": return a degraded summary with fixture links only.
+    nlp_summary_calibration_mismatch_policy: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_SUMMARY_CALIBRATION_MISMATCH_POLICY", "note"
+    ).strip().lower())
+    # nlp_calibration_horizon_strict: if true, reject any Phase 5 / v1
+    #   approved prediction whose calibration_state_horizon != prematch.
+    #   Default = true for Phase 10 v1 delivery.
+    nlp_calibration_horizon_strict: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_CALIBRATION_HORIZON_STRICT", "true"
+    ).lower() in ("true", "1", "yes"))
+    # nlp_age_gating_enabled: enable 18+ gating when user age attestation is absent.
+    #   Default false at Phase 10 v1 until self-registration ships.
+    nlp_age_gating_enabled: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_AGE_GATING_ENABLED", "false"
+    ).lower() in ("true", "1", "yes"))
+    # nlp_disclosure_locale_fallback_chain: locale fallback chain for disclosure texts.
+    #   Default is tr-TR only at Phase 10 v1.
+    nlp_disclosure_locale_fallback_chain: list[str] = field(default_factory=lambda: [
+        loc.strip() for loc in os.getenv(
+            "NEGELIR_SWARM_NLP_DISCLOSURE_LOCALE_FALLBACK_CHAIN", "tr-TR"
+        ).split(",") if loc.strip()
+    ])
+    # nlp_preview_token_budget_per_operator_per_h: per-operator preview token budget.
+    #   Defends against runaway operator-driven preview sessions.
+    nlp_preview_token_budget_per_operator_per_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_PREVIEW_TOKEN_BUDGET_PER_OPERATOR_PER_H", "2400"
+    )))
+    # nlp_preview_dir: root directory for operator preview artifacts.
+    #   Default is a local Phase 10 preview workspace for tooling and audit.
+    nlp_preview_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_PREVIEW_DIR", "data/nlp/preview"
+    ))
+    # nlp_complaint_trace_default_window_h: audit scan window centered on
+    #   the request timestamp when resolving a complaint trace.
+    nlp_complaint_trace_default_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_COMPLAINT_TRACE_DEFAULT_WINDOW_H", "24"
+    )))
+    # nlp_complaint_trace_dir: root directory for complaint trace output.
+    nlp_complaint_trace_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_COMPLAINT_TRACE_DIR", "data/nlp/complaint_traces"
+    ))
+    # nlp_abuse_window_h: rolling abuse detection window in hours.
+    nlp_abuse_window_h: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ABUSE_WINDOW_H", "168"
+    )))
+    # nlp_abuse_dym_acceptance_anomaly_ratio: threshold for did-you-mean abuse.
+    nlp_abuse_dym_acceptance_anomaly_ratio: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_ABUSE_DYM_ACCEPTANCE_ANOMALY_RATIO", "4.0"
+    )))
+    # nlp_abuse_style_shift_kl: KL divergence threshold for style-shift alerts.
+    nlp_abuse_style_shift_kl: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_ABUSE_STYLE_SHIFT_KL", "0.6"
+    )))
+    # nlp_abuse_shadow_concentration_distinct_buckets_min: minimum distinct
+    #   subject buckets before concentration alert can fire.
+    nlp_abuse_shadow_concentration_distinct_buckets_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ABUSE_SHADOW_CONCENTRATION_DISTINCT_BUCKETS_MIN", "5"
+    )))
+    # nlp_abuse_account_farm_jaccard_min: minimum Jaccard similarity for account
+    #   farm detection.
+    nlp_abuse_account_farm_jaccard_min: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_SWARM_NLP_ABUSE_ACCOUNT_FARM_JACCARD_MIN", "0.5"
+    )))
+    # nlp_abuse_account_farm_account_count_min: minimum account count before
+    #   account-farm anomaly can fire.
+    nlp_abuse_account_farm_account_count_min: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ABUSE_ACCOUNT_FARM_ACCOUNT_COUNT_MIN", "100"
+    )))
+    # nlp_intent_train_max_rows_per_subject_bucket: per-subject bucket cap for
+    #   high-risk shadow rows eligible for intent training.
+    nlp_intent_train_max_rows_per_subject_bucket: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_INTENT_TRAIN_MAX_ROWS_PER_SUBJECT_BUCKET", "500"
+    )))
+    # nlp_qa_answer_min_supported_version: minimum client schema version accepted.
+    #   Older clients should receive 426 if unsupported.
+    nlp_qa_answer_min_supported_version: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION", "1"
+    )))
+    # nlp_default_answer_format: default answer_format when none is requested.
+    #   Defaults to plain at Phase 10 v1.
+    nlp_default_answer_format: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_DEFAULT_ANSWER_FORMAT", "plain"
+    ).strip())
+    # nlp_answer_formats: recognized answer_format enum values.
+    #   Defaults to Phase 10 v1 plus future forward-hook slots.
+    nlp_answer_formats: list[str] = field(default_factory=lambda: [
+        fmt.strip()
+        for fmt in os.getenv(
+            "NEGELIR_SWARM_NLP_ANSWER_FORMATS",
+            "plain,markdown_safe,screen_reader,whatsapp_4096,sms_160,tts_neutral",
+        ).split(",")
+        if fmt.strip()
+    ])
+    # nlp_answer_format_enabled: JSON map from answer_format to whether it is enabled.
+    #   Phase 10 v1 pins the three new forward-hook slots off.
+    _nlp_answer_format_enabled_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_ANSWER_FORMAT_ENABLED",
+        '{"plain": true, "markdown_safe": true, "screen_reader": true, "whatsapp_4096": false, "sms_160": false, "tts_neutral": false}',
+    ))
+
+    @property
+    def nlp_answer_format_enabled(self) -> dict[str, bool]:
+        raw = self._nlp_answer_format_enabled_raw.strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("NEGELIR_SWARM_NLP_ANSWER_FORMAT_ENABLED must be valid JSON object") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("NEGELIR_SWARM_NLP_ANSWER_FORMAT_ENABLED must decode to a JSON object")
+        result: dict[str, bool] = {}
+        for key, value in parsed.items():
+            norm_key = str(key).strip()
+            if not norm_key:
+                continue
+            if isinstance(value, bool):
+                result[norm_key] = value
+                continue
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in ("true", "1", "yes"):
+                    result[norm_key] = True
+                    continue
+                if normalized in ("false", "0", "no"):
+                    result[norm_key] = False
+                    continue
+            raise ValueError(
+                f"NEGELIR_SWARM_NLP_ANSWER_FORMAT_ENABLED[{norm_key}] must be a boolean"
+            )
+        return result
+    # nlp_lexicon_swap_grace_s: cross-pod lexicon swap coordination window.
+    #   Files are not activated until now_utc() >= swap_at_utc.
+    nlp_lexicon_swap_grace_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_LEXICON_SWAP_GRACE_S", "120"
+    )))
+    # nlp_lexicon_swap_max_lag_s: maximum allowed lag after swap_at_utc.
+    #   If a pod sees the new file too late, it warns and may refuse traffic.
+    nlp_lexicon_swap_max_lag_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_LEXICON_SWAP_MAX_LAG_S", "600"
+    )))
+    # nlp_lexicon_rebuild_concurrency_max: maximum concurrent in-flight lexicon
+    #   rebuilds per pod. Excess rebuild triggers queue FIFO.
+    nlp_lexicon_rebuild_concurrency_max: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_LEXICON_REBUILD_CONCURRENCY_MAX", "2"
+    )))
+    # nlp_lexicon_rebuild_queue_max: maximum queued rebuild triggers when
+    #   concurrency is saturated; overflow drops oldest.
+    nlp_lexicon_rebuild_queue_max: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_LEXICON_REBUILD_QUEUE_MAX", "8"
+    )))
+    # nlp_lexicon_rebuild_rss_reservation_mb: reserved RSS headroom for each
+    #   in-flight lexicon rebuild so request budgets do not falsely trip.
+    nlp_lexicon_rebuild_rss_reservation_mb: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_LEXICON_REBUILD_RSS_RESERVATION_MB", "200"
+    )))
+    # nlp_per_request_rss_budget_swap_grace_mb: temporary soft budget bonus for
+    #   requests landing during a lexicon swap grace window.
+    nlp_per_request_rss_budget_swap_grace_mb: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_PER_REQUEST_RSS_BUDGET_SWAP_GRACE_MB", "64"
+    )))
+    # nlp_kill_pattern_arm_max_concurrent: operator kill-pattern arm capacity.
+    #   Used by Phase 8/10 tooling.
+    nlp_kill_pattern_arm_max_concurrent: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_KILL_PATTERN_ARM_MAX_CONCURRENT", "8"
+    )))
+    # nlp_summary_fanout_timeout_ms: per-fixture fan-out timeout in the
+    #   summary dispatcher.  Default = 2500 ms.
+    nlp_active_learning_queue_max: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_ACTIVE_LEARNING_QUEUE_MAX", "10000")
+    ))
+    # nlp_dispatch_dedup_window_s: sliding dedup window for the dispatcher
+    #   idempotency key `(qa_correlation_id, intent, entity_hash)` (§10.6).
+    #   Replayed qa.intent.v1 messages whose composite key was already seen
+    #   within this window are silently dropped (replay safe, mirrors Phase 7
+    #   RequestIdDeduper pattern).  Must be >= nlp_request_dedup_window_s.
+    #   Default = 600 s (10 min; comfortably covers any Streams retry budget).
+    nlp_dispatch_dedup_window_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_DISPATCH_DEDUP_WINDOW_S", "600"
+    )))
+    # nlp_conversation_max_turns: maximum number of turns carried in a
+    #   single conversation context.  Over-cap drops the context and
+    #   starts a fresh conversation.
+    nlp_conversation_max_turns: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_CONVERSATION_MAX_TURNS", "8")
+    ))
+    # nlp_conversation_idle_ttl_s: Redis TTL for conversation context state.
+    #   Idle context expires after this many seconds, after which the next
+    #   turn starts fresh.
+    nlp_conversation_idle_ttl_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_CONVERSATION_IDLE_TTL_S", "180")
+    ))
+    # nlp_conversation_redis_key_prefix: Redis key prefix for stored
+    #   conversation context objects.
+    nlp_conversation_redis_key_prefix: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_CONVERSATION_REDIS_KEY_PREFIX", "nlp:ctx:")
+    )
+    # nlp_conversation_enabled_tier_floor: Phase 20 hook for gating
+    #   conversational context by tier; default 0 = enabled for everyone.
+    nlp_conversation_enabled_tier_floor: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_CONVERSATION_ENABLED_TIER_FLOOR", "0")
+    ))
+    # nlp_conversation_index_backend: backend used for conversation context index storage.
+    #   Default is redis, and this is currently the only supported backend.
+    nlp_conversation_index_backend: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_CONVERSATION_INDEX_BACKEND", "redis").strip().lower()
+    )
+    # nlp_intent_tier_map: JSON object mapping intent -> tier id label (§10.21.11).
+    #   Dispatcher computes qa.answer.v1.tier_id_required from intent only
+    #   (humanizer usage must not affect entitlement labels).
+    #   Example: {"predict.match_outcome":"pro","summary.matchday":"pro"}
+    _nlp_intent_tier_map_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_INTENT_TIER_MAP", "{}"
+    ))
+
+    @property
+    def nlp_intent_tier_map(self) -> dict[str, str]:
+        raw = self._nlp_intent_tier_map_raw.strip()
+        if not raw:
+            try:
+                raw = _INTENT_TIER_MAP_PATH.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("NEGELIR_SWARM_NLP_INTENT_TIER_MAP must be valid JSON object") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("NEGELIR_SWARM_NLP_INTENT_TIER_MAP must decode to a JSON object")
+        result: dict[str, str] = {}
+        for key, value in parsed.items():
+            norm_key = str(key).strip()
+            norm_value = str(value).strip()
+            if norm_key and norm_value:
+                result[norm_key] = norm_value
+        return result
+
+    # nlp_tier_humanizer_tokens_per_min: JSON object mapping tier id -> allowed
+    # humanizer tokens per tenant per minute when monetization is enabled
+    # (Phase 10 §10.23.1 Phase 20 hook).
+    _nlp_tier_humanizer_tokens_per_min_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN", "{}"
+    ))
+
+    @property
+    def nlp_tier_humanizer_tokens_per_min(self) -> dict[str, int]:
+        raw = self._nlp_tier_humanizer_tokens_per_min_raw.strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN must be valid JSON object") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN must decode to a JSON object")
+        result: dict[str, int] = {}
+        for key, value in parsed.items():
+            norm_key = str(key).strip()
+            if not norm_key:
+                raise ValueError("NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN keys must be non-empty strings")
+            if isinstance(value, bool):
+                raise ValueError(
+                    f"NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN[{norm_key}] must be an integer"
+                )
+            try:
+                parsed_value = int(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN[{norm_key}] must be an integer"
+                ) from exc
+            if parsed_value < 1:
+                raise ValueError(
+                    f"NEGELIR_SWARM_NLP_TIER_HUMANIZER_TOKENS_PER_MIN[{norm_key}] must be >= 1"
+                )
+            result[norm_key] = parsed_value
+        return result
+
+    # ── Phase 10 §10.13 — Idempotency, dedup, replay safety (bus spool) ──
+    #
+    # nlp_bus_failure_circuit_threshold: consecutive bus publish failures
+    #   before the NLP circuit breaker transitions to bus_degraded and
+    #   starts spooling to disk (§10.13).  Mirrors maint_bus_fail_threshold.
+    #   Bounded: 1..100.  Default = 3.
+    nlp_bus_failure_circuit_threshold: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_BUS_FAILURE_CIRCUIT_THRESHOLD", "3"
+    )))
+    # nlp_spool_max_entries: per-agent spool cap (§10.13).  Over-cap → drop
+    #   oldest + nlp.alert.v1{kind=nlp_spool_overflow, severity=critical}.
+    #   Bounded: 1..100_000.  Default = 1000 (distinct from maint 1024).
+    nlp_spool_max_entries: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SPOOL_MAX_ENTRIES", "1000"
+    )))
+    # nlp_agent_spool_dir: root directory for per-agent NLP spools (§10.13).
+    #   Each agent gets a subdirectory keyed by agent_name (e.g.
+    #   data/nlp/spool/nlp.intent.v1/).  Defaults to data/nlp/spool.
+    nlp_agent_spool_dir: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_AGENT_SPOOL_DIR", "data/nlp/spool"
+    ))
+    # nlp_spool_payload_pii_strip: when true, spool writes for qa.intent.v1
+    #   drop payload.sanitized_text and persist only
+    #   payload.sanitized_text_sha256 for replay correlation.  Default = true.
+    nlp_spool_payload_pii_strip: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_SPOOL_PAYLOAD_PII_STRIP", "true"
+    ).lower() in ("1", "true", "yes"))
+
+    # ── Phase 10 §10.7 — Answer generation / template rendering ───────────
+    #
+    # nlp_confidence_bands: JSON-encoded list of [lower_inclusive,
+    #   upper_exclusive, label] triples used by the ``confidence_band``
+    #   Jinja2 filter/global in ai/nlp/jinja_filters_tr.py (§10.7 Confidence
+    #   rendering).  First matching band wins.  Labels must be Turkish.
+    #   Default 3-band table: <0.55 → "düşük", 0.55-0.75 → "orta",
+    #   >0.75 → "yüksek".  Decoded at runtime; invalid JSON refuses boot.
+    nlp_confidence_bands: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_CONFIDENCE_BANDS",
+        '[[0.0,0.55,"d\u00fc\u015f\u00fck"],[0.55,0.75,"orta"],[0.75,1.01,"y\u00fcksek"]]',
+    ))
+    # nlp_default_locale: default locale for NLP templates and responses.
+    #   Format: IETF BCP 47 language tag (e.g., "tr-TR", "en-GB").
+    #   Template resolution follows: <intent>.<locale>.j2
+    #   Per-request override from Phase 9 Accept-Language header (§10.17).
+    nlp_default_locale: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_DEFAULT_LOCALE",
+        "tr-TR",
+    ))
+    # nlp_locale_fallback_chain: ordered supported locales used when incoming
+    #   locale tags are language-only, malformed, or unsupported. v1 ships only
+    #   "tr-TR".
+    _nlp_locale_fallback_chain_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_SWARM_NLP_LOCALE_FALLBACK_CHAIN", '["tr-TR"]'
+    ))
+
+    @property
+    def nlp_locale_fallback_chain(self) -> list[str]:
+        raw = self._nlp_locale_fallback_chain_raw.strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("NEGELIR_SWARM_NLP_LOCALE_FALLBACK_CHAIN must be valid JSON list") from exc
+        if not isinstance(parsed, list):
+            raise ValueError("NEGELIR_SWARM_NLP_LOCALE_FALLBACK_CHAIN must decode to a JSON list")
+        result: list[str] = []
+        for item in parsed:
+            if not isinstance(item, str):
+                raise ValueError("NEGELIR_SWARM_NLP_LOCALE_FALLBACK_CHAIN entries must be strings")
+            normalized = item.strip()
+            if normalized:
+                result.append(normalized)
+        return result
+
+    # ── Phase 10 §10.21 — Hardening, integrity, second-order safety ──────
+    #
+    # nlp_hypothesis_max_examples: maximum number of examples per property-based
+    #   test in the NLP suite (§10.21.1).  Used by the "nlp_ci" hypothesis profile
+    #   registered in ai/tests/conftest.py.  Higher values = deeper shrinking on
+    #   failures but slower CI.  Bounded: 1..10000.  Default = 1000.
+    nlp_hypothesis_max_examples: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_HYPOTHESIS_MAX_EXAMPLES", "1000"
+    )))
+    # nlp_singleflight_sweep_interval_s: background sweeper poll interval
+    #   (§10.21.2 Singleflight event-map sweeper).  Sweeper thread wakes every
+    #   this many seconds, drops orphaned events older than event_max_age_s,
+    #   and emits nlp.event.v1{kind=singleflight_event_swept, count=N} (debounced).
+    #   Bounded: 1..3600.  Default = 30.
+    nlp_singleflight_sweep_interval_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SINGLEFLIGHT_SWEEP_INTERVAL_S", "30"
+    )))
+    # nlp_singleflight_event_max_age_s: orphan threshold (§10.21.2).  Events
+    #   older than this age (from creation to sweep-pass) are dropped.  A crashed
+    #   dispatcher may leave an event un-set forever → sweeper reaps it.
+    #   Bounded: 1..3600.  Default = 60.
+    nlp_singleflight_event_max_age_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SINGLEFLIGHT_EVENT_MAX_AGE_S", "60"
+    )))
+    # nlp_singleflight_max_inflight: hard cap on the event map size (§10.21.2).
+    #   Over-cap → new sf.do() calls are rejected with an exception +
+    #   nlp.alert.v1{kind=nlp_singleflight_overflow, severity=warn}.  Defends
+    #   against unbounded growth from a wedged pipeline or abnormal query rate.
+    #   Bounded: 1..100000.  Default = 2048.
+    nlp_singleflight_max_inflight: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_SWARM_NLP_SINGLEFLIGHT_MAX_INFLIGHT", "2048"
+    )))
+
+    # ── Phase 12 — Adversarial & chaos test suite ────────────────────────
+    # §12.2.3 — Growth bound & rotation
+    # Maximum rows added to adversarial corpora per calendar quarter.
+    # Prevents unbounded corpus growth; new families need explicit reviewer
+    # ack (not silent addition). Bounded: 1..10000. Default 500.
+    adversarial_corpus_max_added_rows_per_quarter: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_ADVERSARIAL_CORPUS_MAX_ADDED_ROWS_PER_QUARTER", "500"
+    )))
+
+    # §12.3.3 — Fuzz harness time budgets
+    # Wall-clock budget (seconds) for nightly fuzz campaigns (make fuzz.api,
+    # make fuzz.nlp, make fuzz.wire). Each target gets this many seconds
+    # of coverage-guided fuzzing. Bounded: 30..3600. Default 600 (10 min).
+    fuzz_nightly_budget_s: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_FUZZ_NIGHTLY_BUDGET_S", "600"
+    )))
+
+    # ── Phase 8 — Self-maintenance plane (ops console + maint.event/ack) ──
+    #
+    # §8.1 ops console baseline knobs. The ops console is a stateless CLI
+    # under ``xops/opsctl/``; it publishes ``maint.event.v1`` envelopes
+    # and waits for ``maint.ack.v1`` replies up to the per-publish budget.
+    # Bus-down replays land in ``opsctl_spool_dir`` and are drained by
+    # ``make ops.spool-flush``. Critical-agent destructive operations
+    # (scale=0 / restart of consensus / sec.rate / maint.backup) require
+    # an explicit typed-token confirmation, sourced from the agent set
+    # below (csv-parsed; whitespace-tolerant).
+    #
+    # Doctrine reminders (binding):
+    #   * ``opsctl_ack_timeout_ms`` is wall-clock per the Phase 7
+    #     monotonic-clock convention only inside agent code; the CLI
+    #     uses wall-clock for operator-facing budgets so it matches the
+    #     human's stopwatch on a stuck publish.
+    #   * The ack payload caps below cap PRODUCER side (consumers
+    #     publishing ``maint.ack.v1``); they do NOT cap the operator's
+    #     own envelope payload.
+    #   * Empty ``opsctl_audit_path`` / ``opsctl_spool_dir`` resolve to
+    #     ``<data_dir>/maint/opsctl_audit.csv`` and
+    #     ``<data_dir>/maint/opsctl_spool/`` respectively (see the
+    #     properties of the same name).
+    opsctl_ack_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_ACK_TIMEOUT_MS", "5000")))
+    # Maximum TTL for operator NLP kill-pattern arms. Events above this
+    # ceiling are clamped on consumer-side to prevent stale forever-filters.
+    opsctl_nlp_kill_max_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_NLP_KILL_MAX_TTL_S", "3600")))
+    opsctl_flame_capture_ttl_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_FLAME_CAPTURE_TTL_H", "24")))
+    opsctl_flame_capture_max_armed_per_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_FLAME_CAPTURE_MAX_ARMED_PER_H", "10")))
+    # Phase 8 §8.16.13 — realistic local Redis Streams latency budget used
+    # by `make swarm.demo.live`. This must stay strictly below the hard
+    # operator-facing ack timeout above.
+    opsctl_ack_timeout_ms_live_demo: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_ACK_TIMEOUT_MS_LIVE_DEMO", "1000")))
+    # Phase 9 §9.13 — base URL for the `make swarm.demo.live` API smoke test
+    # (register → login → POST /v1/qa end-to-end check). Override when the
+    # API runs on a non-default port or host in the local dev environment.
+    api_demo_base_url: str = field(default_factory=lambda: os.getenv("NEGELIR_SERVER_API_DEMO_BASE_URL", "http://localhost:8080"))
+    opsctl_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_SPOOL_MAX_ENTRIES", "1024")))
+    opsctl_critical_agents: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_OPSCTL_CRITICAL_AGENTS", "consensus.v1,sec.rate.v1,maint.backup.v1"
+    ))
+    opsctl_audit_path: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_AUDIT_PATH", ""))
+    opsctl_spool_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_SPOOL_DIR", ""))
+    opsctl_lock_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_LOCK_DIR", ""))
+    # Re-entrancy lock: a stale lockfile (no live ``flock`` holder)
+    # older than ``opsctl_ack_timeout_ms × opsctl_lock_stale_factor``
+    # is reaped on the next acquire. Keeps a crashed CLI from
+    # permanently blocking the same ``(kind, target)`` tuple.
+    opsctl_lock_stale_factor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_LOCK_STALE_FACTOR", "2")))
+    # Phase 8 §8.16.2 — spool-flush ack reconciler. The reconciler
+    # walks the audit CSV and, for every ``op=spool-flush`` row whose
+    # ``received_acks < expected_acks``, alerts when the row's age
+    # exceeds this threshold. Default: 24h (one operator-day).
+    opsctl_spool_ack_max_wait_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_SPOOL_ACK_MAX_WAIT_H", "24")))
+    # §8.14.10 spool-flush drain budget: max envelopes per flush invocation.
+    # 0 = unlimited (operator override via --max-entries=0). Default 100
+    # bounds wall-clock cost against a wedged bus. Partial flushes emit a
+    # kind=spool_flush_partial audit row; operator re-runs to drain further.
+    opsctl_spool_flush_max_per_run: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_SPOOL_FLUSH_MAX_PER_RUN", "100")))
+    maint_ack_payload_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_ACK_PAYLOAD_MAX_BYTES", "4096")))
+    maint_ack_reason_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_ACK_REASON_MAX_BYTES", "512")))
+    maint_ack_details_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_ACK_DETAILS_MAX_BYTES", "2048")))
+    # Phase 8 §8.14.4 — opsctl Redis ACL + signed envelopes.
+    # ``opsctl_redis_expected_user`` is the ACL username opsctl must
+    # authenticate as; ``negelir_opsctl`` is provisioned by the §2 mock
+    # setup and the Phase 14 K8s Secret manifest.
+    opsctl_redis_expected_user: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_REDIS_EXPECTED_USER", "negelir_opsctl"))
+    # ``opsctl_require_signature`` gates envelope signing and consumer-side
+    # verification. Default ``true`` in prod; set ``false`` in mock via env var.
+    opsctl_require_signature: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_OPSCTL_REQUIRE_SIGNATURE", "true"
+    ).lower() in ("true", "1", "yes"))
+    # ``opsctl_key_path`` — path to the 32-byte operator key file (mode 0600).
+    # Empty string resolves to ``~/.negelir/opsctl_key`` at call time.
+    opsctl_key_path: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_KEY_PATH", ""))
+    # ``opsctl_operators_file`` — path to the operator registry JSON.
+    # Empty string resolves to ``infra/maint/opsctl_operators.json``.
+    opsctl_operators_file: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_OPERATORS_FILE", ""))
+    # ``opsctl_authz_file`` — path to the per-subcommand authz YAML.
+    # Empty string resolves to ``infra/maint/opsctl_authz.yaml``.
+    opsctl_authz_file: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_AUTHZ_FILE", ""))
+
+    # ── Phase 8 §8.15.4 — HMAC key lifecycle ──────────────────────────
+    # Revocation grace window: envelopes published up to this many seconds
+    # BEFORE a revocation are still accepted (allows in-flight ops to land).
+    # After the grace window, revoked-key envelopes are hard-rejected with
+    # reason="key_revoked" + critical sec.alert.v1.
+    opsctl_key_revocation_grace_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_KEY_REVOCATION_GRACE_S", "60")))
+    # Maximum key age in days before rotation is overdue. A heartbeat alert
+    # (sec.alert.v1{kind=opsctl_key_rotation_overdue, severity=warn}) is
+    # emitted daily (debounced) per key that has exceeded this threshold.
+    opsctl_key_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_KEY_MAX_AGE_DAYS", "365")))
+    # Days past max_age before auto-revocation fires at the consumer side.
+    # Consumer rejects with reason="key_age_exceeded" regardless of revoked_at.
+    opsctl_key_revocation_grace_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_KEY_REVOCATION_GRACE_DAYS", "30")))
+    # operators.json hot-reload poll interval in seconds (cache coherency).
+    # Reload failure flips the consumer to fail-safe: all signatures fail.
+    opsctl_operators_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_OPERATORS_RELOAD_S", "60")))
+    # Emergency kill-switch file path. When the file exists and its mtime is
+    # within kill_switch_max_age_h hours, ALL opsctl envelopes are rejected.
+    # Empty string resolves to ``infra/maint/opsctl_kill_switch`` under the
+    # repo root at call time.
+    opsctl_kill_switch_path: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_OPSCTL_KILL_SWITCH_PATH", ""))
+    # Kill-switch becomes stale (treated as absent) after this many hours.
+    opsctl_kill_switch_max_age_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_KILL_SWITCH_MAX_AGE_H", "24")))
+    # Per-key token-bucket rate limit: max envelopes per minute per key_id.
+    # Caps stolen-key blast radius even when signature + authz pass.
+    opsctl_key_rate_limit_per_min: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_KEY_RATE_LIMIT_PER_MIN", "30")))
+
+    # ── Phase 8 §8.2 — `maint.scaler.v1` agent ────────────────────────
+    # Decision window in ms: one scale_decision per target per window.
+    # Anchored on a monotonic clock (CLOCK_BOOTTIME on Linux when
+    # `maint_scaler_clock_source=auto`); a wall-clock NTP step cannot
+    # collapse two windows into one.
+    maint_scaler_decision_window_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_DECISION_WINDOW_MS", "30000")))
+    maint_scaler_clock_source: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCALER_CLOCK_SOURCE", "auto"))
+    # Phase 8 §8.15.1 — suspend-detection alert threshold in seconds.
+    # Heartbeat agents compute delta_s = (boottime_ns - monotonic_ns) / 1e9;
+    # a step-up larger than this value within one heartbeat interval indicates
+    # a container suspend just happened.  Set to 0 to disable the probe.
+    maint_clock_suspend_alert_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_CLOCK_SUSPEND_ALERT_S", "30")))
+    maint_scaler_max_targets: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MAX_TARGETS", "256")))
+    maint_scaler_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MAX_REPLICAS", "16")))
+    # Phase 8 §8.16.1 — default-policy fallback applied to any
+    # registered agent that has NO explicit entry in
+    # ``maint_scaler_max_replicas_overrides_csv``. Conservative-by-
+    # default ceiling for unconfigured agents. Set to ``0`` (the
+    # bootstrap default) to preserve legacy behavior — unconfigured
+    # agents fall back to ``maint_scaler_max_replicas`` and no alert
+    # is emitted. Set to >=2 to OPT IN: each first-sighting of an
+    # unconfigured agent then emits a one-shot
+    # ``sec.alert.v1{kind=maint_scaler_unconfigured_agent}`` plus an
+    # audit ``maint.event.v1{kind=maint_scaler_default_applied}``
+    # AND the per-target ceiling drops to this value (capped by
+    # ``maint_scaler_max_replicas`` and ``..._global_max_replicas``).
+    # Floor when enabled is 2 (1 is indistinguishable from "do not
+    # scale me" and would silently freeze unconfigured agents).
+    maint_scaler_default_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_DEFAULT_MAX_REPLICAS", "0")))
+    maint_scaler_min_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MIN_REPLICAS", "1")))
+    maint_scaler_scale_up_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_SCALE_UP_QUEUE_DEPTH", "50")))
+    maint_scaler_scale_down_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_SCALE_DOWN_QUEUE_DEPTH", "5")))
+    maint_scaler_scale_up_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_SCALER_SCALE_UP_HEAD_AGE_S", "30")))
+    maint_scaler_hysteresis_windows: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_HYSTERESIS_WINDOWS", "3")))
+    maint_scaler_hysteresis_grace: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_HYSTERESIS_GRACE", "1")))
+    maint_scaler_max_changes_per_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MAX_CHANGES_PER_WINDOW", "4")))
+    maint_scaler_manual_pin_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MANUAL_PIN_TTL_S", "1800")))
+    # Per-agent ``max_replicas`` overrides as ``"agent=N,agent2=M"``.
+    # An entry trumps :attr:`maint_scaler_max_replicas` for that
+    # specific target; closes the spec gap that registered agents may
+    # legitimately need different ceilings (a single trainer.v1 vs a
+    # fan-out predictor.elo.v1).
+    maint_scaler_max_replicas_overrides_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCALER_MAX_REPLICAS_OVERRIDES_CSV", ""))
+    # Replica count published when the scaler reacts to a
+    # ``retrain_request`` warm-up. Kept tiny by default — the trainer
+    # is the action-of-record; the scaler only ensures one warm pod.
+    maint_scaler_warmup_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_WARMUP_REPLICAS", "1")))
+    # Phase 8 §8.14.8 — comma-separated set of agent names that manage
+    # their own replica counts (self-scaling targets). The auto-scaler
+    # refuses to emit ``scale_decision`` for these targets; instead it
+    # emits ``scale_throttled{reason=self_scaling_target}`` every tick
+    # AND a one-shot ``sec.alert.v1{kind=scaler_target_forbidden,
+    # severity=warn}`` (debounced per target per process). On
+    # ``retrain_request``, the scaler emits the softer
+    # ``trainer_warmup_hint`` advisory instead of ``scale_decision``.
+    # Default: ``trainer.v1`` — the trainer pod is the sole writer of
+    # its own replica count; the scaler must not race it.
+    maint_scaler_self_scaling_targets: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCALER_SELF_SCALING_TARGETS", "trainer.v1"))
+    # Phase 8 §8.15.9 — scheduler noise-window suppression.
+    # JSON-encoded list of 5-field UTC cron expressions (minute hour dom
+    # month dow) that mark known high-load periods where the §8.3 backup
+    # agent inflates PG / IO / network signals. During an active window the
+    # scaler suppresses load-driven scale decisions (lag_high, cpu_high,
+    # p95_high, dlq_depth_high) and emits scale_throttled{reason=
+    # noise_window_active}. Emergency decisions (vram_budget_exceeded,
+    # manual_pin, retrain_request_warmup) always fire. Empty list disables
+    # suppression entirely. Uses the §8.3 stdlib cron evaluator; the active
+    # check tests whether the current UTC hour matches the cron's hour set
+    # (the minute field is ignored — the full hour block is suppressed).
+    # Default covers the §8.3 nightly backup window (03:00-05:59) and
+    # Sunday cold-verify (05:00 on DOW=0).
+    maint_scaler_noise_windows: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCALER_NOISE_WINDOWS", '["0 3-5 * * *","0 5 * * 0"]'))
+    # Runtime selector for the scaler's ``RuntimeController``. ``none``
+    # makes the scaler a pure observer (decisions emit; runtime calls
+    # are skipped). ``compose`` invokes ``docker compose --scale`` via
+    # subprocess. ``k8s`` is reserved for Phase 14 — boot raises until
+    # the K8s controller lands.
+    maint_runtime: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_RUNTIME", "none"))
+    # Compose file used by ``ComposeController`` when
+    # ``maint_runtime=compose``. Boot validation refuses to start if
+    # the file does not exist on disk.
+    maint_scaler_compose_file: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCALER_COMPOSE_FILE", "docker-compose.yml"))
+    # Subprocess timeout for any runtime call (compose / k8s patch).
+    maint_scaler_runtime_timeout_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_SCALER_RUNTIME_TIMEOUT_S", "30")))
+    # Hard global cap across every target — defends against runaway
+    # auto-scale during a self-amplifying lag storm. The per-target
+    # cap (``maint_scaler_max_replicas`` + overrides) is applied
+    # first; this cap is enforced on the *sum* of desired replicas
+    # before issuing the runtime call.
+    maint_scaler_global_max_replicas: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_GLOBAL_MAX_REPLICAS", "64")))
+    # Minimum interval between two scale_decision events for the SAME
+    # target across distinct decision windows. Lower than this and
+    # the candidate decision is coalesced (latest-wins, no runtime
+    # call) and emits ``scale_throttled{reason=min_decision_interval}``.
+    # Wall-clock-of-monotonic, set in seconds — defaults to 90s per
+    # ROADMAP §8.2 binding.
+    maint_scaler_min_decision_interval_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MIN_DECISION_INTERVAL_S", "90")))
+    # Headroom (MB) subtracted from total per-host VRAM before the
+    # scaler computes its budget. Stops the scaler from packing pods
+    # so densely that any one pod's transient spike OOMs the host.
+    maint_scaler_vram_headroom_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_VRAM_HEADROOM_MB", "1024")))
+    # Phase 8 §8.16.8 — VRAM-budget pessimism factor for unknown-footprint
+    # agents. When GPU is the active device and the fraction of VRAM already
+    # committed exceeds this value, scale-up for an agent that has never
+    # emitted model_registered is refused with reason=vram_footprint_unknown.
+    # Below the threshold the unknown agent is admitted on the legacy
+    # predictor_max_vram_mb default.
+    maint_scaler_vram_pessimistic_threshold_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_SCALER_VRAM_PESSIMISTIC_THRESHOLD_PCT", "0.6")))
+    # Phase 8 §8.16.8 — CPU-class scale-up budget: fraction of total detected
+    # cores per host that CPU-class (device_class=cpu) replicas may collectively
+    # consume. Each CPU-class replica counts as 1 core. Scale-up that would push
+    # aggregate CPU-class replicas past budget×cores is refused.
+    # No-op pre-Phase 14 (single-host compose mode); active under K8s.
+    maint_scaler_cpu_budget_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_SCALER_CPU_BUDGET_PCT", "0.8")))
+    # Phase 8 §8.2 A1 — scale-down grace: number of consecutive
+    # decision windows whose smoothed signals must remain below the
+    # scale-down threshold before the supervisor emits a scale-down.
+    # Stops a single quiet window from yanking replicas away while a
+    # bursty workload is mid-spike. Set to 0 to disable the grace
+    # gate (legacy behaviour).
+    maint_scaler_scale_down_grace_windows: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_SCALE_DOWN_GRACE_WINDOWS", "2")))
+    # Phase 8 §8.2 A1 — Welford rolling-sketch retention: number of
+    # most-recent samples per signal whose mean+variance is used in
+    # the decision function. ``maint_scaler_signal_window_samples=0``
+    # falls back to instantaneous (last sample) values.
+    maint_scaler_signal_window_samples: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_SIGNAL_WINDOW_SAMPLES", "5")))
+    # Phase 8 §8.2 A2 — load-driven clamp formula: desired_replicas =
+    # clamp(min, ceil(observed_load / target_load_per_replica), max).
+    # ``observed_load`` is the smoothed queue_depth (see Welford).
+    # 0 disables the clamp formula and reverts to the legacy ±1-step
+    # decision (kept for forward compatibility with operators who
+    # haven't tuned the per-replica target yet).
+    maint_scaler_target_load_per_replica: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_TARGET_LOAD_PER_REPLICA", "50")))
+    # Phase 8 §8.2 A2 — cap on how many replicas the clamp formula
+    # may add or remove in a single decision window. Defends against
+    # a Welford-window cold-start where ``observed_load`` jumps from
+    # 0 to a large value and would otherwise scale from 1 → N in one
+    # tick. Default 1 preserves the legacy step magnitude.
+    maint_scaler_max_step_per_window: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_MAX_STEP_PER_WINDOW", "1")))
+    # Phase 8 §8.2 — observability: histogram bucket boundaries for
+    # ``maint_scaler_runtime_call_seconds`` (the wall-clock duration
+    # of every ``RuntimeController.apply`` call). CSV of strictly
+    # positive floats in seconds; the parser sorts ascending and
+    # de-duplicates. The default mirrors the prometheus default
+    # latency ladder (5ms..10s) which covers both the noop path
+    # (~µs) and a slow ``docker compose --scale`` (~seconds).
+    maint_scaler_runtime_histogram_buckets: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS", "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"))
+    # Phase 8 §8.9 DoD — bounded global decision history. The scaler
+    # keeps an insertion-ordered map of the most recent N
+    # ``scale_decision`` events (keyed by ``decision_window_id``).
+    # Oldest entries are evicted when the cap is hit (LRU by
+    # insertion order). Default 1024 holds ~14h of decisions at the
+    # default 30-second window cadence across a 256-target roster.
+    maint_scaler_history_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCALER_HISTORY_MAX", "1024")))
+    # Phase 8 §8.9 DoD — leader-lease duration for maint-plane agents.
+    # When the K8s coordination API is unreachable, the in-memory
+    # :class:`~swarm.sdk.leader.ControllableK8sLeader` / Phase 14 real
+    # driver expire the lease after this many seconds.  A losing pod
+    # transitions to observer mode (``is_leader()`` returns False) no
+    # later than ``maint_leader_lease_duration_s`` after the last
+    # successful renewal.  Mirrors the ``leaseDurationSeconds`` field
+    # on the ``coordination.k8s.io/v1.Lease`` object (Phase 14).
+    maint_leader_lease_duration_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_LEADER_LEASE_DURATION_S", "15")))
+
+    # ── Phase 8 §8.5 — `maint.dlq.v1` supervisor ─────────────────────
+    maint_dlq_per_topic_quota: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_PER_TOPIC_QUOTA", "100")))
+    maint_dlq_replay_backoff_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_REPLAY_BACKOFF_S", "60")))
+    maint_dlq_backoff_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_BACKOFF_LRU", "1024")))
+    # CSV allow-list of replayable DLQ topics (e.g.
+    # ``"predict.vote.dlq,predict.final.dlq"``). Empty = allow every
+    # topic *not* in :data:`RECURSION_DENY_SET`. Sec/PII DLQs are
+    # never automatically replayable; this is the operator surface
+    # for the rest.
+    maint_dlq_replay_topics_allow_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_DLQ_REPLAY_TOPICS_ALLOW_CSV", ""))
+    # Phase 8.16.7 — operator-attested exceptions to replay-policy
+    # sensitive-prefix denial. CSV of full DLQ topic names.
+    _maint_dlq_replay_allow_overrides_raw: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_DLQ_REPLAY_ALLOW_OVERRIDES", ""))
+
+    @property
+    def maint_dlq_replay_allow_overrides(self) -> list[str]:
+        """Attested replay exceptions as an ordered list."""
+        return [
+            tok.strip()
+            for tok in self._maint_dlq_replay_allow_overrides_raw.split(",")
+            if tok.strip()
+        ]
+
+    # Operator-driven replays a single ``(topic, request_id)`` may
+    # incur before escalation. Default 2 → 1st + 2nd visit replay,
+    # 3rd visit emits ``dlq_escalated`` and refuses further replays
+    # for that request.
+    maint_dlq_visit_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_VISIT_MAX", "2")))
+    # Per-topic token-bucket cap on replay attempts per minute. Caps
+    # a poisoned-message storm from being thrashed against a still-
+    # broken consumer (§8.5 binding).
+    maint_dlq_per_topic_max_per_min: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_PER_TOPIC_MAX_PER_MIN", "60")))
+    # LRU cap on the ``(topic, request_id) → visit_count`` map.
+    # Bounded state per the §8.9 DoD.
+    maint_dlq_visit_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_VISIT_LRU", "4096")))
+    # Phase 8 §8.5 C1 — periodic-tick budget across all active DLQ
+    # topics (round-robin fairness). Per-tick total replays is
+    # ``max(1, maint_dlq_max_replays_per_tick // len(active_topics))``
+    # per topic, so a single hot topic cannot starve the others.
+    maint_dlq_max_replays_per_tick: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_MAX_REPLAYS_PER_TICK", "50")))
+    # Phase 8 §8.5 C2 — poison-pattern detection. If ≥
+    # ``maint_dlq_consumer_broken_threshold`` distinct request_ids
+    # escalate on the same DLQ topic within
+    # ``maint_dlq_consumer_broken_window_s`` seconds, the supervisor
+    # freezes that topic (refusing further dlq_replay requests) and
+    # emits ``sec.alert.v1{kind=consumer_likely_broken, severity=error}``.
+    # Operator lifts the freeze via ``ops.dlq-resume --topic <t>``.
+    maint_dlq_consumer_broken_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_CONSUMER_BROKEN_THRESHOLD", "5")))
+    maint_dlq_consumer_broken_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_CONSUMER_BROKEN_WINDOW_S", "600")))
+    # Phase 8 §8.5 backlog-pressure damping: per-topic DLQ depth
+    # threshold above which the supervisor emits a debounced
+    # ``sec.alert.v1{kind=dlq_backlog_high}`` and quarters that
+    # topic's per-tick replay budget until depth falls below half
+    # the original observed depth.
+    maint_dlq_backlog_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_BACKLOG_ALERT", "1000")))
+    # Phase 8 §8.9 DoD — bounded in-memory topic-state map.
+    # ``_state`` is capped at this value with insertion-order LRU
+    # eviction. Default 100 000 covers large-scale deployments with
+    # thousands of DLQ topic variants. Cap-pressure alert fires when
+    # the evicted entry is younger than
+    # ``maint_dlq_replay_backoff_s × maint_dlq_backoff_factor × 3``.
+    maint_dlq_state_max: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_STATE_MAX", "100000")))
+    # Exponential-backoff multiplier used by the DLQ supervisor for
+    # cap-pressure evaluation (also referenced by the escalation
+    # window calculation). Default 2 matches the §8.5 "double the
+    # backoff window" pattern.
+    maint_dlq_backoff_factor: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_BACKOFF_FACTOR", "2")))
+    # Phase 8 §8.9 DoD — per-topic per-second replay rate cap.
+    # Enforced on both the operator-driven handle() path and the
+    # periodic tick() scheduler. Default 10 rps per topic; values ≥ 1.
+    maint_dlq_replay_rps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_DLQ_REPLAY_RPS", "10")))
+
+    # ── Phase 8 §8.6 — `maint.schema.v1` sentinel ────────────────────
+    maint_schema_sample_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_SAMPLE_RATE_PER_S", "5")))
+    maint_schema_burst: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_BURST", "10")))
+    maint_schema_drift_debounce_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_DRIFT_DEBOUNCE_S", "60")))
+    maint_schema_drift_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_DRIFT_LRU", "512")))
+    # Phase 8 §8.6 Detector B — cadence for the PG-column-vs-migration
+    # comparison. Default 1h; lower bound 60s (ROADMAP §8.6 binding
+    # — the crawl runs information_schema.columns once per tick and
+    # is cheap, but cadence below 60s adds noise without recall gain).
+    maint_schema_pg_check_interval_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_PG_CHECK_INTERVAL_S", "3600")))
+    # Phase 8 §8.6 binding boundary — auto-apply migrations is
+    # OUT OF SCOPE for v1. The sentinel is detect-only; humans (or
+    # the Phase 17 patcher under `migration` scope) drive the fix.
+    # This knob exists for forward compatibility only: when set to
+    # ``true`` the schema sentinel logs a warning at boot AND emits
+    # a one-shot ``sec.alert.v1{kind=schema_auto_apply_misconfigured,
+    # severity=warn}``. No `psql -f migrations/NNN_*.sql` code path
+    # exists in v1; the AST boundary test in
+    # ``ai/swarm/agents/maint/tests/test_schema_auto_apply_boundary.py``
+    # locks this so a future patch wiring auto-apply gets caught.
+    maint_schema_auto_apply_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_AUTO_APPLY_ENABLED", "false").lower() in ("1", "true", "yes"))
+    # Phase 8 §8.14.7 — hard per-process cross-topic cap on the total
+    # validation rate.  Prevents a sample_rate=1.0 misconfig from
+    # burning CPU and starving the agent heartbeat (self-DoS guard).
+    # Over-budget validates are silently dropped and counted in the
+    # per-topic drop tracker; a debounced sec.alert is emitted when
+    # the drop rate exceeds 10 % of attempted over a 60 s window.
+    # Boundary cap: value MUST be ≤ 500 (boot-validated;
+    # fail_safe_validate_rps_cap_exceeded on larger values).
+    maint_schema_validate_max_rps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_VALIDATE_MAX_RPS", "50")))
+
+    # ── Phase 8 §8.7 + §8.8 — `maint.sec.v1` agent ───────────────────
+    maint_sec_pattern_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SEC_PATTERN_TTL_S", "604800")))
+    maint_sec_pattern_promote_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD", "1")))
+    # Days before an un-promoted `pending` row is pruned from the
+    # pattern_allowlist table. Bounds growth when operators never
+    # confirm a FP (e.g. noise generated by a transient rule hit).
+    maint_sec_pattern_pending_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SEC_PATTERN_PENDING_TTL_DAYS", "30")))
+    # Formal Phase 8 DoD name for the pattern_allowlist pending-row TTL
+    # (same semantic as maint_sec_pattern_pending_ttl_days; canonical name
+    # required by the triangle-test bullet).  Default 30 days.
+    maint_sec_allowlist_pending_ttl_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SEC_ALLOWLIST_PENDING_TTL_DAYS", "30")))
+    maint_sec_request_lru: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SEC_REQUEST_LRU", "2048")))
+    # Phase 8 §8.8 hysteresis: minimum seconds between two
+    # ``denylist_decimate_now`` runs (global; the denylist zset is
+    # one shared resource). A second decimate inside the window is
+    # acked ``accepted=true, reason="hysteresis_throttled"`` and
+    # emits ``denylist_decimate_throttled``.
+    maint_sec_decimate_min_interval_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SEC_DECIMATE_MIN_INTERVAL_S", "300")))
+
+    # ── Phase 8 §8.10 — broadcast pause ──────────────────────────────
+    maint_pause_default_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_PAUSE_DEFAULT_TTL_S", "600")))
+    # Hard upper-bound on any operator-specified pause TTL. Operators
+    # cannot request a pause longer than this; the agent caps the TTL
+    # and emits ``kind=maint_pause_ttl_capped`` if the request exceeds it.
+    # Default 86400s (24h) — prevents accidentally indefinite pauses.
+    maint_pause_max_ttl_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_PAUSE_MAX_TTL_S", "86400")))
+    maint_silence_dedup_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SILENCE_DEDUP_S", "300")))
+    # Phase 8 §8.16 D2 — dead-mans-switch.
+    # If no maint.event.v1 message has been observed for this many
+    # hours AND swarm uptime exceeds ``maint_silence_warmup_s``,
+    # emit ``sec.alert.v1{kind=maint_silence_alert, severity=critical}``.
+    maint_silence_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SILENCE_ALERT_H", "24")))
+    maint_silence_warmup_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SILENCE_WARMUP_S", "3600")))
+    # Self-DLQ depth threshold per maint.* agent. When an agent's
+    # own ``<id>.dlq`` depth exceeds this, the dead-mans-switch
+    # flips that agent's PauseState.self_isolated to True (§8.13.5
+    # idempotency matrix; agent then refuses pause until an
+    # operator explicitly resumes it).
+    maint_self_dlq_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SELF_DLQ_ALERT", "100")))
+    # Growth-rate self-throttle (§8.11): if the agent's own DLQ depth
+    # grows by more than this many entries per minute, the agent halves
+    # its emit rate (token-bucket on its own producer side) until growth
+    # is non-positive for ``maint_self_dlq_throttle_recovery_s`` seconds.
+    # Distinct from the absolute-depth ``maint_self_dlq_alert`` above.
+    maint_self_dlq_growth_alert: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SELF_DLQ_GROWTH_ALERT", "50")))
+    # How long (seconds) growth must remain non-positive before the
+    # per-agent DLQ self-throttle lifts (default 120 s = 2 minutes).
+    maint_self_dlq_throttle_recovery_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SELF_DLQ_THROTTLE_RECOVERY_S", "120")))
+
+    # ── Phase 8 §8.11 — consumer-lag watchdog ────────────────────────
+    # Lag threshold (ms) that triggers tier-1 shedding after the alert
+    # window has elapsed.  Tier 2 = 15 000ms, Tier 3 = 60 000ms.
+    maint_plane_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_PLANE_LAG_ALERT_MS", "5000")))
+    # Lag must exceed the threshold for this many seconds before tier-1 fires.
+    maint_plane_lag_alert_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_PLANE_LAG_ALERT_WINDOW_S", "60")))
+    # Symmetric sec-plane lag watchdog (§8.16.11) for sec.alert.v1 consumers.
+    sec_plane_lag_alert_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_PLANE_LAG_ALERT_MS", "5000")))
+    sec_plane_lag_alert_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_SEC_PLANE_LAG_ALERT_WINDOW_S", "60")))
+    # Lag must be below 1s for this many seconds before recovery fires.
+    maint_plane_recovery_window_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_PLANE_RECOVERY_WINDOW_S", "120")))
+
+    # ── Phase 8 §8.9 — per-agent bus circuit-breaker ─────────────────
+    # Consecutive publish failures before the breaker opens (bus_degraded).
+    maint_bus_fail_threshold: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BUS_FAIL_THRESHOLD", "3")))
+    # Time window (seconds) within which consecutive failures must occur
+    # for the breaker to open.  A failure outside this window resets the
+    # streak counter.  Default 30s per §8.11 spec.
+    maint_bus_fail_window_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BUS_FAIL_WINDOW_S", "30.0")))
+    # Per-agent spool cap (entries).  Oldest entries are NOT evicted —
+    # new writes are refused when the cap is reached.
+    maint_bus_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BUS_SPOOL_MAX_ENTRIES", "1024")))
+    # Root directory for per-agent spools (one sub-dir per agent name).
+    maint_agent_spool_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_AGENT_SPOOL_DIR", "data/maint/agent_spool"))
+    # Cap on entries stored per agent in its per-agent sub-spool under
+    # ``maint_agent_spool_dir``. Distinct from ``maint_bus_spool_max_entries``
+    # (the bus circuit-breaker spool cap). New writes are refused when
+    # the cap is reached; oldest entries are NOT evicted.
+    maint_agent_spool_max_entries: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_AGENT_SPOOL_MAX_ENTRIES", "512")))
+
+    # ── Phase 8 §8.11 — three-tier backpressure ──────────────────────
+    maint_backpressure_yellow_factor: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_YELLOW_FACTOR", "4.0")))
+    maint_backpressure_yellow_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_YELLOW_QUEUE_DEPTH", "200")))
+    maint_backpressure_yellow_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_YELLOW_HEAD_AGE_S", "60")))
+    maint_backpressure_yellow_storage_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_YELLOW_STORAGE_PCT", "75")))
+    maint_backpressure_yellow_error_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_YELLOW_ERROR_RATE_PER_S", "1")))
+    maint_backpressure_red_queue_depth: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_RED_QUEUE_DEPTH", "1000")))
+    maint_backpressure_red_head_age_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_RED_HEAD_AGE_S", "300")))
+    maint_backpressure_red_storage_pct: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_RED_STORAGE_PCT", "92")))
+    maint_backpressure_red_error_rate_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S", "10")))
+
+    # ── Phase 8 §8.13.2 — cumulative `data/maint/` storage cap ────────
+    # Total budget across every per-subdir spool / audit / ledger
+    # under ``data/maint/``. The per-subdir caps that already exist
+    # (e.g. ``opsctl_spool_max_entries``) are individual; this is the
+    # single rollup that prevents one runaway producer from
+    # filling the disk regardless of which subdir it touches.
+    # 80% → warn alert (debounced 1h); 100% → error alert + spool
+    # writes refuse; usage must drop below 70% before writes resume
+    # (single hysteresis band, prevents thrash). 0 = disabled.
+    maint_storage_total_max_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_STORAGE_TOTAL_MAX_MB", "512")))
+
+    # ── Phase 8 §8.13.3 — spool entry max age ───────────────────────
+    # Spool entries (both opsctl_spool and agent_spool) older than
+    # this many hours are pruned on every flush attempt. Pruned entries
+    # emit maint.event.v1{kind=spool_entry_aged_out} (audit) and
+    # sec.alert.v1{kind=spool_entry_aged_out, severity=warn} (debounced
+    # per agent). Default 168h = 7d. 0 = disabled (no pruning).
+    maint_spool_entry_max_age_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SPOOL_ENTRY_MAX_AGE_H", "168")))
+
+    # ── Phase 8 §8.13.3 — spool retired-kind floor ───────────────────
+    # Spool entries whose envelope schema_version is below this value
+    # are quarantined to spool_dir/.retired/ on flush (same path as
+    # entries with a kind no longer in KNOWN_MAINT_EVENT_KINDS). 1 =
+    # accept all current schema versions; bump only when a breaking
+    # schema change is deployed.
+    swarm_min_supported_schema_version: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_MIN_SUPPORTED_SCHEMA_VERSION", "1")))
+
+    # ── Phase 8 §8.15.3 — advisory-lock hold-time guard ──────────────
+    # Wall-clock cap on how long a Postgres advisory lock taken via
+    # ``xops.maint.advisory_lock.BoundLock`` may stay acquired before
+    # the context manager fires a debounced
+    # ``sec.alert.v1{kind=maint_advisory_lock_held_long, severity=warn}``
+    # on release. Detects accidental long transactions inside the
+    # critical section. Generous default (5s); 0 disables.
+    maint_advisory_lock_max_hold_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_ADVISORY_LOCK_MAX_HOLD_MS", "5000")))
+
+    # ── Phase 8 §8.14 — audit log ────────────────────────────────────
+    maint_audit_hmac_key_b64: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_AUDIT_HMAC_KEY_B64", ""))
+    maint_audit_partition_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_AUDIT_PARTITION_RETENTION_DAYS", "365")))
+
+    # ── Phase 8 §8.15.7 — opsctl_audit.csv hash-chain HMAC ─────────────
+    # Path to the 32-byte HMAC-SHA256 key file used by the opsctl_audit.csv
+    # integrity chain.  Mode 0400, owned by the agent process user.
+    # Empty → no HMAC chain (test/dev only — set in prod).
+    audit_chain_hmac_key_path: str = field(default_factory=lambda: os.getenv("NEGELIR_COMMON_AUDIT_CHAIN_HMAC_KEY_PATH", "/var/lib/negelir/secrets/audit_chain.key"))
+    # Maximum size of opsctl_audit.csv before rotation (bytes).
+    # When the active file grows past this, it is renamed to
+    # opsctl_audit.csv.1 (et seq.) and a fresh file is started.
+    # The chain continues across rotation: the new file's genesis
+    # prev_hmac = last rotated file's row_hmac.  Default 10 MB.
+    opsctl_audit_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_OPSCTL_AUDIT_MAX_BYTES", str(10 * 1024 * 1024))))
+
+    # ── Phase 8 §8.15.5 — per-row size cap + per-kind details budget ─
+    # Hard per-row cap for the maint_audit_log ``payload`` JSONB column
+    # (UTF-8 JSON bytes).  Enforced by the §8.14.1 BEFORE INSERT trigger
+    # backstop AND by the producer-side helper in swarm.sdk.maint_audit.
+    # Default 16384 (16 KB) keeps rows toast-friendly and autovacuum-safe.
+    maint_audit_row_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_AUDIT_ROW_MAX_BYTES", "16384")))
+    # Per-kind soft fence (JSON dict, kind → int bytes).  Producer-side
+    # cap applied BEFORE emit by MaintEvent._make().  Keys are
+    # maint.event.v1 kind strings; "default" key is the fallback for
+    # unlisted kinds.  Values must be ≤ maint_audit_row_max_bytes.
+    # Example override: '{"dlq_escalated": 4096}'.
+    maint_audit_per_kind_details_max_bytes: str = field(
+        default_factory=lambda: os.getenv(
+            "NEGELIR_INFRA_MAINT_AUDIT_PER_KIND_DETAILS_MAX_BYTES",
+            '{"dlq_escalated": 8192, "schema_drift_detected": 4096,'
+            ' "backup_dump_file_corrupted": 8192, "default": 2048}',
+        )
+    )
+
+    # ── Phase 8 §8.3 — backup agent ──────────────────────────────────
+    # Cron expression (5-field, UTC) that fires the nightly backup
+    # state machine. Operator typos are caught by parse_cron at boot.
+    maint_backup_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_CRON", "0 3 * * *"))
+    # Where dump artefacts + audit.csv live. Created on demand.
+    maint_backup_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_DIR", "./data/backups"))
+    # Daily-grain retention. Older daily dumps are pruned; weekly
+    # dumps (Sunday) are kept for `retention_weeks` instead.
+    maint_backup_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_RETENTION_DAYS", "14")))
+    maint_backup_retention_weeks: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_RETENTION_WEEKS", "4")))
+    # Safety floor — when true, every emit carries dry_run=true and
+    # NO destructive prune is executed (would_delete_count instead).
+    # Defaults to true when NEGELIR_COMMON_PROFILE is unset or "mock"
+    # (dev/CI safety net); false for production.
+    # Note: uses (os.getenv("NEGELIR_COMMON_PROFILE") or "mock") so the
+    # _GETENV_DEFAULT_RE duplicate-key test ignores this nested read.
+    maint_backup_dry_run: bool = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_MAINT_BACKUP_DRY_RUN",
+        "true" if (os.getenv("NEGELIR_COMMON_PROFILE") or "mock") == "mock" else "false",
+    ).lower() in ("1", "true", "yes"))
+    # Disk-pressure guard — refuse to start a dump if free space <
+    # max(2*last_dump_size, min_free_gb*1GB).
+    maint_backup_min_free_gb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MIN_FREE_GB", "5")))
+    # Catch-up: at most one make-up run if monotonic delta vs last fire
+    # exceeds this many hours; otherwise we wait for the next cron tick.
+    maint_backup_max_skew_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MAX_SKEW_H", "36")))
+    # `pii_erased` / `quarantine_pruned` are DML, no Postgres dump
+    # required — but we still gate on having a recent successful dump
+    # (within this many hours) before the destructive prune phase.
+    maint_backup_age_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_AGE_ALERT_H", "30")))
+    # Backwards wall-clock step bigger than this (seconds) → emit
+    # sec.alert.v1{kind=backup_clock_skew, severity=error} and skip
+    # this fire (refuse-to-start safety floor).
+    maint_backup_clock_step_back_alert_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S", "300")))
+    # Forward wall-clock leap (last_fire → now) bigger than this (hours)
+    # → log a warn-level operator-visibility marker AND tag the next
+    # `backup_started` event with `forward_leap_h: float`. The catch-up
+    # policy still handles the missed window itself; this is purely the
+    # early-warning surface (`scope=forward` per ROADMAP §8.3 prose).
+    # The corresponding `sec.alert.v1{kind=backup_clock_skew, severity=warn,
+    # scope=forward}` emission is deferred until the closed sec.alert.v1
+    # source enum is extended to admit `maint.backup.v1`.
+    maint_backup_clock_step_forward_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_CLOCK_STEP_FORWARD_ALERT_H", "24")))
+    # pg_dump parallelism (-j flag); 1 disables parallel mode.
+    maint_backup_pg_jobs: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PG_JOBS", "2")))
+    # ROADMAP §8.9 binding (fail_safe_pg_conn_limit_too_low): minimum
+    # Postgres role connection limit accepted at agent startup.  0 means
+    # "auto-derive": the agent requires at least pg_jobs + 1 (N parallel
+    # workers + 1 coordinator connection).  Set an explicit positive value
+    # to enforce a higher floor (e.g. pg_jobs + application pool headroom).
+    maint_backup_pg_conn_limit: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PG_CONN_LIMIT", "0")))
+    # ROADMAP §8.16.3 binding (``fail_safe_prune_order_invalid``): boot
+    # validation in :class:`xops.maint.prune_order.PruneOrderValidator`
+    # asserts that the declared :data:`PRUNE_ORDER` is a valid topological
+    # sort of the live PG FK graph. Drift → refuse-to-start + critical alert.
+    # No runtime knob; presence here documents the doctrine name so the
+    # §7.7-style triangle test can assert it is referenced in config comments.
+
+    # DELETE batch size for the destructive prune phase. Bounded so a
+    # single cron run cannot hold a long-lived row-lock cascade.
+    maint_backup_prune_batch: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PRUNE_BATCH", "10000")))
+    # Maximum milliseconds a single prune batch may hold a table lock.
+    # Each DELETE batch is constrained so that
+    # (rows_in_batch × cost_per_row_ms) <= this budget.
+    # Default 500ms matches the §8.9 DoD lock-hold-time requirement.
+    maint_backup_prune_max_lock_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PRUNE_MAX_LOCK_MS", "500")))
+    # ROADMAP §8.3 TTL prune retention windows. Each is a calendar-day
+    # cap; rows whose `created_at` (or `expires_at` for the allowlist)
+    # falls outside the window are pruned by the nightly maint.backup.v1
+    # tick. The audit-log retention is intentionally the longest — the
+    # operator trail is the highest-value record on disk.
+    maint_schema_snapshot_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_SCHEMA_SNAPSHOT_RETENTION_DAYS", "90")))
+    swarm_dlq_pg_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_DLQ_PG_RETENTION_DAYS", "14")))
+    maint_audit_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_AUDIT_RETENTION_DAYS", "365")))
+    # Per-kind retention overrides (JSON dict, str → int days). Keys are
+    # ``maint.event.v1`` kind strings; values override the global
+    # ``maint_audit_retention_days`` for that kind. Default ships the
+    # ROADMAP §8.9 right-to-erasure requirement: ``pii_erased`` rows
+    # are kept for 7 years (2555 days) as breach-evidence records.
+    # Example: '{"pii_erased": 2555, "backup_age_alert": 90}'.
+    maint_audit_retention_days_overrides: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_AUDIT_RETENTION_DAYS_OVERRIDES", '{"pii_erased": 2555}'))
+    # Live `pg_dump` DSN — empty string means "no live driver wired"
+    # (the in-memory shim is used; refused at agent boot in production
+    # profile by the swarm bootstrap).
+    maint_backup_pg_dsn: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PG_DSN", ""))
+    # Path to the `age` recipients file (one DR-class public key per
+    # line). Required when the live `LocalPgDumpExecutor` is wired.
+    maint_backup_age_recipients_file: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_AGE_RECIPIENTS_FILE", ""))
+    # Directory of versioned recipient public keys (``keys.vN.age.pub``
+    # + optional ``keys.vN.recipients.txt``). Empty string disables
+    # encryption-at-rest. ROADMAP §8.3 binding: when ``profile=prod``
+    # AND ``maint_runtime != none``, an unset key dir AND unset
+    # recipients file refuses-to-start (``fail_safe_no_encryption_in_prod``).
+    # The dir-format full implementation lands in a follow-up bullet;
+    # this knob exists today so the prod-profile refusal can gate on
+    # both surfaces uniformly.
+    maint_backup_encryption_key_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_ENCRYPTION_KEY_DIR", ""))
+    # Minimum DR-class recipients required in each `keys.vN.recipients.txt`
+    # under `maint_backup_encryption_key_dir`. Default `2` matches the
+    # ROADMAP §8.3 prod binding ("at least 2 in prod") — a single DR
+    # recipient is a single point of disaster-recovery failure. Mock
+    # / dev stacks override down to `1` via env when running the
+    # encryption surface end-to-end without an off-cluster custodian.
+    maint_backup_min_dr_recipients: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MIN_DR_RECIPIENTS", "2")))
+    # Path to the `age` identity file used by the restore-verifier to
+    # decrypt dumps in the ephemeral scratch container.
+    maint_backup_age_identity_file: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_AGE_IDENTITY_FILE", ""))
+    # Pinned Postgres image for the restore-verifier scratch container.
+    # Must NOT be `*-latest` (CLAUDE.md doctrine: pin specific tags).
+    maint_backup_verify_pg_image: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_VERIFY_PG_IMAGE", "postgres:16-alpine"))
+    # §8.14.9 nice level for pg_dump subprocess. Default 10 (lower CPU
+    # priority than interactive queries). Set 0 to disable nice wrapping
+    # (mock profile; dedicated-PG deployments). Bounded 0–19 (UNIX nice).
+    maint_backup_pg_dump_nice_level: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PG_DUMP_NICE_LEVEL", "10")))
+    # §8.14.9 ionice wrapping for pg_dump on Linux: best-effort I/O class
+    # (-c 2) at lowest priority (-n 7). Default true. Ignored on non-Linux.
+    maint_backup_pg_dump_ionice: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PG_DUMP_IONICE", "true").lower() not in ("false", "0", "no"))
+    # Restore-verify mode (ROADMAP §8.3 escape hatch). `full` (default)
+    # runs the complete `pg_restore` + verify.sql suite; `toc_only` runs
+    # only `pg_restore --list` to validate the dump's table-of-contents
+    # without restoring rows — forward escape hatch for very-large-DB ops
+    # where a nightly full restore exceeds the maintenance window. The
+    # weekly cold-verify still runs the full suite regardless. Boot
+    # validation in `MaintBackupAgent` refuses any other value.
+    maint_backup_verify_mode: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_VERIFY_MODE", "full"))
+    # ROADMAP §8.13.4 restore version-invariant: maximum schema-version gap
+    # (in_tree_max_version - manifest.max_version) before restore-verify
+    # refuses with backup_dump_too_old + sec.alert.v1{severity=error}.
+    # Default 5 covers ~quarterly migration cadence (≤5 migrations per
+    # quarter). Operator must escalate to a manual restore using the
+    # historical commit when the gap exceeds this.
+    maint_backup_max_version_gap: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MAX_VERSION_GAP", "5")))
+    # ROADMAP §8.3 binding (weekly cold-verify — silent storage rot).
+    # 5-field UTC cron expression that fires the cold-verify pass on
+    # the oldest still-retained Sunday dump. Default `0 5 * * 0`
+    # (Sunday 05:00 UTC, after the nightly window). Catches bit-rot /
+    # S3 lifecycle bugs / silent encryption-key loss long before the
+    # dump is needed for real DR. Boot validation in
+    # `MaintBackupAgent` refuses cron syntax errors loudly.
+    maint_backup_cold_verify_cron: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_COLD_VERIFY_CRON", "0 5 * * 0"))
+    # ROADMAP §8.15.10 Fix A — restore-verify concurrency cap.
+    # Maximum seconds the second restore-verify caller waits to acquire
+    # the PG advisory lock `LOCK_MAINT_BACKUP_RESTORE_VERIFY` before
+    # yielding with kind=verify_concurrency_blocked.  Default 1800 s
+    # (30 min — generous; both cold-verify and nightly fire in the same
+    # early-Sunday window).  0 disables the wait (try-once, yield immediately).
+    maint_backup_verify_lock_timeout_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_VERIFY_LOCK_TIMEOUT_S", "1800")))
+    # ROADMAP §8.3 crash-cleanup invariant: on agent restart, orphaned
+    # `negelir-maint-verify/restore-verify-*` K8s Jobs + ephemeral PVCs older
+    # than this many hours are swept at boot and emit
+    # `maint.event.v1{kind=backup_verify_orphan_swept}`. Default 6h.
+    maint_backup_verify_orphan_ttl_h: float = field(default_factory=lambda: float(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_VERIFY_ORPHAN_TTL_H", "6.0")))
+    # Size (Gi) of the ephemeral PVC provisioned for the K8s
+    # restore-verify job. Must be at least 2× the expected
+    # pg_restore output size; boot validation warns when this
+    # is below ``maint_backup_min_free_gb``. Default 10 Gi.
+    maint_backup_pvc_size_gb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PVC_SIZE_GB", "10")))
+    # PII-aware dump: comma-separated list of ``table.column`` entries excluded
+    # from the logical dump by default. The production ``LocalPgDumpExecutor``
+    # maps these to ``pg_dump --exclude-table-data`` / ``--exclude-column``.
+    # The in-memory ``NoopDumpExecutor`` records them in ``dump_toc`` so tests
+    # can assert the contract. ROADMAP §8.9 DoD: quarantine_samples.raw_bytes_b64
+    # excluded by default (right-to-erasure invariant).
+    maint_backup_pii_excluded_columns: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_MAINT_BACKUP_PII_EXCLUDED_COLUMNS",
+        "quarantine_samples.raw_bytes_b64",
+    ))
+    # ROADMAP §8.9 binding (`fail_safe_wrong_pg_role`): the expected
+    # Postgres role name the backup agent must run as. Defaults to the
+    # least-privilege backup role `negelir_backup` (migration 011).
+    # Changing this in prod requires an explicit env override and a
+    # matching Postgres GRANT; the default is the safe hardened value.
+    maint_backup_pg_role: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_INFRA_MAINT_BACKUP_PG_ROLE",
+        "negelir_backup",
+    ))
+    # ROADMAP §8.13.6 binding (fail_safe_pg_secret_expired): hard cap on the
+    # backup-role PG password age in days.  The agent refuses to start when
+    # the age reported by PgSecretAgeChecker exceeds this value, forcing the
+    # operator to rotate.  Default 120d = alert threshold (100d) + 20d grace.
+    maint_backup_pg_secret_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_PG_SECRET_MAX_AGE_DAYS", "120")))
+    # ROADMAP §8.14.3 supply-chain pin: the `age` encryption binary version
+    # that the `maint.backup.v1` agent and the `ops.restore` CLI require.
+    # Default "1.2.0" matches the upstream release pinned in the Dockerfile
+    # and recorded in infra/maint/age_binary_provenance.txt. Operators can
+    # override to roll forward without an image rebuild; the boot assertion
+    # still fires loud on mismatch (fail_safe_age_version_mismatch).
+    maint_backup_age_binary_version: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_AGE_BINARY_VERSION", "1.2.0"))
+    # ROADMAP §8.9 two-class encryption: when True (default) each nightly
+    # dump gets a freshly-generated ephemeral verify-class recipient keypair.
+    # The verify key is included as a second recipient alongside the DR keys
+    # so the SidecarVerifier (Phase 14) can decrypt for restore-verify without
+    # holding a DR key. Set to False only for disaster-recovery drills where
+    # the verify sidecar is intentionally bypassed.
+    maint_backup_verify_key_rotate_per_dump: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_VERIFY_KEY_ROTATE_PER_DUMP", "true").lower() in ("true", "1", "yes"))
+    # ── ROADMAP §8.12 off-host replication ────────────────────────────────────────────────
+    # Target type: "none" (disabled, default) or "s3" (S3-compatible).
+    maint_backup_offsite_target: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_TARGET", "none"))
+    # S3-compatible endpoint URL (leave empty for AWS-default region routing).
+    maint_backup_offsite_endpoint: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_ENDPOINT", ""))
+    # Destination bucket name.
+    maint_backup_offsite_bucket: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_BUCKET", ""))
+    # Minimum file size (MB) to trigger multipart upload. 0 = single-part.
+    maint_backup_offsite_multipart_threshold_mb: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_MULTIPART_THRESHOLD_MB", "64")))
+    # Bandwidth cap for offsite uploads (KB/s). 0 = unlimited.
+    maint_backup_offsite_bw_kbps: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_BW_KBPS", "0")))
+    # Upload timeout per fire window (hours). Exceeded → offsite_failed.
+    maint_backup_offsite_upload_timeout_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_UPLOAD_TIMEOUT_H", "6")))
+    # Object-lock (WORM) retention period in days. 0 = no WORM enforcement.
+    maint_backup_offsite_object_lock_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_DAYS", "0")))
+    # Alert threshold: emit ``backup_offsite_age_alert`` when last successful
+    # offsite upload is older than this many hours. 0 = watchdog disabled.
+    maint_backup_offsite_age_alert_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_AGE_ALERT_H", "48")))
+    # On-object retention in days for objects in the remote bucket.
+    # Default 90 d in prod (compliance-grade window), 7 d in mock/dev.
+    # Note: uses (os.getenv("NEGELIR_COMMON_PROFILE") or "mock") so the
+    # _GETENV_DEFAULT_RE duplicate-key test ignores this nested read.
+    maint_backup_offsite_retention_days: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_RETENTION_DAYS",
+        "90" if (os.getenv("NEGELIR_COMMON_PROFILE") or "mock") == "prod" else "7",
+    )))
+    # S3 access key ID (public, non-secret; the matching secret is referenced by
+    # maint_backup_offsite_secret_access_key_secret_ref below).
+    maint_backup_offsite_access_key_id: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_ACCESS_KEY_ID", ""))
+    # File-path reference to the S3 secret access key. In K8s this is a
+    # secretKeyRef volume-mount path (0400); in Compose/dev it is a plain file.
+    # NEVER the literal secret value — the agent reads the file at boot.
+    maint_backup_offsite_secret_access_key_secret_ref: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_SECRET_ACCESS_KEY_SECRET_REF", ""))
+    # AWS / S3-compatible region used for SigV4 signing (e.g. "us-east-1",
+    # "auto" for non-AWS services like R2 / B2 that don't enforce a region).
+    maint_backup_offsite_s3_region: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_S3_REGION", "us-east-1"))
+    # ROADMAP §8.15.10 Fix B — offsite credential hot-reload.
+    # How often FileSecretProvider polls the secret file for mtime changes.
+    # 0 disables polling (credentials read once at agent boot — compose dev shortcut).
+    maint_backup_offsite_cred_reload_s: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_CRED_RELOAD_S", "60")))
+    # Age threshold (days) beyond which the S3 access key is considered overdue
+    # for rotation.  Matches the §8.15.10 90-day cadence best practice.
+    # 0 disables the age check.
+    maint_backup_offsite_credential_max_age_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_CREDENTIAL_MAX_AGE_DAYS", "90")))
+    # Grace period (days) on top of maint_backup_offsite_credential_max_age_days.
+    # Past max_age the agent emits severity=warn daily.  Past max_age+grace the
+    # agent escalates to severity=critical AND refuses new uploads (keeps running
+    # to not affect the rest of the maint plane).
+    maint_backup_offsite_credential_grace_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_CREDENTIAL_GRACE_DAYS", "30")))
+    # Phase 8 §8.16.5 — multipart upload-id TTL + lifecycle assertion.
+    # Max age (hours) of .offsite_state.json before treating the persisted
+    # upload_id as expired without even probing AWS.  Headroom under AWS's
+    # 24 h default abort policy; default 18 h.  0 = always probe (no
+    # time-based short-circuit).
+    maint_backup_offsite_state_max_age_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_STATE_MAX_AGE_H", "18")))
+    # Minimum acceptable AbortIncompleteMultipartUpload.DaysAfterInitiation.
+    # If the bucket's lifecycle rule is more aggressive, a sec.alert is emitted.
+    # Default 2 — gives the agent a one-day recovery window even on aggressive
+    # cost-optimised bucket policies.
+    maint_backup_offsite_lifecycle_min_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_LIFECYCLE_MIN_DAYS", "2")))
+    # Phase 8 §8.16.6 — Object-Lock / WORM boot-time preflight probe.
+    # How often (hours) the preflight probe repeats after the initial boot run.
+    # 0 = run at boot only (disables recurring probe).
+    maint_backup_offsite_preflight_interval_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_PREFLIGHT_INTERVAL_H", "24")))
+    # When True (default) the agent refuses to start if the bucket's
+    # Object-Lock is disabled while maint_backup_offsite_object_lock_days > 0.
+    # Mock profile sets this to False via env to skip the hardware check.
+    maint_backup_offsite_object_lock_required: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_REQUIRED", "true").lower() in ("true", "1", "yes"))
+    # ROADMAP §8.16.6 binding fail-safe flags (all default True — refuse-to-start
+    # / spool-mode on any preflight failure; operators may relax in non-prod).
+    # Bucket Object-Lock is not enabled and object_lock_days > 0.
+    fail_safe_offsite_object_lock_disabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_FAIL_SAFE_OFFSITE_OBJECT_LOCK_DISABLED", "true").lower() in ("true", "1", "yes"))
+    # Sentinel retention metadata did not round-trip (IAM policy gap).
+    fail_safe_offsite_retention_not_applied: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_FAIL_SAFE_OFFSITE_RETENTION_NOT_APPLIED", "true").lower() in ("true", "1", "yes"))
+    # Sentinel was deleted during retention window (WORM not enforced).
+    fail_safe_offsite_lock_not_enforced: bool = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_FAIL_SAFE_OFFSITE_LOCK_NOT_ENFORCED", "true").lower() in ("true", "1", "yes"))
+    # RsyncSshTarget: SSH host (or user@host) for the DR replica.
+    maint_backup_offsite_rsync_host: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_RSYNC_HOST", ""))
+    # RsyncSshTarget: absolute destination path on the remote SSH host.
+    maint_backup_offsite_rsync_dest_path: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_RSYNC_DEST_PATH", ""))
+    # RsyncSshTarget: path to a known_hosts file for strict host-key checking.
+    # Empty = fall back to agent's ~/.ssh/known_hosts (acceptable in K8s pods).
+    maint_backup_offsite_rsync_ssh_known_hosts: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_OFFSITE_RSYNC_SSH_KNOWN_HOSTS", ""))
+    # Phase 8 §8.12 — DR-drill cadence gauge.
+    # Path to the append-only CSV recording quarterly DR-drill outcomes.
+    maint_backup_dr_drill_csv: str = field(default_factory=lambda: os.getenv("NEGELIR_INFRA_MAINT_BACKUP_DR_DRILL_CSV", "data/backups/dr_drills.csv"))
+    # Days threshold for the cadence-overdue alert (default 100 — one quarter
+    # is ~91 d; the extra 9 d absorbs scheduling slippage before paging).
+    maint_backup_dr_drill_alert_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_DR_DRILL_ALERT_DAYS", "100")))
+    # ROADMAP §8.15.10 Fix C — restore-verify forensic capture.
+    # Maximum total bytes written to <date>.failed/verify_forensic.json.
+    # Default 256 KiB (262144).  When the computed JSON exceeds this budget,
+    # the largest field is truncated first (pg_restore_stderr → pg_restore_stdout
+    # → verify_sql_results) until the serialised size fits.
+    # 0 disables the cap (unbounded; use only in dev/test).
+    maint_backup_forensic_max_bytes: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_FORENSIC_MAX_BYTES", "262144")))
+    # Phase 8 §8.13.1 — model-artifact backup discipline.
+    # After a worst-case restore, the trainer can re-derive a byte-equivalent
+    # artifact from the calibration/outcome rows referenced in the lineage
+    # sidecar within this many hours of latency.  Used by the ops runbook
+    # to set the SLA expectation; not enforced in-process today.
+    maint_backup_model_reproducibility_window_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MODEL_REPRODUCIBILITY_WINDOW_H", "24")))
+    # Retention days for model tarballs in the offsite bucket (shorter than
+    # the PG retention because models are reproducible from Postgres rows).
+    maint_backup_model_offsite_retention_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MODEL_OFFSITE_RETENTION_DAYS", "30")))
+    # Debounce window (hours) for sec.alert.v1{kind=backup_model_lineage_missing}
+    # per predictor_id.  A predictor whose artifacts are persistently sidecar-free
+    # re-alerts at most once per window so a misconfigured trainer does not flood
+    # the bus.  Set to 0 to disable debounce (useful in tests).
+    maint_backup_model_lineage_missing_debounce_h: int = field(default_factory=lambda: int(os.getenv("NEGELIR_INFRA_MAINT_BACKUP_MODEL_LINEAGE_MISSING_DEBOUNCE_H", "24")))
+    # Phase 8 §8.4 — source-watcher summarizer graduation gate.
+    # The summarizer may only enable when a pinned model id is
+    # configured AND a startup reachability probe can contact the
+    # summarizer endpoint from the agent's network namespace.
+    source_watcher_summarizer_enabled: bool = field(default_factory=lambda: os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_ENABLED", "false").lower() in ("true", "1", "yes"))
+    source_watcher_summarizer_model_id: str = field(default_factory=lambda: os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_MODEL_ID", ""))
+    source_watcher_summarizer_probe_url: str = field(default_factory=lambda: os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_PROBE_URL", ""))
+    source_watcher_summarizer_probe_timeout_sec: float = field(default_factory=lambda: float(os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_PROBE_TIMEOUT_SEC", "2.0")))
+    source_watcher_summarizer_max_tokens_per_call: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_CALL", "4096")))
+    source_watcher_summarizer_max_tokens_per_day: int = field(default_factory=lambda: int(os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_DAY", "50000")))
+    source_watcher_summarizer_ledger_path: str = field(default_factory=lambda: os.getenv("NEGELIR_DATASOURCE_SOURCE_WATCHER_SUMMARIZER_LEDGER_PATH", "data/maint/summarizer_ledger.json"))
+
+    # Bootstrap / data validation
+    bootstrap_min_matches: int = field(default_factory=lambda: int(os.getenv(
+        "BOOTSTRAP_MIN_MATCHES", "100"
+    )))
+
+    # Feature-vector range validation (roadmap §5.6.2 firewall).
+    # Override via NEGELIR_DATASOURCE_FEATURE_RANGES_JSON='{"elo":[-500,3500], ...}'.
+    _feature_ranges_raw: str = field(default_factory=lambda: os.getenv(
+        "NEGELIR_DATASOURCE_FEATURE_RANGES_JSON", ""
+    ))
+
+    @property
+    def feature_ranges(self) -> dict[str, tuple[float, float]]:
+        """
+        Mapping of feature-name substring → (lo, hi) clamp range.
+        Defaults match roadmap §5.6.2 firewall spec; override via
+        NEGELIR_DATASOURCE_FEATURE_RANGES_JSON for league-specific tuning.
+        """
+        defaults: dict[str, tuple[float, float]] = {
+            "elo":       (-500.0, 3500.0),
+            "ratio":     (0.0, 1.0),
+            "pct":       (0.0, 100.0),
+            "norm":      (0.0, 1.0),
+            "sentiment": (-1.0, 1.0),
+            "optimism":  (-1.0, 1.0),
+            "sin":       (-1.0, 1.0),
+            "cos":       (-1.0, 1.0),
+            "flag":      (0.0, 1.0),
+            "age":       (15.0, 45.0),
+            "scored":    (0.0, 10.0),
+            "conceded":  (0.0, 10.0),
+            "yellows":   (0.0, 10.0),
+            "fouls":     (0.0, 40.0),
+            "cards":     (0.0, 15.0),
+            "bayesian":  (0.0, 1.0),
+            "sos":       (800.0, 2200.0),
+            "default":   (-100.0, 100.0),
+        }
+        raw = self._feature_ranges_raw.strip()
+        if not raw:
+            return defaults
+        try:
+            parsed = json.loads(raw)
+            return {k: (float(v[0]), float(v[1])) for k, v in parsed.items()}
+        except (ValueError, TypeError, KeyError, IndexError):
+            return defaults
+
+    # Paths
+    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "/data"))
+    model_dir: str = field(default_factory=lambda: os.getenv("MODEL_DIR", "/data/models"))
+    report_dir: str = field(default_factory=lambda: os.getenv("NEGELIR_DATASOURCE_REPORT_DIR", "/data/reports"))
+
+    # Phase 3 — Training pipeline thresholds (env-overridable)
+    training_thresholds_model_acc: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_THRESHOLD_MODEL_ACC", "0.50"
+    )))
+    training_thresholds_holdout_acc: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_THRESHOLD_HOLDOUT_ACC", "0.50"
+    )))
+    training_thresholds_quarantine_max: float = field(default_factory=lambda: float(os.getenv(
+        "NEGELIR_DATASOURCE_THRESHOLD_QUARANTINE_MAX", "0.10"
+    )))
+    training_thresholds_min_holdout_matches: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_THRESHOLD_MIN_HOLDOUT_MATCHES", "5"
+    )))
+    verification_window_weeks: int = field(default_factory=lambda: int(os.getenv(
+        "NEGELIR_DATASOURCE_VERIFICATION_WINDOW_WEEKS", "4"
+    )))
+
+    @property
+    def training_thresholds(self) -> dict[str, float | int]:
+        """Phase 3: numeric thresholds driving pipeline pass/fail verdict."""
+        return {
+            "model_acc": self.training_thresholds_model_acc,
+            "ensemble_acc": self.training_thresholds_holdout_acc,  # legacy key alias
+            "holdout_acc": self.training_thresholds_holdout_acc,
+            "quarantine_max": self.training_thresholds_quarantine_max,
+            "min_holdout_matches": self.training_thresholds_min_holdout_matches,
+        }
+
+    @property
+    def pg_dsn(self) -> str:
+        return f"host={self.pg_host} port={self.pg_port} dbname={self.pg_db} user={self.pg_user} password={self.pg_password}"
+
+    @property
+    def pg_dsn_datasource_writer(self) -> str:
+        return f"host={self.pg_host} port={self.pg_port} dbname={self.pg_db} user=datasource_writer password={self.pg_password}"
+
+    @property
+    def pg_dsn_swarm_reader(self) -> str:
+        return f"host={self.pg_host} port={self.pg_port} dbname={self.pg_db} user=swarm_reader password={self.pg_password}"
+
+    @property
+    def pg_dsn_server_reader(self) -> str:
+        return f"host={self.pg_host} port={self.pg_port} dbname={self.pg_db} user=server_reader password={self.pg_password}"
+
+    @property
+    def pg_dsn_patcher_writer(self) -> str:
+        return f"host={self.pg_host} port={self.pg_port} dbname={self.pg_db} user=patcher_writer password={self.pg_password}"
+
+    @property
+    def pg_url(self) -> str:
+        return f"postgresql://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_db}"
+
+    @property
+    def proofreader_quorum(self) -> int:
+        """Phase 6.1: minimum distinct accept/warn verdicts required
+        for the aggregator to publish `predict.approved.v1`. Computed
+        as ⌊N/2⌋+1 from the length of
+        ``swarm.agents.proofreader.replicas.PROOFREADER_POLICY_CLASSES``
+        (the single source of truth for replica count; see Phase-6
+        audit F3-1). Imported lazily to avoid a config↔swarm import
+        cycle. Always ≥1.
+        """
+        # Local import: ai/common must not depend on ai/swarm at
+        # module load time. The roster is a module-level constant so
+        # the import is effectively free after the first call.
+        from ai.swarm.agents.proofreader.replicas import (
+            PROOFREADER_POLICY_CLASSES,
+        )
+
+        n = max(len(PROOFREADER_POLICY_CLASSES), 1)
+        return (n // 2) + 1
+
+    # ── Phase 8 §8.1 resolved paths + parsed critical-agent set ────────
+    @property
+    def opsctl_critical_agents_set(self) -> frozenset[str]:
+        """Comma-separated agent ids (whitespace-tolerant) that require
+        typed-token confirmation for destructive ops console commands."""
+        return frozenset(
+            tok.strip()
+            for tok in self.opsctl_critical_agents.split(",")
+            if tok.strip()
+        )
+
+    @property
+    def opsctl_audit_path_resolved(self) -> str:
+        """Empty ``opsctl_audit_path`` → ``<data_dir>/maint/opsctl_audit.csv``."""
+        if self.opsctl_audit_path:
+            return self.opsctl_audit_path
+        return os.path.join(self.data_dir, "maint", "opsctl_audit.csv")
+
+    @property
+    def opsctl_spool_dir_resolved(self) -> str:
+        """Empty ``opsctl_spool_dir`` → ``<data_dir>/maint/opsctl_spool``."""
+        if self.opsctl_spool_dir:
+            return self.opsctl_spool_dir
+        return os.path.join(self.data_dir, "maint", "opsctl_spool")
+
+    @property
+    def opsctl_lock_dir_resolved(self) -> str:
+        """Empty ``opsctl_lock_dir`` → ``<data_dir>/maint/opsctl_locks``.
+
+        Per ROADMAP §8.1 binding, the ops console takes a per-(host,
+        kind, target) advisory lockfile here via :func:`fcntl.flock`
+        non-blocking. Stale locks (no live holder, mtime older than
+        ``opsctl_ack_timeout_ms × opsctl_lock_stale_factor``) are
+        reaped on the next acquire.
+        """
+        if self.opsctl_lock_dir:
+            return self.opsctl_lock_dir
+        return os.path.join(self.data_dir, "maint", "opsctl_locks")
+
+    @property
+    def maint_audit_per_kind_details_max_bytes_parsed(self) -> "dict[str, int]":
+        """Parse ``maint_audit_per_kind_details_max_bytes`` (JSON str) → dict.
+
+        Keys are ``maint.event.v1`` kind strings; values are byte caps.
+        The ``"default"`` key provides the fallback for unlisted kinds.
+        Falls back to the ROADMAP §8.15.5 defaults on parse failure (malformed
+        values are caught by ``validate()`` at boot).
+        """
+        import json as _json
+        _defaults = {
+            "dlq_escalated": 8192,
+            "schema_drift_detected": 4096,
+            "backup_dump_file_corrupted": 8192,
+            "default": 2048,
+        }
+        try:
+            parsed = {k: int(v) for k, v in _json.loads(
+                self.maint_audit_per_kind_details_max_bytes
+            ).items()}
+            return parsed
+        except (ValueError, TypeError, AttributeError):
+            return _defaults
+
+    @property
+    def maint_audit_retention_overrides_parsed(self) -> "dict[str, int]":
+        """Parse ``maint_audit_retention_days_overrides`` (JSON str) → dict.
+
+        Used by the partition prune / pre-creation jobs to apply per-kind
+        retention cutoffs.  Falls back to the §8.9 default (``pii_erased:
+        2555``) when the env var is absent or malformed — validated at boot
+        by ``validate()`` so malformed values only reach this path in tests.
+        """
+        import json as _json
+        try:
+            return {k: int(v) for k, v in _json.loads(
+                self.maint_audit_retention_days_overrides
+            ).items()}
+        except (ValueError, TypeError, AttributeError):
+            return {"pii_erased": 2555}
+
+    def validate(self, *, strict: bool = False) -> list[str]:
+        """
+        Sanity-check configuration values. Returns list of issue strings.
+        When strict=True, raises ValueError on any issue.
+
+        Numeric ranges, port bounds, and probability fractions are validated.
+        Empty/missing secrets are reported but never echoed back.
+        """
+        issues: list[str] = []
+
+        def _bounded(name: str, value, lo, hi, *, allow_eq_hi: bool = True):
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                issues.append(f"{name}: not numeric ({value!r})")
+                return
+            ok = (lo <= v <= hi) if allow_eq_hi else (lo <= v < hi)
+            if not ok:
+                issues.append(f"{name}={v} outside [{lo}, {hi}]")
+
+        # Ports
+        _bounded("pg_port", self.pg_port, 1, 65535)
+        _bounded("redis_port", self.redis_port, 1, 65535)
+        _bounded("swarm_metrics_port", self.swarm_metrics_port, 1, 65535)
+        _bounded("telemetry_metrics_port", self.telemetry_metrics_port, 1, 65535)
+        _bounded("categorizer_min_conf", self.categorizer_min_conf, 0.0, 1.0)
+        _bounded("scrape_http_max_retries", self.scrape_http_max_retries, 0, 100)
+        _bounded("cache_record_ttl_sec", self.cache_record_ttl_sec, 1, 86400 * 30)
+        _bounded("cache_prediction_ttl_sec", self.cache_prediction_ttl_sec, 1, 86400 * 30)
+        _bounded("reactor_max_event_age_sec", self.reactor_max_event_age_sec, 1, 86400 * 365)
+        _bounded("reactor_ledger_max_size", self.reactor_ledger_max_size, 1, 10_000_000)
+        if self.scrape_profile not in ("mock", "real"):
+            issues.append(
+                f"scrape_profile={self.scrape_profile!r} not in ('mock', 'real')"
+            )
+        if self.profile not in ("mock", "prod"):
+            issues.append(
+                f"profile={self.profile!r} not in ('mock', 'prod')"
+            )
+
+        # Telemetry metrics bind: minimal sanity. Reject empty / whitespace
+        # strings so we never silently bind to "" (= 0.0.0.0). A full
+        # IP/hostname grammar isn't worth re-implementing — `socket.bind`
+        # will reject anything truly malformed at startup.
+        if not self.telemetry_metrics_bind or not self.telemetry_metrics_bind.strip():
+            issues.append("telemetry_metrics_bind must be a non-empty host/IP")
+
+        # Swarm bus kind enum
+        _swarm_bus_kinds = {"redis", "memory"}
+        if self.swarm_bus_kind not in _swarm_bus_kinds:
+            issues.append(
+                f"swarm_bus_kind={self.swarm_bus_kind!r} must be one of "
+                f"{sorted(_swarm_bus_kinds)}"
+            )
+
+        # Probability / fraction fields
+        _bounded("drift_accuracy_floor", self.drift_accuracy_floor, 0.0, 1.0)
+        _bounded("drift_brier_ceiling", self.drift_brier_ceiling, 0.0, 1.0)
+        _bounded("training_noise_pct", self.training_noise_pct, 0.0, 1.0)
+        _bounded("training_test_split", self.training_test_split, 0.0, 1.0, allow_eq_hi=False)
+        _bounded("stale_confidence_penalty", self.stale_confidence_penalty, 0.0, 1.0)
+        _bounded("training_thresholds_model_acc", self.training_thresholds_model_acc, 0.0, 1.0)
+        _bounded("training_thresholds_holdout_acc", self.training_thresholds_holdout_acc, 0.0, 1.0)
+        _bounded("training_thresholds_quarantine_max", self.training_thresholds_quarantine_max, 0.0, 1.0)
+        _bounded("nlp_morph_min_confidence", self.nlp_morph_min_confidence, 0.0, 1.0)
+        _bounded("nlp_flame_capture_overhead_floor_pct", self.nlp_flame_capture_overhead_floor_pct, 0.0, 100.0)
+
+        if not isinstance(self.nlp_morph_context_radius, int) or self.nlp_morph_context_radius < 0:
+            issues.append(
+                f"nlp_morph_context_radius={self.nlp_morph_context_radius} must be an integer >= 0"
+            )
+
+        # Positive integers
+        for name, value in (
+            ("drift_accuracy_window", self.drift_accuracy_window),
+            ("training_min_matches", self.training_min_matches),
+            ("source_failure_threshold", self.source_failure_threshold),
+            ("stale_threshold_seconds", self.stale_threshold_seconds),
+            ("telemetry_max_stream_len", self.telemetry_max_stream_len),
+            ("server_fetch_timeout", self.server_fetch_timeout),
+            ("scrape_trigger_timeout", self.scrape_trigger_timeout),
+            ("health_check_timeout", self.health_check_timeout),
+            ("mackolik_http_timeout", self.mackolik_http_timeout),
+            ("scrape_http_timeout", self.scrape_http_timeout),
+            ("footballdata_http_timeout", self.footballdata_http_timeout),
+            ("redis_socket_timeout", self.redis_socket_timeout),
+            ("training_thresholds_min_holdout_matches", self.training_thresholds_min_holdout_matches),
+            ("verification_window_weeks", self.verification_window_weeks),
+            ("bootstrap_min_matches", self.bootstrap_min_matches),
+            ("swarm_heartbeat_sec", self.swarm_heartbeat_sec),
+            ("swarm_registry_ttl_sec", self.swarm_registry_ttl_sec),
+            ("swarm_max_in_flight", self.swarm_max_in_flight),
+            ("swarm_retry_budget", self.swarm_retry_budget),
+            ("swarm_dlq_max_len", self.swarm_dlq_max_len),
+            ("swarm_pending_claim_sec", self.swarm_pending_claim_sec),
+            ("nlp_eval_corpus_pr_max_added_rows_per_quarter", self.nlp_eval_corpus_pr_max_added_rows_per_quarter),
+            # Phase 5
+            ("consensus_window_ms", self.consensus_window_ms),
+            ("consensus_min_voters", self.consensus_min_voters),
+            ("consensus_brier_window", self.consensus_brier_window),
+            ("predictor_max_vram_mb", self.predictor_max_vram_mb),
+            ("trainer_debounce_sec", self.trainer_debounce_sec),
+            ("backtest_window_weeks", self.backtest_window_weeks),
+            ("backtest_min_n", self.backtest_min_n),
+            ("api_consensus_overhead_ms", self.api_consensus_overhead_ms),
+            # Phase 6
+            ("proofreader_quorum_window_ms", self.proofreader_quorum_window_ms),
+            ("proofreader_aggregator_max_pending", self.proofreader_aggregator_max_pending),
+            ("swarm_flush_interval_ms", self.swarm_flush_interval_ms),
+            ("drift_window_size", self.drift_window_size),
+            ("drift_max_pending", self.drift_max_pending),
+            ("drift_max_settled", self.drift_max_settled),
+            ("nlp_morph_topk", self.nlp_morph_topk),
+            ("nlp_productive_peel_max_depth", self.nlp_productive_peel_max_depth),
+            ("nlp_morph_ambiguous_max_per_query", self.nlp_morph_ambiguous_max_per_query),
+        ):
+            if not isinstance(value, int) or value <= 0:
+                issues.append(f"{name}={value} must be a positive integer")
+
+        # Phase 5 fractions
+        _bounded("consensus_min_confidence", self.consensus_min_confidence, 0.0, 1.0)
+        _bounded("backtest_swarm_floor_pct", self.backtest_swarm_floor_pct, 0.0, 1.0)
+        _bounded(
+            "consensus_overflow_flag_min_interval_sec",
+            self.consensus_overflow_flag_min_interval_sec,
+            0.0,
+            3600.0,
+        )
+
+        # Phase 6.2 — proofreader check thresholds
+        _bounded("proofreader_sanity_eps", self.proofreader_sanity_eps, 0.0, 1.0)
+        _bounded("proofreader_plausibility_max_prob", self.proofreader_plausibility_max_prob, 0.0, 1.0)
+        _bounded("proofreader_grid_consistency_tol", self.proofreader_grid_consistency_tol, 0.0, 1.0)
+
+        # Phase 6.3 — drift agent (Brier *ceiling* — see field docstring)
+        _bounded("drift_brier_ceiling", self.drift_brier_ceiling, 0.0, 1.0)
+        _bounded("drift_pvalue", self.drift_pvalue, 0.0, 1.0)
+
+        # ── Phase 7 — Defense-agent knob validation ───────────────
+        # Bytes (not codepoints) — see `sec_input_max_len` docstring.
+        _bounded("sec_input_max_len", self.sec_input_max_len, 1, 1_048_576)
+        _bounded("sec_input_gateway_max_latency_ms", self.sec_input_gateway_max_latency_ms, 1, 60_000)
+        _bounded("sec_input_classifier_max_latency_ms", self.sec_input_classifier_max_latency_ms, 1, 60_000)
+        _bounded("sec_input_classifier_batch_size", self.sec_input_classifier_batch_size, 1, 1024)
+        _bounded("sec_input_classifier_batch_window_ms", self.sec_input_classifier_batch_window_ms, 1, 60_000)
+        _bounded("sec_input_classifier_max_pending", self.sec_input_classifier_max_pending, 1, 1_000_000)
+        _bounded("sec_input_breaker_open_s", self.sec_input_breaker_open_s, 1, 86_400)
+        _bounded("sec_input_pattern_reload_s", self.sec_input_pattern_reload_s, 1, 86_400)
+        _bounded("sec_input_allowlist_reload_s", self.sec_input_allowlist_reload_s, 1, 86_400)
+        _bounded(
+            "sec_input_allowlist_hmac_key_max_age_days",
+            self.sec_input_allowlist_hmac_key_max_age_days,
+            1,
+            3650,
+        )
+        _SEC_DEVICES = {"auto", "cpu", "cuda", "rocm", "npu"}
+        if self.sec_input_classifier_device not in _SEC_DEVICES:
+            issues.append(
+                f"sec_input_classifier_device={self.sec_input_classifier_device!r} "
+                f"must be one of {sorted(_SEC_DEVICES)}"
+            )
+        _SEC_BATCH = {"auto", "true", "false"}
+        if self.sec_input_classifier_batch_enabled not in _SEC_BATCH:
+            issues.append(
+                f"sec_input_classifier_batch_enabled="
+                f"{self.sec_input_classifier_batch_enabled!r} must be one of "
+                f"{sorted(_SEC_BATCH)}"
+            )
+        _bounded("sec_quarantine_ttl_days", self.sec_quarantine_ttl_days, 1, 3650)
+        _bounded("sec_quarantine_payload_max_bytes", self.sec_quarantine_payload_max_bytes, 1, 16 * 1024 * 1024)
+        _bounded("sec_quarantine_producer_queue_max", self.sec_quarantine_producer_queue_max, 1, 1_000_000)
+        _bounded("sec_quarantine_storage_lag_alert_ms", self.sec_quarantine_storage_lag_alert_ms, 1, 86_400_000)
+
+        _bounded("sec_scrape_size_delta_pct", self.sec_scrape_size_delta_pct, 0.0, 100_000.0)
+        _bounded("sec_scrape_inflate_ratio_max", self.sec_scrape_inflate_ratio_max, 1.0, 10_000.0)
+        _bounded("sec_scrape_warmup_samples", self.sec_scrape_warmup_samples, 0, 100_000)
+        _bounded("sec_scrape_baseline_flush_s", self.sec_scrape_baseline_flush_s, 1, 86_400)
+        _bounded("sec_scrape_max_pending", self.sec_scrape_max_pending, 1, 10_000_000)
+        _bounded("sec_scrape_dedup_window", self.sec_scrape_dedup_window, 1, 10_000_000)
+        # SimHash distance is bits-out-of-64; >= 32 is essentially "always trip".
+        _bounded("sec_scrape_simhash_max_distance", self.sec_scrape_simhash_max_distance, 0, 64)
+        _bounded("sec_scrape_dom_fingerprint_max_nodes", self.sec_scrape_dom_fingerprint_max_nodes, 1, 1_000_000)
+        _bounded("sec_scrape_simhash_ring_size", self.sec_scrape_simhash_ring_size, 1, 1024)
+
+        _bounded("sec_rate_pre_auth_capacity", self.sec_rate_pre_auth_capacity, 1, 1_000_000)
+        _bounded("sec_rate_pre_auth_refill_per_s", self.sec_rate_pre_auth_refill_per_s, 0.0, 1e6)
+        _bounded("sec_rate_post_auth_capacity", self.sec_rate_post_auth_capacity, 1, 10_000_000)
+        _bounded("sec_rate_post_auth_refill_per_s", self.sec_rate_post_auth_refill_per_s, 0.0, 1e6)
+        _bounded("sec_rate_bucket_idle_ttl_s", self.sec_rate_bucket_idle_ttl_s, 1, 86_400 * 30)
+        _bounded("sec_rate_max_subjects", self.sec_rate_max_subjects, 1, 100_000_000)
+        _bounded("sec_rate_ipv4_prefix", self.sec_rate_ipv4_prefix, 0, 32)
+        _bounded("sec_rate_ipv6_prefix", self.sec_rate_ipv6_prefix, 0, 128)
+        _bounded("sec_rate_redis_timeout_ms", self.sec_rate_redis_timeout_ms, 1, 60_000)
+        _bounded("sec_rate_secondary_capacity", self.sec_rate_secondary_capacity, 1, 10_000_000)
+        _bounded("sec_rate_secondary_refill_per_s", self.sec_rate_secondary_refill_per_s, 0.0, 1e6)
+        _bounded("sec_rate_default_cost", self.sec_rate_default_cost, 0, 1_000_000)
+        _bounded("sec_rate_eviction_rate_alert_per_s", self.sec_rate_eviction_rate_alert_per_s, 0.0, 1e9)
+        _bounded("sec_rate_eviction_rate_window_s", self.sec_rate_eviction_rate_window_s, 1, 86_400)
+
+        _bounded("sec_burst_threshold", self.sec_burst_threshold, 1, 100_000_000)
+        _bounded("sec_burst_window_ms", self.sec_burst_window_ms, 1, 86_400_000)
+        _bounded("sec_burst_dedup_window", self.sec_burst_dedup_window, 1, 10_000_000)
+
+        _bounded("sec_denylist_ttl_s", self.sec_denylist_ttl_s, 1, 86_400 * 30)
+        _bounded("sec_denylist_escalation_factor", self.sec_denylist_escalation_factor, 1.0, 1e6)
+        _bounded("sec_denylist_max_entries", self.sec_denylist_max_entries, 1, 100_000_000)
+
+        _bounded("sec_alert_debounce_ttl_s", self.sec_alert_debounce_ttl_s, 0, 86_400)
+        _bounded("sec_alert_debouncer_max_buckets", self.sec_alert_debouncer_max_buckets, 1, 10_000_000)
+        _bounded("qa_request_v1_dedup_window_s", self.qa_request_v1_dedup_window_s, 1, 86_400)
+
+        # Phase 9 §9.7 — burst budget.
+        _bounded("api_burst_capacity", self.api_burst_capacity, 1, 10_000_000)
+        _bounded("api_burst_refill_per_s", self.api_burst_refill_per_s, 0.001, 1e6)
+
+        # Phase 9 §9.13 — demo API base URL must be http:// or https://.
+        if not (
+            self.api_demo_base_url.startswith("http://")
+            or self.api_demo_base_url.startswith("https://")
+        ):
+            issues.append(
+                "api_demo_base_url must start with http:// or https://"
+            )
+
+        # Phase 8 §8.1 — ops console budgets + ack payload caps.
+        _bounded("opsctl_ack_timeout_ms", self.opsctl_ack_timeout_ms, 1, 600_000)
+        _bounded("opsctl_ack_timeout_ms_live_demo", self.opsctl_ack_timeout_ms_live_demo, 1, 60_000)
+        if self.opsctl_ack_timeout_ms_live_demo >= self.opsctl_ack_timeout_ms:
+            issues.append(
+                "opsctl_ack_timeout_ms_live_demo must be lower than "
+                "opsctl_ack_timeout_ms"
+            )
+        _bounded("opsctl_nlp_kill_max_ttl_s", self.opsctl_nlp_kill_max_ttl_s, 1, 86_400)
+        _bounded("opsctl_flame_capture_ttl_h", self.opsctl_flame_capture_ttl_h, 1, 168)
+        _bounded(
+            "opsctl_flame_capture_max_armed_per_h",
+            self.opsctl_flame_capture_max_armed_per_h,
+            1,
+            1_000,
+        )
+        _bounded("opsctl_spool_max_entries", self.opsctl_spool_max_entries, 1, 1_000_000)
+        _bounded("opsctl_spool_flush_max_per_run", self.opsctl_spool_flush_max_per_run, 0, 1_000_000)
+        _bounded("maint_ack_payload_max_bytes", self.maint_ack_payload_max_bytes, 64, 1_048_576)
+        _bounded("maint_ack_reason_max_bytes", self.maint_ack_reason_max_bytes, 16, 65_536)
+        _bounded("maint_ack_details_max_bytes", self.maint_ack_details_max_bytes, 64, 1_048_576)
+        # Reason + details together must fit inside the total payload cap
+        # with room for the fixed-shape JSON wrapper (~256 bytes for the
+        # request_id/accepted/accepted_by/processed_at/attempt fields).
+        _ACK_FIXED_OVERHEAD = 256
+        if (
+            self.maint_ack_reason_max_bytes
+            + self.maint_ack_details_max_bytes
+            + _ACK_FIXED_OVERHEAD
+            > self.maint_ack_payload_max_bytes
+        ):
+            issues.append(
+                "maint_ack_payload_max_bytes is too small for "
+                "maint_ack_reason_max_bytes + maint_ack_details_max_bytes "
+                f"(+ {_ACK_FIXED_OVERHEAD}B fixed overhead)"
+            )
+
+        # Phase 8 §8.2 — scaler.
+        _bounded("maint_scaler_decision_window_ms", self.maint_scaler_decision_window_ms, 100, 86_400_000)
+        _bounded("maint_scaler_max_targets", self.maint_scaler_max_targets, 1, 1_000_000)
+        _bounded("maint_scaler_max_replicas", self.maint_scaler_max_replicas, 1, 10_000)
+        # Phase 8 §8.16.1 — default-policy fallback. 0 = disabled
+        # (legacy behavior: unconfigured agents inherit
+        # maint_scaler_max_replicas with no alert). When enabled,
+        # floor is 2 (1 would be indistinguishable from "do not
+        # scale me" and would silently freeze unconfigured agents).
+        if self.maint_scaler_default_max_replicas != 0:
+            _bounded("maint_scaler_default_max_replicas", self.maint_scaler_default_max_replicas, 2, 10_000)
+        _bounded("maint_scaler_min_replicas", self.maint_scaler_min_replicas, 0, 10_000)
+        _bounded("maint_scaler_scale_up_queue_depth", self.maint_scaler_scale_up_queue_depth, 1, 10_000_000)
+        _bounded("maint_scaler_scale_down_queue_depth", self.maint_scaler_scale_down_queue_depth, 0, 10_000_000)
+        _bounded("maint_scaler_scale_up_head_age_s", self.maint_scaler_scale_up_head_age_s, 0.0, 86_400.0)
+        _bounded("maint_scaler_hysteresis_windows", self.maint_scaler_hysteresis_windows, 1, 1_000)
+        _bounded("maint_scaler_hysteresis_grace", self.maint_scaler_hysteresis_grace, 0, 1_000)
+        _bounded("maint_scaler_max_changes_per_window", self.maint_scaler_max_changes_per_window, 1, 1_000)
+        _bounded("maint_scaler_manual_pin_ttl_s", self.maint_scaler_manual_pin_ttl_s, 1, 604_800)
+        _bounded("maint_scaler_warmup_replicas", self.maint_scaler_warmup_replicas, 1, 10_000)
+        _bounded("maint_scaler_global_max_replicas", self.maint_scaler_global_max_replicas, 1, 100_000)
+        _bounded("maint_scaler_min_decision_interval_s", self.maint_scaler_min_decision_interval_s, 0.0, 86_400.0)
+        _bounded("maint_scaler_runtime_timeout_s", self.maint_scaler_runtime_timeout_s, 1.0, 3_600.0)
+        _bounded("maint_scaler_vram_headroom_mb", self.maint_scaler_vram_headroom_mb, 0, 1_048_576)
+        _bounded("maint_scaler_vram_pessimistic_threshold_pct", self.maint_scaler_vram_pessimistic_threshold_pct, 0.0, 1.0)
+        _bounded("maint_scaler_cpu_budget_pct", self.maint_scaler_cpu_budget_pct, 0.0, 1.0)
+        _bounded("maint_scaler_scale_down_grace_windows", self.maint_scaler_scale_down_grace_windows, 0, 1_000)
+        _bounded("maint_scaler_signal_window_samples", self.maint_scaler_signal_window_samples, 0, 10_000)
+        _bounded("maint_scaler_target_load_per_replica", self.maint_scaler_target_load_per_replica, 0, 10_000_000)
+        _bounded("maint_scaler_max_step_per_window", self.maint_scaler_max_step_per_window, 1, 10_000)
+        # Phase 8 §8.2 observability — histogram bucket CSV must
+        # parse to at least one strictly-positive float; values
+        # outside (0, 86_400] are rejected to keep the bucket count
+        # small and the bound monotonic.
+        if self.maint_scaler_runtime_histogram_buckets.strip():
+            seen: set[float] = set()
+            for raw in self.maint_scaler_runtime_histogram_buckets.split(","):
+                tok = raw.strip()
+                if not tok:
+                    continue
+                try:
+                    v = float(tok)
+                except ValueError:
+                    issues.append(
+                        f"maint_scaler_runtime_histogram_buckets entry "
+                        f"{tok!r} is not a float"
+                    )
+                    continue
+                if not (0.0 < v <= 86_400.0):
+                    issues.append(
+                        f"maint_scaler_runtime_histogram_buckets entry "
+                        f"{v!r} out of (0, 86400]"
+                    )
+                    continue
+                seen.add(v)
+            if not seen:
+                issues.append(
+                    "maint_scaler_runtime_histogram_buckets parsed "
+                    "to no usable buckets"
+                )
+        if self.maint_runtime not in ("none", "compose", "k8s"):
+            issues.append(
+                f"maint_runtime={self.maint_runtime!r} must be one of: "
+                "none, compose, k8s"
+            )
+        if self.maint_scaler_clock_source not in ("auto", "boottime", "monotonic"):
+            issues.append(
+                f"maint_scaler_clock_source={self.maint_scaler_clock_source!r} "
+                "must be one of: auto, boottime, monotonic"
+            )
+        if self.maint_clock_suspend_alert_s < 0:
+            issues.append(
+                f"maint_clock_suspend_alert_s={self.maint_clock_suspend_alert_s!r} "
+                "must be >= 0 (0 = disabled)"
+            )
+        # Per-agent overrides parse-validation: each non-empty entry
+        # MUST be ``name=int`` with int in [min, max-replicas-cap].
+        if self.maint_scaler_max_replicas_overrides_csv.strip():
+            for raw in self.maint_scaler_max_replicas_overrides_csv.split(","):
+                tok = raw.strip()
+                if not tok:
+                    continue
+                if "=" not in tok:
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv entry "
+                        f"{tok!r} is not 'agent=N'"
+                    )
+                    continue
+                name, _, value = tok.partition("=")
+                name = name.strip()
+                if not name:
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv entry "
+                        f"{tok!r} has empty agent name"
+                    )
+                    continue
+                try:
+                    n = int(value.strip())
+                except ValueError:
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv[{name}]"
+                        f"={value!r} is not an integer"
+                    )
+                    continue
+                if not (1 <= n <= 10_000):
+                    issues.append(
+                        f"maint_scaler_max_replicas_overrides_csv[{name}]"
+                        f"={n} out of [1, 10000]"
+                    )
+
+        # Phase 8 §8.5 — DLQ supervisor.
+        _bounded("maint_dlq_per_topic_quota", self.maint_dlq_per_topic_quota, 1, 10_000_000)
+        _bounded("maint_dlq_replay_backoff_s", self.maint_dlq_replay_backoff_s, 1, 86_400)
+        _bounded("maint_dlq_backoff_lru", self.maint_dlq_backoff_lru, 1, 1_000_000)
+        _bounded("maint_dlq_visit_max", self.maint_dlq_visit_max, 1, 1_000)
+        _bounded("maint_dlq_per_topic_max_per_min", self.maint_dlq_per_topic_max_per_min, 1, 1_000_000)
+        _bounded("maint_dlq_visit_lru", self.maint_dlq_visit_lru, 1, 1_000_000)
+        _bounded("maint_dlq_max_replays_per_tick", self.maint_dlq_max_replays_per_tick, 1, 1_000_000)
+        _bounded("maint_dlq_consumer_broken_threshold", self.maint_dlq_consumer_broken_threshold, 2, 1000)
+        _bounded("maint_dlq_consumer_broken_window_s", self.maint_dlq_consumer_broken_window_s, 1, 86_400)
+        # Allow-list parse: every non-empty entry MUST end in ``.dlq``.
+        if self.maint_dlq_replay_topics_allow_csv.strip():
+            for raw in self.maint_dlq_replay_topics_allow_csv.split(","):
+                tok = raw.strip()
+                if tok and not tok.endswith(".dlq"):
+                    issues.append(
+                        f"maint_dlq_replay_topics_allow_csv entry "
+                        f"{tok!r} must end in '.dlq'"
+                    )
+        for tok in self.maint_dlq_replay_allow_overrides:
+            if not tok.endswith(".dlq"):
+                issues.append(
+                    f"maint_dlq_replay_allow_overrides entry "
+                    f"{tok!r} must end in '.dlq'"
+                )
+
+        # Phase 8 §8.6 — schema sentinel.
+        _bounded("maint_schema_sample_rate_per_s", self.maint_schema_sample_rate_per_s, 0.0, 10_000.0)
+        _bounded("maint_schema_burst", self.maint_schema_burst, 1, 10_000)
+        _bounded("maint_schema_drift_debounce_s", self.maint_schema_drift_debounce_s, 1, 86_400)
+        _bounded("maint_schema_drift_lru", self.maint_schema_drift_lru, 1, 1_000_000)
+        _bounded("maint_schema_pg_check_interval_s", self.maint_schema_pg_check_interval_s, 60, 86_400)
+        # Phase 8 §8.14.7 — hard per-process validation-rate cap.
+        # Positive lower bound (≥ 1); hard ceiling 500 is the safety knob
+        # itself — exceeding it means a finger-fumble in the safety config.
+        _bounded("maint_schema_validate_max_rps", self.maint_schema_validate_max_rps, 1, 500)
+        if self.maint_schema_validate_max_rps > 500:
+            issues.append(
+                f"fail_safe_validate_rps_cap_exceeded: "
+                f"maint_schema_validate_max_rps={self.maint_schema_validate_max_rps} "
+                f"exceeds the safety ceiling of 500 — reduce to ≤ 500"
+            )
+
+        # Phase 8 §8.7 + §8.8 — sec maint.
+        _bounded("maint_sec_pattern_ttl_s", self.maint_sec_pattern_ttl_s, 1, 31_536_000)
+        _bounded("maint_sec_pattern_promote_threshold", self.maint_sec_pattern_promote_threshold, 1, 1_000_000)
+        _bounded("maint_sec_pattern_pending_ttl_days", self.maint_sec_pattern_pending_ttl_days, 1, 3_650)
+        _bounded("maint_sec_allowlist_pending_ttl_days", self.maint_sec_allowlist_pending_ttl_days, 1, 3_650)
+        _bounded("maint_sec_request_lru", self.maint_sec_request_lru, 1, 1_000_000)
+        _bounded("maint_sec_decimate_min_interval_s", self.maint_sec_decimate_min_interval_s, 1, 86_400)
+        _bounded("maint_dlq_backlog_alert", self.maint_dlq_backlog_alert, 1, 100_000_000)
+        _bounded("maint_dlq_replay_rps", self.maint_dlq_replay_rps, 1, 100_000)
+
+        # Phase 8 §8.10 — pause/resume.
+        _bounded("maint_pause_default_ttl_s", self.maint_pause_default_ttl_s, 1, 604_800)
+        _bounded("maint_pause_max_ttl_s", self.maint_pause_max_ttl_s, self.maint_pause_default_ttl_s, 604_800)
+        _bounded("maint_silence_dedup_s", self.maint_silence_dedup_s, 1, 86_400)
+        _bounded("maint_silence_alert_h", self.maint_silence_alert_h, 1, 720)
+        _bounded("maint_silence_warmup_s", self.maint_silence_warmup_s, 60, 86_400)
+        _bounded("maint_self_dlq_alert", self.maint_self_dlq_alert, 1, 1_000_000)
+        _bounded("maint_self_dlq_growth_alert", self.maint_self_dlq_growth_alert, 1, 100_000)
+        _bounded("maint_self_dlq_throttle_recovery_s", self.maint_self_dlq_throttle_recovery_s, 1, 3_600)
+        _bounded("maint_plane_lag_alert_ms", self.maint_plane_lag_alert_ms, 100, 300_000)
+        _bounded("maint_plane_lag_alert_window_s", self.maint_plane_lag_alert_window_s, 1, 3_600)
+        _bounded("sec_plane_lag_alert_ms", self.sec_plane_lag_alert_ms, 100, 300_000)
+        _bounded("sec_plane_lag_alert_window_s", self.sec_plane_lag_alert_window_s, 1, 3_600)
+        _bounded("maint_plane_recovery_window_s", self.maint_plane_recovery_window_s, 1, 3_600)
+        # Phase 8 §8.9 — bus circuit-breaker.
+        _bounded("maint_bus_fail_threshold", self.maint_bus_fail_threshold, 1, 100)
+        _bounded("maint_bus_fail_window_s", self.maint_bus_fail_window_s, 1.0, 3_600.0)
+        _bounded("maint_bus_spool_max_entries", self.maint_bus_spool_max_entries, 1, 100_000)
+        _bounded("maint_agent_spool_max_entries", self.maint_agent_spool_max_entries, 1, 100_000)
+        # Phase 10 §10.13 — NLP bus circuit breaker thresholds.
+        _bounded("nlp_bus_failure_circuit_threshold", self.nlp_bus_failure_circuit_threshold, 1, 100)
+        _bounded("nlp_spool_max_entries", self.nlp_spool_max_entries, 1, 100_000)
+
+        # Phase 8 §8.11 — backpressure.
+        _bounded("maint_backpressure_yellow_factor", self.maint_backpressure_yellow_factor, 1.0, 1_000.0)
+        _bounded("maint_backpressure_yellow_queue_depth", self.maint_backpressure_yellow_queue_depth, 1, 100_000_000)
+        _bounded("maint_backpressure_yellow_head_age_s", self.maint_backpressure_yellow_head_age_s, 0.0, 86_400.0)
+        _bounded("maint_backpressure_yellow_storage_pct", self.maint_backpressure_yellow_storage_pct, 0.0, 100.0)
+        _bounded("maint_backpressure_yellow_error_rate_per_s", self.maint_backpressure_yellow_error_rate_per_s, 0.0, 1_000_000.0)
+        _bounded("maint_backpressure_red_queue_depth", self.maint_backpressure_red_queue_depth, 1, 100_000_000)
+        _bounded("maint_backpressure_red_head_age_s", self.maint_backpressure_red_head_age_s, 0.0, 86_400.0)
+        _bounded("maint_backpressure_red_storage_pct", self.maint_backpressure_red_storage_pct, 0.0, 100.0)
+        _bounded("maint_backpressure_red_error_rate_per_s", self.maint_backpressure_red_error_rate_per_s, 0.0, 1_000_000.0)
+        # Phase 8 §8.13.2 — cumulative storage cap (0 = disabled).
+        if self.maint_storage_total_max_mb != 0:
+            _bounded("maint_storage_total_max_mb", self.maint_storage_total_max_mb, 1, 1_048_576)
+        # Phase 8 §8.15.3 advisory-lock hold-time guard. 0 disables.
+        if self.maint_advisory_lock_max_hold_ms != 0:
+            _bounded("maint_advisory_lock_max_hold_ms", self.maint_advisory_lock_max_hold_ms, 1, 3_600_000)
+        if self.maint_backpressure_yellow_queue_depth >= self.maint_backpressure_red_queue_depth:
+            issues.append("maint_backpressure_yellow_queue_depth must be < maint_backpressure_red_queue_depth")
+        if self.maint_backpressure_yellow_head_age_s >= self.maint_backpressure_red_head_age_s:
+            issues.append("maint_backpressure_yellow_head_age_s must be < maint_backpressure_red_head_age_s")
+        if self.maint_backpressure_yellow_storage_pct >= self.maint_backpressure_red_storage_pct:
+            issues.append("maint_backpressure_yellow_storage_pct must be < maint_backpressure_red_storage_pct")
+
+        # Phase 8 §8.14 — audit retention.
+        _bounded("maint_audit_partition_retention_days", self.maint_audit_partition_retention_days, 1, 36_500)
+
+        # Phase 8 §8.3 — backup agent.
+        try:
+            from xops.backup.cron import CronSyntaxError, parse_cron
+            _parsed = parse_cron(str(self.maint_backup_cron))
+            if _parsed.fires_every_minute:
+                issues.append(
+                    "maint_backup_cron resolves to every-minute firing "
+                    f"({self.maint_backup_cron!r}); refusing — set a"
+                    " specific hour/minute"
+                )
+        except CronSyntaxError as exc:
+            issues.append(f"maint_backup_cron: {exc}")
+        except ImportError:
+            # xops package not on sys.path during very-early bootstrap
+            # (e.g. some pickled-cfg unit tests). Defer to the agent's
+            # own parse at construction time.
+            pass
+        # Phase 8 §8.3 — weekly cold-verify cron.
+        try:
+            from xops.backup.cron import CronSyntaxError, parse_cron
+            _parsed_cv = parse_cron(str(self.maint_backup_cold_verify_cron))
+            if _parsed_cv.fires_every_minute:
+                issues.append(
+                    "maint_backup_cold_verify_cron resolves to every-minute "
+                    f"firing ({self.maint_backup_cold_verify_cron!r}); "
+                    "refusing — set a specific hour/minute"
+                )
+        except CronSyntaxError as exc:
+            issues.append(f"maint_backup_cold_verify_cron: {exc}")
+        except ImportError:
+            pass
+        _bounded("maint_backup_retention_days", self.maint_backup_retention_days, 1, 3650)
+        _bounded("maint_backup_retention_weeks", self.maint_backup_retention_weeks, 1, 520)
+        _bounded("maint_backup_min_free_gb", self.maint_backup_min_free_gb, 1, 100_000)
+        _bounded("maint_backup_max_skew_h", self.maint_backup_max_skew_h, 1, 8760)
+        _bounded("maint_backup_age_alert_h", self.maint_backup_age_alert_h, 1, 8760)
+        _bounded("maint_backup_clock_step_back_alert_s", self.maint_backup_clock_step_back_alert_s, 1, 86_400)
+        _bounded("maint_backup_pg_jobs", self.maint_backup_pg_jobs, 1, 64)
+        _bounded("maint_backup_pg_conn_limit", self.maint_backup_pg_conn_limit, 0, 10_000)
+        _bounded("maint_backup_pg_secret_max_age_days", self.maint_backup_pg_secret_max_age_days, 1, 3650)
+        _bounded("maint_backup_prune_batch", self.maint_backup_prune_batch, 1, 1_000_000)
+        _bounded("maint_backup_prune_max_lock_ms", self.maint_backup_prune_max_lock_ms, 1, 300_000)
+        _bounded("maint_schema_snapshot_retention_days", self.maint_schema_snapshot_retention_days, 1, 3650)
+        _bounded("swarm_dlq_pg_retention_days", self.swarm_dlq_pg_retention_days, 1, 3650)
+        _bounded("maint_audit_retention_days", self.maint_audit_retention_days, 1, 3650)
+        _bounded("opsctl_audit_max_bytes", self.opsctl_audit_max_bytes, 65536, 1_073_741_824)
+        _bounded("maint_audit_row_max_bytes", self.maint_audit_row_max_bytes, 1024, 1_048_576)
+        try:
+            import json as _json
+            kind_budgets = _json.loads(self.maint_audit_per_kind_details_max_bytes)
+            if not isinstance(kind_budgets, dict):
+                issues.append(
+                    "maint_audit_per_kind_details_max_bytes must be a JSON object "
+                    f"(got {self.maint_audit_per_kind_details_max_bytes!r})"
+                )
+            else:
+                for k, v in kind_budgets.items():
+                    if not isinstance(v, int) or v < 1:
+                        issues.append(
+                            f"maint_audit_per_kind_details_max_bytes[{k!r}]={v!r} "
+                            "must be a positive integer"
+                        )
+                    elif v > self.maint_audit_row_max_bytes:
+                        issues.append(
+                            f"maint_audit_per_kind_details_max_bytes[{k!r}]={v} "
+                            f"exceeds maint_audit_row_max_bytes={self.maint_audit_row_max_bytes}"
+                        )
+        except (ValueError, TypeError) as _perr:
+            issues.append(
+                "maint_audit_per_kind_details_max_bytes must be a valid JSON object "
+                f"(got {self.maint_audit_per_kind_details_max_bytes!r}): {_perr}"
+            )
+        try:
+            import json as _json
+            _json.loads(self.maint_audit_retention_days_overrides)
+        except (ValueError, TypeError):
+            issues.append(
+                "maint_audit_retention_days_overrides must be a valid JSON object "
+                f"(got {self.maint_audit_retention_days_overrides!r})"
+            )
+        _bounded("maint_backup_min_dr_recipients", self.maint_backup_min_dr_recipients, 1, 64)
+        _bounded("maint_backup_pvc_size_gb", self.maint_backup_pvc_size_gb, 1, 65_536)
+        _bounded("maint_backup_max_version_gap", self.maint_backup_max_version_gap, 1, 1000)
+        # Refuse `*-latest` style verify-image tags — CLAUDE.md doctrine.
+        if str(self.maint_backup_verify_pg_image).endswith(":latest") or self.maint_backup_verify_pg_image.endswith("-latest"):
+            issues.append(
+                f"maint_backup_verify_pg_image={self.maint_backup_verify_pg_image!r} "
+                f"must pin a specific tag (no *-latest)"
+            )
+        _bounded("maint_backup_pg_dump_nice_level", self.maint_backup_pg_dump_nice_level, 0, 19)
+        # §8.15.10 new knobs — allow 0 (disabled) for all three.
+        if self.maint_backup_verify_lock_timeout_s != 0:
+            _bounded("maint_backup_verify_lock_timeout_s", self.maint_backup_verify_lock_timeout_s, 1, 86_400)
+        if self.maint_backup_offsite_cred_reload_s != 0:
+            _bounded("maint_backup_offsite_cred_reload_s", self.maint_backup_offsite_cred_reload_s, 1, 86_400)
+        if self.maint_backup_offsite_credential_max_age_days != 0:
+            _bounded("maint_backup_offsite_credential_max_age_days", self.maint_backup_offsite_credential_max_age_days, 1, 3650)
+        if self.maint_backup_offsite_credential_grace_days != 0:
+            _bounded("maint_backup_offsite_credential_grace_days", self.maint_backup_offsite_credential_grace_days, 1, 365)
+        if self.maint_backup_offsite_state_max_age_h != 0:
+            _bounded("maint_backup_offsite_state_max_age_h", self.maint_backup_offsite_state_max_age_h, 1, 168)
+        if self.maint_backup_offsite_lifecycle_min_days != 0:
+            _bounded("maint_backup_offsite_lifecycle_min_days", self.maint_backup_offsite_lifecycle_min_days, 1, 365)
+        if self.maint_backup_forensic_max_bytes != 0:
+            _bounded("maint_backup_forensic_max_bytes", self.maint_backup_forensic_max_bytes, 1024, 10_485_760)
+        _bounded(
+            "source_watcher_summarizer_probe_timeout_sec",
+            self.source_watcher_summarizer_probe_timeout_sec,
+            0.1,
+            60.0,
+        )
+        _bounded(
+            "source_watcher_summarizer_max_tokens_per_call",
+            self.source_watcher_summarizer_max_tokens_per_call,
+            1,
+            131_072,
+        )
+        _bounded(
+            "source_watcher_summarizer_max_tokens_per_day",
+            self.source_watcher_summarizer_max_tokens_per_day,
+            1,
+            10_000_000,
+        )
+        if (
+            self.source_watcher_summarizer_max_tokens_per_day
+            < self.source_watcher_summarizer_max_tokens_per_call
+        ):
+            issues.append(
+                "source_watcher_summarizer_max_tokens_per_day must be >= "
+                "source_watcher_summarizer_max_tokens_per_call"
+            )
+        if not self.source_watcher_summarizer_ledger_path.strip():
+            issues.append(
+                "source_watcher_summarizer_ledger_path must be non-empty"
+            )
+        if (
+            self.source_watcher_summarizer_model_id.strip()
+            and (
+                self.source_watcher_summarizer_model_id.endswith(":latest")
+                or self.source_watcher_summarizer_model_id.endswith("-latest")
+            )
+        ):
+            issues.append(
+                "source_watcher_summarizer_model_id="
+                f"{self.source_watcher_summarizer_model_id!r} must pin a "
+                "specific model id (no *-latest)"
+            )
+        if self.source_watcher_summarizer_enabled:
+            if not self.source_watcher_summarizer_model_id.strip():
+                issues.append(
+                    "source_watcher_summarizer_enabled=true requires a non-empty "
+                    "source_watcher_summarizer_model_id"
+                )
+            if not self.source_watcher_summarizer_probe_url.strip():
+                issues.append(
+                    "source_watcher_summarizer_enabled=true requires a non-empty "
+                    "source_watcher_summarizer_probe_url"
+                )
+
+        # Hour/minute ranges
+        _bounded("schedule_daily_scrape_hour", self.schedule_daily_scrape_hour, 0, 23)
+        _bounded("schedule_outcome_check_hour", self.schedule_outcome_check_hour, 0, 23)
+        _bounded("schedule_retrain_hour", self.schedule_retrain_hour, 0, 23)
+        _bounded("schedule_daily_scrape_minute", self.schedule_daily_scrape_minute, 0, 59)
+        _bounded("schedule_outcome_check_minute", self.schedule_outcome_check_minute, 0, 59)
+
+        # Day-of-week for retrain schedule (APScheduler short-form names)
+        _ALLOWED_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+        if str(self.schedule_retrain_day).lower() not in _ALLOWED_DAYS:
+            issues.append(
+                f"schedule_retrain_day={self.schedule_retrain_day!r} "
+                f"must be one of {sorted(_ALLOWED_DAYS)}"
+            )
+
+        # Feature-range JSON override must parse to (lo, hi) tuples with lo < hi
+        try:
+            for fname, (lo, hi) in self.feature_ranges.items():
+                if lo >= hi:
+                    issues.append(f"feature_ranges[{fname!r}]: lo={lo} >= hi={hi}")
+        except (ValueError, TypeError, KeyError) as e:
+            issues.append(f"feature_ranges parse error: {e}")
+
+        # Required strings
+        if not self.default_league_id:
+            issues.append("default_league_id is empty")
+        if not self.data_dir:
+            issues.append("data_dir is empty")
+        if not self.model_dir:
+            issues.append("model_dir is empty")
+        if not self.report_dir:
+            issues.append("report_dir is empty")
+
+        # Sample weights must parse and have at least 3 entries (Home/Draw/Away)
+        try:
+            weights = self.training_sample_weights
+            if len(weights) < 3:
+                issues.append(f"training_sample_weights needs >=3 entries (got {len(weights)})")
+            for k, v in weights.items():
+                if v < 0:
+                    issues.append(f"training_sample_weights[{k}]={v} cannot be negative")
+        except (ValueError, TypeError) as e:
+            issues.append(f"training_sample_weights parse error: {e}")
+
+        # URL schemes for HTTP endpoints (server + active scrape sources)
+        def _check_url(name: str, value: str) -> None:
+            if not value:
+                return  # empty = optional / disabled
+            try:
+                parsed = urlparse(value)
+            except (ValueError, TypeError):
+                issues.append(f"{name}={value!r} is not a parseable URL")
+                return
+            if parsed.scheme not in ("http", "https"):
+                issues.append(
+                    f"{name}={value!r} must use http:// or https:// (got scheme={parsed.scheme!r})"
+                )
+            if not parsed.netloc:
+                issues.append(f"{name}={value!r} is missing a host")
+
+        _check_url("server_url", self.server_url)
+        _check_url("scrape_source_1", self.scrape_source_1)
+        _check_url("scrape_source_2", self.scrape_source_2)
+        _check_url("scrape_source_3", self.scrape_source_3)
+        _check_url("scrape_source_4", self.scrape_source_4)
+        _check_url("scrape_source_5", self.scrape_source_5)
+        _check_url("scrape_source_fallback", self.scrape_source_fallback)
+        _check_url(
+            "source_watcher_summarizer_probe_url",
+            self.source_watcher_summarizer_probe_url,
+        )
+        for extra in self.scrape_source_extra.split(","):
+            extra = extra.strip()
+            if extra:
+                _check_url("scrape_source_extra", extra)
+
+        # Strict mode: refuse unknown env keys with prefixes the Python layer owns.
+        # Triggered by NEGELIR_COMMON_STRICT=1 OR explicit strict=True call.
+        env_strict = os.getenv("NEGELIR_COMMON_STRICT", "").lower() in ("1", "true", "yes", "on")
+        if strict or env_strict:
+            declared = _declared_env_keys()
+            stray = sorted(
+                k for k in os.environ
+                if k.startswith(_OWNED_ENV_PREFIXES) and k not in declared
+            )
+            for key in stray:
+                issues.append(
+                    f"unknown env key {key!r} matches reserved prefix "
+                    f"({'/'.join(p.rstrip('_') for p in _OWNED_ENV_PREFIXES)}); "
+                    "remove it or add a corresponding field in Config"
+                )
+
+        # ── Phase 10 §10.0 — Cross-phase contract boot validators ────────────
+        # Bounds checks.
+        _bounded("nlp_input_max_codepoints", self.nlp_input_max_codepoints, 1, 100_000)
+        _bounded("nlp_repeat_collapse_max_len", self.nlp_repeat_collapse_max_len, 1, 10_000)
+        _bounded("nlp_repeat_collapse_min_freq", self.nlp_repeat_collapse_min_freq, 1, 100_000)
+        _bounded("nlp_request_dedup_window_s", self.nlp_request_dedup_window_s, 1, 86_400)
+        _bounded("nlp_intake_workers", self.nlp_intake_workers, 2, 128)
+        if self.nlp_intake_workers > (os.cpu_count() or 1) * 2:
+            issues.append(
+                f"nlp_intake_workers={self.nlp_intake_workers} must be <= "
+                f"2 × os.cpu_count()({os.cpu_count() or 1}) = {(os.cpu_count() or 1) * 2} "
+                "(Phase 10 §10.23.10 bottleneck assertion at start)"
+            )
+        _bounded("predict_citation_hmac_key_grace_s", self.predict_citation_hmac_key_grace_s, 0, 604_800)
+        if self.nlp_predict_citation_hmac_required not in ("off", "warn", "enforce"):
+            issues.append(
+                f"nlp_predict_citation_hmac_required={self.nlp_predict_citation_hmac_required!r} "
+                "must be 'off', 'warn', or 'enforce' (Phase 10 §10.21.8)"
+            )
+        if self.nlp_predict_prediction_id_determinism_required not in ("off", "warn", "enforce"):
+            issues.append(
+                f"nlp_predict_prediction_id_determinism_required={self.nlp_predict_prediction_id_determinism_required!r} "
+                "must be 'off', 'warn', or 'enforce' (Phase 10 §10.29.12)"
+            )
+        _bounded("qa_answer_hmac_grace_s", self.qa_answer_hmac_grace_s, 0, 604_800)
+        if self.nlp_answer_envelope_hmac_required not in ("off", "warn", "enforce"):
+            issues.append(
+                f"nlp_answer_envelope_hmac_required={self.nlp_answer_envelope_hmac_required!r} "
+                "must be 'off', 'warn', or 'enforce' (Phase 10 §10.26.8)"
+            )
+        if not (0.0 <= self.nlp_empty_input_anomaly_threshold <= 1.0):
+            issues.append(
+                f"nlp_empty_input_anomaly_threshold={self.nlp_empty_input_anomaly_threshold!r} "
+                "must be between 0.0 and 1.0 (Phase 10 §10.26.11)"
+            )
+        _bounded("nlp_empty_input_anomaly_window_s", self.nlp_empty_input_anomaly_window_s, 1, 86_400)
+        if self.nlp_lexicon_source not in ("file", "feed"):
+            issues.append(
+                f"nlp_lexicon_source={self.nlp_lexicon_source!r} must be 'file' or 'feed'"
+            )
+        _bounded("nlp_lexicon_feed_hmac_key_grace_s", self.nlp_lexicon_feed_hmac_key_grace_s, 0, 604_800)
+        if self.nlp_lexicon_feed_signature_required not in ("off", "warn", "enforce"):
+            issues.append(
+                f"nlp_lexicon_feed_signature_required={self.nlp_lexicon_feed_signature_required!r} "
+                "must be 'off', 'warn', or 'enforce' (Phase 10 §10.22.12)"
+            )
+        if self.nlp_fairness_key not in ("tenant_id", "account_id", "ip_bucket"):
+            issues.append(
+                f"nlp_fairness_key={self.nlp_fairness_key!r} must be one of "
+                "('tenant_id', 'account_id', 'ip_bucket') (Phase 10 §10.23.1)"
+            )
+        _bounded("nlp_per_tenant_inflight_max", self.nlp_per_tenant_inflight_max, 1, 1_000)
+        _bounded("nlp_fairness_max_tracked_keys", self.nlp_fairness_max_tracked_keys, 1, 1_000_000)
+        _bounded("nlp_tenant_abuse_qps_threshold", self.nlp_tenant_abuse_qps_threshold, 0.001, 10_000.0)
+        _bounded("nlp_tenant_abuse_window_s", self.nlp_tenant_abuse_window_s, 1, 86_400)
+        expected_tenant_classes = (
+            "account_paid",
+            "account_free",
+            "ip_anonymous",
+            "ip_known_proxy",
+        )
+        if tuple(self.nlp_tenant_class_enum) != expected_tenant_classes:
+            issues.append(
+                f"nlp_tenant_class_enum={self.nlp_tenant_class_enum!r} must equal "
+                f"{expected_tenant_classes!r} (Phase 10 §10.23.1 closed-set class enum)"
+            )
+        _bounded("nlp_intent_model_canary_pct", self.nlp_intent_model_canary_pct, 0, 100)
+        if self.nlp_canary_pod and self.nlp_intent_model_canary_pct == 0:
+            issues.append(
+                "nlp_canary_pod=true requires nlp_intent_model_canary_pct > 0 "
+                "(Phase 10 §10.23.2)"
+            )
+        _bounded("nlp_canary_account_bucket_size", self.nlp_canary_account_bucket_size, 1, 1_000_000)
+        if self.nlp_intent_shadow_mode not in ("off", "on"):
+            issues.append(
+                f"nlp_intent_shadow_mode={self.nlp_intent_shadow_mode!r} must be 'off' or 'on' "
+                "(Phase 10 §10.23.2)"
+            )
+        if not self.nlp_lexicon_dir:
+            issues.append("nlp_lexicon_dir must be configured for lexicon load")
+        _bounded("nlp_shadow_sample_rate", self.nlp_shadow_sample_rate, 0.0, 1.0)
+        _bounded("nlp_canary_min_shadow_hours", self.nlp_canary_min_shadow_hours, 0, 8_760)
+        _bounded("nlp_canary_max_disagreement_rate", self.nlp_canary_max_disagreement_rate, 0.0, 1.0)
+        _bounded("nlp_canary_max_confidence_drift", self.nlp_canary_max_confidence_drift, 0.0, 1.0)
+        _bounded("nlp_lexicon_canary_max_disagreement_pct", self.nlp_lexicon_canary_max_disagreement_pct, 0.0, 1.0)
+        _bounded("nlp_lexicon_canary_max_per_field_disagreement_pct", self.nlp_lexicon_canary_max_per_field_disagreement_pct, 0.0, 1.0)
+        _bounded("nlp_weekly_eval_sample_size", self.nlp_weekly_eval_sample_size, 1, 100_000)
+        _bounded("nlp_weekly_eval_sample_max_chars", self.nlp_weekly_eval_sample_max_chars, 1, 10_000)
+        _bounded("nlp_weekly_eval_max_accuracy_drop", self.nlp_weekly_eval_max_accuracy_drop, 0.0, 1.0)
+        _bounded("nlp_weekly_eval_consecutive_drop_threshold", self.nlp_weekly_eval_consecutive_drop_threshold, 0.0, 1.0)
+        _bounded("nlp_pipeline_timeout_ms", self.nlp_pipeline_timeout_ms, 1, 300_000)
+        _bounded("nlp_dispatch_overhead_ms", self.nlp_dispatch_overhead_ms, 1, 60_000)
+        _bounded("nlp_consensus_overhead_ms", self.nlp_consensus_overhead_ms, 1, 60_000)
+        _bounded("nlp_per_request_cpu_budget_ms", self.nlp_per_request_cpu_budget_ms, 50, 30_000)
+        _bounded("nlp_per_request_cpu_budget_with_humanizer_ms", self.nlp_per_request_cpu_budget_with_humanizer_ms, 100, 60_000)
+        _bounded("nlp_per_request_cpu_budget_min_ms", self.nlp_per_request_cpu_budget_min_ms, 1, 1_000)
+        _bounded("nlp_per_request_rss_budget_mb", self.nlp_per_request_rss_budget_mb, 16, 1024)
+        _bounded("nlp_per_request_rss_budget_swap_grace_mb", self.nlp_per_request_rss_budget_swap_grace_mb, 0, 512)
+        _bounded("nlp_lexicon_rebuild_concurrency_max", self.nlp_lexicon_rebuild_concurrency_max, 1, 16)
+        _bounded("nlp_lexicon_rebuild_queue_max", self.nlp_lexicon_rebuild_queue_max, 0, 128)
+        _bounded("nlp_lexicon_rebuild_rss_reservation_mb", self.nlp_lexicon_rebuild_rss_reservation_mb, 0, 1024)
+        if self.nlp_per_request_cpu_budget_ms < self.nlp_per_request_cpu_budget_min_ms:
+            issues.append(
+                f"nlp_per_request_cpu_budget_ms={self.nlp_per_request_cpu_budget_ms!r} "
+                f"must be >= nlp_per_request_cpu_budget_min_ms={self.nlp_per_request_cpu_budget_min_ms!r}"
+            )
+        if self.nlp_per_request_cpu_budget_with_humanizer_ms < self.nlp_per_request_cpu_budget_ms:
+            issues.append(
+                "nlp_per_request_cpu_budget_with_humanizer_ms must be >= "
+                "nlp_per_request_cpu_budget_ms"
+            )
+        _bounded("nlp_humanizer_max_latency_ms", self.nlp_humanizer_max_latency_ms, 1, 300_000)
+        _bounded("nlp_humanizer_breaker_open_s", self.nlp_humanizer_breaker_open_s, 1, 86_400)
+        if self.nlp_humanizer_breaker_scope not in ("pod", "cluster"):
+            issues.append(
+                f"nlp_humanizer_breaker_scope={self.nlp_humanizer_breaker_scope!r} "
+                "must be 'pod' or 'cluster' (Phase 10 §10.21.4)"
+            )
+        if self.nlp_answer_streaming not in ("disabled", "guarded", "off"):
+            issues.append(
+                f"nlp_answer_streaming={self.nlp_answer_streaming!r} "
+                "must be one of 'disabled', 'guarded', or 'off' (Phase 10 §10.25)"
+            )
+        if self.nlp_conversation_index_backend not in ("redis",):
+            issues.append(
+                f"nlp_conversation_index_backend={self.nlp_conversation_index_backend!r} "
+                "must be 'redis' (Phase 10 §10.25)"
+            )
+        _bounded("nlp_intent_retrain_max_regression", self.nlp_intent_retrain_max_regression, 0.0, 1.0)
+        _bounded("nlp_erase_scan_batch", self.nlp_erase_scan_batch, 1, 10_000)
+        _bounded("nlp_streaming_proofread_chunk_chars", self.nlp_streaming_proofread_chunk_chars, 1, 1_000)
+        _bounded("nlp_streaming_write_timeout_ms", self.nlp_streaming_write_timeout_ms, 1, 60_000)
+        _bounded("nlp_per_tenant_humanizer_burst", self.nlp_per_tenant_humanizer_burst, 1, 1_000)
+        _bounded("nlp_per_tenant_humanizer_refill_per_s", self.nlp_per_tenant_humanizer_refill_per_s, 0.001, 1_000.0)
+        _bounded("nlp_humanizer_request_rate", self.nlp_humanizer_request_rate, 0.0, 1.0)
+        if not self.nlp_humanizer_budget_redis_key_prefix:
+            issues.append(
+                "nlp_humanizer_budget_redis_key_prefix must be configured "
+                "for tenant budget state keys (Phase 10 §10.23)"
+            )
+        _bounded("nlp_humanizer_max_new_tokens", self.nlp_humanizer_max_new_tokens, 1, 1024)
+        _bounded("nlp_max_humanizer_tokens_per_request", self.nlp_max_humanizer_tokens_per_request, 1, 1024)
+        _bounded("nlp_max_humanizer_tokens_per_tenant_per_min", self.nlp_max_humanizer_tokens_per_tenant_per_min, 1, 100_000)
+        try:
+            for tier_id, token_cap in self.nlp_tier_humanizer_tokens_per_min.items():
+                if token_cap < 1 or token_cap > 100_000:
+                    issues.append(
+                        f"nlp_tier_humanizer_tokens_per_min[{tier_id}]={token_cap!r} "
+                        "must be in 1..100000"
+                    )
+        except ValueError as exc:
+            issues.append(str(exc))
+        _bounded("nlp_max_humanizer_tokens_per_pod_per_hour", self.nlp_max_humanizer_tokens_per_pod_per_hour, 1, 10_000_000)
+        _bounded("nlp_humanizer_pod_cooldown_s", self.nlp_humanizer_pod_cooldown_s, 1, 86_400)
+        _bounded("nlp_humanizer_respawn_cooldown_s", self.nlp_humanizer_respawn_cooldown_s, 1, 86_400)
+        _bounded("nlp_humanizer_temperature", self.nlp_humanizer_temperature, 0.0, 2.0)
+        _bounded("nlp_humanizer_top_p", self.nlp_humanizer_top_p, 0.0, 1.0)
+        _bounded("nlp_humanizer_repetition_penalty", self.nlp_humanizer_repetition_penalty, 1.0, 2.0)
+        _bounded("nlp_humanizer_max_edit_ratio", self.nlp_humanizer_max_edit_ratio, 0.0, 1.0)
+        _bounded("nlp_boot_budget_s", self.nlp_boot_budget_s, 1, 3_600)
+        _bounded("nlp_boot_liveness_grace_s", self.nlp_boot_liveness_grace_s, 1, 3_600)
+        _bounded("nlp_boot_consensus_smoke_timeout_s", self.nlp_boot_consensus_smoke_timeout_s, 1, 3_600)
+        _bounded("nlp_boot_consensus_smoke_critical_s", self.nlp_boot_consensus_smoke_critical_s, 1, 3_600)
+        if not self.nlp_boot_consensus_sentinel_match_id:
+            issues.append(
+                "nlp_boot_consensus_sentinel_match_id must be configured and non-empty"
+            )
+        _bounded("nlp_shutdown_grace_s", self.nlp_shutdown_grace_s, 1, 3_600)
+        _bounded("nlp_bench_latency_p95_threshold_ms", self.nlp_bench_latency_p95_threshold_ms, 1, 10_000)
+        _bounded("nlp_entity_bench_latency_p95_threshold_ms", self.nlp_entity_bench_latency_p95_threshold_ms, 1, 10_000)
+        _bounded("nlp_default_fixture_window_h", self.nlp_default_fixture_window_h, 1, 720)
+        _bounded("nlp_summary_max_fixtures", self.nlp_summary_max_fixtures, 1, 100)
+        _bounded("nlp_summary_max_fixtures_hard", self.nlp_summary_max_fixtures_hard, 1, 100)
+        _bounded("nlp_skew_window_s", self.nlp_skew_window_s, 1, 86_400)
+        _bounded("nlp_skew_alert_p95", self.nlp_skew_alert_p95, 0.0, 1.0)
+        _bounded("nlp_skew_alert_min_requests", self.nlp_skew_alert_min_requests, 1, 10_000)
+        _bounded("nlp_skew_alert_debounce_s", self.nlp_skew_alert_debounce_s, 0, 86_400)
+        _bounded("nlp_max_subqueries", self.nlp_max_subqueries, 1, 10)
+        _bounded("nlp_summary_aggregation_timeout_ms", self.nlp_summary_aggregation_timeout_ms, 1, 300_000)
+        if self.nlp_summary_aggregation_timeout_ms > self.nlp_pipeline_timeout_ms:
+            issues.append(
+                f"nlp_summary_aggregation_timeout_ms={self.nlp_summary_aggregation_timeout_ms} "
+                f"must be <= nlp_pipeline_timeout_ms={self.nlp_pipeline_timeout_ms} "
+                "(Phase 10 §10.6 deadline-propagation)"
+            )
+        if not self.nlp_format_number_rounding:
+            issues.append(
+                "nlp_format_number_rounding must be configured "
+                "(Phase 10 §10.23 render formatting)"
+            )
+        _bounded("nlp_l0_cache_ttl_s", self.nlp_l0_cache_ttl_s, 1, 86_400)
+        _bounded("nlp_l1_answer_cache_ttl_s", self.nlp_l1_answer_cache_ttl_s, 1, 86_400)
+        if not (0.0 < self.nlp_summary_min_fixture_quorum <= 1.0):
+            issues.append(
+                f"nlp_summary_min_fixture_quorum={self.nlp_summary_min_fixture_quorum!r} "
+                "must be > 0.0 and <= 1.0 (Phase 10 §10.6 quorum policy)"
+            )
+        if self.nlp_zoneinfo_dir:
+            zoneinfo_dir = Path(self.nlp_zoneinfo_dir)
+            if not zoneinfo_dir.exists():
+                issues.append(
+                    f"nlp_zoneinfo_dir={self.nlp_zoneinfo_dir!r} does not exist "
+                    "(Phase 10 §10.23.6)"
+                )
+            elif not zoneinfo_dir.is_dir():
+                issues.append(
+                    "nlp_zoneinfo_dir must be a directory (Phase 10 §10.23.6)"
+                )
+            else:
+                istanbul_file = zoneinfo_dir / "Europe" / "Istanbul"
+                if not istanbul_file.exists():
+                    issues.append(
+                        "nlp_zoneinfo_dir is missing Europe/Istanbul zoneinfo file "
+                        "(Phase 10 §10.23.6)"
+                    )
+                else:
+                    try:
+                        actual_sha = hashlib.sha256(istanbul_file.read_bytes()).hexdigest()
+                    except OSError as exc:
+                        issues.append(
+                            f"nlp_zoneinfo_dir Europe/Istanbul unreadable: {exc} "
+                            "(Phase 10 §10.23.6)"
+                        )
+                    else:
+                        chart_path = Path(__file__).resolve().parents[2] / "xops" / "versioning" / "chart.json"
+                        if chart_path.exists():
+                            chart = json.loads(chart_path.read_text(encoding="utf-8"))
+                            expected = (
+                                chart.get("compatibility", {})
+                                .get("data_files", {})
+                                .get("zoneinfo_file", {})
+                                .get("sha256", "")
+                            )
+                            if not expected:
+                                issues.append(
+                                    "chart.json compatibility.data_files.zoneinfo_file.sha256 missing "
+                                    "(Phase 10 §10.23.6)"
+                                )
+                            elif actual_sha != expected:
+                                issues.append(
+                                    "nlp_zoneinfo_dir Europe/Istanbul SHA mismatch with chart.json "
+                                    "compatibility data (Phase 10 §10.23.6)"
+                                )
+        _bounded("nlp_summary_fanout_timeout_ms", self.nlp_summary_fanout_timeout_ms, 1, 300_000)
+        if not self.nlp_format_number_rounding:
+            issues.append(
+                "nlp_format_number_rounding must be configured "
+                "(Phase 10 §10.23 render formatting)"
+            )
+        _bounded("nlp_l0_cache_ttl_s", self.nlp_l0_cache_ttl_s, 1, 86_400)
+        _bounded("nlp_l1_answer_cache_ttl_s", self.nlp_l1_answer_cache_ttl_s, 1, 86_400)
+        if self.nlp_summary_calibration_mismatch_policy not in ("note", "refuse"):
+            issues.append(
+                f"nlp_summary_calibration_mismatch_policy={self.nlp_summary_calibration_mismatch_policy!r} "
+                "must be 'note' or 'refuse' (Phase 10 §10.21.10)"
+            )
+        if self.nlp_time_default_period not in ("am", "pm"):
+            issues.append(
+                f"nlp_time_default_period={self.nlp_time_default_period!r} "
+                "must be 'am' or 'pm' (Phase 10 §10.22.6)"
+            )
+        if self.nlp_runtime_locale not in ("tr_TR.UTF-8", "und-TR", "und_TR.UTF-8"):
+            issues.append(
+                f"nlp_runtime_locale={self.nlp_runtime_locale!r} must be tr_TR.UTF-8 or und-TR "
+                "(Phase 10 §10.33.1)"
+            )
+        _bounded("nlp_active_learning_queue_max", self.nlp_active_learning_queue_max, 1, 100_000)
+        _bounded("nlp_date_default_window_days", self.nlp_date_default_window_days, 1, 365)
+        _bounded("nlp_dispatch_dedup_window_s", self.nlp_dispatch_dedup_window_s, 1, 86_400)
+        if self.nlp_dispatch_dedup_window_s < self.nlp_request_dedup_window_s:
+            issues.append(
+                f"nlp_dispatch_dedup_window_s={self.nlp_dispatch_dedup_window_s} "
+                f"must be >= nlp_request_dedup_window_s={self.nlp_request_dedup_window_s} "
+                "(Phase 10 §10.6 dispatch dedup window)"
+            )
+        if self.nlp_typo_max_edit_distance not in (1, 2):
+            issues.append(
+                f"nlp_typo_max_edit_distance={self.nlp_typo_max_edit_distance} "
+                "must be 1 or 2 (§10.3 SymSpellIndex constraint)"
+            )
+        _bounded("nlp_typo_max_lookups_per_query", self.nlp_typo_max_lookups_per_query, 1, 1_000)
+        _bounded("nlp_ime_layout_cache_s", self.nlp_ime_layout_cache_s, 1, 86_400)
+        _bounded("nlp_asr_filler_strip_max", self.nlp_asr_filler_strip_max, 1, 100)
+        _bounded(
+            "nlp_lexicon_feed_max_supported_schema_version",
+            self.nlp_lexicon_feed_max_supported_schema_version,
+            1,
+            100,
+        )
+        if self.nlp_diacritic_tie_break_ratio < 1.0:
+            issues.append(
+                f"nlp_diacritic_tie_break_ratio={self.nlp_diacritic_tie_break_ratio} "
+                "must be >= 1.0 (§10.3 ambiguity policy)"
+            )
+        if self.nlp_diacritic_tie_break_ratio_voice < 1.0:
+            issues.append(
+                f"nlp_diacritic_tie_break_ratio_voice={self.nlp_diacritic_tie_break_ratio_voice} "
+                "must be >= 1.0 (§10.3 voice path policy)"
+            )
+        if self.nlp_voice_eval_intent_accuracy_floor <= 0.0 or self.nlp_voice_eval_intent_accuracy_floor >= 1.0:
+            issues.append(
+                f"nlp_voice_eval_intent_accuracy_floor={self.nlp_voice_eval_intent_accuracy_floor} "
+                "must be in (0, 1) (§10.18 voice evaluation gate)"
+            )
+        if self.nlp_voice_eval_entity_f1_floor <= 0.0 or self.nlp_voice_eval_entity_f1_floor >= 1.0:
+            issues.append(
+                f"nlp_voice_eval_entity_f1_floor={self.nlp_voice_eval_entity_f1_floor} "
+                "must be in (0, 1) (§10.18 voice evaluation gate)"
+            )
+        if self.nlp_diacritic_hard_call_min_freq < 1:
+            issues.append(
+                f"nlp_diacritic_hard_call_min_freq={self.nlp_diacritic_hard_call_min_freq} "
+                "must be >= 1 (§10.22.1 hard-call restoration policy)"
+            )
+        if self.nlp_diacritic_max_risk_per_token < 0.0:
+            issues.append(
+                f"nlp_diacritic_max_risk_per_token={self.nlp_diacritic_max_risk_per_token} "
+                "must be >= 0.0 (§10.22.1 per-character diacritic risk policy)"
+            )
+        if self.nlp_repair_density_p95_max < 0.0:
+            issues.append(
+                f"nlp_repair_density_p95_max={self.nlp_repair_density_p95_max} "
+                "must be >= 0.0 (§10.22.13 repair-density cap)"
+            )
+        if self.nlp_ascii_vs_restored_margin < 0.0:
+            issues.append(
+                f"nlp_ascii_vs_restored_margin={self.nlp_ascii_vs_restored_margin} "
+                "must be >= 0.0 (§10.22.1 ASCII-vs-restored conflict policy)"
+            )
+        _bounded("nlp_normalize_stage_timeout_ms", self.nlp_normalize_stage_timeout_ms, 1, 60_000)
+        _bounded("nlp_normalize_total_budget_p99_ms", self.nlp_normalize_total_budget_p99_ms, 5, 30)
+        _bounded("nlp_intent_model_max_size_mb", self.nlp_intent_model_max_size_mb, 1, 10_000)
+        _bounded("nlp_intent_accuracy_floor", self.nlp_intent_accuracy_floor, 0.01, 0.9999)
+        _bounded("nlp_quotative_min_confidence", self.nlp_quotative_min_confidence, 0.0, 1.0)
+        _bounded("nlp_aspectual_stack_max_depth", self.nlp_aspectual_stack_max_depth, 1, 10)
+        _bounded("nlp_intent_drift_window", self.nlp_intent_drift_window, 1, 1_000_000)
+        _bounded("nlp_entity_f1_floor", self.nlp_entity_f1_floor, 0.01, 0.9999)
+        # Inequality 1: NLP dedup window ≥ Phase 7 qa.request.v1 dedup + 30 s.
+        _min_dedup = self.qa_request_v1_dedup_window_s + 30
+        if self.nlp_request_dedup_window_s < _min_dedup:
+            issues.append(
+                f"nlp_request_dedup_window_s={self.nlp_request_dedup_window_s} "
+                f"must be >= qa_request_v1_dedup_window_s"
+                f"({self.qa_request_v1_dedup_window_s}) + 30 = {_min_dedup} "
+                "(Phase 10 §10.0 cross-phase contract)"
+            )
+        # Inequality 2: Phase 9 timeout chain extends to NLP.
+        _min_api_ms = self.nlp_pipeline_timeout_ms + self.nlp_dispatch_overhead_ms
+        if self.api_request_timeout_ms < _min_api_ms:
+            issues.append(
+                f"api_request_timeout_ms={self.api_request_timeout_ms} "
+                f"must be >= nlp_pipeline_timeout_ms({self.nlp_pipeline_timeout_ms})"
+                f" + nlp_dispatch_overhead_ms({self.nlp_dispatch_overhead_ms})"
+                f" = {_min_api_ms} (Phase 10 §10.0 timeout chain)"
+            )
+        # Inequality 3: NLP pipeline must budget for consensus + optional humanizer.
+        _min_pipe_ms = self.consensus_window_ms + self.nlp_consensus_overhead_ms
+        if self.nlp_humanize:
+            _min_pipe_ms += self.nlp_humanizer_max_latency_ms
+        if self.nlp_pipeline_timeout_ms < _min_pipe_ms:
+            _humanizer_note = (
+                f" + nlp_humanizer_max_latency_ms({self.nlp_humanizer_max_latency_ms})"
+                if self.nlp_humanize
+                else ""
+            )
+            issues.append(
+                f"nlp_pipeline_timeout_ms={self.nlp_pipeline_timeout_ms} "
+                f"must be >= consensus_window_ms({self.consensus_window_ms})"
+                f" + nlp_consensus_overhead_ms({self.nlp_consensus_overhead_ms})"
+                f"{_humanizer_note} = {_min_pipe_ms}"
+                " (Phase 10 §10.0 pipeline timeout chain)"
+            )
+
+        # Phase 10 §10.21.2 — RSS ceiling per pod boot validator.
+        # Sums all sub-knobs and refuses start if it exceeds the cap.
+        _rss_sum = (
+            self.nlp_lexicon_max_rss_mb
+            + self.nlp_intent_model_max_size_mb
+            + self.nlp_crf_max_rss_mb
+            + self.nlp_symspell_max_rss_mb
+            + self.nlp_jinja_cache_max_rss_mb
+            + self.nlp_python_overhead_mb
+            + self.nlp_humanizer_max_rss_mb
+        )
+        if _rss_sum > self.nlp_pod_rss_max_mb:
+            issues.append(
+                f"nlp_pod_rss_max_mb={self.nlp_pod_rss_max_mb} exceeded by sum of sub-knobs: "
+                f"nlp_lexicon_max_rss_mb({self.nlp_lexicon_max_rss_mb}) + "
+                f"nlp_intent_model_max_size_mb({self.nlp_intent_model_max_size_mb}) + "
+                f"nlp_crf_max_rss_mb({self.nlp_crf_max_rss_mb}) + "
+                f"nlp_symspell_max_rss_mb({self.nlp_symspell_max_rss_mb}) + "
+                f"nlp_jinja_cache_max_rss_mb({self.nlp_jinja_cache_max_rss_mb}) + "
+                f"nlp_python_overhead_mb({self.nlp_python_overhead_mb}) + "
+                f"nlp_humanizer_max_rss_mb({self.nlp_humanizer_max_rss_mb}) "
+                f"= {_rss_sum} MB (Phase 10 §10.21.2 RSS ceiling per pod)"
+            )
+
+        if strict and issues:
+            raise ValueError("Config validation failed:\n  - " + "\n  - ".join(issues))
+        return issues
+
+
+# Singleton
+cfg = Config()

@@ -23,19 +23,18 @@ Confidence gate contract (bullet 4):
   - official → final roster-state write; clear provisional on same player
 """
 
-from ai.scraper.differs.transfers_feed.differ import (
-    BaseDiffer,
-    TransferDiffer,
-    ContractDiffer,
-    SuspensionDiffer,
-    DiffEvent,
-)
-
 from ai.scraper.differs.transfers_feed.confidence_gate import (
     RosterStateWriteInstruction,
-    should_write,
-    get_write_mode,
     apply_gate,
+    get_write_mode,
+    should_write,
+)
+from ai.scraper.differs.transfers_feed.differ import (
+    BaseDiffer,
+    ContractDiffer,
+    DiffEvent,
+    SuspensionDiffer,
+    TransferDiffer,
 )
 
 __all__ = [

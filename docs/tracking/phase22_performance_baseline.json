@@ -1,0 +1,67 @@
+{
+  "phase": "22.2",
+  "bullet": 10,
+  "title": "Performance target: full codemod for largest package in ≤ 60s",
+  "generated_at_utc": "2026-05-27T00:00:00Z",
+  "reference_ci_runner_config": {
+    "dod_smoke_min_cpu": 4,
+    "dod_smoke_min_mem_gb": 8,
+    "python_version": "3.8+",
+    "note": "Specifications from ROADMAP §2.547 and §18.15; exact config values from ai/common/config.py defaults"
+  },
+  "performance_targets": {
+    "full_package_rewrite_max_s": 60,
+    "recommended_target_s": 40,
+    "note": "Full codemod includes: read, parse, rewrite, isort, sidecar creation"
+  },
+  "packages_tested": [
+    {
+      "package_name": "model",
+      "path": "ai/model",
+      "rationale": "LARGEST package by import site count (primary performance target)",
+      "baseline": {
+        "file_count": 13,
+        "total_bytes": null,
+        "import_sites_count": 0,
+        "estimated_rewrite_time_s": null,
+        "status": "ready_for_measurement"
+      }
+    },
+    {
+      "package_name": "common",
+      "path": "ai/common",
+      "rationale": "SECOND-LARGEST package (comparative baseline data)",
+      "baseline": {
+        "file_count": 65,
+        "total_bytes": null,
+        "import_sites_count": 22,
+        "estimated_rewrite_time_s": null,
+        "status": "ready_for_measurement"
+      }
+    }
+  ],
+  "measurement_methodology": {
+    "description": "Full rewrite pipeline simulation",
+    "stages": [
+      "reading all .py files from disk",
+      "parsing with libcst.parse_module()",
+      "running libcst.CSTTransformer on each file",
+      "running isort with --known-first-party",
+      "writing .phase22.orig sidecars"
+    ],
+    "note": "Test uses pytest.mark.perf to allow separate execution from regular test suite"
+  },
+  "test_location": {
+    "file": "ai/tests/test_22_2_codemod_performance.py",
+    "test_class": "TestCodemodPerformanceTarget",
+    "test_functions": [
+      "test_22_2_codemod_full_package_completes_within_60s",
+      "test_22_2_codemod_package_analysis_comparative"
+    ]
+  },
+  "roadmap_reference": {
+    "phase": "Phase 22.2",
+    "bullet": 10,
+    "spec": "the full codemod for the largest package (`model/`, with the most import sites) must complete in ≤ 60 s on the reference CI runner (`cfg.dod_smoke_min_cpu` cores, `cfg.dod_smoke_min_mem_gb` GB)"
+  }
+}
