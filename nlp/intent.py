@@ -55,7 +55,7 @@ from nlp.phase10_30 import apply_wh_prior_to_scores, infer_telegraphic_intent
 #: Absolute path to the single-source enum registry (§10.4).
 _INTENT_ENUM_PATH: Path = (
     Path(__file__).parent.parent
-    / "swarm" / "sdk" / "schemas" / "_intent_enum.json"
+    / "ai" / "swarm" / "sdk" / "schemas" / "_intent_enum.json"
 )
 
 #: Expected schema_version in _intent_enum.json; mismatch refuses load.

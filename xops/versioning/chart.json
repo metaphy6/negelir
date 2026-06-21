@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.16.0",
-    "build": 0,
+    "build": 6,
     "released": null
   },
   "components": {
@@ -35,9 +35,9 @@
       }
     },
     "xops": {
-      "version": "3.89.7",
+      "version": "3.89.13",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-21T14:35:05+00:00"
+      "last_changed": "2026-06-21T15:40:12+00:00"
     },
     "docs": {
       "version": "3.25.0",
@@ -17941,6 +17941,60 @@
       "from": "1.15.1",
       "to": "1.16.0",
       "build": 0
+    },
+    {
+      "timestamp": "2026-06-21T15:07:49+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.3b bullet 4: Conftest consolidation complete - sys.path/sys.modules cleanup, marker deduplication across conftest.py, tests/conftest.py, and pyproject.toml to prevent duplicate marker warnings",
+      "from": "3.89.7",
+      "to": "3.89.8",
+      "build": 1
+    },
+    {
+      "timestamp": "2026-06-21T15:13:32+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 3: nlp/ package moved to root — codemod applied, imports updated, path references fixed",
+      "from": "3.89.8",
+      "to": "3.89.9",
+      "build": 2
+    },
+    {
+      "timestamp": "2026-06-21T15:16:49+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.3b bullet 5: Pytest marker deduplication complete — all 5 custom markers consolidated in tests/conftest.py with no duplicates",
+      "from": "3.89.9",
+      "to": "3.89.10",
+      "build": 3
+    },
+    {
+      "timestamp": "2026-06-21T15:23:30+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 4: qid/ package moved to root; import rewriting complete; no new cycles",
+      "from": "3.89.10",
+      "to": "3.89.11",
+      "build": 4
+    },
+    {
+      "timestamp": "2026-06-21T15:30:40+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.3b: test consolidation complete, conftest merged, tests/__init__.py for module resolution",
+      "from": "3.89.11",
+      "to": "3.89.12",
+      "build": 5
+    },
+    {
+      "timestamp": "2026-06-21T15:40:12+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Phase 22.4 bullet 5: moved tqu/ to root, 8 files, updated pyproject.toml",
+      "from": "3.89.12",
+      "to": "3.89.13",
+      "build": 6
     }
   ]
 }

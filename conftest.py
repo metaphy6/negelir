@@ -32,6 +32,12 @@ else:
 
 
 def pytest_configure(config):  # noqa: D401
+    """Configure pytest for repo root level.
+    
+    Phase 22.3b: Marker registrations moved to tests/conftest.py to avoid
+    duplication when both root and tests/conftest.py are loaded.
+    This conftest handles sys.path setup for the whole project.
+    """
     if _phase22_layout:
         # Double-check that repo root is still first (it should be, but just in case)
         if _root_str in sys.path:
@@ -51,21 +57,8 @@ def pytest_configure(config):  # noqa: D401
                     for k in modules_to_remove:
                         sys.modules.pop(k, None)
     
-    config.addinivalue_line(
-        "markers",
-        "live: opt-in tests that hit real upstreams (RUN_LIVE_TESTS=1)",
-    )
-    config.addinivalue_line(
-        "markers",
-        "cpu_only: Phase 11 parity tests — predictor / model output must be "
-        "identical (or within ε) on CPU vs the chosen device.",
-    )
-    config.addinivalue_line(
-        "markers",
-        "slow: tests that take noticeable wall time (CPU/GPU parity sweeps, "
-        "full-pipeline runs). Excluded by `make test.fast`; included by "
-        "`make test.ai` and CI.",
-    )
+    # Phase 22.3b: All pytest markers consolidated in tests/conftest.py
+    # Marker registrations removed here to prevent duplication warnings
 
 
 import pytest  # noqa: E402 — must come after sys.path is populated above

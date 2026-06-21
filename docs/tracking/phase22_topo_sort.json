@@ -1,5 +1,5 @@
 {
-  "generated_at": 1782053823.3250475,
+  "generated_at": 1782056647.5712833,
   "packages": [
     "ai.__init__.py",
     "ai.backtest",
@@ -7,17 +7,13 @@
     "ai.data_showcase.py",
     "ai.datasource",
     "ai.main.py",
-    "ai.nlp",
     "ai.orchestrator",
     "ai.pipeline",
     "ai.proofreader",
-    "ai.qid",
     "ai.reports",
     "ai.scheduler.py",
     "ai.swarm",
-    "ai.tests",
-    "ai.tqu",
-    "ai.trc"
+    "ai.tests"
   ],
   "topo_sort": [
     "ai.__init__.py",
@@ -28,15 +24,11 @@
     "ai.main.py",
     "ai.orchestrator",
     "ai.pipeline",
-    "ai.qid",
     "ai.reports",
     "ai.scheduler.py",
     "ai.swarm",
-    "ai.nlp",
     "ai.proofreader",
-    "ai.tests",
-    "ai.tqu",
-    "ai.trc"
+    "ai.tests"
   ],
   "has_cycles": false,
   "cycles": [],

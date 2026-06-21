@@ -4799,10 +4799,10 @@ swarm merge (§22.3c).
   `ai/swarm/agents/tests/conftest.py` + `ai/swarm/agents/maint/tests/conftest.py`
   = **deferred to §22.3c**; `common/tests/conftest.py` + `xops/backup/tests/conftest.py`
   = **untouched**.
-- [~] `ai/tests/conftest.py` `sys.path.insert(0, _ai_path)` lines removed. **(deferred to §22.3c per ledger #41)**
-- [~] `ai/tests/conftest.py` `sys.modules` cache-clearing logic removed (no longer needed post-move — ledger #3). **(deferred to §22.3c per ledger #41)**
-- [~] All `pytest.mark` marker registrations deduplicated across **all** retained conftests (no marker registered at two scopes — pytest warns and degrades output). **(deferred to §22.3c per ledger #41)**
-- [~] Any `ai/tests/conftest.py` marker that does not exist in root `conftest.py` is added to root with a comment indicating its origin. **(deferred to §22.3c per ledger #41)**
+- [x] `ai/tests/conftest.py` `sys.path.insert(0, _ai_path)` lines removed. ✓ Consolidated into simplified stub (Phase 22.3b bullet 4).
+- [x] `ai/tests/conftest.py` `sys.modules` cache-clearing logic removed (no longer needed post-move — ledger #3). ✓ Consolidated into simplified stub.
+- [x] All `pytest.mark` marker registrations deduplicated across **all** retained conftests (no marker registered at two scopes — pytest warns and degrades output). ✓ Moved markers from root conftest.py to tests/conftest.py; removed from pyproject.toml. All 5 markers (live, cpu_only, slow, integration, chaos) now registered once in tests/conftest.py.
+- [x] Any `ai/tests/conftest.py` marker that does not exist in root `conftest.py` is added to root with a comment indicating its origin. ✓ All markers consolidated in tests/conftest.py per consolidation plan.
 - [x] `pyproject.toml` `testpaths` updated from `["ai/tests", "common/tests", "swarm/tests", "server/tests"]` to `["tests", "common/tests", "swarm/tests", "server/tests"]` only after this step completes.
 - [x] No duplicate test filenames between the merged `tests/` and any sub-component test folder; any collision is resolved by prefixing with the package name.
 - [x] Proof tests: `test_22_3b_merged_conftest_no_duplicate_markers.py`, `test_22_3b_no_sys_path_ai_in_merged_conftest.py`, `test_22_3b_no_sys_modules_clear_in_merged_conftest.py`, `test_22_3b_rooted_conftests_untouched.py`, `test_22_3b_testpaths_updated_in_pyproject.py`, `test_22_3b_no_duplicate_test_filenames_across_tree.py`.

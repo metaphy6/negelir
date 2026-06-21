@@ -12,17 +12,17 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import hashlib
-import hmac
 import importlib.metadata
 import json
-import math
-import os
 import re
 import statistics
 import subprocess
 import sys
 import time
+import os
+import math
+import hmac
+import hashlib
 import unicodedata
 import uuid
 from datetime import datetime, timezone
@@ -1409,7 +1409,6 @@ def cmd_nlp_lexicon_build(argv: List[str]) -> int:
     """
     import json
     import re
-
     import yaml
 
     REPO_ROOT_LOCAL = Path(__file__).resolve().parents[2]
@@ -1908,7 +1907,6 @@ def cmd_verify_nlp_lexicons(argv: List[str]) -> int:
         1  One or more violations, or import/load error.
     """
     import json as _json
-
     import yaml as _yaml
 
     REPO_ROOT_LOCAL = Path(__file__).resolve().parents[2]
@@ -2120,7 +2118,6 @@ def cmd_verify_nlp_lexicon_diff(argv: List[str]) -> int:
     Uses git diff line-addition statistics as a proxy for PR row count.
     """
     import argparse
-
     from common.config import cfg
 
     parser = argparse.ArgumentParser(prog="verify.nlp-lexicon-diff")
@@ -2241,7 +2238,6 @@ def cmd_nlp_diacritics_build(argv: List[str]) -> int:
     import datetime as _dt
     import hashlib
     import re as _re
-
     import yaml
 
     # Only emit pure lowercase ASCII word tokens — multi-word / mixed-char
@@ -2489,7 +2485,7 @@ def cmd_nlp_intent_train(argv: list[str]) -> int:
         return 1
 
     try:
-        from nlp.trainer import IntentTrainError, train_intent_candidate
+        from ai.nlp.trainer import IntentTrainError, train_intent_candidate
     except ImportError as exc:
         err(f"nlp.intent-train: import error — {exc}")
         return 1
@@ -2829,7 +2825,7 @@ def cmd_nlp_compat_validate(argv: List[str]) -> int:
     artifact SHAs / calibration range are compatible.
     """
     try:
-        from nlp.compat import validate_compatibility_matrix
+        from ai.nlp.compat import validate_compatibility_matrix
     except ImportError as exc:
         err(f"nlp.compat-validate: import error — {exc}")
         return 1
@@ -2872,7 +2868,6 @@ def cmd_nlp_canary_promote(argv: List[str]) -> int:
 
     try:
         from importlib import reload
-
         from common import config as _cm
     except ImportError as exc:
         err(f"nlp.canary-promote: import error — {exc}")
@@ -3096,7 +3091,6 @@ def cmd_nlp_weekly_eval(argv: List[str]) -> int:
 
     try:
         from importlib import reload
-
         from common import config as _cm
     except ImportError as exc:
         err(f"nlp.weekly-eval: import error — {exc}")
@@ -3210,9 +3204,8 @@ def cmd_nlp_eval_diff(argv: List[str]) -> int:
     import json
     import subprocess
     import tempfile
-    from typing import Any, Dict, List
-
     import yaml
+    from typing import Any, Dict, List
 
     if len(argv) < 1:
         err("nlp.eval-diff: BASELINE=<sha> required")
