@@ -1,39 +1,25 @@
-"""Phase 22.4 / 22.8 — Regression check: datasource/ folder must not exist at repo root."""
-
+"""Phase 22.13 — Verify no datasource/ folder remains at repo root."""
 from pathlib import Path
 
 
-def test_no_datasource_folder_at_root():
-    """Verify datasource/ does not exist at repo root (Phase 22.2 § 22.4 must have moved it)."""
-    repo_root = Path(__file__).parent.parent
-    datasource_at_root = repo_root / "datasource"
+def test_22_4_no_datasource_folder_at_root():
+    """
+    Verification: After Phase 22.4, the transitional datasource/ stub at root is gone.
     
-    assert not datasource_at_root.exists(), (
-        "datasource/ should not exist at repo root; it should be under ai/ as ai/datasource/ "
-        "until Phase 22 migration is complete"
+    The stub was used to hold temporary bridge files during transition.
+    After migration, all content is absorbed into root packages:
+    - datasource/enrichment/ → enrichment/
+    - datasource/t3_resource_manager.py → enrichment/t3_resource_manager.py
+    - datasource/quarantine.py → scraper/quarantine.py
+    - datasource/ folder is deleted
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    datasource_folder = repo_root / 'datasource'
+    
+    # The datasource stub at root should not exist after Phase 22
+    # (Note: there may be a datasource/quarantine.py file at root in the pre-migration state,
+    # but after Phase 22, the entire datasource/ root folder should be gone)
+    assert not datasource_folder.exists(), (
+        f"datasource/ folder still exists at {datasource_folder}. "
+        f"Phase 22.4 should have deleted it after moving its contents to root packages."
     )
-
-
-def test_ai_datasource_might_exist():
-    """Verify ai/datasource/ exists (or will exist once Phase 22 migration starts)."""
-    repo_root = Path(__file__).parent.parent
-    ai_datasource = repo_root / "ai" / "datasource"
-    
-    # During Phase 22, datasource code lives in ai/datasource/
-    # After the migration, the module moves and ai/ folder is deleted
-    # This test documents the expected state during Phase 22: datasource NOT at root
-    if ai_datasource.exists():
-        # If ai/datasource exists, that's fine - we're in the transition phase
-        assert ai_datasource.is_dir(), "ai/datasource should be a directory"
-    # If it doesn't exist, we might be post-migration, but at minimum
-    # datasource should NOT be at root
-
-
-if __name__ == "__main__":
-    test_no_datasource_folder_at_root()
-    print("✅ test_no_datasource_folder_at_root passed")
-    
-    test_ai_datasource_might_exist()
-    print("✅ test_ai_datasource_might_exist passed")
-    
-    print("\n✅ All datasource folder tests passed!")

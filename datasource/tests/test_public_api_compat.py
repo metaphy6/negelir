@@ -4,7 +4,7 @@ Pins the public surface declared in __all__ to detect breaking changes.
 """
 from __future__ import annotations
 
-from ai.datasource import watcher
+from datasource import watcher
 
 
 def test_datasource_watcher_public_api_exports_exist() -> None:
