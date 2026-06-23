@@ -14,3 +14,19 @@ def section_banner(title: str) -> None:
     print(f"  {title}")
     print("=" * width + "\n")
 
+
+def success_banner(message: str) -> None:
+    """Print a formatted success banner."""
+    width = 60
+    print("\n" + "✓" * width)
+    print(f"  {message}")
+    print("✓" * width + "\n")
+
+
+def error_banner(message: str) -> None:
+    """Print a formatted error banner."""
+    width = 60
+    print("\n" + "✗" * width)
+    print(f"  {message}")
+    print("✗" * width + "\n")
+

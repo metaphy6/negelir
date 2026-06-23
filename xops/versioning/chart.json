@@ -4,14 +4,14 @@
   "project": {
     "name": "negelir",
     "version": "1.17.7",
-    "build": 15,
+    "build": 16,
     "released": null
   },
   "components": {
     "ai": {
-      "version": "1.171.3",
+      "version": "1.171.4",
       "description": "Python AI pipeline (scrapers, model, NLP, orchestrator).",
-      "last_changed": "2026-06-23T12:42:02+00:00",
+      "last_changed": "2026-06-23T13:06:08+00:00",
       "min_compatible_with": {
         "swarm": "0.50.8"
       },
@@ -18656,6 +18656,15 @@
       "from": "1.171.2",
       "to": "1.171.3",
       "build": 15
+    },
+    {
+      "timestamp": "2026-06-23T13:06:08+00:00",
+      "component": "ai",
+      "level": "patch",
+      "note": "Add Phase 21 enrichment features to training pipeline; fix logger exports and trainer imports",
+      "from": "1.171.3",
+      "to": "1.171.4",
+      "build": 16
     }
   ]
 }

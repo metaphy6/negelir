@@ -12,11 +12,11 @@ import xgboost as xgb
 from sklearn.metrics import accuracy_score, log_loss
 
 from common.config import cfg
-from common.constants import MODEL_VERSION
+from common.constants import MODEL_VERSION, FEATURE_COLUMNS
 from common.league_config import get_league_config
 from common.logger import get_logger, section_banner, success_banner
 from model.device import detect_device, get_xgb_params
-from model.features import inject_noise, FEATURE_COLUMNS
+from model.features import inject_noise
 
 log = get_logger("model.trainer")
 
@@ -178,7 +178,6 @@ def train_model(save_path: str | None = None,
 
     # Feature importance (top 10)
     importance = model.feature_importances_
-    from model.features import FEATURE_COLUMNS
     top_features = sorted(
         zip(FEATURE_COLUMNS, importance),
         key=lambda x: x[1], reverse=True

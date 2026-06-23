@@ -597,7 +597,7 @@ def _build_feature_vector(
     h2h: H2HTracker, standings: StandingsTracker,
     match_idx: int, total_matches: int,
 ) -> list[float]:
-    """Build a single 130-element feature vector for a match."""
+    """Build a single 157-element feature vector for a match (base + QID + enrichment)."""
 
     helo = elo.rating(home)
     aelo = elo.rating(away)
@@ -757,6 +757,42 @@ def _build_feature_vector(
         home_stats.goals_per_match_rate(), away_stats.goals_per_match_rate(),
         # QID features (v0.3) — zeroed, populated at inference time from swarm
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        # ── Enrichment Plane 6: Roster-state (Phase 21) ──
+        # (zeroed during training; populated by swarm roster reactor at inference)
+        0.0,  # squad_strength_delta
+        0.0,  # cohesion_penalty
+        0.0,  # departure_shock
+        # ── Enrichment Plane 7: Health (Phase 21) ──
+        0.0,  # squad_availability_score
+        0.0,  # doubtful_ratio
+        0.0,  # key_player_out_flag
+        # ── Enrichment Plane 8: Officials (Phase 21) ──
+        0.0,  # referee_yellows_per_match
+        0.0,  # referee_reds_per_match
+        0.0,  # referee_penalties_per_match
+        0.0,  # referee_home_win_pct_adj
+        # ── Enrichment Plane 9: Environment (Phase 21) ──
+        1.0,  # wind_xg_factor (default: no wind penalty)
+        1.0,  # rain_xg_factor (default: no rain penalty)
+        0.0,  # surface_style_penalty
+        1.0,  # pitch_condition_score (default: pristine)
+        # ── Enrichment Derived View: Market-movement (Phase 21.5) ──
+        0.0,  # drift_1x2_home_pct
+        0.0,  # drift_1x2_draw_pct
+        0.0,  # drift_1x2_away_pct
+        0.0,  # drift_total_pct
+        0.0,  # implied_prob_shift_max
+        0.0,  # high_drift_flag
+        # ── Enrichment Derived View: Fixture-congestion refined (Phase 21.5) ──
+        0.0,  # home_travel_km_7d
+        0.0,  # away_travel_km_7d
+        0.0,  # congestion_diff_7d
+        0.0,  # is_post_international_break
+        # ── Enrichment Derived View: Card-context (Phase 21.5) ──
+        0.0,  # combined_card_score
+        0.0,  # referee_cards_per_match_smoothed
+        # ── Enrichment Derived View: Narrative-pressure (Phase 21.5) ──
+        0.0,  # narrative_score
     ]
 
     assert len(vec) == N_FEATURES, f"Feature vector length {len(vec)} != {N_FEATURES}"
