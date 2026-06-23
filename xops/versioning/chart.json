@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.16.0",
-    "build": 16,
+    "build": 17,
     "released": null
   },
   "components": {
@@ -35,9 +35,9 @@
       }
     },
     "xops": {
-      "version": "3.89.22",
+      "version": "3.90.0",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-21T16:52:04+00:00"
+      "last_changed": "2026-06-23T07:09:43+00:00"
     },
     "docs": {
       "version": "3.25.1",
@@ -18085,6 +18085,15 @@
       "from": "3.89.21",
       "to": "3.89.22",
       "build": 16
+    },
+    {
+      "timestamp": "2026-06-23T07:09:43+00:00",
+      "component": "xops",
+      "level": "minor",
+      "note": "hooks: commit-msg Conventional Commits gate added",
+      "from": "3.89.22",
+      "to": "3.90.0",
+      "build": 17
     }
   ]
 }

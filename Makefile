@@ -638,6 +638,20 @@ hosts.status: ## Show current /etc/hosts state for mock vhosts
 hosts.preview: ## Show the hostnames the mock stack will register
 	@$(XOPS)/hosts.py show
 
+# ── git hooks ───────────────────────────────────────────────
+
+.PHONY: hooks.install
+hooks.install: ## Install shared git hooks (commit-msg Conventional Commits gate)
+	@$(XOPS)/hooks.py install
+
+.PHONY: hooks.uninstall
+hooks.uninstall: ## Remove shared git hooks installed by this repo
+	@$(XOPS)/hooks.py uninstall
+
+.PHONY: hooks.status
+hooks.status: ## Show installation status of shared git hooks
+	@$(XOPS)/hooks.py status
+
 # ══════════════════════════════════════════════════════════════
 #       PHASE 12 — ADVERSARIAL & CHAOS TEST SUITE (§12.4–§12.5)
 # ══════════════════════════════════════════════════════════════
