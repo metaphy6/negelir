@@ -986,16 +986,222 @@ def cmd_k8s_scan(argv: List[str]) -> int:
 
 
 def cmd_metric_scan(argv: List[str]) -> int:
-    """List non-conforming metric names from TelemetrySink calls (Phase 22.2).
+    """List non-conforming metric names from metric definitions (Phase 22.9 bullet 1).
     
-    Scans for metrics that don't conform to the pattern:
+    Scans Python files for metrics that don't conform to the pattern:
     ^(datasource|swarm|server|common|patcher|gitops)_[a-z0-9_]+_(seconds|bytes|total|ratio|count|gauge)$
     
-    Produces a list for remediation in §22.9.
+    Scans for:
+    - TelemetrySink.register_* calls
+    - prometheus_client.Counter/Gauge/Histogram/Summary/Info constructor calls
+    - _metrics[...] dict initializations
+    
+    Produces docs/tracking/phase22_metric_rename_table.md with all violations
+    and proposed renames.
     """
-    # TODO: Implement in Phase 22.2
-    print("phase22.metric-scan: not yet implemented")
+    import os
+    
+    # Valid pattern: prefix_[a-z0-9_]+_suffix
+    VALID_PREFIXES = ("datasource", "swarm", "server", "common", "patcher", "gitops")
+    VALID_SUFFIXES = ("seconds", "bytes", "total", "ratio", "count", "gauge")
+    METRIC_PATTERN = re.compile(
+        r"^(" + "|".join(VALID_PREFIXES) + r")_[a-z0-9_]+_(" + "|".join(VALID_SUFFIXES) + r")$"
+    )
+    
+    # Scan patterns (for multi-line support, we search within the whole file)
+    # Matches: Histogram("metric_name", ...) or Histogram(\n  "metric_name", ...)
+    PROMETHEUS_METRIC = re.compile(
+        r"(?:Counter|Gauge|Histogram|Summary|Info)\s*\(\s*['\"]([a-z0-9_]+)['\"]",
+        re.MULTILINE
+    )
+    REGISTER_CALL = re.compile(r"\.register_\w+\s*\(\s*['\"]([a-z0-9_]+)['\"]", re.MULTILINE)
+    METRICS_DICT = re.compile(r"_metrics\s*\[\s*['\"]([a-z0-9_]+)['\"]", re.MULTILINE)
+    
+    # Collect all metric names found
+    metrics_found: Dict[str, Dict[str, Any]] = {}  # name -> {file, count, type, proposed_rename}
+    
+    # Scan all Python files in key directories
+    scan_dirs = [
+        REPO_ROOT / "ai",
+        REPO_ROOT / "common",
+        REPO_ROOT / "server",
+    ]
+    
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        
+        for py_file in scan_dir.rglob("*.py"):
+            if "__pycache__" in str(py_file):
+                continue
+            
+            try:
+                content = py_file.read_text(encoding="utf-8")
+                
+                # Find all metrics in this file (process whole file to handle multi-line defs)
+                # Scan for prometheus_client direct calls
+                for match in PROMETHEUS_METRIC.finditer(content):
+                    metric_name = match.group(1)
+                    if metric_name not in metrics_found:
+                        conforms = METRIC_PATTERN.match(metric_name) is not None
+                        metrics_found[metric_name] = {
+                            "files": [str(py_file.relative_to(REPO_ROOT))],
+                            "type": "prometheus_direct",
+                            "conforms": conforms,
+                            "proposed_rename": _propose_metric_rename(metric_name, VALID_PREFIXES, VALID_SUFFIXES) if not conforms else None,
+                        }
+                    else:
+                        # Add file to list if not already there
+                        file_str = str(py_file.relative_to(REPO_ROOT))
+                        if file_str not in metrics_found[metric_name]["files"]:
+                            metrics_found[metric_name]["files"].append(file_str)
+                
+                # Scan for .register_*(...)
+                for match in REGISTER_CALL.finditer(content):
+                    metric_name = match.group(1)
+                    if metric_name not in metrics_found:
+                        conforms = METRIC_PATTERN.match(metric_name) is not None
+                        metrics_found[metric_name] = {
+                            "files": [str(py_file.relative_to(REPO_ROOT))],
+                            "type": "telemetry_sink",
+                            "conforms": conforms,
+                            "proposed_rename": _propose_metric_rename(metric_name, VALID_PREFIXES, VALID_SUFFIXES) if not conforms else None,
+                        }
+                    else:
+                        file_str = str(py_file.relative_to(REPO_ROOT))
+                        if file_str not in metrics_found[metric_name]["files"]:
+                            metrics_found[metric_name]["files"].append(file_str)
+                
+                # Scan for _metrics[...]
+                for match in METRICS_DICT.finditer(content):
+                    metric_name = match.group(1)
+                    if metric_name not in metrics_found:
+                        conforms = METRIC_PATTERN.match(metric_name) is not None
+                        metrics_found[metric_name] = {
+                            "files": [str(py_file.relative_to(REPO_ROOT))],
+                            "type": "metrics_dict",
+                            "conforms": conforms,
+                            "proposed_rename": _propose_metric_rename(metric_name, VALID_PREFIXES, VALID_SUFFIXES) if not conforms else None,
+                        }
+                    else:
+                        file_str = str(py_file.relative_to(REPO_ROOT))
+                        if file_str not in metrics_found[metric_name]["files"]:
+                            metrics_found[metric_name]["files"].append(file_str)
+            except (OSError, UnicodeDecodeError):
+                pass
+    
+    # Filter to only non-conforming metrics
+    non_conforming = {
+        name: info for name, info in metrics_found.items()
+        if not info["conforms"]
+    }
+    
+    # Generate markdown table
+    tracking_dir = REPO_ROOT / "docs" / "tracking"
+    tracking_dir.mkdir(parents=True, exist_ok=True)
+    table_path = tracking_dir / "phase22_metric_rename_table.md"
+    
+    lines_out: List[str] = [
+        "# Phase 22.9 — Metric rename table",
+        "",
+        f"Generated at Phase 22.9 bullet 1: `make phase22.metric-scan`",
+        "",
+        "## Conformance pattern",
+        "",
+        "```",
+        "^(datasource|swarm|server|common|patcher|gitops)_[a-z0-9_]+_(seconds|bytes|total|ratio|count|gauge)$",
+        "```",
+        "",
+        "## Summary",
+        "",
+        f"Total metrics found: {len(metrics_found)}",
+        f"Conforming: {sum(1 for info in metrics_found.values() if info['conforms'])}",
+        f"Non-conforming: {len(non_conforming)}",
+        "",
+        "## Non-conforming metrics",
+        "",
+        "| Old Name | New Name | Type | Files |",
+        "|----------|----------|------|-------|",
+    ]
+    
+    for metric_name in sorted(non_conforming.keys()):
+        info = non_conforming[metric_name]
+        new_name = info.get("proposed_rename", "?")
+        type_str = info["type"]
+        files_str = ", ".join(sorted(info["files"]))
+        
+        lines_out.append(
+            f"| `{metric_name}` | `{new_name}` | {type_str} | {files_str} |"
+        )
+    
+    if not non_conforming:
+        lines_out.append("(none)")
+    
+    # Write the table
+    table_path.write_text("\n".join(lines_out) + "\n", encoding="utf-8")
+    
+    # Report results
+    print(f"✓ {table_path.relative_to(REPO_ROOT)}")
+    print()
+    print(f"Total metrics found: {len(metrics_found)}")
+    print(f"Conforming: {sum(1 for info in metrics_found.values() if info['conforms'])}")
+    print(f"Non-conforming: {len(non_conforming)}")
+    print()
+    
+    if non_conforming:
+        print(f"Non-conforming metrics ({len(non_conforming)}):")
+        for name, info in sorted(non_conforming.items()):
+            proposed = info.get("proposed_rename", "?")
+            print(f"  {name} → {proposed}")
+    else:
+        print("All metrics conform to the naming pattern ✓")
+    
     return 0
+
+
+def _propose_metric_rename(
+    metric_name: str,
+    valid_prefixes: Tuple[str, ...],
+    valid_suffixes: Tuple[str, ...],
+) -> str:
+    """Propose a conforming rename for a non-conforming metric name.
+    
+    Heuristics:
+    1. If name starts with an invalid prefix (e.g., nlp_, ai_), replace with common_
+    2. If name ends with an invalid suffix, infer the best one from context
+    3. Otherwise, append _gauge as a default unit
+    """
+    # Split on underscores
+    parts = metric_name.split("_")
+    if not parts:
+        return metric_name + "_gauge"
+    
+    # Check first part (prefix)
+    prefix = parts[0]
+    has_valid_prefix = prefix in valid_prefixes
+    
+    # Check last part (suffix)
+    suffix = parts[-1] if parts else ""
+    has_valid_suffix = suffix in valid_suffixes
+    
+    # Heuristic: if prefix is invalid (e.g. nlp_, ai_), replace with common_
+    if not has_valid_prefix:
+        # Replace the first part with common_
+        new_parts = ["common"] + parts[1:]
+        middle = "_".join(new_parts)
+        
+        # If suffix is also invalid, append _gauge
+        if not has_valid_suffix:
+            return middle + "_gauge"
+        else:
+            return middle
+    
+    # If suffix is invalid but prefix is valid, append _gauge
+    if not has_valid_suffix:
+        return metric_name + "_gauge"
+    
+    # Should not reach here (metric conforms)
+    return metric_name
 
 
 COMMANDS = {

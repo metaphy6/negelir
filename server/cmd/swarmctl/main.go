@@ -174,12 +174,12 @@ func cmdPs(ctx context.Context, rdb *redis.Client, cfg *config.Config) error {
 	return nil
 }
 
-// ── wire-authority (static; Go side of ai/swarm/sdk/wire_contracts.py) ──
+// ──wire-authority (static; Go side of swarm/sdk/wire_contracts.py) ──
 //
 // Maps topic name → sole/declared producer. This is the Go-side mirror of
 // the Python `API_TOPIC_V1_ALLOWED_PRODUCERS` and
 // `PREDICT_CANCEL_V1_ALLOWED_PRODUCERS` constants in
-// `ai/swarm/sdk/wire_contracts.py`. The `topics` command reads this map so
+// `swarm/sdk/wire_contracts.py`. The `topics` command reads this map so
 // it can show a PRODUCER column alongside XLEN/PENDING/GROUPS for every
 // known gateway-owned stream, whether or not the stream already exists in
 // Redis (streams are created on first publish).

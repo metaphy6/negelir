@@ -115,6 +115,8 @@ services:
       context: ./server
       dockerfile: Dockerfile
     profiles:
+      - core
+      - mock
       - server
       - internal
       - swarm

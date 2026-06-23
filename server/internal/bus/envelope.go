@@ -1,7 +1,7 @@
 // Package bus implements the Phase 3 wire-envelope discipline for every bus
 // message published by the API gateway (§9.5 binding spec).
 //
-// Wire shape mirrors the Python SDK JsonCodec output (ai/swarm/sdk/codec.py)
+// Wire shape mirrors the Python SDK JsonCodec output (swarm/sdk/codec.py)
 // so swarm consumers can decode API-published messages without adaptation:
 //
 //	{"envelope": {...}, "payload": {...}}
@@ -44,7 +44,7 @@ const schemaVersion = 1
 const Producer = "api.gateway.v1"
 
 // Envelope is the Phase 3 per-message metadata wrapper. JSON field names
-// are compatible with the Python SDK (ai/swarm/sdk/types.py Envelope.as_dict)
+// are compatible with the Python SDK (swarm/sdk/types.py Envelope.as_dict)
 // except that Go uses produced_at where Python uses created_at — the design
 // doc §9.5 canonises produced_at for the Go gateway side.
 type Envelope struct {

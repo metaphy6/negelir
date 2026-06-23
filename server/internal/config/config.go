@@ -1,6 +1,6 @@
 // Package config is the Go server's single source of truth for tunables.
 //
-// Mirrors the Python pattern in ai/common/config.py: every field is loaded
+// Mirrors the Python pattern in common/config/ai_pipeline.py: every field is loaded
 // from an env var with a documented default, and Validate() catches obvious
 // misconfiguration (bad ports, negative timeouts, missing URLs).
 //
@@ -26,7 +26,7 @@ type Config struct {
 	DatabaseURL string `env:"DATABASE_URL"      default:""`
 	RedisURL    string `env:"REDIS_URL"         default:""`
 
-	// Shared with Python (ai/common/config.py) — marked `# shared` in .env.example.
+	// Shared with Python (common/config/ai_pipeline.py) — marked `# shared` in .env.example.
 	PostgresHost     string `env:"POSTGRES_HOST"     default:"postgres"`
 	PostgresPort     string `env:"POSTGRES_PORT"     default:"5432"`
 	PostgresDB       string `env:"POSTGRES_DB"       default:"negelir"`
@@ -36,6 +36,7 @@ type Config struct {
 	RedisPort        string `env:"REDIS_PORT"        default:"6379"`
 
 	// Go-only knobs.
+	Mode                     string `env:"MODE"                      default:"api"`
 	Port                     string `env:"SERVER_PORT"               default:"8080"`
 	DBMaxConns               int    `env:"DB_MAX_CONNS"              default:"10"`
 	DBConnectTimeoutSec      int    `env:"DB_CONNECT_TIMEOUT_SEC"    default:"5"`
@@ -49,13 +50,13 @@ type Config struct {
 	CacheMatchesTTLSec       int    `env:"CACHE_MATCHES_TTL_SEC"     default:"300"`
 	CacheTeamsTTLSec         int    `env:"CACHE_TEAMS_TTL_SEC"       default:"600"`
 
-	// Shared with Python (ai/common/config.py) — used by `swarmctl` to
+	// Shared with Python (common/config/ai_pipeline.py) — used by `swarmctl` to
 	// compute the dead-after-3-missed-heartbeats marker. Marked `# shared`
 	// in .env.example.
 	SwarmHeartbeatSec int `env:"SWARM_HEARTBEAT_SEC" default:"5"`
 
 	// Phase 7 §7.1 / §7.3 — defense-agent knobs SHARED with the Python
-	// `sec.*` agents (ai/swarm/agents/sec/). The Go gateway runs the
+	// `sec.*` agents (swarm/agents/sec/). The Go gateway runs the
 	// in-process tier (length cap, deterministic rules, GCRA bucket via
 	// EVALSHA, denylist short-circuit); the Python agents own the
 	// escalation classifier + denylist mutation + burst detection. Both
@@ -599,6 +600,10 @@ func Load() (*Config, error) {
 
 // Validate returns the first detected misconfiguration error, or nil.
 func (c *Config) Validate() error {
+	// Phase 22.8 — MODE must be either "api" or "mocksrv".
+	if c.Mode != "api" && c.Mode != "mocksrv" {
+		return fmt.Errorf("MODE=%q must be either \"api\" or \"mocksrv\"", c.Mode)
+	}
 	if err := validatePort(c.Port, "SERVER_PORT"); err != nil {
 		return err
 	}
@@ -951,6 +956,7 @@ func (c *Config) specs() []fieldSpec {
 		{name: "POSTGRES_PASSWORD", dflt: "", stringDst: &c.PostgresPassword},
 		{name: "REDIS_HOST", dflt: "redis", stringDst: &c.RedisHost},
 		{name: "REDIS_PORT", dflt: "6379", stringDst: &c.RedisPort},
+		{name: "MODE", dflt: "api", stringDst: &c.Mode},
 		{name: "SERVER_PORT", dflt: "8080", stringDst: &c.Port},
 		{name: "DB_MAX_CONNS", dflt: "10", intDst: &c.DBMaxConns},
 		{name: "DB_CONNECT_TIMEOUT_SEC", dflt: "5", intDst: &c.DBConnectTimeoutSec},

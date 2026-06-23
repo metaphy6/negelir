@@ -165,7 +165,7 @@ between `*.local` and the real hosts.
 Every plane's bytes are normalized into the same `Record` envelope
 before anything downstream looks at them. Defined in
 `common/schemas/records.py` (Phase 4; during the R1/R2 migration the
-shim lives at `ai/common/schemas/records.py`).
+shim lives at `common/schemas/records.py`).
 
 ```python
 class Record(TypedDict):
@@ -216,7 +216,7 @@ features.
   feature for fixture `F` can only use records with
   `captured_at ≤ as_of_utc < kickoff(F)`. Enforced by
   `swarm/predictors/<predictor>/features.py` (post-Pivot v3; today:
-  `ai/model/features.py`) and tested with leakage probes.
+  `model/features.py`) and tested with leakage probes.
 - **Cadence:** retraining is **event-gated**, not time-gated. The
   trainer wakes on `score.finalized`, `fixture.cancelled`, or
   `dataset.recomposed` events from CONTENT_FRESHNESS — never on a
@@ -305,9 +305,9 @@ an existing source.
 
 - `xops/mock/sources.py` — source registry; CI fails if §2 of this
   doc lists a source not present there (and vice versa).
-- `common/schemas/records.py` (post-Pivot v3; today: `ai/common/schemas/records.py`) — Record envelope; `record_type`
+- `common/schemas/records.py` (post-Pivot v3; today: `common/schemas/records.py`) — Record envelope; `record_type`
   literals must match §1's plane table (lint check).
-- `swarm/predictors/<predictor>/features.py` (post-Pivot v3; today: `ai/model/features.py`) — leakage probe asserts §5.1's cut-off
+- `swarm/predictors/<predictor>/features.py` (post-Pivot v3; today: `model/features.py`) — leakage probe asserts §5.1's cut-off
   discipline.
 - CONTENT_FRESHNESS.md §3 — payload schemas referenced by §4 here.
 - MOCK_DATA_SERVER.md — implementation of the seed corpus referenced

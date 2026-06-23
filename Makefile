@@ -487,6 +487,14 @@ clean.all: ## Remove everything including volumes (DATA=1 also wipes ./data)
 	@$(XOPS)/cleanup.py clean.all
 
 # ══════════════════════════════════════════════════════════════
+#            DOCKER COMPOSE LIFECYCLE & REPORTING
+# ══════════════════════════════════════════════════════════════
+
+.PHONY: compose.overlay.usage_report
+compose.overlay.usage_report: ## Check for any references to deprecated docker-compose.mock.yml
+	@$(XOPS)/compose.py overlay.usage_report
+
+# ══════════════════════════════════════════════════════════════
 #               PHASE 2 — MOCK-DATA DEV STACK
 # ══════════════════════════════════════════════════════════════
 
@@ -589,6 +597,10 @@ feeds.schema.review: ## Manual review of feed schema and partitioning strategy
 feeds.schema.audit: ## Audit schema compatibility across all feed versions
 	@$(XOPS)/feeds.py schema.audit
 
+.PHONY: schema.validate
+schema.validate: ## Phase 22.11 — Validate feed schemas for correctness and zero warnings
+	@python3 xops/lint/schema_validator.py
+
 .PHONY: feeds.backfill
 feeds.backfill: ## Backfill missing feed partitions (SOURCE=<id> FROM=<utc-iso> TO=<utc-iso>)
 	@$(XOPS)/feeds.py backfill $(SOURCE) $(FROM) $(TO)
@@ -674,7 +686,7 @@ chaos.list: ## Print the chaos catalogue (single source: docs/testing/phase12_ca
 
 .PHONY: test.chaos.inproc
 test.chaos.inproc: ## Run in-process FaultInjector scenarios (deterministic, no compose)
-	@PYTHONPATH=ai $(PY) -m pytest ai/tests/test_phase12_fault_injector.py -q
+	@PYTHONPATH=. $(PY) -m pytest tests/test_phase12_fault_injector.py -q
 
 # ── §12.6 Bus & Network Chaos ──────────────────────────────
 
@@ -912,7 +924,7 @@ test.integration: env ## Full-pipeline integration test (skips cleanly if real d
 
 .PHONY: test.adversarial
 test.adversarial: env ## Phase 12 — Run adversarial corpus tests; zero xfail (§12.2.4)
-	@PYTHONPATH=ai python3 -m pytest ai/tests/test_adversarial_corpus.py -q
+	@PYTHONPATH=. python3 -m pytest tests/test_adversarial_corpus.py -q
 
 .PHONY: fuzz.smoke
 fuzz.smoke: ## Phase 12 — Replay persisted fuzz corpus (PR lane, deterministic)
@@ -1403,6 +1415,25 @@ phase22.k8s-scan: ## Phase 22.2 — Scan infra/k8s/ for ai/ path references (led
 .PHONY: phase22.metric-scan
 phase22.metric-scan: ## Phase 22.2 — List non-conforming metric names from Phase 22.9 pattern
 	@$(XOPS)/phase22.py metric-scan
+
+.PHONY: config.export-env
+config.export-env: ## Phase 22.6 — Generate xops/env/.env.example from common/config/defaults.yaml
+	@$(XOPS)/config_export.py export-env
+
+.PHONY: config.export-doc
+config.export-doc: ## Phase 22.6 — Generate docs/design/CONFIGURATION.md registry from defaults.yaml
+	@$(XOPS)/config_export.py export-doc
+
+.PHONY: config.export-go
+config.export-go: ## Phase 22.6 — Generate server/internal/config/config_defaults.go from defaults.yaml
+	@$(XOPS)/config_export.py export-go
+
+.PHONY: config.export-check
+config.export-check: ## Phase 22.6 — Check-mode: verify all config exports are current (for CI)
+	@$(XOPS)/config_export.py export-env --check
+	@$(XOPS)/config_export.py export-doc --check
+	@$(XOPS)/config_export.py export-go --check
+	@echo "✅ Config exports are current"
 
 # ══════════════════════════════════════════════════════════════
 #                  GIT (HUMAN-ONLY)

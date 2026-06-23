@@ -2,3 +2,10 @@
 
 Phase 22.4: ai/swarm is a backwards-compat shim. Import from swarm directly.
 """
+
+__all__ = [
+    "AgentSDK",
+    "PredictorAgent",
+    "ProofreaderAgent",
+]
+

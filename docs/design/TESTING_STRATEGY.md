@@ -19,7 +19,7 @@ The eleven-layer test pyramid from Phase 12 §12.1. Each layer has a **single ow
 | **Chaos** | Kill / slow / partition / corrupt | full stack | nightly | `chaos.redis-flap` |
 | **Soak** | Long-run leak / drift / MTBF | every long-lived agent | nightly + weekly | `soak.swarm.24h` |
 | **Regression/Golden** | Frozen-output byte-identity | NLP render, citations | pr | `test_nlp_audit_rerender_byte_identical` |
-| **Mutation** | "Covered ⇒ asserted" | security/integrity hot paths | nightly | `mutmut run --paths-to-mutate ai/swarm/agents/sec` |
+| **Mutation** | "Covered ⇒ asserted" | security/integrity hot paths | nightly | `mutmut run --paths-to-mutate swarm/agents/sec` |
 
 ## 🎯 Adversarial corpus
 

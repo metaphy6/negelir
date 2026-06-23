@@ -58,7 +58,7 @@ func parseEnvExample(t *testing.T) (allKeys, sharedKeys map[string]struct{}) {
 
 // TestEnvSync — every env key the Go Config binds must be documented in
 // .env.example. This is the Go-side counterpart of the Python test in
-// ai/tests/test_config_sync.py.
+// tests/test_config_sync.py.
 func TestEnvSync(t *testing.T) {
 	docs, _ := parseEnvExample(t)
 	var missing []string
@@ -79,14 +79,14 @@ func TestEnvSync(t *testing.T) {
 // "double-owned" (per ROADMAP §1.3).
 //
 // This test enumerates the canonical Python-owned env vars (those read in
-// ai/common/config.py) by scanning the source file at test time.
+// common/config/ai_pipeline.py) by scanning the source file at test time.
 func TestSharedKeysAreMarked(t *testing.T) {
 	docs, shared := parseEnvExample(t)
 
 	// envExamplePath returns .../xops/env/.env.example; the repo root is
 	// three levels up.
 	root := filepath.Dir(filepath.Dir(filepath.Dir(envExamplePath(t))))
-	pyPath := filepath.Join(root, "ai", "common", "config.py")
+	pyPath := filepath.Join(root, "common", "config", "ai_pipeline.py")
 	pyBody, err := os.ReadFile(pyPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", pyPath, err)

@@ -20,6 +20,16 @@ Key additions:
 
 All 31 Phase 21 bullets are complete; enrichment_roster, enrichment_health, enrichment_officials, enrichment_environment components reach 1.0.0.
 
+### Added (Phase 22.10: Core Component Maturation & Pivot v3 Transition)
+
+**Phase 22.10: Core component milestone—five key subsystems (common, swarm, datasource_scraper, datasource_refresher, datasource_watcher) reach 1.0.0 stability. Legacy ai package and source_watcher alias deprecated in favor of Pivot v3 component structure.** Completes the foundational infrastructure rework supporting clustered scraper swarms, unified data pipeline contract, and operational readiness gates. All 8 sub-phase deliverables shipped, verified against proof-of-concept test suite.
+
+Key milestones:
+- Five core components promoted to 1.0.0: common, swarm, datasource_scraper, datasource_refresher, datasource_watcher.
+- Legacy ai package (pre-Pivot v3) marked EOL; migration to new component layout complete.
+- source_watcher agent alias retired in favor of datasource_watcher canonical naming.
+- All Phase 22.10 bullets verified; proof-of-concept test suite passing (7/7).
+
 ## [1.14.0] — 2026-06-20
 
 (Previous release notes would be here)

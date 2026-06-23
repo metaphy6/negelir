@@ -16,7 +16,7 @@ import (
 //
 // If this test fails, refresh the embedded copy with:
 //
-//	cp ai/common/security/injection_patterns.yaml \
+//	cp common/security/injection_patterns.yaml \
 //	   server/internal/sec/embedded/injection_patterns.yaml
 //	# (etc. for whichever file diverged)
 func TestEmbeddedAssetsByteIdenticalToCanonical(t *testing.T) {
@@ -28,9 +28,9 @@ func TestEmbeddedAssetsByteIdenticalToCanonical(t *testing.T) {
 		{"server/internal/sec/embedded/sec_rate_check.lua", "infra/redis/lua/sec_rate_check.lua"},
 		{"server/internal/sec/embedded/sec_denylist_mutate.lua", "infra/redis/lua/sec_denylist_mutate.lua"},
 		{"server/internal/sec/embedded/sec_denylist_decimate.lua", "infra/redis/lua/sec_denylist_decimate.lua"},
-		{"server/internal/sec/embedded/qa.request.v1.json", "ai/swarm/sdk/schemas/qa.request.v1.json"},
-		{"server/internal/sec/embedded/injection_patterns.yaml", "ai/common/security/injection_patterns.yaml"},
-		{"server/internal/sec/embedded/endpoint_costs.yaml", "ai/common/security/endpoint_costs.yaml"},
+		{"server/internal/sec/embedded/qa.request.v1.json", "swarm/sdk/schemas/qa.request.v1.json"},
+		{"server/internal/sec/embedded/injection_patterns.yaml", "common/security/injection_patterns.yaml"},
+		{"server/internal/sec/embedded/endpoint_costs.yaml", "common/security/endpoint_costs.yaml"},
 	}
 	for _, c := range cases {
 		t.Run(filepath.Base(c.embedded), func(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 
 // CompiledRule is one entry from `injection_patterns.yaml` after
 // validation. The fields mirror the Python `RuleSet`/`CompiledRule`
-// pair in `ai/common/security/patterns.py`.
+// pair in `common/security/patterns.py`.
 type CompiledRule struct {
 	ID       string
 	Severity string // info | warn | error | critical

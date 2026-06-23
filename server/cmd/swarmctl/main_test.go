@@ -10,7 +10,7 @@ import (
 // This is the Go-side companion to the Python boundary test
 // `test_api_topic_v1_allowed_producers_constant` and the new
 // `test_predict_cancel_v1_allowed_producers_constant` in
-// `ai/swarm/agents/tests/test_boundary_discipline.py`.
+// `swarm/agents/tests/test_boundary_discipline.py`.
 //
 // The assertions mirror the Python `wire_contracts.py` constants:
 //

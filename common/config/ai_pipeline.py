@@ -1228,6 +1228,10 @@ class Config:
     # telemetry_debug_enabled=true is refused if
     # len(kinds) × len(consumers) × 2 > telemetry_debug_max_series.
     telemetry_debug_max_series: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_TELEMETRY_DEBUG_MAX_SERIES", "5000")))
+    # Phase 22.9 — Metric rename dual-emission window (days)
+    # During metric renames, both old and new metric names are emitted for this duration
+    # to allow dashboards and alert rules to transition gradually (default 30 days).
+    metric_rename_alias_days: int = field(default_factory=lambda: int(os.getenv("NEGELIR_COMMON_METRIC_RENAME_ALIAS_DAYS", "30")))
     reactor_max_event_age_sec: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SWARM_REACTOR_MAX_EVENT_AGE_SEC", "86400")))
     # Cap on the per-reactor in-memory idempotency ledger. The ledger
     # keys events by `(reactor_name, event_id)`; with no bound a long-
@@ -1450,7 +1454,7 @@ class Config:
     # Foundation knobs landed here in lockstep with the topic catalog +
     # JSON schemas; agent logic follows in Phase 7.1 / 7.2 / 7.3.
     # The §7.7 test_config_sync gate is the contract: every knob below
-    # also appears in `xops/env/.env.example` and `ai/common/defaults.yaml`.
+    # also appears in `xops/env/.env.example` and `common/config/defaults.yaml`.
     #
     # Doctrine: `sec_input_max_len` is **bytes after UTF-8 encoding**
     # (NOT codepoints) — the byte count stresses Redis + the
@@ -1573,7 +1577,7 @@ class Config:
     api_burst_refill_per_s: float = field(default_factory=lambda: float(os.getenv("NEGELIR_SERVER_API_BURST_REFILL_PER_S", "2.0")))
 
     # ── Phase 9 §9.12 — Full API knob inventory (shared with Go API gateway) ──
-    # Every key below is also in server/internal/config/config.go, ai/common/defaults.yaml,
+    # Every key below is also in server/internal/config/config.go, common/config/defaults.yaml,
     # and xops/env/.env.example with `# shared`. test_config_sync covers all three sides.
     api_request_timeout_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_REQUEST_TIMEOUT_MS", "2500")))
     api_transit_jitter_ms: int = field(default_factory=lambda: int(os.getenv("NEGELIR_SERVER_API_TRANSIT_JITTER_MS", "100")))
@@ -2114,8 +2118,8 @@ class Config:
     #   Default true.
     nlp_ki_context_disambiguation: bool = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_KI_CONTEXT_DISAMBIGUATION", "true").lower() in ("true", "1", "yes"))
     # nlp_tr_normalize_spec_path: path to the cross-language TR normalize spec.
-    #   Default ai/common/text/tr_normalize_spec.json.
-    nlp_tr_normalize_spec_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TR_NORMALIZE_SPEC_PATH", "ai/common/text/tr_normalize_spec.json").strip())
+    #   Default common/text/tr_normalize_spec.json.
+    nlp_tr_normalize_spec_path: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TR_NORMALIZE_SPEC_PATH", "common/text/tr_normalize_spec.json").strip())
     # nlp_tr_normalize_spec_required: spec validation mode. Default enforce.
     nlp_tr_normalize_spec_required: str = field(default_factory=lambda: os.getenv("NEGELIR_SWARM_NLP_TR_NORMALIZE_SPEC_REQUIRED", "enforce").strip().lower())
     # nlp_reduplication_collapse_enabled: enable whole-word reduplication collapse

@@ -40,11 +40,26 @@ def cmd_api(_argv: List[str]) -> int:
     errors = []
     
     for component in components:
-        # Try Phase 22 layout first (datasource/, swarm/, common/)
-        comp_path = REPO_ROOT / component.replace("_", "/")
-        if not comp_path.exists():
-            # Fall back to Phase 18 layout (ai/)
-            comp_path = REPO_ROOT / "ai" / component.replace("_", "/")
+        # Special case mappings for Phase 22 components
+        if component == "datasource_scraper":
+            comp_path = REPO_ROOT / "scraper"
+        elif component == "datasource_emitter":
+            # Already at 1.0.0; might be at enrichment/ or ai/datasource/emitter
+            comp_path = REPO_ROOT / "enrichment" / "emitter"
+            if not comp_path.exists():
+                comp_path = REPO_ROOT / "ai" / "datasource" / "emitter"
+        elif component == "datasource_watcher" or component == "datasource_refresher" or component == "datasource_patcher" or component == "datasource_gitops":
+            # Try Phase 22 layout: datasource/watcher, datasource/refresher, etc.
+            comp_path = REPO_ROOT / component.split("_", 1)[1]  # removes "datasource_" prefix
+            if not comp_path.exists():
+                # Fall back to Phase 18 layout: ai/datasource/watcher, etc.
+                comp_path = REPO_ROOT / "ai" / component.replace("_", "/")
+        else:
+            # Try Phase 22 layout first (swarm/, common/)
+            comp_path = REPO_ROOT / component.replace("_", "/")
+            if not comp_path.exists():
+                # Fall back to Phase 18 layout (ai/)
+                comp_path = REPO_ROOT / "ai" / component.replace("_", "/")
         
         if not comp_path.exists():
             print(f"⚠️  {component}: not found at {comp_path}")

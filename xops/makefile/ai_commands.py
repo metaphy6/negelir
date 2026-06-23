@@ -25,7 +25,6 @@ from typing import List
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "ai"))
 
 from xops.makefile._common import REPO_ROOT as _R, dispatch, err, info, ok, warn  # noqa: E402
 

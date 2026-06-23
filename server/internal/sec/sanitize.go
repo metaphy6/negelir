@@ -54,7 +54,7 @@ var hangulFillerRunes = map[rune]bool{
 	0x3164: true,
 }
 
-const defaultTRNormalizeSpecPath = "ai/common/text/tr_normalize_spec.json"
+const defaultTRNormalizeSpecPath = "common/text/tr_normalize_spec.json"
 
 var TRNormalizeSpecSHA string
 

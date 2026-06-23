@@ -136,7 +136,7 @@ FEATURE_COLUMNS: list[str] = [
     "narrative_score",               # Phase 21.5: sentiment polarity aggregated from editorial plane (Phase 10)
 ]
 
-N_FEATURES: int = len(FEATURE_COLUMNS)  # Auto-resolves to 147 after Phase 21.16 lands
+N_FEATURES: int = len(FEATURE_COLUMNS)  # Derived identity — currently 157 (120 base + 10 QID + 27 enrichment per Phase 21)
 
 # ── Locale-driven data (loaded from YAML) ───────────────
 # Strict loading: missing/malformed locale is a hard error. Silent empty

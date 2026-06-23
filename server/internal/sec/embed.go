@@ -32,17 +32,17 @@ var EmbeddedDenylistMutateLua string
 //go:embed embedded/sec_denylist_decimate.lua
 var EmbeddedDecimateLua string
 
-// Canonical: ai/swarm/sdk/schemas/qa.request.v1.json
+// Canonical: swarm/sdk/schemas/qa.request.v1.json
 //
 //go:embed embedded/qa.request.v1.json
 var EmbeddedQARequestV1Schema []byte
 
-// Canonical: ai/common/security/injection_patterns.yaml
+// Canonical: common/security/injection_patterns.yaml
 //
 //go:embed embedded/injection_patterns.yaml
 var EmbeddedInjectionPatternsYAML []byte
 
-// Canonical: ai/common/security/endpoint_costs.yaml
+// Canonical: common/security/endpoint_costs.yaml
 //
 //go:embed embedded/endpoint_costs.yaml
 var EmbeddedEndpointCostsYAML []byte

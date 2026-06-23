@@ -1,6 +1,6 @@
 """Top-level pytest config.
 
-Adds the workspace root to ``sys.path`` so ``ai.*`` and ``xops.*``
+Adds the workspace root to ``sys.path`` so all root packages and ``xops.*``
 imports resolve from any test file location, and registers custom
 markers used across the suite.
 """
@@ -14,21 +14,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 _root_str = str(ROOT)
 
-# Phase 18 transitional layout: ai/common exists, root/common doesn't
-# Phase 22+ layout: root/common exists, ai/ tree is deleted
-# Check if root/common/config/__init__.py exists to determine which phase we're in
-_phase22_layout = (ROOT / "common" / "config" / "__init__.py").exists()
-
-if _phase22_layout:
-    # Phase 22+: Ensure repo root is at the front of sys.path
-    # This allows top-level 'common' to be found before 'ai/common'
-    if _root_str in sys.path:
-        sys.path.remove(_root_str)
-    sys.path.insert(0, _root_str)
-else:
-    # Phase 18: Keep ai/ in sys.path so ai.common imports work
-    # Don't manipulate sys.path to prefer root/common since it doesn't exist
-    pass
+# Phase 22+: Root layout is definitive; ai/ tree is deleted.
+# Ensure repo root is at the front of sys.path so all root packages are found.
+if _root_str in sys.path:
+    sys.path.remove(_root_str)
+sys.path.insert(0, _root_str)
 
 
 def pytest_configure(config):  # noqa: D401
@@ -38,24 +28,10 @@ def pytest_configure(config):  # noqa: D401
     duplication when both root and tests/conftest.py are loaded.
     This conftest handles sys.path setup for the whole project.
     """
-    if _phase22_layout:
-        # Double-check that repo root is still first (it should be, but just in case)
-        if _root_str in sys.path:
-            sys.path.remove(_root_str)
-        sys.path.insert(0, _root_str)
-        
-        # If 'common' was imported as 'ai/common' (due to PYTHONPATH=ai being set first),
-        # clear it from sys.modules so that subsequent imports resolve to the top-level common
-        if 'common' in sys.modules:
-            common_module = sys.modules['common']
-            if hasattr(common_module, '__file__') and common_module.__file__:
-                if '/ai/common' in common_module.__file__:
-                    # This is ai/common; remove it so the top-level common is imported next time
-                    sys.modules.pop('common', None)
-                    # Also remove any submodules of ai/common
-                    modules_to_remove = [k for k in sys.modules.keys() if k.startswith('common.')]
-                    for k in modules_to_remove:
-                        sys.modules.pop(k, None)
+    # Double-check that repo root is still first in sys.path
+    if _root_str in sys.path:
+        sys.path.remove(_root_str)
+    sys.path.insert(0, _root_str)
     
     # Phase 22.3b: All pytest markers consolidated in tests/conftest.py
     # Marker registrations removed here to prevent duplication warnings

@@ -161,7 +161,7 @@ filtered before it touches a file system:
    outside config, secrets-shaped strings, any edit under
    `xops/versioning/`, `AGENTS.md`, `docs/planning/`.
 5. **Check config drift.** If the diff adds a new env var, it must
-   also update `xops/env/.env.example` and `ai/common/config.py`.
+   also update `xops/env/.env.example` and `common/config.py`.
    The `no_magic.py` lint gate runs on the patched tree.
 
 Only diffs passing all five filters enter step 4 of the loop.

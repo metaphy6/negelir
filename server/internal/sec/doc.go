@@ -4,12 +4,12 @@
 // The package owns:
 //
 //   - Length cap + UTF-8 sanitizer (NFC + control / zero-width strip)
-//     mirroring `ai/swarm/agents/sec/input.py::sanitize_text`. The
+//     mirroring `swarm/agents/sec/input.py::sanitize_text`. The
 //     mirror is byte-for-byte deliberate so the Python escalation
 //     agent never sees text that the gateway claimed it sanitized.
 //
 //   - Deterministic injection-pattern engine compiled from
-//     `ai/common/security/injection_patterns.yaml`. Patterns use the
+//     `common/security/injection_patterns.yaml`. Patterns use the
 //     RE2 portable subset (no backrefs, no lookbehinds) so the same
 //     YAML loads in Go and in Python without an extra translation
 //     layer. The file is the single source of truth; the Go side
@@ -27,7 +27,7 @@
 //     allocation.
 //
 //   - Per-endpoint weighted token cost from
-//     `ai/common/security/endpoint_costs.yaml`. The mapping must be
+//     `common/security/endpoint_costs.yaml`. The mapping must be
 //     total over the gateway router; an integrity test asserts every
 //     registered route resolves to either an explicit entry or the
 //     intentional `default_cost` fallback.
@@ -48,7 +48,7 @@
 //  4. The on-the-wire `qa.request.v1` envelope is the contract
 //     between the gateway and the Python NLP layer. The Go side and
 //     the Python side both load the schema from
-//     `ai/swarm/sdk/schemas/qa.request.v1.json` (Go via embed); a
+//     `swarm/sdk/schemas/qa.request.v1.json` (Go via embed); a
 //     parity test asserts the embedded copy matches the canonical
 //     source byte-for-byte.
 package sec

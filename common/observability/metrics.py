@@ -37,7 +37,7 @@ if _PROMETHEUS_AVAILABLE:
     # Binary gauge: 1 if RELAX_ISOLATION_FOR_ROLLBACK is active, 0 otherwise
     # Alert if value is 1 longer than auto-unset window (cfg.isolation_relax_max_hours, default 72 h)
     isolation_relax_hatch_active = Gauge(
-        "common_isolation_relax_hatch_active",
+        "common_isolation_relax_hatch_active_gauge",
         "Binary gauge: 1 if isolation relax hatch is active (rollback mode)",
     )
 else:

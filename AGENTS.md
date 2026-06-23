@@ -70,7 +70,7 @@ Every PR, every diff, every agent run must respect them:
 
 | # | Rule | Concretely |
 |---|---|---|
-| 1 | **Single-source configuration** | New tunables go through `ai/common/config.py` (Python) or `server/internal/config` (Go) and are documented in `xops/env/.env.example`. No magic numbers, no hardcoded URLs, no inline thresholds. |
+| 1 | **Single-source configuration** | New tunables go through `common/config.py` (Python) or `server/internal/config` (Go) and are documented in `xops/env/.env.example`. No magic numbers, no hardcoded URLs, no inline thresholds. |
 | 2 | **Containerized only** | All run/test instructions assume `docker compose`. Never tell the user to `pip install` or `go install` on the host. *Sanctioned dev-time host exception:* the CodeGraph MCP server (`npx -y @colbymchenry/codegraph` — node 20–24) is treated as host-installed dev tooling on the same footing as VS Code itself; it produces no runtime artifact and is wired only into agent surfaces. See [`docs/guides/CODEGRAPH.md`](docs/guides/CODEGRAPH.md). |
 | 3 | **No fabricated production data** | Synthetic data is only allowed inside `*/tests/`. Production code must never silently fall back to fake data. |
 | 4 | **Smallest model that works** | Prefer deterministic code → scikit-learn / XGBoost → small transformers (≤ 100 MB) → mid LLMs only with explicit justification in the agent's `README`. |
@@ -273,7 +273,7 @@ bullets remain in the named scope.**
   fail on drift.
 - **Source-watcher classifications stay deterministic.** Per ROADMAP
   §2.8 doctrine, the classifier rules in
-  `ai/swarm/source_watcher/classifier.py` must remain LLM-free. Any
+  `swarm/source_watcher/classifier.py` must remain LLM-free. Any
   Phase 8 LLM hook is narration only — it must not change the rule
   outputs. Tests guard this.
 
@@ -283,7 +283,7 @@ bullets remain in the named scope.**
 
 | Stack | Source of truth | Tests | Notes |
 |---|---|---|---|
-| Python (AI / agents) | `ai/common/config.py` | `ai/tests/` (pytest) | 3.8+; stdlib preferred for tooling. |
+| Python (AI / agents) | `common/config.py` | `ai/tests/` (pytest) | 3.8+; stdlib preferred for tooling. |
 | Go (server / mocksrv) | `server/internal/config` | `server/...` (`go test`) | Mirrors the Python config pattern. Two run modes: `MODE=api` and `MODE=mocksrv`. |
 | Tooling / scripts | n/a | smoke-test in CI | Cross-platform (no bash-isms in shared scripts). |
 
@@ -363,7 +363,7 @@ docs/guides/SETUP.md            # local dev setup
 xops/env/.env.example           # canonical env-var template (every key documented)
 xops/env/.env                   # active values (gitignored)
 xops/env/README.md              # env-folder conventions
-ai/common/config.py             # Python config layer
+common/config.py             # Python config layer
 server/internal/config/         # Go config layer (Phase 1.2)
 xops/                           # all repo automation (CI/CD, deploy, …)
 xops/makefile/                  # per-Makefile-target dispatchers
@@ -374,7 +374,7 @@ xops/versioning/version.py      # version CLI (used by `make version.*`)
 xops/makefile/codegraph.py      # `make codegraph.*` dispatcher (status/reindex/check/upgrade)
 xops/mock/                      # Phase 2 mock-data helpers (manifest, verify, capture)
 infra/mock/                     # Phase 2 mock-data root (CA, certs, seeds, nginx vhosts)
-ai/swarm/source_watcher/        # Phase 2.8 source-drift detector (deterministic core)
+swarm/source_watcher/        # Phase 2.8 source-drift detector (deterministic core)
 xops/README.md                  # xops conventions & how to extend
 docs/guides/CODEGRAPH.md        # CodeGraph MCP dev tooling (Node host process)
 .codegraph/                     # CodeGraph local index (DB gitignored, config tracked)

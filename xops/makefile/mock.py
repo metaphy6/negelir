@@ -28,15 +28,17 @@ from xops.makefile._common import COMPOSE, ENV_FILE, dispatch, info, ok, sudo_ru
 
 
 def _mock_compose_base() -> str:
-    """`docker compose --env-file <env> -f base -f mock` as a single shell string.
+    """`docker compose --env-file <env> -f base --profile mock` as a single shell string.
 
     Centralised so cmd_up/cmd_down can't drift from the project-wide env-file
     convention enforced in _common.py.
+    
+    Mock services are now in the base docker-compose.yml with the 'mock' profile.
     """
     parts = list(COMPOSE)
     if ENV_FILE.is_file():
         parts += ["--env-file", str(ENV_FILE)]
-    parts += ["-f", "docker-compose.yml", "-f", "docker-compose.mock.yml"]
+    parts += ["-f", "docker-compose.yml", "--profile", "mock"]
     return " ".join(parts)
 
 

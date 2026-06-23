@@ -6,11 +6,11 @@ and QID intent distributions, backed by Redis streams.
 Falls back to no-op if Redis is unavailable (non-blocking).
 
 Phase 10 §10.14 Prometheus metrics:
-  - nlp_pipeline_latency_seconds{stage, intent} histogram
-  - nlp_intent_confidence{intent} summary
-  - nlp_humanizer_breaker_state{state} gauge
-  - nlp_proofreader_block_total{reason} counter
-  - nlp_lexicon_version{file} info gauge
+  - common_pipeline_latency_seconds{stage, intent} histogram
+  - common_intent_confidence_gauge{intent} summary
+  - common_humanizer_breaker_state_gauge{state} gauge
+  - common_proofreader_block_total{reason} counter
+  - common_lexicon_version_gauge{file} info gauge
 
 Phase 10 §10.14 W3C tracing:
   - Trace propagation via traceparent (Phase 9 §9.5)
@@ -42,157 +42,157 @@ log = get_logger("telemetry")
 # Aligned with §9.17.5 bucket discipline.
 
 if _PROMETHEUS_AVAILABLE:
-    # nlp_pipeline_latency_seconds{stage, intent} — histogram
+    # common_pipeline_latency_seconds{stage, intent} — histogram
     # Stages: normalize, intent, entities, dispatch, predict_wait, render, humanize, proofread
     NLP_PIPELINE_LATENCY = Histogram(
-        "nlp_pipeline_latency_seconds",
+        "common_pipeline_latency_seconds",
         "NLP pipeline stage latency",
         labelnames=["stage", "intent"],
         buckets=(0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0),
     )
 
-    # nlp_intent_confidence{intent} — summary (p50/p95/p99)
+    # common_intent_confidence_gauge{intent} — summary (p50/p95/p99)
     NLP_INTENT_CONFIDENCE = Summary(
-        "nlp_intent_confidence",
+        "common_intent_confidence_gauge",
         "Intent classifier confidence distribution",
         labelnames=["intent"],
     )
 
-    # nlp_humanizer_breaker_state{state} — gauge
+    # common_humanizer_breaker_state_gauge{state} — gauge
     # States: closed, open, half_open
     NLP_HUMANIZER_BREAKER_STATE = Gauge(
-        "nlp_humanizer_breaker_state",
+        "common_humanizer_breaker_state_gauge",
         "Humanizer circuit breaker state",
         labelnames=["state"],
     )
 
-    # nlp_proofreader_block_total{reason} — counter
+    # common_proofreader_block_total{reason} — counter
     NLP_PROOFREADER_BLOCK_TOTAL = Counter(
-        "nlp_proofreader_block_total",
+        "common_proofreader_block_total",
         "Proofreader block events by reason",
         labelnames=["reason"],
     )
 
-    # nlp_prober_success_rate{intent} — last outcome of synthetic prober requests
+    # common_prober_success_rate_gauge{intent} — last outcome of synthetic prober requests
     NLP_PROBER_SUCCESS_RATE = Gauge(
-        "nlp_prober_success_rate",
+        "common_prober_success_rate_gauge",
         "Synthetic prober success rate by intent",
         labelnames=["intent"],
     )
 
-    # nlp_flame_capture_armed_count — gauge of currently armed flame captures
+    # common_flame_capture_armed_count — gauge of currently armed flame captures
     NLP_FLAME_CAPTURE_ARMED_COUNT = Gauge(
-        "nlp_flame_capture_armed_count",
+        "common_flame_capture_armed_count",
         "Number of currently armed NLP flame capture requests",
     )
 
-    # nlp_input_repair_total{repair_class} — counter of input repair events per class
+    # common_input_repair_total{repair_class} — counter of input repair events per class
     NLP_INPUT_REPAIR_TOTAL = Counter(
-        "nlp_input_repair_total",
+        "common_input_repair_total",
         "NLP input repair events by class",
         labelnames=["repair_class"],
     )
 
-    # nlp_input_shout_total — counter of normalized shout input observations
+    # common_input_shout_total — counter of normalized shout input observations
     NLP_INPUT_SHOUT_TOTAL = Counter(
-        "nlp_input_shout_total",
+        "common_input_shout_total",
         "NLP shout input events",
     )
 
-    # nlp_input_repair_density — histogram of repairs/token-count per query
+    # common_input_repair_density_gauge — histogram of repairs/token-count per query
     NLP_INPUT_REPAIR_DENSITY = Histogram(
-        "nlp_input_repair_density",
+        "common_input_repair_density_gauge",
         "NLP input repair density per query",
         buckets=(0.001, 0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0),
     )
 
-    # nlp_empty_input_rate_per_subject{subject} — histogram of per-subject empty-input abuse rate
+    # common_empty_input_rate_per_subject_gauge{subject} — histogram of per-subject empty-input abuse rate
     NLP_EMPTY_INPUT_RATE_PER_SUBJECT = Histogram(
-        "nlp_empty_input_rate_per_subject",
+        "common_empty_input_rate_per_subject_gauge",
         "Per-subject empty-input rate for NLP abuse detection",
         labelnames=["subject"],
         buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0),
     )
 
-    # nlp_lexicon_coverage{intent_class} — histogram of resolvable lexicon hit fraction per query
+    # common_lexicon_coverage_gauge{intent_class} — histogram of resolvable lexicon hit fraction per query
     NLP_LEXICON_COVERAGE = Histogram(
-        "nlp_lexicon_coverage",
+        "common_lexicon_coverage_gauge",
         "NLP lexicon coverage per intent class",
         labelnames=["intent_class"],
         buckets=(0.0, 0.25, 0.5, 0.75, 1.0),
     )
 
-    # nlp_classifier_extractor_skew{intent} — histogram of classifier vs extractor skew per intent
+    # common_classifier_extractor_skew_gauge{intent} — histogram of classifier vs extractor skew per intent
     NLP_CLASSIFIER_EXTRACTOR_SKEW = Histogram(
-        "nlp_classifier_extractor_skew",
+        "common_classifier_extractor_skew_gauge",
         "Classifier-extractor skew per NLP intent",
         labelnames=["intent"],
         buckets=(0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0),
     )
 
-    # nlp_dialect_normalization_rate{dialect_class} — histogram of dialect normalization observations per class
+    # common_dialect_normalization_rate_gauge{dialect_class} — histogram of dialect normalization observations per class
     NLP_DIALECT_NORMALIZATION_RATE = Histogram(
-        "nlp_dialect_normalization_rate",
+        "common_dialect_normalization_rate_gauge",
         "NLP dialect normalization observations by class",
         labelnames=["dialect_class"],
         buckets=(1.0,),
     )
 
-    # nlp_eval_corpus_growth_rate{intent_class} — histogram of new eval corpus rows added per intent class
+    # common_eval_corpus_growth_rate_gauge{intent_class} — histogram of new eval corpus rows added per intent class
     NLP_EVAL_CORPUS_GROWTH_RATE = Histogram(
-        "nlp_eval_corpus_growth_rate",
+        "common_eval_corpus_growth_rate_gauge",
         "New NLP evaluation corpus rows added per intent class",
         labelnames=["intent_class"],
         buckets=(1.0, 5.0, 10.0, 25.0, 50.0, 100.0),
     )
 
-    # nlp_disambiguation_offered_total{cause} — counter of disambiguation offers
+    # common_disambiguation_offered_total{cause} — counter of disambiguation offers
     NLP_DISAMBIGUATION_OFFERED_TOTAL = Counter(
-        "nlp_disambiguation_offered_total",
+        "common_disambiguation_offered_total",
         "Disambiguation offers by cause",
         labelnames=["cause"],
     )
 
-    # nlp_offensive_input_total{offense_class} — counter of offensive input tokens
+    # common_offensive_input_total{offense_class} — counter of offensive input tokens
     NLP_OFFENSIVE_INPUT_TOTAL = Counter(
-        "nlp_offensive_input_total",
+        "common_offensive_input_total",
         "Offensive input tokens by class",
         labelnames=["offense_class"],
     )
 
-    # nlp_sarcasm_cue_fire_rate{cue_id} — histogram of sarcasm cue observations
+    # common_sarcasm_cue_fire_rate_gauge{cue_id} — histogram of sarcasm cue observations
     NLP_SARCASM_CUE_FIRE_RATE = Histogram(
-        "nlp_sarcasm_cue_fire_rate",
+        "common_sarcasm_cue_fire_rate_gauge",
         "NLP sarcasm cue fire rate by cue id",
         labelnames=["cue_id"],
         buckets=(1.0,),
     )
 
-    # nlp_humanizer_tokens_emitted_total{tenant_class, intent} — counter of humanizer tokens emitted
+    # common_humanizer_tokens_emitted_total{tenant_class, intent} — counter of humanizer tokens emitted
     NLP_HUMANIZER_TOKENS_EMITTED_TOTAL = Counter(
-        "nlp_humanizer_tokens_emitted_total",
+        "common_humanizer_tokens_emitted_total",
         "Humanizer tokens emitted by tenant class and intent",
         labelnames=["tenant_class", "intent"],
     )
 
-    # nlp_politeness_class_distribution{politeness_class} — histogram of politeness class observations
+    # common_politeness_class_distribution_gauge{politeness_class} — histogram of politeness class observations
     NLP_POLITENESS_CLASS_DISTRIBUTION = Histogram(
-        "nlp_politeness_class_distribution",
+        "common_politeness_class_distribution_gauge",
         "Distribution of politeness classes observed in NLP inputs",
         labelnames=["politeness_class"],
         buckets=(1.0,),
     )
 
-    # nlp_lexicon_version{file} — info gauge
+    # common_lexicon_version_gauge{file} — info gauge
     NLP_LEXICON_VERSION = Info(
-        "nlp_lexicon_version",
+        "common_lexicon_version_gauge",
         "Loaded lexicon version metadata",
     )
 
     # Phase 13.2 — fixture schema-gate metrics
-    # negelir_fixture_competition_missing_total{league_id} — counter of fixtures missing required competition fields for T3 leagues
+    # common_fixture_competition_missing_total{league_id} — counter of fixtures missing required competition fields for T3 leagues
     FIXTURE_COMPETITION_MISSING_TOTAL = Counter(
-        "negelir_fixture_competition_missing_total",
+        "common_fixture_competition_missing_total",
         "Fixtures with missing competition fields (T3 tier allowed with warning)",
         labelnames=["league_id"],
     )
@@ -270,6 +270,11 @@ class TelemetrySink:
         self._nlp_sarcasm_cue_last_alert: dict[str, float] = {}
         self._nlp_sarcasm_cue_window_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_alert_window_s", 7 * 24 * 3600))
         self._nlp_sarcasm_cue_alert_cooldown_s = float(getattr(cfg, "nlp_sarcasm_cue_drift_alert_cooldown_s", 7 * 24 * 3600))
+        # Phase 22.9 — Metric rename aliases for dual-emission window
+        # Maps old_name → (new_name, registration_timestamp_utc)
+        self._metric_aliases: dict[str, tuple[str, float]] = {}
+        self._metric_rename_alias_days = float(getattr(cfg, "metric_rename_alias_days", 30))
+        self._metric_rename_alias_window_s = self._metric_rename_alias_days * 86400
 
     @property
     def enabled(self) -> bool:
@@ -297,6 +302,42 @@ class TelemetrySink:
         if self._redis is None and not self._redis_attempted_connection:
             self._connect_redis()
         return self._redis
+
+    def register_alias(self, old_name: str, new_name: str) -> None:
+        """
+        Register a metric name alias for dual-emission during the rename window.
+        
+        During Phase 22.9 metric renames, both old and new metric names are emitted
+        for cfg.metric_rename_alias_days (default 30) to allow dashboards and alert
+        rules to transition gradually. After the window closes, the old name stops
+        being emitted.
+        
+        Args:
+            old_name: The deprecated metric name (e.g., "nlp_pipeline_latency_seconds")
+            new_name: The conforming replacement name (e.g., "common_pipeline_latency_seconds")
+        """
+        self._metric_aliases[old_name] = (new_name, self._clock())
+        log.debug(
+            "Metric alias registered: %s → %s (30-day window)",
+            old_name,
+            new_name,
+        )
+
+    def is_alias_active(self, old_name: str) -> bool:
+        """Check if a metric alias is still within its emission window."""
+        if old_name not in self._metric_aliases:
+            return False
+        new_name, registered_at = self._metric_aliases[old_name]
+        elapsed_s = self._clock() - registered_at
+        return elapsed_s < self._metric_rename_alias_window_s
+
+    def get_active_aliases(self) -> dict[str, str]:
+        """Return dict of old_name → new_name for currently active aliases."""
+        return {
+            old: new
+            for old, (new, reg_at) in self._metric_aliases.items()
+            if (self._clock() - reg_at) < self._metric_rename_alias_window_s
+        }
 
     # ── TQU classification events ────────────────────────
 

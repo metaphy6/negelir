@@ -41,6 +41,7 @@ run_gate() {
 }
 
 run_gate lint              make lint
+run_gate k8s_paths         python3 xops/lint/phase22_k8s_paths.py
 run_gate test.ai           make test.ai
 run_gate test              make test
 run_gate version.validate  make version.validate

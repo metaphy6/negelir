@@ -1,0 +1,18 @@
+# Phase 22 Patcher Artifact Migration State
+
+## Status: No-op (Phase 17 not yet shipped)
+
+Generated: 2026-06-15T00:00:00Z
+
+### Cassettes (xops/patcher/cassettes/)
+- Status: ABSENT (expected)
+- Action: none required
+- Phase 17 (patcher) ships after Phase 22 completes
+- When Phase 17 lands post-Phase-22, `make patcher.cassette.migrate` will rewrite ai/ paths
+
+### Bundles (feeds/ops/bundles/)
+- Status: ABSENT (expected)
+- Action: none required
+- When Phase 17 lands post-Phase-22, `make patcher.bundle.migrate-paths` will rewrite ai/ paths
+
+Both conditional migrations deferred until Phase 17 implementation.

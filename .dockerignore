@@ -1,0 +1,24 @@
+# Phase 22.5 — exclude non-runtime paths
+xops/
+docs/
+data/
+infra/
+migrations/
+server/
+*.md
+.git/
+.gitignore
+.github/
+.vscode/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.coverage
+.hypothesis/
+*.log

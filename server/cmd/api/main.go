@@ -42,6 +42,7 @@ import (
 	"github.com/metaphy6/negelir/server/internal/handlers"
 	"github.com/metaphy6/negelir/server/internal/metrics"
 	"github.com/metaphy6/negelir/server/internal/middleware"
+	"github.com/metaphy6/negelir/server/internal/mocksrv"
 	"github.com/metaphy6/negelir/server/internal/mtls"
 	"github.com/metaphy6/negelir/server/internal/profiling"
 	runtimetuning "github.com/metaphy6/negelir/server/internal/runtime"
@@ -55,6 +56,14 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("\xe2\x9d\x8c Config error: %v", err)
+	}
+
+	// Phase 22.8 — MODE dispatch. When MODE=mocksrv, run the mock server instead of the API.
+	if cfg.Mode == "mocksrv" {
+		if err := runMocksrv(cfg); err != nil {
+			log.Fatalf("\xe2\x9d\x8c Mocksrv error: %v", err)
+		}
+		return
 	}
 
 	// Phase 9 §9.17.1 — Go runtime tuning (refuse-to-start gates).
@@ -1222,4 +1231,44 @@ func newQACorrelationID() string {
 	b[8] = (b[8] & 0x3f) | 0x80 // variant 10 (RFC 4122)
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// runMocksrv starts the mocksrv server (Phase 22.8).
+// It's invoked when cfg.Mode == "mocksrv" and bypasses all API initialization.
+func runMocksrv(cfg *config.Config) error {
+	fmt.Println("🚀 Negelir Mock Server (mocksrv) starting (MODE=mocksrv)...")
+
+	// mocksrv runs on port 8090 by default (distinct from the API port 8080).
+	// The main server port config is re-purposed: if MODE=mocksrv, cfg.Port is ignored.
+	const mocksrvAddr = ":8090"
+	const seedsDir = "/seeds"
+
+	srv, err := mocksrv.New(mocksrvAddr, seedsDir)
+	if err != nil {
+		return err
+	}
+
+	// Start the server in a goroutine so we can wait for signals.
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- srv.ListenAndServe()
+	}()
+
+	// Wait for interrupt or error.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case <-sigChan:
+		log.Println("mocksrv: received shutdown signal")
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		if err := srv.Shutdown(shutCtx); err != nil {
+			return err
+		}
+		fmt.Println("✅ mocksrv shut down gracefully")
+		return nil
+	case err := <-errChan:
+		return err
+	}
 }

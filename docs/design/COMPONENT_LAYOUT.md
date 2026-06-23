@@ -94,65 +94,32 @@ The pivot rule in one line: **`datasource` produces, `swarm` consumes,
 
 ---
 
-## 3. What moves where
+## 3. What moves where — Phase 22 Final Flat Root Layout
 
-This is the exhaustive list of the Pivot v3 relocation. Everything
-not on this list stays put.
+After Phase 22, all Python packages live at the repo root with no intermediate
+folders. The structure is:
 
-### 3.1 Moving into `server/`
+- `server/` — Go REST API + mock server (unchanged)
+- `scraper/` — Data ingestion (previously `datasource/scraper/`)
+- `datasource_watcher/` — Schema drift detection (previously `datasource/watcher/`)
+- `refresher/` — Content freshness agent (previously `datasource/refresher/`)
+- `patcher/` — Auto-patcher (previously `datasource/patcher/`)
+- `gitops/` — PR driver + merge policy (previously `datasource/gitops/`)
+- `emitter/` — Feed projector (previously `datasource/emitter/`)
+- `pipeline/` — Ingestion orchestration (previously `datasource/pipeline/`)
+- `qid/` — QID collector (previously `datasource/qid/`)
+- `proofreader/` — Scrape-time validator (previously `datasource/proofreader/`)
+- `swarm/` — AI agents + predictors + NLP (moved from `ai/swarm/`)
+- `common/` — Shared libraries (moved from `ai/common/`)
+- `nlp/` — Turkish language pipeline (previously `swarm/nlp/`)
+- `tqu/` — Turkish NLP utilities (previously `swarm/nlp/tqu/`)
+- `trc/` — Response composer (previously `swarm/trc/`)
+- `orchestrator/` — Swarm state machine (previously `swarm/orchestrator/`)
+- `model/` — Predictors (previously `swarm/predictors/`)
+- `reactors/` — Reactor SDK (previously `swarm/reactors/`)
 
-| Current path | New path | Notes |
-|---|---|---|
-| `server/cmd/api/` | `server/cmd/api/` | Unchanged. |
-| `server/cmd/mocksrv/` | `server/cmd/mock/` | Rename binary `mocksrv` → `mock`. |
-| *(new)* | `server/cmd/internal/` | New RPC surface for swarm agents; extracted from today's implicit `ai ↔ server` HTTP calls. |
-| `server/internal/config/` | `server/internal/config/` | Unchanged; grows one new `Mode` value. |
-
-Run mode flips via `-mode {api,internal,mock}` or `SERVER_MODE=`.
-Config layer already supports this (Phase 1.2).
-
-### 3.2 Moving into `datasource/`
-
-| Current path | New path | Notes |
-|---|---|---|
-| `ai/scraper/` | `datasource/scraper/` | Full move, preserving the selectors/field_discovery/self_healing split. |
-| `ai/swarm/source_watcher/` | `datasource/watcher/` | Single-word rename; module name becomes `datasource.watcher`. **Owns ingestion-side schema-drift detection.** Distinct from the Phase 6 `swarm/drift/` agent (`drift.v1` topic), which detects **prediction-quality drift** and is a fully separate component on the swarm side — see [SWARM.md](SWARM.md) §Roles. The two were briefly conflated; this row pins the boundary so future work cannot drift them back together. |
-| *(new)* | `datasource/refresher/` | Home for the CONTENT_FRESHNESS agent (Phase 3). |
-| *(new)* | `datasource/patcher/` | New component; auto-patching scraper. See [SCRAPER_PATCHER.md](SCRAPER_PATCHER.md). |
-| *(new)* | `datasource/gitops/` | New component; PR driver + 7-day auto-merge policy. |
-| *(new)* | `datasource/emitter/` | New component; projects DB/Redis state into NDJSON/Parquet feeds. See [EMITTER.md](EMITTER.md). |
-| `ai/pipeline/` | `datasource/pipeline/` | Orchestration glue between scraper → extractor → store → emitter. |
-| `ai/qid/` | `datasource/qid/` | QID collector is an ingestion concern. |
-| `ai/proofreader/` (scrape-time cross-validator) | `datasource/proofreader/` | The scrape-time cross-validator stays with ingestion. The prediction-time proofreader lives in `swarm/proofreaders/`. |
-
-### 3.3 Staying in `swarm/`
-
-| Current path | New path | Notes |
-|---|---|---|
-| `ai/model/` | `swarm/predictors/` | Full move; one sub-package per predictor model. |
-| `ai/nlp/` | `swarm/nlp/` | Turkish pipeline. |
-| `ai/tqu/` | `swarm/nlp/tqu/` | Nest under NLP. |
-| `ai/trc/` | `swarm/trc/` | Phase 10 response composer. |
-| `ai/orchestrator/` | `swarm/orchestrator/` | Swarm-level state machine (not ingestion). |
-| *(new)* | `swarm/reactors/` | Phase 4.7 reactor SDK. |
-
-### 3.4 Moving into `common/`
-
-| Current path | New path | Notes |
-|---|---|---|
-| `ai/common/config.py` | `common/config/python/` | Python view. |
-| `server/internal/config/` (tagged schema only) | `common/config/schema.yaml` | Both languages read from this. |
-| *(new)* | `common/schemas/records.py` | Canonical Record envelope (DATA_PIPELINE §4). |
-| *(new)* | `common/schemas/feeds/` | JSONSchema per feed type (EMITTER §3). |
-| *(new)* | `common/bus/` | Redis Streams / NATS adapter shared by every Python component. |
-
-### 3.5 Retired / absorbed
-
-| Path | Fate |
-|---|---|
-| `ai/` | Empty after migration; removed. Replaced by `datasource/`, `swarm/`, `common/`. |
-| `docker-compose.mock.yml` | Absorbed into the base compose as the `mock` profile. |
-| `server/cmd/mocksrv` (binary name) | Renamed to `mock`. Any `mocksrv` references become aliases during one transition release, then drop. |
+All imports use `PYTHONPATH=.` (set in Dockerfile). The intermediate
+`ai/`, `datasource/`, and `ai/datasource/` folders are deleted.
 
 ---
 
@@ -186,30 +153,27 @@ minimum). `PROFILES=` overrides. See [DATA_SOURCE.md §5](DATA_SOURCE.md#5-compo
 
 ---
 
-## 5. Versioning chart additions
+## 5. Versioning chart (Phase 22 Final State)
 
-[`xops/versioning/chart.json`](../../xops/versioning/chart.json)
-gains new components. Existing `ai` and `source_watcher` entries are
-**renamed** to match the new layout (the CLI supports rename via a
-one-shot migration record in the changelog).
+After Phase 22, the versioning chart reflects the flat root layout. Each
+package at the root level has its own SemVer entry:
 
 | Chart key | Role | Starts at | Notes |
 |---|---|---|---|
-| `server` | Unchanged | current | gains `mock` sub-mode |
-| `datasource_scraper` | scraper binary | 1.0.0 (from `ai`'s scraper share) | |
-| `datasource_watcher` | schema drift detector | from renamed `source_watcher` | keeps history |
-| `datasource_refresher` | content-freshness agent | 0.1.0 | new |
-| `datasource_patcher` | auto-patcher | 0.1.0 | new; gated behind `NEGELIR_PATCHER=1` |
-| `datasource_gitops` | PR driver | 0.1.0 | new |
-| `datasource_emitter` | feed projector | 0.1.0 | new |
-| `swarm` | AI consumers | 1.0.0 (from `ai`'s model/nlp/trc/orchestrator share) | |
-| `common` | shared libs | 0.1.0 | new |
+| `server` | Go REST API + mock | current | unchanged |
+| `scraper` | Data ingestion | 1.0.0 | moved to root |
+| `datasource_watcher` | Schema drift detector | from v2 | moved to root |
+| `refresher` | Content-freshness agent | 0.1.0 | moved to root |
+| `patcher` | Auto-patcher | 0.1.0 | moved to root |
+| `gitops` | PR driver | 0.1.0 | moved to root |
+| `emitter` | Feed projector | 0.1.0 | moved to root |
+| `swarm` | AI agents + predictors | 1.0.0 | moved to root |
+| `common` | Shared libraries | 0.1.0 | moved to root |
 | `infra_mock` | unchanged | current | retains history |
+| `docs` | Documentation | varies | tracks design doc updates |
+| `xops` | Repo automation | varies | tracks tooling updates |
 
-The rename `source_watcher → datasource_watcher` is recorded as a
-`"rename": {"from": "source_watcher", "to": "datasource_watcher"}`
-changelog row by a new `version.py rename` subcommand landed in
-Phase R1.
+The flat root layout is the final state. No further migrations planned.
 
 ---
 
@@ -286,21 +250,29 @@ These three invariants are enforced by three CI tests:
 
 ---
 
-## 7. Migration safety
+## 7. Migration safety — Phase 22 Flat Root Layout
 
-Pivot v3 is a **big move**. The migration is phased (see ROADMAP
-Phase R1–R5) and every step is individually reversible:
+The Phase 22 migration is the **final** relocation. It consolidates the entire
+Python codebase to the repo root in a single coordinated move:
 
-- **R1** renames chart keys + landings path aliases (no code moves).
-- **R2** moves `scraper` + `watcher` to `datasource/` behind shim
-  imports (`from ai.scraper import *` keeps working for one release).
-- **R3** lands `emitter`, `refresher`, `patcher`, `gitops` skeletons.
-- **R4** deletes shims; `ai/` tree is removed.
-- **R5** enforces the three isolation tests from §6.
+- All `datasource/*` packages move to `<package>/` at root
+- All `swarm/*` packages move to `<package>/` at root
+- All `common/*` packages move to `<package>/` at root
+- The `ai/` tree is deleted entirely
+- All imports rewritten to `PYTHONPATH=.`
+- The layout is now **frozen** — no further root-level migrations
 
-Between R2 and R4 the old `ai.*` import path still resolves. CI
-warns on each shim hit; the warning count must hit zero before R4
-ships.
+The migration is verified by:
+
+1. **Isolation gates:** `make isolation.check --full` passes (Phase 18 enforcement)
+2. **Import sweep:** No `ai.*` or `datasource.*` imports remain (test_22_13_no_ai_import_anywhere.py)
+3. **Documentation:** No backtick `ai/` paths in docs (test_22_12_roadmap_no_ai_path_backtick_references.py)
+4. **Phase ledger:** All present phase-ledger lints pass after path updates
+5. **30-day burn-in:** Zero regressions for 30 calendar days post-merge (Phase 22.13)
+
+Once Phase 22 lands, the flat root layout is the canonical architecture.
+Phases 18, 19, 21 ship under the transitional layout; Phase 17 ships natively
+on the flat root layout after Phase 22 completes.
 
 ---
 

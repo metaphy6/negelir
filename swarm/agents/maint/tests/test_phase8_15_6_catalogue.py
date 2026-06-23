@@ -5,7 +5,7 @@ Asserts the compile-time invariants documented in
 
 1. **Compose service coverage** — every ``compose_service_name`` listed
    in the catalogue (excluding ``N/A`` entries) exists in
-   ``docker-compose.yml`` or ``docker-compose.mock.yml``.
+   ``docker-compose.yml``.
 
 2. **opsctl_critical_agents coverage** — every agent ID in
    ``cfg.opsctl_critical_agents`` has a catalogue row.  Left-orphan
@@ -80,7 +80,7 @@ def _parse_compose_services(compose_file: Path) -> Set[str]:
 def _all_compose_services() -> Set[str]:
     """Union of service names across docker-compose.yml and mock override."""
     services: Set[str] = set()
-    for filename in ("docker-compose.yml", "docker-compose.mock.yml"):
+    for filename in ("docker-compose.yml",):
         compose_path = _REPO_ROOT / filename
         if compose_path.is_file():
             services |= _parse_compose_services(compose_path)

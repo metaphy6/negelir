@@ -1,0 +1,977 @@
+# =============================================================================
+# Negelir — Canonical default configuration reference.
+# -----------------------------------------------------------------------------
+# This file is the single human-readable source of truth for every tunable
+# default in the AI stack.
+#
+#   * Authoritative runtime values live in `ai/common/config.py` (Config) and
+#     `ai/common/league_config.py` (LeagueConfig); each
+#     `field(default_factory=...)` reads the matching environment variable
+#     shown below, falling back to the value listed here.
+#   * `.env.example` mirrors these env-var names — keep all three files in
+#     sync when adding new tunables.
+#   * Nothing imports this file at runtime (it is documentation), so editing a
+#     value here has no effect; set the env var or override the dataclass.
+# =============================================================================
+
+# ── PostgreSQL ───────────────────────────────────────────────────────────────
+postgres:
+  host: localhost            # POSTGRES_HOST
+  port: 5432                 # POSTGRES_PORT
+  db: negelir                # POSTGRES_DB
+  user: negelir              # POSTGRES_USER
+  password: ""               # POSTGRES_PASSWORD  (REQUIRED in .env, never default)
+
+# ── Redis ────────────────────────────────────────────────────────────────────
+redis:
+  host: localhost            # REDIS_HOST
+  port: 6379                 # REDIS_PORT
+  socket_timeout_sec: 2      # NEGELIR_REDIS_SOCKET_TIMEOUT
+
+# ── Go server ────────────────────────────────────────────────────────────────
+server:
+  url: http://localhost:8080 # SERVER_URL
+  fetch_timeout_sec: 10      # NEGELIR_SERVER_FETCH_TIMEOUT
+
+# ── AI runtime ───────────────────────────────────────────────────────────────
+ai:
+  device: auto               # AI_DEVICE          (auto|cpu|cuda)
+  log_level: DEBUG           # AI_LOG_LEVEL
+
+# ── Runtime defaults (league + season identity) ──────────────────────────────
+runtime:
+  default_league_id: super_lig            # NEGELIR_COMMON_DEFAULT_LEAGUE_ID
+  # default_season is date-derived (common.season.current_season, July rollover)
+  # when the env var is unset/empty; pin explicitly only to override.
+  default_season: ""                      # NEGELIR_DEFAULT_SEASON
+  mackolik_group_id: 1                    # NEGELIR_MACKOLIK_GROUP_ID
+  mackolik_league_name_filter: "Süper Lig" # NEGELIR_MACKOLIK_LEAGUE_FILTER
+
+# ── HTTP / scrape timeouts (seconds) ─────────────────────────────────────────
+timeouts:
+  scrape_trigger: 30         # NEGELIR_SCRAPE_TRIGGER_TIMEOUT
+  health_check: 5            # NEGELIR_HEALTH_CHECK_TIMEOUT
+  mackolik_http: 15          # NEGELIR_MACKOLIK_HTTP_TIMEOUT
+  scrape_http: 15            # NEGELIR_SCRAPE_HTTP_TIMEOUT
+  footballdata_http: 10      # NEGELIR_FOOTBALLDATA_HTTP_TIMEOUT
+
+# ── Scheduler (APScheduler cron) ─────────────────────────────────────────────
+scheduler:
+  daily_scrape_hour: 6       # NEGELIR_SCHEDULE_DAILY_SCRAPE_HOUR
+  daily_scrape_minute: 0     # NEGELIR_SCHEDULE_DAILY_SCRAPE_MINUTE
+  outcome_check_hour: 22     # NEGELIR_SCHEDULE_OUTCOME_CHECK_HOUR
+  outcome_check_minute: 0    # NEGELIR_SCHEDULE_OUTCOME_CHECK_MINUTE
+  retrain_day: sun           # NEGELIR_SCHEDULE_RETRAIN_DAY  (mon..sun)
+  retrain_hour: 3            # NEGELIR_SCHEDULE_RETRAIN_HOUR
+  heartbeat_minutes: 5       # NEGELIR_SCHEDULE_HEARTBEAT_MINUTES
+
+# ── Self-healing / failover ──────────────────────────────────────────────────
+self_healing:
+  source_priority: [source_a, source_b, source_c, source_d]  # NEGELIR_SOURCE_PRIORITY (csv)
+  stale_threshold_seconds: 604800  # NEGELIR_STALE_THRESHOLD_SECONDS  (7 days)
+  stale_confidence_penalty: 0.5    # NEGELIR_STALE_CONFIDENCE_PENALTY
+  source_failure_threshold: 3      # NEGELIR_SOURCE_FAILURE_THRESHOLD
+
+# ── Scraping ─────────────────────────────────────────────────────────────────
+scraping:
+  rate_limit_seconds: 2      # SCRAPE_RATE_LIMIT_SECONDS
+  real_data_rate_limit: 1.0  # NEGELIR_REAL_DATA_RATE_LIMIT
+  user_agent: "Xops/0.1 (Football Analysis Research)"  # SCRAPE_USER_AGENT
+  respect_robots_txt: true   # SCRAPE_RESPECT_ROBOTS_TXT
+  sources:                   # SCRAPE_SOURCE_1, SCRAPE_SOURCE_2, SCRAPE_SOURCE_3, SCRAPE_SOURCE_4, SCRAPE_SOURCE_5, SCRAPE_SOURCE_FALLBACK, SCRAPE_SOURCE_EXTRA
+    - https://www.mackolik.com
+    - https://www.nesine.com
+    - https://www.tff.org
+    - https://raw.githubusercontent.com/openfootball/football.json/master
+    - https://www.football-data.co.uk/mmz4281
+    - https://arsiv.mackolik.com  # fallback
+  mackolik_seasons:          # MACKOLIK_SEASON_<LABEL>
+    "2025/2026": 70381
+    "2024/2025": 67287
+    "2023/2024": 62682
+    "2022/2023": 59539
+    "2021/2022": 55775
+
+# ── Model / training ─────────────────────────────────────────────────────────
+training:
+  noise_pct: 0.005           # NEGELIR_TRAINING_NOISE_PCT
+  test_split: 0.2            # NEGELIR_TRAINING_TEST_SPLIT
+  random_seed: 42            # NEGELIR_TRAINING_SEED
+  cross_source_agreement_multi: 0.95  # NEGELIR_TRAINING_CROSS_SOURCE_AGREEMENT_MULTI
+  model_max_size_mb: 8.0     # NEGELIR_MODEL_MAX_SIZE_MB
+  min_matches: 100           # NEGELIR_TRAINING_MIN_MATCHES
+  sample_weights: [1.0, 2.0, 1.0]  # NEGELIR_TRAINING_SAMPLE_WEIGHTS  (Home,Draw,Away)
+
+drift:
+  accuracy_window: 30        # NEGELIR_DRIFT_WINDOW (legacy ai/model/drift.py — accuracy floor)
+  accuracy_floor: 0.35       # NEGELIR_DRIFT_FLOOR  (legacy ai/model/drift.py — accuracy floor)
+
+# ── Bootstrap gate ───────────────────────────────────────────────────────────
+bootstrap:
+  min_matches: 100           # BOOTSTRAP_MIN_MATCHES (Makefile + proofreader)
+
+# ── NLP (Phase 10) ───────────────────────────────────────────────────────────
+nlp:
+  # Proofreader gate 3: length bounds (§10.9 bullet 2)
+  min_answer_chars: 20       # NEGELIR_NLP_MIN_ANSWER_CHARS
+  max_answer_chars: 600      # NEGELIR_NLP_MAX_ANSWER_CHARS
+  # §10.24.2 repeated-character collapse token-length cap.
+  repeat_collapse_max_len: 64  # NEGELIR_NLP_REPEAT_COLLAPSE_MAX_LEN
+  repeat_collapse_min_freq: 100  # NEGELIR_NLP_REPEAT_COLLAPSE_MIN_FREQ
+  digit_letter_fold_enabled: true  # NEGELIR_NLP_DIGIT_LETTER_FOLD_ENABLED
+  negation_enabled: true  # NEGELIR_NLP_NEGATION_ENABLED
+  compound_query_enabled: true  # NEGELIR_NLP_COMPOUND_QUERY_ENABLED
+  emoji_hint_enabled: true  # NEGELIR_NLP_EMOJI_HINT_ENABLED
+  hashtag_handling_enabled: true  # NEGELIR_NLP_HASHTAG_HANDLING_ENABLED
+  at_mention_handling_enabled: true  # NEGELIR_NLP_AT_MENTION_HANDLING_ENABLED
+  html_unescape_enabled: true  # NEGELIR_NLP_HTML_UNESCAPE_ENABLED
+  harmony_tolerant_strip_enabled: true  # NEGELIR_NLP_HARMONY_TOLERANT_STRIP_ENABLED
+  preamble_strip_enabled: true  # NEGELIR_NLP_PREAMBLE_STRIP_ENABLED
+  consonant_alternation_enabled: true  # NEGELIR_NLP_CONSONANT_ALTERNATION_ENABLED
+  assimilation_fold_enabled: true  # NEGELIR_NLP_ASSIMILATION_FOLD_ENABLED
+  compound_split_enabled: true  # NEGELIR_NLP_COMPOUND_SPLIT_ENABLED
+  tr_pii_redact_enabled: true  # NEGELIR_NLP_TR_PII_REDACT_ENABLED
+  telegraphic_max_tokens: 4  # NEGELIR_NLP_TELEGRAPHIC_MAX_TOKENS
+  telegraphic_min_entity_confidence: 0.85  # NEGELIR_NLP_TELEGRAPHIC_MIN_ENTITY_CONFIDENCE
+  telegraphic_inference_enabled: true  # NEGELIR_NLP_TELEGRAPHIC_INFERENCE_ENABLED
+  ki_context_disambiguation: true  # NEGELIR_NLP_KI_CONTEXT_DISAMBIGUATION
+  tr_normalize_spec_path: "ai/common/text/tr_normalize_spec.json"  # NEGELIR_NLP_TR_NORMALIZE_SPEC_PATH
+  tr_normalize_spec_required: enforce  # NEGELIR_NLP_TR_NORMALIZE_SPEC_REQUIRED
+  loanword_variants_enabled: true  # NEGELIR_NLP_LOANWORD_VARIANTS_ENABLED
+  loanword_singularisation_enabled: true  # NEGELIR_NLP_LOANWORD_SINGULARISATION_ENABLED
+  # §10.19 backpressure
+  queue_pressure_threshold: 100  # NEGELIR_NLP_QUEUE_PRESSURE_THRESHOLD
+  pressure_humanize_off_s: 60    # NEGELIR_NLP_PRESSURE_HUMANIZE_OFF_S
+  eval_corpus_pr_max_added_rows_per_quarter: 500  # NEGELIR_NLP_EVAL_CORPUS_PR_MAX_ADDED_ROWS_PER_QUARTER
+  eval_corpus_review_required: true  # NEGELIR_NLP_EVAL_CORPUS_REVIEW_REQUIRED
+  # §10.19 sampled answer audit
+  answer_sample_inverse: 1000    # NEGELIR_NLP_ANSWER_SAMPLE_INVERSE
+  answer_sample_daily_cap: 5000  # NEGELIR_NLP_ANSWER_SAMPLE_DAILY_CAP
+  audit_bundle_retention_days: 2555  # NEGELIR_NLP_AUDIT_BUNDLE_RETENTION_DAYS
+  default_answer_format: "plain"  # NEGELIR_NLP_DEFAULT_ANSWER_FORMAT
+  answer_formats: "plain,markdown_safe,screen_reader,whatsapp_4096,sms_160,tts_neutral"  # NEGELIR_NLP_ANSWER_FORMATS
+  answer_format_enabled: '{"plain": true, "markdown_safe": true, "screen_reader": true, "whatsapp_4096": false, "sms_160": false, "tts_neutral": false}'  # NEGELIR_NLP_ANSWER_FORMAT_ENABLED
+  template_git_sha: ""           # NEGELIR_NLP_TEMPLATE_GIT_SHA
+  pipeline_version: "10.0.0"     # NEGELIR_NLP_PIPELINE_VERSION
+  compatibility_matrix_path: "ai/nlp/_compat/compatibility_matrix.json"  # NEGELIR_NLP_COMPATIBILITY_MATRIX_PATH
+  system_capability_template_path: ""  # NEGELIR_NLP_SYSTEM_CAPABILITY_TEMPLATE_PATH
+  # §10.21.9 boot-time readiness budget and liveness restart grace
+  boot_budget_s: 30              # NEGELIR_NLP_BOOT_BUDGET_S
+  boot_liveness_grace_s: 60      # NEGELIR_NLP_BOOT_LIVENESS_GRACE_S
+  # §10.21 graceful SIGTERM drain budget
+  shutdown_grace_s: 20           # NEGELIR_NLP_SHUTDOWN_GRACE_S
+  # §10.21.7 log redaction long-string heuristic threshold
+  log_max_unredacted_str_len: 64  # NEGELIR_NLP_LOG_MAX_UNREDACTED_STR_LEN
+  # §10.21.8 citation-signature HMAC key file
+  predict_citation_hmac_key_path: /var/lib/negelir/secrets/predict_citation_hmac.key  # NEGELIR_PREDICT_CITATION_HMAC_KEY_PATH
+  # §10.21.8 dual-acceptance window for previous citation-signature key (seconds)
+  predict_citation_hmac_key_grace_s: 86400  # NEGELIR_PREDICT_CITATION_HMAC_KEY_GRACE_S
+  # §10.21.8 consume-side citation-signature verification mode (off|warn|enforce)
+  predict_citation_hmac_required: warn  # NEGELIR_NLP_PREDICT_CITATION_HMAC_REQUIRED
+  # §10.21.2 Jinja2 bytecode cache directory
+  jinja_bcc_dir: "data/cache/jinja_bcc"  # NEGELIR_NLP_JINJA_BCC_DIR
+  # §10.21.6 runtime guard minimum substring length
+  template_finalize_min_user_text_len: 6  # NEGELIR_NLP_TEMPLATE_FINALIZE_MIN_USER_TEXT_LEN
+
+# ── Feature-vector firewall (roadmap §5.6.2) ─────────────────────────────────
+# Substring → (lo, hi). Override via NEGELIR_FEATURE_RANGES_JSON.
+feature_ranges:
+  elo:       [-500.0, 3500.0]
+  ratio:     [0.0, 1.0]
+  pct:       [0.0, 100.0]
+  norm:      [0.0, 1.0]
+  sentiment: [-1.0, 1.0]
+  optimism:  [-1.0, 1.0]
+  sin:       [-1.0, 1.0]
+  cos:       [-1.0, 1.0]
+  flag:      [0.0, 1.0]
+  age:       [15.0, 45.0]
+  scored:    [0.0, 10.0]
+  conceded:  [0.0, 10.0]
+  yellows:   [0.0, 10.0]
+  fouls:     [0.0, 40.0]
+  cards:     [0.0, 15.0]
+  bayesian:  [0.0, 1.0]
+  sos:       [800.0, 2200.0]
+  default:   [-100.0, 100.0]
+
+# ── Telemetry ────────────────────────────────────────────────────────────────
+telemetry:
+  max_stream_len: 50000      # NEGELIR_TELEMETRY_MAX_STREAM
+  # Phase 8.16.4 — debug gate (false in prod, true in dev/triage)
+  debug_enabled: false       # NEGELIR_TELEMETRY_DEBUG_ENABLED
+  # Cardinality boot guard ceiling for the per-kind debug metric family
+  debug_max_series: 5000     # NEGELIR_TELEMETRY_DEBUG_MAX_SERIES
+
+# ── Swarm SDK (Phase 3) ──────────────────────────────────────────────────────
+swarm:
+  bus_kind: redis            # SWARM_BUS_KIND  (redis|memory)
+  consumer_group_prefix: swarm   # SWARM_CONSUMER_GROUP_PREFIX
+  heartbeat_sec: 5           # SWARM_HEARTBEAT_SEC
+  registry_ttl_sec: 30       # SWARM_REGISTRY_TTL_SEC
+  max_in_flight: 32          # SWARM_MAX_IN_FLIGHT
+  retry_budget: 3            # SWARM_RETRY_BUDGET
+  dlq_max_len: 10000         # SWARM_DLQ_MAX_LEN
+  pending_claim_sec: 60      # SWARM_PENDING_CLAIM_SEC
+  metrics_port: 9100         # SWARM_METRICS_PORT
+
+# ── Phase 4 — Worker agents (scrape → categorize → process → store) ──────────
+phase4:
+  scrape_profile: mock                # SCRAPE_PROFILE  (mock|real)
+  profile: mock                       # NEGELIR_PROFILE  (mock|prod)
+  scrape_http_max_retries: 3          # SCRAPE_HTTP_MAX_RETRIES
+  categorizer_min_conf: 0.55          # NEGELIR_CATEGORIZER_MIN_CONF
+  categorizer_model_path: data/models/categorizer_v1.joblib  # NEGELIR_CATEGORIZER_MODEL_PATH
+  cache_record_ttl_sec: 600           # NEGELIR_CACHE_RECORD_TTL_SEC
+  cache_prediction_ttl_sec: 300       # NEGELIR_CACHE_PREDICTION_TTL_SEC
+  telemetry_metrics_port: 9101        # NEGELIR_TELEMETRY_METRICS_PORT
+  telemetry_metrics_bind: 127.0.0.1   # NEGELIR_TELEMETRY_METRICS_BIND
+  reactor_max_event_age_sec: 86400    # NEGELIR_REACTOR_MAX_EVENT_AGE_SEC
+  reactor_ledger_max_size: 100000     # NEGELIR_REACTOR_LEDGER_MAX_SIZE
+
+# ── Phase 5 — Predictor swarm + consensus ───────────────────────────────────
+phase5:
+  consensus_window_ms: 750            # NEGELIR_CONSENSUS_WINDOW_MS
+  consensus_min_confidence: 0.0       # NEGELIR_CONSENSUS_MIN_CONFIDENCE
+  consensus_min_voters: 3             # NEGELIR_CONSENSUS_MIN_VOTERS
+  consensus_brier_window: 200         # NEGELIR_CONSENSUS_BRIER_WINDOW
+  consensus_max_pending: 4096         # NEGELIR_CONSENSUS_MAX_PENDING
+  consensus_overflow_flag_min_interval_sec: 10  # NEGELIR_CONSENSUS_OVERFLOW_FLAG_MIN_INTERVAL_SEC
+  predictor_market_features_enabled: false  # NEGELIR_PREDICTOR_MARKET_FEATURES_ENABLED
+  predictor_max_vram_mb: 1024         # NEGELIR_PREDICTOR_MAX_VRAM_MB
+  trainer_debounce_sec: 300           # NEGELIR_TRAINER_DEBOUNCE_SEC
+  backtest_swarm_floor_pct: 0.01      # NEGELIR_BACKTEST_SWARM_FLOOR_PCT
+  backtest_window_weeks: 12           # NEGELIR_BACKTEST_WINDOW_WEEKS
+  backtest_min_n: 20                  # NEGELIR_BACKTEST_MIN_N
+  api_consensus_overhead_ms: 250      # NEGELIR_API_CONSENSUS_OVERHEAD_MS
+
+# ── Phase 6 — Proofreader & drift swarm ─────────────────────────────────────
+phase6:
+  # Replica roster lives in `swarm.agents.proofreader.replicas
+  # .PROOFREADER_POLICY_CLASSES`; quorum derives from len(roster) so
+  # there is no env knob to drift (Phase-6 audit F3-1 retired the
+  # standalone NEGELIR_PROOFREADER_REPLICAS).
+  proofreader_quorum_window_ms: 200   # NEGELIR_PROOFREADER_QUORUM_WINDOW_MS
+  proofreader_aggregator_max_pending: 4096  # NEGELIR_PROOFREADER_AGGREGATOR_MAX_PENDING — LRU bound on aggregator _pending (Phase-6 audit F-9)
+  swarm_flush_interval_ms: 100        # NEGELIR_SWARM_FLUSH_INTERVAL_MS — runner tick for flush_expired (Phase-6 audit F-2)
+  # Per-replica check thresholds (§6.2)
+  proofreader_sanity_eps: 0.01                 # NEGELIR_PROOFREADER_SANITY_EPS — sum-to-1 tolerance
+  proofreader_plausibility_max_prob: 0.85      # NEGELIR_PROOFREADER_PLAUSIBILITY_MAX_PROB — single-outcome cap (warn)
+  proofreader_grid_consistency_tol: 0.05       # NEGELIR_PROOFREADER_GRID_CONSISTENCY_TOL — score_grid vs market_outcomes
+  # Drift agent (§6.3). NOTE: `drift_brier_ceiling` is a *Brier ceiling*
+  # (lower Brier = better → trip when mean > ceiling). Distinct from
+  # the legacy `drift.accuracy_floor` knob above which gates the
+  # `ai/model/drift.py` accuracy detector.
+  drift_window_size: 50                # NEGELIR_DRIFT_WINDOW_SIZE — rolling Brier/log-loss window
+  drift_brier_ceiling: 0.30            # NEGELIR_DRIFT_BRIER_CEILING — trip when mean Brier > ceiling
+  drift_pvalue: 0.01                   # NEGELIR_DRIFT_PVALUE — KS-test stationarity threshold
+
+# ── Phase 8.4 — source-watcher summarizer graduation ───────────────────────
+source_watcher:
+  summarizer_enabled: false            # NEGELIR_SOURCE_WATCHER_SUMMARIZER_ENABLED
+  summarizer_model_id: ""             # NEGELIR_SOURCE_WATCHER_SUMMARIZER_MODEL_ID
+  summarizer_probe_url: ""           # NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_URL
+  summarizer_probe_timeout_sec: 2.0    # NEGELIR_SOURCE_WATCHER_SUMMARIZER_PROBE_TIMEOUT_SEC
+  summarizer_max_tokens_per_call: 4096 # NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_CALL
+  summarizer_max_tokens_per_day: 50000 # NEGELIR_SOURCE_WATCHER_SUMMARIZER_MAX_TOKENS_PER_DAY
+  summarizer_ledger_path: data/maint/summarizer_ledger.json # NEGELIR_SOURCE_WATCHER_SUMMARIZER_LEDGER_PATH
+  drift_max_pending: 100000            # NEGELIR_DRIFT_MAX_PENDING — LRU bound on unsettled predictions
+  drift_max_settled: 100000            # NEGELIR_DRIFT_MAX_SETTLED — LRU bound on settled (match,market) keys
+
+# ── Phase 7 — Defense agents (sec.input.v1 / sec.scrape.v1 / sec.rate.v1) ────
+# Foundation block: topics, payloads, JSON schemas, and config knobs land
+# together. Agent logic ships in §7.1 / §7.2 / §7.3. The
+# `test_python_defaults_match_env_example` gate enforces every default below
+# matches `xops/env/.env.example` byte-for-byte.
+phase7:
+  # sec.input.v1 (§7.1) — bytes after UTF-8 encoding (NOT codepoints).
+  sec_input_max_len: 8192                          # NEGELIR_SEC_INPUT_MAX_LEN
+  sec_input_gateway_max_latency_ms: 10             # NEGELIR_SEC_INPUT_GATEWAY_MAX_LATENCY_MS
+  sec_input_classifier_max_latency_ms: 100         # NEGELIR_SEC_INPUT_CLASSIFIER_MAX_LATENCY_MS
+  sec_input_classifier_device: auto                # NEGELIR_SEC_INPUT_CLASSIFIER_DEVICE  (auto|cpu|cuda|rocm|npu)
+  sec_input_classifier_path: ""                   # NEGELIR_SEC_INPUT_CLASSIFIER_PATH    (empty = no classifier loaded yet)
+  sec_input_classifier_batch_enabled: auto         # NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_ENABLED  (auto|true|false)
+  sec_input_classifier_batch_size: 8               # NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_SIZE
+  sec_input_classifier_batch_window_ms: 20         # NEGELIR_SEC_INPUT_CLASSIFIER_BATCH_WINDOW_MS
+  sec_input_classifier_max_pending: 256            # NEGELIR_SEC_INPUT_CLASSIFIER_MAX_PENDING
+  sec_input_breaker_open_s: 30                     # NEGELIR_SEC_INPUT_BREAKER_OPEN_S
+  sec_input_pattern_reload_s: 30                   # NEGELIR_SEC_INPUT_PATTERN_RELOAD_S
+  sec_input_allowlist_reload_s: 60                 # NEGELIR_SEC_INPUT_ALLOWLIST_RELOAD_S — §8.7 cache poll
+  sec_input_allowlist_hmac_key_path: /var/lib/negelir/secrets/allowlist_hmac.key  # NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_PATH
+  sec_input_allowlist_hmac_key_max_age_days: 365   # NEGELIR_SEC_INPUT_ALLOWLIST_HMAC_KEY_MAX_AGE_DAYS
+  # sec.quarantine.v1 + storage backpressure (§7.1 + §7.5)
+  sec_quarantine_ttl_days: 30                      # NEGELIR_SEC_QUARANTINE_TTL_DAYS
+  sec_quarantine_payload_max_bytes: 65536          # NEGELIR_SEC_QUARANTINE_PAYLOAD_MAX_BYTES — pre-base64 cap
+  sec_quarantine_producer_queue_max: 1000          # NEGELIR_SEC_QUARANTINE_PRODUCER_QUEUE_MAX
+  sec_quarantine_storage_lag_alert_ms: 5000        # NEGELIR_SEC_QUARANTINE_STORAGE_LAG_ALERT_MS
+  # sec.scrape.v1 (§7.2). Streaming-statistic baseline → no per-source raw cap.
+  sec_scrape_size_delta_pct: 200.0                 # NEGELIR_SEC_SCRAPE_SIZE_DELTA_PCT
+  sec_scrape_inflate_ratio_max: 50.0               # NEGELIR_SEC_SCRAPE_INFLATE_RATIO_MAX
+  sec_scrape_warmup_samples: 50                    # NEGELIR_SEC_SCRAPE_WARMUP_SAMPLES
+  sec_scrape_baseline_flush_s: 300                 # NEGELIR_SEC_SCRAPE_BASELINE_FLUSH_S
+  sec_scrape_max_pending: 4096                     # NEGELIR_SEC_SCRAPE_MAX_PENDING
+  sec_scrape_dedup_window: 4096                    # NEGELIR_SEC_SCRAPE_DEDUP_WINDOW
+  sec_scrape_simhash_max_distance: 12              # NEGELIR_SEC_SCRAPE_SIMHASH_MAX_DISTANCE — bits-out-of-64
+  sec_scrape_dom_fingerprint_max_nodes: 5000       # NEGELIR_SEC_SCRAPE_DOM_FINGERPRINT_MAX_NODES
+  sec_scrape_simhash_ring_size: 8                  # NEGELIR_SEC_SCRAPE_SIMHASH_RING_SIZE
+  # sec.rate.v1 (§7.3). IPv6 prefix /64 = end-site allocation boundary.
+  sec_rate_pre_auth_capacity: 30                   # NEGELIR_SEC_RATE_PRE_AUTH_CAPACITY
+  sec_rate_pre_auth_refill_per_s: 0.5              # NEGELIR_SEC_RATE_PRE_AUTH_REFILL_PER_S
+  sec_rate_post_auth_capacity: 600                 # NEGELIR_SEC_RATE_POST_AUTH_CAPACITY
+  sec_rate_post_auth_refill_per_s: 5.0             # NEGELIR_SEC_RATE_POST_AUTH_REFILL_PER_S
+  sec_rate_bucket_idle_ttl_s: 3600                 # NEGELIR_SEC_RATE_BUCKET_IDLE_TTL_S
+  sec_rate_max_subjects: 100000                    # NEGELIR_SEC_RATE_MAX_SUBJECTS
+  sec_rate_ipv4_prefix: 32                         # NEGELIR_SEC_RATE_IPV4_PREFIX
+  sec_rate_ipv6_prefix: 64                         # NEGELIR_SEC_RATE_IPV6_PREFIX
+  sec_rate_trusted_proxies: ""                    # NEGELIR_SEC_RATE_TRUSTED_PROXIES — comma-separated CIDRs
+  sec_rate_redis_timeout_ms: 50                    # NEGELIR_SEC_RATE_REDIS_TIMEOUT_MS
+  sec_rate_secondary_capacity: 300                 # NEGELIR_SEC_RATE_SECONDARY_CAPACITY
+  sec_rate_secondary_refill_per_s: 5.0             # NEGELIR_SEC_RATE_SECONDARY_REFILL_PER_S
+  sec_rate_default_cost: 1                         # NEGELIR_SEC_RATE_DEFAULT_COST
+  sec_rate_eviction_rate_alert_per_s: 50.0         # NEGELIR_SEC_RATE_EVICTION_RATE_ALERT_PER_S
+  sec_rate_eviction_rate_window_s: 60              # NEGELIR_SEC_RATE_EVICTION_RATE_WINDOW_S
+  # Sliding-window burst detector (§7.3) — monotonic-clock-based.
+  sec_burst_threshold: 100                         # NEGELIR_SEC_BURST_THRESHOLD
+  sec_burst_window_ms: 60000                       # NEGELIR_SEC_BURST_WINDOW_MS
+  sec_burst_dedup_window: 10000                    # NEGELIR_SEC_BURST_DEDUP_WINDOW
+  # Denylist (Redis hash; sole writer = sec.rate.v1) — §7.3.
+  sec_denylist_ttl_s: 3600                         # NEGELIR_SEC_DENYLIST_TTL_S
+  sec_denylist_escalation_factor: 2.0              # NEGELIR_SEC_DENYLIST_ESCALATION_FACTOR
+  sec_denylist_max_entries: 250000                 # NEGELIR_SEC_DENYLIST_MAX_ENTRIES
+  # sec.alert.v1 envelope (§7.4) — generalized debounce.
+  sec_alert_debounce_ttl_s: 60                     # NEGELIR_SEC_ALERT_DEBOUNCE_TTL_S
+  sec_alert_critical_debounce_enabled: false       # NEGELIR_SEC_ALERT_CRITICAL_DEBOUNCE_ENABLED
+  sec_alert_debouncer_max_buckets: 4096            # NEGELIR_SEC_ALERT_DEBOUNCER_MAX_BUCKETS
+  # qa.request.v1 — NLP-side dedup window (§7.5 binding).
+  qa_request_v1_dedup_window_s: 300                # NEGELIR_QA_REQUEST_V1_DEDUP_WINDOW_S
+
+# ── Phase 10 §10.0 — Turkish NLP pipeline (cross-phase contracts) ───────────
+phase10:
+  # §10.1 step 1: hard codepoint cap on raw user input (defense-in-depth).
+  nlp_input_max_codepoints: 512            # NEGELIR_NLP_INPUT_MAX_CODEPOINTS
+  # Collapse Unicode Zs space characters to ASCII space before tokenization.
+  nlp_collapse_unicode_spaces: true        # NEGELIR_NLP_COLLAPSE_UNICODE_SPACES
+  # Dedup window lower bound: qa_request_v1_dedup_window_s(300) + 30 = 330.
+  nlp_request_dedup_window_s: 330          # NEGELIR_NLP_REQUEST_DEDUP_WINDOW_S
+  # §10.23.1 intake fairness key for virtual queues.
+  nlp_fairness_key: account_id             # NEGELIR_NLP_FAIRNESS_KEY
+  # Max concurrent intake slots per fairness key.
+  nlp_per_tenant_inflight_max: 8           # NEGELIR_NLP_PER_TENANT_INFLIGHT_MAX
+  # Cardinality cap for tracked fairness keys (LRU eviction).
+  nlp_fairness_max_tracked_keys: 10000     # NEGELIR_NLP_FAIRNESS_MAX_TRACKED_KEYS
+  # Sustained per-key intake-QPS threshold for abuse observability alerting.
+  nlp_tenant_abuse_qps_threshold: 10       # NEGELIR_NLP_TENANT_ABUSE_QPS_THRESHOLD
+  # Rolling window for per-key intake abuse detection.
+  nlp_tenant_abuse_window_s: 60            # NEGELIR_NLP_TENANT_ABUSE_WINDOW_S
+  # §10.21.1: Hypothesis profile max examples for property-based tests.
+  nlp_hypothesis_max_examples: 1000        # NEGELIR_NLP_HYPOTHESIS_MAX_EXAMPLES
+  # §10.21.2: Singleflight event-map sweeper (orphan cleanup).
+  nlp_singleflight_sweep_interval_s: 30    # NEGELIR_NLP_SINGLEFLIGHT_SWEEP_INTERVAL_S
+  nlp_singleflight_event_max_age_s: 60     # NEGELIR_NLP_SINGLEFLIGHT_EVENT_MAX_AGE_S
+  nlp_singleflight_max_inflight: 2048      # NEGELIR_NLP_SINGLEFLIGHT_MAX_INFLIGHT
+  # Phase 12 §12.2.3 — Adversarial corpus growth bound
+  adversarial_corpus_max_added_rows_per_quarter: 500  # NEGELIR_ADVERSARIAL_CORPUS_MAX_ADDED_ROWS_PER_QUARTER
+  # Phase 12 §12.3.3 — Fuzz nightly budget
+  fuzz_nightly_budget_s: 600               # NEGELIR_FUZZ_NIGHTLY_BUDGET_S
+  # Bus circuit breaker: consecutive publish failures before spooling (§10.13).
+  nlp_bus_failure_circuit_threshold: 3     # NEGELIR_NLP_BUS_FAILURE_CIRCUIT_THRESHOLD
+  # Max spool entries per NLP agent before dropping oldest (§10.13).
+  nlp_spool_max_entries: 1000              # NEGELIR_NLP_SPOOL_MAX_ENTRIES
+  # Per-agent spool directory root (§10.13).
+  nlp_agent_spool_dir: "data/nlp/spool"   # NEGELIR_NLP_AGENT_SPOOL_DIR
+  # Strip sanitized_text from qa.intent.v1 spool payloads; persist sha256 only.
+  nlp_spool_payload_pii_strip: true        # NEGELIR_NLP_SPOOL_PAYLOAD_PII_STRIP
+  # Timeout chain: api_request_timeout_ms(2500) ≥ pipeline(1800) + dispatch(200) = 2000 ✓
+  nlp_pipeline_timeout_ms: 1800            # NEGELIR_NLP_PIPELINE_TIMEOUT_MS
+  nlp_dispatch_overhead_ms: 200            # NEGELIR_NLP_DISPATCH_OVERHEAD_MS
+  nlp_consensus_overhead_ms: 100           # NEGELIR_NLP_CONSENSUS_OVERHEAD_MS
+  # Humanizer latency budget (applied only when nlp_humanize=true).
+  nlp_humanizer_max_latency_ms: 600        # NEGELIR_NLP_HUMANIZER_MAX_LATENCY_MS
+  # Circuit breaker open window (seconds) after humanizer latency breach.
+  nlp_humanizer_breaker_open_s: 60         # NEGELIR_NLP_HUMANIZER_BREAKER_OPEN_S
+  # Template-only mode by default; LLM polish is opt-in per Phase 11 probe.
+  nlp_humanize: false                      # NEGELIR_NLP_HUMANIZE
+  # Decoding constraints for humanizer LLM (§10.8).
+  nlp_humanizer_max_new_tokens: 120        # NEGELIR_NLP_HUMANIZER_MAX_NEW_TOKENS
+  # Upper bound on humanizer tokens allowed per request (Phase 10 §10.23.8).
+  nlp_max_humanizer_tokens_per_request: 120 # NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_REQUEST
+  # Upper bound on humanizer tokens allowed per tenant per minute (Phase 10 §10.23.8).
+  nlp_max_humanizer_tokens_per_tenant_per_min: 2400 # NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_TENANT_PER_MIN
+  nlp_humanizer_request_rate: 0.6            # NEGELIR_NLP_HUMANIZER_REQUEST_RATE
+  nlp_humanizer_budget_redis_key_prefix: "nlp:humanizer:budget:"  # NEGELIR_NLP_HUMANIZER_BUDGET_REDIS_KEY_PREFIX
+  # JSON mapping tier id -> allowed humanizer tokens per tenant per minute when monetization
+  # is enabled. Default free-tier floor is nlp_max_humanizer_tokens_per_tenant_per_min.
+  nlp_tier_humanizer_tokens_per_min: {} # NEGELIR_NLP_TIER_HUMANIZER_TOKENS_PER_MIN
+  # Upper bound on humanizer tokens allowed per pod per hour (Phase 10 §10.23.8).
+  nlp_max_humanizer_tokens_per_pod_per_hour: 720000 # NEGELIR_NLP_MAX_HUMANIZER_TOKENS_PER_POD_PER_HOUR
+  # Cooldown duration after this pod budget is exhausted.
+  nlp_humanizer_pod_cooldown_s: 300 # NEGELIR_NLP_HUMANIZER_POD_COOLDOWN_S
+  nlp_humanizer_temperature: 0.3           # NEGELIR_NLP_HUMANIZER_TEMPERATURE
+  nlp_humanizer_top_p: 0.9                 # NEGELIR_NLP_HUMANIZER_TOP_P
+  nlp_humanizer_repetition_penalty: 1.05   # NEGELIR_NLP_HUMANIZER_REPETITION_PENALTY
+  # Drift guard: max edit_distance / len(template) ratio (§10.8).
+  nlp_humanizer_max_edit_ratio: 0.6        # NEGELIR_NLP_HUMANIZER_MAX_EDIT_RATIO
+  # Humanizer breaker scope: "pod" (default, in-memory) or "cluster" (Redis, cross-pod).
+  # Cluster-scope adds a Redis round-trip on every humanize call → only use after measuring
+  # per-pod breaker open-rate above 5% (§10.21.4 stampede-protection in dense deploys).
+  nlp_humanizer_breaker_scope: pod         # NEGELIR_NLP_HUMANIZER_BREAKER_SCOPE
+  # §10.23.1 humanizer fair-share token bucket per tenant/fairness key.
+  nlp_per_tenant_humanizer_burst: 4        # NEGELIR_NLP_PER_TENANT_HUMANIZER_BURST
+  nlp_per_tenant_humanizer_refill_per_s: 2.0  # NEGELIR_NLP_PER_TENANT_HUMANIZER_REFILL_PER_S
+  # CI gate: normalize_input p95 must not exceed this (ms). Phase 10 §10.1 DoD = 5 ms.
+  nlp_bench_latency_p95_threshold_ms: 5   # NEGELIR_NLP_BENCH_LATENCY_P95_THRESHOLD_MS
+  # mtime-poll interval (seconds) for LexiconStore hot-reload (§10.2 Atomic swap).
+  nlp_lexicon_reload_s: 30                 # NEGELIR_NLP_LEXICON_RELOAD_S
+  # p95 repair-density cap for clean-input quality alerts (§10.22.13).
+  nlp_repair_density_p95_max: 0.5          # NEGELIR_NLP_REPAIR_DENSITY_P95_MAX
+  # Directory containing Phase 10 Turkish language rule tables consumed by
+  # the input normalizer and lexicon build pipeline.
+  nlp_lang_tr_dir: "ai/nlp/lang_tr"         # NEGELIR_NLP_LANG_TR_DIR
+  # File-mtime poll interval for Turkish language rule hot-reload.
+  nlp_lang_tr_reload_s: 30                 # NEGELIR_NLP_LANG_TR_RELOAD_S
+  # Max entries per lexicon file (§10.2 Cardinality cap). Over-cap → dictionary_overflow warn + refuse load.
+  nlp_lexicon_max_entries_per_file: 50000  # NEGELIR_NLP_LEXICON_MAX_ENTRIES_PER_FILE
+  # Max aliases per canonical in the aliased lexicon build path (§10.25.6).
+  #   Defends against alias-graph bloat and Symspell precision loss.
+  nlp_lexicon_max_aliases_per_canonical: 12  # NEGELIR_NLP_LEXICON_MAX_ALIASES_PER_CANONICAL
+  # RSS budget for all lexicons (§10.2 Bounded memory). 0 = disable check.
+  nlp_lexicon_max_rss_mb: 128             # NEGELIR_NLP_LEXICON_MAX_RSS_MB
+  # Max retired snapshots retained for in-flight requests (§10.21.2 Old-gen eviction).
+  nlp_lexicon_max_old_generations: 2      # NEGELIR_NLP_LEXICON_MAX_OLD_GENERATIONS
+  # Swap policy: "all_or_nothing" (default) or "per_file" (§10.21.3 Atomic swap policy).
+  # Under "all_or_nothing", cross-file referential validator runs before swap.
+  nlp_lexicon_swap_atomicity: all_or_nothing  # NEGELIR_NLP_LEXICON_SWAP_ATOMICITY
+  nlp_lexicon_swap_grace_s: 120  # NEGELIR_NLP_LEXICON_SWAP_GRACE_S
+  nlp_lexicon_swap_max_lag_s: 600  # NEGELIR_NLP_LEXICON_SWAP_MAX_LAG_S
+  nlp_preview_dir: "data/nlp/preview"  # NEGELIR_NLP_PREVIEW_DIR
+  # Default root directory for complaint trace output.
+  nlp_complaint_trace_dir: "data/nlp/complaint_traces"  # NEGELIR_NLP_COMPLAINT_TRACE_DIR
+  nlp_complaint_trace_default_window_h: 24  # NEGELIR_NLP_COMPLAINT_TRACE_DEFAULT_WINDOW_H
+  # Rolling abuse detector window in hours.
+  nlp_abuse_window_h: 168  # NEGELIR_NLP_ABUSE_WINDOW_H
+  nlp_abuse_dym_acceptance_anomaly_ratio: 4.0  # NEGELIR_NLP_ABUSE_DYM_ACCEPTANCE_ANOMALY_RATIO
+  nlp_abuse_style_shift_kl: 0.6  # NEGELIR_NLP_ABUSE_STYLE_SHIFT_KL
+  nlp_abuse_shadow_concentration_distinct_buckets_min: 5  # NEGELIR_NLP_ABUSE_SHADOW_CONCENTRATION_DISTINCT_BUCKETS_MIN
+  nlp_abuse_account_farm_jaccard_min: 0.5  # NEGELIR_NLP_ABUSE_ACCOUNT_FARM_JACCARD_MIN
+  nlp_abuse_account_farm_account_count_min: 100  # NEGELIR_NLP_ABUSE_ACCOUNT_FARM_ACCOUNT_COUNT_MIN
+  nlp_intent_train_max_rows_per_subject_bucket: 500  # NEGELIR_NLP_INTENT_TRAIN_MAX_ROWS_PER_SUBJECT_BUCKET
+  nlp_qa_answer_min_supported_version: 1  # NEGELIR_NLP_QA_ANSWER_MIN_SUPPORTED_VERSION
+  # Maximum lexicon feed schema this NLP build supports; higher feed versions
+  # are refused at reload time and prior generation stays active.
+  nlp_lexicon_feed_max_supported_schema_version: 1  # NEGELIR_NLP_LEXICON_FEED_MAX_SUPPORTED_SCHEMA_VERSION
+  # RSS budget for CRF entity tagger model (§10.21.2 RSS ceiling).
+  nlp_crf_max_rss_mb: 5                   # NEGELIR_NLP_CRF_MAX_RSS_MB
+  # RSS budget for SymSpell edit-distance index (§10.21.2 RSS ceiling).
+  nlp_symspell_max_rss_mb: 100            # NEGELIR_NLP_SYMSPELL_MAX_RSS_MB
+  # RSS budget for Jinja2 bytecode cache (§10.21.2 RSS ceiling).
+  nlp_jinja_cache_max_rss_mb: 50          # NEGELIR_NLP_JINJA_CACHE_MAX_RSS_MB
+  # RSS budget for Python runtime overhead (§10.21.2 RSS ceiling).
+  nlp_python_overhead_mb: 200             # NEGELIR_NLP_PYTHON_OVERHEAD_MB
+  # RSS budget for humanizer ONNX model (§10.21.2 RSS ceiling).
+  nlp_humanizer_max_rss_mb: 1024          # NEGELIR_NLP_HUMANIZER_MAX_RSS_MB
+  # Total RSS ceiling per NLP pod (§10.21.2 RSS ceiling). Boot validator refuses start if sub-knobs sum exceeds cap.
+  nlp_pod_rss_max_mb: 2048                # NEGELIR_NLP_POD_RSS_MAX_MB
+  # Global Levenshtein cap for tokens of length ≥ 5 in SymSpell typo correction (§10.3).
+  nlp_typo_max_edit_distance: 2           # NEGELIR_NLP_TYPO_MAX_EDIT_DISTANCE
+  # Per-query fuzzy-lookup budget; when exceeded pipeline emits did_you_mean_offered (§10.3).
+  nlp_typo_max_lookups_per_query: 8       # NEGELIR_NLP_TYPO_MAX_LOOKUPS_PER_QUERY
+  nlp_asr_filler_strip_max: 6             # NEGELIR_NLP_ASR_FILLER_STRIP_MAX
+  # Diacritic ambiguity tie-break ratio (§10.3 Ambiguity policy). When top-2
+  # candidates' frequencies are within this ratio, token is preserved unchanged.
+  nlp_diacritic_tie_break_ratio: 1.5      # NEGELIR_NLP_DIACRITIC_TIE_BREAK_RATIO
+  # Hard-call: minimum corpus frequency for restored form before the restorer
+  # confidently replaces the ASCII input (§10.22.1).
+  nlp_diacritic_hard_call_min_freq: 10000 # NEGELIR_NLP_DIACRITIC_HARD_CALL_MIN_FREQ
+  # Maximum per-token risk score allowed before diacritic restoration is
+  # suppressed for that token (§10.22.1).
+  nlp_diacritic_max_risk_per_token: 2.5   # NEGELIR_NLP_DIACRITIC_MAX_RISK_PER_TOKEN
+  # Minimum confidence margin required before restored-form hit can override
+  # ASCII-pass hit on same span with different canonical (§10.22.1).
+  nlp_ascii_vs_restored_margin: 0.2       # NEGELIR_NLP_ASCII_VS_RESTORED_MARGIN
+  # Normalize+typo+diacritic stage deadline; on timeout falls through to raw tokens (§10.3).
+  nlp_normalize_stage_timeout_ms: 20      # NEGELIR_NLP_NORMALIZE_STAGE_TIMEOUT_MS
+  # §10.34.2 Normalize-chain performance budget (p99 across all passes, milliseconds).
+  nlp_normalize_total_budget_p99_ms: 12   # NEGELIR_NLP_NORMALIZE_TOTAL_BUDGET_P99_MS
+  # §10.22.5 Composite-abbreviation separator pattern (dispatcher §10.6 uses this).
+  # Token between two resolved team entities must match → match_lookup slot.
+  nlp_match_separator_pattern: '^(-|–|—|vs\.?|x|×|/)$'  # NEGELIR_NLP_MATCH_SEPARATOR_PATTERN
+  # §10.4 Intent classifier (fastText, ≤ 20 MB, CPU-only).
+  nlp_intent_model_path: "data/models/nlp/intent.tr.bin"  # NEGELIR_NLP_INTENT_MODEL_PATH
+  nlp_intent_model_sha256: ""             # NEGELIR_NLP_INTENT_MODEL_SHA256
+  nlp_intent_model_max_size_mb: 20        # NEGELIR_NLP_INTENT_MODEL_MAX_SIZE_MB
+  # Platt calibration JSON path; empty = auto-resolved from model dir (§10.4 Calibration).
+  nlp_intent_calibration_path: ""         # NEGELIR_NLP_INTENT_CALIBRATION_PATH
+  # Minimum calibrated confidence for a definite intent; below → abstention (§10.4).
+  nlp_min_intent_conf: 0.55               # NEGELIR_NLP_MIN_INTENT_CONF
+  # Rolling accuracy floor for the drift guard; below → degraded + template-only (§10.4).
+  nlp_intent_accuracy_floor: 0.92         # NEGELIR_NLP_INTENT_ACCURACY_FLOOR
+  # Sliding window size (number of predictions) for the drift guard (§10.4).
+  nlp_intent_drift_window: 1000           # NEGELIR_NLP_INTENT_DRIFT_WINDOW
+  # Entity extraction F1-score floor for §10.18 CI gate (must be ≥ this on golden corpus).
+  nlp_entity_f1_floor: 0.90               # NEGELIR_NLP_ENTITY_F1_FLOOR
+  # Human-readable semver for the deployed intent model file (§10.4 Versioning).
+  # Stamped on every qa.intent.v1 envelope as intent_model_version.
+  nlp_intent_model_version: ""            # NEGELIR_NLP_INTENT_MODEL_VERSION
+  # §10.21.1 Exact numpy version expected at runtime (numpy + fastText version pin).
+  # Boot probe asserts numpy.__version__ matches; refuse start on drift.
+  nlp_numpy_pin: ""                       # NEGELIR_NLP_NUMPY_PIN
+  # §10.21.1 Exact fasttext version expected at runtime (numpy + fastText version pin).
+  # Boot probe asserts fasttext.__version__ matches; refuse start on drift.
+  nlp_fasttext_pin: ""                    # NEGELIR_NLP_FASTTEXT_PIN
+
+  # §10.12 — L0 intent cache (in-process LRU with TTL).
+  nlp_intent_cache_max_entries: 10000     # NEGELIR_NLP_INTENT_CACHE_MAX_ENTRIES
+  nlp_intent_cache_ttl_s: 300             # NEGELIR_NLP_INTENT_CACHE_TTL_S
+  # Phase 10 §10.12 per-pod salt for the L0 intent cache key and associated
+  # cache shards. Defaults to local for single-node development.
+  nlp_pod_id: "local"                    # NEGELIR_NLP_POD_ID
+  # Phase 10 §10.12 L1 answer cache
+  nlp_answer_cache_ttl_data_s: 120        # NEGELIR_NLP_ANSWER_CACHE_TTL_DATA_S
+  nlp_answer_cache_ttl_predict_s: 60      # NEGELIR_NLP_ANSWER_CACHE_TTL_PREDICT_S
+  nlp_l0_cache_ttl_s: 300                 # NEGELIR_NLP_L0_CACHE_TTL_S
+  nlp_l1_answer_cache_ttl_s: 600         # NEGELIR_NLP_L1_ANSWER_CACHE_TTL_S
+
+  # §10.5 — Entity extraction (gazetteer + CRF hybrid pipeline)
+  nlp_entity_kind_priority: "team,player,league,competition,market,date,time,weekday,ordinal,money_amount,score"  # NEGELIR_NLP_ENTITY_KIND_PRIORITY
+  nlp_entity_crf_model_path: ""           # NEGELIR_NLP_ENTITY_CRF_MODEL_PATH
+  nlp_entity_crf_model_sha256: ""         # NEGELIR_NLP_ENTITY_CRF_MODEL_SHA256
+  nlp_entity_crf_model_max_size_mb: 5     # NEGELIR_NLP_ENTITY_CRF_MODEL_MAX_SIZE_MB
+  nlp_entity_bench_latency_p95_threshold_ms: 8  # NEGELIR_NLP_ENTITY_BENCH_LATENCY_P95_THRESHOLD_MS
+  nlp_default_fixture_window_h: 48        # NEGELIR_NLP_DEFAULT_FIXTURE_WINDOW_H
+  nlp_summary_max_fixtures: 10            # NEGELIR_NLP_SUMMARY_MAX_FIXTURES
+  nlp_summary_aggregation_timeout_ms: 1500  # NEGELIR_NLP_SUMMARY_AGGREGATION_TIMEOUT_MS
+  nlp_summary_calibration_mismatch_policy: note  # NEGELIR_NLP_SUMMARY_CALIBRATION_MISMATCH_POLICY
+  nlp_dispatch_dedup_window_s: 600  # NEGELIR_NLP_DISPATCH_DEDUP_WINDOW_S
+  nlp_intent_tier_map: "{}"  # NEGELIR_NLP_INTENT_TIER_MAP
+  # §10.7 confidence bands: JSON list of [lower, upper, label] triples (§10.7 Confidence rendering).
+  # Default: 3-band table matching the §10.7 design.
+  nlp_confidence_bands: '[[0.0,0.55,"düşük"],[0.55,0.75,"orta"],[0.75,1.01,"yüksek"]]'  # NEGELIR_NLP_CONFIDENCE_BANDS
+  # §10.17 default locale: IETF BCP 47 language tag for template resolution.
+  # Template path: ai/nlp/templates/<intent>.<locale>.j2
+  nlp_default_locale: "tr-TR"             # NEGELIR_NLP_DEFAULT_LOCALE
+  # §10.22 locale fallback chain: ordered supported locales used to resolve
+  # language-only or unsupported tags.
+  nlp_locale_fallback_chain: '["tr-TR"]'  # NEGELIR_NLP_LOCALE_FALLBACK_CHAIN
+
+# ── Phase 9 §9.12 — Full API knob inventory (shared: Python AI + Go API) ────
+# Every key below is also in ai/common/config.py, server/internal/config/config.go,
+# and xops/env/.env.example (# shared). test_config_sync covers all three sides.
+phase9:
+  api_burst_capacity: 60                                        # NEGELIR_API_BURST_CAPACITY
+  api_burst_refill_per_s: 2.0                                   # NEGELIR_API_BURST_REFILL_PER_S
+  api_request_timeout_ms: 2500                                  # NEGELIR_API_REQUEST_TIMEOUT_MS
+  api_consensus_overhead_ms: 200                                # NEGELIR_API_CONSENSUS_OVERHEAD_MS
+  api_transit_jitter_ms: 100                                    # NEGELIR_API_TRANSIT_JITTER_MS
+  api_request_max_bytes: 65536                                  # NEGELIR_API_REQUEST_MAX_BYTES
+  qa_input_max_bytes: 4096                                      # NEGELIR_QA_INPUT_MAX_BYTES
+  api_fixture_window_max_days: 14                               # NEGELIR_API_FIXTURE_WINDOW_MAX_DAYS
+  api_allowed_markets: "ms,au_2.5,btts,ah_home,modal_score"    # NEGELIR_API_ALLOWED_MARKETS
+  api_cursor_ttl_s: 1800                                        # NEGELIR_API_CURSOR_TTL_S
+  api_idempotency_ttl_s: 86400                                  # NEGELIR_API_IDEMPOTENCY_TTL_S
+  api_idempotency_inflight_wait_ms: 1500                        # NEGELIR_API_IDEMPOTENCY_INFLIGHT_WAIT_MS
+  api_swr_inflight_max: 64                                      # NEGELIR_API_SWR_INFLIGHT_MAX
+  api_cache_stale_after_s: 30                                   # NEGELIR_API_CACHE_STALE_AFTER_S
+  api_cache_max_age_s: 300                                      # NEGELIR_API_CACHE_MAX_AGE_S
+  api_reply_reaper_s: 60                                        # NEGELIR_API_REPLY_REAPER_S
+  api_predict_request_backlog_high: 5000                        # NEGELIR_API_PREDICT_REQUEST_BACKLOG_HIGH
+  api_max_concurrent_requests: 5000                             # NEGELIR_API_MAX_CONCURRENT_REQUESTS
+  api_response_write_timeout_ms: 5000                           # NEGELIR_API_RESPONSE_WRITE_TIMEOUT_MS
+  api_bcrypt_cost: 12                                           # NEGELIR_API_BCRYPT_COST
+  api_access_ttl_s: 900                                         # NEGELIR_API_ACCESS_TTL_S
+  api_refresh_ttl_s: 2592000                                    # NEGELIR_API_REFRESH_TTL_S
+  api_refresh_replay_grace_s: 30                                # NEGELIR_API_REFRESH_REPLAY_GRACE_S
+  api_revocation_set_max: 10000                                 # NEGELIR_API_REVOCATION_SET_MAX
+  api_jwt_key_poll_s: 10                                        # NEGELIR_API_JWT_KEY_POLL_S
+  api_jwt_retired_grace_s: 960                                  # NEGELIR_API_JWT_RETIRED_GRACE_S
+  api_jwt_clock_skew_s: 30                                      # NEGELIR_API_JWT_CLOCK_SKEW_S
+  api_self_registration_enabled: false                          # NEGELIR_API_SELF_REGISTRATION_ENABLED
+  api_register_cap_per_subnet_per_h: 20                         # NEGELIR_API_REGISTER_CAP_PER_SUBNET_PER_H
+  api_trusted_proxies: ""                                       # NEGELIR_API_TRUSTED_PROXIES
+  api_log_sample_pct: 10                                        # NEGELIR_API_LOG_SAMPLE_PCT
+  api_tier_enforcement_enabled: false                           # NEGELIR_API_TIER_ENFORCEMENT_ENABLED
+  api_deprecation_window_days: 90                               # NEGELIR_API_DEPRECATION_WINDOW_DAYS
+  api_schema_version: 1                                         # NEGELIR_API_SCHEMA_VERSION
+  api_slo_burn_window_s: 3600                                   # NEGELIR_API_SLO_BURN_WINDOW_S
+  api_slo_burn_threshold: 2.0                                   # NEGELIR_API_SLO_BURN_THRESHOLD
+  api_time_format: "iso8601_utc"                                # NEGELIR_API_TIME_FORMAT
+  # §9.13 smoke-test base URL for `make swarm.demo.live` API extension.
+  api_demo_base_url: "http://localhost:8080"                    # NEGELIR_API_DEMO_BASE_URL
+  # §9.17.1 — Go runtime tuning (documented mirrors; code path is Go-only).
+  api_go_mem_limit_mib: 0                                       # NEGELIR_API_GO_MEM_LIMIT_MIB
+  api_go_gc_percent: 50                                         # NEGELIR_API_GO_GC_PERCENT
+  api_read_header_timeout_ms: 5000                              # NEGELIR_API_READ_HEADER_TIMEOUT_MS
+  api_read_timeout_ms: 10000                                    # NEGELIR_API_READ_TIMEOUT_MS
+  api_write_timeout_ms: 15000                                   # NEGELIR_API_WRITE_TIMEOUT_MS
+  api_idle_timeout_ms: 60000                                    # NEGELIR_API_IDLE_TIMEOUT_MS
+  api_shutdown_grace_s: 30                                      # NEGELIR_API_SHUTDOWN_GRACE_S
+  api_in_mesh_port: "8082"                                      # NEGELIR_API_IN_MESH_PORT
+  # §9.17.3 — Connection pool sizing (documented mirrors; code path is Go-only).
+  api_pg_pool_max_conns: 25                                     # NEGELIR_API_PG_POOL_MAX_CONNS
+  api_pg_replica_url: ""                                        # NEGELIR_API_PG_REPLICA_URL
+  api_pg_replica_lag_check_s: 10                                # NEGELIR_API_PG_REPLICA_LAG_CHECK_S
+  api_pg_replica_lag_max_ms: 500                                # NEGELIR_API_PG_REPLICA_LAG_MAX_MS
+  api_redis_cache_pool_size: 50                                 # NEGELIR_API_REDIS_CACHE_POOL_SIZE
+  api_redis_bus_pool_size: 20                                   # NEGELIR_API_REDIS_BUS_POOL_SIZE
+  # §9.17.4 — Resilience (documented mirrors; code path is Go-only).
+  api_breaker_fail_ratio: 0.5                                   # NEGELIR_API_BREAKER_FAIL_RATIO
+  api_breaker_window_s: 10                                      # NEGELIR_API_BREAKER_WINDOW_S
+  api_breaker_min_requests: 20                                  # NEGELIR_API_BREAKER_MIN_REQUESTS
+  api_breaker_open_s: 15                                        # NEGELIR_API_BREAKER_OPEN_S
+  api_hedge_after_ms: 200                                       # NEGELIR_API_HEDGE_AFTER_MS
+  api_hedging_enabled: true                                     # NEGELIR_API_HEDGING_ENABLED
+  api_hedge_budget_pct: 10                                      # NEGELIR_API_HEDGE_BUDGET_PCT
+  api_retry_budget_per_s: 10                                    # NEGELIR_API_RETRY_BUDGET_PER_S
+  api_retry_budget_capacity: 50                                 # NEGELIR_API_RETRY_BUDGET_CAPACITY
+  api_bench_target_rps: 200                                     # NEGELIR_API_BENCH_TARGET_RPS
+
+  # §9.17.6 — In-process L0 LRU cache (documented mirrors; code path is Go-only).
+  api_l0_cache_max_entries: 10000                               # NEGELIR_API_L0_CACHE_MAX_ENTRIES
+  api_l0_cache_max_bytes: 67108864                              # NEGELIR_API_L0_CACHE_MAX_BYTES
+  api_l0_max_ttl_s: 5                                           # NEGELIR_API_L0_MAX_TTL_S
+  api_negative_cache_s: 10                                      # NEGELIR_API_NEGATIVE_CACHE_S
+  api_l0_refresh_max_wait_ms: 200                               # NEGELIR_API_L0_REFRESH_MAX_WAIT_MS
+  api_l0_invalidation_lag_max_ms: 500                           # NEGELIR_API_L0_INVALIDATION_LAG_MAX_MS
+  # §9.17.7 — Audit pipeline performance (documented mirrors; code path is Go-only).
+  api_audit_batch_max: 64                                       # NEGELIR_API_AUDIT_BATCH_MAX
+  api_audit_batch_max_ms: 10                                    # NEGELIR_API_AUDIT_BATCH_MAX_MS
+  api_audit_chan_cap: 4096                                      # NEGELIR_API_AUDIT_CHAN_CAP
+  api_audit_sample_pct_under_pressure: 10                      # NEGELIR_API_AUDIT_SAMPLE_PCT_UNDER_PRESSURE
+  # §9.17.8 — TLS/TCP (documented mirror; code path is Go-only).
+  api_tcp_user_timeout_ms: 20000                                # NEGELIR_API_TCP_USER_TIMEOUT_MS
+  # §9.17.9 — Backpressure feedback loops (documented mirrors; code path is Go-only).
+  api_adaptive_error_rate_threshold: 0.02                      # NEGELIR_API_ADAPTIVE_ERROR_RATE_THRESHOLD
+  api_adaptive_shed_factor: 0.5                                 # NEGELIR_API_ADAPTIVE_SHED_FACTOR
+  api_adaptive_shed_duration_s: 60                              # NEGELIR_API_ADAPTIVE_SHED_DURATION_S
+  api_priority_tier_floor: 0                                    # NEGELIR_API_PRIORITY_TIER_FLOOR
+  # §9.17.10 — Observability for performance (documented mirrors; code path is Go-only).
+  api_pprof_enabled_dev: true                                   # NEGELIR_API_PPROF_ENABLED_DEV
+  api_pprof_enabled_prod: false                                 # NEGELIR_API_PPROF_ENABLED_PROD
+  api_alloc_sample_rate: 0.001                                  # NEGELIR_API_ALLOC_SAMPLE_RATE
+  api_pprof_dir: "data/api/profiles"                            # NEGELIR_API_PPROF_DIR
+
+
+# §8.1 ops console baseline. CLI publishes maint.event.v1 and waits for
+# maint.ack.v1 per expected consumer (kind→consumer-set map at
+# ai/swarm/agents/maint/_ack_routing.py). Bus-down envelopes land in
+# opsctl_spool_dir; replay via `make ops.spool-flush`. Empty
+# audit/spool paths resolve to <data_dir>/maint/opsctl_*.
+phase8:
+  opsctl_ack_timeout_ms: 5000                      # NEGELIR_OPSCTL_ACK_TIMEOUT_MS
+  opsctl_ack_timeout_ms_live_demo: 1000            # NEGELIR_OPSCTL_ACK_TIMEOUT_MS_LIVE_DEMO
+  opsctl_spool_max_entries: 1024                   # NEGELIR_OPSCTL_SPOOL_MAX_ENTRIES
+  opsctl_nlp_kill_max_ttl_s: 3600                   # NEGELIR_OPSCTL_NLP_KILL_MAX_TTL_S
+  opsctl_critical_agents: "consensus.v1,sec.rate.v1,maint.backup.v1"  # NEGELIR_OPSCTL_CRITICAL_AGENTS
+  opsctl_audit_path: ""                           # NEGELIR_OPSCTL_AUDIT_PATH
+  opsctl_spool_dir: ""                            # NEGELIR_OPSCTL_SPOOL_DIR
+  opsctl_lock_dir: ""                             # NEGELIR_OPSCTL_LOCK_DIR
+  opsctl_lock_stale_factor: 2                      # NEGELIR_OPSCTL_LOCK_STALE_FACTOR
+  opsctl_spool_ack_max_wait_h: 24                  # NEGELIR_OPSCTL_SPOOL_ACK_MAX_WAIT_H
+  opsctl_spool_flush_max_per_run: 100              # NEGELIR_OPSCTL_SPOOL_FLUSH_MAX_PER_RUN
+  maint_ack_payload_max_bytes: 4096                # NEGELIR_MAINT_ACK_PAYLOAD_MAX_BYTES
+  maint_ack_reason_max_bytes: 512                  # NEGELIR_MAINT_ACK_REASON_MAX_BYTES
+  maint_ack_details_max_bytes: 2048                # NEGELIR_MAINT_ACK_DETAILS_MAX_BYTES
+  # ── §8.14.4 Redis ACL + signed envelopes ──
+  # negelir_opsctl ACL user — provisioned by §2 mock setup + Phase 14 K8s.
+  opsctl_redis_expected_user: negelir_opsctl       # NEGELIR_OPSCTL_REDIS_EXPECTED_USER
+  # Require HMAC-SHA256 op_signature on every opsctl envelope.
+  # Set to false in mock environments; true in prod.
+  opsctl_require_signature: true                   # NEGELIR_OPSCTL_REQUIRE_SIGNATURE
+  # Path to 32-byte operator key (mode 0600). Empty = ~/.negelir/opsctl_key
+  opsctl_key_path: ""                              # NEGELIR_OPSCTL_KEY_PATH
+  # Operator registry JSON. Empty = infra/maint/opsctl_operators.json
+  opsctl_operators_file: ""                        # NEGELIR_OPSCTL_OPERATORS_FILE
+  # Per-subcommand authz YAML. Empty = infra/maint/opsctl_authz.yaml
+  opsctl_authz_file: ""                            # NEGELIR_OPSCTL_AUTHZ_FILE
+  opsctl_key_revocation_grace_s: 60                # NEGELIR_OPSCTL_KEY_REVOCATION_GRACE_S
+  opsctl_key_max_age_days: 365                     # NEGELIR_OPSCTL_KEY_MAX_AGE_DAYS
+  opsctl_key_revocation_grace_days: 30             # NEGELIR_OPSCTL_KEY_REVOCATION_GRACE_DAYS
+  opsctl_operators_reload_s: 60                    # NEGELIR_OPSCTL_OPERATORS_RELOAD_S
+  opsctl_kill_switch_path: ""                      # NEGELIR_OPSCTL_KILL_SWITCH_PATH
+  opsctl_kill_switch_max_age_h: 24                 # NEGELIR_OPSCTL_KILL_SWITCH_MAX_AGE_H
+  opsctl_key_rate_limit_per_min: 30                # NEGELIR_OPSCTL_KEY_RATE_LIMIT_PER_MIN
+  # ── §8.2 maint.scaler.v1 ──
+  maint_scaler_decision_window_ms: 30000           # NEGELIR_MAINT_SCALER_DECISION_WINDOW_MS
+  maint_scaler_clock_source: auto                  # NEGELIR_MAINT_SCALER_CLOCK_SOURCE
+  maint_clock_suspend_alert_s: 30                  # NEGELIR_MAINT_CLOCK_SUSPEND_ALERT_S
+  maint_scaler_max_targets: 256                    # NEGELIR_MAINT_SCALER_MAX_TARGETS
+  maint_scaler_max_replicas: 16                    # NEGELIR_MAINT_SCALER_MAX_REPLICAS
+  maint_scaler_default_max_replicas: 0             # NEGELIR_MAINT_SCALER_DEFAULT_MAX_REPLICAS
+  maint_scaler_min_replicas: 1                     # NEGELIR_MAINT_SCALER_MIN_REPLICAS
+  maint_scaler_scale_up_queue_depth: 50            # NEGELIR_MAINT_SCALER_SCALE_UP_QUEUE_DEPTH
+  maint_scaler_scale_down_queue_depth: 5           # NEGELIR_MAINT_SCALER_SCALE_DOWN_QUEUE_DEPTH
+  maint_scaler_scale_up_head_age_s: 30             # NEGELIR_MAINT_SCALER_SCALE_UP_HEAD_AGE_S
+  maint_scaler_hysteresis_windows: 3               # NEGELIR_MAINT_SCALER_HYSTERESIS_WINDOWS
+  maint_scaler_hysteresis_grace: 1                 # NEGELIR_MAINT_SCALER_HYSTERESIS_GRACE
+  maint_scaler_max_changes_per_window: 4           # NEGELIR_MAINT_SCALER_MAX_CHANGES_PER_WINDOW
+  maint_scaler_manual_pin_ttl_s: 1800              # NEGELIR_MAINT_SCALER_MANUAL_PIN_TTL_S
+  maint_scaler_max_replicas_overrides_csv: ""     # NEGELIR_MAINT_SCALER_MAX_REPLICAS_OVERRIDES_CSV
+  maint_scaler_warmup_replicas: 1                  # NEGELIR_MAINT_SCALER_WARMUP_REPLICAS
+  maint_scaler_self_scaling_targets: "trainer.v1" # NEGELIR_MAINT_SCALER_SELF_SCALING_TARGETS
+  # §8.13.5 A1 — signal smoothing + scale-down grace.
+  maint_scaler_signal_window_samples: 5            # NEGELIR_MAINT_SCALER_SIGNAL_WINDOW_SAMPLES
+  maint_scaler_scale_down_grace_windows: 3         # NEGELIR_MAINT_SCALER_SCALE_DOWN_GRACE_WINDOWS
+  # §8.13.5 A2 — clamp-formula decision.
+  maint_scaler_target_load_per_replica: 25         # NEGELIR_MAINT_SCALER_TARGET_LOAD_PER_REPLICA
+  maint_scaler_max_step_per_window: 2              # NEGELIR_MAINT_SCALER_MAX_STEP_PER_WINDOW
+  maint_scaler_noise_windows: '["0 3-5 * * *","0 5 * * 0"]'  # NEGELIR_MAINT_SCALER_NOISE_WINDOWS
+  maint_runtime: none                              # NEGELIR_MAINT_RUNTIME
+  maint_scaler_compose_file: docker-compose.yml    # NEGELIR_MAINT_SCALER_COMPOSE_FILE
+  maint_scaler_runtime_timeout_s: 30               # NEGELIR_MAINT_SCALER_RUNTIME_TIMEOUT_S
+  maint_scaler_global_max_replicas: 64             # NEGELIR_MAINT_SCALER_GLOBAL_MAX_REPLICAS
+  maint_scaler_min_decision_interval_s: 90         # NEGELIR_MAINT_SCALER_MIN_DECISION_INTERVAL_S
+  maint_scaler_vram_headroom_mb: 1024              # NEGELIR_MAINT_SCALER_VRAM_HEADROOM_MB
+  maint_scaler_vram_pessimistic_threshold_pct: 0.6  # NEGELIR_MAINT_SCALER_VRAM_PESSIMISTIC_THRESHOLD_PCT
+  maint_scaler_cpu_budget_pct: 0.8                  # NEGELIR_MAINT_SCALER_CPU_BUDGET_PCT
+  maint_scaler_runtime_histogram_buckets: "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0,2.5,5.0,10.0"  # NEGELIR_MAINT_SCALER_RUNTIME_HISTOGRAM_BUCKETS
+  maint_scaler_history_max: 1024                   # NEGELIR_MAINT_SCALER_HISTORY_MAX
+  maint_leader_lease_duration_s: 15               # NEGELIR_MAINT_LEADER_LEASE_DURATION_S
+  # ── §8.5 maint.dlq.v1 ──
+  maint_dlq_per_topic_quota: 100                   # NEGELIR_MAINT_DLQ_PER_TOPIC_QUOTA
+  maint_dlq_replay_backoff_s: 60                   # NEGELIR_MAINT_DLQ_REPLAY_BACKOFF_S
+  maint_dlq_backoff_lru: 1024                      # NEGELIR_MAINT_DLQ_BACKOFF_LRU
+  maint_dlq_backoff_factor: 2                      # NEGELIR_MAINT_DLQ_BACKOFF_FACTOR
+  maint_dlq_state_max: 100000                      # NEGELIR_MAINT_DLQ_STATE_MAX
+  maint_dlq_replay_topics_allow_csv: ""           # NEGELIR_MAINT_DLQ_REPLAY_TOPICS_ALLOW_CSV
+  maint_dlq_replay_allow_overrides: []             # NEGELIR_MAINT_DLQ_REPLAY_ALLOW_OVERRIDES
+  maint_dlq_visit_max: 2                           # NEGELIR_MAINT_DLQ_VISIT_MAX
+  maint_dlq_per_topic_max_per_min: 60              # NEGELIR_MAINT_DLQ_PER_TOPIC_MAX_PER_MIN
+  maint_dlq_visit_lru: 4096                        # NEGELIR_MAINT_DLQ_VISIT_LRU
+  # §8.13.5 C1 / C2 — round-robin replay budget + poison freeze.
+  maint_dlq_max_replays_per_tick: 50               # NEGELIR_MAINT_DLQ_MAX_REPLAYS_PER_TICK
+  maint_dlq_consumer_broken_threshold: 5           # NEGELIR_MAINT_DLQ_CONSUMER_BROKEN_THRESHOLD
+  maint_dlq_consumer_broken_window_s: 600          # NEGELIR_MAINT_DLQ_CONSUMER_BROKEN_WINDOW_S
+  maint_dlq_replay_rps: 10                         # NEGELIR_MAINT_DLQ_REPLAY_RPS
+  maint_dlq_backlog_alert: 1000                    # NEGELIR_MAINT_DLQ_BACKLOG_ALERT
+  # ── §8.6 maint.schema.v1 ──
+  maint_schema_sample_rate_per_s: 5                # NEGELIR_MAINT_SCHEMA_SAMPLE_RATE_PER_S
+  maint_schema_burst: 10                           # NEGELIR_MAINT_SCHEMA_BURST
+  maint_schema_drift_debounce_s: 60                # NEGELIR_MAINT_SCHEMA_DRIFT_DEBOUNCE_S
+  maint_schema_drift_lru: 512                      # NEGELIR_MAINT_SCHEMA_DRIFT_LRU
+  maint_schema_pg_check_interval_s: 3600           # NEGELIR_MAINT_SCHEMA_PG_CHECK_INTERVAL_S
+  # §8.6 binding boundary — auto-apply migrations is detect-only in
+  # v1; this knob exists for forward compatibility only. Setting it
+  # true logs a warning + emits sec.alert{schema_auto_apply_misconfigured}.
+  maint_schema_auto_apply_enabled: false           # NEGELIR_MAINT_SCHEMA_AUTO_APPLY_ENABLED
+  # §8.14.7 — hard per-process cross-topic cap; ceiling 500 (fail_safe).
+  maint_schema_validate_max_rps: 50                # NEGELIR_MAINT_SCHEMA_VALIDATE_MAX_RPS
+  # ── §8.7 + §8.8 maint.sec.v1 ──
+  maint_sec_pattern_ttl_s: 604800                  # NEGELIR_MAINT_SEC_PATTERN_TTL_S
+  maint_sec_pattern_promote_threshold: 1           # NEGELIR_MAINT_SEC_PATTERN_PROMOTE_THRESHOLD
+  maint_sec_pattern_pending_ttl_days: 30           # NEGELIR_MAINT_SEC_PATTERN_PENDING_TTL_DAYS
+  maint_sec_allowlist_pending_ttl_days: 30          # NEGELIR_MAINT_SEC_ALLOWLIST_PENDING_TTL_DAYS  (Phase 8 DoD canonical name)
+  maint_sec_request_lru: 2048                      # NEGELIR_MAINT_SEC_REQUEST_LRU
+  maint_sec_decimate_min_interval_s: 300           # NEGELIR_MAINT_SEC_DECIMATE_MIN_INTERVAL_S
+  # ── §8.10 broadcast pause/resume ──
+  maint_pause_default_ttl_s: 600                   # NEGELIR_MAINT_PAUSE_DEFAULT_TTL_S
+  maint_pause_max_ttl_s: 86400                     # NEGELIR_MAINT_PAUSE_MAX_TTL_S  (hard cap; default 24h)
+  maint_silence_dedup_s: 300                       # NEGELIR_MAINT_SILENCE_DEDUP_S
+  # §8.16 D2 — dead-mans-switch.
+  maint_silence_alert_h: 24                        # NEGELIR_MAINT_SILENCE_ALERT_H
+  maint_silence_warmup_s: 3600                     # NEGELIR_MAINT_SILENCE_WARMUP_S
+  maint_self_dlq_alert: 100                        # NEGELIR_MAINT_SELF_DLQ_ALERT
+  maint_self_dlq_growth_alert: 50                  # NEGELIR_MAINT_SELF_DLQ_GROWTH_ALERT  (entries/min growth threshold)
+  maint_self_dlq_throttle_recovery_s: 120          # NEGELIR_MAINT_SELF_DLQ_THROTTLE_RECOVERY_S
+  # ── §8.11 consumer-lag watchdog ──
+  maint_plane_lag_alert_ms: 5000                   # NEGELIR_MAINT_PLANE_LAG_ALERT_MS
+  maint_plane_lag_alert_window_s: 60               # NEGELIR_MAINT_PLANE_LAG_ALERT_WINDOW_S
+  sec_plane_lag_alert_ms: 5000                     # NEGELIR_SEC_PLANE_LAG_ALERT_MS
+  sec_plane_lag_alert_window_s: 60                 # NEGELIR_SEC_PLANE_LAG_ALERT_WINDOW_S
+  maint_plane_recovery_window_s: 120               # NEGELIR_MAINT_PLANE_RECOVERY_WINDOW_S
+  # ── §8.9 per-agent bus circuit-breaker ──
+  maint_bus_fail_threshold: 3                      # NEGELIR_MAINT_BUS_FAIL_THRESHOLD
+  maint_bus_fail_window_s: 30.0                    # NEGELIR_MAINT_BUS_FAIL_WINDOW_S
+  maint_bus_spool_max_entries: 1024                # NEGELIR_MAINT_BUS_SPOOL_MAX_ENTRIES
+  maint_agent_spool_dir: "data/maint/agent_spool"  # NEGELIR_MAINT_AGENT_SPOOL_DIR
+  maint_agent_spool_max_entries: 512               # NEGELIR_MAINT_AGENT_SPOOL_MAX_ENTRIES  (per-agent sub-spool cap)
+  # ── §8.11 three-tier backpressure ──
+  maint_backpressure_yellow_factor: 4.0            # NEGELIR_MAINT_BACKPRESSURE_YELLOW_FACTOR
+  maint_backpressure_yellow_queue_depth: 200       # NEGELIR_MAINT_BACKPRESSURE_YELLOW_QUEUE_DEPTH
+  maint_backpressure_yellow_head_age_s: 60         # NEGELIR_MAINT_BACKPRESSURE_YELLOW_HEAD_AGE_S
+  maint_backpressure_yellow_storage_pct: 75        # NEGELIR_MAINT_BACKPRESSURE_YELLOW_STORAGE_PCT
+  maint_backpressure_yellow_error_rate_per_s: 1    # NEGELIR_MAINT_BACKPRESSURE_YELLOW_ERROR_RATE_PER_S
+  maint_backpressure_red_queue_depth: 1000         # NEGELIR_MAINT_BACKPRESSURE_RED_QUEUE_DEPTH
+  maint_backpressure_red_head_age_s: 300           # NEGELIR_MAINT_BACKPRESSURE_RED_HEAD_AGE_S
+  maint_backpressure_red_storage_pct: 92           # NEGELIR_MAINT_BACKPRESSURE_RED_STORAGE_PCT
+  maint_backpressure_red_error_rate_per_s: 10      # NEGELIR_MAINT_BACKPRESSURE_RED_ERROR_RATE_PER_S
+  # ── §8.13.2 cumulative `data/maint/` storage cap ──
+  maint_storage_total_max_mb: 512                  # NEGELIR_MAINT_STORAGE_TOTAL_MAX_MB
+  # ── §8.13.3 spool entry max age ──
+  maint_spool_entry_max_age_h: 168                 # NEGELIR_MAINT_SPOOL_ENTRY_MAX_AGE_H
+  # ── §8.13.3 spool retired-kind floor ──
+  swarm_min_supported_schema_version: 1            # NEGELIR_SWARM_MIN_SUPPORTED_SCHEMA_VERSION
+  # ── §8.15.3 advisory-lock hold-time guard ──
+  maint_advisory_lock_max_hold_ms: 5000            # NEGELIR_MAINT_ADVISORY_LOCK_MAX_HOLD_MS
+  # ── §8.14 audit log ──
+  maint_audit_hmac_key_b64: ""                     # NEGELIR_MAINT_AUDIT_HMAC_KEY_B64
+  maint_audit_partition_retention_days: 365        # NEGELIR_MAINT_AUDIT_PARTITION_RETENTION_DAYS
+  # ── §8.15.7 audit chain HMAC ──
+  audit_chain_hmac_key_path: "/var/lib/negelir/secrets/audit_chain.key"  # NEGELIR_AUDIT_CHAIN_HMAC_KEY_PATH
+  opsctl_audit_max_bytes: 10485760               # NEGELIR_OPSCTL_AUDIT_MAX_BYTES (10 MB)
+  # ── §8.15.5 audit row size cap ──
+  maint_audit_row_max_bytes: 16384                 # NEGELIR_MAINT_AUDIT_ROW_MAX_BYTES
+  maint_audit_per_kind_details_max_bytes: '{"dlq_escalated": 8192, "schema_drift_detected": 4096, "backup_dump_file_corrupted": 8192, "default": 2048}'  # NEGELIR_MAINT_AUDIT_PER_KIND_DETAILS_MAX_BYTES
+  # ── §8.3 backup agent ──
+  maint_backup_cron: "0 3 * * *"                   # NEGELIR_MAINT_BACKUP_CRON
+  maint_backup_dir: "./data/backups"               # NEGELIR_MAINT_BACKUP_DIR
+  maint_backup_retention_days: 14                  # NEGELIR_MAINT_BACKUP_RETENTION_DAYS
+  maint_backup_retention_weeks: 4                  # NEGELIR_MAINT_BACKUP_RETENTION_WEEKS
+  maint_backup_dry_run: false                      # NEGELIR_MAINT_BACKUP_DRY_RUN
+  maint_backup_min_free_gb: 5                      # NEGELIR_MAINT_BACKUP_MIN_FREE_GB
+  maint_backup_max_skew_h: 36                      # NEGELIR_MAINT_BACKUP_MAX_SKEW_H
+  maint_backup_age_alert_h: 30                     # NEGELIR_MAINT_BACKUP_AGE_ALERT_H
+  maint_backup_clock_step_back_alert_s: 300        # NEGELIR_MAINT_BACKUP_CLOCK_STEP_BACK_ALERT_S
+  maint_backup_clock_step_forward_alert_h: 24      # NEGELIR_MAINT_BACKUP_CLOCK_STEP_FORWARD_ALERT_H
+  maint_backup_pg_jobs: 2                          # NEGELIR_MAINT_BACKUP_PG_JOBS
+  maint_backup_pg_conn_limit: 0                    # NEGELIR_MAINT_BACKUP_PG_CONN_LIMIT  (0=auto: pg_jobs+1; fail_safe_pg_conn_limit_too_low)
+  maint_backup_prune_batch: 10000                  # NEGELIR_MAINT_BACKUP_PRUNE_BATCH  (rows per DELETE; fail_safe_prune_order_invalid boot check on FK DAG)
+  maint_backup_prune_max_lock_ms: 500              # NEGELIR_MAINT_BACKUP_PRUNE_MAX_LOCK_MS
+  maint_schema_snapshot_retention_days: 90         # NEGELIR_MAINT_SCHEMA_SNAPSHOT_RETENTION_DAYS
+  swarm_dlq_pg_retention_days: 14                  # NEGELIR_SWARM_DLQ_PG_RETENTION_DAYS
+  maint_audit_retention_days: 365                  # NEGELIR_MAINT_AUDIT_RETENTION_DAYS
+  maint_audit_retention_days_overrides: '{"pii_erased": 2555}'  # NEGELIR_MAINT_AUDIT_RETENTION_DAYS_OVERRIDES  (per-kind overrides JSON)
+  maint_backup_pg_dsn: ""                          # NEGELIR_MAINT_BACKUP_PG_DSN
+  maint_backup_age_recipients_file: ""             # NEGELIR_MAINT_BACKUP_AGE_RECIPIENTS_FILE
+  maint_backup_encryption_key_dir: ""              # NEGELIR_MAINT_BACKUP_ENCRYPTION_KEY_DIR
+  maint_backup_min_dr_recipients: 2                # NEGELIR_MAINT_BACKUP_MIN_DR_RECIPIENTS
+  maint_backup_age_identity_file: ""               # NEGELIR_MAINT_BACKUP_AGE_IDENTITY_FILE
+  maint_backup_verify_pg_image: "postgres:16-alpine"  # NEGELIR_MAINT_BACKUP_VERIFY_PG_IMAGE
+  maint_backup_pg_dump_nice_level: 10                 # NEGELIR_MAINT_BACKUP_PG_DUMP_NICE_LEVEL  (§8.14.9 UNIX nice; 0=disabled)
+  maint_backup_pg_dump_ionice: true                   # NEGELIR_MAINT_BACKUP_PG_DUMP_IONICE  (§8.14.9 Linux ionice best-effort; ignored non-Linux)
+  maint_backup_verify_mode: "full"                 # NEGELIR_MAINT_BACKUP_VERIFY_MODE  (full | toc_only)
+  maint_backup_max_version_gap: 5                  # NEGELIR_MAINT_BACKUP_MAX_VERSION_GAP  (§8.13.4 restore version-invariant)
+  maint_backup_verify_orphan_ttl_h: 6.0            # NEGELIR_MAINT_BACKUP_VERIFY_ORPHAN_TTL_H
+  maint_backup_pvc_size_gb: 10                     # NEGELIR_MAINT_BACKUP_PVC_SIZE_GB  (K8s ephemeral PVC for restore-verify, Gi)
+  maint_backup_pii_excluded_columns: "quarantine_samples.raw_bytes_b64"  # NEGELIR_MAINT_BACKUP_PII_EXCLUDED_COLUMNS
+  maint_backup_pg_role: "negelir_backup"            # NEGELIR_MAINT_BACKUP_PG_ROLE  (fail_safe_wrong_pg_role / fail_safe_superuser gates)
+  maint_backup_pg_secret_max_age_days: 120          # NEGELIR_MAINT_BACKUP_PG_SECRET_MAX_AGE_DAYS  (fail_safe_pg_secret_expired; alert@100d + 20d grace)
+  maint_backup_cold_verify_cron: "0 5 * * 0"       # NEGELIR_MAINT_BACKUP_COLD_VERIFY_CRON  (Sun 05:00 UTC)
+  maint_backup_age_binary_version: "1.2.0"           # NEGELIR_MAINT_BACKUP_AGE_BINARY_VERSION  (§8.14.3 supply-chain pin; fail_safe_age_version_mismatch)
+  maint_backup_verify_key_rotate_per_dump: true     # NEGELIR_MAINT_BACKUP_VERIFY_KEY_ROTATE_PER_DUMP  (§8.9 two-class encryption)
+  # ── §8.15.10 verify-concurrency + offsite credential hot-reload ─────────────────────
+  maint_backup_verify_lock_timeout_s: 1800          # NEGELIR_MAINT_BACKUP_VERIFY_LOCK_TIMEOUT_S  (max seconds to wait for advisory lock)
+  maint_backup_offsite_cred_reload_s: 60            # NEGELIR_MAINT_BACKUP_OFFSITE_CRED_RELOAD_S  (hot-reload interval for offsite credentials)
+  maint_backup_offsite_credential_max_age_days: 90  # NEGELIR_MAINT_BACKUP_OFFSITE_CREDENTIAL_MAX_AGE_DAYS  (alert threshold)
+  maint_backup_offsite_credential_grace_days: 30    # NEGELIR_MAINT_BACKUP_OFFSITE_CREDENTIAL_GRACE_DAYS  (grace on top of max_age)
+  # Phase 8 §8.16.5 — multipart upload-id TTL + lifecycle assertion.
+  maint_backup_offsite_state_max_age_h: 18          # NEGELIR_MAINT_BACKUP_OFFSITE_STATE_MAX_AGE_H  (skip probe if state file older than this)
+  maint_backup_offsite_lifecycle_min_days: 2        # NEGELIR_MAINT_BACKUP_OFFSITE_LIFECYCLE_MIN_DAYS  (minimum acceptable AbortIncompleteMultipartUpload days)
+  # ── §8.16.6 Object-Lock / WORM preflight probe ─────────────────────────────
+  maint_backup_offsite_preflight_interval_h: 24     # NEGELIR_MAINT_BACKUP_OFFSITE_PREFLIGHT_INTERVAL_H  (recurring probe interval; 0=boot-only)
+  maint_backup_offsite_object_lock_required: true   # NEGELIR_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_REQUIRED  (mock sets false)
+  fail_safe_offsite_object_lock_disabled: true      # NEGELIR_FAIL_SAFE_OFFSITE_OBJECT_LOCK_DISABLED
+  fail_safe_offsite_retention_not_applied: true     # NEGELIR_FAIL_SAFE_OFFSITE_RETENTION_NOT_APPLIED
+  fail_safe_offsite_lock_not_enforced: true         # NEGELIR_FAIL_SAFE_OFFSITE_LOCK_NOT_ENFORCED
+  maint_backup_forensic_max_bytes: 262144           # NEGELIR_MAINT_BACKUP_FORENSIC_MAX_BYTES  (max sidecar bytes; 256 KiB)
+  # ── ROADMAP §8.12 off-host replication ──────────────────────────────────────────────
+  maint_backup_offsite_target: "none"             # NEGELIR_MAINT_BACKUP_OFFSITE_TARGET  (none|s3)
+  maint_backup_offsite_endpoint: ""               # NEGELIR_MAINT_BACKUP_OFFSITE_ENDPOINT
+  maint_backup_offsite_bucket: ""                 # NEGELIR_MAINT_BACKUP_OFFSITE_BUCKET
+  maint_backup_offsite_multipart_threshold_mb: 64  # NEGELIR_MAINT_BACKUP_OFFSITE_MULTIPART_THRESHOLD_MB
+  maint_backup_offsite_bw_kbps: 0                 # NEGELIR_MAINT_BACKUP_OFFSITE_BW_KBPS  (0=unlimited)
+  maint_backup_offsite_upload_timeout_h: 6        # NEGELIR_MAINT_BACKUP_OFFSITE_UPLOAD_TIMEOUT_H
+  maint_backup_offsite_object_lock_days: 0        # NEGELIR_MAINT_BACKUP_OFFSITE_OBJECT_LOCK_DAYS  (0=no WORM)
+  maint_backup_offsite_age_alert_h: 48            # NEGELIR_MAINT_BACKUP_OFFSITE_AGE_ALERT_H  (0=watchdog disabled)
+  maint_backup_offsite_retention_days: 7          # NEGELIR_MAINT_BACKUP_OFFSITE_RETENTION_DAYS
+  maint_backup_offsite_access_key_id: ""          # NEGELIR_MAINT_BACKUP_OFFSITE_ACCESS_KEY_ID
+  maint_backup_offsite_secret_access_key_secret_ref: ""  # NEGELIR_MAINT_BACKUP_OFFSITE_SECRET_ACCESS_KEY_SECRET_REF
+  maint_backup_offsite_s3_region: "us-east-1"    # NEGELIR_MAINT_BACKUP_OFFSITE_S3_REGION
+  maint_backup_offsite_rsync_host: ""             # NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_HOST
+  maint_backup_offsite_rsync_dest_path: ""        # NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_DEST_PATH
+  maint_backup_offsite_rsync_ssh_known_hosts: ""  # NEGELIR_MAINT_BACKUP_OFFSITE_RSYNC_SSH_KNOWN_HOSTS
+  # ── §8.12 DR-drill cadence gauge ─────────────────────────────────────────
+  maint_backup_dr_drill_csv: "data/backups/dr_drills.csv"  # NEGELIR_MAINT_BACKUP_DR_DRILL_CSV
+  maint_backup_dr_drill_alert_days: 100           # NEGELIR_MAINT_BACKUP_DR_DRILL_ALERT_DAYS
+  # ── §8.13.1 model-artifact backup discipline ──
+  maint_backup_model_reproducibility_window_h: 24   # NEGELIR_MAINT_BACKUP_MODEL_REPRODUCIBILITY_WINDOW_H
+  maint_backup_model_offsite_retention_days: 30     # NEGELIR_MAINT_BACKUP_MODEL_OFFSITE_RETENTION_DAYS
+  maint_backup_model_lineage_missing_debounce_h: 24 # NEGELIR_MAINT_BACKUP_MODEL_LINEAGE_MISSING_DEBOUNCE_H
+
+# ── Phase 18 — Datasource Cohesion & Swarm Isolation (ledger #2) ────────────
+# CI pipeline infrastructure: isolation job runs first with short-circuit on failure.
+phase18:
+  ci_isolation_max_seconds: 60           # NEGELIR_CI_ISOLATION_MAX_SECONDS — max wall-clock budget for isolation check
+
+# ── Storage paths ────────────────────────────────────────────────────────────
+paths:
+  data_dir: /data            # DATA_DIR
+  model_dir: /data/models    # MODEL_DIR
+  report_dir: /data/reports  # NEGELIR_REPORT_DIR
+
+# ── Phase 3 — Training-pipeline pass/fail thresholds ───────────────────
+training_thresholds:
+  model_acc: 0.50            # NEGELIR_THRESHOLD_MODEL_ACC
+  holdout_acc: 0.50          # NEGELIR_THRESHOLD_HOLDOUT_ACC
+  quarantine_max: 0.10       # NEGELIR_THRESHOLD_QUARANTINE_MAX
+  min_holdout_matches: 5     # NEGELIR_THRESHOLD_MIN_HOLDOUT_MATCHES
+verification:
+  window_weeks: 4            # NEGELIR_VERIFICATION_WINDOW_WEEKS
+
+# ── Operational toggles ───────────────────────────────────────
+operational:
+  strict: false              # NEGELIR_COMMON_STRICT  (1/true → fail validate() on unknown reserved-prefix env keys)
+
+# ── LeagueConfig (per-league overrides; see ai/common/league_config.py) ──────
+# Numbers below are the Turkish Süper Lig defaults. Each preset in
+# `LEAGUE_REGISTRY` (en_premier_league, de_bundesliga, es_la_liga, …) overrides
+# the subset of fields that differ for that league.
+league:
+  identity:
+    league_id: tr_super_lig
+    league_name: "Turkish Süper Lig"
+    country: Turkey
+    language: tr
+  structure:
+    teams_count: 19
+    rounds_per_season: 38
+    promotion_slots: 3
+    relegation_slots: 4
+  elo:
+    initial: 1500.0
+    k: 32.0
+    home_advantage: 65.0
+  goals:
+    first_half_goal_pct: 0.47
+    league_avg_goals: 2.65
+  poisson:
+    max_goals: 7
+    ht_max_goals: 5
+    home_goal_cap: 7
+    away_goal_cap: 7
+    draw_goal_cap: 5
+    market_goal_cap: 6
+    min_xg_floor: 0.3
+  dixon_coles_rho: -0.13
+  elo_xg_curve:
+    divisor: 600.0
+    factor_min: 0.7
+    factor_range: 0.6
+  venue_ratio:
+    floor: 0.7
+    ceiling: 1.4
+  ensemble:
+    xgb_weight: 0.35
+  draw_thresholds:
+    ha_gap: 0.15
+    prob: 0.26
+    bayesian: 0.20
+  xgboost:
+    n_estimators: 300
+    max_depth: 4
+    learning_rate: 0.08
+    min_child_weight: 3
+    reg_alpha: 0.5
+    reg_lambda: 1.5
+    subsample: 0.8
+    colsample_bytree: 0.8
+    gamma: 0.1
+  training:
+    draw_sample_weight: 2.0
+    val_split: 0.15
+    train_pct: 0.75
+    calibrate_probabilities: true
+  demo:
+    label: "Turkish Q&A Demo"
+    sentiment_samples:
+      - "Galatasaray son maçta muhteşem bir galibiyet aldı, takım morali çok yüksek"
+      - "Fenerbahçe'de sakatlık krizi devam ediyor, taraftar moral bozuk"
+      - "Beşiktaş istikrarlı oynuyor, savunma sağlam gidiyor"

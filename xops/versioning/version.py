@@ -340,12 +340,25 @@ def cmd_bump(args: argparse.Namespace) -> int:
         # Check three required conditions for 1.0.0 bump
         repo_root = CHART_PATH.parent.parent.parent
         
-        # (a) <component>/PUBLIC_API.md must exist
-        component_path = repo_root / component.replace("_", "/")
-        # For Phase 18 (still in ai/ layout), also check under ai/
-        if not component_path.exists():
-            component_path = repo_root / "ai" / component.replace("_", "/")
+        # Resolve component path with special mappings
+        if component == "datasource_scraper":
+            component_path = repo_root / "scraper"
+        elif component == "datasource_watcher":
+            component_path = repo_root / "watcher"
+            if not component_path.exists():
+                component_path = repo_root / "ai" / "datasource" / "watcher"
+        elif component == "datasource_refresher":
+            component_path = repo_root / "refresher"
+            if not component_path.exists():
+                component_path = repo_root / "ai" / "datasource" / "refresher"
+        else:
+            # Try Phase 22 layout first (root-level)
+            component_path = repo_root / component.replace("_", "/")
+            # Fall back to Phase 18 layout (ai/)
+            if not component_path.exists():
+                component_path = repo_root / "ai" / component.replace("_", "/")
         
+        # (a) <component>/PUBLIC_API.md must exist
         public_api_path = component_path / "PUBLIC_API.md"
         if not public_api_path.exists():
             raise VersionChartError(

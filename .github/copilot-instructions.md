@@ -41,7 +41,7 @@ If the user request conflicts with `docs/planning/ROADMAP.md`,
   `pull`, `reset`, `rebase`, `tag`, `branch`, etc. The only entry
   point is `make git`, which is human-only.
 - **Single-source config** — new tunables go through
-  `ai/common/config.py` or `server/internal/config` and are
+  `common/config.py` or `server/internal/config` and are
   documented in `xops/env/.env.example` (`AGENTS.md` Rule 1).
 - **No fabricated production data** — synthetic data is allowed
   only inside `*/tests/` (`AGENTS.md` Rule 3).

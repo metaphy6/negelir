@@ -74,7 +74,7 @@ progress.
 
 > **Pivot v3 transitional paths.** Until ROADMAP Phase R1/R2 lands the
 > `datasource/`, `swarm/`, and `common/` packages, the equivalent
-> sources still live under `ai/` (e.g. `ai/scraper/`, `ai/common/`).
+> sources still live under `ai/` (e.g. `scraper/`, `common/`).
 > The diagnostic bundle's `failing_code_excerpt`, `git_history`, and
 > any explicit path fields are the source of truth — edit the file the
 > bundle points to, not its post-Pivot equivalent. The scope
@@ -85,7 +85,7 @@ You may **never** edit:
 
 - Anything under `swarm/` (predictor logic — different lifecycle, not
   yours to change)
-- Anything under `ai/swarm/agents/maint/` (Phase 8 maintenance
+- Anything under `swarm/agents/maint/` (Phase 8 maintenance
   reactors — `maint.scaler.v1`, `maint.backup.v1`, `maint.dlq.v1`,
   `maint.schema.v1`, `maint.sec.v1`; different lifecycle, not yours
   to change)
@@ -100,14 +100,14 @@ You may **never** edit:
   the fix easier
 
 > **Phase 8 / auto-mutation boundary.** The Phase 8 maint agents
-> (`ai/swarm/agents/maint/`) and the ops console (`xops/opsctl/`)
+> (`swarm/agents/maint/`) and the ops console (`xops/opsctl/`)
 > are maintenance-plane reactors — they monitor, alert, and operate
 > the running system. They publish bus events and read ack topics;
 > **they do not mutate scraper extractor code**. The patcher (this
 > harness) is the **only** component that automatically edits scraper
 > extractor code (the future `maint.coder.v1` planned in Phase 17).
 > There is no overlap: if a diagnostic artifact points at
-> `xops/opsctl/` or `ai/swarm/agents/maint/`, call
+> `xops/opsctl/` or `swarm/agents/maint/`, call
 > `request_escalation(reason="scope mismatch: patcher does not own maint agents")`.
 
 If your fix genuinely needs a file outside the assigned scope, call
@@ -174,7 +174,7 @@ and you will have spent budget for nothing.
 - Adding `subprocess.`, `os.system`, `eval`, `exec`, `__import__`,
   hardcoded URLs, or anything that looks like a secret
 - Introducing a new env var without updating both
-  `xops/env/.env.example` and `ai/common/config.py`
+  `xops/env/.env.example` and `common/config.py`
 - Producing a `DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, or any
   destructive SQL
 - Producing `*-latest` model IDs in any new code
@@ -189,7 +189,7 @@ The full doctrine lives in [`AGENTS.md`](AGENTS.md) §2. The rules
 that apply to you in this harness:
 
 - **Rule 1 — Single-source configuration.** Any new tunable goes
-  through `ai/common/config.py` and `xops/env/.env.example`.
+  through `common/config.py` and `xops/env/.env.example`.
 - **Rule 3 — No fabricated production data.** Synthetic data
   belongs only inside `tests/` directories. Never have a fix
   silently fall back to fake data.
