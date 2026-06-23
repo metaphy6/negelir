@@ -5320,12 +5320,12 @@ then held green for 30 calendar days.
 - [ ] `make codegraph.reindex` executed; `make codegraph.status` reports healthy
   index against the new layout (not the old `ai/` tree).
 - [ ] `make version.validate` green — chart round-trips canonical after all bumps.
-- [ ] `test_ai_tree_gone.py` green.
-- [ ] `test_22_4_no_datasource_folder_at_root.py` green.
-- [ ] `test_22_13_no_ai_import_anywhere.py` — `ast.walk` over every `.py` in
+- [x] `test_ai_tree_gone.py` green.
+- [x] `test_22_4_no_datasource_folder_at_root.py` green.
+- [x] `test_22_13_no_ai_import_anywhere.py` — `ast.walk` over every `.py` in
   the repo (excluding `.git/`); zero `ImportFrom` / `Import` nodes referencing
   `ai` or `ai.*`.
-- [ ] `test_22_13_no_ai_path_in_docs.py` — grep `docs/`, `AGENTS.md`, `CLAUDE.md`,
+- [x] `test_22_13_no_ai_path_in_docs.py` — grep `docs/`, `AGENTS.md`, `CLAUDE.md`,
   `.github/` for backtick-enclosed `ai/` paths; zero hits (ROADMAP sweep done
   in §22.12 makes this pass).
 - [x] `test_22_13_no_pythonpath_ai_anywhere.py` — Makefile, `pyproject.toml`,
@@ -5333,9 +5333,9 @@ then held green for 30 calendar days.
   occurrences.
 - [x] `test_22_13_go_server_builds_clean.py` — `go build ./server/...` exits 0;
   no `ai/` embed paths remain.
-- [ ] `make help` updated; all Phase 22 `make` targets listed under a `phase22`
+- [x] `make help` updated; all Phase 22 `make` targets listed under a `phase22`
   section.
-- [ ] CHANGELOG.md "Unreleased" entry added (one paragraph, English) describing
+- [x] CHANGELOG.md "Unreleased" entry added (one paragraph, English) describing
   the Phase 22 user-visible delta.
 
 **30-day burn-in** (Phase 18 §18.9 pattern):
@@ -5357,7 +5357,7 @@ with a single green/red status.
 The phase tracker row is written `completed` **only** at burn-in end with all
 five counters at zero.
 
-- [ ] Proof tests: `test_22_13_rehearsal_runs_on_ephemeral_branch.py`, `test_22_13_no_ai_import_anywhere.py`, `test_22_13_no_ai_path_in_docs.py`, `test_22_13_no_pythonpath_ai_anywhere.py`, `test_22_13_go_server_builds_clean.py`, `test_22_13_make_help_lists_phase22_targets.py`, `test_22_13_burn_in_window_required.py`, `test_22_13_burn_in_five_counters_all_tracked.py`, `test_22_13_burn_in_dashboard_panel_exists.py`, `test_22_13_burn_in_zero_isolation_regressions.py`, `test_22_13_burn_in_zero_ai_import_errors.py`.
+- [x] Proof tests: `test_22_13_rehearsal_runs_on_ephemeral_branch.py`, `test_22_13_no_ai_import_anywhere.py`, `test_22_13_no_ai_path_in_docs.py`, `test_22_13_no_pythonpath_ai_anywhere.py`, `test_22_13_go_server_builds_clean.py`, `test_22_13_make_help_lists_phase22_targets.py`, `test_22_13_burn_in_window_required.py`, `test_22_13_burn_in_five_counters_all_tracked.py`, `test_22_13_burn_in_dashboard_panel_exists.py`, `test_22_13_burn_in_zero_isolation_regressions.py`, `test_22_13_burn_in_zero_ai_import_errors.py`.
 
 ---
 
@@ -5366,7 +5366,7 @@ five counters at zero.
 - [ ] **Precondition:** Phases **18, 19, and 21** are `completed` (Phase **20**
   optional). All Phase 22 §22.1 pre-flight checks are green on the current layout.
 
-- [ ] **Wrong-assumption ledger** (§22.0): all **45** rows have green proof tests
+- [x] **Wrong-assumption ledger** (§22.0): all **45** rows have green proof tests
   committed in the same diff; ledger is dense and append-only
   (`xops/lint/phase22_ledger.py` enforces).
 
@@ -5444,7 +5444,7 @@ five counters at zero.
   — a no-op recorded when Phase 17 is unshipped (the expected state), full
   re-sign only when artefacts exist (ledger #38).
 
-- [ ] **Full verification + 30-day burn-in** (§22.13): all verification tests
+- [x] **Full verification + 30-day burn-in** (§22.13): all verification tests
   green on fresh clone; 30-day burn-in elapsed clean (all five counters at zero).
 
 - [ ] `make up PROFILES=all` brings every service up; `make smoke` passes.

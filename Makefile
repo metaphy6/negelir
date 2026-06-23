@@ -1405,8 +1405,12 @@ phase22.rollback: ## Phase 22.2 — Rollback one migration step and re-run tests
 	@STEP=$(STEP) $(XOPS)/phase22.py rollback
 
 .PHONY: phase22.burn-in.status
-phase22.burn-in.status: ## Phase 22.2 — Report five burn-in counter values from Redis (ledger #35)
+phase22.burn-in.status: ## Phase 22.13 — Report five burn-in counter values from Redis (ledger #35)
 	@$(XOPS)/phase22.py burn-in.status
+
+.PHONY: phase22.rehearse
+phase22.rehearse: ## Phase 22.13 — Full migration rehearsal on ephemeral branch (proves dependency order, blocks real migration if fails)
+	@$(XOPS)/phase22.py rehearse
 
 .PHONY: phase22.k8s-scan
 phase22.k8s-scan: ## Phase 22.2 — Scan infra/k8s/ for ai/ path references (ledger #13)

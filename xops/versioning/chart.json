@@ -4,7 +4,7 @@
   "project": {
     "name": "negelir",
     "version": "1.17.7",
-    "build": 11,
+    "build": 13,
     "released": null
   },
   "components": {
@@ -37,14 +37,14 @@
       }
     },
     "xops": {
-      "version": "3.92.7",
+      "version": "3.92.8",
       "description": "Repo automation (Makefile dispatchers, CI/CD, tooling).",
-      "last_changed": "2026-06-23T09:16:26+00:00"
+      "last_changed": "2026-06-23T10:45:15+00:00"
     },
     "docs": {
-      "version": "3.25.17",
+      "version": "3.25.18",
       "description": "Roadmap, design docs, tracking, guides.",
-      "last_changed": "2026-06-23T10:37:12+00:00"
+      "last_changed": "2026-06-23T10:45:10+00:00"
     },
     "infra_mock": {
       "version": "1.6.0",
@@ -18620,6 +18620,24 @@
       "from": "3.25.16",
       "to": "3.25.17",
       "build": 11
+    },
+    {
+      "timestamp": "2026-06-23T10:45:10+00:00",
+      "component": "docs",
+      "level": "patch",
+      "note": "Phase 22.13 verification checklist updated; ROADMAP bullets ticked for verification infrastructure",
+      "from": "3.25.17",
+      "to": "3.25.18",
+      "build": 12
+    },
+    {
+      "timestamp": "2026-06-23T10:45:15+00:00",
+      "component": "xops",
+      "level": "patch",
+      "note": "Added make phase22.rehearse target; Phase 22.13 verification infrastructure complete",
+      "from": "3.92.7",
+      "to": "3.92.8",
+      "build": 13
     }
   ]
 }
