@@ -2,7 +2,7 @@
 Phase 1 follow-up regression tests.
 
 Goal: prevent silent drift between the runtime configuration surface
-(`ai/common/config.py`, `ai/common/league_config.py`) and the documentation
+(`common/config.py`, `common/league_config.py`) and the documentation
 surface (`.env.example`).
 
 These tests do not require any external services. They run in any
@@ -19,27 +19,20 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 ENV_EXAMPLE = REPO_ROOT / "xops" / "env" / ".env.example"
-AI_CONFIG = REPO_ROOT / "ai" / "common" / "config.py"
+AI_CONFIG = REPO_ROOT / "common" / "config.py"
 GO_CONFIG = REPO_ROOT / "server" / "internal" / "config" / "config.go"
-DEFAULTS_YAML = REPO_ROOT / "ai" / "common" / "defaults.yaml"
+DEFAULTS_YAML = REPO_ROOT / "common" / "defaults.yaml"
 
 
 def _ensure_ai_path_priority():
-    """Phase 18: Force sys.path to prioritize ai/ for config imports.
+    """Phase 22: Flat root layout — no ai/ path injection needed.
     
-    This ensures that imports inside ai/common/config (like common.season)
-    resolve to ai/common/season, not root/common/season.
+    Post-migration, all modules are at the root level.
     """
-    _ai_path = str(REPO_ROOT / "ai")
-    if _ai_path in sys.path:
-        sys.path.remove(_ai_path)
-    sys.path.insert(0, _ai_path)
-    # Clear any cached common modules that might have been loaded from root/
-    to_remove = [k for k in list(sys.modules.keys()) if k.startswith('common')]
-    for k in to_remove:
-        sys.modules.pop(k, None)
+    pass
+
 
 # Env vars listed in .env.example but intentionally not consumed by the
 # Python config layer (Go server, docker-compose, optional features).
