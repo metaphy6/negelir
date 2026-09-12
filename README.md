@@ -20,13 +20,13 @@ for live phase status.
 
 | Phase | Title | Status |
 |---|---|---|
-| 0 | Repo Reset & Cleanup | ✅ in progress |
-| 1 | Centralized Configuration | ⏳ next |
-| 2 | Mock-Data Dev Stack ("Fake Internet") | ⏳ |
-| 3 | Swarm Foundation (Bus, Registry, Supervisor) | ⏳ |
-| 4 | Core Worker Agents | ⏳ |
-| 5 | Predictor Swarm & Consensus | ⏳ |
-| 6+ | Proofreader • Defense • Self-Maintenance • API • NLP • GPU/NPU • Chaos • Multi-League • Cloud • Frontend | ⏳ |
+| 0 | Repo Reset & Cleanup | ✅ |
+| 1 | Centralized Configuration | ✅ |
+| 2 | Mock-Data Dev Stack ("Fake Internet") | ✅ |
+| 3 | Swarm Foundation (Bus, Registry, Supervisor) | ✅ |
+| 4 | Core Worker Agents | ✅ |
+| 5 | Predictor Swarm & Consensus | ✅ |
+| 6+ | Proofreader • Defense • Self-Maintenance • API • NLP • GPU/NPU • Chaos • Multi-League • Cloud • Frontend | ✅ |
 
 ---
 
